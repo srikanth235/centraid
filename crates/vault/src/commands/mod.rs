@@ -38,6 +38,7 @@
 
 pub mod core;
 pub mod core_links;
+mod event_time;
 pub mod knowledge;
 pub mod locker;
 pub mod media;
@@ -107,7 +108,7 @@ impl Risk {
 /// For most commands the handler's own SQL says it — every command that stamps
 /// `deleted_at` is a `Delete` whatever it is called — and
 /// `crates/evalsuite/grammar/derive/derive_grammar.py` reads it off the SQL
-/// rather than off a list. Twenty-six handlers state it somewhere the SQL
+/// rather than off a list. Twenty-nine handlers state it somewhere the SQL
 /// cannot be seen: the statement lives in a helper (`set_starred`,
 /// `write_new_expense`, `task_for_person`), or the command writes nothing at
 /// all. Those are DECLARED in [`DECLARED_EFFECTS`] below, each with the reason,
@@ -200,7 +201,7 @@ pub struct DeclaredEffect {
     pub why: &'static str,
 }
 
-/// THE TWENTY-SIX whose effect the handler's SQL does not state.
+/// THE TWENTY-NINE whose effect the handler's SQL does not state.
 ///
 /// Read out of `crates/vault/src/commands/*.rs` one handler at a time. Every
 /// other command's effect is derived from its own SQL and is NOT repeated here:
@@ -224,6 +225,27 @@ pub const DECLARED_EFFECTS: &[DeclaredEffect] = &[
         effect: Effect::Edit,
         why: "`upsert_text_derivative` fills in an existing document's text; no \
               row a member names appears.",
+    },
+    DeclaredEffect {
+        command: "core.add_document",
+        effect: Effect::Create,
+        why: "`file_new_document` mints the document wrapper over the minted bytes.",
+    },
+    DeclaredEffect {
+        command: "core.create_text_document",
+        effect: Effect::Create,
+        why: "`file_new_document`, over a body minted from the text the member wrote.",
+    },
+    DeclaredEffect {
+        command: "core.purge_document",
+        effect: Effect::Edit,
+        why: "`destroy_document` deletes one trashed document for good — the class \
+              `locker.purge_item` and `media.purge_asset` take from their own SQL.",
+    },
+    DeclaredEffect {
+        command: "core.empty_document_trash",
+        effect: Effect::Edit,
+        why: "`destroy_document` over every trashed document, as `core.purge_document`.",
     },
     DeclaredEffect {
         command: "core.merge_party",
@@ -250,11 +272,6 @@ pub const DECLARED_EFFECTS: &[DeclaredEffect] = &[
         command: "locker.totp_code",
         effect: Effect::Read,
         why: "derives a code from a stored seed and writes only its subject receipt.",
-    },
-    DeclaredEffect {
-        command: "locker.watchtower",
-        effect: Effect::Read,
-        why: "reports weak and reused secrets; writes only its subject receipt.",
     },
     DeclaredEffect {
         command: "locker.export",
@@ -417,20 +434,9 @@ pub const DECLARED_EGRESS: &[DeclaredEgress] = &[
         why: "as `locker.add_item` — the seat seals the private key, the vault stores it.",
     },
     DeclaredEgress {
-        command: "locker.rotate_key",
-        egress: Egress::None,
-        why: "`online_only` because the seat holds the key it rotates; the new \
-              key never leaves that seat.",
-    },
-    DeclaredEgress {
         command: "locker.totp_code",
         egress: Egress::None,
         why: "derives a code at the member's own seat; it is shown, not sent.",
-    },
-    DeclaredEgress {
-        command: "locker.watchtower",
-        egress: Egress::None,
-        why: "reads the locker's own rows and answers at the seat.",
     },
     DeclaredEgress {
         command: "tally.materialize_recurring_expense",
@@ -453,7 +459,7 @@ pub struct CommandCtx<'tx, 'conn> {
     clock: &'tx dyn crate::clock::Clock,
     produced_ids: std::cell::RefCell<Vec<String>>,
     /// The vault's local content store, when it has one. See [`CommandCtx::blobs`].
-    blobs: Option<&'tx (dyn crate::backup::store::BlobStore + Send + Sync)>,
+    blobs: Option<&'tx (dyn crate::bytes::BlobStore + Send + Sync)>,
 }
 
 impl<'conn> CommandCtx<'_, 'conn> {
@@ -471,7 +477,7 @@ impl<'conn> CommandCtx<'_, 'conn> {
     /// bytes nothing kept. `pre_inline_bytes_are_storable` is that refusal, so
     /// in practice a handler reaching here has already been gated.
     #[must_use]
-    pub const fn blobs(&self) -> Option<&(dyn crate::backup::store::BlobStore + Send + Sync)> {
+    pub const fn blobs(&self) -> Option<&(dyn crate::bytes::BlobStore + Send + Sync)> {
         self.blobs
     }
 
@@ -568,9 +574,6 @@ pub struct CommandDefinition {
     pub handler: CommandHandler,
     /// Input keys whose values are secrets: tokenised before the journal.
     pub sealed_input: &'static [&'static str],
-    /// A seat refuses to QUEUE this offline, with a typed reason the shell
-    /// renders — a Locker reveal, an assistant turn, an export.
-    pub online_only: bool,
 }
 
 /// A command plus its compiled validator.

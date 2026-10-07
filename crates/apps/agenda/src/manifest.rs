@@ -95,16 +95,17 @@ mod tests {
         }
     }
 
-    /// THIRTEEN SCOPES, and `read+act` over the whole `schedule` schema is the
+    /// FOURTEEN SCOPES, and `read+act` over the whole `schedule` schema is the
     /// **widest form in the tree** — only agenda and people use it (census
     /// §A0). Ported faithfully, and re-judged in the receipt rather than
     /// silently narrowed: narrowing it here would make the port's grant
     /// disagree with the one a member already accepted.
     #[test]
-    fn it_declares_thirteen_scopes_including_the_widest_form() {
+    fn it_declares_fourteen_scopes_including_the_widest_form() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Agenda declares its reach");
-        assert_eq!(vault.scopes.len(), 13);
+        // The fourteenth is `core.place`: an event's location name (#1029).
+        assert_eq!(vault.scopes.len(), 14);
         let mut schemas: Vec<&str> = vault
             .scopes
             .iter()

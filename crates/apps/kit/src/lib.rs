@@ -36,6 +36,7 @@
 pub mod canonical;
 pub mod changes;
 pub mod contract_vault;
+pub mod denial;
 pub mod error;
 pub mod fixtures;
 pub mod grammar;
@@ -49,6 +50,7 @@ pub mod statement;
 pub mod testdoor;
 
 pub use canonical::{canonical_json, compare_utf16};
+pub use denial::Denial;
 pub use error::{KitError, KitResult};
 pub use page::{MAX_PAGE_ROWS, Page, PageCursor, PageRequest, page_of, probe_limit};
 pub use reads::{

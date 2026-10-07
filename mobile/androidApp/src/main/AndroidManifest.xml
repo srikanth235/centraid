@@ -9,6 +9,12 @@
   covers the legacy path, `dataExtractionRules` covers Android 12+ cloud backup
   and device-to-device transfer separately, and `fullBackupContent` covers the
   11-and-below fallback.
+
+  `android:usesCleartextTraffic="false"` is stated because the platform default
+  is `true` below API 28 and `minSdk` is 24. Nothing here speaks plain HTTP: a
+  gateway is reached by the Rust core over HTTPS, pinned to the certificate the
+  pairing QR fingerprinted (#1080 ruling 1), and the player reads local files,
+  so the flag costs nothing and closes the old-device default.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -20,8 +26,37 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- A photograph's place, as the camera wrote it (#1080, the walker).
+         Without this grant Android 10 and up strips the EXIF location from
+         every original it hands over, so the backup would hold a different
+         file from the one the member took. Asked for with the photo grant
+         (`PhotoAccessRemedy`); a reader then asks for the unredacted bytes
+         with `MediaStore.setRequireOriginal`. -->
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
+    <!-- The camera, for pair.laptop's scan of the laptop's square only
+         (#1047 E6), asked for when the member taps Scan. Declaring it means
+         Docs' Scan capture intent needs the grant too, so Docs asks for it
+         the same way (`DocsRoutes`). Not required: a phone without a camera
+         pairs by paste and hides Scan. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- "BACK UP NOW" AND A BACKLOG (#1080, the shells; `backup/BackupNow.kt`).
+         API 34 and up: a user-initiated data transfer job, which needs
+         RUN_USER_INITIATED_JOBS. Below 34: a `dataSync` foreground service,
+         which needs FOREGROUND_SERVICE and, from 34, its typed twin. Both show
+         a notification, which needs POST_NOTIFICATIONS from 33 — asked for
+         when the member taps "Back up now", never at launch. -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".CentraidApplication"
@@ -30,7 +65,8 @@
         android:fullBackupContent="@xml/full_backup_content"
         android:label="Centraid"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Centraid">
+        android:theme="@style/Theme.Centraid"
+        android:usesCleartextTraffic="false">
         <activity
             android:name="dev.centraid.android.MainActivity"
             android:exported="true"
@@ -40,5 +76,45 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- THE TWO WAYS "BACK UP NOW" KEEPS THE PROCESS ALIVE (#1080). Neither
+             is exported: the job is bound only by the system's job scheduler,
+             and the service is started only by this app. -->
+        <service
+            android:name="dev.centraid.android.backup.BackupJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service
+            android:name="dev.centraid.android.backup.BackupForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- "Send a copy" (#816): the copies `PhotoHandOff` writes, and
+             nothing else. Not exported; a receiving app reads one copy
+             through the grant on the intent that carried it. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.photocopies"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_copies" />
+        </provider>
+
+        <!-- Docs' Scan row (#1047): the system camera app writes its
+             photograph into `docs-scans/` through this, and nothing else.
+             Not exported; the grant rides the capture intent. CAMERA is
+             declared (pairing's scan), so the capture intent needs the grant
+             and Docs asks for it at Scan. -->
+        <provider
+            android:name="dev.centraid.android.screens.docs.DocsScanProvider"
+            android:authorities="${applicationId}.docsscans"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/docs_scans" />
+        </provider>
     </application>
 </manifest>

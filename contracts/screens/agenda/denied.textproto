@@ -1,0 +1,18 @@
+# THE VAULT WOULD NOT LET AGENDA READ. A state and not a failure: the kit's
+# gate, with no band, no day bar and no retry, because retrying cannot change a
+# grant. Compare `read-refused`, which keeps both.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_DAY
+anchor_day: ""
+denied {
+  title: "Agenda cannot read your calendar"
+  body: "The owner has not granted it core.event. Nothing was read, and nothing was written."
+  receipt: "grant.missing"
+}
+sheet: SHEET_NONE
+toolbar { shown: false }
+chrome { title: "Agenda" retry: "Retry" }

@@ -31,12 +31,6 @@ repository = "https://github.com/srikanth235/centraid"
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 flate2 = "1"
-# The free-space probe the bootstrap room check needs (#1025 S7, item 3).
-# A safe wrapper over `statvfs`/`GetDiskFreeSpaceEx`; the alternative was an
-# `unsafe` block in `crates/seat-link`, which is `#![forbid(unsafe_code)]` and
-# stays that way — the only crate in this workspace with an unsafe surface is
-# `crates/core-ffi`, where the C ABI is.
-fs4 = { version = "0.13", default-features = false }
 hex = "0.4"
 # THE ONE IMAGE CODEC (#1025 S3, D-1025-S7-50). Derivatives are generated at
 # the gateway, so the workspace needs a decoder and a JPEG encoder and nothing
@@ -68,11 +62,12 @@ rusqlite = { version = "0.40", features = [
   "hooks",
   "functions",
   # THE ONLINE BACKUP API, and it is a durability requirement (#1029 B4).
-  # A backup base must be PAGE-IDENTICAL: `VACUUM INTO` rebuilds the file from
-  # its logical content and renumbers every page, which is why WAL frames could
-  # never be replayed onto the old base. `rusqlite::backup` copies page 1 to
-  # page 1 and page N to page N, which is what makes a page number in a segment
-  # mean anything (`crates/vault/src/backup/base.rs`).
+  # A backup snapshot must be PAGE-IDENTICAL: `VACUUM INTO` rebuilds the file
+  # from its logical content and renumbers every page, so every 64 KiB range
+  # would change and none would match a name the gateway already holds.
+  # `rusqlite::backup` copies page 1 to page 1 and page N to page N, which is
+  # what lets an unchanged range keep its name (#1080,
+  # `crates/vault/src/backup/snapshot.rs`).
   "backup",
 ] }
 serde = { version = "1", features = ["derive"] }
@@ -90,42 +85,45 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 # HPKE base mode (RFC 9180's HKDF-SHA256) are fixed by their own specifications
 # and cannot be respelled in BLAKE3 without leaving the standard. Both are
 # somebody else's protocol; `blake3` remains ONE HASH for everything this repo
-# defines itself. Two more crates joined them under #1029 and for the same
-# reason — an object store's API is not ours: `crates/gateway-core`
-# (`src/checksum.rs`, the SHA-256 an S3-compatible store attests) and
-# `crates/gateway-server` (`src/bytes/sigv4.rs`, AWS Signature Version 4, which
-# is HMAC-SHA256 over a SHA-256 payload digest). Each is ONE module, each has an
-# entry in `crates/vault/tests/one_hash.rs`'s allowlist carrying its reason, and
-# no other crate under `crates/` may depend on `sha2` or `hmac`. W0.5-R1 is a
-# ruling put to the owner with a recommendation, not yet a `docs/decisions.md`
-# supersession of D-1025-S4-5 (that entry is W9's).
+# defines itself, and no other crate under `crates/` may depend on `sha2`, nor
+# on `hmac` save `crates/core` for RFC 6238 (the `sha1` note below). The object
+# store's SHA-256 checksum that once made `crates/gateway-core` a third left
+# with that crate (#1080). W0.5-R1 is a ruling put to the owner with a
+# recommendation, not yet a `docs/decisions.md` supersession of D-1025-S4-5
+# (that entry is W9's).
 hmac = "0.13"
 sha2 = "0.11"
+# SHA-1 SURVIVES IN ONE PLACE, AND FOR THE SAME REASON (#1047, Q-1047-16):
+# `crates/core::locker::phone` computes a Locker one-time code, and RFC 6238's
+# HMAC-SHA-1 is the algorithm every authenticator app and every site that
+# printed the QR code agree on — somebody else's protocol, not a hash this repo
+# chose. It is `hmac` + RustCrypto `sha1` in that one module and nowhere else;
+# nothing the vault names, stores or deduplicates is SHA-1.
+sha1 = "0.11"
 thiserror = "2"
 tracing = "0.1"
 
-# Wave 2 lane C — the schema workspace, the transport-generic protocol, the
-# iroh endpoint and the one binary (#1020).
+# Wave 2 lane C — the schema workspace, the transport-generic protocol and the
+# one binary (#1020).
 base64 = "0.22"
 bytes = "1"
-iroh = "1.2"
-# Wave 3 lane B — the byte plane over BLAKE3 + bao (#1020, D-1020-B1).
-#
-# `iroh-blobs` is NOT an optional convenience over the endpoint: it is the only
-# reason the byte plane can be interrupted. Its transfer is verified per 16 KiB
-# chunk group against a bao outboard, so a window that ends mid-file leaves
-# durable, already-verified chunks behind — which is the single property the
-# whole mobile design rests on. A hand-rolled mover would have to re-verify from
-# the start of the file, and an 800 MB video would then need one unbroken window
-# no phone ever gets.
-iroh-blobs = "0.103"
 prost = "0.14"
 prost-build = "0.14"
 protox = "0.9"
 qrcode = { version = "0.14", default-features = false }
+
+# THE PHONE'S CLIENT TO ITS GATEWAY (#1080): HTTP/1.1 over TLS over TCP,
+# `hyper`'s connection API with `tokio-rustls` underneath and a verifier that
+# accepts one pinned certificate. `hyper-util` is only `TokioIo`, the adapter
+# between tokio's IO traits and hyper's; `http-body-util` is `Full` and
+# `collect`. No client stack and no connection pool.
+hyper = { version = "1", default-features = false, features = [
+  "client",
+  "http1",
+] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+http-body-util = "0.1"
 rand = "0.9"
-rand_chacha = "0.9"
-turmoil = "0.7"
 tokio = { version = "1", features = [
   "macros",
   "rt-multi-thread",
@@ -142,42 +140,25 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # never routine housekeeping. The KDF and MAC crates that used to sit here —
 # `hkdf` and `hmac`, both over SHA-256 — are gone: ONE HASH (#1025 S4,
 # D-1025-S4-1), and `blake3` carries `derive_key` and `keyed_hash` itself.
-aes-gcm = "0.11"
-# XChaCha20-Poly1305, the AEAD `centraid-object/1` is built from (#1029 §4).
 #
-# It sits BESIDE `aes-gcm` rather than replacing it: `aes-gcm` still serves the
-# v0-derived seals `crates/vault/src/backup` has not yet been moved off, and a
-# crate that is only half-retired is a crate that is still declared. What this
-# one buys is the 24-byte nonce. `centraid-object/1` draws every nonce from the
-# operating system and never from an address (the defect B9 names), and a
-# 96-bit random nonce has a birthday bound worth arguing about while a 192-bit
-# one does not — "draw it at random" becomes a design rather than a budget.
-# Like `aes-gcm`, a major bump here is a re-keying event to be proven against
-# `contracts/crypto/object-vectors.json`, never routine housekeeping.
+# `aes-gcm` seals a Locker cell (`lk1:`, `crates/vault/src/custody/locker_key.rs`).
+aes-gcm = "0.11"
+# XChaCha20-Poly1305 is the AEAD `centraid-sealed/2` is built from (#1080): a
+# 24-byte nonce drawn from the operating system for every chunk, never derived
+# from an address, so "draw it at random" is a design rather than a budget.
+# A major bump here is a re-keying event to be proven against
+# `contracts/crypto/sealed-vectors.json`, never routine housekeeping.
 chacha20poly1305 = "0.11"
 ryu-js = "1.0.3"
-scrypt = "0.12"
-subtle = "2"
 tempfile = "3"
 zstd = "0.13"
+# THE SPOOL'S BUDGET IS A TENTH OF THE FREE SPACE (#1080, "Ledger"), and the
+# standard library cannot say how much is free. `statvfs` is POSIX and rustix
+# answers it with no `unsafe` in this tree, on iOS and Android alike. Already
+# in the lock through `tempfile`; `fs` is the one feature this needs.
+rustix = { version = "1.1.4", features = ["fs"] }
 
-# Wave 4 lane assist — the client half of the Agent Client Protocol (#1020,
-# D-1020-AS5). It replaces the JSON-RPC-over-stdio plumbing v0 hand-rolled
-# behind `@agentclientprotocol/sdk`: the `Client` role the gateway speaks, the
-# `Agent` it talks to, typed `ContentBlock`s (including
-# `ImageContent { data, mime_type }` — the shape v0's `multimodal.ts` warns is
-# NOT Anthropic's `source.media_type`), and `AcpAgent`, which spawns a harness
-# and frames its stdio.
-#
-# `unstable_mcp_over_acp` EXISTS in 2.1.0 and is deliberately NOT enabled: it is
-# recorded as the future collapse of `centraid mcp` into the ACP connection
-# itself, and it stays unadopted while it is unstable and while neither
-# first-party adapter implements the `type: "acp"` MCP transport
-# (`vault-mcp-server.ts:1`-`:16`).
-agent-client-protocol = "2.1"
-# Comes with the protocol crate's own API surface (`BoxFuture`, the
-# executor-agnostic streams its connection is built on), so it is declared here
-# rather than reached through a re-export.
+# The gateway streams a file's bytes as a body; `Stream` is this crate's trait.
 futures = "0.3"
 
 # Wave 4 lane automations — civil time with a BUNDLED tzdb (#1020, D-1020-AU2).
@@ -186,24 +167,8 @@ jiff = { version = "0.2", default-features = false, features = [
   "tzdb-bundle-always",
 ] }
 
-# Wave 4 lane Locker — origin matching, and the one dependency it adds
-# (#1020, D-1020-L10). `psl` is the Public Suffix List embedded and pinned: its
-# version number IS the list's date, which is the same shape `tldts` has on the
-# TypeScript side that `contracts/origin-matching-v1.json` is the spec for. A
-# bump is a list refresh and re-runs that spec in both trees. `url` is the
-# WHATWG parser the policy needs anyway (IDNA, default-port normalisation) and
-# is already in the graph.
-psl = "2.1"
-url = "2.5"
-# THE ONE JOB A FAST HASH MUST NOT DO (#1025 S4, D-1025-S4-4). Stretching a
-# member's passphrase is memory-hardness work, and BLAKE3 is deliberately fast,
-# so the seat's at-rest wrap is Argon2id — not `blake3::derive_key`, which would
-# be the one place "one hash" bought an attacker throughput. v0's
-# PBKDF2-SHA-256 at 600,000 rounds is superseded; `pbkdf2` leaves the graph.
-argon2 = "0.6"
-
 # Wave 0.5 lane A — `crates/identity`: the 24-word phrase, SLIP-0010 hardened
-# derivation, device certificates and HPKE base mode (#1029 §0, §4).
+# derivation, the safety number and HPKE base mode (#1029 §0, §4).
 #
 # `bip39` mints and validates the 24-word recovery phrase and derives its
 # 64-byte seed (PBKDF2-HMAC-SHA512, BIP39's own spec — W0.5-R1). Default
@@ -212,8 +177,8 @@ argon2 = "0.6"
 # the workspace's `rand 0.9`), so entropy is drawn from `rand` and handed in as
 # bytes.
 bip39 = "3"
-# `ed25519-dalek` signs the account key, the vault identity key and device
-# certificates. Default features (`fast`, `zeroize`) are enough: every key
+# `ed25519-dalek` is the account key and the vault identity key, which signs
+# the claims and read grants a gateway verifies (#1080). Default features (`fast`, `zeroize`) are enough: every key
 # here is built from 32 bytes this crate already derived or generated, never
 # from `SigningKey::generate`, so the optional `rand_core` feature (pinned to
 # `rand_core 0.10`, a second major version next to the workspace's `rand 0.9`)
@@ -237,103 +202,68 @@ x25519-dalek = { version = "3", default-features = false, features = [
 # additionally pull in `mlkem`, `chacha` and `shake` (a post-quantum KEM, a
 # second AEAD, three more hash families) that no ciphersuite here uses.
 #
-# **`getrandom` IS NOT HERE, AND THAT IS THE WASM SPLIT** (#1029 §3, W4C-1).
-# It is what draws the ephemeral encapsulation key, once per seal — the one
-# place this repository lets a dependency touch the system RNG directly rather
-# than going through `rand`, because `hpke`'s convenience entry point is what
-# keeps its `rand_core 0.10` off our own call sites. But `getrandom` has no
-# backend on `wasm32-unknown-unknown` unless one is named in RUSTFLAGS, and a
-# Cloudflare Worker that verifies a device certificate must not need one. A
-# feature named in this table is unioned into every member that inherits the
-# dependency and cannot be switched off downstream, so it is named by
-# `centraid-identity`'s own `mint` feature instead (`crates/identity/Cargo.toml`),
-# which is default-on: nothing in this workspace changes, and the
-# `--no-default-features` half compiles to wasm with no RNG in its graph at all.
+# **`getrandom` IS NOT HERE, AND THAT IS DELIBERATE.** It is what draws the
+# ephemeral encapsulation key, once per seal — the one place this repository
+# lets a dependency touch the system RNG directly rather than going through
+# `rand`, because `hpke`'s convenience entry point is what keeps its
+# `rand_core 0.10` off our own call sites. A feature named in this table is
+# unioned into every member that inherits the dependency, so it is named by the
+# one crate that seals instead (`crates/identity/Cargo.toml`). It used to be a
+# `mint` feature there so the hosted adapter could link the crate on `wasm32`
+# without an RNG backend; that adapter is struck from v0 (#1029, scope amendment
+# 2026-09-21) and the feature is gone.
 hpke = { version = "0.14", default-features = false, features = [
   "x25519",
   "aes",
   "alloc",
 ] }
 
-# Wave 0.5 lane B — discovery: the signed pkarr record, publish and resolve
-# (#1029 §0, "Resolution: iroh's discovery, pkarr").
+# THE GATEWAY A MEMBER RUNS (#1080, `crates/gateway`'s `server` feature):
+# every entry here exists because a SERVER needs it and nothing else in this
+# workspace is one — the phone opens no listening socket, and this binary's
+# whole job is to be the thing it dials.
 #
-# `pkarr` is the signed-DNS record format, and the relay client that puts one
-# on an `iroh-dns-server` and reads it back. **`default-features = false` here
-# is the umbrella invariant, not a size trim** (#1029 §6): `pkarr`'s defaults
-# enable `dht`, whose mainline client binds a UDP socket and joins a gossip
-# overlay. The phone opens no listening socket, so the DHT half never enters
-# the graph, and `relays` — outbound HTTP to the configured server, nothing
-# else — is the whole client. `signed_packet` is the record type itself, which
-# encodes and decodes with no client at all.
-pkarr = { version = "8", default-features = false, features = [
-  "signed_packet",
-  "relays",
-] }
-# `iroh-dns-server` is n0's own server, a DEV-DEPENDENCY ONLY: the
-# publish-and-resolve exit runs one in-process on a free port, so the round
-# trip is proven against the implementation #1029 §0 names as the default
-# rather than against a mock of ours. It pulls `iroh-base`, `iroh-dns` and
-# `iroh-metrics`; it does NOT pull `iroh` proper, so no endpoint, no ALPN and
-# no QUIC listener reaches even the test graph. `ring` is its one default
-# feature, the rustls provider its self-signed HTTPS listener wants.
-iroh-dns-server = "1.2"
-
-# Wave 4 lane B — `crates/gateway-server`: the standalone gateway anyone can
-# self-host (#1029 §3). Every entry here exists because a SERVER needs it and
-# nothing else in this workspace is one: the phone opens no listening socket,
-# and this binary's whole job is to be the thing it dials.
-#
-# `axum` is the HTTP surface over `centraid-gateway-core`'s ports. It carries no
-# policy: every refusal it renders comes from `gateway_core::Refusal::code()`, so
-# the two adapters answer the same request with the same code.
+# `axum` is the HTTP surface over the gateway's rules. It carries no policy:
+# every refusal it renders is a `rules::code::Refusal`.
 axum = { version = "0.8", default-features = false, features = [
   "http1",
   "json",
   "query",
   "tokio",
 ] }
-# `reqwest` is the client half, and it exists for ONE caller: the S3-compatible
-# byte store. `default-features = false` drops the default TLS stack and the
-# cookie machinery; `rustls-tls` is the stack this workspace already links
-# through `tokio-rustls-acme`, so no second TLS implementation enters the graph.
-reqwest = { version = "0.12", default-features = false, features = [
-  "rustls-tls",
-  "http2",
-] }
-# ACME (RFC 8555) over rustls, so a self-hoster gets a certificate without a
-# second daemon. `tokio-rustls-acme` renews in the background and caches the
-# account and certificate on disk; TLS-ALPN-01 is the challenge, which needs no
-# inbound port 80 and no DNS API token — the two things a home box behind a
-# tunnel usually cannot offer.
-# `rustls-tls-webpki-roots` is its one default feature and the set this needs:
-# the roots the ACME client verifies the directory's own TLS with. Nothing here
-# turns on its `axum` feature — that pulls `axum-server`, a second HTTP server
-# beside the one this crate already runs.
-tokio-rustls-acme = { version = "0.9" }
+# TLS for both ends: the gateway's listener and the phone's pinned client.
 tokio-rustls = { version = "0.26", default-features = false, features = [
   "ring",
 ] }
-# THE S3 SIGNATURE, AND THE ONE PLACE IT LIVES (#1025 S4, D-1025-S4-5; W0.5-R1).
-#
-# AWS Signature Version 4 is HMAC-SHA256 over a SHA-256 payload digest, all the
-# way down: it is somebody else's protocol in exactly the shape
-# `crates/gateway-core/src/checksum.rs` already carries, and a signature
-# restated in BLAKE3 would not open an S3 bucket. So `hmac` joins `sha2` in the
-# graph, both confined to `crates/gateway-server/src/bytes/sigv4.rs` — the one
-# module under `crates/gateway-server` that names that function at all, with the
-# allowlist entry in `crates/vault/tests/one_hash.rs` that says so. The boundary
-# is the point: every object NAME this server handles is BLAKE3, and so is every
-# request body digest it verifies.
-#
-# `time` is the SigV4 credential scope's own date arithmetic. Nothing here reads
-# a wall clock for a RULE: time is an input to `gateway-core`, and what this
-# crate reads is the server's own clock and hands in.
-time = { version = "0.3", default-features = false, features = [
-  "formatting",
-  "std",
-] }
 
+# #1080 — `crates/gateway`, the gateway v2: direct HTTPS from the phone to a
+# gateway that mints its own certificate, which the phone pins by BLAKE3
+# fingerprint. No certificate authority, relay or DNS service is involved.
+#
+# `rcgen` mints that certificate at first `serve`: ECDSA P-256 (Apple's TLS
+# stack, which drives the iPhone's background upload session, refuses Ed25519
+# server certificates), through `ring`, the provider `tokio-rustls` above
+# already links, with `pem` for the two files an operator can read. These are
+# the crate's defaults, named so a default that moves cannot change the curve.
+rcgen = { version = "0.14", default-features = false, features = [
+  "crypto",
+  "ring",
+  "pem",
+] }
+# `serve` advertises `_centraid-gateway._tcp` so a phone at home can refresh a
+# destination's addresses without a pairing QR. Pure Rust on its own thread,
+# no async runtime; `default-features = false` drops its `log` and async
+# channel halves, which nothing here reads.
+mdns-sd = { version = "0.21", default-features = false }
+# The pairing QR lists the bound port on every non-loopback interface address.
+# This enumerates them, and `mdns-sd` already links it.
+if-addrs = "0.15"
+# And the host's own name, for the `<host>.local` address the QR carries last.
+gethostname = "1"
+# DEV-ONLY: the test that parses the minted certificate and asserts its key is
+# P-256 reads it with a real X.509 parser, not a byte search. Already in the
+# graph through `rcgen`.
+x509-parser = "0.18"
 # THE EDIT-RUN LOOP IS THE NEW HERMES (#1020) — and DWARF is what it costs on
 # disk (D-1020-G7).
 #
@@ -342,8 +272,8 @@ time = { version = "0.3", default-features = false, features = [
 # and bin executables** (the four `centraid` test binaries alone were
 # 363–387 MB each) and **4.3 GB was rlibs**. Almost all of it is debuginfo, and
 # almost none of it was ever read: the disk allowance ran out twice during this
-# wave and the thing that ran out was type and variable tables for iroh,
-# rustls and SQLite.
+# wave and the thing that ran out was type and variable tables for the
+# networking stack, rustls and SQLite.
 #
 # So: `debug = "line-tables-only"` for OUR crates — a backtrace still names the
 # file and the line, which is what a red test is read with — and `debug = false`
@@ -365,7 +295,7 @@ split-debuginfo = "unpacked"
 
 [profile.dev.package."*"]
 # Dependencies: optimised once, and carrying no debuginfo at all. Stepping into
-# iroh or rusqlite is a `CARGO_PROFILE_DEV_DEBUG=2` session, not the default
+# rustls or rusqlite is a `CARGO_PROFILE_DEV_DEBUG=2` session, not the default
 # every build pays for.
 opt-level = 2
 debug = false

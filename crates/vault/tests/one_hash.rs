@@ -13,12 +13,9 @@
 //!    The allowlist is tiny and each entry carries its reason, because an
 //!    allowlist without reasons is a place to hide the next one.
 //!
-//! "The Rust tree" is `crates/` **and `gateway/`** (#1029 §3). The second root
-//! is not a convenience: `gateway/cloudflare` is an adapter of the same protocol
-//! as `crates/gateway-server`, it has the same reason to name SigV4, and a scan
-//! that stopped at `crates/` would have let the third carve-out in without
-//! anybody writing down why. A rule that covers one of two adapters is a rule
-//! the other one is exempt from by accident.
+//! "The Rust tree" is `crates/`. It was `crates/` and `gateway/` while there
+//! were two adapters of one protocol; the hosted adapter is struck from v0
+//! (#1029, scope amendment 2026-09-21) and `gateway/` no longer exists.
 //!
 //! Neither scan is clever, and that is the point: a clever scan is one somebody
 //! silences.
@@ -39,13 +36,11 @@ fn crates_root() -> PathBuf {
 
 /// Every root of Rust source this repository ships.
 ///
-/// `crates/` is the workspace; `gateway/` is the Cloudflare adapter, which is
-/// its OWN cargo workspace (it compiles only to `wasm32-unknown-unknown`) and is
-/// therefore reached by path rather than by workspace membership. A file under
-/// either is scanned the same way and is named in the allowlist by its path from
-/// the repository root.
+/// One root, `crates/`, since the hosted adapter left (#1029, scope amendment
+/// 2026-09-21). A file under it is named in the allowlist by its path from the
+/// repository root.
 fn source_roots() -> Vec<PathBuf> {
-    vec![crates_root(), repository_root().join("gateway")]
+    vec![crates_root()]
 }
 
 fn rust_files() -> Vec<PathBuf> {
@@ -96,7 +91,7 @@ fn relative(path: &Path) -> String {
 /// A file lands here for one of two reasons and the reason is the entry:
 ///
 /// - it calls `content_digest` (or `centraid_media::format::content_hash_hex`,
-///   which IS `content_digest` — see `crates/vault/src/backup/store.rs`); or
+///   which IS `content_digest`); or
 /// - it carries a value it did not compute, out of a row or a verified handle,
 ///   and the entry says which.
 ///
@@ -115,15 +110,6 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
         "search/tests/door.rs",
         "a test fixture row; the value is a literal of the right shape and \
          nothing reads it as a digest",
-    ),
-    (
-        "vault/src/backup/drill.rs",
-        "the restore drill's own corpus: the ids come from `BlobStore::put`, \
-         which returns `backup::store::digest`",
-    ),
-    (
-        "vault/src/backup/restore.rs",
-        "writes a row the drill then samples; the value is the store's own id",
     ),
     (
         "vault/src/commands/core.rs",
@@ -148,9 +134,16 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
     ),
     (
         "vault/src/content.rs",
-        "`Vault::stage_bytes`, which writes the hash bao already verified the \
-         pulled bytes against — and this file DEFINES `content_digest`, so its \
-         one `blake3::hash` call is the door itself",
+        "`Vault::stage_bytes` and `Vault::stage_derivative`, which write the hash \
+         the content store computed as the bytes were written (#1080, the stage \
+         door) — and this file DEFINES `content_digest`, so its one \
+         `blake3::hash` call is the door itself",
+    ),
+    (
+        "vault/src/backup/files.rs",
+        "its own `#[cfg(test)]` fixture, and nothing else in the file writes a \
+         row: an original and its poster seeded with `content_digest` over the \
+         fixture's bytes, so the listing has a film and a picture to tell apart",
     ),
     (
         "vault/src/page.rs",
@@ -165,17 +158,9 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
          is (#1029 W3-0)",
     ),
     (
-        "vault/src/backup/base.rs",
-        "`content_digest` over the 4 MiB page range it just sealed — the \
-         plaintext hash IS the range-dedup key, which is why the index column \
-         exists (#1029 §2, §4). `object_name` beside it is the object's own \
-         name, which is `BlobStore::put`'s return and therefore \
-         `backup::store::digest`, the same function",
-    ),
-    (
-        "vault/tests/backup_crash_matrix.rs",
-        "`content_digest` over the row bytes the matrix writes — a fixture \
-         corpus, hashed through the one door so the scan is not lied to",
+        "vault/tests/collection_kind.rs",
+        "`content_digest` over the asset id — stand-in bytes for a photograph \
+         whose only job is to be filed into an album, and that nothing opens",
     ),
     (
         "vault/tests/common/mod.rs",
@@ -188,6 +173,11 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
     (
         "vault/tests/media_commands.rs",
         "`content_digest` over the bytes the test minted",
+    ),
+    (
+        "vault/tests/originals.rs",
+        "`BlobStore::put`'s return for an original held on this device, and \
+         `content_digest` over the same bytes for one that is not",
     ),
 ];
 
@@ -352,59 +342,6 @@ const SHA256_ALLOWED: &[(&str, &str)] = &[
         "opens RFC 9180 Appendix A.1's own ciphertexts with A.1's own key, so it \
          must name A.1's ciphersuite. A vector we generated proves only that we \
          agree with ourselves; the RFC's bytes are the point of the file (W0.5-R1)",
-    ),
-    (
-        "gateway-core/src/checksum.rs",
-        "THE WIRE'S ATTESTED CHECKSUM (#1029 §3), in W0.5-R1's shape and with \
-         the same boundary. An object's NAME is the BLAKE3-256 of its \
-         ciphertext, everywhere, and that does not move. What this file holds \
-         is the SECOND name the same bytes have on somebody else's API: R2, S3, \
-         B2 and MinIO attest SHA-256 and nothing else, and R2 records it only \
-         when the client sent it — so a blind gateway that must verify bytes it \
-         never sees has to speak the store's checksum or verify nothing at all. \
-         A checksum restated in BLAKE3 would not be that protocol any more. The \
-         BOUNDARY is the point: this is the ONLY module in \
-         `crates/gateway-core` that names SHA-256, the object name beside it is \
-         BLAKE3 (`gateway-core/src/ids.rs`), and `auth.rs`'s request body digest \
-         is BLAKE3 because THAT digest is ours",
-    ),
-    (
-        "gateway-server/src/bytes/sigv4.rs",
-        "AWS SIGNATURE VERSION 4 (#1029 §3), in the entry above's shape and with \
-         the same boundary. An object store's API is not ours: SigV4 is defined \
-         as an HMAC-SHA256 chain over a canonical request whose payload is \
-         identified by its SHA-256, and a signature restated in BLAKE3 would not \
-         open a bucket — it would be a protocol no store implements. The BOUNDARY \
-         is the point: this is the ONLY module in `crates/gateway-server` that \
-         names the function; the two header names it spells \
-         (`x-amz-content-sha256`, `x-amz-checksum-sha256`) are the store's own \
-         and are declared here so that no other file has to spell them; every \
-         object NAME this server handles is BLAKE3; and the request body digest \
-         it verifies is BLAKE3 because THAT digest is ours",
-    ),
-    (
-        "gateway/cloudflare/src/r2.rs",
-        "R2'S OWN FIELD NAME, AND NOTHING COMPUTED (#1029 §3). `checksums.sha256` \
-         is a field on a type the Workers runtime defines, not a digest this \
-         file chooses: it is read, and its `Option` IS the rule — R2 records the \
-         attestation only when the client sent it, so `None` is a refused commit. \
-         The entry is here rather than silenced with a citation because the \
-         distinction is worth a reader's attention: this file NAMES a store's \
-         field, `sigv4.rs` beside it COMPUTES a signature, and only the second \
-         is a hash decision. Every object NAME this adapter handles is BLAKE3",
-    ),
-    (
-        "gateway/cloudflare/src/sigv4.rs",
-        "AWS SIGNATURE VERSION 4 AGAIN, on the other adapter and for a different \
-         half of it (#1029 §3). `gateway-server` signs HEADERS for requests it \
-         makes itself; this signs a QUERY STRING for a request the gateway never \
-         makes — the presigned URL a phone uploads to, because on the hosted \
-         adapter bytes never pass through gateway code at all. Same reason, same \
-         boundary: this is the ONLY module in `gateway/cloudflare` that names the \
-         function, every object NAME it handles is BLAKE3, and the request body \
-         digest it verifies is BLAKE3 because THAT digest is ours. The \
-         duplication between the two SigV4 modules is real and is filed as a \
-         find in this lane\'s receipt with a recommendation to extract it",
     ),
     (
         "xtask/src/artifact.rs",

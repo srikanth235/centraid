@@ -69,6 +69,26 @@ public interface ScreenMachine<S, E> {
      * a real answer — Home draws its own status line and needs no seat.
      */
     public fun seatChanged(seat: SeatState): E?
+
+    /**
+     * A [ScreenEffect.Schedule] CAME DUE: this screen's own event for [token],
+     * or null for a screen that schedules nothing (the kit's autosave debounce).
+     *
+     * A reducer has no clock, so a delay is an effect the runtime serves and
+     * its expiry is an event the machine names here. A default, because most
+     * screens never schedule and a stub on each would say nothing.
+     */
+    public fun ticked(token: String): E? = null
+
+    /**
+     * THE SCREEN IS CLOSING: this screen's own event, or null.
+     *
+     * The bridge's `leave()` sends it BEFORE it releases its scope, so an
+     * editor's unsaved words are submitted on close (#1015 D3: close = done).
+     * The write runs on the session's scope, so releasing the bridge does not
+     * cancel it.
+     */
+    public fun left(): E? = null
 }
 
 public data class Step<S>(val state: S, val effects: List<ScreenEffect> = emptyList())
@@ -88,6 +108,19 @@ public sealed interface ScreenEffect {
     public data class ReadPage(
         public val screenId: String,
         public val afterCursor: String?,
+    ) : ScreenEffect
+
+    /**
+     * WAKE THIS SCREEN LATER. A reducer is pure and has no clock, so a delay is
+     * data: the runtime serving [screenId] waits [delayMs] and sends the
+     * machine's [ScreenMachine.ticked] event for [token]. A later schedule does
+     * not cancel an earlier one; the machine drops a token it has moved past,
+     * which is what makes the debounce a pure function.
+     */
+    public data class Schedule(
+        public val screenId: String,
+        public val token: String,
+        public val delayMs: Long,
     ) : ScreenEffect
 
     /** Ask the OS. The answer arrives as an event, because it is a state. */
@@ -141,37 +174,56 @@ public sealed interface ScreenEffect {
     public data class SwitchVault(public val vaultId: String) : ScreenEffect
 
     /**
-     * FETCH ONE ORIGINAL THE MEMBER TAPPED (#1025 S5, D-1025-S7-63).
+     * FETCH ONE ORIGINAL THE MEMBER TAPPED (#1025 S5, D-1025-S7-63; #1080).
      *
      * WhatsApp's download arrow. An effect and not a write: it commits
      * nothing.
      *
-     * **WHAT SERVES IT, AND WHAT IS STILL MISSING** (#1029 §1, W6).
-     *
-     * It rode `seat.bytes.fetch`, which left with the seat plane —
-     * `grep -rn 'seat.bytes.fetch' crates/` is empty — so `ScreenRuntime` has
-     * not answered it since. W6 built the two halves under it and NOT the hop
-     * between them, and the honest state is worth writing down rather than
-     * discovering:
-     *
-     * - the vault knows where the original is and holds the key that opens it
-     *   (`backup_blob_placement`, `backup::custody::open_blob`);
-     * - the member's transfer rule decides whether this window may ask for it,
-     *   and a tap overrides the rule for that one item
-     *   (`centraid_blobs::plan::wants_from_custody`, `Budget::only`);
-     * - **there is no core request that carries the tap.** `Request` has no
-     *   `fetch_original` arm, so a shell has nothing to send. Adding one means
-     *   a proto field, a handler, and a gateway transport inside
-     *   `crates/core` — which is a layering decision for the umbrella and not
-     *   one to take while wiring a screen.
-     *
-     * The affordance and this effect are kept rather than deleted because that
-     * remaining hop is a wire, not a design.
+     * `ScreenRuntime` serves it through the core's `fetch_original` (arm 25,
+     * `CoreBackupDoors.fetchOriginal`): the bytes come back from this phone
+     * when they are already here, else from a paired gateway, sealed and
+     * checked, into the app's own store. The screen hears a `FetchSettled` —
+     * fetched, so its next read serves the original, or the line that names
+     * why not (`FetchedOriginal`). It is the way back for an original that
+     * free up space removed from the library.
      */
     public data class FetchOriginal(
         public val screenId: String,
         public val assetId: String,
         public val contentHash: String,
+    ) : ScreenEffect
+
+    /**
+     * RENDER AN EDIT AND KEEP IT AS A NEW PHOTOGRAPH (#1029, photos port; v0's
+     * `photo-edit-save.ts`).
+     *
+     * An effect and not a write, because the write cannot be composed yet:
+     * `media.add_asset` names STAGED BYTES, and the bytes do not exist until a
+     * platform has decoded the original and drawn the plan onto it — CoreImage
+     * on one shell, `Bitmap` and `Matrix` on the other. The reducer states the
+     * intent; the shell renders, stages and commits, and answers with the
+     * screen's own settle event.
+     *
+     * [key] is CONTENT-DERIVED — the asset and the plan — so a settle that
+     * arrives for a plan the member has since changed is recognisably stale.
+     * [plan] is an encoded `PhotoEditPlan`: Swift decodes it with
+     * SwiftProtobuf, and a Wire object would not cross.
+     *
+     * [capturedAt], [tzOffsetMinutes] and [placeId] are the ORIGINAL's: an
+     * edit keeps the date and the place of the photograph it was made from, as
+     * Apple Photos does. Empty or null means the original records none, and
+     * none is written.
+     */
+    public data class RenderEdit(
+        public val screenId: String,
+        public val key: String,
+        public val sourceAssetId: String,
+        public val sourcePath: String,
+        public val title: String,
+        public val capturedAt: String,
+        public val tzOffsetMinutes: Int?,
+        public val placeId: String,
+        public val plan: okio.ByteString,
     ) : ScreenEffect
 }
 

@@ -126,6 +126,11 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
             event.roster_changed != null ->
                 Step(state.copy(vaults = event.roster_changed.vaults))
 
+            // THE BACKUP LINE IS SHELL KNOWLEDGE too (#1080): finished by
+            // `BackupLines` from the core's `backup_status`, and recorded as is.
+            event.backup_line != null ->
+                Step(state.copy(backup_line = event.backup_line.line))
+
             event.vault_changed != null -> {
                 val vault = event.vault_changed.vault
                 // THE FIRST LOCKUP IS NOT A SWITCH. A state with no vault in it
@@ -203,6 +208,7 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
                 vaults = vaults,
                 all_apps_sheet_open = all_apps_sheet_open,
                 vault_sheet_open = vault_sheet_open,
+                backup_line = backup_line,
             ),
             fresh.effects,
         )
@@ -276,7 +282,12 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
      */
     private fun regraded(data: HomeData): HomeData {
         val graded = data.tiles.map { tile ->
-            tile.copy(earns_grid = SpringboardPolicy.earnsGrid(tile.status, tile.body))
+            val spoken = HomeTileWords.spoken(tile)
+            tile.copy(
+                earns_grid = SpringboardPolicy.earnsGrid(tile.status, tile.body),
+                open_label = spoken.first,
+                accessibility_label = spoken.second,
+            )
         }
         val membership = SpringboardPolicy.gridMembership(graded)
         val unreadable = SpringboardPolicy.everyTileUnreadable(graded)

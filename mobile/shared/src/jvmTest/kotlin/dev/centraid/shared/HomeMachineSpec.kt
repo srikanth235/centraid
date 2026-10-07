@@ -1,5 +1,6 @@
 package dev.centraid.shared
 
+import centraid.screen.v1.BackupLine
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.HomeState
 import centraid.screen.v1.HomeStatus
@@ -14,13 +15,17 @@ import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.shell.FirstMoves
 import dev.centraid.shared.shell.HomeMachine
+import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.shell.SpringboardPolicy
+import dev.centraid.shared.shell.StrandedWrite
+import dev.centraid.shared.shell.strandedStatus
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 
 /**
@@ -69,6 +74,51 @@ class HomeMachineSpec : StringSpec({
         SpringboardPolicy.SPRINGBOARD_ORDER.fold(state) { acc, appId ->
             arrive(acc, appId, TileStatus.TILE_STATUS_EMPTY)
         }
+
+    // --- the words a view draws, not spells (#1047) ------------------------
+
+    "every tile's accessibility words are the machine's: \"Open People, 5 people\", the withheld glyph never spoken" {
+        val seeded = opened().data_!!.tiles.single { it.app_id == "people" }
+        seeded.open_label shouldBe "Open People"
+        seeded.accessibility_label shouldBe "Open People"
+        val counted = HomeMachine.reduce(
+            opened(),
+            HomeEvent(
+                tile = HomeEvent.TileArrived(
+                    app_id = "people",
+                    status = TileStatus.TILE_STATUS_CONTENT,
+                    count = TileCount(value_ = 5),
+                    count_label = "people",
+                ),
+            ),
+        ).state.data_!!.tiles.single { it.app_id == "people" }
+        counted.accessibility_label shouldBe "Open People, 5 people"
+        counted.open_label shouldBe "Open People"
+        val capped = HomeMachine.reduce(
+            opened(),
+            HomeEvent(
+                tile = HomeEvent.TileArrived(
+                    app_id = "docs",
+                    status = TileStatus.TILE_STATUS_CONTENT,
+                    count = TileCount(value_ = 200, capped = true),
+                    count_label = "documents",
+                ),
+            ),
+        ).state.data_!!.tiles.single { it.app_id == "docs" }
+        capped.accessibility_label shouldBe "Open Docs, 200+ documents"
+    }
+
+    "the people tile's foot is in state: \"+N more in your directory\", else everyone" {
+        fun row(id: String) = centraid.core.v1.Row(
+            values = listOf(centraid.core.v1.Value(text = id), centraid.core.v1.Value(text = "Name $id")),
+        )
+        val five = HomeReads.arrived("people", (1..5).map { row("p$it") }, capped = false).tile!!.body!!.people!!
+        five.more shouldBe 2
+        five.more_label shouldBe "+2 more in your directory"
+        val two = HomeReads.arrived("people", (1..2).map { row("p$it") }, capped = false).tile!!.body!!.people!!
+        two.more shouldBe 0
+        two.more_label shouldBe "That's everyone in your directory"
+    }
 
     // --- the seed ---------------------------------------------------------
 
@@ -176,7 +226,7 @@ class HomeMachineSpec : StringSpec({
         // Empty, and still on the grid — it has something true to say and is
         // never an invitation to fill it.
         locker.earns_grid.shouldBeTrue()
-        SpringboardPolicy.gridMembership(state.data_!!.tiles)
+        SpringboardPolicy.gridMembership(state.data_.tiles)
             .idleAppIds.contains("locker").shouldBeFalse()
     }
 
@@ -262,7 +312,7 @@ class HomeMachineSpec : StringSpec({
         frozen.data_!!.tiles.first { it.app_id == "docs" }.status shouldBe
             TileStatus.TILE_STATUS_CONTENT
         frozen.vault!!.state shouldBe VaultLockup.State.STATE_FROZEN
-        frozen.vault!!.frozen_line shouldBe "3 changes since 2026-03-14"
+        frozen.vault.frozen_line shouldBe "3 changes since 2026-03-14"
     }
 
     // --- the packed grid --------------------------------------------------
@@ -299,7 +349,7 @@ class HomeMachineSpec : StringSpec({
         // Locker. A tile with nothing to say is an invitation like any other.
         val drawn = filled.data_!!.grid_rows.flatMap { it.app_ids }
         drawn shouldContainExactly listOf("notes")
-        filled.data_!!.tiles.size shouldBe SpringboardPolicy.SPRINGBOARD_ORDER.size
+        filled.data_.tiles.size shouldBe SpringboardPolicy.SPRINGBOARD_ORDER.size
     }
 
     "every tile unreadable draws them all rather than an empty launcher" {
@@ -374,8 +424,10 @@ class HomeMachineSpec : StringSpec({
         val moves = settleAllEmpty(opened()).data_!!.first_moves
         // A nudge as tall as its grid is no nudge.
         moves.size shouldBe FirstMoves.LIMIT
-        // Leverage order, not springboard order: one connection fills several.
-        moves.first().id shouldBe FirstMoves.CONNECTORS
+        // Leverage order, not springboard order. `connectors` led it until
+        // #1029 §8 deleted the connector plane; the head of the order is now
+        // the first app in it.
+        moves.first().id shouldBe FirstMoves.FIRST_MOVE_ORDER.first()
         moves.all { it.label.isNotEmpty() && it.hint.isNotEmpty() }.shouldBeTrue()
     }
 
@@ -434,7 +486,7 @@ class HomeMachineSpec : StringSpec({
             ),
         ).state
         loud.data_!!.status!!.tone shouldBe HomeStatus.Tone.TONE_URGENT
-        loud.data_!!.tiles shouldBe filled.data_!!.tiles
+        loud.data_.tiles shouldBe filled.data_!!.tiles
     }
 
     // --- the vault switcher -------------------------------------------------
@@ -688,6 +740,30 @@ class HomeMachineSpec : StringSpec({
         again.data_!!.tiles.first { it.app_id == "docs" }.status shouldBe
             TileStatus.TILE_STATUS_CONTENT
         again.vault!!.state shouldBe VaultLockup.State.STATE_ONLINE
+    }
+
+    "a write stranded by its screen's closing is Home's status line, in the attention tone" {
+        val quiet = strandedStatus(StrandedWrite(appId = "notes", command = "knowledge.edit_note", sentence = ""))
+        quiet.tone shouldBe HomeStatus.Tone.TONE_ATTENTION
+        quiet.copy shouldBe "Your last change in Notes was not saved."
+        quiet.action shouldBe ""
+        quiet.destination shouldBe HomeStatus.Destination.DESTINATION_NONE
+        strandedStatus(StrandedWrite("tasks", "schedule.edit_task", "That task is gone.")).copy shouldBe
+            "Tasks: That task is gone."
+        val told = HomeMachine.reduce(named("v1", "Demo vault"), HomeEvent(status = HomeEvent.StatusChanged(status = quiet))).state
+        told.data_.shouldNotBeNull().status shouldBe quiet
+    }
+
+    "the backup line is Home's to draw, and a reopen keeps it until the store redraws it" {
+        // #1080 (seam contract A11): every line `BackupStatusStore` draws
+        // arrives as a `BackupLineChanged`, and the view reads it off the
+        // state like any other field.
+        val line = BackupLine(sentence = "Backed up 2 minutes ago.", tone = BackupLine.Tone.TONE_QUIET)
+        val drawn = HomeMachine.reduce(opened(), HomeEvent(backup_line = HomeEvent.BackupLineChanged(line = line))).state
+        drawn.backup_line shouldBe line
+        // A RELOAD IS THE TILES', not the line's: the session's rebind re-reads
+        // the status and sends the new line itself.
+        HomeMachine.reduce(drawn, HomeEvent(opened = HomeEvent.Opened())).state.backup_line shouldBe line
     }
 })
 

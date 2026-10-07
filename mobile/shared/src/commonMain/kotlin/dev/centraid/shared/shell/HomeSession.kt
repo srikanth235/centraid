@@ -2,26 +2,55 @@ package dev.centraid.shared.shell
 
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.HomeState
+import centraid.screen.v1.HomeStatus
 import centraid.screen.v1.SeatState
 import centraid.screen.v1.VaultLockup
 import dev.centraid.core.CentraidCore
+import dev.centraid.design.CentraidCatalog
+import dev.centraid.design.copy.SharedCopy
+import dev.centraid.shared.custody.DevSeed
+import dev.centraid.shared.platform.BackgroundTasks
 import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
+import dev.centraid.shared.sync.BackupReading
+import dev.centraid.shared.sync.BackupStatusStore
 import dev.centraid.shared.sync.ChangeStream
+import dev.centraid.shared.sync.CoreBackupDoors
+import dev.centraid.shared.sync.CoreBackupStatus
+import dev.centraid.shared.sync.CoreDrainDoor
+import dev.centraid.shared.sync.DrainAnswer
+import dev.centraid.shared.sync.DrainPass
+import dev.centraid.shared.sync.ForgetAnswer
+import dev.centraid.shared.sync.LibraryDeleter
+import dev.centraid.shared.sync.PassConditions
+import dev.centraid.shared.sync.ScreenQueries
+import dev.centraid.shared.sync.ScreenQueryRuntime
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
 import dev.centraid.shared.sync.ScreenWrites
+import dev.centraid.shared.sync.ShelfDrain
+import dev.centraid.shared.sync.StrandedWrites
+import dev.centraid.shared.sync.UploadLoop
+import dev.centraid.shared.sync.UploadPin
+import dev.centraid.shared.sync.freezeFor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * HOME, WIRED TO A REAL VAULT — AND TO THE OTHERS THE DEVICE HOLDS
@@ -86,6 +115,182 @@ public class HomeSession private constructor(
 ) {
     public val state: StateFlow<HomeState> get() = host.state
 
+    /** The monotonic origin the commit debounce measures from. See [drain]. */
+    private val sinceOpen: TimeMark = TimeSource.Monotonic.markNow()
+
+    /**
+     * THE PASS OVER THIS DEVICE'S SHELF (#1080, the shells; #1029 W18-6).
+     *
+     * On the session and not on either shell, because a pass is over the
+     * SHELF — every held vault — and the shelf is this object's. iOS reaches it
+     * through `HomeBridge`, Android directly and from its workers. The
+     * session's own triggers are wired in [open]: the first pass, every
+     * commit, and the radio moving.
+     *
+     * The member's rule and the platform's reading are read at the start of
+     * every run ([PassConditions.read]); the next window is asked for after
+     * every pass, because a `BGTaskRequest` is one-shot.
+     */
+    public val drain: ShelfDrain = ShelfDrain(
+        holdings = { shelf.all() },
+        doorFor = { core -> CoreDrainDoor(core) },
+        // MONOTONIC, NOT THE WALL CLOCK: it measures only "how long since",
+        // and a phone whose clock moves would debounce for hours or never. It
+        // is never a backup claim; those moments are the gateway's.
+        nowMs = { sinceOpen.elapsedNow().inWholeMilliseconds },
+        conditions = { PassConditions.read(services) },
+        reschedule = DrainPass.Rescheduler { services.backgroundTasks.resubmit() },
+        // WHAT THE SPOOL HAD NO ROOM FOR AT IMPORT, streamed from the library
+        // again when the core asks (`need_bytes`).
+        feed = { vaultId, needs -> libraryFeed.feed(vaultId, needs) },
+        onOutcome = { outcome -> settle(outcome) },
+    )
+
+    private val libraryFeed: LibraryFeed = LibraryFeed(services) { vaultId ->
+        shelf.all().firstOrNull { it.vaultId == vaultId && it.moved == null }?.core
+    }
+
+    /**
+     * WHAT THE OS SAID WHEN THIS LAUNCH REGISTERED ITS WINDOWS, or null before
+     * it answered. A member reads it: "Background App Refresh is off" is a
+     * reason their backup waits for the app to be opened.
+     */
+    public val backgroundRegistration: StateFlow<BackgroundTasks.Registration?>
+        get() = registration.asStateFlow()
+
+    private val registration = MutableStateFlow<BackgroundTasks.Registration?>(null)
+
+    /**
+     * "BACK UP NOW" (#1080, the three controls): a snapshot and everything
+     * that can move, inside the platform's long-run envelope — a foreground
+     * notification on Android, an awake screen on iOS — which is released
+     * however the run ends. A second press joins the first ([ShelfDrain.backUpNow]).
+     */
+    public suspend fun backUpNow(): List<ShelfDrain.Outcome> {
+        services.backgroundTasks.backlog(start = true)
+        return try {
+            drain.backUpNow()
+        } finally {
+            services.backgroundTasks.backlog(start = false)
+        }
+    }
+
+    /**
+     * EVERY VAULT'S BACKUP READING AND THE FOREGROUND'S LINE (#1080). Re-read
+     * after each pass ([settle]) and on every rebind, so Home's line follows a
+     * switch; the Backup screen re-reads it when it opens.
+     */
+    public val backupStatus: BackupStatusStore = BackupStatusStore(
+        holdings = { shelf.all() },
+        foreground = { shelf.foregroundHolding()?.vaultId },
+        doorFor = { core -> CoreBackupStatus(core) },
+        // THE WALL CLOCK, for "2 minutes ago" only: every time it is compared
+        // with is the gateway's.
+        nowMs = { services.clock.read().epochMillis },
+    )
+
+    /**
+     * ONE VAULT'S PASS ENDED: re-read its status, and freeze a vault another
+     * phone claimed. The gateway's `MOVED` — on this pass, or remembered by the
+     * core's ledger — is the producer `Shelf.freeze` was waiting for (#1029 F1).
+     */
+    private suspend fun settle(outcome: ShelfDrain.Outcome) {
+        val reading = backupStatus.refresh(outcome.vaultId)
+        val answer = (outcome.outcome as? DrainPass.Outcome.Ran)?.answer
+        freezeIfMoved(outcome.vaultId, reading, movedAtMs = answer?.movedAtMs?.takeIf {
+            answer.stopped == DrainAnswer.Stopped.MOVED
+        })
+        // EVERY iOS PASS ENDS WITH RECONCILE → HANDOFF → ENQUEUE (A11): what
+        // the pass sealed but did not move goes to the OS to carry while the
+        // app is suspended. No loop is installed on Android.
+        uploads?.afterPass(outcome.vaultId)
+    }
+
+    /** The iOS mover's Kotlin half, once the shell installed one ([attachUploads]). */
+    private var uploads: UploadLoop? = null
+
+    /**
+     * THE SHELL'S HAND ON THE OS LIBRARY, or null (#1080 A20). Free up space
+     * reads it at each use: Android installs one when its activity is created
+     * and clears it when the activity is destroyed, because the deleter holds
+     * that activity's launcher for the system's confirmation, and a rotation
+     * must not leave a destroyed activity here. iOS installs one, once,
+     * through `HomeBridge`.
+     */
+    public val libraryDeleter: LibraryDeleter? get() = deleter
+
+    private var deleter: LibraryDeleter? = null
+
+    /** Install the shell's deleter, or clear it with null. See [libraryDeleter]. */
+    public fun installLibraryDeleter(deleter: LibraryDeleter?) {
+        this.deleter = deleter
+    }
+
+    /**
+     * Bind the iOS mover's loop to this session's vaults (`HomeBridge`). A
+     * frozen vault hands nothing off: the gateway would refuse its writes.
+     */
+    public fun attachUploads(loop: UploadLoop) {
+        uploads = loop
+        fun drainable() = shelf.all().filter { it.core != null && it.moved == null }
+        loop.attach(
+            UploadLoop.Binding(
+                vaults = { drainable().map { it.vaultId } },
+                doorsFor = { vaultId ->
+                    if (drainable().none { it.vaultId == vaultId }) {
+                        null
+                    } else {
+                        CoreBackupDoors { shelf.all().firstOrNull { it.vaultId == vaultId }?.core }
+                    }
+                },
+                resubmit = { services.backgroundTasks.resubmit() },
+            ),
+        )
+    }
+
+    /**
+     * Every held vault's pinned gateway certificates (`pins`), for the shell's
+     * own TLS. Null when no vault's core answered — a refusal is never an
+     * empty list, which would read as "trust nothing".
+     */
+    public suspend fun uploadPins(): List<UploadPin>? {
+        val answers = shelf.all().mapNotNull { holding ->
+            holding.core?.let { core -> CoreBackupDoors { core }.pins() }
+        }
+        if (answers.isEmpty()) return null
+        return answers.flatten().distinctBy { it.gateway to it.certDer.toList() }
+    }
+
+    /** Freeze [vaultId] once, when a pass or the ledger says it moved ([freezeFor]). */
+    private suspend fun freezeIfMoved(vaultId: String, reading: BackupReading?, movedAtMs: Long?) {
+        val moved = freezeFor(reading, movedAtMs) ?: return
+        if (shelf.all().any { it.vaultId == vaultId && it.moved != null }) return
+        vaultMoved(vaultId, moved.atIso, moved.unacked)
+        backupStatus.publish()
+    }
+
+    /**
+     * Stop backing [shelf]'s foreground vault up to [gatewayId] (seam
+     * contract A5): the ledger drops the destination and its confirmations,
+     * and what that gateway holds stays there. True when forgotten, false when
+     * the core knew no such destination, null when there was no core to ask.
+     */
+    public suspend fun forgetDestination(gatewayId: String): ForgetAnswer? {
+        val forgotten = CoreBackupDoors { shelf.core() }.forget(gatewayId)
+        backupStatus.refreshForeground()
+        return forgotten
+    }
+
+    /**
+     * The member changed the rule: the windows' constraints follow it, and on
+     * iOS every upload the OS holds is cancelled, because each keeps the
+     * cellular flag of the rule it was handed off under ([UploadLoop.cancelAll]).
+     */
+    public fun ruleChanged() {
+        services.backgroundTasks.resubmit()
+        uploads?.cancelAll()
+    }
+
     /**
      * THE FOREGROUND HOLDING'S CORE, ASKED OF THE SHELF EVERY TIME.
      *
@@ -101,6 +306,25 @@ public class HomeSession private constructor(
 
     public fun send(event: HomeEvent) {
         scope.launch { host.send(event) }
+    }
+
+    /**
+     * THE SCOPE A SCREEN'S LAST WRITE RUNS ON. A bridge's `leave()` sends the
+     * screen's `Left` event here rather than on its own scope, so releasing the
+     * bridge does not cancel the flush it just asked for.
+     */
+    internal val outliving: CoroutineScope get() = scope
+
+    /**
+     * A write that failed after its screen was left (the kit's autosave flush
+     * on close). Home's status line says so ([serveStranded]).
+     */
+    public val strandedWrites: SharedFlow<StrandedWrite> get() = _stranded.asSharedFlow()
+
+    private val _stranded = MutableSharedFlow<StrandedWrite>(extraBufferCapacity = STRANDED_BUFFER)
+
+    private val strand = StrandedWrites { appId, command, sentence ->
+        _stranded.tryEmit(StrandedWrite(appId, command, sentence))
     }
 
     /**
@@ -136,6 +360,8 @@ public class HomeSession private constructor(
         reads: ScreenReads<S, E>,
         /** Null for a screen with no write. See [ScreenWrites]. */
         writes: ScreenWrites<S, E>? = null,
+        /** Whether the screen was left; its bridge's. See [StrandedWrites]. */
+        left: () -> Boolean = { false },
     ): Job {
         changes.route(host)
         return ScreenRuntime(
@@ -144,9 +370,119 @@ public class HomeSession private constructor(
             reads = reads,
             scope = scope,
             writes = writes,
+            left = left,
+            stranded = strand,
             // READ OFF THE SHELF AT THE MOMENT OF THE WRITE (#1029 F1). A
             // vault frozen while the member was mid-edit must refuse the save
             // they then press, and a value read at attach would not.
+            readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+            zone = { services.clock.read().zone },
+        ).start()
+    }
+
+    /**
+     * A SECOND READ FOR A SCREEN THAT IS ALREADY ATTACHED (#1029, photos port).
+     *
+     * **The read door has no join clause**, and two screens need one. A place
+     * card is `core_place`'s name, pin and zone beside `media_asset`'s count
+     * and cover; a person row is `core_party`'s display name beside
+     * `media_face_region`'s count. Neither is answerable in one statement, so
+     * those screens run two passes and merge the answers into one state.
+     *
+     * **This exists because [attachScreen] is not idempotent.** It does two
+     * things — serve the screen's `ReadPage` effects, and `changes.route(host)`
+     * so sync moves the screen without a tap — and the second is *registration
+     * with no removal*, by design ("a screen the member has scrolled away from
+     * must be right when they come back"). Calling it twice for a second read
+     * therefore routes the same host twice, and every change event delivers
+     * two re-reads for ever. That is not a leak anyone would notice in a test
+     * and is a doubling of read load on a real vault, growing by one multiple
+     * per extra pass.
+     *
+     * So: one [attachScreen] for the screen, and one of these per further
+     * read. The route is deliberately absent here — the host is already on the
+     * stream, and the screen's own `rowsChanged` is what decides whether a
+     * table it reads in EITHER pass is one of its own.
+     *
+     * The merge is the machine's business and not this method's: an `arrived`
+     * that had to know which pass it came from would be a reducer with a mode,
+     * so both screens make theirs commutative instead.
+     *
+     * ## WHICH OF THE TWO SHAPES A MULTI-READ SCREEN TAKES
+     *
+     * Four screens hit this independently and three invented different
+     * mechanisms, so the rule is written here once. **The question is whether a
+     * partial answer is a state the screen can render.**
+     *
+     * - **It is** when the second read ENRICHES rows the first already
+     *   produced — a place's asset count, a cluster's bytes, a lightbox's
+     *   people. Then this method is the answer: each leg lands its own event,
+     *   the reducer merges commutatively, and the screen draws the rows it has
+     *   with the columns it has. Every one of those events is an AMENDMENT and
+     *   says so on the wire (`DataArrived.amendment`,
+     *   `PlacementArrived`, `ThumbnailsArrived`), because a reducer that cannot
+     *   tell a merge from a replace paints one subject's data onto another.
+     * - **It is not** when the data case cannot be CONSTRUCTED until both reads
+     *   land — a person row is a `core_party` name and a `media_face_region`
+     *   count, and neither half is a row. Then the fan-out belongs in the
+     *   bridge, which folds both answers and sends ONE event, exactly as
+     *   `HomeRuntime` fans out seven reads per app. There is no third option:
+     *   a screen's `content` is a protobuf `oneof`, so Wire REFUSES a state
+     *   with `loading` and `data` both set, and there is nowhere to park the
+     *   first answer while the second is in flight.
+     *
+     * Neither shape is a workaround for the other. A screen that folds in the
+     * bridge when it could amend gives up showing anything until the slowest
+     * read returns; a screen that amends when it cannot construct has to invent
+     * a half-built row.
+     */
+    public fun <S, E> attachReads(
+        host: ScreenHost<S, E>,
+        reads: ScreenReads<S, E>,
+    ): Job = ScreenRuntime(
+        core = { core },
+        host = host,
+        reads = reads,
+        scope = scope,
+        writes = null,
+        readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+        zone = { services.clock.read().zone },
+    ).start()
+
+    /**
+     * PUT A SCREEN THAT READS THROUGH APP QUERIES ON THIS SESSION'S CORE
+     * (#1046).
+     *
+     * [attachScreen]'s twin for a [ScreenQueries] screen — one whose reads the
+     * core runs as an app's own query (`app_query.proto`) because no page read
+     * can say them. Both halves, as there: the runtime serves what the screen
+     * asks for, and `changes.route` delivers what arrives unasked, which the
+     * machine's `rowsChanged` turns into a re-read on exactly
+     * [ScreenQueries.tables].
+     *
+     * The device's zone is the PLATFORM's and is read at every read
+     * ([PlatformServices.clock]); a bridge passes nothing for it. Like
+     * [attachScreen], this is registration with no removal — call it once per
+     * screen host.
+     */
+    public fun <S, E> attachQueries(
+        host: ScreenHost<S, E>,
+        queries: ScreenQueries<S, E>,
+        /** Null for a screen with no write. See [ScreenWrites]. */
+        writes: ScreenWrites<S, E>? = null,
+        /** Whether the screen was left; its bridge's. See [StrandedWrites]. */
+        left: () -> Boolean = { false },
+    ): Job {
+        changes.route(host)
+        return ScreenQueryRuntime(
+            core = { core },
+            host = host,
+            queries = queries,
+            clock = services.clock,
+            scope = scope,
+            writes = writes,
+            left = left,
+            stranded = strand,
             readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
         ).start()
     }
@@ -194,6 +530,32 @@ public class HomeSession private constructor(
         }
 
     /**
+     * HOLD WHAT A RESTORE BROUGHT BACK, and bind Home to it (#1047 E1).
+     * See [Shelf.adoptRestored]; the seed is already stored.
+     */
+    public suspend fun adoptRestored(restored: List<Shelf.Restored>): Int {
+        val added = shelf.adoptRestored(restored)
+        rebind()
+        // A RESTORE THAT FINISHED IS A PASS'S REASON (`WakeReason.RESTORED`):
+        // the ledger beside a restored vault is new, so until a pass asks the
+        // gateway what it holds, the line counts "0 of 50" for a library that
+        // is all there (#1080, the simulator restore). Launched, not awaited:
+        // the restore's own answer is on screen first.
+        if (added > 0) scope.launch { drain.afterRestore() }
+        return added
+    }
+
+    /**
+     * REOPEN THIS PHONE'S VAULTS WITH THE WORDS HANDED BACK (#1047 E1). See
+     * [Shelf.rekey]; a foreground core that was replaced is rebound.
+     */
+    public suspend fun rekeyed(): Int {
+        val keyed = shelf.rekey()
+        rebind()
+        return keyed
+    }
+
+    /**
      * THIS VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1).
      *
      * Freezes it: writes are refused with [Shelf.MOVED_SENTENCE] and reads go
@@ -204,14 +566,13 @@ public class HomeSession private constructor(
      * The session republishes so the frozen holding's line is on screen without
      * waiting for the next touch.
      *
-     * ## Its one caller
+     * ## Who calls it
      *
-     * Whatever learns the vault moved, which is the gateway client: it holds
-     * the lease and hears the supersession. **The typed error exists now**
-     * (#1029 W5, hand-off 2) — `ERROR_CODE_VAULT_MOVED = 25`, with
-     * `lease.proto`'s `VaultMoved` riding beside it — and
-     * `dev.centraid.shared.sync.movedFrom` is the ONE place that reads a
-     * refusal and answers these two arguments. [Shelf.freeze] has the note.
+     * `freezeIfMoved`, when a pass stops `MOVED` or the core's `backup_status`
+     * says the vault is frozen (#1080): `dev.centraid.shared.sync.freezeFor`
+     * answers these two arguments, as `movedFrom` does for a refusal carrying
+     * `ERROR_CODE_VAULT_MOVED` and `error.proto`'s `VaultMoved`. [Shelf.freeze]
+     * has the note.
      */
     public suspend fun vaultMoved(vaultId: String, atIso: String, unacked: Long) {
         shelf.freeze(vaultId, atIso, unacked)
@@ -352,19 +713,25 @@ public class HomeSession private constructor(
                 runtime = null
             }
             runtime == null -> {
-                runtime = HomeRuntime(core = { core }, host = host, scope = scope).start()
+                runtime = HomeRuntime(
+                    core = { core },
+                    host = host,
+                    scope = scope,
+                    clock = services.clock,
+                ).start()
             }
         }
         if (open != null) {
             changeReader = changes.start(open, scope)
         }
-        // THE SEAT LINE TRAVELS WITH THE BINDING, and this is now the only
-        // place it is published: it used to ride every pass's outcome, and
-        // there are no passes. What it says — is a vault open, is a write
-        // durable, what does the radio report — changes exactly when the
-        // foreground does.
+        // THE SEAT LINE TRAVELS WITH THE BINDING: what it says — is a vault
+        // open, is a write durable, what does the radio report — changes
+        // exactly when the foreground does. So does the backup line.
         publishSeat()
         publishLockup()
+        val front = shelf.foregroundHolding()?.vaultId
+        val reading = backupStatus.refreshForeground()
+        if (front != null) freezeIfMoved(front, reading, movedAtMs = null)
     }
 
     /**
@@ -442,6 +809,17 @@ public class HomeSession private constructor(
     }
 
     /**
+     * A WRITE STRANDED BY ITS SCREEN'S CLOSING lands on Home's status line —
+     * the one feedback channel with no screen of its own to be on — in the
+     * attention tone, with the core's sentence when it gave one.
+     */
+    private fun serveStranded(): Job = scope.launch {
+        strandedWrites.collect { write ->
+            host.send(HomeEvent(status = HomeEvent.StatusChanged(status = strandedStatus(write))))
+        }
+    }
+
+    /**
      * RE-POINT THE WHOLE APP AT ANOTHER VAULT.
      *
      * An id with no holding, or a file that will not open, leaves the session
@@ -494,12 +872,14 @@ public class HomeSession private constructor(
             services: PlatformServices,
             dispatcher: CoroutineDispatcher,
             uiThreadName: String,
+            /** A debug build's demo seed, or null — always null in release. See [DevSeed]. */
+            devSeed: DevSeed? = null,
         ): HomeSession {
             val scope = CoroutineScope(SupervisorJob() + dispatcher)
             val host = ScreenHost(HomeMachine)
             val shelf = Shelf(vaultDir, services, dispatcher, uiThreadName)
             // FIRST, and with nothing else open. See the header.
-            shelf.load()
+            shelf.load(devSeed)
             val session = HomeSession(
                 scope = scope,
                 host = host,
@@ -510,14 +890,69 @@ public class HomeSession private constructor(
                 changeReader = null,
             )
             session.changes.route(host)
+            // THE COMMIT TRIGGER. Debounced inside `ShelfDrain`, and launched
+            // rather than awaited: the listener runs on the one consumer of the
+            // core's bounded, drop-nothing event queue, and a listener that
+            // waited for a network there would stall it.
+            session.changes.onCommit = { scope.launch { session.drain.afterCommit() } }
+            // THE RADIO MOVED: a link that came back, or Wi-Fi after cellular,
+            // is when withheld originals can go. Debounced on its own clock.
+            services.networkStatus.onChange { reading -> scope.launch { session.drain.onConnectivity(reading) } }
             session.serveSwitches()
             // THE ROSTER COLLECTOR BEFORE THE REBIND, so the roster the shelf
             // is already holding reaches Home rather than being the one value
             // that arrives only on the next change.
             session.serveRoster()
+            session.serveStranded()
+            // HOME DRAWS THE BACKUP LINE FROM ITS OWN STATE (A11): every line
+            // the store draws becomes a `BackupLineChanged`.
+            scope.launch {
+                session.backupStatus.line.collect { line ->
+                    host.send(HomeEvent(backup_line = HomeEvent.BackupLineChanged(line = line)))
+                }
+            }
             session.rebind()
             host.send(HomeEvent(opened = HomeEvent.Opened()))
+            // THE ONE LAUNCH REGISTRATION, here and nowhere else in commonMain
+            // (`BackgroundSchedulingSpec`): both shells open a session at
+            // launch, and a background window the OS never registered is a
+            // backup that runs only while the app is open.
+            scope.launch {
+                session.registration.value = services.backgroundTasks.register()
+                session.drain.onSessionOpened()
+            }
             return session
         }
     }
+}
+
+/** One write that failed after its screen was left. [sentence] is the core's, or empty. */
+public data class StrandedWrite(
+    public val appId: String,
+    public val command: String,
+    public val sentence: String,
+)
+
+/** A handful: a member closes one editor at a time. */
+private const val STRANDED_BUFFER: Int = 8
+
+/**
+ * WHAT HOME'S STATUS LINE SAYS ABOUT A STRANDED WRITE: the app by name, and
+ * the core's sentence when there is one. Attention, never urgent — the words
+ * are still in the member's memory, and nothing else was lost — and nowhere
+ * to go: the screen that could retry it has closed.
+ */
+public fun strandedStatus(write: StrandedWrite): HomeStatus {
+    val app = CentraidCatalog.byId[write.appId]?.name ?: write.appId
+    val sentence = write.sentence.trim()
+    return HomeStatus(
+        tone = HomeStatus.Tone.TONE_ATTENTION,
+        copy = if (sentence.isEmpty()) {
+            SharedCopy.STRANDED_WRITE.replace("{app}", app)
+        } else {
+            SharedCopy.STRANDED_WRITE_WHY.replace("{app}", app).replace("{sentence}", sentence)
+        },
+        action = "",
+        destination = HomeStatus.Destination.DESTINATION_NONE,
+    )
 }

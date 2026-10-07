@@ -43,9 +43,8 @@
 //!    typed [`SearchError::NotADomain`].
 //!
 //! `crates/search/tests/door.rs` plants a secret in every sealed column the
-//! registry names — **sealed by `crates/vault::custody` itself**, the
-//! `sealed:v1:` envelope for a connector credential and the member key's `lk1:`
-//! cell for Locker's — and asserts the door answers nothing carrying either the
+//! registry names — **sealed by `crates/vault::custody` itself**, as the member
+//! key's `lk1:` cell — and asserts the door answers nothing carrying either the
 //! plaintext or the ciphertext. A hand-typed prefix would prove something about
 //! a string; this proves something about the vault.
 //!

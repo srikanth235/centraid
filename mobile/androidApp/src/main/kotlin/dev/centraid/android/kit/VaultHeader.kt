@@ -44,9 +44,11 @@ import dev.centraid.shared.shell.TransferRuleChoice
  * differently. The iOS shell states the identical table; the two shells
  * must read the same, so a change here is a change there.
  *
- * **"Synced" is a PAST-TENSE FACT.** [VaultLockup.State.STATE_ONLINE] says the
- * vault is here and whole; nothing on this screen probes anything, so
- * "connected" would promise a live link this state has not checked.
+ * **"On this phone", never "synced" or "connected".** [VaultLockup.State.STATE_ONLINE]
+ * says the vault is here and whole — the phone is the vault. "Connected"
+ * would promise a live link this state has not checked, and "synced" claimed
+ * a backup over a vault that was never paired (#1047 walk); what a gateway
+ * holds is the backup line's to say (`BackupLineRow`, #1080), not this one's.
  *
  * EXHAUSTIVE and with no `else`, deliberately: a case added to `State` must
  * fail to compile here rather than fall quietly into somebody else's sentence,
@@ -63,7 +65,7 @@ import dev.centraid.shared.shell.TransferRuleChoice
  */
 public fun stateLine(state: VaultLockup.State): String = when (state) {
     VaultLockup.State.STATE_UNSPECIFIED -> ""
-    VaultLockup.State.STATE_ONLINE -> "synced"
+    VaultLockup.State.STATE_ONLINE -> "on this phone"
     // THE VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1, W5). A STATE and
     // not an incident: it is drawn in place under the vault's name like the
     // other one, in the same mono line, because a banner would make a
@@ -357,7 +359,7 @@ public fun TransferRulesSheet(
                     .testTag("transfer-rule-" + choice.stored)
                     .semantics(mergeDescendants = true) {
                         contentDescription = choice.sentence
-                        if (choice.stored == selected) selected()
+                        if (choice.stored == selected) this.selected = true
                     },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),

@@ -68,17 +68,24 @@ pub enum Step {
 pub enum Fault {
     /// Abort as soon as this step has finished, as a process death would.
     AbortAfter(Step),
-    /// Write the copy somewhere else — for a test that needs `VACUUM INTO` to
-    /// fail for a REAL reason.
+    /// Write the gzipped artifact somewhere else — for a test that needs a
+    /// build's file write to fail for a REAL reason.
     ///
     /// A snapshot build can never exhaust SQLite pages (D-1020-D1-17): every
     /// step after the copy only ever FREES pages, so `PRAGMA max_page_count`
     /// has nothing to refuse, and SQLite clamps a cap up to the current size
     /// anyway. The disk-full surface of a build is the two FILE writes — the
-    /// `VACUUM INTO` and the gzip — and this redirects the first of them. A
-    /// test on Linux points it at `/dev/full`, which returns ENOSPC on every
-    /// write and makes SQLite report a genuine `SQLITE_FULL`.
-    CopyTo(&'static str),
+    /// `VACUUM INTO` and the gzip — and this redirects the SECOND. A test on
+    /// Linux points it at `/dev/full`, which returns ENOSPC on every write;
+    /// one on macOS, which has no `/dev/full`, at a file on a filled disk image.
+    ///
+    /// Not the first (#1047): SQLite creates a rollback journal BESIDE the
+    /// `VACUUM INTO` target, so a copy aimed at `/dev/full` needs
+    /// `/dev/full-journal`, which only root may create. An unprivileged run
+    /// got `SQLITE_READONLY` before a single page was written — the test only
+    /// ever passed as root. The gzip is a plain Rust write with no sibling
+    /// file, so the ENOSPC it meets is the one a full disk produces.
+    GzipTo(&'static str),
 }
 
 /// The identity of a snapshot artifact — lane C's `SnapshotHead`, in Rust
@@ -108,9 +115,9 @@ impl Vault {
         Ok(())
     }
 
-    fn copy_target(&self) -> Option<&'static str> {
+    fn gzip_target(&self) -> Option<&'static str> {
         match self.fault.get() {
-            Some(Fault::CopyTo(path)) => Some(path),
+            Some(Fault::GzipTo(path)) => Some(path),
             _ => None,
         }
     }
@@ -176,9 +183,7 @@ fn build_shaped(vault: &Vault, dir: &Path) -> Result<SnapshotHead> {
 
 fn build_into(vault: &Vault, working: &Path, working_gz: &Path) -> Result<(SnapshotHead, PathBuf)> {
     // 1. VACUUM INTO. Not a transaction, and it cannot be in one.
-    let target = vault
-        .copy_target()
-        .map_or_else(|| working.to_string_lossy().to_string(), str::to_owned);
+    let target = working.to_string_lossy().to_string();
     vault
         .connection()
         .execute("VACUUM INTO ?1", [&target])
@@ -216,7 +221,7 @@ fn build_into(vault: &Vault, working: &Path, working_gz: &Path) -> Result<(Snaps
     vault.fault_at(Step::Compacted)?;
 
     // 4. GZIP. The artifact moves as one compressed file.
-    gzip_file(working, working_gz)?;
+    gzip_file(working, vault.gzip_target().map_or(working_gz, Path::new))?;
     vault.fault_at(Step::Gzipped)?;
     let built = working_gz.to_path_buf();
     let plain_digest = blake3::hash(&std::fs::read(&built)?).to_hex();

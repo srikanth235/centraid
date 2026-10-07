@@ -6,8 +6,8 @@
 // WHY JNA AND NOT THE FOREIGN FUNCTION & MEMORY API: FFM is final in JDK 22 and
 // Android's minimum is nowhere near it, so an Android shell uses JNA (or JNI)
 // for years. Wave 2's spike measured the binding the product ships
-// (`crates/core-ffi/spike/jna`, D-1020-D2-7) and this module is that spike
-// grown up.
+// (D-1020-D2-7) and this module is that spike grown up; the spike's own
+// Gradle project was deleted in #1047.
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)

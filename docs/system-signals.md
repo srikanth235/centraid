@@ -1,5 +1,7 @@
 # Assistant companion and system signals
 
+> **Partly superseded (#1029; recorded 2026-09-24).** The phone is the vault and the only client ([#1029](https://github.com/srikanth235/centraid/issues/1029)), so most of this page describes planes that were deleted: the three seats, the gateway's **System** destination, the **Automations**, **Connectors** and **Copies** destinations, the `enrichment` probe and the automations plane's five signals (`crates/automations` is gone; no recognition runs — [ARCHITECTURE.md](../ARCHITECTURE.md#recognition)), and the **Assistant companion**. The **Activity** and **Needs you** band places are ruled out of the band ([R-1047-P2](decisions.md#the-app-ports-and-the-shell-kit-1047)). What stands is the **signal ladder** and its three tones, `quiet`, `attention` and `urgent`, which Home's status line still speaks (`HomeStatus.Tone` in `screen.proto`).
+
 Centraid presents the household as monitored-for, not monitoring. Healthy state is quiet; a problem becomes prominent only when it needs a member's attention or action. The same mental model holds across the three seats in [blueprint seats](blueprint-seats.md): origin (mobile), custodian (desktop), and viewer (web/PWA).
 
 ## Signal ladder
@@ -30,16 +32,16 @@ Persisted route ids do not change. Member-facing names and default pins are:
 | Existing id | Member-facing destination | Default |
 | --- | --- | --- |
 | `home` | Home | pinned by law |
-| `notifs` / `approvals` | Notifications | pinned |
-| `stats` / `insights` | Activity | pinned |
-| `data` / `atlas` | Vault | pinned |
+| `notifs` / `approvals` | Notifications | dropped with its data plane ([#1029](https://github.com/srikanth235/centraid/issues/1029)) |
+| `stats` / `insights` | Activity | dropped with its data plane ([#1029](https://github.com/srikanth235/centraid/issues/1029)) |
+| `data` / `atlas` | Vault | not pinned until a shell can draw it ([R-1047-F7b](decisions.md#the-compromised-flag-and-the-default-band-1047-f7)) |
 | `autos` / `automations` | Automations | More; absent when capability is off |
 | `conn` / `connectors` | Connectors | More; absent when capability is off |
 | `devices` / `household` | Copies | Vault section with a retained deep link |
 | `gateway` | System | never default-pinned; absent from Origin launchers |
 | `storage` / phone-storage route | On this phone | Origin only |
 
-Launcher filtering is presentation, not authorization. A deep link to a destination omitted from a seat still resolves and explains where that seat's relevant facts live. Compact navigation shows up to five destinations including Home followed by a standing More control. The default is Home, Alerts, Activity, Vault, More; member pinning may fill the fifth destination without removing More or violating the touch target floor.
+Launcher filtering is presentation, not authorization. A deep link to a destination omitted from a seat still resolves and explains where that seat's relevant facts live. Compact navigation shows up to five destinations including Home followed by a standing More control. The default is Home and More, because no other place has a screen on the phone yet (`BandPolicy.DEFAULT_PINS`, R-1047-F7b); member pinning may fill the fifth destination without removing More or violating the touch target floor.
 
 Assistant opening is a local frame-state interaction with a 100ms perceived-latency budget from gesture to painted companion. The desktop UI-impact test measures that interval inside the renderer, excluding automation transport latency. Sending paints the member turn and working state synchronously before conversation creation or streaming begins; network first-token latency is reported by the existing run telemetry rather than hidden behind the opening budget.
 

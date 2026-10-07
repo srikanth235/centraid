@@ -1,89 +1,42 @@
-# Key custody — three layers, three AADs
+# Sealed values — one layer, the Locker cell
 
-Three encryption layers live in this directory. They look alike and they are not interchangeable, because each one's AAD names a different thing about what a ciphertext is _allowed to be_. Collapsing them into one "encrypt a string" helper is how a ciphertext becomes movable between rows.
+One encryption layer lives in this directory: Locker's secret values, sealed under the Locker key `K`.
 
 | Layer | Module | Wire form | AAD | What it protects |
 | --- | --- | --- | --- | --- |
-| Named secrets on disk | `keystore` | `CENTRAID-KEY-V1\n{"scheme","payload"}\n` | — (the envelope's own scheme) | the key files themselves |
-| The vault DEK (seal key) | `seal` | `sealed:v1:base64(nonce ‖ ct ‖ tag)` | `<physical>.<column>:<rowId>` | one cell |
-| The Locker key `K` | `locker_key` (format), `member_key` (custody) | `lk1:base64(nonce ‖ ct ‖ tag)` | `<rowId>‖<keyId>` | one row, under one key generation |
-| `K` on its way to a second seat | `member_key` | `mk1:base64(nonce ‖ ct ‖ tag)` | `<vaultId>‖<keyId>‖<deviceId>` | the key itself, in transit through a host that must not open it |
+| The Locker key `K` | `locker_key` | `lk1:base64(nonce ‖ ct ‖ tag)` | `<rowId>‖<keyId>` | one row, under the vault's key generation |
 
-All three are AES-256-GCM with a **fresh random 96-bit nonce per value**. The deterministic nonces in this codebase belong to the byte plane and the backup plane (`crates/media`, `crates/vault/src/backup`) and are documented there; the distinction is load-bearing, because a derived nonce over a partial address is a nonce reuse.
+AES-256-GCM with a **fresh random 96-bit nonce per value**. The deterministic nonces in this codebase belong to the byte plane and the backup plane (`crates/media`, `crates/vault/src/backup`) and are documented there; the distinction is load-bearing, because a derived nonce over a partial address is a nonce reuse. The backup plane's keys and AADs are its own and are not a cell format: collapsing a cell format into one "encrypt a string" helper shared with them is how a ciphertext becomes movable between rows.
 
-The formats are fixed by files that exist ([#1020](https://github.com/srikanth235/centraid/issues/1020), D-1020-R2), and one property shapes the whole directory: **`K` is not in the gateway's custody**. See [The member key](#the-member-key--the-box-is-closed).
+**No key material lives in this crate.** Every seal and unseal takes its key by value, so there is no ambient key for a read path to reach for.
 
-## `keystore` — the envelope, and why adoption is loud rather than refused
+`is_locker_ciphertext` is **structural**, not a `starts_with`: prefix, then a strict-alphabet base64 body, a multiple of four long, decoding to at least `nonce + tag` bytes. A value that merely begins `lk1:` must be _sealed_, not stored verbatim as "already sealed" — a bare prefix test hands a caller a way to write plaintext into a sealed column by choosing its first four characters.
 
-A key file is never a bare secret. Two schemes: `file-0600-v1` (unprotected, **adoption only**) and `aes-256-gcm-v1` (`nonce(12) ‖ tag(16) ‖ ciphertext` under a host wrapping key — note the tag is in the middle, which is the byte order the existing files use).
+## `locker_key` — the Locker cell format, and the phone's two doors
 
-Three behaviours that read like rough edges and are deliberate:
-
-- A pre-envelope raw 32-byte file is adopted and **rewritten before the read returns**, so a successful open never leaves live raw material behind.
-- An unprotected envelope found on a host that _has_ custody is adopted, rewrapped, and **warned about**. Refusing outright needs an operator-visible switch and a release note; until then the adoption is a line in the log and not an invisible success. `take_warnings()` is how a caller gets it.
-- Loose permissions are **repaired** to 600 with a warning, not refused.
-
-`atomic_write` is the durability rule: a temp file at `O_EXCL` mode 0600, a `before_commit` fault seam, `rename`, `chmod 600`, and the temp removed on every failure path. A half-written key file is the one unrecoverable outcome, so it is the one outcome that cannot happen. `rotate` goes through a `<name>.next` sidecar, which is what makes an interrupted rotation recoverable.
-
-## `seal` — the cell AAD, and the structural predicate
-
-The AAD is the whole security property: a ciphertext lifted out of one cell and dropped into another fails to open. `is_sealed_value` is therefore **structural**, not a `starts_with`: prefix, then a strict-alphabet base64 body of at least 38 characters, a multiple of four long, decoding to at least `nonce + tag` bytes. A member password that merely begins `sealed:v1:` must be _sealed_, not stored verbatim as "already sealed" — a bare prefix test hands an attacker a way to write plaintext into a sealed column by choosing its first ten characters.
-
-`seal_key_fingerprint` is a truncated BLAKE3 prefixed `blake3:` (D-1025-S4-1), safe in a receipt, and `stamp_seal_key_fingerprint` writes it into `core_vault.settings_json` **inside the sealing transaction**. "This vault has secrets" and the secrets commit together, so a crash cannot leave sealed cells whose key nothing names.
-
-## `locker_key` — rotation is an order, not a transaction
-
-`keys/` and `vault.db` share no transaction, so the **order** is the guarantee:
-
-1. write `K′` to the **rotating seat's** key store as a new file (the old one untouched);
-2. **one** applied batch — `locker.rotate_key` — which retires the old row, inserts the new one, and rewrites every secret the **seat** re-encrypted, refusing unless the batch covers every cell;
-3. each seat adopts `K′` and only then deletes `K`.
-
-A crash between 1 and 2 leaves the DB naming the old key and `K′` an orphan; a crash between 2 and 3 leaves the retired file behind. `sweep_retired_locker_keys` reconciles either on open. At no point is any ciphertext under a key the DB does not name, and at no point are two rows live. Both windows have a test (`a_crash_between_the_new_key_file_and_the_transaction_sweeps_clean`, `a_crash_between_the_transaction_and_the_old_file_delete_sweeps_clean`).
-
-The retire **precedes** the insert inside step 2 because `locker_key_live_idx` is checked per statement, not per transaction. That index is on the _predicate_ (`ON locker_key(retired_at IS NULL) WHERE retired_at IS NULL`), because SQLite treats NULLs as distinct and indexing `retired_at` itself would permit any number of live rows.
-
-Only secret **values** are encrypted. Title, url and username stay plaintext, so a locked seat can list and search offline — which is the whole reason Locker is usable on a phone in airplane mode.
-
-## The member key — the box is closed
-
-The gateway does not hold `K`, and `member_key` is the module that makes that a property rather than a promise (#1020, D-1020-L1, D-1020-L2).
+`K` is the 24 words' own leaf, `seed / vault'(i) / locker'` ([#1047](https://github.com/srikanth235/centraid/issues/1047), [D-6](../../../../docs/decisions.md#the-owners-rulings-of-2026-09-28-1047)), derived by the core at open into its in-memory keyring. It is **never a file**: the vault stores only the generation's id in `locker_key`, and a restore from the 24 words re-derives the same `K` for the same id.
 
 | Question | Answer |
 | --- | --- |
-| Who mints `K` | **the seat that founds the vault**, into its own key store |
-| What the vault stores | an **id only**, for the life of the vault |
-| How a second seat gets it | a `mk1:` envelope from a seat that has it, or the recovery kit |
-| Who can reveal a cell | **only a seat**, behind the member's unlock |
-| What a vault with no seat holds | no key, and therefore no secrets — a secret-bearing write is a receipted refusal |
+| Who holds `K` | the core, in memory, from open to close; a Locker session holds a copy between unlock and relock (D-7) |
+| What the vault stores | the generation's **id** only (`locker_key`, one row) |
+| What the laptop's gateway stores | sealed backup objects; the `lk1:` cells inside them stay ciphertext under `K` once an object is opened, and the gateway holds neither `K` nor an object key |
+| Who can reveal a cell | the core, behind the member's unlock |
 
-**The gateway has no reveal door, in three places, and each one is a different kind of absence.**
+The phone's two doors are `Vault::locker_generation` (names the generation, writing the one `locker_key` row on a vault that has none; never inside a commit) and `Vault::locker_sealed_item_cell` (one sealed cell's ciphertext and generation, for a reveal). Neither returns plaintext.
 
-1. **A value that cannot be built.** `crates/vault::access::Verb` has two arms; there is no `Reveal`. A reveal goes through `evaluate_reveal`, whose subject is a `SealedSubject`, and `SealedSubject::new` refuses the `locker` schema. A policy check would be a line somebody can move.
-2. **A path that does not exist.** There is no host-side mapping to a Locker key directory. `MemberKeyCustody::on_seat` is the only constructor, and it takes a **seat's** directory.
-3. **A role that answers differently.** `crates/core::api::reveal` returns the typed refusal on the gateway role and unwraps locally on a seat role.
+`locker_key(key_id, created_at)` holds **at most one row**: `locker_key_one_generation` is a unique index on a constant, so a second generation is refused by the file (rung seven, `contracts/migrations/007_locker_key_one_generation.sql`). `K` is the seed's single leaf, so nothing ever retires a generation; `retired_at` and the predicate index that let one live row stand beside retired ones are gone ([R-1047-D2](../../../../docs/decisions.md#the-sealedv1-cell-layer-and-the-retired-locker-generation-deleted-1047)).
 
-`crates/vault/tests/member_key_gate.rs` asserts all three, plus the behaviour: every door that returns bytes, the seat snapshot, the backup base and the vault file are searched for planted plaintext. Its demonstrated red is in the receipt.
+Only secret **values** are encrypted. Title, url and username stay plaintext, so a locked Locker can list and search — which is the whole reason Locker is usable on a phone in airplane mode.
 
-**The envelope, and why it is not a public-key box** (D-1020-L11). `mk1:<base64(nonce ‖ ct ‖ tag)>`, AES-256-GCM under a key derived (BLAKE3 `derive_key`) from a **one-time transfer secret** the member moves out of band, with `AAD = <vaultId>‖<keyId>‖<recipientDeviceId>`. The third AAD component is what makes a relayed envelope useless to any seat but the one it was minted for — and therefore useless to the host that relayed it. Wrapping under the recipient's device public key is the better long-run shape and is an owner hand-off, not an omission: `access_device_secret.public_key` is an ed25519 signing key, a KEM over it needs an ed25519→X25519 conversion the workspace has no primitive for, and adding one is a **re-keying event** under D-1020-R1 rather than routine housekeeping.
+**The reveal door is absent from the access plane**, not refused: `crates/vault::access::Verb` is `read` and `act`, and there is no reveal judgement at all. A Locker write that carries plaintext is a receipted refusal (`assert_sealed_cell` in `commands/locker.rs`).
 
-**What the gateway does not do** (D-1020-L6). `locker.watchtower` and `locker.totp_code` never unseal inside the gateway. They answer the **addresses** to derive over and write the receipt; the derivations run in `crates/apps/locker::{watchtower, totp}` over plaintext a seat unwrapped. `locker.export` works the same way and keeps its confirm and its `high` risk.
+## What these modules no longer hold
 
-**Rotation is an order, and a distributed one** (D-1020-L4). Step 1 is a key file on a device; step 2 is `locker.rotate_key`, one batch the gateway applies atomically, refused unless it re-encrypts **every** cell under the outgoing generation; step 3 is each seat adopting `K′` and only then forgetting `K`. `crates/sim/tests/rotation_across_seats.rs` runs three seats over every seed in `pr`'s 25, through six interruption windows, asserting that the DB never names a generation nobody holds, that two live rows never appear, that every cell opens, and that a stranded seat has a working repair.
+[#1020](https://github.com/srikanth235/centraid/issues/1020)'s multi-seat file custody is deleted (#1047 slice D1): the `keystore` key-file envelopes (`CENTRAID-KEY-V1`), `member_key`'s seat custody and its `mk1:` transfer envelope, the recovery kit's adopt, founding `K` into a key file, rotation across seats (`rotate_locker_key`, the sweep and the `locker.rotate_key` command) and `tests/member_key_gate.rs`'s structural and binary scans. On a phone that derives `K` from the seed, no path called any of it. The vault DEK's `sealed:v1:` layer — `seal_value`, `open_value`, `is_sealed_value`, the seal-key fingerprint stamped into `core_vault.settings_json` and the restore check's key verdict — is deleted too (#1047 slice D2): the only columns it sealed were the connector credentials rung five dropped, and no production path wrote a cell or stamped a fingerprint. The supersessions are recorded in [docs/decisions.md](../../../../docs/decisions.md#the-multi-seat-locker-custody-plane-deleted-1047) ([R-1047-D1](../../../../docs/decisions.md#the-multi-seat-locker-custody-plane-deleted-1047), [R-1047-D2](../../../../docs/decisions.md#the-sealedv1-cell-layer-and-the-retired-locker-generation-deleted-1047)).
 
-## Where the recovery kit fits — and it is now the only custody path
+## The tests
 
-`keys/` is deliberately outside the directory that export, backup and copy gestures move around. A copied vault carries ciphertext only, and the recovery kit is the one artefact that carries keys — so a missing key file is unambiguous custody loss, and the error message says which artefact would have carried it.
-
-The kit is **the one artefact between a member and total loss**, and two paths say so rather than quietly doing the wrong thing:
-
-- `centraid export` on a **gateway** writes a kit with **no member key**, prints the generation the vault names, and says that the Locker half comes from a seat's own export. The kit's fingerprint deliberately includes which Locker keys it carries, because _a kit that lost one restores a vault whose secrets do not open_ — a real capability difference an owner must be able to notice, and a kit with none has a different fingerprint from a kit with one.
-- `centraid recover` on a **gateway** **does not adopt** member key files a kit carries. It counts them, names them, and says which seat gesture adopts them. Importing them would be the door again: a key that was once on the host was on the host.
-
-`custody::member_key::adopt_from_kit` is the seat's half, and it **refuses** a kit that carries none rather than reporting a restore that restored nothing.
-
-## The format-level test, and what it cannot see
-
-`gateway_file_and_keystore_do_not_reveal_a_cell_without_k` proves _a sealed cell depends on `K` and on nothing else that is on disk_. That property is what let the key move between custodians without touching the format.
-
-It is written so that it passes whoever holds `K`, and therefore cannot **detect** where the key lives. `crates/vault/tests/member_key_gate.rs` is the test that does.
+- `locker_key::tests::the_vault_file_does_not_reveal_a_cell_without_k` — a sealed cell depends on `K` and on nothing else in the file.
+- `crates/vault/tests/locker_plaintext_gate.rs` — every door that returns bytes, the snapshot, the backup base (sealed and opened) and the vault file with its WAL are searched for planted plaintext, with a falsification that proves the search fires.
+- `crates/core/src/app_query/locker_tests.rs` — no `keys` directory is ever created, and a restore from the same 24 words reopens sealed secrets.

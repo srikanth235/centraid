@@ -53,7 +53,7 @@ class PendingWriteSpec : StringSpec({
         )
         event.shouldNotBeNull()
         event.rows_changed.shouldNotBeNull()
-        event.rows_changed!!.asset_ids shouldBe listOf("a-1", "a-2")
+        event.rows_changed.asset_ids shouldBe listOf("a-1", "a-2")
         // AND A TABLE THIS SCREEN DOES NOT READ IS NOT ITS EVENT — including
         // the one the byte plane used to name.
         PhotosGridMachine.rowsChanged("core_content_item", listOf("c-1")).shouldBeNull()

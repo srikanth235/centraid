@@ -1,323 +1,498 @@
-//! The restore drill: write, back up, lose everything, restore, check (#1029 §2).
+//! The drill: back a vault up, lose everything on the device, restore it from
+//! the store, and prove it is the vault that was lost (#1080, "Drill").
 //!
-//! This is the acceptance box *"the restore drill runs in CI"*, and it is the
-//! only test in the tree that asserts the whole durability chain end to end:
+//! 1. Found a vault and write notes through the command plane, so the file is
+//!    many ranges of real rows, receipts and full-text index.
+//! 2. Snapshot, ask, spool, move, settle: the head names it.
+//! 3. Back up every content item by name, sealed in one pass, and prove the
+//!    ledger confirms every name its hash implies.
+//! 4. Fifty more commits; snapshot again, and prove only the ranges that
+//!    changed were sealed and the store grew by exactly those plus a manifest.
+//! 5. Retention keeps the newest; garbage collection deletes exactly the
+//!    ranges only the dropped snapshot named.
+//! 6. Destroy the vault, its WAL and SHM, the spool, the ledger and the
+//!    scratch: what is left is the store, which is ciphertext, and the key.
+//! 7. Restore from the head; open the file through the ladder; prove its
+//!    census, its `db_hash` and a dump of every row equal the lost vault's,
+//!    and that a file fetched by name verifies against its hash.
+//! 8. Take the vault over at the next epoch, after the checks: the old
+//!    writer's next write is refused `MOVED`.
 //!
-//! 1. found a vault and write commits through the command plane, so the log has
-//!    real rows;
-//! 2. capture, so the spool holds every committed page;
-//! 3. take a generation — a page-identical sealed base, the segments after it,
-//!    and a manifest chained by its own name;
-//! 4. write **more** commits, and capture them, so there is a tail the first
-//!    base does not cover;
-//! 5. **destroy the live vault**, its WAL and its spool. What is left is the
-//!    object store, which is ciphertext, and the two keys §0 derives;
-//! 6. restore: the base, then every segment, **applied** (B3);
-//! 7. prove `restore_check` is clean, prove the census matches the census the
-//!    generation carried at that txid, and prove the file is **byte-identical**
-//!    to the vault that was lost.
-//!
-//! ## WHAT CHANGED FROM THE DRILL THAT STOOD HERE, AND WHY
-//!
-//! **The recovery-kit file is gone** (§5, Reference A). The old drill wrapped a
-//! `RecoveryKitDocument` under scrypt, wrote it to disk, deleted the data
-//! directory and handed the kit to `centraid recover` as a subprocess. §0 makes
-//! every key derive from a **24-word phrase**, so there is nothing for a kit to
-//! carry that the member does not already hold, and a file that carries keys is
-//! a file that can be copied. The two keys are passed in directly here, which is
-//! what a phone does after deriving them from its seed.
-//!
-//! **The subprocess seam is gone with it.** The old module argued that a drill
-//! calling a library proves the library and not the product; that was right
-//! when `centraid recover` was the product. The product is the phone, the CLI
-//! is being reshaped by W4 and W5, and what this lane is responsible for is that
-//! **a committed transaction survives a crash and comes back byte-exact**. That
-//! is a claim about this crate, and it is asserted about this crate.
-//!
-//! **Step 8 is gone.** It opened the restored vault, bumped the fence, required
-//! `RebootstrapRequired{epoch-mismatch}` of the old seat, re-enrolled and
-//! converged. There is no seat (#1029 §6) and there is no log-page door. The
-//! phone-shaped replacement — restore onto a second device from the 24 words,
-//! and watch the first freeze on `VAULT_MOVED` — belongs to the wave that builds
-//! the lease (W5), not to this one.
+//! The store is a [`MemoryStore`]; the cut-over runs the same drill against
+//! the gateway, because the plane takes any [`Store`].
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::time::{Duration, Instant};
 
-use crate::backup::objects::ObjectKeys;
-use crate::backup::restore::{RestoreDrillReport, RestoredGeneration};
-use crate::backup::store::BlobStore as _;
-use crate::backup::{self, BackupError, BackupHome};
+use centraid_media::sealed::{self, Assembler, FileSealer};
+
+use super::PlaneError;
+use super::ledger::{Destination, Ledger, PartKind, Queued};
+use super::mover::{Stop, move_queue};
+use super::naming::{BackupKeys, Name, PlaintextHash, content_hashes, keys_from_root, names_of};
+use super::restore::{Check, RestoreError, restore_head};
+use super::retention::{garbage, keep, live_names};
+use super::snapshot::{self, APP, Settled, Snapshot};
+use super::spool::{SPOOL_CEILING_BYTES, Spool};
+use super::store::{self, MemoryStore, Store, StoreError};
+use crate::access::Principal;
+use crate::clock::{Clock, SystemClock};
+use crate::commands::{Command, CommandStatus, Registry};
 use crate::error::VaultError;
 use crate::file::Vault;
+
+/// The drill's root key. A drill holds a key the way a phone does after
+/// deriving it from the words; this one derives from nothing.
+const ROOT_KEY: [u8; 32] = [0xd7; 32];
+
+/// The drill's vault identity, hex.
+const VAULT_ID: &str = "d711d711d711d711d711d711d711d711d711d711d711d711d711d711d711d711";
+
+/// Notes written before the first snapshot, and the size of each body: enough
+/// to make the file several ranges, under the 64 KiB a note body may be.
+const FIRST_NOTES: usize = 240;
+const FIRST_BODY_BYTES: usize = 48 * 1024;
+
+/// Commits between the two snapshots (#1080's acceptance case).
+const SECOND_NOTES: usize = 50;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DrillError {
     #[error(transparent)]
+    Plane(#[from] PlaneError),
+    #[error(transparent)]
+    Restore(#[from] RestoreError),
+    #[error(transparent)]
     Vault(#[from] VaultError),
     #[error(transparent)]
-    Backup(#[from] BackupError),
+    Sealed(#[from] sealed::SealedError),
+    #[error(transparent)]
+    Store(#[from] StoreError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
     #[error("the drill failed: {0}")]
     Failed(String),
 }
-
-type Result<T> = std::result::Result<T, DrillError>;
 
 fn fail(reason: impl Into<String>) -> DrillError {
     DrillError::Failed(reason.into())
 }
 
-/// What the drill proved.
+/// What the drill proved, with the numbers it proved it with.
 #[derive(Debug, Clone)]
-pub struct DrillOutcome {
-    pub vault_id: String,
-    pub generation: String,
-    /// The generation's address: its manifest's object name.
-    pub manifest: String,
-    /// The txid the restored file stands at.
-    pub txid: u64,
-    pub segments_applied: usize,
-    pub census_before: BTreeMap<String, i64>,
-    pub total_rows: i64,
-    /// Whether the restored file is byte-identical to the one that was lost.
-    /// **This is the lane's whole claim**: "comes back byte-exact".
-    pub byte_identical: bool,
-    pub report: RestoreDrillReport,
-    pub restored: RestoredGeneration,
+pub struct DrillReport {
+    pub tables: usize,
+    pub rows: i64,
+    pub db_len: u64,
+    pub ranges_first: usize,
+    pub ranges_second: usize,
+    /// Ranges the second snapshot had to seal, of `ranges_second`.
+    pub sealed_second: usize,
+    pub objects_before_second: usize,
+    pub objects_after_second: usize,
+    pub content_files: usize,
+    pub content_parts: usize,
+    /// Names garbage collection deleted after retention.
+    pub collected: usize,
+    pub checks: Vec<Check>,
     pub elapsed_ms: u128,
 }
 
-/// Run the drill under `root`, with the two keys §0 derives.
-///
-/// `writes` is how many commits to make before the generation, and `after` how
-/// many to make after it — the second number is what makes the drill exercise a
-/// tail the first base does not cover, which is the case B3 was silently losing.
-///
-/// # Errors
-/// [`DrillError`] naming the step that failed.
-pub fn run_drill(
-    root: &Path,
-    keys: &ObjectKeys,
-    writes: usize,
-    after: usize,
-    member_bytes: Option<&dyn backup::store::BlobStore>,
-) -> Result<DrillOutcome> {
-    let started = std::time::Instant::now();
-    let live = root.join("live");
-    let home = BackupHome::open(root.join("backup"))?;
-    let blobs = home.objects().map_err(|error| fail(error.to_string()))?;
-
-    // ---- 1. found and write ----------------------------------------------
-    std::fs::create_dir_all(&live).map_err(|error| fail(error.to_string()))?;
-    let vault_file = live.join("vault.db");
-    let vault = Vault::create(&vault_file)?;
-    let founded = vault.found("The Drill Household", "Ada")?;
-    let vault_id = founded.vault_id.clone();
-    for index in 0..writes {
-        write_one(&vault, index)?;
-    }
-    let census_before = census(&vault_file)?;
-    let total_rows: i64 = census_before.values().copied().sum();
-    if total_rows == 0 {
-        return Err(fail("the drill's own vault has no rows to lose"));
-    }
-
-    // ---- 2 and 3. capture, then the generation ---------------------------
-    let spool = home.spool().map_err(|error| fail(error.to_string()))?;
-    backup::capture(&vault, &spool, keys).map_err(BackupError::from)?;
-    let first = backup::take_generation(&vault, keys, &home, &blobs, None)?;
-
-    // ---- 4. more commits, and a tail the first base does not cover -------
-    for index in writes..writes + after {
-        write_one(&vault, index)?;
-    }
-    backup::capture(&vault, &spool, keys).map_err(BackupError::from)?;
-    let outcome = backup::take_generation(&vault, keys, &home, &blobs, Some(&first.manifest))?;
-
-    // The file as it stands, which is what "byte-exact" is measured against.
-    // Checkpointed first, so the comparison is against a file with no log
-    // behind it — the same state the base was taken from.
-    backup::checkpoint(&vault, &spool).map_err(BackupError::from)?;
-    let census_at_head = census(&vault_file)?;
-    let lost = std::fs::read(&vault_file).map_err(|error| fail(error.to_string()))?;
-    vault.close()?;
-
-    // ---- 5. lose everything ----------------------------------------------
-    // The spool goes too. What is left is the object store — which is
-    // ciphertext — and the two keys, which on a phone come from the 24 words.
-    std::fs::remove_dir_all(&live).map_err(|error| fail(error.to_string()))?;
-    std::fs::remove_dir_all(home.spool_dir()).map_err(|error| fail(error.to_string()))?;
-    if live.exists() {
-        return Err(fail("the live data directory survived its own deletion"));
-    }
-
-    // ---- 6. restore ------------------------------------------------------
-    let manifest_bytes = blobs
-        .get(&outcome.manifest)
-        .map_err(|error| fail(error.to_string()))?;
-    let manifest = backup::GenerationManifest::open(keys, &manifest_bytes)
-        .map_err(|error| fail(error.to_string()))?;
-    let restored_dir = root.join("restored");
-    std::fs::create_dir_all(&restored_dir).map_err(|error| fail(error.to_string()))?;
-    let restored_file = restored_dir.join("vault.db");
-    let restored =
-        backup::restore::restore_generation(keys, &manifest, &blobs, &restored_file, None)
-            .map_err(|error| fail(error.to_string()))?;
-
-    // ---- 7. is it clean, are the rows back, are the bytes the same? ------
-    // THE STORE THIS TAKES IS A MEMBER'S OWN BYTES, AND IT IS A PARAMETER
-    // (#1029 W6, hand-off 5). `restored-blob-coverage` asks whether the bytes a
-    // `core_content_item` row points at are in a store. The store this drill
-    // holds itself is the **backup object store** — sealed objects named by
-    // their own ciphertext hash — and handing that to the check would compare a
-    // plaintext hash against a set of ciphertext names and report every row
-    // missing, which is a check that always fails rather than one that says
-    // something.
-    //
-    // A member's bytes live in `centraid_blobs::ByteStore`, which only a crate
-    // above `crates/blobs` can open, so a caller that has one passes it here
-    // and a caller that has none passes `None`. `None` is honest rather than
-    // lenient: `restored-blob-custody` runs either way, and under F14 — the
-    // vault owns its copy AND EVICTS IT — that is the check a restored phone
-    // can actually pass.
-    let report = backup::restore_drill(&restored_file, None, member_bytes, Some(&census_at_head))
-        .map_err(|error| fail(error.to_string()))?;
-    if !report.is_clean() {
-        return Err(fail(format!(
-            "restore_check/drill is not clean: {}",
-            report
-                .checks
-                .iter()
-                .filter(|check| !check.ok)
-                .map(|check| format!("{}: {}", check.name, check.detail))
-                .collect::<Vec<_>>()
-                .join("; ")
-        )));
-    }
-    if let Err(reason) = restored
-        .census_matches(&restored_file)
-        .map_err(|error| fail(error.to_string()))?
-    {
-        return Err(fail(format!(
-            "the census at txid {} is wrong: {reason}",
-            restored.txid
-        )));
-    }
-
-    let back = std::fs::read(&restored_file).map_err(|error| fail(error.to_string()))?;
-    // BYTE-EXACT, past the file header. Bytes 24..40 of a SQLite header are the
-    // change counter and the freelist bookkeeping, which the backup API and a
-    // reopen both move without changing a single row; every page body must be
-    // identical, and that is the claim.
-    let byte_identical = back.len() == lost.len() && back.get(100..) == lost.get(100..);
-
-    Ok(DrillOutcome {
-        vault_id,
-        generation: outcome.generation.hex(),
-        manifest: outcome.manifest,
-        txid: restored.txid,
-        segments_applied: restored.segments_applied,
-        census_before,
-        total_rows,
-        byte_identical,
-        report,
-        restored,
-        elapsed_ms: started.elapsed().as_millis(),
-    })
+fn deadline() -> Instant {
+    Instant::now() + Duration::from_secs(600)
 }
 
-/// One commit a drill can count.
-///
-/// `core_content_item` is the table it writes because its only foreign keys are
-/// nullable: a drill is about losing and recovering rows, not about the
-/// ontology's dependency order.
-///
-/// **PUBLIC, AND THAT IS WHERE THE SQL HAS TO LIVE** (#1029 W5-4). The phone
-/// drill in `crates/centraid` needs the same commits, and it had its own copy
-/// of this statement until two rules said no and were right: `sql-confinement`
-/// keeps every SQL literal inside `crates/{ontology,vault,search,apps/kit}`,
-/// and `one_hash` requires every writer of a hash column to be declared with
-/// the SOURCE of its value. A drill in another crate satisfies neither by
-/// copying the statement and both by calling this.
-///
-/// The hash is [`crate::content::content_digest`]'s, which is `one_hash`'s
-/// whole rule: there is one hash in this product and a writer either calls that
-/// function or carries a value that already went through it.
-///
-/// # Errors
-/// [`VaultError`] from the commit.
-pub fn write_one(vault: &Vault, index: usize) -> std::result::Result<(), VaultError> {
-    vault.commit(|tx| {
-        tx.set_producer("drill.write");
-        tx.connection().execute(
-            "INSERT INTO core_content_item \
-               (content_id, content_uri, content_hash, byte_size, created_at) \
-             VALUES (?1, ?2, ?3, ?4, '2026-01-01T00:00:00.000Z')",
-            rusqlite::params![
-                format!("content-{index}"),
-                format!("cas:content-{index}"),
-                crate::content::content_digest(format!("drill content {index}").as_bytes()),
-                (64 + index) as i64,
-            ],
+fn now_ms() -> u64 {
+    u64::try_from(SystemClock.now_ms()).unwrap_or(0)
+}
+
+/// A body of about `bytes` bytes, unique to `index`.
+fn body(index: usize, bytes: usize) -> String {
+    let mut out = format!("Note {index}.\n");
+    let mut line = 0;
+    while out.len() < bytes {
+        out.push_str(&format!(
+            "Line {line} of note {index}: the phone is the vault and the gateway holds ciphertext.\n"
+        ));
+        line += 1;
+    }
+    out
+}
+
+fn write_notes(
+    vault: &Vault,
+    registry: &Registry,
+    from: usize,
+    count: usize,
+    bytes: usize,
+) -> Result<(), DrillError> {
+    let principal = Principal::owner("drill");
+    for index in from..from + count {
+        let outcome = vault.execute(
+            registry,
+            &principal,
+            &Command::new(
+                "knowledge.create_note",
+                serde_json::json!({
+                    "title": format!("Note {index}"),
+                    "body_text": body(index, bytes),
+                    "format": "plain",
+                }),
+            ),
         )?;
-        Ok(())
-    })?;
-    // AND ITS BLOB CUSTODY (#1029 §4, W6). A content row with no custody row is
-    // a photograph whose key did not survive, and `restored-blob-custody` is
-    // the check that catches it — so the drill has to write one, or the check
-    // it runs over the restored file is a check over an empty table.
-    let hash = crate::content::content_digest(format!("drill content {index}").as_bytes());
-    let admission = crate::backup::custody::admit(
-        vault,
-        &hash,
-        (64 + index) as u64,
-        crate::backup::custody::BlobRole::Original,
-    )?;
-    if matches!(admission, crate::backup::custody::Admission::Fresh(_)) {
-        crate::backup::custody::record_placements(
-            vault,
-            &hash,
-            &[crate::backup::custody::Placement {
-                part_index: 0,
-                // Through `content_digest`, which is `crates/vault`'s one
-                // declared way to compute a hash (ONE HASH, `one_hash.rs`). A
-                // stand-in object name: the drill's blobs are never sealed, and
-                // what `restored-blob-custody` checks is that the ROW came
-                // back, not what the object holds.
-                object_name: crate::content::content_digest(hash.as_bytes()),
-                byte_offset: 0,
-                byte_length: (64 + index) as u64,
-            }],
-        )?;
+        if outcome.status != CommandStatus::Executed {
+            return Err(fail(format!(
+                "note {index} was refused: {:?}",
+                outcome.reason
+            )));
+        }
     }
     Ok(())
 }
 
-/// Row counts per table, for a file on disk.
+/// Every row of every table a member has rows in, as text, sorted per table.
+///
+/// Public because a restore is proved by comparing two of these — this drill's
+/// and `crates/centraid/tests/restore_drill.rs`'s, which crosses the real
+/// gateway — and a crate that may not write SQL has no other way to read
+/// every row.
 ///
 /// # Errors
-/// [`VaultError`] when the file will not open.
-pub fn census(file: &Path) -> std::result::Result<BTreeMap<String, i64>, VaultError> {
-    let connection =
-        rusqlite::Connection::open_with_flags(file, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    let mut statement = connection.prepare(
-        r"SELECT name FROM sqlite_schema
-            WHERE type = 'table' AND name NOT LIKE 'sqlite\_%' ESCAPE '\'
-            ORDER BY name",
+/// SQLite's refusal.
+pub fn dump(vault: &Vault) -> Result<BTreeMap<String, Vec<String>>, DrillError> {
+    Ok(vault.read(|connection| {
+        let census = snapshot::census_of(connection).map_err(|error| VaultError::Invariant {
+            context: error.to_string(),
+        })?;
+        let mut out = BTreeMap::new();
+        for table in census.keys() {
+            let sql = format!("SELECT * FROM {}", crate::log::identifiers::quoted(table));
+            let mut statement = connection.prepare(&sql)?;
+            let columns = statement.column_count();
+            let mut rows: Vec<String> = statement
+                .query_map([], |row| {
+                    let values: Vec<rusqlite::types::Value> = (0..columns)
+                        .map(|index| row.get(index))
+                        .collect::<rusqlite::Result<_>>()?;
+                    Ok(format!("{values:?}"))
+                })?
+                .collect::<rusqlite::Result<_>>()?;
+            rows.sort();
+            out.insert(table.clone(), rows);
+        }
+        Ok(out)
+    })?)
+}
+
+/// Take a snapshot and move it all the way to the head.
+fn back_up(
+    vault: &Vault,
+    keys: &BackupKeys,
+    scratch: &Path,
+    ledger: &Ledger,
+    spool: &Spool,
+    store: &dyn Store,
+) -> Result<(Snapshot, snapshot::Plan), DrillError> {
+    let taken = snapshot::take(vault, keys, scratch, VAULT_ID, APP)?;
+    let plan = snapshot::plan(&taken, store)?;
+    let spooled = snapshot::spool(
+        &taken,
+        &plan,
+        spool,
+        ledger,
+        keys,
+        SPOOL_CEILING_BYTES,
+        now_ms(),
     )?;
-    let tables: Vec<String> = statement
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut census = BTreeMap::new();
-    for table in tables {
-        let sql = format!(
-            "SELECT count(*) FROM {}",
-            crate::log::identifiers::quoted(&table)
-        );
-        census.insert(
-            table,
-            connection.query_row(&sql, [], |row| row.get::<_, i64>(0))?,
-        );
+    if !spooled.deferred.is_empty() {
+        return Err(fail("the spool deferred parts under the drill's budget"));
     }
-    Ok(census)
+    let moved = move_queue(ledger, spool, store, deadline(), &SystemClock)?;
+    if moved.stopped != Stop::Empty {
+        return Err(fail(format!("the move stopped early: {:?}", moved.stopped)));
+    }
+    match snapshot::settle(
+        ledger,
+        store,
+        &taken.manifest_name,
+        &taken.manifest,
+        &SystemClock,
+    )? {
+        Settled::HeadSet(head) if head.name == taken.manifest_name => {}
+        other => return Err(fail(format!("the head did not move: {other:?}"))),
+    }
+    Ok((taken, plan))
+}
+
+/// Back up every content item's bytes by name, each sealed in one pass, and
+/// return how many files and parts that was.
+fn back_up_content(
+    vault: &Vault,
+    keys: &BackupKeys,
+    ledger: &Ledger,
+    spool: &Spool,
+    store: &dyn Store,
+) -> Result<(usize, usize), DrillError> {
+    let bodies: Vec<(String, String)> = vault.read(|connection| {
+        let mut statement = connection.prepare(
+            "SELECT i.content_hash, t.body_text FROM core_content_item i
+               JOIN core_content_text t ON t.content_id = i.content_id
+              ORDER BY i.content_hash",
+        )?;
+        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    })?;
+    let mut parts = 0;
+    for (index, (hash, text)) in bodies.iter().enumerate() {
+        let tag = index.to_string();
+        let mut sealer = FileSealer::new(keys, false, Some(text.len() as u64), |part| {
+            spool.temp_path(&tag, part)
+        });
+        sealer.update(text.as_bytes())?;
+        let sealed = sealer.finish()?;
+        if sealed.h.to_hex() != *hash {
+            return Err(fail(format!(
+                "content {hash} is not the bytes its row names"
+            )));
+        }
+        for part in &sealed.parts {
+            let path = spool.adopt(&part.path, &part.name)?;
+            ledger.enqueue(&Queued {
+                name: part.name,
+                part_path: path,
+                size: part.len,
+                digest: part.digest,
+                kind: PartKind::Original,
+                media_type: Some("text/plain".to_owned()),
+                created_ms: now_ms(),
+                handed_off_ms: None,
+                attempts: 0,
+                last_error: None,
+            })?;
+            parts += 1;
+        }
+    }
+    let moved = move_queue(ledger, spool, store, deadline(), &SystemClock)?;
+    if moved.stopped != Stop::Empty {
+        return Err(fail(format!(
+            "the content move stopped early: {:?}",
+            moved.stopped
+        )));
+    }
+    let confirmed = ledger.confirmed_names(store.gateway_id())?;
+    for (h, len) in content_hashes(vault)? {
+        if names_of(keys, &h, len)
+            .iter()
+            .any(|name| !confirmed.contains(name))
+        {
+            return Err(fail(format!(
+                "content {h} has a name the ledger never confirmed"
+            )));
+        }
+    }
+    Ok((bodies.len(), parts))
+}
+
+/// Run the drill under `dir`, which it fills and leaves for the caller.
+///
+/// # Errors
+/// [`DrillError`] naming the step that failed.
+pub fn run(dir: &Path) -> Result<DrillReport, DrillError> {
+    let started = Instant::now();
+    let keys = keys_from_root(&ROOT_KEY);
+    let vault_path = dir.join("live").join("vault.db");
+    std::fs::create_dir_all(dir.join("live"))?;
+    let store = MemoryStore::new("drill-gateway");
+
+    // ---- 1. found and write ------------------------------------------------
+    let vault = Vault::create(&vault_path)?;
+    vault.found("The Drill Household", "Ada")?;
+    let registry = Registry::with_system_commands()?;
+    registry.install(&vault)?;
+    write_notes(&vault, &registry, 0, FIRST_NOTES, FIRST_BODY_BYTES)?;
+
+    let ledger = Ledger::open(Ledger::path_for(&vault_path))?;
+    ledger.put_destination(&Destination {
+        gateway_id: store.gateway_id().to_owned(),
+        addrs: vec!["127.0.0.1:7443".to_owned()],
+        cert_der: Vec::new(),
+        token: "0".repeat(64),
+        epoch: store.epoch(),
+        label: "The drill's gateway".to_owned(),
+        paired_at_ms: now_ms(),
+        last_seen_ms: None,
+        last_ack_ms: None,
+    })?;
+    let spool = Spool::open(Spool::dir_for(&vault_path))?;
+    let scratch = dir.join("live").join("scratch");
+
+    // ---- 2. the first snapshot ---------------------------------------------
+    let (first, first_plan) = back_up(&vault, &keys, &scratch, &ledger, &spool, &store)?;
+    if first_plan.missing_ranges.len() != first.manifest.range_names().len() {
+        return Err(fail(
+            "an empty store already held part of the first snapshot",
+        ));
+    }
+
+    // ---- 3. the content, by name -------------------------------------------
+    let (content_files, content_parts) = back_up_content(&vault, &keys, &ledger, &spool, &store)?;
+
+    // ---- 4. more commits, and only what changed ----------------------------
+    write_notes(&vault, &registry, FIRST_NOTES, SECOND_NOTES, 200)?;
+    let before: BTreeSet<Name> = store::list_all(&store)?
+        .iter()
+        .map(|entry| entry.name)
+        .collect();
+    let (second, second_plan) = back_up(&vault, &keys, &scratch, &ledger, &spool, &store)?;
+    let after: BTreeSet<Name> = store::list_all(&store)?
+        .iter()
+        .map(|entry| entry.name)
+        .collect();
+    let sealed_second = second_plan.missing_ranges.len();
+    if sealed_second >= second.ranges.len() {
+        return Err(fail(format!(
+            "the second snapshot sealed {sealed_second} of {} ranges: nothing was reused",
+            second.ranges.len()
+        )));
+    }
+    let grown: BTreeSet<Name> = after.difference(&before).copied().collect();
+    let mut expected: BTreeSet<Name> = second_plan
+        .missing_ranges
+        .iter()
+        .filter_map(|index| second.ranges.get(usize::try_from(*index).ok()?))
+        .map(|range| range.name)
+        .collect();
+    expected.insert(second.manifest_name);
+    if grown != expected {
+        return Err(fail(format!(
+            "the store grew by {} names; the missing ranges and the manifest are {}",
+            grown.len(),
+            expected.len()
+        )));
+    }
+
+    // ---- 5. retention, then garbage ----------------------------------------
+    // Two snapshots a few seconds apart share a day, so retention keeps the
+    // newest alone — unless the drill straddled midnight UTC, when it keeps
+    // both and there is nothing to collect. Either way the garbage must be
+    // exactly the ranges only a dropped snapshot named.
+    let decided = keep(&store.snapshots()?, now_ms());
+    if decided.keep.first() != Some(&second.manifest_name) {
+        return Err(fail(format!(
+            "retention did not keep the newest: {decided:?}"
+        )));
+    }
+    store::delete_all(&store, &decided.drop)?;
+    for name in &decided.drop {
+        ledger.forget_snapshot(name)?;
+    }
+    let taken = [&first, &second];
+    let names_kept_by = |kept: bool| -> BTreeSet<Name> {
+        taken
+            .iter()
+            .filter(|snapshot| decided.keep.contains(&snapshot.manifest_name) == kept)
+            .flat_map(|snapshot| snapshot.manifest.range_names())
+            .collect()
+    };
+    let mut live_ranges = names_kept_by(true);
+    let only_dropped: BTreeSet<Name> = names_kept_by(false)
+        .difference(&live_ranges)
+        .copied()
+        .collect();
+    live_ranges.extend(decided.keep.iter().copied());
+    let live = live_names(&keys, live_ranges, content_hashes(&vault)?);
+    let listed: Vec<Name> = store::list_all(&store)?
+        .iter()
+        .map(|entry| entry.name)
+        .collect();
+    let collect = garbage(listed, &live);
+    if collect.iter().copied().collect::<BTreeSet<_>>() != only_dropped {
+        return Err(fail(
+            "garbage is not exactly the ranges only a dropped snapshot named",
+        ));
+    }
+    let deleted = store::delete_all(&store, &collect)?;
+    if !deleted.refused.is_empty() {
+        return Err(fail(format!(
+            "the store refused to collect {:?}",
+            deleted.refused
+        )));
+    }
+
+    // ---- 6. lose everything ------------------------------------------------
+    let lost = dump(&vault)?;
+    let census = second.manifest.census.clone();
+    let (ranges_first, ranges_second) = (first.ranges.len(), second.ranges.len());
+    let head = second.manifest_name;
+    first.discard()?;
+    second.discard()?;
+    vault.close()?;
+    drop(ledger);
+    std::fs::remove_dir_all(dir.join("live"))?;
+    if vault_path.exists() || Spool::dir_for(&vault_path).exists() {
+        return Err(fail("the device's state survived its own deletion"));
+    }
+
+    // ---- 7. restore, and prove it ------------------------------------------
+    std::fs::create_dir_all(dir.join("live"))?;
+    let restored = restore_head(&store, &keys, &vault_path)?;
+    let reopened = Vault::open(&vault_path)?;
+    let back = dump(&reopened)?;
+    if back != lost {
+        let differing: Vec<&String> = lost
+            .keys()
+            .filter(|table| back.get(*table) != lost.get(*table))
+            .collect();
+        return Err(fail(format!(
+            "rows differ after the restore in {differing:?}"
+        )));
+    }
+    let recounted = reopened.read(|connection| {
+        snapshot::census_of(connection).map_err(|error| VaultError::Invariant {
+            context: error.to_string(),
+        })
+    })?;
+    if recounted != census {
+        return Err(fail("the census through the ladder is not the manifest's"));
+    }
+    let (h, len) = content_hashes(&reopened)?
+        .into_iter()
+        .max_by_key(|(_, len)| *len)
+        .ok_or_else(|| fail("the restored vault names no content"))?;
+    let mut assembler = Assembler::new(h, len);
+    let mut original = Vec::new();
+    while let Some(name) = assembler.next_name(&keys) {
+        let mut sealed_bytes = Vec::new();
+        store.get(&name, &mut sealed_bytes)?;
+        assembler.part(&keys, sealed_bytes.as_slice(), &mut original)?;
+    }
+    assembler.finish()?;
+    if PlaintextHash::of(&original) != h {
+        return Err(fail("the fetched original is not its hash"));
+    }
+    reopened.close()?;
+
+    // ---- 8. the takeover fences the old writer -----------------------------
+    let _successor = store.claim();
+    match store.set_head(&head, Some(&head), 0) {
+        Err(StoreError::Moved { .. }) => {}
+        other => return Err(fail(format!("the old writer was not fenced: {other:?}"))),
+    }
+
+    Ok(DrillReport {
+        tables: census.len(),
+        rows: census.values().sum(),
+        db_len: restored.manifest.db_len,
+        ranges_first,
+        ranges_second,
+        sealed_second,
+        objects_before_second: before.len(),
+        objects_after_second: after.len(),
+        content_files,
+        content_parts,
+        collected: collect.len(),
+        checks: restored.checks,
+        elapsed_ms: started.elapsed().as_millis(),
+    })
 }

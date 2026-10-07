@@ -1,515 +1,449 @@
-//! The spool: sealed segments that outlive a checkpoint (#1029 §2, F11).
+//! The spool: sealed parts waiting to move, one file per name, in
+//! `<stem>.spool/` beside the vault (#1080).
 //!
-//! ## THE DURABILITY ORDER IS THE PRODUCT (F11)
+//! A part is sealed once and the same bytes are sent on every retry, so a
+//! retry is a re-upload and never a re-seal; on iOS the OS uploads a spool file
+//! by path while the app is suspended. A part reaches its real name only by
+//! rename after an fsync, so a crash leaves a whole part or a `.partial` that
+//! [`Spool::open`] sweeps away — never a short file under a name the queue
+//! trusts. A whole part whose queue row a crash kept from landing, or whose
+//! file a crash kept from going, is swept by the opener against the queue
+//! ([`Spool::sweep_unqueued`]).
 //!
-//! The WAL is already the fsynced log, so the spool does not have to be a second
-//! one. What it has to be is **the thing that still holds a commit's pages after
-//! the checkpoint that removed them from the WAL**. That gives one ordering, and
-//! every rule in this module is a clause of it:
+//! ## THE BUDGET
 //!
-//! 1. **The WAL is durable first.** `synchronous = FULL` is set explicitly by
-//!    W1, not inherited: without it a checkpoint could remove frames the
-//!    platter never saw, and the next txid would collide with a commit the phone
-//!    lost.
-//! 2. **A segment is sealed, written, fsynced — file *and* directory — and then
-//!    read back from disk and opened** (§4, "verify before upload"). The
-//!    read-back is not paranoia about the format: storage corruption only shows
-//!    in what fsync put down, never in the buffer that was sealed.
-//! 3. **The cursor is recorded only after that**, and before any checkpoint, so
-//!    a crash between the two re-captures frames rather than losing them.
-//! 4. **The checkpoint runs only when every committed frame is in the spool.**
-//!    [`Spool::covers`] is the question a checkpoint asks.
-//! 5. **A spool entry is dropped only after the store acks it** — never on a
-//!    timer, never because a checkpoint happened. [`Spool::release_through`] is
-//!    the only remover.
+//! The spool holds at most [`Spool::budget`] bytes: 2 GiB, or a tenth of the
+//! free space, whichever is smaller. A part is sealed into it only when it
+//! fits what is left ([`admits`]), and preparing resumes once moving has
+//! drained it, so a backlog never fills the phone. One part larger than the
+//! whole budget is sealed only into an empty spool, alone: it still backs up
+//! a part at a time rather than never. Free space is the caller's to measure:
+//! the plane has no platform call for it.
 //!
-//! Re-capturing is always safe and losing is never safe, so every crash window
-//! in that list falls on the re-capture side.
-//!
-//! ## What is not here
-//!
-//! The upload. §6 puts the gateway in W4 and there is no network in this crate:
-//! "the store acks it" means a [`super::store::BlobStore`] returned an id, and
-//! v0's only store is the local filesystem.
+//! **The budget bounds what waits, never what can back up.** A file larger
+//! than it is sealed a window of parts at a time, each window moved before
+//! the next is sealed: from the app's store part by part (R-1080-C12), and
+//! from the library one read per window (R-1080-C39).
 
+use std::fs::{self, File};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use crate::backup::segment::GenerationId;
-use crate::backup::wal::WalCursor;
+use super::Result;
+use super::naming::Name;
 
-#[derive(Debug, thiserror::Error)]
-pub enum SpoolError {
-    #[error("spool io at {path}: {source}")]
-    Io {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("the spool cursor at {path} is not one this build reads: {reason}")]
-    Cursor { path: PathBuf, reason: String },
+/// The spool's ceiling, whatever the free space.
+pub const SPOOL_CEILING_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// The most a part of `plaintext_len` bytes seals to: its header, a nonce, a
+/// length and a tag for every chunk, and what zstd may add to a compressed
+/// part that would not compress.
+#[must_use]
+pub fn sealed_bound(plaintext_len: u64) -> u64 {
+    use centraid_media::sealed::{CHUNK_BYTES, CHUNK_FRAME_BYTES, HEADER_BYTES, TAG_BYTES};
+    let chunks = plaintext_len / CHUNK_BYTES as u64 + 1;
+    plaintext_len
+        .saturating_add(plaintext_len >> 8)
+        .saturating_add(64)
+        .saturating_add(HEADER_BYTES as u64)
+        .saturating_add(chunks.saturating_mul((CHUNK_FRAME_BYTES + TAG_BYTES) as u64))
 }
 
-type Result<T> = std::result::Result<T, SpoolError>;
-
-fn io_at(path: &Path) -> impl FnOnce(std::io::Error) -> SpoolError + '_ {
-    move |source| SpoolError::Io {
-        path: path.to_path_buf(),
-        source,
-    }
+/// Whether a part of `plaintext_len` bytes may be sealed into a spool that
+/// holds `held` sealed bytes under `budget`: when it fits, or when the spool
+/// is empty and the part is larger than the whole budget, alone (the module
+/// header's "a part at a time rather than never"). A budget of nothing — a
+/// volume that would not say how much is free — admits nothing.
+#[must_use]
+pub fn admits(held: u64, plaintext_len: u64, budget: u64) -> bool {
+    budget > 0 && (held == 0 || held.saturating_add(sealed_bound(plaintext_len)) <= budget)
 }
 
-/// `fsync` a directory, so a rename into it is on the platter.
-///
-/// **A rename is not durable until its directory is synced.** Renaming a
-/// segment into place and syncing only the file leaves a crash window in which
-/// the bytes exist and the name does not — which is exactly a lost commit.
-fn sync_dir(dir: &Path) -> Result<()> {
-    std::fs::File::open(dir)
-        .and_then(|handle| handle.sync_all())
-        .map_err(io_at(dir))
-}
+const PARTIAL: &str = "partial";
 
-/// Write bytes durably, atomically, under a name that cannot collide (B13).
-pub(crate) fn write_durably(path: &Path, bytes: &[u8]) -> Result<()> {
-    use std::io::Write as _;
-
-    let dir = path.parent().unwrap_or(Path::new("."));
-    let temp = dir.join(unique_temp_name(path));
-    {
-        let mut handle = std::fs::File::create(&temp).map_err(io_at(&temp))?;
-        handle.write_all(bytes).map_err(io_at(&temp))?;
-        handle.sync_all().map_err(io_at(&temp))?;
-    }
-    match std::fs::rename(&temp, path) {
-        Ok(()) => {}
-        Err(error) => {
-            let _ = std::fs::remove_file(&temp);
-            return Err(io_at(path)(error));
-        }
-    }
-    sync_dir(dir)
-}
-
-/// A temp name two writers cannot both choose (B13).
-///
-/// The name this replaces was `{id}.{pid}.tmp`, which two threads of one
-/// process share: both create it, both write, one renames a file the other is
-/// still writing into. The process id stays because it makes an abandoned temp
-/// attributable; what makes it unique is the 16 random bytes.
-pub(crate) fn unique_temp_name(path: &Path) -> String {
-    use rand::TryRngCore as _;
-
-    let stem = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("object");
-    let mut suffix = [0_u8; 16];
-    // A failure here is not a reason to fall back to a colliding name: the
-    // clock and the thread id are both guessable, and the whole point is that
-    // two writers cannot meet. `OsRng` failing means the process cannot make a
-    // nonce either, so let the write fail loudly at `create` instead.
-    if rand::rngs::OsRng.try_fill_bytes(&mut suffix).is_err() {
-        return format!("{stem}.{}.__entropy_failed__.tmp", std::process::id());
-    }
-    format!("{stem}.{}.{}.tmp", std::process::id(), hex::encode(suffix))
-}
-
-/// What capture knows, written down before any checkpoint can make it stale.
-///
-/// §2: "Record `(salt1, salt2, last frame, last_txid)` durably with the spool
-/// entry, before any checkpoint makes it stale."
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpoolCursor {
-    pub generation: GenerationId,
-    pub wal: WalCursor,
-    /// The last txid capture has cut a segment for.
-    pub last_txid: u64,
-    /// **The txid the object store has acknowledged**, and therefore the point
-    /// below which the spool no longer has to hold anything.
-    ///
-    /// This is what a checkpoint measures coverage from, and it is deliberately
-    /// not "the base's txid": a generation's base and a store ack are different
-    /// events, and asking coverage from the base would refuse every checkpoint
-    /// after the first generation released its spool.
-    pub acked_txid: u64,
-}
-
-impl SpoolCursor {
-    /// A cursor for a generation with nothing spooled yet, at `acked_txid`.
-    #[must_use]
-    pub const fn at(generation: GenerationId, acked_txid: u64) -> Self {
-        Self {
-            generation,
-            wal: WalCursor::fresh(),
-            last_txid: acked_txid,
-            acked_txid,
-        }
-    }
-
-    fn encode(&self) -> String {
-        let (salt1, salt2) = self.wal.salts.unwrap_or((0, 0));
-        serde_json::json!({
-            "format": "centraid-spool-cursor/1",
-            "generation": self.generation.hex(),
-            "salt1": salt1,
-            "salt2": salt2,
-            "haveSalts": self.wal.salts.is_some(),
-            "nextFrame": self.wal.next_frame,
-            "lastTxid": self.last_txid,
-            "ackedTxid": self.acked_txid,
-        })
-        .to_string()
-    }
-
-    fn decode(path: &Path, text: &str) -> Result<Self> {
-        let bad = |reason: &str| SpoolError::Cursor {
-            path: path.to_path_buf(),
-            reason: reason.to_owned(),
-        };
-        let value: serde_json::Value =
-            serde_json::from_str(text).map_err(|error| bad(&error.to_string()))?;
-        if value.get("format").and_then(serde_json::Value::as_str)
-            != Some("centraid-spool-cursor/1")
-        {
-            return Err(bad("the format line is not this build's"));
-        }
-        let generation = value
-            .get("generation")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| bad("no generation"))
-            .and_then(|text| {
-                GenerationId::from_hex(text).map_err(|error| bad(&error.to_string()))
-            })?;
-        let number = |key: &str| -> Result<u64> {
-            value
-                .get(key)
-                .and_then(serde_json::Value::as_u64)
-                .ok_or_else(|| bad(&format!("no {key}")))
-        };
-        let have_salts = value
-            .get("haveSalts")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
-        let salts = if have_salts {
-            Some((
-                u32::try_from(number("salt1")?).map_err(|_| bad("salt1 is not 32 bits"))?,
-                u32::try_from(number("salt2")?).map_err(|_| bad("salt2 is not 32 bits"))?,
-            ))
-        } else {
-            None
-        };
-        Ok(Self {
-            generation,
-            wal: WalCursor {
-                salts,
-                next_frame: number("nextFrame")?,
-            },
-            last_txid: number("lastTxid")?,
-            acked_txid: number("ackedTxid")?,
-        })
-    }
-}
-
-/// One sealed segment the spool holds.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpoolEntry {
-    pub first_txid: u64,
-    pub last_txid: u64,
-    /// The object's name: the BLAKE3 of its own ciphertext.
-    pub object: String,
-    pub path: PathBuf,
-    pub bytes: u64,
-}
-
-/// The directory sealed segments wait in.
+/// The spool directory.
 #[derive(Debug, Clone)]
 pub struct Spool {
-    root: PathBuf,
-}
-
-/// `<first>-<last>-<object>.seg`, so the spool is orderable without opening a
-/// single segment.
-fn entry_name(first_txid: u64, last_txid: u64, object: &str) -> String {
-    format!("{first_txid:020}-{last_txid:020}-{object}.seg")
-}
-
-fn parse_entry(path: &Path) -> Option<SpoolEntry> {
-    let name = path.file_name()?.to_str()?;
-    let stem = name.strip_suffix(".seg")?;
-    let mut parts = stem.splitn(3, '-');
-    let first_txid = parts.next()?.parse().ok()?;
-    let last_txid = parts.next()?.parse().ok()?;
-    let object = parts.next()?;
-    if object.len() != 64 || !object.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return None;
-    }
-    Some(SpoolEntry {
-        first_txid,
-        last_txid,
-        object: object.to_owned(),
-        bytes: std::fs::metadata(path).ok()?.len(),
-        path: path.to_path_buf(),
-    })
+    dir: PathBuf,
 }
 
 impl Spool {
-    /// Open (creating) the spool under a data directory.
+    /// `<stem>.spool/` beside the vault file.
+    #[must_use]
+    pub fn dir_for(vault_path: &Path) -> PathBuf {
+        vault_path.with_extension("spool")
+    }
+
+    /// The most the spool may hold, given the free space on its volume.
+    #[must_use]
+    pub fn budget(free_bytes: u64) -> u64 {
+        Self::budget_under(SPOOL_CEILING_BYTES, free_bytes)
+    }
+
+    /// The most the spool may hold under a `ceiling` other than 2 GiB.
+    #[must_use]
+    pub fn budget_under(ceiling: u64, free_bytes: u64) -> u64 {
+        ceiling.min(free_bytes / 10)
+    }
+
+    /// Open (creating) the spool, sweeping away any part a crash left
+    /// half-written.
     ///
     /// # Errors
-    /// [`SpoolError::Io`] when the directory cannot be made.
-    pub fn open(root: impl AsRef<Path>) -> Result<Self> {
-        let root = root.as_ref().to_path_buf();
-        std::fs::create_dir_all(&root).map_err(io_at(&root))?;
-        Ok(Self { root })
+    /// The filesystem's refusal.
+    pub fn open(dir: impl AsRef<Path>) -> Result<Self> {
+        let dir = dir.as_ref().to_path_buf();
+        fs::create_dir_all(&dir)?;
+        for entry in fs::read_dir(&dir)? {
+            let path = entry?.path();
+            if path
+                .extension()
+                .is_some_and(|extension| extension == PARTIAL)
+            {
+                fs::remove_file(&path)?;
+            }
+        }
+        Ok(Self { dir })
     }
 
     #[must_use]
-    pub fn root(&self) -> &Path {
-        &self.root
+    pub fn dir(&self) -> &Path {
+        &self.dir
     }
 
-    fn cursor_path(&self) -> PathBuf {
-        self.root.join("cursor")
+    /// Where the part `name` is, whether or not it is there yet.
+    #[must_use]
+    pub fn path(&self, name: &Name) -> PathBuf {
+        self.dir.join(name.to_hex())
     }
 
-    /// The cursor, or `None` for a spool that has never captured.
+    /// Whether the part `name` is spooled.
+    #[must_use]
+    pub fn contains(&self, name: &Name) -> bool {
+        self.path(name).is_file()
+    }
+
+    /// Write a whole sealed part.
     ///
     /// # Errors
-    /// [`SpoolError::Io`] or [`SpoolError::Cursor`].
-    pub fn cursor(&self) -> Result<Option<SpoolCursor>> {
-        let path = self.cursor_path();
-        match std::fs::read_to_string(&path) {
-            Ok(text) => SpoolCursor::decode(&path, &text).map(Some),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(source) => Err(SpoolError::Io { path, source }),
-        }
+    /// The filesystem's refusal; nothing is left under the real name then.
+    pub fn write(&self, name: &Name, sealed: &[u8]) -> Result<PathBuf> {
+        let mut writer = self.writer(name)?;
+        writer.write_all(sealed)?;
+        writer.finish()
     }
 
-    /// Record the cursor durably. **Call this before any checkpoint** (§2).
+    /// Stream a sealed part in, for a part too large to hold.
     ///
     /// # Errors
-    /// [`SpoolError::Io`].
-    pub fn record_cursor(&self, cursor: &SpoolCursor) -> Result<()> {
-        write_durably(&self.cursor_path(), cursor.encode().as_bytes())
-    }
-
-    /// Add a sealed segment, durably, and hand back the entry.
-    ///
-    /// The bytes are fsynced and the directory with them; the caller then reads
-    /// the file back and verifies it before anything is allowed to depend on it
-    /// ([`Spool::read`], §4).
-    ///
-    /// # Errors
-    /// [`SpoolError::Io`].
-    pub fn add(
-        &self,
-        first_txid: u64,
-        last_txid: u64,
-        object: &str,
-        sealed: &[u8],
-    ) -> Result<SpoolEntry> {
-        let path = self.root.join(entry_name(first_txid, last_txid, object));
-        write_durably(&path, sealed)?;
-        Ok(SpoolEntry {
-            first_txid,
-            last_txid,
-            object: object.to_owned(),
-            path,
-            bytes: sealed.len() as u64,
+    /// The filesystem's refusal.
+    pub fn writer(&self, name: &Name) -> Result<SpoolWriter> {
+        let partial = self.dir.join(format!("{}.{PARTIAL}", name.to_hex()));
+        let file = File::create(&partial)?;
+        Ok(SpoolWriter {
+            file: Some(file),
+            partial,
+            target: self.path(name),
+            dir: self.dir.clone(),
         })
     }
 
-    /// Read a spooled segment back **from disk**.
-    ///
-    /// # Errors
-    /// [`SpoolError::Io`].
-    pub fn read(&self, entry: &SpoolEntry) -> Result<Vec<u8>> {
-        std::fs::read(&entry.path).map_err(io_at(&entry.path))
+    /// A temp path inside the spool for part `index` of a file still being
+    /// sealed, whose name is not known until its last byte
+    /// (`centraid_media::sealed::FileSealer`). It is a `.partial`, so a crash
+    /// leaves nothing [`Spool::open`] does not sweep.
+    #[must_use]
+    pub fn temp_path(&self, tag: &str, index: u32) -> PathBuf {
+        self.dir.join(format!("stage-{tag}-{index}.{PARTIAL}"))
     }
 
-    /// Every segment the spool holds, in txid order.
+    /// Give a sealed, fsynced temp file its name.
     ///
     /// # Errors
-    /// [`SpoolError::Io`].
-    pub fn entries(&self) -> Result<Vec<SpoolEntry>> {
-        let mut entries: Vec<SpoolEntry> = match std::fs::read_dir(&self.root) {
-            Ok(listing) => listing
-                .filter_map(std::result::Result::ok)
-                .filter_map(|entry| parse_entry(&entry.path()))
-                .collect(),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-            Err(source) => {
-                return Err(SpoolError::Io {
-                    path: self.root.clone(),
-                    source,
-                });
+    /// The filesystem's refusal.
+    pub fn adopt(&self, temp: &Path, name: &Name) -> Result<PathBuf> {
+        let target = self.path(name);
+        fs::rename(temp, &target)?;
+        sync_dir(&self.dir)?;
+        Ok(target)
+    }
+
+    /// Open a spooled part to send it.
+    ///
+    /// # Errors
+    /// The filesystem's refusal, including a part that is not there.
+    pub fn read(&self, name: &Name) -> Result<File> {
+        Ok(File::open(self.path(name))?)
+    }
+
+    /// Remove a part. A part that is already gone is not an error: a confirmed
+    /// part may be removed by a pass that crashed after removing it.
+    ///
+    /// # Errors
+    /// The filesystem's refusal for any other reason.
+    pub fn remove(&self, name: &Name) -> Result<()> {
+        match fs::remove_file(self.path(name)) {
+            Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error.into()),
+            _ => Ok(()),
+        }
+    }
+
+    /// Every spooled part's name.
+    ///
+    /// # Errors
+    /// The filesystem's refusal.
+    pub fn names(&self) -> Result<Vec<Name>> {
+        let mut names = Vec::new();
+        for entry in fs::read_dir(&self.dir)? {
+            let entry = entry?;
+            if let Some(name) = entry
+                .file_name()
+                .to_str()
+                .and_then(|text| Name::from_hex(text).ok())
+            {
+                names.push(name);
             }
-        };
-        entries.sort_by_key(|entry| (entry.first_txid, entry.last_txid));
-        Ok(entries)
+        }
+        names.sort();
+        Ok(names)
     }
 
-    /// The bytes the spool is holding, which is what its bound is measured in.
+    /// Remove every whole part `queued` does not name, and answer the bytes
+    /// that freed.
+    ///
+    /// **A CRASH CAN LEAVE A WHOLE PART NO QUEUE ROW NAMES.** A part's file and
+    /// its queue row are two writes: a pass killed between confirming a part
+    /// and deleting its file, or between giving a sealed part its name and
+    /// queuing it, leaves a file nothing will ever move or delete. Kept, it
+    /// would read as bytes waiting to back up on every pass and hold the
+    /// spool's room from every later one. Only the opener calls this, before
+    /// anything writes: a part being queued right now has its name and not yet
+    /// its row.
     ///
     /// # Errors
-    /// [`SpoolError::Io`].
+    /// The filesystem's refusal.
+    pub fn sweep_unqueued(&self, queued: &std::collections::BTreeSet<Name>) -> Result<u64> {
+        let mut freed = 0_u64;
+        for name in self.names()? {
+            if queued.contains(&name) {
+                continue;
+            }
+            let path = self.path(&name);
+            let len = fs::metadata(&path).map_or(0, |meta| meta.len());
+            match fs::remove_file(&path) {
+                Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error.into()),
+                _ => freed = freed.saturating_add(len),
+            }
+        }
+        Ok(freed)
+    }
+
+    /// The bytes the spool holds in whole parts.
+    ///
+    /// # Errors
+    /// The filesystem's refusal.
     pub fn bytes(&self) -> Result<u64> {
-        Ok(self.entries()?.iter().map(|entry| entry.bytes).sum())
+        let mut total = 0_u64;
+        for name in self.names()? {
+            // A PART DELETED BETWEEN THE LISTING AND THIS LOOK IS GONE, NOT AN
+            // ERROR: the status is read while a pass deletes every part a
+            // gateway acknowledged, and a screen's read must not fail for it.
+            match fs::metadata(self.path(&name)) {
+                Ok(meta) => total = total.saturating_add(meta.len()),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Ok(total)
     }
 
-    /// **Does the spool hold every commit up to `txid`?** This is the question a
-    /// checkpoint asks, and a `false` is a refusal to checkpoint (§2, F11).
-    ///
-    /// A run with a hole in it does not cover anything past the hole, however
-    /// many segments sit above it.
+    /// Whether the spool is under `budget`, so another part may be prepared.
     ///
     /// # Errors
-    /// [`SpoolError::Io`].
-    pub fn covers(&self, from_txid: u64, txid: u64) -> Result<bool> {
-        if txid < from_txid {
-            return Ok(true);
-        }
-        let mut next = from_txid;
-        for entry in self.entries()? {
-            if entry.first_txid > next {
-                break;
-            }
-            if entry.last_txid >= next {
-                next = entry.last_txid + 1;
-            }
-        }
-        Ok(next > txid)
+    /// The filesystem's refusal.
+    pub fn room(&self, budget: u64) -> Result<bool> {
+        Ok(self.bytes()? < budget)
+    }
+}
+
+/// A part being written. Dropped without [`SpoolWriter::finish`], it removes
+/// its partial file.
+pub struct SpoolWriter {
+    file: Option<File>,
+    partial: PathBuf,
+    target: PathBuf,
+    dir: PathBuf,
+}
+
+impl SpoolWriter {
+    /// Make the part durable under its real name: fsync, rename, fsync the
+    /// directory.
+    ///
+    /// # Errors
+    /// The filesystem's refusal; the partial file is removed then.
+    pub fn finish(mut self) -> Result<PathBuf> {
+        let file = self
+            .file
+            .take()
+            .ok_or_else(|| super::invariant("a spool writer finished twice"))?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&self.partial, &self.target)?;
+        sync_dir(&self.dir)?;
+        Ok(self.target.clone())
+    }
+}
+
+impl Write for SpoolWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.file
+            .as_mut()
+            .ok_or_else(|| io::Error::other("the spool writer is finished"))?
+            .write(buf)
     }
 
-    /// **Drop segments the store has acknowledged — and nothing else** (§2).
-    ///
-    /// The only remover in this module, and it takes a txid the caller got back
-    /// from a store, not a clock and not a checkpoint. A segment dropped because
-    /// "the checkpoint succeeded" is the commit the phone lost.
-    ///
-    /// # Errors
-    /// [`SpoolError::Io`].
-    pub fn release_through(&self, acked_txid: u64) -> Result<usize> {
-        let mut removed = 0;
-        for entry in self.entries()? {
-            if entry.last_txid <= acked_txid {
-                std::fs::remove_file(&entry.path).map_err(io_at(&entry.path))?;
-                removed += 1;
-            }
-        }
-        if removed > 0 {
-            sync_dir(&self.root)?;
-        }
-        Ok(removed)
+    fn flush(&mut self) -> io::Result<()> {
+        self.file.as_mut().map_or(Ok(()), File::flush)
     }
+}
+
+impl Drop for SpoolWriter {
+    fn drop(&mut self) {
+        if self.file.take().is_some() {
+            // An abandoned part: the partial file is all there is to undo, and
+            // a failure to remove it is swept by the next `Spool::open`.
+            let _ = fs::remove_file(&self.partial);
+        }
+    }
+}
+
+/// Make a rename durable: the directory entry is written by the directory's
+/// own fsync.
+#[cfg(unix)]
+fn sync_dir(dir: &Path) -> io::Result<()> {
+    File::open(dir)?.sync_all()
+}
+
+/// Windows has no directory fsync; NTFS journals the rename itself.
+#[cfg(not(unix))]
+fn sync_dir(_dir: &Path) -> io::Result<()> {
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backup::naming::PlaintextHash;
 
-    fn generation() -> GenerationId {
-        GenerationId::from_bytes([1_u8; 16])
-    }
-
-    fn object(byte: u8) -> String {
-        hex::encode([byte; 32])
+    fn name_of(label: &str) -> Name {
+        Name::from_bytes(*PlaintextHash::of(label.as_bytes()).as_bytes())
     }
 
     #[test]
-    fn the_cursor_round_trips_and_a_foreign_one_is_refused() {
+    fn a_part_is_written_counted_read_and_removed() {
         let dir = tempfile::tempdir().expect("a directory");
-        let spool = Spool::open(dir.path()).expect("opens");
-        assert_eq!(spool.cursor().expect("reads"), None);
-
-        let cursor = SpoolCursor {
-            generation: generation(),
-            wal: WalCursor {
-                salts: Some((0xdead_beef, 0x0bad_f00d)),
-                next_frame: 41,
-            },
-            last_txid: 9,
-            acked_txid: 4,
-        };
-        spool.record_cursor(&cursor).expect("records");
-        assert_eq!(spool.cursor().expect("reads"), Some(cursor));
-
-        std::fs::write(dir.path().join("cursor"), r#"{"format":"other/1"}"#).expect("writes");
-        assert!(matches!(spool.cursor(), Err(SpoolError::Cursor { .. })));
+        let spool = Spool::open(Spool::dir_for(&dir.path().join("vault.db"))).expect("opens");
+        assert_eq!(spool.dir(), dir.path().join("vault.spool"));
+        let (one, two) = (name_of("one"), name_of("two"));
+        let path = spool.write(&one, &[7; 100]).expect("writes");
+        assert_eq!(path, spool.path(&one));
+        let mut streamed = spool.writer(&two).expect("begins");
+        streamed.write_all(&[8; 50]).expect("streams");
+        streamed.finish().expect("finishes");
+        assert!(spool.contains(&one) && spool.contains(&two));
+        assert_eq!(spool.bytes().expect("sums"), 150);
+        assert!(spool.room(151).expect("asks"));
+        assert!(!spool.room(150).expect("asks"));
+        let mut back = Vec::new();
+        io::Read::read_to_end(&mut spool.read(&one).expect("opens"), &mut back).expect("reads");
+        assert_eq!(back, vec![7; 100]);
+        spool.remove(&one).expect("removes");
+        spool.remove(&one).expect("removing twice is not an error");
+        assert_eq!(spool.names().expect("lists"), vec![two]);
     }
 
-    /// **F11's rule 5.** A checkpoint does not remove a spool entry; only an ack
-    /// does.
+    /// A crash mid-write leaves a `.partial`, never a short part under a real
+    /// name, and the next open sweeps it.
     #[test]
-    fn a_segment_is_dropped_only_after_the_store_acks_it() {
+    fn an_abandoned_part_never_reaches_its_name() {
         let dir = tempfile::tempdir().expect("a directory");
-        let spool = Spool::open(dir.path()).expect("opens");
-        spool.add(1, 2, &object(0xa1), b"sealed one").expect("adds");
-        spool.add(3, 3, &object(0xa2), b"sealed two").expect("adds");
-        spool
-            .add(4, 6, &object(0xa3), b"sealed three")
-            .expect("adds");
-        assert_eq!(spool.entries().expect("lists").len(), 3);
-
-        // The store acked through txid 3, and only those two go.
-        assert_eq!(spool.release_through(3).expect("releases"), 2);
-        let left = spool.entries().expect("lists");
-        assert_eq!(left.len(), 1);
-        assert_eq!((left[0].first_txid, left[0].last_txid), (4, 6));
-
-        // A partial ack never takes a segment that reaches past it.
-        assert_eq!(spool.release_through(5).expect("releases"), 0);
-        assert_eq!(spool.entries().expect("lists").len(), 1);
+        let spool = Spool::open(dir.path().join("s.spool")).expect("opens");
+        let name = name_of("half");
+        {
+            let mut writer = spool.writer(&name).expect("begins");
+            writer.write_all(&[1; 10]).expect("streams");
+        }
+        assert!(!spool.contains(&name));
+        let leftover = spool.dir().join(format!("{}.partial", name.to_hex()));
+        fs::write(&leftover, b"what a crash left").expect("plants");
+        assert_eq!(spool.bytes().expect("sums"), 0, "a partial is not a part");
+        let reopened = Spool::open(spool.dir()).expect("reopens");
+        assert!(!leftover.exists(), "the sweep removed it");
+        assert!(reopened.names().expect("lists").is_empty());
     }
 
-    /// The question a checkpoint asks, and the hole it must see.
+    /// A file sealed in one pass is written to temp paths and adopted under
+    /// its names once they are known; an unadopted temp is swept.
     #[test]
-    fn covers_is_false_across_a_hole_however_many_segments_sit_above_it() {
+    fn a_temp_part_is_adopted_under_its_name_or_swept() {
         let dir = tempfile::tempdir().expect("a directory");
-        let spool = Spool::open(dir.path()).expect("opens");
-        spool.add(1, 3, &object(0xb1), b"one").expect("adds");
-        spool.add(7, 9, &object(0xb2), b"three").expect("adds");
-        assert!(spool.covers(1, 3).expect("asks"));
-        assert!(!spool.covers(1, 4).expect("asks"), "txids 4..6 are missing");
-        assert!(!spool.covers(1, 9).expect("asks"));
-        spool.add(4, 6, &object(0xb3), b"two").expect("adds");
-        assert!(spool.covers(1, 9).expect("asks"));
-        assert!(spool.covers(1, 0).expect("nothing to cover"));
+        let spool = Spool::open(dir.path().join("s.spool")).expect("opens");
+        let kept = spool.temp_path("photo", 0);
+        let lost = spool.temp_path("photo", 1);
+        fs::write(&kept, b"sealed part 0").expect("writes");
+        fs::write(&lost, b"a crash left this").expect("writes");
+        let name = name_of("photo part 0");
+        assert_eq!(
+            spool.adopt(&kept, &name).expect("adopts"),
+            spool.path(&name)
+        );
+        assert_eq!(spool.names().expect("lists"), vec![name]);
+        assert_eq!(spool.bytes().expect("sums"), 13, "a temp is not a part");
+        Spool::open(spool.dir()).expect("reopens");
+        assert!(!lost.exists(), "the sweep removed it");
+        assert!(spool.contains(&name));
     }
 
-    /// **B13.** Two writers cannot choose one temp name.
+    /// A whole part no queue row names goes; a queued one, and a part still
+    /// being written, stay.
     #[test]
-    fn a_temp_name_cannot_collide_between_two_writers() {
-        let path = Path::new("/spool/a.seg");
-        let names: std::collections::BTreeSet<String> =
-            (0..256).map(|_| unique_temp_name(path)).collect();
-        assert_eq!(names.len(), 256, "256 draws, 256 names");
-        assert!(names.iter().all(|name| name.ends_with(".tmp")));
-        assert!(names.iter().all(|name| name.starts_with("a.seg.")));
-    }
-
-    #[test]
-    fn a_durable_write_leaves_no_temp_behind_and_the_bytes_are_there() {
+    fn a_whole_part_no_queue_row_names_is_swept() {
         let dir = tempfile::tempdir().expect("a directory");
-        let path = dir.path().join("thing");
-        write_durably(&path, b"durable").expect("writes");
-        assert_eq!(std::fs::read(&path).expect("reads"), b"durable");
-        let leftovers: Vec<_> = std::fs::read_dir(dir.path())
-            .expect("lists")
-            .filter_map(std::result::Result::ok)
-            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
-            .collect();
-        assert!(leftovers.is_empty(), "no temp file survives a write");
+        let spool = Spool::open(dir.path().join("s.spool")).expect("opens");
+        let (kept, stray) = (name_of("queued"), name_of("a crash kept it"));
+        spool.write(&kept, &[1; 30]).expect("writes");
+        spool.write(&stray, &[2; 70]).expect("writes");
+        let mut writing = spool.writer(&name_of("being written")).expect("begins");
+        writing.write_all(&[3; 10]).expect("streams");
+        let freed = spool
+            .sweep_unqueued(&std::collections::BTreeSet::from([kept]))
+            .expect("sweeps");
+        assert_eq!(freed, 70);
+        assert_eq!(spool.names().expect("lists"), vec![kept]);
+        writing.finish().expect("a part being written is not swept");
+    }
+
+    /// A part joins the spool when it fits; one larger than the whole budget
+    /// goes alone into an empty spool; a budget of nothing takes nothing.
+    #[test]
+    fn a_part_is_admitted_when_it_fits_or_goes_alone() {
+        let part = 400 * 1024;
+        assert!(admits(0, part, 1 << 20));
+        assert!(admits(sealed_bound(part), part, 1 << 20));
+        assert!(!admits(2 * sealed_bound(part), part, 1 << 20));
+        assert!(admits(0, 64 << 20, 1 << 20), "alone, into an empty spool");
+        assert!(!admits(1, 64 << 20, 1 << 20));
+        assert!(!admits(0, 1, 0), "a budget of nothing takes nothing");
+        assert!(sealed_bound(0) > 0 && sealed_bound(part) > part);
     }
 
     #[test]
-    fn a_file_that_is_not_a_segment_is_not_one() {
-        let dir = tempfile::tempdir().expect("a directory");
-        let spool = Spool::open(dir.path()).expect("opens");
-        std::fs::write(dir.path().join("README"), b"not a segment").expect("writes");
-        std::fs::write(dir.path().join("1-2-short.seg"), b"nor this").expect("writes");
-        spool.add(1, 1, &object(7), b"real").expect("adds");
-        assert_eq!(spool.entries().expect("lists").len(), 1);
-        assert_eq!(spool.bytes().expect("sizes"), 4);
+    fn the_budget_is_two_gib_or_a_tenth_of_the_free_space() {
+        assert_eq!(Spool::budget(1_000_000), 100_000);
+        assert_eq!(
+            Spool::budget(100 * SPOOL_CEILING_BYTES),
+            SPOOL_CEILING_BYTES
+        );
+        assert_eq!(Spool::budget(0), 0);
     }
 }

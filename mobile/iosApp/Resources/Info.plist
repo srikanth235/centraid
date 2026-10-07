@@ -2,13 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- EVERY IDENTIFIER `BGTaskScheduler` IS GIVEN MUST BE HERE.
-	     Registering or submitting one this array does not declare raises an
-	     NSInternalInconsistencyException: the app TERMINATES, it does not just
-	     fail the task. These two are
-	     `IosBackgroundTasks.PERMITTED_IDENTIFIERS` in
-	     `mobile/shared/src/iosMain/.../PlatformServices.ios.kt`, and the two
-	     lists are one fact kept in two files. -->
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>dev.centraid.sync-pass</string>
@@ -34,8 +27,23 @@
 	<string>1</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_centraid-gateway._tcp</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Centraid uses the camera to scan paper documents into Docs, and to read the square your laptop shows when you pair it.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Centraid uses Face ID to unlock Locker.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Centraid finds and reaches your laptop on this network to back up your vault and to bring it back.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Centraid backs up your camera roll into your own vault.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>InstrumentSans_470Book.ttf</string>
+		<string>InstrumentSans-SemiBold.ttf</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

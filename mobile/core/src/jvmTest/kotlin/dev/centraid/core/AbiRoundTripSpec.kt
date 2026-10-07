@@ -263,8 +263,12 @@ class AbiRoundTripSpec : StringSpec({
                     "two vaults on two paths were refused: ${other.failure}",
                 )
             }
-            second.delete()
-            for (sidecar in listOf("-wal", "-shm")) File(second.path + sidecar).delete()
+            // A clean close may already have folded the sidecars away; what
+            // is still there must go, or the next run copies onto a stale one.
+            for (suffix in listOf("", "-wal", "-shm")) {
+                val left = File(second.path + suffix)
+                if (left.exists()) left.delete().shouldBeTrue()
+            }
         } finally {
             first.close()
         }
@@ -285,8 +289,8 @@ class AbiRoundTripSpec : StringSpec({
         val opened = (released as CoreOutcome.Answered).value
         try {
             opened.identityWarning!! shouldContain "NOT CHECKED"
-            opened.identityWarning!! shouldContain "this core is a development build"
-            opened.identityWarning!! shouldContain "b8b1e0f2c3d4e5f6"
+            opened.identityWarning shouldContain "this core is a development build"
+            opened.identityWarning shouldContain "b8b1e0f2c3d4e5f6"
         } finally {
             opened.close()
         }

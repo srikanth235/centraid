@@ -15,7 +15,7 @@ use centraid_apps_kit::row::{Cell, Row};
 use centraid_apps_kit::statement::{PageOrder, PageQuery};
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_vault::access::Principal;
-use centraid_vault::backup::store::FsBlobStore;
+use centraid_vault::bytes::FsBlobStore;
 use centraid_vault::{Clock, Command, CommandStatus, Registry, SeededIds, Vault};
 
 /// The device every command is invoked from.
@@ -57,21 +57,19 @@ pub fn millis_of(datetime: jiff::civil::DateTime) -> i64 {
         .unwrap_or_default()
 }
 
+/// THE LOCKER KEY EVERY HARNESS WORLD IS SEALED UNDER — the same bytes as
+/// `centraid_evalworld::HARNESS_LOCKER_KEY`, so a world either crate builds
+/// opens in the other. It protects nothing: every value it seals is invented.
+pub const HARNESS_LOCKER_KEY: &[u8; 32] = b"centraid harness locker key 0001";
+
 /// Where the content store of a vault file lives.
 #[must_use]
 pub fn blobs_dir(vault: &Path) -> PathBuf {
     sibling(vault, "blobs")
 }
 
-/// Where the seat-side member key custody of a vault file lives.
-#[must_use]
-pub fn seat_dir(vault: &Path) -> PathBuf {
-    sibling(vault, "seat")
-}
-
-/// Copy a CLOSED vault and everything beside it: the file, its WAL pair (the
-/// vault never checkpoints on close, `docs/traps/wal-checkpoint.md`), its
-/// content store and its seat custody.
+/// Copy a CLOSED vault and everything beside it: the file, its WAL pair
+/// (`docs/traps/wal-checkpoint.md`) and its content store.
 pub fn copy_vault(from: &Path, to: &Path) -> Result<(), String> {
     if to.exists() {
         return Err(format!("{} already exists", to.display()));
@@ -87,12 +85,7 @@ pub fn copy_vault(from: &Path, to: &Path) -> Result<(), String> {
             std::fs::copy(&source, &target).map_err(io)?;
         }
     }
-    for (source, target) in [
-        (blobs_dir(from), blobs_dir(to)),
-        (seat_dir(from), seat_dir(to)),
-    ] {
-        copy_tree(&source, &target).map_err(io)?;
-    }
+    copy_tree(&blobs_dir(from), &blobs_dir(to)).map_err(io)?;
     Ok(())
 }
 
@@ -293,56 +286,27 @@ impl Handle {
             })
     }
 
-    /// Found the Locker key plane on the seat beside this vault (idempotent).
+    /// The Locker generation's id and the key its cells are sealed under:
+    /// `(key_id, key)`. The id is the vault's own (naming one on first use);
+    /// the key is [`HARNESS_LOCKER_KEY`], because the phone derives `K` from
+    /// the 24 words and a harness world has none (#1047, D-6).
     pub fn locker_key(&self) -> Result<(String, Vec<u8>), String> {
-        let vault_id = self
+        let key_id = self
             .vault
-            .vault_id()
-            .map_err(|error| error.to_string())?
-            .unwrap_or_default();
-        let custody =
-            centraid_vault::custody::MemberKeyCustody::on_seat(&seat_dir(&self.path), vault_id);
-        let now = self.clock.now_text();
-        let mut found: Option<Result<(String, Vec<u8>), String>> = None;
-        self.vault
-            .commit(|tx| {
-                tx.set_producer("nativetools.locker-key");
-                found = Some(
-                    centraid_vault::custody::found_locker_key(
-                        tx.connection(),
-                        &custody,
-                        "locker-key-1",
-                        &now,
-                    )
-                    .map_err(|error| error.to_string()),
-                );
-                Ok(())
-            })
+            .locker_generation()
             .map_err(|error| error.to_string())?;
-        found.unwrap_or_else(|| Err("the key plane was not founded".to_owned()))
+        Ok((key_id, HARNESS_LOCKER_KEY.to_vec()))
     }
 }
 
 impl Handle {
-    /// Move the write-ahead log into the vault file and truncate it, through
-    /// the vault's own checkpoint (a scratch spool that has never captured,
-    /// so nothing is held back). The vault never checkpoints on its own or on
-    /// close, so a seeded vault would otherwise keep every write in `-wal`.
+    /// Move the write-ahead log into the vault file and truncate it, so a
+    /// seeded vault's file is the whole vault before it is copied
+    /// (`docs/traps/wal-checkpoint.md`).
     pub fn checkpoint(&self) -> Result<(), String> {
-        let spool_dir = self.path.with_extension("checkpoint-spool");
-        let _ = std::fs::remove_dir_all(&spool_dir);
-        let result = centraid_vault::backup::spool::Spool::open(&spool_dir)
+        self.vault
+            .read(|connection| Ok(connection.pragma_update(None, "wal_checkpoint", "TRUNCATE")?))
             .map_err(|error| error.to_string())
-            .and_then(|spool| {
-                centraid_vault::backup::capture::checkpoint(&self.vault, &spool)
-                    .map_err(|error| error.to_string())
-            });
-        let _ = std::fs::remove_dir_all(&spool_dir);
-        let outcome = result?;
-        if outcome.busy {
-            return Err("the checkpoint found a reader in the way".to_owned());
-        }
-        Ok(())
     }
 
     /// Seal one locker cell for `item_id` under the Locker key (founding the

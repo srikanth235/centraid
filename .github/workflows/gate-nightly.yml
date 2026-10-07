@@ -190,7 +190,7 @@ jobs:
       fail-fast: false
       matrix:
         lane:
-          - ios-transfer-experiment
+          - backup-measurement
           - android-macrobenchmark
           - ios-xctest-metrics
           - battery-per-background-pass
@@ -277,7 +277,7 @@ jobs:
           fi
           echo "flake.nix reads the channel (${channel}) from rust-toolchain.toml and states no second copy"
           if [ -f flake.lock ]; then
-            echo "::warning title=flake.lock exists and nothing evaluated it::add the pinned nix installer this job is missing, then `nix flake check`"
+            echo "::warning title=flake.lock exists and nothing evaluated it::add the pinned nix installer this job is missing, then \`nix flake check\`"
           fi
           {
             echo "### nix flake check: NOT RUN"

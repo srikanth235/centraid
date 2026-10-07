@@ -294,6 +294,15 @@ pub fn now_text() -> String {
 /// stopping at the first one: a world missing two apps and a world missing one
 /// command are different findings, and stopping early reports the second when
 /// the first is true.
+/// THE LOCKER KEY EVERY WORLD IS SEALED UNDER.
+///
+/// The phone derives `K` from the 24 words and holds it only in memory
+/// (#1047, D-6); a fixture has no words, so its secrets are sealed under this
+/// fixed key and a harness that reveals them opens them with the same bytes.
+/// It protects nothing and is not meant to: every value it seals is invented.
+/// `crates/nativetools` declares the same bytes for the worlds it opens.
+pub const HARNESS_LOCKER_KEY: &[u8; 32] = b"centraid harness locker key 0001";
+
 pub(crate) struct Seeder<'a> {
     vault: &'a Vault,
     registry: &'a Registry,
@@ -481,28 +490,15 @@ pub fn build_scenario(dir: &Path, scenario: Scenario) -> Result<World, BuildErro
     }
     let bytes_dir = vault_path.with_extension("bytes");
     let _ = std::fs::remove_dir_all(&bytes_dir);
-    let keys_dir = dir.join("keys");
-    let _ = std::fs::remove_dir_all(&keys_dir);
-
-    // THE ONE CONTENT STORE (D-1025-S3-1), on its own runtime. A vault with no
-    // store refuses every photograph by name, and a fixture that attached a
-    // different kind of store would be seeding an arrangement no device has.
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .map_err(BuildError::Io)?;
-    let store = runtime
-        .block_on(centraid_blobs::ByteStore::open(&bytes_dir))
-        .map_err(|error| {
-            BuildError::Io(std::io::Error::other(format!(
-                "the content store at {} does not open: {error}",
-                bytes_dir.display()
-            )))
-        })?;
-    // Kept to close it with: iroh-blobs flushes its index on shutdown, and a
-    // store left unflushed is a world whose photographs another process reads
-    // as absent.
-    let to_close = store.clone();
+    // THE ONE CONTENT STORE (D-1025-S3-1). A vault with no store refuses every
+    // photograph by name, and a fixture that attached a different kind of
+    // store would be seeding an arrangement no device has.
+    let store = centraid_blobs::ByteStore::open(&bytes_dir).map_err(|error| {
+        BuildError::Io(std::io::Error::other(format!(
+            "the content store at {} does not open: {error}",
+            bytes_dir.display()
+        )))
+    })?;
 
     let clock = Arc::new(FixedClock::at(NOW_MS - BUILD_STARTS_DAYS_BEFORE * DAY_MS));
     let vault = Vault::create_with(
@@ -510,10 +506,7 @@ pub fn build_scenario(dir: &Path, scenario: Scenario) -> Result<World, BuildErro
         Box::new(Arc::clone(&clock)),
         Box::new(SeededIds::new(scenario.seed())),
     )?
-    .with_blobs(Box::new(centraid_blobs::ContentBytes::new(
-        store,
-        runtime.handle().clone(),
-    )));
+    .with_blobs(Box::new(centraid_blobs::ContentBytes::new(store)));
 
     // LET SQLITE CHECKPOINT AS IT GOES, which the product deliberately does
     // not. `Vault::open_with` sets `wal_autocheckpoint = 0` because under
@@ -543,25 +536,14 @@ pub fn build_scenario(dir: &Path, scenario: Scenario) -> Result<World, BuildErro
         step_ms: BULK_STEP_MS,
     };
     match scenario {
-        Scenario::First => scenario::seed(
-            &mut seeder,
-            &founded.owner_party_id,
-            &keys_dir,
-            &founded.vault_id,
-        ),
-        Scenario::Second => scenario2::seed(
-            &mut seeder,
-            &founded.owner_party_id,
-            &keys_dir,
-            &founded.vault_id,
-        ),
+        Scenario::First => scenario::seed(&mut seeder, &founded.owner_party_id),
+        Scenario::Second => scenario2::seed(&mut seeder, &founded.owner_party_id),
     }
 
     let Seeder {
         refusals, entities, ..
     } = seeder;
     vault.close()?;
-    runtime.block_on(to_close.close());
     checkpoint_the_wal(&vault_path)?;
 
     if !refusals.is_empty() {

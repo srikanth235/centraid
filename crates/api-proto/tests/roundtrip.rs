@@ -153,6 +153,92 @@ fn every_envelope_body_round_trips() {
     }
 }
 
+/// AN APP QUERY AND ITS TYPED ANSWER (#1046), and the one distinction its
+/// answer depends on: an event with NO END and an event whose end is the empty
+/// string are different facts, and so are a vault that names no owner and an
+/// owner whose id is empty. `optional` is what keeps them apart on the wire; a
+/// plain `string` would decode both as `""`, and a Day row would draw a
+/// zero-length event where the vault said "no end".
+#[test]
+fn an_app_query_and_its_typed_answer_round_trip_with_absence_intact() {
+    let asked = core::Request {
+        kind: Some(core::request::Kind::AppQuery(core::AppQueryRequest {
+            query: Some(core::app_query_request::Query::AgendaUpcoming(
+                core::AgendaUpcomingRequest {
+                    from: "2099-06-01T00:00:00.000Z".to_owned(),
+                    to: String::new(),
+                    tz: "America/New_York".to_owned(),
+                },
+            )),
+        })),
+    };
+    roundtrip(&asked);
+
+    let open_ended = core::AgendaEvent {
+        event_id: "ev_1".to_owned(),
+        dtstart: "2099-06-01T09:00:00.000Z".to_owned(),
+        dtend: None,
+        summary: Some(String::new()),
+        instance_key: "ev_1".to_owned(),
+        reminders: vec![core::AgendaReminder { minutes_before: 10 }],
+        local_start: "2099-06-01T05:00".to_owned(),
+        local_days: vec!["2099-06-01".to_owned()],
+        ..core::AgendaEvent::default()
+    };
+    let answered = core::Response {
+        kind: Some(core::response::Kind::AppQuery(Box::new(
+            core::AppQueryResponse {
+                answer: Some(core::app_query_response::Answer::AgendaUpcoming(
+                    core::AgendaUpcoming {
+                        events: vec![open_ended],
+                        calendars: Vec::new(),
+                        today: "2099-06-01".to_owned(),
+                        now_local: "2099-06-01T05:00".to_owned(),
+                    },
+                )),
+            },
+        ))),
+    };
+    roundtrip(&answered);
+    let decoded = core::Response::decode(answered.encode_to_vec().as_slice()).expect("decodes");
+    let Some(core::response::Kind::AppQuery(answered)) = decoded.kind else {
+        panic!("an upcoming answer decodes as one");
+    };
+    let core::AppQueryResponse {
+        answer: Some(core::app_query_response::Answer::AgendaUpcoming(upcoming)),
+    } = *answered
+    else {
+        panic!("an upcoming answer decodes as one");
+    };
+    assert_eq!(upcoming.events[0].dtend, None, "no end is not an empty end");
+    assert_eq!(upcoming.events[0].summary.as_deref(), Some(""));
+    // The local readings ride the row: no end stated is no local end.
+    assert_eq!(upcoming.events[0].local_end, "");
+    assert_eq!(upcoming.events[0].local_days, ["2099-06-01"]);
+    assert_eq!(upcoming.today, "2099-06-01");
+
+    let unowned = core::AgendaParties {
+        parties: Vec::new(),
+        me: None,
+    };
+    let decoded = core::AgendaParties::decode(unowned.encode_to_vec().as_slice()).expect("decodes");
+    assert_eq!(
+        decoded.me, None,
+        "a vault that names no owner is not an empty id"
+    );
+
+    // A DENIAL IS AN ANSWER, not an `Error` body.
+    roundtrip(&core::AppQueryResponse {
+        answer: Some(core::app_query_response::Answer::Denied(
+            core::AppQueryDenial {
+                code: None,
+                message: Some("Agenda's access was withdrawn.".to_owned()),
+                revoked_at: Some("2099-06-01T09:00:00.000Z".to_owned()),
+            },
+        )),
+    });
+}
+
 /// A command's input and the screen's state are OPAQUE BYTES, and that is
 /// load-bearing: it is mechanism 2 of D-1020-C13, the reason a newer peer's
 /// payload arrives whole even though prost drops unknown FIELDS.
@@ -220,128 +306,9 @@ fn prost_drops_unknown_fields_which_is_why_nothing_relays_a_decoded_message() {
     );
 }
 
-// ------------------------------------------------- the gateway protocol ----
-//
-// Same discipline as above: what is under test is the SCHEMA, not prost. The
-// gateway's two absent-versus-empty seams are `prev_head` (no head yet versus a
-// head this writer read) and `purge_after_ms` (live versus tombstoned), and
-// both are `optional` because a singular field cannot carry the distinction
-// (#1029 §3, F7).
-
-/// A FIRST COMMIT AND A COMMIT THAT READ AN EMPTY HEAD ARE DIFFERENT FACTS.
-///
-/// This is the compare-and-set fence itself (F7). If absent and empty collapsed
-/// into one value, a writer that had never read the vault could present the
-/// same bytes as a writer that had, and the gateway would have no way to refuse
-/// it — which is precisely the rollback the fence exists to make impossible.
-#[test]
-fn a_commit_with_no_previous_head_is_not_a_commit_with_an_empty_one() {
-    let first = core::CommitRequest {
-        generation: "e1d0f0b3b39a4c6f9c5f1d2a3b4c5d6e".to_owned(),
-        objects: vec![vec![1_u8; 32]],
-        manifest_head: vec![2_u8; 32],
-        prev_head: None,
-        first_txid: 1,
-        last_txid: 9,
-    };
-    let mut stale = first.clone();
-    stale.prev_head = Some(Vec::new());
-
-    roundtrip(&first);
-    roundtrip(&stale);
-
-    let decoded_first =
-        core::CommitRequest::decode(first.encode_to_vec().as_slice()).expect("decode");
-    let decoded_stale =
-        core::CommitRequest::decode(stale.encode_to_vec().as_slice()).expect("decode");
-    assert_eq!(decoded_first.prev_head, None, "no head yet stays absent");
-    assert_eq!(
-        decoded_stale.prev_head,
-        Some(Vec::new()),
-        "a present-but-empty head stays present"
-    );
-    assert_ne!(decoded_first, decoded_stale);
-}
-
-/// A LIVE OBJECT AND A TOMBSTONED ONE WHOSE GRACE PERIOD ENDED AT THE EPOCH.
-///
-/// `purge_after_ms` absent means "not tombstoned". A singular `int64` would
-/// make zero — a real instant — indistinguishable from "live", and the purge
-/// sweep would read every live object as purgeable.
-#[test]
-fn a_live_object_and_a_tombstone_at_time_zero_are_different_facts() {
-    let live = core::ObjectEntry {
-        name: vec![3_u8; 32],
-        kind: core::ObjectKind::Base as i32,
-        padded_size: 4 * 1024 * 1024,
-        received_at_ms: 1_770_000_000_000,
-        purge_after_ms: None,
-    };
-    let mut tombstoned = live.clone();
-    tombstoned.purge_after_ms = Some(0);
-
-    roundtrip(&live);
-    roundtrip(&tombstoned);
-    assert_ne!(
-        core::ObjectEntry::decode(live.encode_to_vec().as_slice()).expect("decode"),
-        core::ObjectEntry::decode(tombstoned.encode_to_vec().as_slice()).expect("decode")
-    );
-}
-
-/// THE BLIND-GATEWAY CANARY, AT THE SCHEMA LEVEL.
-///
-/// Every message a gateway receives is built from these fields, so a field that
-/// could carry plaintext is the only way plaintext could reach one. The object
-/// declaration is the narrowest place to hold the line: a name, a checksum, a
-/// kind and a PADDED size, and nothing whose value depends on what the object
-/// says.
-#[test]
-fn an_object_declaration_carries_no_plaintext_shaped_field() {
-    let declaration = core::ObjectDeclaration {
-        name: vec![4_u8; 32],
-        attested_checksum: vec![5_u8; 32],
-        kind: core::ObjectKind::Segment as i32,
-        padded_size: 65_536,
-    };
-    roundtrip(&declaration);
-    // Four fields, and the encoding proves there is no fifth to smuggle one in.
-    let bytes = declaration.encode_to_vec();
-    let decoded = core::ObjectDeclaration::decode(bytes.as_slice()).expect("decode");
-    assert_eq!(decoded, declaration);
-    assert_eq!(
-        decoded.name.len(),
-        32,
-        "the name is a 32-byte digest and never a path, a table or a title"
-    );
-}
-
-/// Version skew reads the same in both directions, which is why it is one
-/// message: a phone too old for a server and a server too old for a phone are
-/// the same comparison seen from two ends.
-#[test]
-fn a_version_refusal_reads_the_same_in_both_directions() {
-    let phone_too_old = core::VersionRefusal {
-        server: Some(core::ProtocolRange { min: 4, max: 6 }),
-        client: Some(core::ProtocolRange { min: 1, max: 3 }),
-    };
-    let server_too_old = core::VersionRefusal {
-        server: Some(core::ProtocolRange { min: 1, max: 3 }),
-        client: Some(core::ProtocolRange { min: 4, max: 6 }),
-    };
-    roundtrip(&phone_too_old);
-    roundtrip(&server_too_old);
-    assert_ne!(phone_too_old, server_too_old);
-}
-
-/// A skew refusal carries the SERVER's time, so the client can re-sign once
-/// (Reference B, "Protocol"). A refusal without it is a refusal a phone with a
-/// wrong clock can only answer by retrying with the same wrong clock.
-#[test]
-fn a_clock_skew_refusal_carries_the_server_time_and_the_window() {
-    let skew = core::ClockSkew {
-        server_time_ms: 1_770_000_000_000,
-        replay_window_seconds: 300,
-    };
-    roundtrip(&skew);
-    assert!(skew.server_time_ms > 0 && skew.replay_window_seconds > 0);
-}
+// THE #1029 GATEWAY PROTOCOL'S ROUND TRIPS STOOD HERE — a commit's `prev_head`,
+// a tombstone's `purge_after_ms`, a declaration with no plaintext-shaped field,
+// the version and clock-skew refusals. Their messages left with that gateway's
+// `gateway.proto`, `backup.proto` and `lease.proto` (#1080): the gateway a
+// phone speaks to now declares its protocol in `crates/gateway/src/rules`, and
+// its wire is held by that crate's own conformance suite.

@@ -1,0 +1,48 @@
+# NOT EMPTY — AND THE DOOR IS STILL THERE.
+#
+# `EMPTY_REASON_NONE` is an explicit value and not the absence of one, so a list
+# with people in it says "not empty" rather than leaving a reader to infer it
+# from the count. Zero is the UNSPECIFIED slot; a screen that treated unset as
+# "not empty" would draw a full list for a state that never said so.
+#
+# The pairing is what this case is for: the list is populated AND
+# `proposed_face_count` is 7. The two are independent facts — a vault can have
+# named people and still have questions waiting — which is exactly why People
+# and review are two screens: one is a list of answers, the other is a queue of
+# questions, and the badge on the door is the only thing that connects them.
+#
+# `photo_count` is confirmed regions only. Ada's 148 does not include the seven
+# proposals; if it did, the number would shrink when a member rejected one, and
+# a count that goes down when you correct it is a count nobody trusts.
+#
+# AND IT IS A FLOOR. Ada carries `photo_count_capped: true` and Grace does not:
+# the read that counted Ada's regions filled its page and stopped, so 148 is
+# where it stopped and not how many there are, while Grace's twelve came back
+# whole. There is no `COUNT(*)` on the read door, so every count in this section
+# is counted in the reducer from rows it actually read. The honest phrasing for
+# Ada is "at least 148"; printing a bare number would state a total nobody
+# counted. The two rows are here together so a view that drew them the same way
+# is wrong about one of them.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_LOCAL_ONLY
+  pending { queued_writes: 4 oldest_queued_seconds: 90 }
+  connectivity: CONNECTIVITY_ONLINE_METERED
+}
+data {
+  people {
+    party_id: "pty-0031"
+    display_name: "Ada Lovelace"
+    photo_count: 148
+    photo_count_capped: true
+    cover_thumbnail_path: "thumbs/ast-0110.jpg"
+  }
+  people {
+    party_id: "pty-0044"
+    display_name: "Grace Hopper"
+    photo_count: 12
+  }
+  next_cursor: "Grace Hopper|pty-0044"
+  proposed_face_count: 7
+  empty_reason: EMPTY_REASON_NONE
+}

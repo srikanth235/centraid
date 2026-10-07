@@ -1154,7 +1154,6 @@ fn definition(
         postconditions,
         handler,
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2707,26 +2706,28 @@ fn set_expense_memo() -> CommandDefinition {
             // THE OWNER'S REMARK IS ENTITY-SCOPED MEANING (#310): a
             // `knowledge_annotation`, never a prose column on the expense —
             // and ONE running memo per entity, so an empty note CLEARS it
-            // rather than storing an empty remark.
+            // rather than storing an empty remark. The table has no kind
+            // column: an annotation on a `tally.expense` IS its memo, which
+            // is how `tally.expense.memo` reads it back (#1029).
             let expense_id = ctx.required_str("expense_id")?.to_owned();
-            let note = ctx.required_str("note")?.to_owned();
+            let note = ctx.required_str("note")?.trim().to_owned();
             ctx.connection().execute(
                 "DELETE FROM knowledge_annotation
-                  WHERE target_type = 'tally.expense' AND target_id = ?1 AND kind = 'memo'",
+                  WHERE target_type = 'tally.expense' AND target_id = ?1",
                 [&expense_id],
             )?;
-            if !note.trim().is_empty() {
+            if !note.is_empty() {
                 let annotation_id = ctx.next_id();
                 ctx.connection().execute(
                     "INSERT INTO knowledge_annotation
-                       (annotation_id, target_type, target_id, kind, body, author_party_id,
+                       (annotation_id, author_party_id, target_type, target_id, body_text,
                         created_at, updated_at)
-                     VALUES (?1, 'tally.expense', ?2, 'memo', ?3, ?4, ?5, ?5)",
+                     VALUES (?1, ?2, 'tally.expense', ?3, ?4, ?5, ?5)",
                     rusqlite::params![
                         annotation_id,
+                        owner_party_id(ctx)?,
                         expense_id,
                         note,
-                        owner_party_id(ctx)?,
                         ctx.now
                     ],
                 )?;
@@ -3057,7 +3058,7 @@ fn save_recurring_expense() -> CommandDefinition {
 }
 
 fn materialize_recurring_expense() -> CommandDefinition {
-    let mut definition = definition(
+    definition(
         "tally.materialize_recurring_expense",
         r#"{
           "type": "object",
@@ -3090,13 +3091,7 @@ fn materialize_recurring_expense() -> CommandDefinition {
                 Some(_) => Err(invalid("template_id", "recurring expense is not active")),
             }
         },
-    );
-    // v0's Tally `online_only` list is exactly this command (census E4 of wave
-    // 3): materialising an occurrence is withheld offline, because a seat that
-    // queued one could write a second copy of the same occurrence when the
-    // gateway had already written it.
-    definition.online_only = true;
-    definition
+    )
 }
 
 fn edit_recurring_expense_occurrence() -> CommandDefinition {
@@ -3258,16 +3253,6 @@ mod tests {
             vec!["tally.remove_group_member", "tally.nudge"],
             "tally has exactly two command-level confirms (census A0)"
         );
-    }
-
-    #[test]
-    fn only_materialize_is_withheld_offline() {
-        let online: Vec<&str> = definitions()
-            .iter()
-            .filter(|definition| definition.online_only)
-            .map(|definition| definition.name)
-            .collect();
-        assert_eq!(online, vec!["tally.materialize_recurring_expense"]);
     }
 
     #[test]

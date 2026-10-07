@@ -6,8 +6,8 @@
 //! ```
 //!
 //! This is not `centraid-ontology`'s `export-ddl`, and the difference is the
-//! whole point of a second tool. `contracts/schema/vault-ddl.sql` is a
-//! *description*: `sqlite_master` ordered by type then name, which puts every
+//! whole point of a second tool. `contracts/golden/issue-1020/vault-ddl.sql`
+//! is a *description*: `sqlite_master` ordered by type then name, which puts every
 //! index before every table and is therefore unrunnable. A migration has to be
 //! ordered by DEPENDENCY — tables, then views, then indexes, then triggers —
 //! and has to leave out the objects SQLite creates for itself.

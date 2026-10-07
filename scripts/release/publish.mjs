@@ -74,21 +74,6 @@ if (!shipResolved.ok) {
   console.error(shipResolved.error);
   process.exit(2);
 }
-const continuousOnly = shipResolved.surfaces.every(
-  (s) => s.cadence === "continuous" || s.cadence === "sideline"
-);
-if (continuousOnly && resolvedShip.length > 0) {
-  const allContinuous = shipResolved.surfaces.every(
-    (s) => s.cadence === "continuous"
-  );
-  if (allContinuous) {
-    console.error(
-      "refusing publish that only lists continuous surfaces (oauth-worker) — deploy from main, not v* tags"
-    );
-    process.exit(2);
-  }
-}
-
 const rootPkgPath = path.join(root, "package.json");
 const rootPkg = JSON.parse(readFileSync(rootPkgPath, "utf8"));
 const prev = rootPkg.version;

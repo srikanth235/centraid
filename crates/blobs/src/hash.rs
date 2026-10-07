@@ -1,25 +1,13 @@
 //! What names a blob, and the URI a row carries (#1020, D-1020-B2).
 //!
-//! ## BLAKE3, and why the byte plane could not keep SHA-256
+//! ## BLAKE3, because everything Centraid names is BLAKE3
 //!
-//! v0 named a member's bytes with SHA-256 over the whole file, and SHA-256 is
-//! **all-or-nothing**: the only way to know a stream of bytes is the file it
-//! claims to be is to receive every one of them and hash the lot. On a desktop
-//! that is a detail. On a phone it is the whole problem — a 30-second window
-//! that moves 60% of a video has produced nothing a device may keep, because
-//! there is no way to say which 60% was genuine. The next window starts from
-//! zero, and a large file is never transferred at all.
-//!
-//! BLAKE3 is a Merkle tree, so a verifier holds a hash for every subtree. With
-//! bao that means **each 16 KiB chunk group is verified as it arrives**,
-//! against the one root hash the row already carried. An interrupted transfer
-//! leaves behind chunks that are already proven to belong to this file, from a
-//! peer that could not have forged them. Resumption is then not a trust
-//! decision at all: it is set subtraction over the ranges already held.
-//!
-//! That is the single property the mobile design rests on, and it is not
-//! reachable from SHA-256 by any amount of careful engineering — it is a
-//! property of the hash's shape.
+//! A blob's name is the BLAKE3 of its bytes: the value
+//! `core_content_item.content_hash` holds, the `h` the sealed backup format
+//! names a file's parts from (#1080 ruling 4), and the one hash the repository
+//! allows (D-1025-S4-1). A second function here would be a second name for the
+//! same photograph, and the store, the vault and the backup would disagree
+//! about which file a row means.
 //!
 //! ## The column's shape does not move, and its NAME did (#1025 S4, D-1025-S4-7)
 //!
@@ -71,9 +59,9 @@ pub struct ContentHash([u8; 32]);
 impl ContentHash {
     /// Hash bytes that are already in memory.
     ///
-    /// For anything that came off a camera roll, prefer hashing the file as it
-    /// is read — see [`crate::store::ByteStore::add_path`], which never holds a
-    /// whole photograph, let alone a whole video.
+    /// For anything that came off a camera roll, prefer hashing the bytes as
+    /// they are written — see [`crate::store::ByteStore::writer`], which never
+    /// holds a whole photograph, let alone a whole video.
     #[must_use]
     pub fn of(bytes: &[u8]) -> Self {
         Self(*blake3::hash(bytes).as_bytes())
@@ -140,21 +128,6 @@ impl fmt::Debug for ContentHash {
     }
 }
 
-/// The seam to iroh-blobs. Both sides are the BLAKE3 root hash and nothing
-/// else, so this is a rename and never a conversion — which is the reason
-/// [`ContentHash`] can exist at all without the cost of a second hash scheme.
-impl From<ContentHash> for iroh_blobs::Hash {
-    fn from(hash: ContentHash) -> Self {
-        Self::from_bytes(hash.0)
-    }
-}
-
-impl From<iroh_blobs::Hash> for ContentHash {
-    fn from(hash: iroh_blobs::Hash) -> Self {
-        Self(*hash.as_bytes())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,16 +187,5 @@ mod tests {
             ContentHash::parse_hex("short"),
             Err(HashError::NotAHash(_))
         ));
-    }
-
-    /// A rename, not a conversion. Asserted because the day it stops being true
-    /// is the day every stored URI stops naming the blob iroh holds.
-    #[test]
-    fn the_iroh_seam_is_the_same_thirty_two_bytes() {
-        let ours = ContentHash::of(b"a photograph");
-        let theirs: iroh_blobs::Hash = ours.into();
-        assert_eq!(theirs.as_bytes(), ours.as_bytes());
-        assert_eq!(theirs.to_hex(), ours.to_hex());
-        assert_eq!(ContentHash::from(theirs), ours);
     }
 }

@@ -45,6 +45,9 @@
 #![forbid(unsafe_code)]
 
 pub mod api;
+/// AN APP'S OWN QUERY, RUN IN THE CORE (#1046): the page door an app crate
+/// reads through, and Agenda's answers as `agenda.proto` spells them.
+pub mod app_query;
 pub mod config;
 pub mod convert;
 pub mod error;
@@ -52,6 +55,13 @@ pub mod events;
 pub mod handle;
 pub mod identity;
 pub mod locker;
+/// THE ORIGINALS ON THIS PHONE, AND THE ALBUMS WHOSE ORIGINALS STAY (#1029,
+/// the photos port). See `originals.proto`.
+pub mod originals;
+/// THE PHONE'S BACKUP PLANE (#1029 W15, #1080): the pass, pairing, restore,
+/// the status the shell draws, and the doors beside the pass. See
+/// `phone.proto`.
+pub mod phone;
 pub mod stage;
 
 /// Lane C's generated types, re-exported so a consumer needs one dependency.
@@ -61,6 +71,12 @@ pub use error::{CoreError, Result, sentence_for_code};
 pub use events::{ChangeFeed, EVENT_QUEUE_CAP, EventQueue};
 pub use handle::{Core, Handle};
 pub use identity::{ArtifactIdentity, require_digest};
+
+/// THE SEED A SHELL HANDS IN, re-exported so a consumer needs one dependency
+/// (#1029 W15). `crates/core-ffi` parses it out of the open configuration and
+/// has no reason to depend on `centraid-identity` for one type.
+pub use centraid_identity::Seed;
+pub use centraid_identity::phrase::SEED_BYTES;
 
 /// The request and response envelopes, spelled once.
 pub use centraid_api_proto::core_v1::{Event, Request, Response};

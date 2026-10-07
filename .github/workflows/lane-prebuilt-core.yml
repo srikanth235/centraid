@@ -23,8 +23,8 @@ name: lane-prebuilt-core
 #     `crates/xtask/src/artifact.rs`.
 #   * THE IDENTITY STAMP answers *is the artifact a shell just loaded the one
 #     this tree produced?* It is baked INTO the artifact during the build
-#     (`crates/centraid/build.rs`) and checked at load
-#     (`crates/centraid/src/identity.rs`'s `require_digest`) and at install
+#     (`crates/core/build.rs`) and checked at load
+#     (`crates/core/src/identity.rs`'s `require_digest`) and at install
 #     (`deploy/vps/install.sh`).
 #
 # A SYMBOL FILE BESIDE EVERY ARTIFACT. There is no precedent in this repository
@@ -114,25 +114,36 @@ jobs:
       # is red with no evidence (gate.yml's backstop comment, #557).
       fail-fast: false
       matrix:
+        # `gateway` says whether the leg also ships `centraid-gateway` (#1080):
+        # the member's laptop or VPS runs it, and `centraid-gateway install`
+        # writes a systemd or launchd unit, so the Linux and macOS tarballs
+        # carry it beside `centraid`. Windows has no unit writer yet, so its
+        # tarball carries the operator binary alone until that lands.
         include:
           - triple: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
             required: true
+            gateway: true
           - triple: aarch64-unknown-linux-gnu
             runner: ubuntu-24.04-arm
             required: false
+            gateway: true
           - triple: aarch64-apple-darwin
             runner: macos-latest
             required: true
+            gateway: true
           - triple: x86_64-apple-darwin
             runner: macos-15-intel
             required: false
+            gateway: true
           - triple: x86_64-pc-windows-msvc
             runner: windows-latest
             required: true
+            gateway: false
           - triple: aarch64-pc-windows-msvc
             runner: windows-11-arm
             required: false
+            gateway: false
     steps:
       - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         if: runner.os == 'Linux'
@@ -161,6 +172,14 @@ jobs:
             exit 1
           fi
           echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+      # On the Intel macOS runner `rustup default` succeeds and the next step
+      # dies with `rustc: command not found`: dtolnay only puts `~/.cargo/bin`
+      # on PATH when it has to install rustup itself, and the image already
+      # has one (#1075).
+      - name: Put the cargo proxies on PATH
+        if: runner.os == 'macOS'
+        shell: bash
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
           toolchain: ${{ steps.channel.outputs.channel }}
@@ -179,7 +198,7 @@ jobs:
         env:
           CENTRAID_BUILD_GIT_SHA: ${{ github.sha }}
           CENTRAID_BUILD_DIGEST: ${{ steps.key.outputs.key }}
-        run: cargo build --profile dist --bin centraid --target '${{ matrix.triple }}'
+        run: cargo build --profile dist --bin centraid ${{ matrix.gateway && '--bin centraid-gateway' || '' }} --target '${{ matrix.triple }}'
       # SYMBOLS FIRST, THEN STRIP. The other order throws them away.
       - name: Collect the symbol file and strip the binary
         shell: bash
@@ -194,16 +213,25 @@ jobs:
           # cargo produced, rather than running objcopy/dsymutil here, is what
           # keeps the symbol file and the binary from being derived by two
           # different tools at two different times.
+          # Every binary the leg built, the same way: `centraid`, and on a leg
+          # with `gateway: true` the gateway beside it (deploy/vps/install.sh
+          # looks for `centraid-gateway` at the tarball's root).
+          bins="centraid"
+          if [ "${{ matrix.gateway }}" = "true" ]; then bins="centraid centraid-gateway"; fi
           case "${{ runner.os }}" in
             Linux)
-              cp "$built/centraid" "$out/centraid"
-              cp "$built/centraid.dwp" "$out/centraid.dwp"
-              objcopy --strip-debug "$out/centraid"
+              for bin in $bins; do
+                cp "$built/$bin" "$out/$bin"
+                cp "$built/$bin.dwp" "$out/$bin.dwp"
+                objcopy --strip-debug "$out/$bin"
+              done
               ;;
             macOS)
-              cp "$built/centraid" "$out/centraid"
-              cp -R "$built/centraid.dSYM" "$out/centraid.dSYM"
-              strip -S "$out/centraid"
+              for bin in $bins; do
+                cp "$built/$bin" "$out/$bin"
+                cp -R "$built/$bin.dSYM" "$out/$bin.dSYM"
+                strip -S "$out/$bin"
+              done
               ;;
             Windows)
               cp "$built/centraid.exe" "$out/centraid.exe"
@@ -299,12 +327,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/android/symbols
-          for lib in $(find dist/android/jni -name '*.so'); do
+          while IFS= read -r -d '' lib; do
             abi="$(basename "$(dirname "$lib")")"
             mkdir -p "dist/android/symbols/${abi}"
             cp "$lib" "dist/android/symbols/${abi}/"
             "${ANDROID_NDK_HOME:-/usr/local/lib/android/sdk/ndk-bundle}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" "$lib" || true
-          done
+          done < <(find dist/android/jni -name '*.so' -print0)
           (cd dist/android && zip -qr ../../centraid-android-symbols.zip symbols)
           {
             echo "### prebuilt-core: the Android AAR is NOT assembled"
@@ -427,16 +455,21 @@ jobs:
           cat artifacts/prebuilt-core-*/SHA256SUMS.* > SHA256SUMS
           sort -o SHA256SUMS SHA256SUMS
           cat SHA256SUMS
-          # Every published artifact must carry the SAME digest, because they
-          # were all built from one tree. A divergence means one leg built a
-          # different commit, which is exactly the confusion the stamp exists to
-          # make impossible.
-          digests="$(grep -ho '"digest":"[^"]*"' artifacts/prebuilt-core-*/centraid-*.identity.json | sort -u | wc -l)"
-          if [ "$digests" -gt 1 ]; then
-            echo "::error title=Digests disagree::the published artifacts report more than one digest, so they were not all built from one tree"
-            grep -ho '"digest":"[^"]*"' artifacts/prebuilt-core-*/centraid-*.identity.json | sort -u
-            exit 1
-          fi
+          # Every published artifact must come from ONE tree. The digest cannot
+          # say so: it is the artifact key, and the key hashes the triple, so
+          # each triple's digest differs by construction (each leg already
+          # proved above that its binary reports ITS OWN triple's key). What
+          # the legs share is the commit and the schema they were stamped with,
+          # and a divergence there means one leg built a different commit,
+          # which is exactly the confusion the stamp exists to make impossible.
+          for field in gitSha schemaVersion; do
+            values="$(grep -ho "\"${field}\":\"\?[^\",}]*" artifacts/prebuilt-core-*/artifact/*/centraid-*.identity.json | sort -u)"
+            if [ "$(printf '%s\n' "$values" | wc -l)" -gt 1 ]; then
+              echo "::error title=Stamps disagree::the published artifacts report more than one ${field}, so they were not all built from one tree"
+              printf '%s\n' "$values"
+              exit 1
+            fi
+          done
           [ "$missing" -eq 0 ]
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

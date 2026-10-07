@@ -12,22 +12,18 @@
     "crates/apps/photos": 0,
     "crates/apps/tally": 0,
     "crates/apps/tasks": 0,
-    "crates/assist": 0,
-    "crates/automations": 0,
     "crates/blobs": 0,
-    "crates/centraid": 18,
+    "crates/centraid": 0,
     "crates/core": 0,
-    "crates/core-ffi": 86,
+    "crates/core-ffi": 97,
     "crates/design": 0,
+    "crates/gateway": 0,
+    "crates/identity": 0,
     "crates/media": 0,
-    "crates/net": 0,
     "crates/ontology": 0,
     "crates/protocol": 0,
     "crates/search": 0,
-    "crates/seat": 0,
-    "crates/seat-link": 0,
-    "crates/sim": 0,
     "crates/vault": 0,
-    "crates/xtask": 0
+    "crates/xtask": 1
   }
 }

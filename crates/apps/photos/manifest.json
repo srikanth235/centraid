@@ -127,8 +127,7 @@
         "schema": "core",
         "table": "place",
         "verbs": "read",
-        "surface": "kind",
-        "surfaceReason": "Photos serves places as their own board — GRAMMAR.md §2.1 Kind `places` — although no command creates one; places arrive with imported assets."
+        "surface": "internal"
       },
       { "schema": "media", "table": "set_asset_place", "verbs": "act" },
       { "schema": "media", "table": "name_place", "verbs": "act" },

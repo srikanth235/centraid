@@ -1,0 +1,31 @@
+# THE OCCURRENCE IS NO LONGER THERE — cancelled, moved or deleted since it was
+# picked. Its own arm and not a failure: the read LANDED and said so, and the
+# way on is back to the list, not a retry.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+event_id: "event-0004"
+instance_key: "2026-03-10T18:00"
+day: "2026-03-10"
+gone {
+  title: "This event is no longer on your calendar."
+  body: "It was cancelled, moved or deleted."
+  action_label: "Back to Agenda"
+}
+write { phase: PHASE_IDLE }
+sheet: SHEET_NONE
+chrome {
+  title: "Event"
+  back: "Agenda"
+  loading: "Opening your calendar"
+  retry: "Retry"
+  scope_title: "Cancel a repeating event"
+  scope_body: "Pick which occurrences to cancel."
+  scope_commit: "Cancel event"
+  scope_keep: "Keep it"
+  confirm_keep: "Keep it"
+}
+dismissed: false
+cancel_armed: false

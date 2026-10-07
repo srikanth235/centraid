@@ -1,0 +1,32 @@
+# CHROME IS A STATE, NOT AN ANIMATION.
+#
+# A tap hides the bars. A member who has hidden them and then rotates the phone,
+# backgrounds the app, or swipes to a neighbour must NOT get them back — which
+# is only true if the fact lives on the state and survives a re-render. An
+# animation flag inside a view is a fact the next recomposition forgets.
+#
+# `sheet: SHEET_NONE` beside it says the two are independent: hidden chrome is
+# not "a sheet is over the photograph", and a decoder that inferred one from the
+# other would put the bars back the moment a sheet closed.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+asset_id: "ast-0310"
+detail {
+  asset_id: "ast-0310"
+  thumbnail_path: "thumbs/ast-0310.jpg"
+  original_path: "originals/ast-0310.heic"
+  title: "Harbour, evening"
+  captured_at: "2026-02-08T18:03:00Z"
+  captured_utc_offset_minutes: -480
+  kind: KIND_PHOTO
+  held: HELD_ORIGINAL
+  original_hash: "11aa22bb33cc44dd55ee66ff7788990011223344556677889900112233445566"
+  width: 6048
+  height: 8064
+  byte_size: 19224064
+}
+chrome_visible: false
+sheet: SHEET_NONE

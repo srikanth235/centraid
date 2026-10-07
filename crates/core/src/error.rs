@@ -50,33 +50,57 @@ pub enum CoreError {
     #[error("this file already holds vault {vault_id}; found into a fresh file")]
     VaultAlreadyHeld { vault_id: String },
 
-    /// THE ENDPOINT THIS DEVICE SPAWNED IS NOT THE ONE ITS GATEWAY ENROLLED
-    /// (#1025 S7-13).
-    ///
-    /// The enrolment record the shell handed back names the public key the
-    /// gateway put in its allowlist when this device paired — the gateway's own
-    /// statement, derived from the connection iroh's TLS proved. If the
-    /// endpoint that came up at open has a different key, the secret half is
-    /// gone: a lost Keychain item, a store whose write silently failed, a
-    /// record settled under one vault and a key under another.
-    ///
-    /// **Refused at open, and the network is NOT attached.** Dialling with an
-    /// unenrolled identity is not a smaller failure — it is the SAME failure
-    /// one round trip later, reported by the gateway as "an unenrolled peer"
-    /// and rendered on the phone as a version-window sentence, which sends a
-    /// member to update an app that is not the problem. Both keys are in
-    /// `detail` for the log; the member reads a sentence about re-pairing.
-    #[error("this device's endpoint is {found}, and its gateway enrolled {enrolled}")]
-    IdentityMismatch { enrolled: String, found: String },
-
     /// A thin seat could not reach its gateway.
     #[error("the gateway is unreachable: {reason}")]
     Unavailable { reason: String },
+
+    /// THE GATEWAY ANSWERED AND SAID NO (#1047 E5).
+    ///
+    /// Distinct from [`Self::Unavailable`] because the remedy is different: a
+    /// gateway that did not answer wants waking, and one that answered and
+    /// refused a pairing code — spent, expired, unknown, or a claim it will
+    /// not admit — wants a new code. Folding the two into `PEER_UNREACHABLE`
+    /// sent a member to check a gateway that was awake and had told the phone
+    /// why.
+    #[error("the gateway refused: {reason}")]
+    GatewayRefused { reason: String },
+
+    /// **THIS VAULT MOVED TO ANOTHER PHONE** (#1029 F1, §1; #1080).
+    ///
+    /// A gateway's refusal, heard by this core because a pass writes under a
+    /// token whose writer epoch another phone's claim has passed — a restore,
+    /// or a pairing that took the vault over. The shell freezes the vault
+    /// read-only, shows the unacknowledged work as "N changes since `<date>`",
+    /// and **keeps everything** — nothing is wiped and nothing is taken back
+    /// automatically. The ledger remembers it, so every later pass refuses
+    /// the same way.
+    ///
+    /// It is deliberately NOT a `DrainStop`: a stop reason says why a pass
+    /// ended and invites the next one, and "unreachable" in particular promises
+    /// the next pass will work. This is a refusal, and the only honest answer
+    /// to it is to stop drawing a backup at all.
+    #[error("this vault moved to another phone at epoch {current_epoch}")]
+    VaultMoved {
+        /// The writer epoch that holds it now.
+        current_epoch: u64,
+        /// When, on the GATEWAY's clock.
+        moved_at_ms: i64,
+    },
 
     /// The request itself is wrong: a zero limit, a cursor with a non-decimal
     /// seq, a page query with no order column. Not the state.
     #[error("invalid request: {detail}")]
     InvalidRequest { detail: String },
+
+    /// AN APP QUERY REACHED ITS OWN STATED CEILING (#1046).
+    ///
+    /// A loader walks its joins to a declared fan-out and expands a series to a
+    /// declared instance cap, and stops here rather than answering what it
+    /// had: a short agenda that reads as a whole one is the truncation flag
+    /// again (D-1020-D3-12). `query` is the statement that reached it and `cap`
+    /// the rows it reached, so the log names the bound and not a guess at it.
+    #[error("`{query}` reached its stated ceiling of {cap} rows; ask for a narrower range")]
+    ReadBoundReached { query: String, cap: usize },
 
     /// A message type or body this build does not carry.
     #[error("unsupported message: {type_url}")]
@@ -89,10 +113,6 @@ pub enum CoreError {
         what: &'static str,
         lands_in: &'static str,
     },
-
-    /// The action refuses to run without a gateway.
-    #[error("`{app_id}.{action}` needs the gateway and this seat has none")]
-    OnlineOnly { app_id: String, action: String },
 
     /// The request was cancelled by a `Cancel`.
     #[error("request {request_id} was cancelled")]
@@ -143,15 +163,16 @@ impl CoreError {
             // which cannot fix it (#1020 wave 3).
             Self::StaleCore { .. } => ErrorCode::VersionWindow,
             Self::Unavailable { .. } => ErrorCode::PeerUnreachable,
+            Self::GatewayRefused { .. } => ErrorCode::Unauthorized,
+            Self::VaultMoved { .. } => ErrorCode::VaultMoved,
             Self::Unpaired => ErrorCode::RebootstrapRequired,
             Self::VaultAlreadyHeld { .. } => ErrorCode::VaultAlreadyHeld,
-            Self::IdentityMismatch { .. } => ErrorCode::IdentityMismatch,
             Self::InvalidRequest { .. } | Self::NotCancellable { .. } | Self::Decode(_) => {
                 ErrorCode::InvalidRequest
             }
             Self::Unsupported { .. } => ErrorCode::UnsupportedMessage,
+            Self::ReadBoundReached { .. } => ErrorCode::ReadBoundReached,
             Self::NotYetAvailable { .. } => ErrorCode::NotYetAvailable,
-            Self::OnlineOnly { .. } => ErrorCode::OnlineOnly,
             Self::Cancelled { .. } => ErrorCode::Cancelled,
             Self::Vault(vault) => vault_code(vault),
             Self::Protocol(_) => ErrorCode::MalformedFrame,
@@ -195,15 +216,25 @@ impl CoreError {
             detail: self.to_string(),
             diagnostic_id: self.diagnostic_id().unwrap_or_default().to_owned(),
             sentence: self.sentence(),
-            // NONE, AND NOT BECAUSE IT IS UNIMPLEMENTED (#1029 W5). `moved`
-            // carries `lease.proto`'s `VaultMoved` on an
-            // `ERROR_CODE_VAULT_MOVED`, and that code is a GATEWAY's refusal:
-            // it means "you held this vault and a higher epoch took it", which
-            // is a statement about a lease this core neither holds nor hears
-            // about. `CoreError` has no variant that maps to it, so there is no
-            // arm here that could fill it in — and a core that invented an
-            // epoch and a date would be the second mechanism F1 forbids.
-            moved: None,
+            // FILLED SINCE #1029 W15-2, AND THE PARAGRAPH THAT SAID IT COULD
+            // NOT BE IS SUPERSEDED. It read: "that code is a GATEWAY's
+            // refusal … a statement about a lease this core neither holds nor
+            // hears about". That was true when it was written, in W5, and the
+            // drain changed it — `phone::drain` claims nothing but commits
+            // under the lease, so `ClientError::Moved` arrives here with the
+            // gateway's OWN epoch and the gateway's OWN moment. Nothing is
+            // invented: both numbers are copied out of the refusal, which is
+            // exactly what the old paragraph was guarding against.
+            moved: match self {
+                Self::VaultMoved {
+                    current_epoch,
+                    moved_at_ms,
+                } => Some(centraid_api_proto::core_v1::VaultMoved {
+                    current_epoch: *current_epoch,
+                    moved_at_ms: *moved_at_ms,
+                }),
+                _ => None,
+            },
         }
     }
 }
@@ -244,6 +275,13 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
             "That request does not make sense to this build, and nothing was changed."
         }
         C::SnapshotUnavailable => "The gateway has nowhere to build a copy of the vault right now.",
+        // NOTHING WAS LOST AND NOTHING IS BROKEN, and the sentence says the
+        // true reason no part of the answer is shown: a part would read as the
+        // whole (#1046, D-1020-D3-12).
+        C::ReadBoundReached => {
+            "There is more here than one look can gather, so none of it was shown rather than \
+             part of it. Try a shorter range."
+        }
         // THE VAULT ALREADY HERE IS THE ONE THIS PROTECTS, and the sentence
         // says so rather than naming a file: the member's vault is intact,
         // which is the fact they need. Mobile rarely renders it — `Shelf.found`
@@ -251,14 +289,6 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
         // caller that got there another way (#1025 S7-9, #1029 W5).
         C::VaultAlreadyHeld => {
             "There is already a vault in that file, so it was left alone. Make a new one."
-        }
-        // WHAT IS WRONG IS THE CREDENTIAL, AND THE REMEDY IS PAIRING AGAIN
-        // (#1025 S7-13). It names neither key — they are 64 hex characters
-        // apiece and mean nothing to a member — and it does not blame the
-        // gateway, which is behaving correctly by not knowing this device.
-        C::IdentityMismatch => {
-            "This device's key for that vault is gone, so the gateway no longer recognises it. \
-             Pair it again."
         }
         C::IntentHashMismatch => {
             "That request does not match what was submitted with it, so it was not run."
@@ -273,7 +303,6 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
             "That change did not declare everything it reads, so it was refused rather than run \
              on a guess."
         }
-        C::OnlineOnly => "That one needs the gateway, and this device cannot reach it.",
         C::Denied => "That is not allowed for this app.",
         // RETRYABLE, and the sentence says the device is still working rather
         // than that anything went wrong: the write is in the queue, its bytes
@@ -301,57 +330,14 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
         // THE ONE WITH A BEHAVIOUR ATTACHED. The phone freezes this vault
         // read-only and keeps its unacked spool, so the sentence has to make
         // the freeze make sense — and it has to say the changes are still
-        // there, because they are and they are the only thing at stake.
+        // there, because they are and they are the only thing at stake. And
+        // it names the way back, since pairing again is refused the same way
+        // (`phone::pair`'s "superseded"): a restore starts from the gateway's
+        // head, never from this phone's older copy.
         C::VaultMoved => {
             "This vault has moved to another phone. It is read-only here, and any changes made on \
-             this phone since then are still on it."
-        }
-        C::GatewaySignatureInvalid => {
-            "The backup service did not recognise this phone. Check it is set up for this vault."
-        }
-        // The remedy is automatic — the phone re-signs once with the server's
-        // own time — so this reaches a member only when that failed too.
-        C::GatewayClockSkew => {
-            "This phone's clock is too far from the backup service's. Check the date and time."
-        }
-        C::GatewayChecksumMissing | C::GatewayChecksumMismatch => {
-            "Some of the backup did not arrive intact, so it was not accepted. It will be sent \
-             again."
-        }
-        C::GatewayAlreadyCommitted => "That part of the backup is already saved.",
-        C::GatewayObjectUnknown => {
-            "Part of the backup was missing when it was saved, so nothing was recorded. It will \
-             be sent again."
-        }
-        C::GatewayObjectTooLarge => {
-            "That file was sent in a piece larger than the backup service accepts."
-        }
-        // The compare-and-set fence (F7). The member's action is to look at the
-        // other phone, which is the only thing that can explain it.
-        C::GatewayHeadConflict => {
-            "Another phone backed this vault up first. Nothing was overwritten; open Centraid on \
-             the other phone to see what it holds."
-        }
-        C::GatewayLeaseStale | C::GatewayNotLeaseHolder => {
-            "Another phone holds this vault now, so this one cannot back it up."
-        }
-        C::GatewayQuotaExceeded => {
-            "This vault has used all its backup space. Free some up, or move to a larger plan."
-        }
-        // READ-ONLY, NOT DELETED, and the sentence leads with that: the whole
-        // reason the rule exists is that a member who let a plan lapse finds
-        // their backup where they left it (F13).
-        C::GatewayPlanLapsed => {
-            "This plan has lapsed. The backup is still there and can still be restored; nothing \
-             new is being saved."
-        }
-        C::GatewayDeleteRefused => {
-            "The backup service kept that rather than deleting it. Backups are held for a set \
-             time so an older one can always be restored."
-        }
-        C::GatewayCapabilityScope => "That share is no longer available.",
-        C::GatewayMailboxRefused => {
-            "That could not be delivered right now. It will be tried again later."
+             this phone since then are still on it. To make this phone its writer again, restore \
+             the vault from your 24 words."
         }
     }
 }
@@ -515,7 +501,7 @@ mod tests {
 
     /// Every code the enum carries, so the sweep above cannot miss one: a new
     /// code with no sentence is a code whose refusal renders as nothing.
-    const EVERY_CODE: [ErrorCode; 22] = [
+    const EVERY_CODE: [ErrorCode; 21] = [
         ErrorCode::Unspecified,
         ErrorCode::Unauthorized,
         ErrorCode::VersionWindow,
@@ -532,7 +518,6 @@ mod tests {
         ErrorCode::IntentIdReused,
         ErrorCode::IntentOutcomeExpired,
         ErrorCode::ReadSetIncomplete,
-        ErrorCode::OnlineOnly,
         ErrorCode::Denied,
         ErrorCode::DowngradeRefused,
         ErrorCode::UpgradeRequired,

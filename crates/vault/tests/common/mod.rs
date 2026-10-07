@@ -54,31 +54,15 @@ impl Scratch {
     /// It is **the real store**, `<vault>.bytes` behind
     /// `centraid_blobs::ContentBytes`, and not a stand-in. A device holds one
     /// content store (D-1025-S3-1), so a test fixture that attached a second
-    /// kind would be testing an arrangement no device has — which is precisely
-    /// how the flat CAS these tests used to open went a year without anyone
-    /// noticing that nothing else on a device read it.
-    ///
-    /// The runtime is the fixture's own and is leaked with it: these vaults
-    /// live for the length of one test binary, and shutting an iroh store down
-    /// from a `Drop` that may run on a runtime thread is the deadlock this note
-    /// exists to avoid.
+    /// kind would be testing an arrangement no device has.
     pub fn founded_with_blobs(seed: &str) -> Result<Self> {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir)?;
         let clock = Arc::new(FixedClock::frozen());
         let file = dir.join("vault.db");
-        let runtime = Box::leak(Box::new(
-            tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .expect("a runtime"),
-        ));
-        let store = runtime
-            .block_on(centraid_blobs::ByteStore::open(
-                file.with_extension("bytes"),
-            ))
+        let store = centraid_blobs::ByteStore::open(file.with_extension("bytes"))
             .expect("a content store opens");
-        let blobs = centraid_blobs::ContentBytes::new(store, runtime.handle().clone());
+        let blobs = centraid_blobs::ContentBytes::new(store);
         let vault = Vault::create_with(
             file,
             Box::new(Arc::clone(&clock)),
@@ -87,6 +71,38 @@ impl Scratch {
         .with_blobs(Box::new(blobs));
         vault.found("Test", "Test Owner")?;
         Ok(Self { dir, vault, clock })
+    }
+
+    /// The same store, its door reading the backup ledger beside the vault —
+    /// what a phone's core attaches (#1080 ruling 6). The ledger is handed
+    /// back so a test can record what the operating system's library holds.
+    pub fn founded_with_library(
+        seed: &str,
+    ) -> Result<(
+        Self,
+        Arc<std::sync::Mutex<centraid_vault::backup::ledger::Ledger>>,
+    )> {
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir)?;
+        let clock = Arc::new(FixedClock::frozen());
+        let file = dir.join("vault.db");
+        let store = centraid_blobs::ByteStore::open(file.with_extension("bytes"))
+            .expect("a content store opens");
+        let ledger = Arc::new(std::sync::Mutex::new(
+            centraid_vault::backup::ledger::Ledger::open(
+                centraid_vault::backup::ledger::Ledger::path_for(&file),
+            )
+            .expect("the ledger opens"),
+        ));
+        let blobs = centraid_blobs::ContentBytes::new(store).with_ledger(Arc::clone(&ledger));
+        let vault = Vault::create_with(
+            file,
+            Box::new(Arc::clone(&clock)),
+            Box::new(SeededIds::new(seed)),
+        )?
+        .with_blobs(Box::new(blobs));
+        vault.found("Test", "Test Owner")?;
+        Ok((Self { dir, vault, clock }, ledger))
     }
 
     #[must_use]
@@ -165,8 +181,24 @@ pub fn owner_party(vault: &Vault) -> Result<String> {
     })
 }
 
-/// Enrol a device owned by the vault's owner.
+/// A device row and its private key sibling, owned by the vault's owner —
+/// the private table a canary is planted in. Written raw: nothing in the
+/// product enrols a device since the gateway allowlist left with iroh (#1080).
 pub fn enrol(vault: &Vault, device_id: &str, public_key: &str) -> Result<()> {
     let owner = owner_party(vault)?;
-    vault.enrol_device(device_id, &owner, "Test device", "ios", public_key)
+    let now = vault.clock().now_text();
+    vault.commit(|tx| {
+        tx.set_producer("test.enrol");
+        tx.connection().execute(
+            "INSERT INTO access_device (device_id, owner_party_id, name, platform, enrolled_at)
+             VALUES (?1, ?2, 'Test device', 'ios', ?3)",
+            rusqlite::params![device_id, owner, now],
+        )?;
+        tx.connection().execute(
+            "INSERT INTO access_device_secret (device_id, public_key) VALUES (?1, ?2)",
+            rusqlite::params![device_id, public_key],
+        )?;
+        Ok(())
+    })?;
+    Ok(())
 }

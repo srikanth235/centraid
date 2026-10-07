@@ -51,4 +51,4 @@ The run exits non-zero. That is expected — the untouched packages' floors fail
 - Issue [#839](https://github.com/srikanth235/centraid/issues/839) (Wave 0 blend re-seed; the recorded numbers did not reproduce)
 - [TESTING.md](../../TESTING.md#the-ledgers-915-wave-4-927) — the `tests/` ledgers and who reads them
 - `tests/floors.json#coverage` — `approvedDeviation` carries each seed's provenance
-- `vitest.config.ts` — the root config whose `include` defines every denominator (`desktop/vitest.config.ts` is a separate project with no floor)
+- `vitest.config.ts` — the root config whose `include` defines every denominator

@@ -4,7 +4,12 @@ import centraid.core.v1.TransferRule as Wire
 import dev.centraid.shared.platform.SecureStore
 
 /**
- * THE MEMBER'S TRANSFER RULE (#1025 S4, D-1025-S7-60).
+ * THE MEMBER'S TRANSFER RULE (#1025 S4, D-1025-S7-60; #1080).
+ *
+ * **One setting for both directions** (#1080, the Backup screen): the pass
+ * carries it on `DrainRequest.rule` for what this phone BACKS UP, and the
+ * fetch window on `originals` for what it DOWNLOADS. The Home header's sheet
+ * and the Backup screen draw the same three choices from one store.
  *
  * WhatsApp's auto-download model, and the reason this product wants it:
  * **bytes are never pushed, they are PLANNED, and the plan is a member's
@@ -25,11 +30,12 @@ import dev.centraid.shared.platform.SecureStore
  *
  * ## THE SHELL HOLDS THE VALUE AND DOES NONE OF THE ARITHMETIC
  *
- * This enum carries a member's choice onto the wire and nothing else. Which
- * tiers a window may fetch under which rule on which link is
- * `centraid_blobs::Budget::admits_original`, in Rust, in one table — a Kotlin
- * or Swift copy of it would be a second rule deciding a member's bill, and the
- * two would drift the first time either was touched. **No sizes and no
+ * This enum carries a member's choice onto the wire and nothing else. What a
+ * pass may seal and move under which rule on which link is the core's
+ * `phone::drain::Conditions` (`may_prepare`, `may_move`, `allows_cellular`),
+ * in Rust, in one place — a Kotlin or Swift copy of it would be a second rule
+ * deciding a member's bill, and the two would drift the first time either was
+ * touched. **No sizes and no
  * ceilings appear anywhere in this file.**
  *
  * ## Thumbnails and previews are not in here
@@ -64,19 +70,24 @@ public enum class TransferRule(
     /** THE DEFAULT. Its failure mode is a late photograph, not a bill. */
     WIFI_ONLY(
         "wifi-only",
-        "Download full-size photos and videos on Wi-Fi only.",
+        "Back up and download full-size photos and videos on Wi-Fi only.",
     ),
 
     /** A photograph's original on cellular; a video's still waits for Wi-Fi. */
     WIFI_AND_CELLULAR_PHOTOS(
         "wifi-and-cellular-photos",
-        "Download full-size photos on Wi-Fi and cellular. Videos wait for Wi-Fi.",
+        "Back up and download full-size photos on Wi-Fi and cellular. Videos wait for Wi-Fi.",
     ),
 
-    /** Nothing arrives on its own. The member taps what they want. */
+    /**
+     * Nothing ARRIVES on its own; the member taps what they want. Backing up
+     * has no tap — camera-roll backup is automatic (R-1029-PH-4) — so what
+     * this phone sends under it waits for Wi-Fi, as under [WIFI_ONLY]
+     * (R-1080-D7; the core's admission is lane C's).
+     */
     MANUAL(
         "manual",
-        "Never download full-size photos on their own. Tap a photo to get it.",
+        "Download full-size photos only when you tap one. Backups of full-size photos and videos wait for Wi-Fi.",
     ),
 
     ;
@@ -93,14 +104,14 @@ public enum class TransferRule(
 
     public companion object {
         /** The heading the sheet draws. */
-        public const val TITLE: String = "Downloads"
+        public const val TITLE: String = "Wi-Fi and cellular"
 
         /**
          * What the sheet says under the heading, once, rather than repeating
          * "on this device" in all three sentences.
          */
         public const val SUBTITLE: String =
-            "This is set for this phone, not for one vault. Thumbnails always arrive."
+            "This is set for this phone, not for one vault. Thumbnails cross on any network."
 
         /** The line the header draws when a rule is holding originals back. */
         public fun waitingSentence(count: Int): String = when {
@@ -128,6 +139,29 @@ public enum class TransferRule(
         public suspend fun write(store: SecureStore, rule: TransferRule) {
             store.write(KEY, rule.stored)
         }
+
+        /**
+         * THE SECOND CONTROL: whether video originals are backed up at all
+         * (#1080, the Backup screen). Its own key because it answers a
+         * different question — what, not over which link — and the rule above
+         * already says videos never cross cellular.
+         *
+         * **Absent is INCLUDED**: the complete backup is the default, which is
+         * also why the wire spells it `exclude_videos` (seam contract A3) —
+         * proto3's zero value is then the whole library.
+         */
+        public const val INCLUDE_VIDEOS_KEY: String = "transfer-rule.include-videos"
+
+        public suspend fun includeVideos(store: SecureStore): Boolean =
+            store.read(INCLUDE_VIDEOS_KEY) != EXCLUDED
+
+        public suspend fun writeIncludeVideos(store: SecureStore, include: Boolean) {
+            // INCLUDED IS STORED AS ABSENCE, so the store holds a key only
+            // while the member is spending less than the default.
+            store.write(INCLUDE_VIDEOS_KEY, if (include) "" else EXCLUDED)
+        }
+
+        private const val EXCLUDED: String = "excluded"
     }
 }
 
@@ -143,8 +177,9 @@ public enum class TransferRule(
  * to name an app's types (`PerAppLayoutSpec`) and this is not photographs'
  * business anyway: it is the same window the pass runs under, which is what
  * makes it impossible for a grid to draw a download arrow under one rule while
- * the pass plans under another. `HomeSession` writes it once a round, from the
- * window it just built; a screen reads it.
+ * the pass plans under another. [PassConditions.read] writes it at the start
+ * of every pass, from the reading that pass is about to carry; a screen reads
+ * it.
  *
  * The defaults WITHHOLD NOTHING, so a read that ran before anybody said
  * otherwise labels a cell "still on its way" rather than drawing a download

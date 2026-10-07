@@ -58,11 +58,23 @@ const HUE_VAR_OPEN: &str = "var(--c-";
 /// v0's `identityHash`: `Math.imul(hash, 31) + codePoint`, wrapped to a signed
 /// 32-bit range, then `Math.abs`.
 ///
-/// The wrap is the whole subtlety. `Math.imul` multiplies as int32 and JS then
-/// ADDS the code point as a double, so the sum can exceed `i32::MAX` — and v0
-/// brings it back by subtracting 2³² when it does. An `i32::wrapping_add`
-/// would wrap at a different place and give a different hue for a minority of
-/// ids; the corpus is what proves this one agrees.
+/// The wrap reads like the subtlety and is not one. `Math.imul` multiplies as
+/// int32 and JS then ADDS the code point as a double, so the sum can exceed
+/// `i32::MAX` — and v0 brings it back by subtracting 2³² when it does. But a
+/// code point is NON-NEGATIVE, so the sum can only overflow upward and by at
+/// most `0x10_FFFF`: one wrap, never two, and never below `i32::MIN`.
+/// Subtracting 2³² exactly when it passes `i32::MAX` is therefore the
+/// definition of `i32::wrapping_add`, and the two are the same function. This
+/// comment said the opposite until `mobile/.../PartyHueWheelSpec.kt` was
+/// written to falsify it and could not, so it also records what the corpus
+/// does NOT show: the branch fires zero times across every row, because
+/// landing within `0x10_FFFF` of `i32::MAX` is a one-in-four-thousand event
+/// per character. The spelling below is kept because it is what the source
+/// says, not because it changes an answer.
+///
+/// The absolute value is the guard that IS real: `Math.abs` of `i32::MIN`
+/// answers 2 147 483 648, which no `i32` holds. It changes no hue either —
+/// 2³¹ is divisible by eight — but it changes what this function returns.
 #[must_use]
 pub fn identity_hash(value: &str) -> u64 {
     let mut hash: i32 = 0;

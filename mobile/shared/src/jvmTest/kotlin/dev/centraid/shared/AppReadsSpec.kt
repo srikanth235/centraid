@@ -8,22 +8,126 @@ import centraid.screen.v1.NoteDraft
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.ReadFailureKind
 import dev.centraid.core.CoreFailure
+import dev.centraid.shared.apps.docs.DocsDocumentMachine
+import dev.centraid.shared.apps.docs.DocsDocumentReads
+import dev.centraid.shared.apps.docs.DocsDriveMachine
+import dev.centraid.shared.apps.docs.DocsDriveReads
+import dev.centraid.shared.apps.docs.DocsEditorMachine
+import dev.centraid.shared.apps.docs.DocsEditorReads
+import dev.centraid.shared.apps.docs.DocsTrashMachine
+import dev.centraid.shared.apps.docs.DocsTrashReads
+import dev.centraid.shared.apps.agenda.AgendaEditorMachine
+import dev.centraid.shared.apps.agenda.AgendaEditorReads
+import dev.centraid.shared.apps.agenda.AgendaEventMachine
+import dev.centraid.shared.apps.agenda.AgendaEventReads
+import dev.centraid.shared.apps.agenda.AgendaHomeMachine
+import dev.centraid.shared.apps.agenda.AgendaReads
+import dev.centraid.shared.apps.locker.LOCKER_TRASH
+import dev.centraid.shared.apps.locker.LockerEditorMachine
+import dev.centraid.shared.apps.locker.LockerEditorReads
+import dev.centraid.shared.apps.locker.LockerExportMachine
+import dev.centraid.shared.apps.locker.LockerExportReads
+import dev.centraid.shared.apps.locker.LockerGeneratorMachine
+import dev.centraid.shared.apps.locker.LockerGeneratorReads
+import dev.centraid.shared.apps.locker.LockerHomeMachine
+import dev.centraid.shared.apps.locker.LockerHomeReads
+import dev.centraid.shared.apps.locker.LockerImportMachine
+import dev.centraid.shared.apps.locker.LockerImportReads
+import dev.centraid.shared.apps.locker.LockerItemMachine
+import dev.centraid.shared.apps.locker.LockerItemReads
+import dev.centraid.shared.apps.locker.LockerTrashMachine
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.notes.NotesReads
+import dev.centraid.shared.apps.notes.NotesHistoryMachine
+import dev.centraid.shared.apps.notes.NotesHistoryReads
+import dev.centraid.shared.apps.notes.NotesJournalMachine
+import dev.centraid.shared.apps.notes.NotesJournalReads
+import dev.centraid.shared.apps.notes.NotesLibraryMachine
+import dev.centraid.shared.apps.notes.NotesLibraryReads
+import dev.centraid.shared.apps.notes.NotesLinkPickerMachine
+import dev.centraid.shared.apps.notes.NotesLinkPickerReads
+import dev.centraid.shared.apps.notes.NotesNotebooksMachine
+import dev.centraid.shared.apps.notes.NotesNotebooksReads
+import dev.centraid.shared.apps.notes.NotesTrashMachine
+import dev.centraid.shared.apps.notes.NotesTrashReads
+import dev.centraid.shared.apps.people.PeopleEditorMachine
+import dev.centraid.shared.apps.people.PeopleEditorReads
+import dev.centraid.shared.apps.people.PeopleHomeMachine
+import dev.centraid.shared.apps.people.PeopleHomeReads
+import dev.centraid.shared.apps.people.PeoplePersonMachine
+import dev.centraid.shared.apps.people.PeoplePersonReads
+import dev.centraid.shared.apps.people.PeopleTrashMachine
+import dev.centraid.shared.apps.people.PeopleTrashReads
+import centraid.screen.v1.PhotoShelf
+import centraid.screen.v1.PhotoShelfEvent
+import centraid.screen.v1.PhotoLightboxEvent
+import centraid.screen.v1.PhotoPickerEvent
+import centraid.screen.v1.DuplicateReviewEvent
+import dev.centraid.shared.apps.photos.DuplicateReviewMachine
+import dev.centraid.shared.apps.photos.DuplicateReviewReads
+import dev.centraid.shared.apps.photos.DuplicatesMachine
+import dev.centraid.shared.apps.photos.DuplicatesReads
+import dev.centraid.shared.apps.photos.PhotoLightboxMachine
+import dev.centraid.shared.apps.photos.PhotoLightboxReads
+import dev.centraid.shared.apps.photos.PhotoPickerMachine
+import dev.centraid.shared.apps.photos.PhotoPickerReads
+import dev.centraid.shared.apps.photos.PhotoShelfMachine
+import dev.centraid.shared.apps.photos.PhotoShelfReads
 import dev.centraid.shared.apps.photos.PhotosGridMachine
+import dev.centraid.shared.apps.photos.PhotosMemoriesMachine
+import dev.centraid.shared.apps.photos.PhotosMemoriesReads
 import dev.centraid.shared.apps.photos.PhotosReads
-import dev.centraid.shared.apps.tally.TallyListMachine
-import dev.centraid.shared.apps.tally.TallyReads
+import dev.centraid.shared.apps.photos.PlacesMachine
+import dev.centraid.shared.apps.photos.PlacesReads
+import dev.centraid.shared.apps.tally.TallyEditorMachine
+import dev.centraid.shared.apps.tally.TallyEditorReads
+import dev.centraid.shared.apps.tally.TallyExpenseMachine
+import dev.centraid.shared.apps.tally.TallyExpenseReads
+import dev.centraid.shared.apps.tally.TallyExportMachine
+import dev.centraid.shared.apps.tally.TallyExportReads
+import dev.centraid.shared.apps.tally.TallyFriendMachine
+import dev.centraid.shared.apps.tally.TallyFriendReads
+import dev.centraid.shared.apps.tally.TallyGroupMachine
+import dev.centraid.shared.apps.tally.TallyGroupReads
+import dev.centraid.shared.apps.tally.TallyHomeMachine
+import dev.centraid.shared.apps.tally.TallyHomeReads
+import dev.centraid.shared.apps.tally.TallyRecurringMachine
+import dev.centraid.shared.apps.tally.TallyRecurringReads
+import dev.centraid.shared.apps.tally.TallySearchMachine
+import dev.centraid.shared.apps.tally.TallySearchReads
+import dev.centraid.shared.apps.tally.TallySettleUpMachine
+import dev.centraid.shared.apps.tally.TallySettleUpReads
+import dev.centraid.shared.apps.tally.TallySpendingMachine
+import dev.centraid.shared.apps.tally.TallySpendingReads
+import dev.centraid.shared.apps.tally.TallyTrashMachine
+import dev.centraid.shared.apps.tally.TallyTrashReads
 import dev.centraid.shared.screen.ScreenMachine
+import dev.centraid.shared.kit.TrashReads
+import dev.centraid.shared.shell.HomeMachine
+import dev.centraid.shared.shell.HomeReads
+import dev.centraid.shared.apps.tasks.TasksCatchUpMachine
+import dev.centraid.shared.apps.tasks.TasksCatchUpReads
+import dev.centraid.shared.apps.tasks.TasksDetailMachine
+import dev.centraid.shared.apps.tasks.TasksDetailReads
+import dev.centraid.shared.apps.tasks.TasksHomeMachine
+import dev.centraid.shared.apps.tasks.TasksHomeReads
+import dev.centraid.shared.apps.tasks.TasksListMachine
+import dev.centraid.shared.apps.tasks.TasksListReads
+import dev.centraid.shared.apps.tasks.TasksProjectMachine
+import dev.centraid.shared.apps.tasks.TasksProjectReads
+import dev.centraid.shared.apps.tasks.TasksTrashMachine
+import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenReads
 import dev.centraid.shared.sync.ScreenRuntime
 import dev.centraid.shared.sync.fromCore
 import dev.centraid.shared.sync.sentenceFor
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
+import java.io.File
 
 /**
  * THE THREE APP SCREENS' READS (#1025 S5, lane L5).
@@ -45,17 +149,95 @@ class AppReadsSpec : StringSpec({
      * would be a fourth chance to leave one out.
      */
     val screens: List<Triple<String, ScreenReads<*, *>, ScreenMachine<*, *>>> = listOf(
-        Triple("tally", TallyReads, TallyListMachine),
         Triple("photos", PhotosReads, PhotosGridMachine),
         Triple("notes", NotesReads, NotesEditorMachine),
+        // THE PHOTOS MINIAPP'S OTHER SCREENS (#1029, photos port). Eight of
+        // the ten are `ScreenReads` and belong here; the three that are not —
+        // Collections, People and face review — fan several statements out in
+        // their bridges and fold the answers, because their data case cannot
+        // be CONSTRUCTED from one table (`HomeSession.attachReads`' ruling).
+        // Those are asserted in their own specs, which is where the fold is.
+        Triple("photos.shelf", PhotoShelfReads, PhotoShelfMachine),
+        Triple("photos.picker", PhotoPickerReads, PhotoPickerMachine),
+        Triple("photos.lightbox", PhotoLightboxReads, PhotoLightboxMachine),
+        Triple("photos.places", PlacesReads, PlacesMachine),
+        // MEMORIES IS SERVED BY ITS OWN BRIDGE — the shelf, then a trip's
+        // route legs, folded into one page (`PhotosMemoriesBridge`) — but its
+        // SHELF is still one `ScreenReads` statement, and that statement is
+        // what this list asserts. The route fold is `PhotosMemoriesSpec`'s.
+        Triple("photos.memories", PhotosMemoriesReads, PhotosMemoriesMachine),
+        Triple("photos.duplicates", DuplicatesReads, DuplicatesMachine),
+        Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
+        Triple("docs.trash", DocsTrashReads, DocsTrashMachine),
+        Triple("tasks.trash", TasksTrashMachine.reads, TasksTrashMachine.machine),
+        // TALLY (#1046 port): the kit's trash over `tally_expense`, restore only.
+        Triple("tally.trash", TallyTrashReads, TallyTrashMachine),
+        // LOCKER (#1047): the kit's trash over `locker_item`. The statement is
+        // the kit's own; `LockerTrashReads` adds only the gate in front of it
+        // (`LockerSpec`).
+        Triple("locker.trash", TrashReads(LOCKER_TRASH), LockerTrashMachine),
     )
 
     /** The statement each screen makes when it is holding a state that can read. */
     fun statementOf(name: String) = when (name) {
-        "tally" -> TallyReads.query(TallyListMachine.initial(), null)
         "photos" -> PhotosReads.query(PhotosGridMachine.initial(), null)
-        else -> NotesReads.query(
+        "notes" -> NotesReads.query(
             NotesEditorMachine.initial().copy(note_id = "note-0001"),
+            null,
+        )
+        // A PARAMETERISED SCREEN IS ASKED IN THE STATE IT WOULD REALLY READ IN.
+        // `query` returns null when a screen cannot yet say what to read, so a
+        // shelf asked with no shelf, a lightbox with no asset or a review with
+        // no cluster would answer null and this whole spec would pass over an
+        // empty statement — proving nothing about the screens most likely to
+        // get their projection wrong. Each is driven through its own `Opened`,
+        // which is how the parameter reaches the state in the product.
+        "photos.shelf" -> PhotoShelfReads.query(
+            PhotoShelfMachine.reduce(
+                PhotoShelfMachine.initial(),
+                PhotoShelfEvent(
+                    opened = PhotoShelfEvent.Opened(
+                        shelf = PhotoShelf(
+                            album = PhotoShelf.Album(collection_id = "alb-1", name = "Portugal"),
+                        ),
+                    ),
+                ),
+            ).state,
+            null,
+        )
+        "photos.picker" -> PhotoPickerReads.query(
+            PhotoPickerMachine.reduce(
+                PhotoPickerMachine.initial(),
+                PhotoPickerEvent(
+                    opened = PhotoPickerEvent.Opened(
+                        collection_id = "alb-1",
+                        collection_name = "Portugal",
+                    ),
+                ),
+            ).state,
+            null,
+        )
+        "photos.lightbox" -> PhotoLightboxReads.query(
+            PhotoLightboxMachine.reduce(
+                PhotoLightboxMachine.initial(),
+                PhotoLightboxEvent(opened = PhotoLightboxEvent.Opened(asset_id = "ast-1")),
+            ).state,
+            null,
+        )
+        "photos.places" -> PlacesReads.query(PlacesMachine.initial(), null)
+        "photos.memories" -> PhotosMemoriesReads.query(PhotosMemoriesMachine.initial(), null)
+        "photos.duplicates" -> DuplicatesReads.query(DuplicatesMachine.initial(), null)
+        "docs.trash" -> DocsTrashReads.query(DocsTrashMachine.initial(), null)
+        "tasks.trash" -> TasksTrashMachine.reads.query(TasksTrashMachine.machine.initial(), null)
+        "tally.trash" -> TallyTrashReads.query(TallyTrashMachine.initial(), null)
+        "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
+        else -> DuplicateReviewReads.query(
+            DuplicateReviewMachine.reduce(
+                DuplicateReviewMachine.initial(),
+                DuplicateReviewEvent(
+                    opened = DuplicateReviewEvent.Opened(cluster_id = "dup-1"),
+                ),
+            ).state,
             null,
         )
     }
@@ -98,6 +280,100 @@ class AppReadsSpec : StringSpec({
         }
     }
 
+    /**
+     * EVERY TABLE IN THE VAULT, from the DDL the vault is built from.
+     *
+     * The universe the app-query law below is asked over: a machine can only
+     * be asked "is this yours" one table at a time, so "exactly these" means
+     * asking it about every table there is.
+     */
+    val vaultTables: Set<String> by lazy {
+        val root = File(System.getProperty("centraid.repositoryRoot") ?: error("unset"))
+        Regex("""(?m)^CREATE TABLE (\w+) \(""")
+            .findAll(root.resolve("contracts/schema/vault-ddl.sql").readText())
+            .map { it.groupValues[1] }
+            .toSet()
+    }
+
+    /** The tables [machine] re-reads on, asked of it over every vault table. */
+    fun reactsTo(machine: ScreenMachine<*, *>): Set<String> =
+        vaultTables.filter { machine.rowsChanged(it, listOf("k")) != null }.toSet()
+
+    /**
+     * THE APP-QUERY SCREENS (#1046), beside their machines. An app query names
+     * no table the runtime can see, so each declares `tables` — and the law
+     * is that the declaration and the machine agree EXACTLY. Agenda's screens
+     * join this list as they land.
+     */
+    val queryScreens: List<Triple<String, ScreenQueries<*, *>, ScreenMachine<*, *>>> = listOf(
+        Triple("agenda.home", AgendaReads, AgendaHomeMachine),
+        Triple("agenda.event", AgendaEventReads(), AgendaEventMachine),
+        Triple("agenda.editor", AgendaEditorReads(), AgendaEditorMachine),
+        Triple("people.home", PeopleHomeReads, PeopleHomeMachine),
+        Triple("people.person", PeoplePersonReads, PeoplePersonMachine),
+        Triple("people.editor", PeopleEditorReads, PeopleEditorMachine),
+        Triple("people.trash", PeopleTrashReads, PeopleTrashMachine),
+        // NOTES (#1029 port). The powerbox declares no table: a transient
+        // sheet over search results re-reads on a new term only.
+        Triple("notes.library", NotesLibraryReads, NotesLibraryMachine),
+        Triple("notes.notebooks", NotesNotebooksReads, NotesNotebooksMachine),
+        Triple("notes.journal", NotesJournalReads, NotesJournalMachine),
+        Triple("notes.history", NotesHistoryReads, NotesHistoryMachine),
+        Triple("notes.link_targets", NotesLinkPickerReads, NotesLinkPickerMachine),
+        Triple("notes.trash", NotesTrashReads, NotesTrashMachine),
+        // DOCS (#1046 port). The trash is a page read; it is in `screens`.
+        Triple("docs.drive", DocsDriveReads, DocsDriveMachine),
+        Triple("docs.document", DocsDocumentReads, DocsDocumentMachine),
+        Triple("docs.editor", DocsEditorReads, DocsEditorMachine),
+        // TASKS (#1029 port). The trash is the kit's page read.
+        Triple("tasks.home", TasksHomeReads, TasksHomeMachine),
+        Triple("tasks.list", TasksListReads, TasksListMachine),
+        Triple("tasks.project", TasksProjectReads, TasksProjectMachine),
+        Triple("tasks.detail", TasksDetailReads, TasksDetailMachine),
+        Triple("tasks.catch_up", TasksCatchUpReads, TasksCatchUpMachine),
+        // TALLY (#1046 port). Every ledger screen folds the same load, so
+        // they share one table set; the expense and editor add revisions and
+        // memos, recurring reads its templates.
+        Triple("tally.home", TallyHomeReads, TallyHomeMachine),
+        Triple("tally.group", TallyGroupReads, TallyGroupMachine),
+        Triple("tally.friend", TallyFriendReads, TallyFriendMachine),
+        Triple("tally.expense", TallyExpenseReads, TallyExpenseMachine),
+        Triple("tally.editor", TallyEditorReads, TallyEditorMachine),
+        Triple("tally.settle_up", TallySettleUpReads, TallySettleUpMachine),
+        Triple("tally.recurring", TallyRecurringReads, TallyRecurringMachine),
+        Triple("tally.spending", TallySpendingReads, TallySpendingMachine),
+        Triple("tally.search", TallySearchReads, TallySearchMachine),
+        // The export folds the same load, plus the dashboard for its picker.
+        Triple("tally.export", TallyExportReads, TallyExportMachine),
+        // LOCKER (#1047). Every read screen shares one table set — the item,
+        // its sidecars, the tag plane and the memo; the generator reads none.
+        Triple("locker.home", LockerHomeReads, LockerHomeMachine),
+        Triple("locker.item", LockerItemReads, LockerItemMachine),
+        Triple("locker.editor", LockerEditorReads, LockerEditorMachine),
+        Triple("locker.generator", LockerGeneratorReads, LockerGeneratorMachine),
+        // #1047 T2: the item page reads its access history (`access_receipt`);
+        // export and import read the shelf's counts.
+        Triple("locker.export", LockerExportReads, LockerExportMachine),
+        Triple("locker.import", LockerImportReads, LockerImportMachine),
+    )
+
+    "an app-query screen's tables are exactly the tables its machine re-reads on" {
+        // THE SAME PAIRING AS A PAGE READ'S, and a stricter one: a page read
+        // has one table, an app query several, and a table read and not
+        // re-read on is a screen that goes stale on sync with nothing red.
+        vaultTables.size shouldBeGreaterThan 50
+        vaultTables.containsAll(HomeReads.TABLES) shouldBe true
+        queryScreens.forEach { (name, queries, machine) ->
+            withClue(name) {
+                vaultTables.containsAll(queries.tables) shouldBe true
+                reactsTo(machine) shouldBe queries.tables
+            }
+        }
+        // HOME IS HELD TO IT TOO: its page reads' tables plus the ones
+        // Agenda's tile query declares, and not one table more.
+        reactsTo(HomeMachine) shouldBe HomeReads.TABLES
+    }
+
     "the notes editor will not read until it knows which note" {
         // A STATEMENT WITH NO NOTE IS NOT A STATEMENT OVER EVERY NOTE. The
         // predicate binds the id, so a missing id could only have become an
@@ -114,55 +390,20 @@ class AppReadsSpec : StringSpec({
         query.with_note_body shouldBe true
     }
 
-    "a tally row is projected off the columns it selected" {
-        val row = Row(
-            values = listOf(
-                Value(text = "exp-1"),
-                Value(text = "Dinner"),
-                // AN INTEGER COLUMN ARRIVES ON THE INTEGER ARM. Read as text it
-                // comes back empty, and every amount in the ledger would be nil.
-                Value(integer = 4250L),
-                Value(text = "JPY"),
-                Value(text = "2026-02-03"),
-            ),
-        )
-        val arrived = TallyReads.arrived(listOf(row), nextCursor = "c").data_.shouldNotBeNull()
-        val data = arrived.data_.shouldNotBeNull()
-        data.next_cursor shouldBe "c"
-        val projected = data.rows.single()
-        projected.expense_id shouldBe "exp-1"
-        projected.description shouldBe "Dinner"
-        projected.occurred_at shouldBe "2026-02-03"
-        projected.amount.shouldNotBeNull().minor shouldBe 4250L
-        projected.amount.shouldNotBeNull().currency shouldBe "JPY"
-        // NAMES ARE ABSENT RATHER THAN INVENTED: they live on `tally_group` and
-        // `core_party` and this read joins neither, so a renderer draws no name
-        // instead of drawing an id as a person.
-        projected.group_name shouldBe ""
-        projected.payer_name shouldBe ""
-        // THE NET BALANCE IS A FOLD AND NOT A COLUMN. A figure summed off one
-        // page would be the balance of a screenful.
-        data.net_balance shouldBe null
-    }
-
-    "an empty tally page is data with no rows, never a refusal" {
-        // A FAILED READ IS NOT AN EMPTY LEDGER, and the converse is the law
-        // this pins: an empty ledger is a real answer and reaches the screen as
-        // data, so the machine clears its loading rather than drawing a
-        // sentence about a vault that is simply new.
-        val arrived = TallyReads.arrived(emptyList(), nextCursor = null)
-        arrived.data_.shouldNotBeNull().data_.shouldNotBeNull().rows shouldBe emptyList()
-        arrived.refused shouldBe null
-    }
-
     "a photo cell is projected off the columns it selected" {
         val row = Row(
             values = listOf(
                 Value(text = "asset-1"),
-                Value(text = "2026-02-03T10:00:00Z"),
+                Value(text = "2026-02-03T05:00:00Z"),
                 Value(integer = -480L),
                 Value(text = "video"),
                 Value(text = "group-9"),
+                // THE GRID'S OWN THREE, after the cell's five: the pixel box a
+                // justified row packs from before a byte arrives, and a video's
+                // length. `duration_s` is REAL in the DDL.
+                Value(integer = 4032L),
+                Value(integer = 3024L),
+                Value(real = 12.5),
                 // THE DOOR'S APPENDED COLUMN (D-1025-S7-20): the path of the
                 // bytes this device holds for this row, resolved in the same
                 // statement rather than by a second trip nobody made.
@@ -180,7 +421,7 @@ class AppReadsSpec : StringSpec({
             .data_.shouldNotBeNull().data_.shouldNotBeNull().cells.single()
         cell shouldBe PhotoCell(
             asset_id = "asset-1",
-            captured_at = "2026-02-03T10:00:00Z",
+            captured_at = "2026-02-03T05:00:00Z",
             captured_utc_offset_minutes = -480,
             kind = PhotoCell.Kind.KIND_VIDEO,
             capture_group_id = "group-9",
@@ -191,6 +432,15 @@ class AppReadsSpec : StringSpec({
             // unmetered link admits a video's original. So the cell is waiting
             // for the bytes rather than for the member — no download arrow.
             held = PhotoCell.Held.HELD_THUMBNAIL_ONLY,
+            width = 4032,
+            height = 3024,
+            // WHOLE SECONDS, rounded down: the tile prints a length, not a
+            // fraction of one.
+            duration_seconds = 12,
+            // THE CAPTURE-LOCAL DAY, NOT UTC'S. Five in the morning UTC at
+            // eight hours west is the evening before, and the timeline groups
+            // by the day the member lived.
+            day = "2026-02-02",
         )
     }
 
@@ -211,6 +461,9 @@ class AppReadsSpec : StringSpec({
         val cell = PhotosReads.arrived(listOf(row), null)
             .data_.shouldNotBeNull().data_.shouldNotBeNull().cells.single()
         cell.thumbnail_path shouldBe null
+        // A ROW WITH NO BOX IS ZERO, never a guess: the view packs it square.
+        cell.width shouldBe 0
+        cell.height shouldBe 0
     }
 
     "an unrecognised kind is unspecified, never a photograph" {

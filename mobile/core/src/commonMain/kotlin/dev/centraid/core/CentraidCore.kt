@@ -71,12 +71,51 @@ public data class CoreConfiguration(
      * use. [ArtifactIdentity.DEV] means "not checked, and say so".
      */
     public val expectedDigest: String = ArtifactIdentity.DEV,
+    /**
+     * THE VAULT'S SEED, AND IT CROSSES ONLY AT OPEN (`CONTRACT.md` §4b, #1029 W15).
+     *
+     * The 64-byte BIP-39 seed the member's 24 words derive, as **128 lowercase
+     * hex characters**, out of this device's Keychain or Keystore. The backup's
+     * keys derive from it (#1080), so a core opened without it cannot back up.
+     *
+     * **Absent is not an error.** Such a core reads and writes its vault
+     * perfectly well and cannot back up (`crates/core/src/phone/mod.rs`) — a
+     * state a shell draws as "unlock to back up",
+     * because a member who has not unlocked their phone has not lost anything.
+     * **Present and malformed IS an error** (`BAD_ARGUMENT`), deliberately: a
+     * shell that believed it had unlocked a core which cannot seal a byte would
+     * find out on the day the phone is gone.
+     *
+     * It is a value on a configuration and not a field this class holds: the
+     * core takes it at open and this binding keeps no reference to it.
+     */
+    public val vaultSeedHex: String? = null,
+    /** The derivation index this vault was minted at. Ignored with no seed. */
+    public val vaultIndex: Int = 0,
 ) {
+    /**
+     * REDACTED: the generated `toString` of a data class prints every field,
+     * and one of these is the seed (#1047 W2). A configuration that reached a
+     * log line or a crash report would carry every vault the member has. There
+     * is no device secret to carry beside it: a gateway knows a phone by a
+     * bearer token in the core's backup ledger (#1080 A21), and the core
+     * ignores a `device` key.
+     */
+    override fun toString(): String =
+        "CoreConfiguration(databasePath=$databasePath, create=$create, " +
+            "expectedDigest=$expectedDigest, " +
+            "vaultSeedHex=${if (vaultSeedHex == null) "absent" else "<redacted>"}, " +
+            "vaultIndex=$vaultIndex)"
+
     internal fun toJson(uiThreadName: String): String = buildString {
         append('{')
         append("\"path\":").append(quote(databasePath))
         append(",\"create\":").append(create)
         append(",\"uiThreadName\":").append(quote(uiThreadName))
+        vaultSeedHex?.let {
+            append(",\"vault\":{\"seed\":").append(quote(it))
+                .append(",\"index\":").append(vaultIndex).append('}')
+        }
         append('}')
     }
 
@@ -328,6 +367,7 @@ public class CentraidCore private constructor(
                             detail = error.detail,
                             diagnosticId = error.diagnostic_id,
                             sentence = error.sentence.ifBlank { "Centraid refused that." },
+                            movedAtMs = error.moved?.moved_at_ms,
                         ),
                     )
                 } else {
@@ -353,13 +393,36 @@ public class CentraidCore private constructor(
             CoreStatus.MALFORMED -> CoreOutcome.Failed(
                 CoreFailure.Malformed("the core could not decode the request this shell encoded"),
             )
+            // A REFUSED REQUEST CARRIES ITS REASON (`CONTRACT.md` clause 4, #1047
+            // E1). The core writes an `Error` body with `BAD_ARGUMENT` for an
+            // `InvalidRequest` — a `tz` a vault cannot answer in, a phrase that
+            // is not one, a `Cancel` naming a bounded read — and this arm threw
+            // those bytes away and said "impossible argument", which is what
+            // hid a missing `tz` behind a generic line (#1047 F2). Decoded, it
+            // is a refusal like any other, with the code a caller branches on.
+            // Only a call with NO body — a null pointer from this binding — is
+            // the binding's own fault.
             CoreStatus.BAD_ARGUMENT -> CoreOutcome.Failed(
-                CoreFailure.BadArgument("the binding handed the ABI an impossible argument"),
+                refusalIn(answer.bytes)
+                    ?: CoreFailure.BadArgument("the binding handed the ABI an impossible argument"),
             )
             CoreStatus.TIMEOUT -> CoreOutcome.Failed(
                 CoreFailure.BadArgument("centraid_call cannot time out; only next_event can"),
             )
         }
+    }
+
+    /** The `Error` body a refusing call wrote, as a [CoreFailure.Refused]; null for none. */
+    private fun refusalIn(bytes: ByteArray?): CoreFailure.Refused? {
+        if (bytes == null || bytes.isEmpty()) return null
+        val error = runCatching { Envelope.ADAPTER.decode(bytes) }.getOrNull()?.error ?: return null
+        return CoreFailure.Refused(
+            code = error.code.value,
+            detail = error.detail,
+            diagnosticId = error.diagnostic_id,
+            sentence = error.sentence.ifBlank { "Centraid refused that." },
+            movedAtMs = error.moved?.moved_at_ms,
+        )
     }
 
     private fun diagnosticIdOf(bytes: ByteArray?): String {

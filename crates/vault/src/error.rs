@@ -157,7 +157,7 @@ pub enum VaultError {
     Sqlite(rusqlite::Error),
 
     #[error(transparent)]
-    Io(#[from] std::io::Error),
+    Io(std::io::Error),
 
     #[error("{context}: {source}")]
     Json {
@@ -192,6 +192,25 @@ impl From<rusqlite::Error> for VaultError {
             };
         }
         Self::Sqlite(error)
+    }
+}
+
+/// A FILE WRITE THAT RAN OUT OF DISK IS THE SAME REFUSAL (#1047).
+///
+/// SQLite is not the only writer of vault bytes: the snapshot's gzip is a Rust
+/// `write`, and ENOSPC there is the member's disk being full exactly as
+/// `SQLITE_FULL` is. Classified here,
+/// unconditionally, for the reason the rusqlite `From` above is: a `?` is how
+/// most of them reach a caller. `ErrorKind::StorageFull` is std's name for
+/// ENOSPC; nothing else is folded in.
+impl From<std::io::Error> for VaultError {
+    fn from(error: std::io::Error) -> Self {
+        if error.kind() == std::io::ErrorKind::StorageFull {
+            return Self::DiskFull {
+                context: error.to_string(),
+            };
+        }
+        Self::Io(error)
     }
 }
 

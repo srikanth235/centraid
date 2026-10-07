@@ -1,4 +1,5 @@
-//! THE `people` SCHEMA: twenty-eight commands, the personal-CRM write surface.
+//! THE `people` SCHEMA: twenty-nine commands (v0's twenty-eight plus
+//! `purge_person`, #1015 D1), the personal-CRM write surface.
 //!
 //! A person is a canonical `core.party` (`kind = 'person'`) plus a **1:1**
 //! `people_profile` holding the keep-in-touch facts — role, nickname, avatar
@@ -144,6 +145,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
         save_contact_channel(),
         delete_contact_channel(),
         undo_contact_channel(),
+        // Not v0's: the destroy People's trash needed to meet #1015 D1.
+        purge_person(),
     ]
 }
 
@@ -944,7 +947,6 @@ fn add_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1032,7 +1034,6 @@ fn edit_person() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1091,7 +1092,6 @@ fn set_cadence() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1139,7 +1139,6 @@ fn trash_person() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1175,7 +1174,217 @@ fn restore_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
+    }
+}
+
+/// The `(table, column)` pairs onto `core_party` that `people.purge_person`
+/// itself removes rather than refuses: the person's OWNED CHILDREN and their
+/// PARTICIPATION rows (the `deletionRoles` of `contracts/schema/v0-registries.json`,
+/// #996 R22). Every other `NO ACTION` foreign key onto the party — money,
+/// messages, authority, an owner's calendar or project — is a durable record,
+/// and a row in one refuses the purge.
+const PURGE_OWNED_PARTY_COLUMNS: &[(&str, &str)] = &[
+    ("people_profile", "party_id"),
+    ("people_important_date", "party_id"),
+    ("core_party_identifier", "party_id"),
+    ("schedule_attendee", "party_id"),
+    ("schedule_recurrence_exception_attendee", "party_id"),
+    ("social_circle_member", "party_id"),
+    ("social_thread_participant", "party_id"),
+    ("tally_friend", "party_id"),
+];
+
+/// Every `NO ACTION` foreign key onto `core_party` the purge does not own,
+/// read from the live schema (as `core::merge_party_sweep` reads it), with the
+/// rows each holds naming `party_id`. Empty is "nothing refuses".
+fn durable_records_naming(
+    connection: &rusqlite::Connection,
+    party_id: &str,
+) -> Result<Vec<String>> {
+    let mut prepared = connection.prepare(
+        "SELECT m.name, f.\"from\"
+           FROM sqlite_master m, pragma_foreign_key_list(m.name) f
+          WHERE m.type = 'table' AND f.\"table\" = 'core_party'
+            AND f.on_delete NOT IN ('CASCADE', 'SET NULL', 'SET DEFAULT')
+          ORDER BY m.name, f.\"from\"",
+    )?;
+    let columns: Vec<(String, String)> = prepared
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<std::result::Result<_, _>>()?;
+    let mut naming = Vec::new();
+    for (table, column) in columns {
+        if PURGE_OWNED_PARTY_COLUMNS
+            .iter()
+            .any(|(owned_table, owned_column)| *owned_table == table && *owned_column == column)
+        {
+            continue;
+        }
+        let count: i64 = connection.query_row(
+            &format!("SELECT COUNT(*) FROM \"{table}\" WHERE \"{column}\" = ?1"),
+            [party_id],
+            |row| row.get(0),
+        )?;
+        if count > 0 {
+            naming.push(format!("{table}.{column}"));
+        }
+    }
+    Ok(naming)
+}
+
+/// Delete one entity through the supertype: the kind's own row goes by its
+/// `ON DELETE CASCADE` onto `core_entity`, and with it every composite
+/// `(type, id)` pointer — links, tags, annotations, collection entries,
+/// attachments, representations, enrichment rows.
+fn delete_entity(ctx: &CommandCtx<'_, '_>, entity_id: &str) -> Result<()> {
+    ctx.connection()
+        .execute("DELETE FROM core_entity WHERE entity_id = ?1", [entity_id])?;
+    Ok(())
+}
+
+fn ids(ctx: &CommandCtx<'_, '_>, sql: &str, binds: &[&dyn rusqlite::ToSql]) -> Result<Vec<String>> {
+    let mut prepared = ctx.connection().prepare(sql)?;
+    let rows = prepared.query_map(binds, |row| row.get::<_, String>(0))?;
+    Ok(rows.collect::<std::result::Result<Vec<String>, _>>()?)
+}
+
+/// EMPTYING PEOPLE'S TRASH (#1015 D1): destroy one trashed person.
+///
+/// **What goes**, in order, each deleted through the entity supertype so the
+/// engine's cascade carries every polymorphic pointer with it:
+///
+/// 1. The person's logged interactions — a `core_activity` whose only link is
+///    an `about` onto this party — and their text annotations.
+/// 2. Their gift ideas — a `schedule_task` linked `gift-for` this party that
+///    has no subtask.
+/// 3. The undo rail's snapshots of them (`people.person`) and of their
+///    channels (`people.channel`), which hold the name and the numbers.
+/// 4. The participation rows in [`PURGE_OWNED_PARTY_COLUMNS`] (the profile, the
+///    important dates, the handles, attendance, circle and thread membership,
+///    the Tally friend row); `social_contact_channel` cascades.
+/// 5. The party. `core_party_entity_delete` removes the entity row, which
+///    cascades every `core_link` from or to them (live or ended), every
+///    `core_tag` on them (the star, the list), and every `knowledge_annotation`
+///    on them (People's notes). Attribution columns (`creator_party_id`,
+///    `tagged_by_party_id`, `organizer_party_id`, revision `actor_party_id`,
+///    `media_face_region.party_id`) are `SET NULL` by the engine.
+///
+/// **What stays**: a task `about` them is the member's own work — it survives
+/// in Tasks with the link gone.
+///
+/// **What refuses**: any other `NO ACTION` reference (money, messages, an
+/// owned calendar), generated from the live schema — the ontology's "money and
+/// authority refuse it while they still name them" (`docs/vault-ontology.md`).
+fn purge_person() -> CommandDefinition {
+    CommandDefinition {
+        name: "people.purge_person",
+        owner_schema: "people",
+        input_schema: PARTY_ID_ONLY,
+        idempotency: Idempotency::Once,
+        risk: Risk::High,
+        // The owner's confirmation is the MANIFEST's (`purge-person`), in front
+        // of the command; `confirm: true` would park the member's own act.
+        confirm: false,
+        preconditions: &[
+            CommandCondition {
+                predicate: "person_trashed",
+                check: |ctx| {
+                    let party_id = ctx.required_str("party_id")?;
+                    let count: i64 = ctx.connection().query_row(
+                        "SELECT COUNT(*) FROM people_profile pr
+                           JOIN core_party p ON p.party_id = pr.party_id
+                          WHERE pr.party_id = ?1 AND p.kind = 'person'
+                            AND pr.deleted_at IS NOT NULL",
+                        [party_id],
+                        |row| row.get(0),
+                    )?;
+                    Ok((count != 1).then(|| {
+                        "Only a person who is already in the trash can be deleted forever."
+                            .to_owned()
+                    }))
+                },
+            },
+            CommandCondition {
+                predicate: "no_durable_record_names_them",
+                check: |ctx| {
+                    let party_id = ctx.required_str("party_id")?;
+                    let naming = durable_records_naming(ctx.connection(), party_id)?;
+                    Ok((!naming.is_empty()).then(|| {
+                        format!(
+                            "Money, messages or other lasting records still name this person \
+                             ({}); settle or remove those first, then delete them forever.",
+                            naming.join(", ")
+                        )
+                    }))
+                },
+            },
+        ],
+        postconditions: &[CommandCondition {
+            predicate: "person_destroyed",
+            check: |ctx| {
+                let party_id = ctx.required_str("party_id")?;
+                let count: i64 = ctx.connection().query_row(
+                    "SELECT (SELECT COUNT(*) FROM core_party WHERE party_id = ?1)
+                          + (SELECT COUNT(*) FROM core_entity WHERE entity_id = ?1)
+                          + (SELECT COUNT(*) FROM people_profile WHERE party_id = ?1)
+                          + (SELECT COUNT(*) FROM core_link
+                              WHERE (to_type = 'core.party' AND to_id = ?1)
+                                 OR (from_type = 'core.party' AND from_id = ?1))",
+                    [party_id],
+                    |row| row.get(0),
+                )?;
+                Ok(
+                    (count != 0)
+                        .then(|| "something of the person is still in the vault".to_owned()),
+                )
+            },
+        }],
+        handler: |ctx| {
+            let party_id = ctx.required_str("party_id")?.to_owned();
+            let interactions = ids(
+                ctx,
+                "SELECT l.from_id FROM core_link l
+                   JOIN core_activity a ON a.activity_id = l.from_id
+                  WHERE l.from_type = ?1 AND l.to_type = ?2 AND l.to_id = ?3
+                    AND NOT EXISTS (SELECT 1 FROM core_link o
+                                     WHERE o.from_type = l.from_type AND o.from_id = l.from_id
+                                       AND NOT (o.to_type = ?2 AND o.to_id = ?3))",
+                &[&ACTIVITY_TARGET_TYPE, &PARTY_TARGET_TYPE, &party_id],
+            )?;
+            let gifts = ids(
+                ctx,
+                "SELECT DISTINCT l.from_id FROM core_link l
+                   JOIN core_concept c ON c.concept_id = l.relation_concept_id
+                  WHERE l.from_type = ?1 AND l.to_type = ?2 AND l.to_id = ?3
+                    AND c.notation = 'gift-for'
+                    AND NOT EXISTS (SELECT 1 FROM schedule_task k
+                                     WHERE k.parent_task_id = l.from_id)",
+                &[&TASK_TARGET_TYPE, &PARTY_TARGET_TYPE, &party_id],
+            )?;
+            for entity_id in interactions.iter().chain(&gifts) {
+                delete_entity(ctx, entity_id)?;
+            }
+            ctx.connection().execute(
+                "DELETE FROM core_entity_revision
+                  WHERE (entity_type = ?1 AND entity_id = ?2)
+                     OR (entity_type = ?3 AND entity_id IN
+                          (SELECT channel_id FROM social_contact_channel WHERE party_id = ?2))",
+                rusqlite::params![PERSON_ENTITY_TYPE, party_id, CHANNEL_ENTITY_TYPE],
+            )?;
+            for (table, column) in PURGE_OWNED_PARTY_COLUMNS {
+                ctx.connection().execute(
+                    &format!("DELETE FROM \"{table}\" WHERE \"{column}\" = ?1"),
+                    [&party_id],
+                )?;
+            }
+            ctx.connection()
+                .execute("DELETE FROM core_party WHERE party_id = ?1", [&party_id])?;
+            Ok(serde_json::json!({
+                "party_id": party_id,
+                "interactions": interactions.len(),
+                "gifts": gifts.len(),
+            }))
+        },
+        sealed_input: &[],
     }
 }
 
@@ -1256,7 +1465,6 @@ fn undo_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id, "revision_id": revision_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1367,7 +1575,6 @@ fn log_interaction() -> CommandDefinition {
             Ok(serde_json::json!({ "interaction_id": interaction_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1397,7 +1604,6 @@ fn star_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1423,7 +1629,6 @@ fn unstar_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1489,7 +1694,6 @@ fn move_person() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1514,7 +1718,6 @@ fn add_note() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1599,7 +1802,6 @@ fn add_task() -> CommandDefinition {
             Ok(serde_json::json!({ "task_id": task_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1675,7 +1877,6 @@ fn complete_task() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1727,7 +1928,6 @@ fn reopen_task() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1848,7 +2048,6 @@ fn add_important_date() -> CommandDefinition {
             Ok(serde_json::json!({ "date_id": date_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1942,7 +2141,6 @@ fn toggle_reminder() -> CommandDefinition {
             Ok(serde_json::json!({ "date_id": date_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2060,7 +2258,6 @@ fn add_relationship() -> CommandDefinition {
             Ok(serde_json::json!({ "relationship_id": relationship_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2098,7 +2295,6 @@ fn add_gift() -> CommandDefinition {
             Ok(serde_json::json!({ "gift_id": gift_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2154,7 +2350,6 @@ fn toggle_gift() -> CommandDefinition {
             Ok(serde_json::json!({ "gift_id": gift_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2265,7 +2460,6 @@ fn add_debt() -> CommandDefinition {
             Ok(serde_json::json!({ "debt_id": debt_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2320,7 +2514,6 @@ fn settle_debt() -> CommandDefinition {
             Ok(serde_json::json!({ "debt_id": debt_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2417,7 +2610,6 @@ fn create_list() -> CommandDefinition {
             Ok(serde_json::json!({ "list_id": list_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2464,7 +2656,6 @@ fn rename_list() -> CommandDefinition {
             Ok(serde_json::json!({ "list_id": list_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2523,7 +2714,6 @@ fn delete_list() -> CommandDefinition {
             Ok(serde_json::json!({ "list_id": list_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2632,7 +2822,6 @@ fn add_journal_entry() -> CommandDefinition {
             Ok(serde_json::json!({ "entry_id": entry_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2963,7 +3152,6 @@ fn save_contact_channel() -> CommandDefinition {
             Ok(output)
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3020,7 +3208,6 @@ fn delete_contact_channel() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3059,22 +3246,54 @@ fn undo_contact_channel() -> CommandDefinition {
             let named = ctx.optional_str("revision_id").map(str::to_owned);
             let (revision_id, snapshot) =
                 load_revision(ctx, CHANNEL_ENTITY_TYPE, &channel_id, named.as_deref())?;
+            let party_id = snapshot_str(&snapshot, "party_id").unwrap_or_default();
+            let kind = snapshot_str(&snapshot, "kind").unwrap_or_default();
+            let is_preferred = snapshot
+                .get("is_preferred")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or_default();
+            // THE PREFERRED CHANNEL MOVES BACK, it does not evict. The
+            // `OR REPLACE` this was resolved a clash on the one-preferred index
+            // by DELETING the channel that is preferred now — a member's other
+            // phone number, gone, with its entity row orphaned because a
+            // REPLACE fires no delete trigger (#1047 R3).
+            if is_preferred == 1 {
+                ctx.connection().execute(
+                    "UPDATE social_contact_channel SET is_preferred = 0
+                      WHERE party_id = ?1 AND kind = ?2 AND is_preferred = 1
+                        AND channel_id <> ?3",
+                    rusqlite::params![party_id, kind, channel_id],
+                )?;
+            }
+            // AN UPSERT AND NEVER `OR REPLACE` (#1047 R3): SQLite does not
+            // report a row a fast-path REPLACE displaced, so the running census
+            // drifted by one on every undo of an edit, and a restore refused
+            // the generation that carried it. A value another channel of this
+            // party now holds is refused by the unique index rather than
+            // deleting that channel.
             ctx.connection().execute(
-                "INSERT OR REPLACE INTO social_contact_channel
+                "INSERT INTO social_contact_channel
                    (channel_id, party_id, kind, label, value, normalized_value,
                     is_preferred, provenance_json, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                 ON CONFLICT (channel_id) DO UPDATE SET
+                   party_id = excluded.party_id,
+                   kind = excluded.kind,
+                   label = excluded.label,
+                   value = excluded.value,
+                   normalized_value = excluded.normalized_value,
+                   is_preferred = excluded.is_preferred,
+                   provenance_json = excluded.provenance_json,
+                   created_at = excluded.created_at,
+                   updated_at = excluded.updated_at",
                 rusqlite::params![
                     snapshot_str(&snapshot, "channel_id").unwrap_or(&channel_id),
-                    snapshot_str(&snapshot, "party_id").unwrap_or_default(),
-                    snapshot_str(&snapshot, "kind").unwrap_or_default(),
+                    party_id,
+                    kind,
                     snapshot_str(&snapshot, "label"),
                     snapshot_str(&snapshot, "value").unwrap_or_default(),
                     snapshot_str(&snapshot, "normalized_value").unwrap_or_default(),
-                    snapshot
-                        .get("is_preferred")
-                        .and_then(serde_json::Value::as_i64)
-                        .unwrap_or_default(),
+                    is_preferred,
                     snapshot_str(&snapshot, "provenance_json"),
                     snapshot_str(&snapshot, "created_at").unwrap_or(&ctx.now),
                     ctx.now
@@ -3084,7 +3303,6 @@ fn undo_contact_channel() -> CommandDefinition {
             Ok(serde_json::json!({ "channel_id": channel_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3108,11 +3326,12 @@ mod tests {
         }
     }
 
-    /// THE WHOLE SCHEMA, and the split the census states: 28 commands,
-    /// **14 idempotent / 14 once**, no retry-safe.
+    /// THE WHOLE SCHEMA, and the split the census states: v0's 28 commands,
+    /// **14 idempotent / 14 once**, no retry-safe — plus `purge_person`
+    /// (#1015 D1), a fifteenth `once`.
     #[test]
-    fn the_schema_carries_all_twenty_eight_of_v0s() {
-        assert_eq!(definitions().len(), 28);
+    fn the_schema_carries_all_twenty_eight_of_v0s_and_the_purge() {
+        assert_eq!(definitions().len(), 29);
         let mut idempotent = 0;
         let mut once = 0;
         let mut retry_safe = 0;
@@ -3123,7 +3342,7 @@ mod tests {
                 Idempotency::RetrySafe => retry_safe += 1,
             }
         }
-        assert_eq!((idempotent, once, retry_safe), (14, 14, 0));
+        assert_eq!((idempotent, once, retry_safe), (14, 15, 0));
     }
 
     /// **NO `people.*` COMMAND PARKS A NON-OWNER** (census §A0's per-command
@@ -3138,11 +3357,6 @@ mod tests {
                 definition.name
             );
             assert!(
-                !definition.online_only,
-                "{} is not online-only",
-                definition.name
-            );
-            assert!(
                 definition.sealed_input.is_empty(),
                 "{} declares a sealed input; People holds no secrets",
                 definition.name
@@ -3150,15 +3364,16 @@ mod tests {
         }
     }
 
-    /// Only `trash_person` is above `low` — the one destructive gesture.
+    /// Only `trash_person` and `purge_person` are above `low` — the two
+    /// destructive gestures.
     #[test]
-    fn trash_person_is_the_only_command_above_low_risk() {
+    fn trash_and_purge_are_the_only_commands_above_low_risk() {
         let loud: Vec<&str> = definitions()
             .iter()
             .filter(|definition| definition.risk != Risk::Low)
             .map(|definition| definition.name)
             .collect();
-        assert_eq!(loud, ["people.trash_person"]);
+        assert_eq!(loud, ["people.trash_person", "people.purge_person"]);
     }
 
     /// D-1020-PE8, as an assertion: the three contact-channel commands are

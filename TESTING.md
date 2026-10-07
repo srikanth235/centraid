@@ -36,13 +36,13 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 
 | Profile | Budget | Steps it adds | Where it runs |
 | --- | --- | --- | --- |
-| `local` | 120 s **warm** | `fmt`, `clippy`, `test` (workspace **minus** `centraid-sim`), `rules`, `ledgers` | By hand, the edit-run loop |
-| `pr` | 1500 s | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `desktop-unit`, `extension-unit`, `advisory`, `lockfile`, `prompt-injection`, `sim` (25 seeds), `call-budget`, `fault-door`; its `test` step runs the **whole** workspace | [`gate.yml`](.github/workflows/gate.yml), every PR and every push to `main` |
-| `nightly` | unbounded | `sim-nightly` (250 seeds), `desktop-e2e`, `extension-e2e`, `device-lanes` | [`gate-nightly.yml`](.github/workflows/gate-nightly.yml), 05:30 UTC |
-| `release` | unbounded | `restore-drill`, `artifact-identity`, `prebuilt-core-required`, `vps-smoke` | By hand before a tag |
+| `local` | 120 s **warm** | `fmt`, `clippy`, `test` (the whole workspace), `restore-drill`, `rules`, `ledgers` | By hand, the edit-run loop |
+| `pr` | 1500 s | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `advisory`, `lockfile`, `call-budget`, `fault-door` | [`gate.yml`](.github/workflows/gate.yml), every PR and every push to `main` |
+| `nightly` | unbounded | `pr` plus `device-lanes` | [`gate-nightly.yml`](.github/workflows/gate-nightly.yml), 05:30 UTC |
+| `release` | unbounded | `artifact-identity`, `prebuilt-core-required` | By hand before a tag |
 | `mobile-jvm` | 420 s | `mobile-jvm` — one step, a superset of nothing | `gate-nightly.yml`'s `mobile-jvm` job; on demand |
 
-`local` is scored **warm or cold**. The runner calls a tree warm only when every workspace member has a linked artifact under the target directory (`CARGO_TARGET_DIR` when set); a cold run is charged to `coldLocalProfileSeconds` in [`compile-time.json`](contracts/ledgers/compile-time.json) and fails where that key states no ceiling. `--cold` forces the cold branch. Leaving `centraid-sim` out of `local` weakens nothing: `pr` runs that crate twice, once in `test` and once as `sim`.
+`local` is scored **warm or cold**. The runner calls a tree warm only when every workspace member has a linked artifact under the target directory (`CARGO_TARGET_DIR` when set); a cold run is charged to `coldLocalProfileSeconds` in [`compile-time.json`](contracts/ledgers/compile-time.json) and fails where that key states no ceiling. `--cold` forces the cold branch. **The restore drill is in `local`, and so in every profile**: the product's promise is proved on every loop rather than only before a tag.
 
 `gate.yml` also runs a `dependency-review` job on pull requests (a GitHub Action over the dependency diff, so it cannot be a gate step). Governance is **not** a step: `.governance/run.sh` runs in [`governance.yml`](.github/workflows/governance.yml) as its own check.
 
@@ -51,25 +51,21 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 | Step | What it runs |
 | --- | --- |
 | `fmt`, `clippy` | `cargo fmt --all --check`; `cargo clippy --workspace --all-targets -- -D warnings` |
-| `test` | `cargo nextest run --workspace` when nextest is installed, otherwise `cargo test --workspace`; the step line says which |
-| `rules` | The structural rules: `sql-confinement` (SQL only under `crates/{ontology,vault,seat,search}` and `crates/apps/kit`), `abi-five-symbols`, `no-listening-socket` (outside `#[cfg(feature = "blob-door")]`), `commonmain-no-platform-import`. Also `cargo xtask rules` on its own |
+| `test` | `cargo nextest run --workspace` then `cargo test --workspace --doc` when nextest is installed (nextest runs no doctests, so the second command keeps the set of tests the same), otherwise `cargo test --workspace`; the step line says which. `gate.yml` installs nextest, so CI runs the first |
+| `rules` | The structural rules: `sql-confinement` (SQL only under `crates/{ontology,vault,search}` and `crates/apps/kit`), `abi-five-symbols`, `no-listening-socket` (the phone dials and accepts nothing; the one exemption is `crates/gateway/src/server/serve.rs`), `commonmain-no-platform-import`. Also `cargo xtask rules` on its own |
 | `ledgers` | Every number in `contracts/ledgers/` against the merge base — see [the ledgers](#the-ledgers-915-wave-4-927) |
 | `buf` | `buf lint`, then `buf breaking` against the PR base **and** every released tag inside the version window |
 | `deny`, `secrets`, `osv`, `lockfile` | `cargo-deny` over [`deny.toml`](deny.toml); gitleaks over the working tree; osv-scanner, CRITICAL only; no `http:` URLs and pinned checksums in `bun.lock` and `Cargo.lock` |
 | `ci-policy` | Workflow pins, egress, path filters ([`tests/path-filter-ledger.json`](tests/path-filter-ledger.json)) and `actionlint` over `.github/**` |
 | `advisory` | Every step whose name declares it advisory has an owner, an issue and an unexpired `revisitBy`, in [`contracts/ledgers/advisory.json`](contracts/ledgers/advisory.json) or `tests/inventory.json#advisory` |
 | `release-build` | `cargo build --workspace --release`, timed against its ledger ceiling |
-| `ts-static` | `bun run check:push:static` when TypeScript exists under `crates/`, `contracts/`, `mobile/`, `desktop/` or `extension/` |
+| `ts-static` | `bun run check:push:static` when TypeScript exists under `crates/`, `contracts/` or `mobile/` |
 | `emitters` | Regenerates the design corpus and native theme ([`contracts/tools/`](contracts/tools)), formats, and fails on drift in `copy/`, `design/` or `mobile/` |
-| `desktop-unit`, `extension-unit` | See [Desktop](#desktop) and [Extension](#extension) |
-| `prompt-injection` | The grow-only corpus in [`contracts/assist/prompt-injection/`](contracts/assist/prompt-injection) through `cargo test -p centraid-assist --test prompt_injection`; the line reports the payload count so a shrinking corpus is visible |
-| `sim`, `sim-nightly` | See [Simulation](#simulation) |
-| `call-budget` | `cargo test -p centraid-core --test call_budget -- --nocapture`: any bounded read over its ceiling in [`call-budget.json`](contracts/ledgers/call-budget.json) fails, and p50/p95/p99 reach the log |
-| `fault-door` | `cargo test -p centraid-core-ffi --features debug-fault --test contract …` — clause 9 of the C ABI against a real panic inside `call`. The only step that turns `debug-fault` on |
-| `restore-drill` | `cargo test -p centraid --test restore_drill`: founds a vault, enrols a seat, writes commits, takes a generation, **deletes the live data directory**, runs the real `centraid recover`, compares every table and row, and proves the old seat is told epoch-mismatch, re-pairs and converges. Its wall clock is written to `target/xtask/release/restore-drill/timing.json` |
+| `call-budget` | `cargo test --workspace --test call_budget -- --nocapture` (the target is `centraid-core`'s; `--workspace` rather than `-p` so it links the binary `test` already built instead of re-resolving features): any bounded read over its ceiling in [`call-budget.json`](contracts/ledgers/call-budget.json) fails, and p50/p95/p99 reach the log |
+| `fault-door` | `cargo test --workspace --features centraid-core-ffi/debug-fault --test contract …` — clause 9 of the C ABI against a real panic inside `call`. The only step that turns `debug-fault` on |
+| `restore-drill` | The whole durability chain ([#1080](https://github.com/srikanth235/centraid/issues/1080)): found a vault and commit; snapshot, upload and set the head; back up every content item by name and prove every name is confirmed; commit fifty more times and prove the second snapshot uploaded only the ranges that changed; let retention and garbage collection delete exactly what only the dropped snapshot named; **destroy the vault, its WAL, the spool and the ledger**; restore from the store and the key derived from the 24 words, and prove the census, the `db_hash` and a dump of every row equal the lost vault's; then claim the next writer epoch and prove the old writer is refused `MOVED`. A census of zero rows proves nothing, so the drill writes real rows first |
 | `artifact-identity` | The stale-core refusal in `crates/core/src/identity.rs` |
 | `prebuilt-core-required` | Artifact keys are computable and distinct for every required triple; that the artifacts **exist** is asserted by [`lane-prebuilt-core.yml`](.github/workflows/lane-prebuilt-core.yml) |
-| `vps-smoke` | [`deploy/vps/install.sh`](deploy/vps/install.sh) in a clean Docker container: verified install, dry-run unit, vault founding, iroh pairing, WAL tick and backup, `centraid doctor`, restart (`crates/xtask/src/smoke.rs`) |
 
 ### What every step prints
 
@@ -83,38 +79,35 @@ Every run writes `target/xtask/<profile>/evidence.json` — profile, hardware cl
 
 ### Known reds
 
-Two `pr` findings are named rather than hidden, and neither was answered by widening an allowlist — a gate whose first act is to widen its own allowlist has gated nothing:
+One `pr` finding is named rather than hidden, and it was not answered by widening an allowlist — a gate whose first act is to widen its own allowlist has gated nothing:
 
-- `secrets` — gitleaks on `contracts/golden/format-golden.json`'s `dataKeyHex`, the test vector the cross-language format golden is sealed with.
-- `osv` — `astro@7.1.5`, CRITICAL, in `bun.lock`.
+- `osv` — `astro@7.1.5`, CRITICAL, in `bun.lock`. An owner hand-off (row 6.3 of [docs/release/v1-handoffs.md](docs/release/v1-handoffs.md)).
 
-Both are owner hand-offs (rows 6.2 and 6.3 of [docs/release/v1-handoffs.md](docs/release/v1-handoffs.md)). A false positive is a different thing and is fixed **in the gate**.
+The `secrets` red is **closed, by deletion rather than by decision** ([#1029](https://github.com/srikanth235/centraid/issues/1029)). It was gitleaks on `contracts/golden/format-golden.json`'s `dataKeyHex`; that fixture went with the TypeScript half of the product and `contracts/golden/` now holds only `issue-1020/` and `issue-929/`. No `.gitleaks.toml` row was ever added for it, and none is needed.
+
+What `secrets` actually scans is **the whole working tree**: `gitleaks detect --source . --no-git --config .gitleaks.toml --redact --no-banner`, with its JSON report written to `target/xtask/<profile>/secrets/report.json` (`run_secrets` in [`crates/xtask/src/gate.rs`](crates/xtask/src/gate.rs)). One invocation rather than one per top-level entry, because gitleaks pays its ruleset compile per process — 2.7 s against a measured 46.5 s, which is 17× the cost for nothing the report filter does not already give. Findings in gitignored or untracked files are dropped from the verdict and **both counts are printed**, so the dropped set is never silent. [`.gitleaks.toml`](.gitleaks.toml) extends the default ruleset and allowlists the paths where a high-entropy string is a fixture rather than a credential. Without the binary the step is a loud `SKIP` naming what turns it into a real run, never a pass.
+
+A false positive is a different thing and is fixed **in the gate**.
 
 ## Rust
 
 Each crate carries its own tests; `cargo test -p <crate>` (or `cargo nextest run -p <crate>`) is the unit of iteration. Give every worktree its own `CARGO_TARGET_DIR` ([docs/traps/shared-cargo-target.md](docs/traps/shared-cargo-target.md)). For one debugging session with full debuginfo: `CARGO_PROFILE_DEV_DEBUG=2 cargo test -p centraid-vault`.
 
-- **End-to-end over the real binary.** [`crates/centraid/tests/`](crates/centraid/tests) spawns `centraid` for the walking skeleton, seat bootstrap, tail and offline queue, gateway install, native host, MCP stdio and the restore drill. `no_listener.rs` reads the kernel's own socket table, because a dependency could open a listener without the string ever appearing in this repository — the runtime half of `no-listening-socket`.
+- **End-to-end over the real binary.** [`crates/centraid/tests/`](crates/centraid/tests) spawns the operator binary, and `crates/gateway`'s wire suite runs every conformance case against a real gateway on a loopback port through the phone's real client. `no-listening-socket` is static: nothing reads the kernel's socket table at runtime since [#1029](https://github.com/srikanth235/centraid/issues/1029) deleted `no_listener.rs` with the seat plane.
 - **The C ABI.** `crates/core-ffi` has a contract test per clause of [`crates/core-ffi/CONTRACT.md`](crates/core-ffi/CONTRACT.md); the Kotlin side proves the same ABI from the JVM (see [Mobile](#mobile)).
 
-### Simulation
+### Simulation — retired
 
-[`crates/sim`](crates/sim/README.md) is the **primary sync proof**: one gateway and N seats in one process under `turmoil`, with partitions, reordering, duplication, latency, crashes and clock skew driven from a seed, and the invariants asserted after every schedule. Every host is real except the network and the clock — real vault, real doors, real applier, real outbox, real sync driver, real on-disk SQLite. It speaks UDP because production is QUIC and the product may not open a listening TCP socket.
-
-```bash
-cargo test -p centraid-sim                               # 25 seeds, what `sim` runs
-SIM_SEEDS=250 cargo test -p centraid-sim --test seeds    # what `sim-nightly` runs
-SIM_SEED=<n> cargo test -p centraid-sim --test seeds     # one seed, as a failure prints it
-```
-
-A failing run prints `SIM_SEED=<n>` and its schedule. **A seed that ever failed is recorded in [`contracts/sim/failing-seeds.json`](contracts/sim/failing-seeds.json), with its schedule, and replayed for ever** by `crates/sim/tests/recorded_seeds.rs`; an entry is never removed.
+`crates/sim` proved the convergence of one gateway and N seats under a scripted network. There is one writer and it is the phone ([#1029](https://github.com/srikanth235/centraid/issues/1029)), so there is nothing to converge. What replaces the claim is two things that are not simulations: the **restore drill**, which destroys a vault and proves the restored one equal to it row for row, and `crates/gateway`'s **conformance suite** — run against an in-memory state and over the wire against the real server — which is what "implements the protocol" means.
 
 ### Fixtures and parity
 
 Everything under [`contracts/`](contracts/README.md) is generated and diffed, never hand-edited:
 
-- **Golden corpora.** `contracts/golden/issue-1020/` and `issue-929/` are frozen vaults; `crates/ontology/tests/fixtures.rs` regenerates the derived fixtures (DDL, manifests) and fails on drift. `contracts/golden/format-golden.json` holds the cross-language byte vectors that `crates/media`, `crates/blobs` and `crates/vault` reproduce, and `contracts/protocol/framing-golden.json` is regenerated by `CENTRAID_UPDATE_FIXTURES=1 cargo test -p centraid-protocol --test framing_golden`.
-- **App parity.** `contracts/apps/<app>/` (`rows.json`, `queries.json`, `commands.json`, `scenarios.json`) was generated from the TypeScript implementation before its removal in [#1020](https://github.com/srikanth235/centraid/issues/1020), and is now frozen. Each `crates/apps/<app>/tests/parity.rs` rebuilds the vault from the rows and compares **values and order**. A divergence is either a port bug or a mapping stated at the top of that test file.
+- **Golden corpora.** `contracts/golden/issue-1020/` and `issue-929/` are frozen vaults; `crates/ontology/tests/fixtures.rs` regenerates the derived fixtures (the corpus's own `vault-ddl.sql`, the manifests) and fails on drift.
+- **The two DDL fixtures answer different questions** (#1029). `contracts/golden/issue-1020/vault-ddl.sql` is the frozen v0 corpus's `sqlite_master`, regenerated by `cargo run -p centraid-ontology --bin export-ddl` and diffed by `crates/ontology/tests/fixtures.rs`. `contracts/schema/vault-ddl.sql` is **the schema a new vault gets** — the `sqlite_master` of a file founded at the ladder head — regenerated by `cargo run -p centraid-vault --bin export-ladder-ddl` and diffed by `crates/vault/tests/ladder_ddl.rs`, which founds a vault to do it. Neither is ever hand-edited.
+- **Crypto vectors.** `contracts/crypto/` carries the byte-level facts, each with the test that reads it beside it: `identity-vectors.json`, `rfc9180-vectors.json` (RFC 9180 Appendix A.1, transcribed from the CFRG file — nothing here produced those bytes), `blake3-vectors.json` and `sealed-vectors.json` (`centraid-sealed/2`'s keys, names and sealed samples, opened on every run). Each regenerates with `CENTRAID_UPDATE_FIXTURES=1` and the comparison still runs afterwards, so the variable is a generator and never a way to go green. They replace the cross-language `format-golden.json` and `framing-golden.json`, which went with the TypeScript half of the product and the stream framing respectively (#1029).
+- **App parity.** `contracts/apps/<app>/` (`rows.json`, `queries.json`, `commands.json`, `scenarios.json`) was generated from the TypeScript implementation before its removal in [#1020](https://github.com/srikanth235/centraid/issues/1020), and is now frozen. Each `crates/apps/<app>/tests/parity.rs` rebuilds the vault from the rows and compares **values and order**. A divergence is either a port bug or a mapping stated at the top of that test file. Rung five's deletions (#1029) left four bundles carrying rows for a table or a column the schema no longer has: the fixture is never edited — the test names what it is skipping through `centraid_apps_kit::contract_vault::FrozenRowMapping`, which refuses a mapping that names something the schema still has, and Docs' and People's parity tests filter the sharing keys out of v0's expected answers with a guard that fails when nothing is filtered.
 - **Screens and theme.** `contracts/screens` and the native theme are regenerated by `mobile-jvm` and `emitters` and checked with `git diff --exit-code`.
 
 ## Mobile
@@ -125,24 +118,14 @@ Everything under [`contracts/`](contracts/README.md) is generated and diffed, ne
 
 ### Device lanes and their runner contract
 
-`device-lanes` has four cells — `ios-transfer-experiment`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass` — named once in `gate.rs` so the workflow matrix and the runner cannot disagree. `gate-nightly.yml` runs them as a matrix on `[self-hosted, macos, devices]` **only** when `vars.CENTRAID_DEVICE_RUNNER == 'true'`; each cell runs `cargo xtask gate --profile nightly --lane <name>`, and an owner with a phone on a laptop runs the same command.
+`device-lanes` has four cells — `backup-measurement`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass` — named once in `gate.rs` so the workflow matrix and the runner cannot disagree. `gate-nightly.yml` runs them as a matrix on `[self-hosted, macos, devices]` **only** when `vars.CENTRAID_DEVICE_RUNNER == 'true'`; each cell runs `cargo xtask gate --profile nightly --lane <name>`, and an owner with a phone on a laptop runs the same command.
 
 - Without `CENTRAID_DEVICE_RUNNER`, the step is a loud `Skipped` — never a pass.
 - With it set, the step **requires** `xcrun devicectl list devices` (a physical iPhone — not `simctl`, which lists simulators) and `adb devices` to list something. A runner that claims the label and has no phone goes **red**.
-- `ios-transfer-experiment` checks that the evidence under `receipts/experiments/ios-transfer/` exists, is complete, is recent and did not come from a simulator; the run itself is the overnight protocol in [`mobile/maestro/ios-transfer-experiment.md`](mobile/maestro/ios-transfer-experiment.md).
+- `backup-measurement` checks that the evidence under `receipts/experiments/backup/` exists, is complete, is recent and did not come from a simulator; the run itself is the protocol in [`mobile/maestro/backup-measurement.md`](mobile/maestro/backup-measurement.md) — the first evening's backup, the night with the app closed, and the fresh phone's grid ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 - `battery-per-background-pass` cannot be automated on either platform and always skips with the owner's manual procedure.
 
-What only a device can measure — the absolute mobile targets, the iOS per-state transfer promise, `kotlinNativeLinkSeconds` — is parked, not gated: the ceilings sit under a leading underscore in [`tests/journeys.json`](tests/journeys.json), where the ratchet cannot see them, until a run on a named reference device promotes them. The hand-offs are in [docs/release/v1-handoffs.md](docs/release/v1-handoffs.md).
-
-## Desktop
-
-- **`desktop-unit`** runs `bun run --cwd desktop/electron test` — vitest over [`desktop/vitest.config.ts`](desktop/vitest.config.ts), **one** project covering `desktop/electron`, `desktop/renderer` and `extension/src` because their pure cores are shared — then `bun run --cwd desktop/electron typecheck` (main, tests and renderer tsconfigs). Every `electron`-importing module has a pure twin, which is what makes this runnable without a display.
-- **`desktop-e2e`** builds `centraid` (debug) and the Electron app, then runs Playwright over [`desktop/e2e/playwright.config.ts`](desktop/e2e/playwright.config.ts): a real Electron window, a real `centraid seat` sidecar, and a `<video>` seeking inside a blob whose bytes are still arriving. Electron has no real headless mode, so it runs under `xvfb-run` when there is no `DISPLAY`, and **fails** when there is neither. Browsers are read from `PLAYWRIGHT_BROWSERS_PATH`. See [docs/traps/electron-screenshot.md](docs/traps/electron-screenshot.md).
-
-## Extension
-
-- **`extension-unit`** runs `bun run --cwd extension typecheck` (`tsc` with `types: []`, so a Node import in the shipped tree is a type error) and `bun run --cwd extension lint` (`extension/scripts/lint.mjs`, which checks the manifests against `contracts/extension/ids.json` and every method the popup and content script send against the method table). The extension's vitest files run inside `desktop-unit`.
-- **`extension-e2e`** runs `bun run --cwd extension e2e`: Playwright loads the unpacked build in a **headed** Chromium (the headless shell cannot load an extension), writes a native-messaging host manifest for the derived id, and talks to `extension/e2e/fake-native-host.mjs`. Under `xvfb-run` when there is no `DISPLAY`; a loud skip when there is neither.
+What only a device can measure — the absolute mobile targets, the backup measurement's three claims, `kotlinNativeLinkSeconds` — is parked, not gated: the ceilings sit under a leading underscore in [`tests/journeys.json`](tests/journeys.json), where the ratchet cannot see them, until a run on a named reference device promotes them. The hand-offs are in [docs/release/v1-handoffs.md](docs/release/v1-handoffs.md).
 
 ## The ledgers (#915 Wave 4, #927)
 

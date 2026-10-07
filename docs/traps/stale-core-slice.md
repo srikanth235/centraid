@@ -24,7 +24,7 @@ cargo build -p centraid-core-ffi --target x86_64-apple-ios        # intel sim
 
 then the XCFramework, then the app. `mobile/README.md`'s iOS hand-off carries this as step 0 for the same reason.
 
-**Why it is not wired into Gradle.** `-Pcentraid.coreFfiLibDir` exists so CI can hand in a slice built by `lane-prebuilt-core.yml` rather than paying for a Rust build on a Mac runner, and a Gradle task that shelled out to `cargo` would fight that override every time. The trade is deliberate; this document is its other half.
+**Why Gradle does not build it, and what it does do.** `-Pcentraid.coreFfiLibDir` exists so CI can hand in a slice built by `lane-prebuilt-core.yml` rather than paying for a Rust build on a Mac runner, and a Gradle task that shelled out to `cargo` would fight that override every time — so building the slice stays this habit. What Gradle does now is **declare the archive as an input of each framework link** (`linkTaskProvider` in `mobile/shared/build.gradle.kts`, [#1080](https://github.com/srikanth235/centraid/issues/1080)). Before that, even running step 0 was not enough: a core rebuilt after the last Kotlin change left the link task up to date, and the XCFramework shipped the previous core with step 0 done — which is how a fix proved green in `cargo test` reached the simulator as the old behaviour. Declaring the file builds nothing; it only makes a new archive a reason to link again, whichever directory it came from.
 
 **How to tell, in one command.** Compare the archive's mtime against your last Rust edit:
 

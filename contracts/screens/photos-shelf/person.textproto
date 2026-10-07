@@ -1,0 +1,39 @@
+# THE `PhotoStateView.Person` ARM, WITH THE NAME RIDING ALONG.
+#
+# A discriminated union and not `{mode, party_id?}` (law 3): a shelf is EITHER
+# one of the four standing modes OR one person's photographs, and the two are
+# mutually exclusive by construction. This fixture is the arm the other three
+# `photos-shelf` fixtures never take, so a decoder that read the oneof as a bag
+# would answer `mode` here and draw "Favorites" over Ada's photographs.
+#
+# `person_name` travels on the shelf rather than being read: the app bar has to
+# say "Ada Lovelace" before the page lands, and a head that waits for a replica
+# round trip paints under whatever shelf was there before it.
+#
+# `purge_window_days` is unset. Only trash may carry it.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_LOCAL_ONLY
+  pending { queued_writes: 2 oldest_queued_seconds: 5400 }
+  connectivity: CONNECTIVITY_ONLINE_METERED
+}
+shelf {
+  state_view {
+    person {
+      party_id: "pty-0031"
+      person_name: "Ada Lovelace"
+    }
+  }
+}
+data {
+  cells {
+    asset_id: "ast-0110"
+    thumbnail_path: "thumbs/ast-0110.jpg"
+    captured_at: "2026-05-02T16:20:00Z"
+    captured_utc_offset_minutes: -300
+    kind: KIND_PHOTO
+    favorite: true
+    held: HELD_ORIGINAL
+    original_hash: "aa11bb22cc33dd44ee55ff6677889900aa11bb22cc33dd44ee55ff6677889900"
+  }
+}

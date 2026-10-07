@@ -45,10 +45,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_four_queries_and_sixteen_actions() {
+    fn it_declares_four_queries_and_eighteen_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 4);
-        assert_eq!(manifest.actions.len(), 16);
+        assert_eq!(manifest.actions.len(), 18);
         // The four are `drive`, `search`, `history`, `activity` — NOT the
         // directory listing: `queries/_shared.ts` and
         // `queries/document-origins.ts` are helpers beside the handlers, and
@@ -109,7 +109,7 @@ mod tests {
             .filter(|row| row.confirm == Confirm::Required)
             .map(|row| row.action)
             .collect();
-        assert_eq!(required, ["empty-trash"]);
+        assert_eq!(required, ["purge", "empty-trash"], "the two destroys");
     }
 
     #[test]
@@ -127,18 +127,21 @@ mod tests {
         }
     }
 
-    /// THIRTY-FOUR SCOPES: eighteen reads over five schemas, and **sixteen
-    /// `act` scopes, one per action** (census §A0's table).
+    /// TWENTY-NINE SCOPES: eleven reads over three schemas, and **eighteen
+    /// `act` scopes, one per action** (census §A0's table). The eight reads
+    /// over `share`, `social` and `core.party` left with the sharing plane
+    /// (#1029's scope amendment); `core.content_text` is the reader's body
+    /// (`docs.document.body`, #1046).
     ///
     /// The `act` half is compared against the action table rather than
     /// transcribed, because the whole point of the narrow form is that it
-    /// tracks the actions: a seventeenth action with no scope is an action the
+    /// tracks the actions: a nineteenth action with no scope is an action the
     /// grant does not cover, and a scope with no action is reach nothing uses.
     #[test]
-    fn it_declares_thirty_four_scopes_with_one_act_scope_per_action() {
+    fn it_declares_twenty_nine_scopes_with_one_act_scope_per_action() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Docs declares its reach");
-        assert_eq!(vault.scopes.len(), 34);
+        assert_eq!(vault.scopes.len(), 29);
 
         let mut schemas: Vec<&str> = vault
             .scopes
@@ -147,7 +150,7 @@ mod tests {
             .collect();
         schemas.sort_unstable();
         schemas.dedup();
-        assert_eq!(schemas, ["access", "blob", "core", "share", "social"]);
+        assert_eq!(schemas, ["access", "blob", "core"]);
 
         let mut declared_acts: Vec<&str> = vault
             .scopes
@@ -162,14 +165,14 @@ mod tests {
             .collect();
         declared_acts.sort_unstable();
         assert_eq!(declared_acts, act_scope_tables());
-        assert_eq!(declared_acts.len(), 16);
+        assert_eq!(declared_acts.len(), 18);
 
         let reads = vault
             .scopes
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Read)
             .count();
-        assert_eq!(reads, 18);
+        assert_eq!(reads, 11);
         // NOTHING WIDER, and nothing revealed: `read+act` over a whole schema
         // is the widest form and only agenda and people use it; `reveal` is
         // Locker's alone.

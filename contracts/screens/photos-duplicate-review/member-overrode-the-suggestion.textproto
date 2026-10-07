@@ -1,0 +1,52 @@
+# THE MEMBER KEPT THE ONE THE SUGGESTION DID NOT.
+#
+# `suggested_keep_asset_id` names the largest copy, `ast-0401`. `keep_asset_id`
+# names `ast-0402`, which is smaller and in an album. Both fields are set and
+# they DISAGREE — which is only representable because they are two fields, and
+# is the case that proves the suggestion is not a default that the member's
+# choice overwrites in place. A single field would have lost the fact that a
+# recommendation was made and declined; the screen could no longer say "you
+# chose differently", and nothing downstream could tell a member's decision from
+# the product's.
+#
+# `member_placed` is why they chose it. A copy in an album, favorited, or
+# otherwise put somewhere by hand is not a stray: deleting it is a different act
+# from deleting a duplicate that has never been touched, and the row carries the
+# fact so the screen can say so before, not after.
+#
+# Resolving from here trashes `ast-0401`. It goes to the TRASH — `permanent` is
+# false and stays false on this screen — so a member who was wrong has the
+# window in `photos-shelf/trash-states-its-window` to change their mind in. A
+# bulk act that could not be undone is not one this screen offers.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_LOCAL_ONLY
+  pending { queued_writes: 1 oldest_queued_seconds: 3 }
+  connectivity: CONNECTIVITY_OFFLINE
+}
+cluster_id: "dup-0002"
+data {
+  members {
+    asset_id: "ast-0401"
+    thumbnail_path: "thumbs/ast-0401.jpg"
+    byte_size: 8412672
+    width: 4032
+    height: 3024
+    captured_at: "2026-03-22T07:45:00Z"
+    member_placed: false
+    held: HELD_ORIGINAL
+  }
+  members {
+    asset_id: "ast-0402"
+    thumbnail_path: "thumbs/ast-0402.jpg"
+    byte_size: 1204736
+    width: 1512
+    height: 1134
+    captured_at: "2026-03-22T07:45:00Z"
+    member_placed: true
+    held: HELD_ORIGINAL
+  }
+  suggested_keep_asset_id: "ast-0401"
+  suggestion_reason: "Largest file — 8.4 MB, 4032 × 3024."
+}
+keep_asset_id: "ast-0402"

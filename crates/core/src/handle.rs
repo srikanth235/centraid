@@ -106,20 +106,57 @@ pub struct Handle {
     /// an honest state and not a failure: a vault with no store refuses binary
     /// bytes rather than writing a row that names bytes nothing kept.
     bytes: Mutex<Option<centraid_blobs::ContentBytes>>,
-    /// THE RUNTIME THAT STORE RUNS ON, WHEN THIS CORE OWNS IT (#1029 W6).
-    ///
-    /// `None` when somebody else owns one and handed a `ContentBytes` in
-    /// through [`Handle::attach_bytes`] — a gateway's `run.rs` does exactly
-    /// that. `Some` when [`Handle::open_own_bytes`] built one, which is the
-    /// case over the C ABI, where there is no other owner left on the device.
-    ///
-    /// It is held HERE and nowhere else because it must outlive every verb the
-    /// byte door drives on it: a runtime dropped while `ContentBytes` still
-    /// holds its handle is a store whose next call panics.
+    /// THE RUNTIME THE FLOWS THAT DIAL A GATEWAY RUN ON (#1029 W15), built
+    /// the first time one is asked for. See [`Handle::runtime_handle`].
     runtime: Mutex<Option<Arc<tokio::runtime::Runtime>>>,
+    /// A PASS IS RUNNING (#1080). A second `drain` while one runs is refused,
+    /// not queued (`phone.proto`): a background window's call must not sit
+    /// behind a foreground pass it cannot see and expire holding nothing.
+    draining: AtomicBool,
+    /// THE FIRST RECONCILE OF THIS CORE'S LIFE HAS RUN (#1080 ruling 7: "on
+    /// every launch"). It asks the gateway about every name the ledger
+    /// confirms; every later one only about the queue. The first pass that
+    /// reaches a gateway runs it when no `reconcile` call has
+    /// ([`Handle::owes_full_reconcile`]), so the ledger is squared on every
+    /// shell, not only on the one whose upload loop calls the door.
+    reconciled: AtomicBool,
+    /// THE STORE THIS CORE OPENED ITSELF.
+    ///
+    /// `Some` only after [`Handle::open_own_bytes`]; a store handed in through
+    /// [`Handle::attach_bytes`] belongs to whoever opened it. It is a directory
+    /// with no lock and no index, so nothing has to be closed when the core
+    /// goes — the next core on the same vault opens the same files.
+    owned_bytes: Mutex<Option<centraid_blobs::ContentBytes>>,
     /// Open staging sessions: bytes a shell is streaming in so this core can
     /// name them (#1025 S4). See [`crate::stage`].
     staging: crate::stage::Staging,
+    /// THE LIBRARY ITEMS THE LAST PASS ASKED FOR, by the library's own
+    /// identifier (R-1080-C39): the parts it planned to seal from each one's
+    /// stream. A `begin` for one takes its plan; the next pass replaces them
+    /// all.
+    library_plan: Mutex<std::collections::BTreeMap<String, crate::stage::Planned>>,
+    /// THE FILE THIS CORE WAS OPENED ON, KEPT (#1029 W15).
+    ///
+    /// The backup plane's files sit **beside the vault file**
+    /// (`crate::phone::Plane`), and a pass that had to be told where its own
+    /// vault lives would be a second place the path is decided; the shells'
+    /// OS-backup exclusion is about exactly that directory, so there is one
+    /// expression per path and this is what it reads.
+    path: std::path::PathBuf,
+    /// THE VAULT'S KEYS, WHEN THE SHELL SUPPLIED A SEED.
+    ///
+    /// `None` is a core that reads and writes its vault and cannot back up,
+    /// which is an honest state (see [`crate::phone`]'s header for why this
+    /// library writes no key down).
+    keys: Option<crate::phone::Keyring>,
+    /// THE BACKUP PLANE'S FILES BESIDE THE VAULT (#1080), with the spool
+    /// opened once for the life of the core (see [`crate::phone::Plane`]).
+    plane: crate::phone::Plane,
+    /// THE LOCKER SESSION (#1047, D-5): a copy of `K` (derived into `keys`
+    /// from the seed, Q-1047-11) while the member has unlocked Locker on this
+    /// phone, zeroed on relock, and nothing otherwise. See
+    /// [`crate::locker::phone`].
+    locker: crate::locker::phone::Cell,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -153,6 +190,8 @@ impl Core {
             clock,
             ids,
             expected_digest,
+            seed,
+            spool_ceiling,
         } = config;
         // BEFORE THE FILE IS TOUCHED. A stale core that opened the vault and
         // then refused would have already run whatever migration its own
@@ -207,13 +246,22 @@ impl Core {
                 None,
             )?)
         };
-        let _ = &path;
+        // THE VAULT KEYS, IF THE SHELL HAD THEM (#1029 W15). Derived here and
+        // never written down: see `crate::phone`'s header.
+        let keys = match seed {
+            None => None,
+            Some((seed, index)) => Some(crate::phone::Keyring::derive(&seed, index)?),
+        };
         Ok(Handle {
+            plane: crate::phone::Plane::of(&path).with_ceiling(spool_ceiling),
+            path,
+            keys,
             vault: Mutex::new(vault),
             registry: Registry::with_system_commands()?,
             ui_thread_name,
             events: Arc::new(EventQueue::new()),
             staging: crate::stage::Staging::default(),
+            library_plan: Mutex::new(std::collections::BTreeMap::new()),
             closed: AtomicBool::new(false),
             poison: Mutex::new(None),
             session: Mutex::new(Session::new()),
@@ -221,6 +269,10 @@ impl Core {
             diagnostics: AtomicU64::new(0),
             bytes: Mutex::new(None),
             runtime: Mutex::new(None),
+            draining: AtomicBool::new(false),
+            reconciled: AtomicBool::new(false),
+            owned_bytes: Mutex::new(None),
+            locker: Mutex::new(None),
         })
     }
 
@@ -265,17 +317,15 @@ impl Core {
         };
         // THE CONTENT STORE, HANDED IN (#1025 S3, D-1025-S3-1).
         //
-        // This used to OPEN one here — a flat `<vault>.blobs/` CAS beside the
-        // file — and that is how a device came to hold two content stores: this
-        // one, which nothing but `content_location` ever read, and iroh's
-        // `<vault>.bytes`, which every transfer wrote. A photograph a seat
-        // synced could not be displayed and one a window minted could not be
-        // served.
+        // A device holds ONE content store per vault. Opening a second one
+        // here, beside the one the core attached, is how a device once held
+        // two, and a photograph written into one could not be displayed from
+        // the other.
         //
-        // Opening the byte plane's store is asynchronous and belongs to
-        // whoever owns a runtime — `SeatLink` on a phone, `run.rs` on a
-        // gateway — so this function takes the store rather than making one,
-        // and [`Handle::attach_bytes`] re-attaches it to the vault a bootstrap
+        // The store belongs to whoever opened it — this core, through
+        // [`Handle::open_own_bytes`], or a host that handed one in — so this
+        // function takes the store rather than making one, and
+        // [`Handle::attach_bytes`] re-attaches it to the vault a restore
         // reopens.
         //
         // `None` is NOT a core that will not open: the vault's rows are still
@@ -299,90 +349,119 @@ impl Handle {
 
     /// Attach THE content store this device holds for this vault (#1025 S3).
     ///
-    /// One per vault, opened by whoever owns a runtime, and the same one the
-    /// byte plane fetches into: a device holds one content store per vault, the
-    /// grid reads it and the window writes it (D-1025-S3-1). Attaching it puts
-    /// the vault's byte door over it, so `media.add_asset` spills into the
-    /// store a seat can serve from and `content_location` answers with a file
-    /// a platform can open.
+    /// One per vault: the grid reads it and the commands write it
+    /// (D-1025-S3-1). Attaching it puts the vault's byte door over it, so
+    /// `media.add_asset` spills into it and `content_location` answers with a
+    /// file a platform can open.
     ///
-    /// Attached AFTER the vault is open, because opening the store is
-    /// asynchronous and `Core::open` is not. A core that is never handed one
-    /// holds text and refuses photographs, honestly and by name.
-    /// **OPEN THE CONTENT STORE THIS CORE OWNS** (#1029 W6, hand-off 2).
+    /// A core that is never handed one holds text and refuses photographs,
+    /// honestly and by name.
+    /// **OPEN THE CONTENT STORE THIS CORE OWNS** (#1029 W6, hand-off 2;
+    /// [#1080](https://github.com/srikanth235/centraid/issues/1080)).
     ///
-    /// ## The decision, and why it is this one
-    ///
-    /// `ByteStore::open` is asynchronous and `ContentBytes` holds a runtime
-    /// handle, so somebody has to own a runtime for the life of the core.
-    /// Until #1029 that was `SeatLink`, which opened `<vault>.bytes` and handed
-    /// it to [`Self::attach_bytes`]; `SeatLink` went with the seat plane, and a
-    /// core opened over the C ABI has been holding text and refusing binary
-    /// bytes by name ever since (`core-ffi/src/lib.rs`).
-    ///
-    /// There is no other owner left on a phone. The alternatives were:
-    ///
-    /// - **leave it** — then F14's "the vault owns its copy" is unreachable
-    ///   from a phone, a restored grid has nowhere to put a thumbnail, and
-    ///   `ScreenEffect.FetchOriginal` has no server for a second wave running;
-    /// - **make the shell own one** — a Swift or Kotlin shell would have to
-    ///   hold a Rust runtime handle across the ABI, which is a pointer with no
-    ///   type on the other side and a lifetime nobody can state;
-    /// - **this** — the core owns it, opens the store beside the vault, and
-    ///   drops both together.
-    ///
-    /// ## Why the runtime is MULTI-THREADED, which is not a preference
-    ///
-    /// `ContentBytes` drives each verb with `runtime.block_on` from a thread of
-    /// its own (`blobs/src/door.rs` says why). On a **current-thread** runtime
-    /// that call drives only the future it was given — nothing drives the tasks
-    /// `iroh-blobs` spawns for its store actor, so the first verb waits for a
-    /// task that will never be polled. A multi-threaded runtime drives its own
-    /// workers, so the spawned actor runs whoever calls in. Two workers: this
-    /// runtime serves one store and a phone has other things to do with its
-    /// cores.
+    /// `<vault>.bytes` beside the vault file: a directory of files named by
+    /// their BLAKE3, opened synchronously, with nothing to own but the path.
+    /// The door also reads the backup ledger beside the vault,
+    /// `<vault>.backup.db`, for the originals the operating system's library
+    /// holds and the phone never copied (#1080 ruling 6); a ledger that will
+    /// not open leaves a door that knows its own files, which is every byte
+    /// this core has written.
     ///
     /// Non-fatal by design. A store that will not open leaves the core exactly
     /// as it was — text, and photographs refused by name — because a vault that
     /// would not open its byte store is still a vault whose notes save.
     ///
     /// # Errors
-    /// [`CoreError`] wrapping whatever the runtime builder or the store
-    /// refused. The core is unchanged on either.
+    /// [`CoreError`] wrapping what the store refused. The core is unchanged.
     pub fn open_own_bytes(&self, root: impl AsRef<std::path::Path>) -> Result<()> {
         let root = root.as_ref().to_path_buf();
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .thread_name("centraid-bytes")
-            .enable_all()
-            .build()
-            .map_err(|error| CoreError::Invariant {
-                context: format!("the byte store's runtime would not start: {error}"),
+        let (store, adopted) =
+            centraid_blobs::ByteStore::open_adopting(&root).map_err(|error| {
+                CoreError::Invariant {
+                    context: format!(
+                        "the byte store at {} would not open: {error}",
+                        root.display()
+                    ),
+                }
             })?;
-        let store = runtime
-            .block_on(centraid_blobs::ByteStore::open(&root))
-            .map_err(|error| CoreError::Invariant {
-                context: format!(
-                    "the byte store at {} would not open: {error}",
-                    root.display()
-                ),
-            })?;
-        let door = centraid_blobs::ContentBytes::new(store, runtime.handle().clone());
-        // THE RUNTIME IS KEPT FIRST. `attach_bytes` publishes a door that
-        // drives on this runtime's handle; publishing it before the runtime is
-        // held would leave a window where a verb could reach a runtime about to
-        // be dropped.
-        if let Ok(mut held) = self.runtime.lock() {
-            *held = Some(Arc::new(runtime));
+        if adopted != centraid_blobs::Adopted::default() {
+            tracing::info!(
+                blobs = adopted.blobs,
+                discarded = adopted.discarded,
+                "the byte store adopted the layout it had before #1080"
+            );
+        }
+        let ledger_path = centraid_vault::backup::ledger::Ledger::path_for(&self.path);
+        let door = match centraid_vault::backup::ledger::Ledger::open(&ledger_path) {
+            Ok(ledger) => {
+                centraid_blobs::ContentBytes::new(store).with_ledger(Arc::new(Mutex::new(ledger)))
+            }
+            Err(error) => {
+                tracing::warn!(
+                    "the backup ledger at {} did not open; the byte door knows only its \
+                     own files: {error}",
+                    ledger_path.display()
+                );
+                centraid_blobs::ContentBytes::new(store)
+            }
+        };
+        if let Ok(mut owned) = self.owned_bytes.lock() {
+            *owned = Some(door.clone());
         }
         self.attach_bytes(door);
         Ok(())
     }
 
+    /// A tokio handle for the flows that dial a gateway (#1029 W15, #1080).
+    ///
+    /// Built the first time it is asked for and kept, so every flow shares one
+    /// thread pool and the gateway client's kept connection. It is
+    /// multi-threaded because a current-thread runtime under `block_on` is a
+    /// deadlock the moment anything it drives waits on another task — a
+    /// streamed request body and its connection are two.
+    ///
+    /// # Errors
+    /// [`CoreError::Invariant`] when a runtime will not start.
+    pub fn runtime_handle(&self) -> Result<tokio::runtime::Handle> {
+        let mut held = self
+            .runtime
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(runtime) = held.as_ref() {
+            return Ok(runtime.handle().clone());
+        }
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("centraid-phone")
+            .enable_all()
+            .build()
+            .map_err(|error| CoreError::Invariant {
+                context: format!("the phone's runtime would not start: {error}"),
+            })?;
+        let handle = runtime.handle().clone();
+        *held = Some(Arc::new(runtime));
+        Ok(handle)
+    }
+
+    /// The file this core was opened on.
+    #[must_use]
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    /// The backup plane's files beside the vault.
+    #[must_use]
+    pub const fn plane(&self) -> &crate::phone::Plane {
+        &self.plane
+    }
+
     /// Whether this core opened and owns its own byte store.
     #[must_use]
     pub fn owns_its_bytes(&self) -> bool {
-        self.runtime.lock().ok().is_some_and(|held| held.is_some())
+        self.owned_bytes
+            .lock()
+            .ok()
+            .is_some_and(|held| held.is_some())
     }
 
     pub fn attach_bytes(&self, bytes: centraid_blobs::ContentBytes) {
@@ -559,6 +638,43 @@ impl Handle {
         self.events.close();
     }
 
+    /// CLOSE THE FILE ITSELF, so what is on disk is the whole vault.
+    ///
+    /// [`Self::close`] releases the waiters and leaves the connection to the
+    /// process's teardown, which is right for a shell: the file is reopened on
+    /// the next launch and SQLite's `-wal` is part of the vault, not a
+    /// leftover. It is WRONG for a process whose artifact is the file — a
+    /// fixture writer, a seeder — because a `-wal` that is never checkpointed
+    /// holds every row the run wrote, and a copy of the `.db` alone is an
+    /// EMPTY vault that opens without an error and draws nothing.
+    ///
+    /// That is not hypothetical: `seed-demo-vault` left a 4 KB file beside a
+    /// 19 MB `-wal`, `mobile/scripts/demo-vault.sh` copied the `.db` and
+    /// dropped the sidecars by design, and the phone opened a vault with no
+    /// rows in it. Nothing failed anywhere along that path.
+    ///
+    /// So this is the door that ENDS a vault: the connection is taken out and
+    /// [`Vault::finish`]ed — the log is checkpointed into the file and the
+    /// connection closed — and a refusal is returned rather than swallowed, a
+    /// file that would not close being a fixture that lies. `Vault::finish`
+    /// carries the rest of the argument, including why a plain close cannot do
+    /// this and why a vault a spool is tracking must not come through here.
+    ///
+    /// Idempotent, and everything after it is [`CoreError::Unpaired`]:
+    /// [`Self::with_vault`] answers that for a core holding no file, which is
+    /// the state this leaves behind.
+    pub fn close_file(&self) -> Result<()> {
+        let taken = self
+            .vault
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        match taken {
+            Some(vault) => Ok(vault.finish()?),
+            None => Ok(()),
+        }
+    }
+
     /// Whether this handle is closed.
     #[must_use]
     pub fn is_closed(&self) -> bool {
@@ -612,11 +728,26 @@ impl Handle {
         body(vault)
     }
 
+    /// Run a body with the vault when there is one, and with `None` when this
+    /// core holds no file: what a read that also answers without a vault —
+    /// the backup status — goes through.
+    pub fn with_vault_if_any<T>(
+        &self,
+        body: impl FnOnce(Option<&Vault>) -> Result<T>,
+    ) -> Result<T> {
+        self.check_open()?;
+        let held = self
+            .vault
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        body(held.as_ref())
+    }
+
     /// Whether this core holds a copy of the vault.
     ///
     /// The fact a shell draws its first screen from, alongside
-    /// [`Self::has_network`] and [`crate::link::SeatNetwork::gateway`]: no
-    /// file, versus a file with no gateway, versus both.
+    /// [`crate::phone::backup_status`]'s `destinations`: no file, versus a
+    /// file with no gateway, versus both.
     #[must_use]
     pub fn holds_a_replica(&self) -> bool {
         self.vault
@@ -727,14 +858,138 @@ impl Handle {
                 let changes = crate::events::ChangeFeed::new(self.events());
                 Ok(response(wire::response::Kind::Command(self.with_vault(
                     |vault| {
+                        // A LOCKER SECRET IS SEALED HERE, before the vault
+                        // sees it (#1047, D-5): the command plane refuses
+                        // plaintext, and the core is the one holder of `K`.
+                        let sealed =
+                            crate::locker::phone::seal_command(vault, &self.locker, command)?;
+                        let command = match sealed {
+                            Some(input) => &wire::Command {
+                                input,
+                                ..command.clone()
+                            },
+                            None => command,
+                        };
                         crate::api::invoke(vault, &self.registry, &self.owner(), command, &changes)
                     },
                 )?)))
             }
-            K::BackupNow(_) => Err(CoreError::NotYetAvailable {
-                what: "backup",
-                lands_in: "wave 2 lane R",
-            }),
+            // THE LOCKER SESSION (#1047, D-5). See `crate::locker::phone`.
+            K::Locker(request) => {
+                let changes = crate::events::ChangeFeed::new(self.events());
+                Ok(response(wire::response::Kind::Locker(self.with_vault(
+                    |vault| {
+                        crate::locker::phone::answer(
+                            vault,
+                            &self.registry,
+                            &self.owner(),
+                            self.keys.as_ref(),
+                            &self.locker,
+                            request,
+                            &changes,
+                        )
+                    },
+                )?)))
+            }
+            // THE PASS (#1080). Not through `with_vault` for its whole length:
+            // the vault is held for the snapshot's copy and the reads a pass
+            // makes, never across the network, so a screen's reads go on while
+            // a backup runs.
+            K::Drain(request) => Ok(response(wire::response::Kind::Drain(self.drain(request)?))),
+            // PAIRING NEEDS NO VAULT TO BE OPEN: it needs the vault's keys,
+            // and keeps the gateway in the ledger beside the file.
+            K::PairPhone(request) => {
+                let runtime = self.runtime_handle()?;
+                Ok(response(wire::response::Kind::PairPhone(
+                    crate::phone::pair::pair(&self.plane, self.keys.as_ref(), request, &runtime)?,
+                )))
+            }
+            // NOR DOES A RESTORE, and for the same reason with more force: the
+            // vault it is about does not exist on this device yet. That is the
+            // whole of what it is for (F2).
+            K::Restore(request) => {
+                let runtime = self.runtime_handle()?;
+                Ok(response(wire::response::Kind::Restore(
+                    crate::phone::restore::run(&self.path, request, &runtime)?,
+                )))
+            }
+            // A STATUS READ ANSWERS WITH OR WITHOUT A VAULT: the ledger is
+            // beside the file, and the content counts need the file.
+            K::BackupStatus(_) => Ok(response(wire::response::Kind::BackupStatus(
+                self.with_vault_if_any(|vault| {
+                    crate::phone::backup_status(&self.plane, vault, self.keys.as_ref())
+                })?,
+            ))),
+            // THE 24 WORDS NEED NO VAULT EITHER (#1047 E1): a first launch
+            // mints them before there is a vault to found, and a restore
+            // judges them before there is one to lay down. Pure functions of
+            // the words and the OS's entropy — see `phone::phrase`.
+            K::Phrase(request) => Ok(response(wire::response::Kind::Phrase(
+                crate::phone::phrase::answer(request)?,
+            ))),
+            // THE KEEP LIST AND THE CENSUS (#1029, the photos port). Through
+            // `with_vault` for every arm, because the vault lock is what
+            // serialises two toggles of one list — see `originals::answer`.
+            K::Originals(request) => Ok(response(wire::response::Kind::Originals(
+                self.with_vault(|vault| crate::originals::answer(vault, &self.path, request))?,
+            ))),
+            // AN APP'S OWN QUERY, RUN WHERE IT IS WRITTEN (#1046). Through
+            // `with_vault` like a page read, because it IS page reads — the
+            // app crate's, through `app_query::VaultDoor`.
+            K::AppQuery(request) => Ok(response(wire::response::Kind::AppQuery(Box::new(
+                self.with_vault(|vault| crate::app_query::answer(vault, request))?,
+            )))),
+            // THE BACKUP PLANE'S DOORS BESIDE THE PASS (#1080). See
+            // `phone.proto` and `crate::phone`.
+            K::Handoff(request) => {
+                let runtime = self.runtime_handle()?;
+                Ok(response(wire::response::Kind::Handoff(
+                    crate::phone::drain::handoff(&self.plane, self.keyring()?, request, &runtime)?,
+                )))
+            }
+            K::Settle(request) => Ok(response(wire::response::Kind::Settle(
+                crate::phone::drain::settle(&self.plane, self.keyring()?, request)?,
+            ))),
+            K::FetchOriginal(request) => {
+                let runtime = self.runtime_handle()?;
+                Ok(response(wire::response::Kind::FetchOriginal(
+                    crate::phone::fetch::fetch_original(self, self.keyring()?, request, &runtime)?,
+                )))
+            }
+            K::Pins(_) => Ok(response(wire::response::Kind::Pins(crate::phone::pins(
+                &self.plane,
+            )?))),
+            K::Reconcile(_) => {
+                let runtime = self.runtime_handle()?;
+                let full = self.owes_full_reconcile();
+                let answer =
+                    crate::phone::drain::reconcile(&self.plane, self.keyring()?, &runtime, full)?;
+                if full && answer.reachable {
+                    self.reconciled_fully();
+                }
+                Ok(response(wire::response::Kind::Reconcile(answer)))
+            }
+            K::ForgetDestination(request) => {
+                let runtime = self.runtime_handle()?;
+                let vault = self.keys.as_ref().map(crate::phone::Keyring::vault_id);
+                Ok(response(wire::response::Kind::ForgetDestination(
+                    crate::phone::forget_destination(&self.plane, vault, &runtime, request)?,
+                )))
+            }
+            K::Releasable(request) => {
+                let keyring = self.keyring()?;
+                Ok(response(wire::response::Kind::Releasable(
+                    self.with_vault(|vault| {
+                        crate::phone::releasable(&self.plane, &self.path, vault, keyring, request)
+                    })?,
+                )))
+            }
+            K::Released(request) => {
+                let (answer, assets) =
+                    self.with_vault(|vault| crate::phone::released(&self.plane, vault, request))?;
+                crate::events::ChangeFeed::new(self.events()).blobs_arrived(&assets);
+                Ok(response(wire::response::Kind::Released(answer)))
+            }
         }
         .map_err(|error| {
             tracing::debug!(request_id, %error, "the core refused a request");
@@ -742,71 +997,68 @@ impl Handle {
         })
     }
 
-    /// One staging frame from a shell: the write half's door (#1025 S4).
-    ///
-    /// The bytes are already in this vault's content store, verified against
-    /// their own name by bao. This writes the `blob_staging` row that carries
-    /// the two facts the store cannot answer — the media type and the declared
-    /// size — so `promote_staged_blob` mints a content row a grid can embed
-    /// rather than one typed `application/octet-stream`.
-    ///
-    /// A gateway only, for the same reason [`Self::submit_intent`] is: a seat
-    /// staging bytes into its copy would be writing rows the applier overwrites.
-    /// One staging frame from a shell: the write half's door (#1025 S4).
-    ///
-    /// See [`crate::stage`] for the shape and for what replaced
-    /// `MediaLibrary.Asset.sha256`. `end` PUTS the assembled bytes into this
-    /// core's content store before it answers, so the handle it hands back names
-    /// bytes this device holds — a handle for bytes nowhere is a row that will
-    /// commit and never render.
+    /// The keys a door that seals, signs or names needs, or the refusal a
+    /// shell draws as "unlock to back up".
+    fn keyring(&self) -> Result<&crate::phone::Keyring> {
+        self.keys.as_ref().ok_or_else(|| CoreError::Unavailable {
+            reason: "this core holds no vault keys, so it cannot back up; open it with a seed"
+                .to_owned(),
+        })
+    }
+
+    /// Whether this core has yet to ask a gateway about every name its ledger
+    /// confirms (#1080 ruling 7, "on every launch").
+    pub(crate) fn owes_full_reconcile(&self) -> bool {
+        !self.reconciled.load(Ordering::SeqCst)
+    }
+
+    /// This core asked a gateway about every name its ledger confirms.
+    pub(crate) fn reconciled_fully(&self) {
+        self.reconciled.store(true, Ordering::SeqCst);
+    }
+
+    /// One pass, one at a time.
+    fn drain(&self, request: &wire::DrainRequest) -> Result<wire::DrainResponse> {
+        let keyring = self.keyring()?;
+        if !self.holds_a_replica() {
+            return Err(CoreError::Unpaired);
+        }
+        if self
+            .draining
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Err(CoreError::InvalidRequest {
+                detail: "a drain is already running".to_owned(),
+            });
+        }
+        let runtime = self.runtime_handle();
+        let asked = request.asked.then(|| self.plane.ask());
+        let answer =
+            runtime.and_then(|runtime| crate::phone::drain::run(self, keyring, request, &runtime));
+        drop(asked);
+        self.draining.store(false, Ordering::SeqCst);
+        answer
+    }
+
+    /// One staging frame from a shell: the write half's door (#1025 S4;
+    /// #1080). See [`crate::stage`]. `end` records what the bytes are before it
+    /// answers, so the handle it hands back names bytes this device holds — a
+    /// handle for bytes nowhere is a row that will commit and never render.
     fn stage(&self, frame: &wire::StageRequest) -> Result<wire::StageResponse> {
         use wire::stage_request::Kind as S;
         let kind = match frame.kind.as_ref() {
             Some(S::Begin(begin)) => wire::stage_response::Kind::Begun(
-                self.staging.begin(&begin.media_type, begin.byte_size)?,
+                self.staging.begin(begin, self.stage_doors(begin)?)?,
             ),
             Some(S::Chunk(chunk)) => wire::stage_response::Kind::Chunked(self.staging.chunk(
                 &chunk.staging_id,
                 chunk.seq,
                 &chunk.payload,
             )?),
-            Some(S::End(end)) => {
-                let staged = self.staging.end(&end.staging_id)?;
-                let bytes = self.bytes().ok_or_else(|| CoreError::Unavailable {
-                    reason: "this core has no content store, so it cannot keep staged bytes"
-                        .to_owned(),
-                })?;
-                // ALREADY-HELD IS ASKED BEFORE THE PUT, because a put is
-                // idempotent and would make every answer `false` on the way in
-                // and `true` on the way out.
-                let already_held = {
-                    use centraid_vault::backup::store::BlobStore as _;
-                    bytes.has(&staged.content_hash).unwrap_or(false)
-                };
-                self.with_vault(|vault| {
-                    vault
-                        .stage_bytes(&[centraid_vault::intents::NeededBytes {
-                            hash: staged.content_hash.clone(),
-                            byte_size: staged.byte_size as i64,
-                            media_type: staged.media_type.clone(),
-                        }])
-                        .map_err(CoreError::from)
-                })
-                .and_then(|_| {
-                    use centraid_vault::backup::store::BlobStore as _;
-                    bytes
-                        .put(&staged.bytes)
-                        .map(|_| ())
-                        .map_err(|error| CoreError::Unavailable {
-                            reason: format!("the staged bytes could not be kept: {error}"),
-                        })
-                })?;
-                wire::stage_response::Kind::Handle(wire::StageHandle {
-                    content_hash: staged.content_hash,
-                    byte_size: staged.byte_size,
-                    already_held,
-                })
-            }
+            Some(S::End(end)) => wire::stage_response::Kind::Handle(
+                self.record_staged(self.staging.end(&end.staging_id)?)?,
+            ),
             None => {
                 return Err(CoreError::InvalidRequest {
                     detail: "a staging request carries one of begin, chunk or end".to_owned(),
@@ -814,6 +1066,150 @@ impl Handle {
             }
         };
         Ok(wire::StageResponse { kind: Some(kind) })
+    }
+
+    /// What a staging session may write to: the content store, and — for an
+    /// item from the library, when a gateway is paired and the keys are here —
+    /// the spool, under its budget, with what the last pass planned for the
+    /// item if it asked for it.
+    fn stage_doors(&self, begin: &wire::StageBegin) -> Result<crate::stage::Doors> {
+        let store = self.bytes().map(|door| door.store().clone());
+        let plane = &self.plane;
+        let paired = !plane
+            .ledger()?
+            .destinations()
+            .map_err(crate::phone::plane_error)?
+            .is_empty();
+        let seal = match (&self.keys, paired) {
+            (Some(keys), true) => Some(crate::stage::SealInto {
+                keys: keys.backup.clone(),
+                spool: plane.spool()?,
+                budget: plane.budget(),
+                planned: if begin.os_ref.is_empty() {
+                    None
+                } else {
+                    self.take_planned(&begin.os_ref)
+                },
+            }),
+            _ => None,
+        };
+        Ok(crate::stage::Doors { store, seal })
+    }
+
+    /// The plan the last pass made for the library item `os_ref`, taken: one
+    /// stream uses it (R-1080-C39).
+    fn take_planned(&self, os_ref: &str) -> Option<crate::stage::Planned> {
+        self.library_plan
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(os_ref)
+    }
+
+    /// What a pass planned for the library items it asked for, in place of
+    /// the last pass's plan (R-1080-C39).
+    pub(crate) fn plan_library(
+        &self,
+        plan: std::collections::BTreeMap<String, crate::stage::Planned>,
+    ) {
+        *self
+            .library_plan
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = plan;
+    }
+
+    /// Record a closed session: owned bytes are staged for the command that
+    /// names them, a derivative beside its parent, and a library item in the
+    /// ledger — where it lives, and its sealed parts in the queue.
+    fn record_staged(&self, staged: crate::stage::Staged) -> Result<wire::StageHandle> {
+        use crate::stage::Staged;
+        match staged {
+            Staged::Owned {
+                stored,
+                media_type,
+                derivative,
+            } => {
+                let hash = stored.hash.to_hex();
+                let byte_size = i64::try_from(stored.bytes).unwrap_or(i64::MAX);
+                self.with_vault(|vault| {
+                    match derivative {
+                        Some((variant_of, variant)) => {
+                            vault.stage_derivative(&centraid_vault::content::StagedDerivative {
+                                hash: hash.clone(),
+                                byte_size,
+                                media_type,
+                                variant,
+                                variant_of,
+                            })?;
+                        }
+                        None => {
+                            vault.stage_bytes(&[centraid_vault::content::NeededBytes {
+                                hash: hash.clone(),
+                                byte_size,
+                                media_type,
+                            }])?;
+                        }
+                    }
+                    Ok(())
+                })?;
+                Ok(wire::StageHandle {
+                    content_hash: hash,
+                    byte_size: stored.bytes,
+                    already_held: stored.already_held,
+                })
+            }
+            Staged::Library {
+                h,
+                len,
+                media_type,
+                os_ref,
+                edited,
+                sealed,
+            } => {
+                let plane = &self.plane;
+                let ledger = plane.ledger()?;
+                let in_store = self.bytes().is_some_and(|door| {
+                    door.store()
+                        .is_complete(centraid_blobs::ContentHash::from_bytes(*h.as_bytes()))
+                        .unwrap_or(false)
+                });
+                let already_held = in_store
+                    || ledger
+                        .local(&h)
+                        .map_err(crate::phone::plane_error)?
+                        .is_some();
+                ledger
+                    .put_local(&centraid_vault::backup::ledger::LocalBytes {
+                        hash: h,
+                        source: centraid_vault::backup::ledger::LocalSource::Os,
+                        os_ref: Some(os_ref),
+                        verified_ms: Some(crate::phone::now_ms()),
+                        edited,
+                    })
+                    .map_err(crate::phone::plane_error)?;
+                if let Some(sealed) = sealed {
+                    crate::phone::drain::queue_sealed(
+                        &plane.spool()?,
+                        &ledger,
+                        &sealed,
+                        &media_type,
+                    )?;
+                }
+                let hash = h.to_hex();
+                self.with_vault(|vault| {
+                    vault.stage_bytes(&[centraid_vault::content::NeededBytes {
+                        hash: hash.clone(),
+                        byte_size: i64::try_from(len).unwrap_or(i64::MAX),
+                        media_type,
+                    }])?;
+                    Ok(())
+                })?;
+                Ok(wire::StageHandle {
+                    content_hash: hash,
+                    byte_size: len,
+                    already_held,
+                })
+            }
+        }
     }
 
     fn hello(&self, peer: &wire::Hello) -> wire::Hello {
@@ -877,11 +1273,56 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // policy rows. A cancel arriving mid-found could not stop it
             // anyway — the commit guard is what decides, and it is
             // all-or-nothing.
-            | K::Found(_),
+            | K::Found(_)
+            // PAIRING IS BOUNDED: one payload, one pairing, a claim retried
+            // at most three times. It talks to the network, which is not the
+            // same question — `Bounded` is "finishes on its own bounded by its
+            // own limit", and a pairing that cannot reach the gateway fails
+            // rather than running on.
+            | K::PairPhone(_)
+            // A STATUS READ IS BOUNDED AND DIALS NOTHING: the ledger, a spool
+            // measurement and one read of the vault's content rows.
+            | K::BackupStatus(_)
+            // THE ORIGINALS ASK IS BOUNDED: one small file, and for a census
+            // one listing of the store and one read of the library's rows. It
+            // moves no byte and dials nothing.
+            | K::Originals(_)
+            // AN APP QUERY IS BOUNDED BY ITS OWN STATED CEILINGS: every join
+            // walks a declared fan-out and every expansion a declared instance
+            // cap, and reaching one is `ReadBoundReached`, not a longer read.
+            | K::AppQuery(_)
+            // A LOCKER STEP IS BOUNDED: one key load, one receipt, one cell.
+            | K::Locker(_)
+            // A PHRASE STEP IS 24 WORDS AND ONE PBKDF2 (#1047 E1).
+            | K::Phrase(_)
+            // SEVEN OF THE BACKUP PLANE'S DOORS ARE BOUNDED (#1080).
+            // `handoff` answers at most the batch it was asked for, `settle`
+            // records what the shell already heard, `pins` is one read of the
+            // device's ledger and `forget_destination` one read, one revoke
+            // and one write, `reconcile` asks `exists` once per thousand names
+            // the ledger holds — a count the ledger bounds, and the network is
+            // not the same question, as with `pair_phone` — `releasable` reads
+            // the ledger and the rows up to its limit, and `released` forgets
+            // the hashes it was handed.
+            | K::Handoff(_)
+            | K::Settle(_)
+            | K::Pins(_)
+            | K::Reconcile(_)
+            | K::ForgetDestination(_)
+            | K::Releasable(_)
+            | K::Released(_),
         )
         | None => RequestKind::Bounded,
-        // A snapshot fetch and a backup are as long as the artifact is.
-        Some(K::BackupNow(_)) => RequestKind::Unbounded,
+        // A DRAIN IS AS LONG AS THE SPOOL IS and a RESTORE as long as the
+        // vault is. Both are cancellable, and a drain has a deadline of its
+        // own besides — the two are different stops and a shell may use
+        // either: `Cancel` is the member leaving the screen, the deadline is
+        // the operating system taking the window back.
+        //
+        // AND A FETCHED ORIGINAL IS AS LONG AS THE ORIGINAL IS (#1080): a
+        // film can be gigabytes, and a member who leaves the lightbox has
+        // stopped wanting it.
+        Some(K::Drain(_) | K::Restore(_) | K::FetchOriginal(_)) => RequestKind::Unbounded,
     }
 }
 
@@ -913,16 +1354,12 @@ mod tests {
     }
 
     /// **HAND-OFF 2, ANSWERED.** A core that opens its own byte store holds
-    /// photographs; one that does not holds text and says so.
-    ///
-    /// The whole claim is here: the runtime the core built actually drives the
-    /// store's actor, so a verb that reaches through `ContentBytes` answers
-    /// instead of hanging on a task nobody polls. That is the property a
-    /// current-thread runtime would not have, and it is why the builder asks
-    /// for workers.
+    /// photographs; one that does not holds text and says so. The store is
+    /// `<vault>.bytes`, and its door reads the backup ledger beside the vault
+    /// for what the operating system's library holds (#1080).
     #[test]
     fn a_core_that_opens_its_own_bytes_can_hold_a_photograph() {
-        use centraid_vault::backup::store::BlobStore as _;
+        use centraid_vault::bytes::BlobStore as _;
 
         let scratch = Scratch::founded();
         assert!(
@@ -946,6 +1383,122 @@ mod tests {
             door.path_of(&id).expect("it answers").is_some(),
             "nothing is inlined, so a grid has a file to open"
         );
+        assert!(door.ledger().is_some(), "the door reads the backup ledger");
+        assert!(
+            scratch.dir.join("vault.backup.db").is_file(),
+            "the ledger is beside the vault, where the backup plane keeps it"
+        );
+    }
+
+    /// A PHOTOGRAPH'S BYTES, LOCATED OVER THE WIRE (#1080 ruling 6): a path for
+    /// the store's own file, the library's identifier for an original the
+    /// operating system's library holds and the phone never copied, and
+    /// neither for bytes that are on this device nowhere.
+    #[test]
+    fn content_urls_answer_the_store_the_library_or_nowhere() {
+        const ONE_PIXEL_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        let scratch = Scratch::founded();
+        scratch
+            .handle
+            .open_own_bytes(scratch.dir.join("vault.bytes"))
+            .expect("the byte store opens");
+        let Some(wire::response::Kind::Command(outcome)) = scratch
+            .handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Command(wire::Command {
+                    name: "media.add_asset".to_owned(),
+                    input: serde_json::to_vec(&serde_json::json!({
+                        "data_uri": format!("data:image/png;base64,{ONE_PIXEL_PNG}"),
+                        "kind": "photo",
+                    }))
+                    .expect("json"),
+                    invoke_key: "content-urls-library".to_owned(),
+                    ..wire::Command::default()
+                })),
+            })
+            .expect("the command answers")
+            .kind
+        else {
+            panic!("a command answers with an outcome");
+        };
+        assert_eq!(
+            outcome.status,
+            wire::CommandStatus::Executed as i32,
+            "{}",
+            outcome.reason
+        );
+        let output: serde_json::Value =
+            serde_json::from_slice(&outcome.output).expect("the output is JSON");
+        let reference = wire::ContentRef {
+            content_id: output["content_id"]
+                .as_str()
+                .expect("a content id")
+                .to_owned(),
+            owner_type: "media.asset".to_owned(),
+            owner_id: output["asset_id"].as_str().expect("an asset id").to_owned(),
+        };
+        let locate = || {
+            let Some(wire::response::Kind::ContentUrls(urls)) = scratch
+                .handle
+                .call(&wire::Request {
+                    kind: Some(wire::request::Kind::ContentUrls(wire::ContentUrlRequest {
+                        refs: vec![reference.clone()],
+                    })),
+                })
+                .expect("the lookup answers")
+                .kind
+            else {
+                panic!("a lookup answers with locations");
+            };
+            urls.urls.into_iter().next().expect("one answer per ref")
+        };
+
+        let stored = locate();
+        assert_eq!(stored.source, wire::ContentSource::Store as i32);
+        let path = std::path::PathBuf::from(stored.path.expect("a path for the store"));
+        assert!(stored.os_ref.is_empty());
+
+        let door = scratch.handle.bytes().expect("a door");
+        let hash = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("a blob is named by its hash")
+            .to_owned();
+        std::fs::remove_file(&path).expect("the store's copy goes");
+        let local = centraid_vault::backup::ledger::LocalBytes {
+            hash: centraid_vault::backup::naming::PlaintextHash::from_hex(&hash).expect("a hash"),
+            source: centraid_vault::backup::ledger::LocalSource::Os,
+            os_ref: Some("library-item-1".to_owned()),
+            verified_ms: Some(1),
+            edited: false,
+        };
+        let ledger = door.ledger().expect("the door reads the ledger");
+        ledger
+            .lock()
+            .expect("the ledger")
+            .put_local(&local)
+            .expect("records");
+        let in_library = locate();
+        assert_eq!(in_library.source, wire::ContentSource::OsLibrary as i32);
+        assert_eq!(in_library.os_ref, "library-item-1");
+        assert_eq!(
+            in_library.path, None,
+            "a path is answered for the store only"
+        );
+        assert!(
+            in_library.absent_reason.is_empty(),
+            "the bytes are on this device"
+        );
+
+        ledger
+            .lock()
+            .expect("the ledger")
+            .forget_local(&local.hash)
+            .expect("forgets");
+        let nowhere = locate();
+        assert_eq!(nowhere.source, wire::ContentSource::None as i32);
+        assert!(nowhere.path.is_none() && nowhere.os_ref.is_empty());
+        assert!(!nowhere.absent_reason.is_empty());
     }
 
     /// A core over a file `create` made and nothing has founded.
@@ -1145,15 +1698,67 @@ mod tests {
     fn an_unbounded_request_is_cancellable_and_a_bounded_one_is_not() {
         // The classification, directly: it lives in one function so a call site
         // cannot choose wrongly.
-        // `backup_now` is the unbounded one now: `snapshot_head` was the other
-        // and is deleted (#1025 S7, item 5).
+        // THE PHONE'S TWO FLOWS ARE UNBOUNDED (#1029 W15). `backup_now` was
+        // the only one and it is retired; `snapshot_head` was the other and
+        // went in #1025 S7, item 5.
         assert_eq!(
             request_kind(&wire::Request {
-                kind: Some(wire::request::Kind::BackupNow(wire::BackupNow {
-                    force: false
+                kind: Some(wire::request::Kind::Drain(wire::DrainRequest {
+                    deadline_ms: 0,
+                    ..wire::DrainRequest::default()
                 })),
             }),
             RequestKind::Unbounded
+        );
+        assert_eq!(
+            request_kind(&wire::Request {
+                kind: Some(wire::request::Kind::Restore(wire::RestoreRequest::default())),
+            }),
+            RequestKind::Unbounded
+        );
+        // A FETCHED ORIGINAL IS AS LONG AS THE ORIGINAL (#1080), and the
+        // backup plane's other doors are bounded.
+        assert_eq!(
+            request_kind(&wire::Request {
+                kind: Some(wire::request::Kind::FetchOriginal(
+                    wire::FetchOriginalRequest::default()
+                )),
+            }),
+            RequestKind::Unbounded
+        );
+        for bounded in [
+            wire::request::Kind::Handoff(wire::HandoffRequest::default()),
+            wire::request::Kind::Settle(wire::SettleRequest::default()),
+            wire::request::Kind::Pins(wire::PinsRequest {}),
+            wire::request::Kind::Reconcile(wire::ReconcileRequest {}),
+            wire::request::Kind::ForgetDestination(wire::ForgetDestinationRequest::default()),
+            wire::request::Kind::Releasable(wire::ReleasableRequest::default()),
+            wire::request::Kind::Released(wire::ReleasedRequest::default()),
+        ] {
+            assert_eq!(
+                request_kind(&wire::Request {
+                    kind: Some(bounded.clone()),
+                }),
+                RequestKind::Bounded,
+                "{bounded:?} is one batch, one ledger read or write, or a ledger-bounded ask"
+            );
+        }
+        // AND THE TWO BESIDE THEM ARE BOUNDED. A status read is a spool
+        // measurement; a pairing is one ticket and one redemption. Talking to
+        // the network is not the same question as being unbounded.
+        assert_eq!(
+            request_kind(&wire::Request {
+                kind: Some(wire::request::Kind::BackupStatus(
+                    wire::BackupStatusRequest {}
+                )),
+            }),
+            RequestKind::Bounded
+        );
+        assert_eq!(
+            request_kind(&wire::Request {
+                kind: Some(wire::request::Kind::PairPhone(wire::PairRequest::default())),
+            }),
+            RequestKind::Bounded
         );
         assert_eq!(request_kind(&hello()), RequestKind::Bounded);
         assert_eq!(
@@ -1168,6 +1773,286 @@ mod tests {
             request_kind(&wire::Request { kind: None }),
             RequestKind::Bounded
         );
+    }
+
+    /// A founded core holding the vault's keys, its content store open.
+    fn unlocked() -> Scratch {
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let words = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                     abandon abandon abandon abandon abandon abandon abandon abandon \
+                     abandon abandon abandon abandon abandon abandon abandon art";
+        let seed = centraid_identity::RecoveryPhrase::parse(words)
+            .expect("the BIP39 vector parses")
+            .seed();
+        let handle =
+            Core::open(CoreConfig::new(dir.join("vault.db")).with_seed(seed, 0)).expect("it opens");
+        handle
+            .with_vault(|vault| Ok(vault.found("Test", "Owner")?))
+            .expect("it founds");
+        handle
+            .open_own_bytes(dir.join("vault.bytes"))
+            .expect("the byte store opens");
+        Scratch { dir, handle }
+    }
+
+    fn ask(scratch: &Scratch, kind: wire::request::Kind) -> Result<wire::response::Kind> {
+        scratch
+            .handle
+            .call(&wire::Request { kind: Some(kind) })
+            .map(|answer| answer.kind.expect("an answer has a kind"))
+    }
+
+    /// THE BACKUP PLANE'S DOORS ANSWER OVER A PHONE THAT IS PAIRED WITH
+    /// NOTHING (#1080): nothing to hand off, nothing settled, no pin, no
+    /// gateway to reconcile with, a pass that reaches nobody — each an answer a
+    /// shell draws, none an error. The refusals left are the request's own.
+    #[test]
+    fn the_backup_doors_answer_an_unpaired_phone() {
+        let scratch = unlocked();
+        let Ok(wire::response::Kind::Handoff(handoff)) = ask(
+            &scratch,
+            wire::request::Kind::Handoff(wire::HandoffRequest {
+                max_bytes: 1 << 20,
+                max_parts: 8,
+            }),
+        ) else {
+            panic!("a handoff answers");
+        };
+        assert!(handoff.parts.is_empty());
+        let Ok(wire::response::Kind::Settle(settled)) = ask(
+            &scratch,
+            wire::request::Kind::Settle(wire::SettleRequest {
+                settled: vec![wire::Settled {
+                    name: "ab".repeat(32),
+                    http_status: 201,
+                    ..wire::Settled::default()
+                }],
+            }),
+        ) else {
+            panic!("a settle answers");
+        };
+        assert_eq!(
+            (settled.confirmed, settled.requeued),
+            (0, 0),
+            "an unknown name counts nothing"
+        );
+        let Ok(wire::response::Kind::Pins(pins)) =
+            ask(&scratch, wire::request::Kind::Pins(wire::PinsRequest {}))
+        else {
+            panic!("pins answer");
+        };
+        assert!(pins.destinations.is_empty());
+        let Ok(wire::response::Kind::Reconcile(reconciled)) = ask(
+            &scratch,
+            wire::request::Kind::Reconcile(wire::ReconcileRequest {}),
+        ) else {
+            panic!("a reconcile answers");
+        };
+        assert!(!reconciled.reachable, "nothing is paired to reach");
+        let Ok(wire::response::Kind::ForgetDestination(forgot)) = ask(
+            &scratch,
+            wire::request::Kind::ForgetDestination(wire::ForgetDestinationRequest {
+                gateway_id: "a-gateway".to_owned(),
+            }),
+        ) else {
+            panic!("a forget answers");
+        };
+        assert!(!forgot.forgotten);
+        let Ok(wire::response::Kind::Drain(drained)) = ask(
+            &scratch,
+            wire::request::Kind::Drain(wire::DrainRequest::default()),
+        ) else {
+            panic!("a drain answers");
+        };
+        assert_eq!(drained.stopped, wire::DrainStop::Unreachable as i32);
+        let Ok(wire::response::Kind::Releasable(releasable)) = ask(
+            &scratch,
+            wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 10 }),
+        ) else {
+            panic!("releasable answers");
+        };
+        assert!(releasable.items.is_empty() && releasable.total_bytes == 0);
+        let Ok(wire::response::Kind::Released(released)) = ask(
+            &scratch,
+            wire::request::Kind::Released(wire::ReleasedRequest {
+                content_hash: vec![vec![7; 32]],
+            }),
+        ) else {
+            panic!("released answers");
+        };
+        assert_eq!(released.recorded, 0, "a hash never recorded is not counted");
+        let Ok(wire::response::Kind::BackupStatus(status)) = ask(
+            &scratch,
+            wire::request::Kind::BackupStatus(wire::BackupStatusRequest {}),
+        ) else {
+            panic!("a status answers");
+        };
+        assert!(status.destinations.is_empty() && !status.frozen);
+        assert_eq!(
+            status.acked_at_ms, None,
+            "never acknowledged is no moment at all"
+        );
+
+        for (kind, code) in [
+            (
+                wire::request::Kind::Handoff(wire::HandoffRequest::default()),
+                wire::ErrorCode::InvalidRequest,
+            ),
+            (
+                wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 0 }),
+                wire::ErrorCode::InvalidRequest,
+            ),
+            (
+                wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
+                    content_hash: vec![7; 31],
+                }),
+                wire::ErrorCode::InvalidRequest,
+            ),
+            (
+                wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
+                    content_hash: vec![7; 32],
+                }),
+                wire::ErrorCode::InvalidRequest,
+            ),
+            (
+                wire::request::Kind::Restore(wire::RestoreRequest {
+                    phrase: "abandon abandon abandon".to_owned(),
+                    payload: "{}".to_owned(),
+                    ..wire::RestoreRequest::default()
+                }),
+                wire::ErrorCode::InvalidRequest,
+            ),
+            (
+                wire::request::Kind::PairPhone(wire::PairRequest {
+                    payload: "not-a-pairing-code".to_owned(),
+                }),
+                wire::ErrorCode::InvalidRequest,
+            ),
+        ] {
+            let refusal = ask(&scratch, kind.clone()).expect_err("refused");
+            assert_eq!(refusal.code(), code, "{kind:?} answered {refusal}");
+        }
+    }
+
+    /// A CORE WITH NO KEYS CANNOT BACK UP, AND SAYS SO: the doors that seal,
+    /// sign or name answer "unlock to back up" (`PEER_UNREACHABLE`, a state a
+    /// shell draws), and the ones that only read the ledger still answer.
+    #[test]
+    fn a_core_without_keys_says_unlock_to_back_up() {
+        let scratch = Scratch::founded();
+        for kind in [
+            wire::request::Kind::Drain(wire::DrainRequest::default()),
+            wire::request::Kind::Handoff(wire::HandoffRequest {
+                max_bytes: 1,
+                max_parts: 1,
+            }),
+            wire::request::Kind::Reconcile(wire::ReconcileRequest {}),
+            wire::request::Kind::Settle(wire::SettleRequest::default()),
+            wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 1 }),
+        ] {
+            let refusal = ask(&scratch, kind.clone()).expect_err("refused");
+            assert_eq!(
+                refusal.code(),
+                wire::ErrorCode::PeerUnreachable,
+                "{kind:?} answered {refusal}"
+            );
+            assert!(refusal.to_string().contains("seed"), "{refusal}");
+        }
+        assert!(matches!(
+            ask(&scratch, wire::request::Kind::Pins(wire::PinsRequest {})),
+            Ok(wire::response::Kind::Pins(_))
+        ));
+        assert!(
+            !scratch.dir.join("vault.scratch").exists(),
+            "a refused pass took no snapshot"
+        );
+    }
+
+    /// THE STAGE DOOR V2 OVER THE ENVELOPE: owned bytes and a derivative
+    /// land in the store and are staged for the rows that name them; a begin
+    /// that contradicts itself is refused, and a source this build has no
+    /// name for too.
+    #[test]
+    fn the_stage_door_takes_owned_bytes_and_derivatives() {
+        let scratch = unlocked();
+        let stage = |request: wire::stage_request::Kind| {
+            ask(
+                &scratch,
+                wire::request::Kind::Stage(wire::StageRequest {
+                    kind: Some(request),
+                }),
+            )
+        };
+        let put = |begin: wire::StageBegin, bytes: &[u8]| -> wire::StageHandle {
+            let Ok(wire::response::Kind::Stage(wire::StageResponse {
+                kind: Some(wire::stage_response::Kind::Begun(begun)),
+            })) = stage(wire::stage_request::Kind::Begin(begin))
+            else {
+                panic!("begun");
+            };
+            stage(wire::stage_request::Kind::Chunk(wire::StageChunk {
+                staging_id: begun.staging_id.clone(),
+                seq: 0,
+                payload: bytes.to_vec(),
+            }))
+            .expect("chunked");
+            let Ok(wire::response::Kind::Stage(wire::StageResponse {
+                kind: Some(wire::stage_response::Kind::Handle(handle)),
+            })) = stage(wire::stage_request::Kind::End(wire::StageEnd {
+                staging_id: begun.staging_id,
+            }))
+            else {
+                panic!("a handle");
+            };
+            handle
+        };
+        let original = put(
+            wire::StageBegin {
+                media_type: "image/heic".to_owned(),
+                byte_size: 9,
+                source: wire::StageSource::Owned as i32,
+                ..wire::StageBegin::default()
+            },
+            b"a picture",
+        );
+        assert!(!original.already_held);
+        let again = put(
+            wire::StageBegin {
+                media_type: "image/heic".to_owned(),
+                ..wire::StageBegin::default()
+            },
+            b"a picture",
+        );
+        assert!(again.already_held, "the same bytes again are held already");
+        let thumb = put(
+            wire::StageBegin {
+                media_type: "image/jpeg".to_owned(),
+                byte_size: 7,
+                for_hash: hex::decode(&original.content_hash).expect("hex"),
+                tier: "thumb".to_owned(),
+                ..wire::StageBegin::default()
+            },
+            b"a thumb",
+        );
+        let door = scratch.handle.bytes().expect("a door");
+        for handle in [&original, &thumb] {
+            assert!(
+                door.store()
+                    .is_complete(
+                        centraid_blobs::ContentHash::parse_hex(&handle.content_hash).expect("hex")
+                    )
+                    .expect("answers"),
+                "staged bytes are in the store"
+            );
+        }
+        let refusal = stage(wire::stage_request::Kind::Begin(wire::StageBegin {
+            media_type: "image/jpeg".to_owned(),
+            source: 9,
+            ..wire::StageBegin::default()
+        }))
+        .expect_err("an unknown source");
+        assert_eq!(refusal.code(), wire::ErrorCode::InvalidRequest);
     }
 
     #[test]
@@ -1253,6 +2138,10 @@ mod tests {
                     }),
                     with_held_thumbnail: false,
                     with_note_body: false,
+                    with_document_size: false,
+                    with_minor_units: false,
+                    local_day_columns: Vec::new(),
+                    tz: String::new(),
                 }),
                 limit: 10,
                 after: None,

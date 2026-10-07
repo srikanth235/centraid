@@ -67,20 +67,12 @@ Without the keystore the lane runs `assembleDebug` only and reports it.
 
 ## 4. Cloudflare (public site)
 
-The public marketing and docs site is the apex `centraid` Workers static-assets project ([`wrangler.json`](../wrangler.json)).
+The public marketing and docs site is the apex `centraid` Workers static-assets project ([`wrangler.json`](../wrangler.json)). **This is the only Cloudflare surface the product has**: the Centraid Assist OAuth Worker and its `oauth-production` environment were deleted with the hosted tier ([#1029](https://github.com/srikanth235/centraid/issues/1029)).
 
 | Name                    | Purpose         |
 | ----------------------- | --------------- |
 | `CLOUDFLARE_API_TOKEN`  | Wrangler deploy |
 | `CLOUDFLARE_ACCOUNT_ID` | Account         |
-
-### Centraid Assist OAuth edge
-
-- [ ] Bind **`oauth.centraid.dev`** as the only custom route for the OAuth worker; disable `workers.dev` and preview URLs.
-- [ ] Create protected GitHub Environment **`oauth-production`** with the maintainer as required reviewer.
-- [ ] Set repository variable `OAUTH_WORKER_DEPLOY_ENABLED=true` only after [the Google/Cloudflare evidence gates](release/oauth-assist-google.md) pass.
-- [ ] Store `GOOGLE_CLIENT_SECRET` and `CALLBACK_RECEIPT_SECRET` with Cloudflare Worker Secrets, not GitHub or the gateway. The public `GOOGLE_CLIENT_ID` is a Worker variable and gateway coordinate.
-- [ ] Establish two alert recipients and a rotation owner; exercise the [Assist recovery runbook](recovery/oauth-assist.md).
 
 ## 5. Cross-cutting
 
@@ -90,16 +82,22 @@ The public marketing and docs site is the apex `centraid` Workers static-assets 
 
 ## 6. Device enrollment
 
-A device pairs by redeeming a one-time ticket the gateway prints: `centraid gateway --data-dir <dir> --print-qr [N]` on the gateway host, then a scan on the phone or `centraid seat pair <ticket>` on a desktop or headless seat. There is no member or owner flag on pairing; a ticket enrols a device of the vault's owner. The redeeming device supplies its own display name. See [recovery/pairing.md](recovery/pairing.md) for the operational runbook.
+A phone pairs with a gateway — the member's laptop, a VPS, a NAS — by scanning the QR the gateway prints: `centraid-gateway serve --data-dir <dir>` prints one while nothing has paired, and `centraid-gateway pair --data-dir <dir>` beside a running `serve` prints a fresh one. The phone's **Pair with your laptop** screen (the band's More sheet), or **Add a gateway** on the Backup screen, takes the payload scanned or pasted ([R-1047-E12](decisions.md#the-24-words-on-the-phone-1047-e1)); it dials the payload's addresses, refuses a certificate whose BLAKE3 is not the payload's pin, pairs with the one-use secret and records the gateway — its addresses, certificate, token and writer epoch — in the ledger `<stem>.backup.db` beside the vault. The member compares the **safety number** the phone shows with the `safety` line `serve` prints once the pairing lands ([D-9](decisions.md#the-owners-rulings-of-2026-09-29-1047)). A phone may pair with more than one gateway, each with its own QR ([R-1080-8](decisions.md#backups-from-first-principles-1080)). There is no member or owner flag and no desktop or headless seat: v0 enrols phones only. The protocol is [gateway.md](gateway.md#pairing); the operational runbook is [recovery/pairing.md](recovery/pairing.md).
 
-**Where the gateway keeps an enrolment** (#1025, [D-1025-S7-80](decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)). `centraid gateway` stores it in the vault's own `access_device` rows and their private `access_device_secret` sibling — the same rows the `DevicesList` read renders and the `devices.revoke` admin command deletes (the `centraid devices` verbs that send them exit 3 in this build). It is therefore durable across a restart, and revoking a device in the member's list is the same act as refusing it at the transport door: the gateway looks a proved iroh EndpointId up by `access_device_secret.public_key`, and a revoked device has no such row. **Unknown and revoked are one refusal**, deliberately.
+Two operational facts worth knowing before restarting a gateway:
 
-Two operational consequences worth knowing before restarting a gateway:
+- **A pairing secret survives a restart until it is used or its day runs out.** The gateway keeps only its hash, in `state.db`; `centraid-gateway pairings` counts how many are waiting, spent or expired, and a spent or expired one is replaced by printing another with `pair`, never revived.
+- **The gateway's identity survives it too**, as `tls.key`, `tls.crt` and `gateway.id` in its data directory ([gateway.md](gateway.md#the-certificate)). Losing them mints a new identity at the next `serve`, and every paired phone must pair again.
 
-- **An unredeemed pairing code does not survive the restart.** Tickets are held in the running process; mint another with `centraid gateway --print-qr`.
-- **The gateway's own endpoint identity does survive it**, as `gateway.endpoint.key` in `<data-dir>/keys` ([D-1025-S7-81](decisions.md#slice-s7--one-loop-one-file-one-page-one-report-1025)). That directory is the one export, backup and copy gestures do not move — a copied vault does not carry the authority to answer as its gateway — so restoring a gateway onto a new machine means moving `keys/` deliberately, or re-pairing every device.
+## 7. The member's 24 words (on the phone)
 
-A gateway started with **no `--data-dir`** has no vault, keeps its enrolments in memory, and says so at start. Nothing it enrols outlives the process.
+Not a human checklist item, and listed here because it is the other half of enrolling a phone: the words are what a vault's keys derive from, and pairing a gateway above is useless to a phone that holds none. Nothing about them is done on a laptop or in a console.
+
+- **Making the first vault mints them.** The phone's core mints 24 BIP39 words from the OS CSPRNG, the phone shows them once on a capture-shielded screen and asks three back, and only then stores the seed and founds the vault, keyed at index 0 ([R-1047-E1](decisions.md#the-24-words-on-the-phone-1047-e1)). Later vaults take the next index from the same seed with no new words (R-1047-E2).
+- **The seed is kept by the platform, the words by the phone and the member.** The seed goes to the synchronised keychain (iCloud Keychain, Android Block Store), or to this phone only where the platform will not take it (R-1047-E6). The words are also kept in this phone's device-only store, so **Show my 24 words** in the band's More sheet can show them again behind the phone's owner check (R-1047-E10); they never sync. The member's written words are the only way back when neither the seed nor the phone survives — [recovery/backup-restore.md](recovery/backup-restore.md).
+- **A new phone is restored, not re-minted.** Restore from the words — or from the synchronised seed, with no words typed (R-1047-E9) — brings each vault back at its own index with a device secret the restore mints (R-1047-E3); a phone that lost only its seed is re-keyed from Locker's "Enter your 24 words" (R-1047-E5).
+- **Pairing with a gateway** is the phone's **Pair with your laptop** screen, or **Add a gateway** on the Backup screen, over the payload `centraid-gateway pair` prints, pasted or scanned (iOS reads the QR with AVFoundation; Android with CameraX and ZXing, asking for the camera at the tap — R-1047-E14): the certificate is checked against the payload's pin, the one-use secret pairs the vault, and the pairing's 60-digit safety number is shown to compare with the `safety` line `serve` prints once the pairing lands (D-9, superseding R-1047-E12's grouped endpoint). A vault open without its words is offered **Enter your 24 words** (D-11). A gateway that answered and refused says so (R-1047-E13). Each vault lives in its own directory with its own backup ledger and spool (R-1047-E8).
+- **The device secret is the core's.** It is minted at pair or restore, handed to the shell once, kept in the device-only store and passed at every keyed open (R-1047-E4).
 
 ## After enrollment
 

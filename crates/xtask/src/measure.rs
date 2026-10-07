@@ -60,9 +60,12 @@ const APP_CRATE_ENTRY: [&str; 2] = [
 
 /// The crate `singleCrateTestSeconds` is measured on: the heaviest one, because
 /// the number is a promise about the worst red-test loop and not the best.
-/// `centraid-net` carries iroh, quinn and tokio; nothing else in the workspace
-/// links more.
-const HEAVIEST_CRATE: &str = "centraid-net";
+/// The gateway carries tokio, hyper, axum, rustls, rcgen, mDNS and SQLite;
+/// nothing else in the workspace links more. It took this over from
+/// `centraid-gateway-server` when #1080 replaced that crate, which had taken
+/// it from `centraid-net` under #1029: the number follows the heaviest graph
+/// to whichever crate binds the gateway's listener.
+const HEAVIEST_CRATE: &str = "centraid-gateway";
 
 /// One measurable key: its ledger name, the one line that says what it times,
 /// and how it is taken.
@@ -85,7 +88,7 @@ const KEYS: [Key; 5] = [
     },
     Key {
         name: "singleCrateTestSeconds",
-        what: "`cargo test -p centraid-net` repeated, the heaviest crate's steady-state loop",
+        what: "`cargo test -p <the gateway crate>` repeated, the heaviest crate's steady-state loop",
         take: take_single_crate_test,
     },
     Key {
@@ -183,7 +186,7 @@ fn take_incremental_check(root: &Path) -> Result<f64> {
 /// The first run is discarded, for the same reason `incrementalCheckSeconds`
 /// checks before it edits: this key is the loop a red test puts you IN, not the
 /// cost of entering it. Entering it is expensive and measured separately —
-/// `cargo test -p centraid-net` after `cargo test --workspace` rebuilds the
+/// `cargo test -p <one crate>` after `cargo test --workspace` rebuilds the
 /// dependency graph, because a single package's feature resolution is not the
 /// workspace's union, so the two commands invalidate each other's artifacts.
 /// On this container that switch cost 185.8 s and 161.7 s on two runs against

@@ -255,12 +255,13 @@ fn every_session_runs_against_a_fresh_world() {
     );
 }
 
-/// THE HAZARD, STATED AS A TEST.
+/// A TRASHED TASK IS READ BESIDE THE BOARD, STAMPED NOT LIVE.
 ///
-/// The Tasks board hands back a soft-deleted task and the FTS door does not.
-/// The harness does not adopt either door's answer: it stamps every row from
-/// the row's own `deleted_at`, so a scorer built on `VaultRow::live` is right
-/// whichever door answered — and stays right the day Tasks is fixed.
+/// The Tasks board leaves a soft-deleted task out (#1047) and so does the FTS
+/// door; the harness reads the trash beside the board so a suite can ask about
+/// a binned task and restore it. It stamps every row from the row's own
+/// `deleted_at`, so a scorer built on `VaultRow::live` never answers with a
+/// row the member deleted.
 #[test]
 fn a_trashed_task_comes_back_from_the_board_and_is_stamped_not_live() {
     let dealt = template().deal().expect("a world is dealt");
@@ -269,23 +270,19 @@ fn a_trashed_task_comes_back_from_the_board_and_is_stamped_not_live() {
     let trashed = board
         .iter()
         .find(|row| row.label == "Return the library books")
-        .expect(
-            "the Tasks board no longer hands back a trashed task — the defect is FIXED. \
-             This test and the module note about it can go.",
-        );
+        .expect("the trashed task is not read beside the Tasks board");
     assert!(
         !trashed.live,
         "the board's trashed task was stamped live; the scorer would answer with a row \
          the member deleted"
     );
-    // AND THE OTHER DOOR SIMPLY DOES NOT HOLD IT — which is the disagreement.
+    // AND THE SEARCH DOOR DOES NOT HOLD IT: a trashed task leaves the index.
     let hits = ctx
         .search("schedule.task", "library", 10)
         .expect("the search door answers");
     assert!(
         hits.is_empty(),
-        "the FTS door now holds the trashed task too, so there is no disagreement to \
-         rule on: {hits:?}"
+        "the FTS door holds the trashed task: {hits:?}"
     );
 }
 

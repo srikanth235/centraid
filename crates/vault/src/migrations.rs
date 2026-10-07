@@ -78,6 +78,63 @@ pub const BACKUP_INDEX_SQL: &str =
 pub const BLOB_CUSTODY_SQL: &str =
     include_str!("../../../contracts/migrations/004_blob_custody.sql");
 
+/// Rung five: the cut — the planes v1 does not have leave the schema (#1029).
+///
+/// **WHY A NEW VAULT FOUNDS AND THEN DROPS.** Rung one is generated from
+/// `contracts/golden/issue-1020/vault.db.gz`, a frozen v0 vault with no
+/// generator; dropping a table there means hand-editing a frozen corpus, which
+/// is the "green by editing the fixture" this repository forbids. So the corpus
+/// keeps describing v0 and the deletions are a rung, like every other schema
+/// change (the owner's ruling of 2026-09-21). The cost is two `sqlite_master`
+/// rows per table in one `Vault::create`; squashing the ladder before the first
+/// release would remove even that and is an owner question, not a cleanup —
+/// a squash is a decision about the migration contract.
+pub const THE_CUT_SQL: &str = include_str!("../../../contracts/migrations/005_the_cut.sql");
+
+/// Rung six: a collection is a notebook or an album, and says which.
+///
+/// `core_collection` gains a REQUIRED `kind` (`notebook` | `album`), so Notes
+/// and Photos stop reading — and writing into, and deleting — each other's
+/// rows. A rebuild rather than `ADD COLUMN`, because SQLite cannot add a
+/// `NOT NULL` column without a default and a default would make the kind
+/// optional. The file states how existing rows are classified.
+pub const COLLECTION_KIND_SQL: &str =
+    include_str!("../../../contracts/migrations/006_collection_kind.sql");
+
+/// Rung seven: the Locker names one generation (#1047, R-1047-D2).
+///
+/// `locker_key` loses `retired_at` and `locker_key_live_idx`, whose only
+/// writer was the rotation R-1047-D1 deleted, and gains
+/// `locker_key_one_generation`, a unique index on a constant that makes a
+/// second row unrepresentable. A rebuild carrying the live row only.
+pub const LOCKER_KEY_ONE_GENERATION_SQL: &str =
+    include_str!("../../../contracts/migrations/007_locker_key_one_generation.sql");
+
+/// Rung eight: a login has no match policy (#1047, Q-1047-15).
+///
+/// `locker_item.url_match_policy` and `locker_item_address.match_policy`
+/// described how wide an address was for a matcher R-1047-D3 deleted; nothing
+/// read them. Two `DROP COLUMN`s, each column's CHECK being its own.
+pub const LOCKER_NO_MATCH_POLICY_SQL: &str =
+    include_str!("../../../contracts/migrations/008_locker_no_match_policy.sql");
+
+/// Rung nine: a vault keeps no notices (#1047).
+///
+/// `notifications_notice` had no writer since the planes that raised notices
+/// were deleted (#1029), and no reader since the inbox left with the v0 tree;
+/// rung five did not name it, so a new vault still founded it. One `DROP`: no
+/// trigger, view or foreign key names the table.
+pub const NO_NOTICES_SQL: &str = include_str!("../../../contracts/migrations/009_no_notices.sql");
+
+/// Rung ten: the vault keeps no backup index (#1080).
+///
+/// Rungs three and four founded the old plane's index inside the vault — the
+/// range dedup index, the base's range list, a file key per blob and where its
+/// bytes sat. The plane that wrote them is deleted and its replacement names
+/// every part from the plaintext it carries and asks the gateway what it
+/// holds, so nothing reads them. Four `DROP`s, the child before its parent.
+pub const BACKUP_V2_SQL: &str = include_str!("../../../contracts/migrations/010_backup_v2.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -103,6 +160,36 @@ pub const LADDER: &[Migration] = &[
         version: 4,
         name: "blob-custody",
         sql: BLOB_CUSTODY_SQL,
+    },
+    Migration {
+        version: 5,
+        name: "the-cut",
+        sql: THE_CUT_SQL,
+    },
+    Migration {
+        version: 6,
+        name: "collection-kind",
+        sql: COLLECTION_KIND_SQL,
+    },
+    Migration {
+        version: 7,
+        name: "locker-key-one-generation",
+        sql: LOCKER_KEY_ONE_GENERATION_SQL,
+    },
+    Migration {
+        version: 8,
+        name: "locker-no-match-policy",
+        sql: LOCKER_NO_MATCH_POLICY_SQL,
+    },
+    Migration {
+        version: 9,
+        name: "no-notices",
+        sql: NO_NOTICES_SQL,
+    },
+    Migration {
+        version: 10,
+        name: "backup-v2",
+        sql: BACKUP_V2_SQL,
     },
 ];
 
@@ -303,6 +390,52 @@ pub fn render_baseline(corpus: &Path) -> Result<String> {
     if let Some(dir) = scratch {
         let _ = std::fs::remove_dir_all(&dir);
     }
+    rendered
+}
+
+/// The header the ladder-head DDL fixture carries, naming its own generator.
+pub const LADDER_DDL_HEADER: &str = "\
+-- GENERATED — do not edit. THE SCHEMA A NEW VAULT GETS: the `sqlite_master` of
+-- a file founded at the ladder head, one statement per block.
+--
+--   cargo run -p centraid-vault --bin export-ladder-ddl \\
+--     > contracts/schema/vault-ddl.sql
+--
+-- Not the corpus. `contracts/golden/issue-1020/vault-ddl.sql` describes the
+-- frozen v0 file as it was, and a rung is allowed to move this file away from
+-- it — which is exactly what rung five does (#1029, the owner's ruling of
+-- 2026-09-21). Ordered by type then name, for READING; the runnable ordering
+-- is `contracts/migrations/001_baseline.sql`.
+--
+-- Source: sqlite_master (type, name, tbl_name, sql) where sql is not null.
+-- `sqlite_stat*` is excluded: it is the planner's own statistics, so it says
+-- how much data a file holds and nothing about its shape.
+-- `crates/vault/tests/ladder_ddl.rs` founds a vault and diffs this file
+-- against its live schema on every run.
+";
+
+/// Render the ladder head's DDL: found a vault in a scratch directory and read
+/// its `sqlite_master` back.
+///
+/// **Founded, not transcribed.** The question this fixture answers is "what
+/// does a file this build writes actually look like", and the only honest way
+/// to answer it is to write one. The scratch file is removed before returning;
+/// it is opened a second time, through `centraid_ontology`, because the
+/// renderer is the one the corpus's own description uses and two renderers
+/// would be two answers to "what does this file look like".
+pub fn render_ladder_ddl() -> Result<String> {
+    use centraid_ontology::golden::scratch_dir;
+    use centraid_ontology::{render_ddl_objects, schema_objects_of};
+
+    let dir = scratch_dir();
+    std::fs::create_dir_all(&dir)?;
+    let db_path = dir.join("vault.db");
+    let rendered = (|| -> Result<String> {
+        let vault = crate::Vault::create(&db_path)?;
+        let objects = vault.read(|connection| Ok(schema_objects_of(connection)?))?;
+        Ok(render_ddl_objects(&objects, LADDER_DDL_HEADER))
+    })();
+    let _ = std::fs::remove_dir_all(&dir);
     rendered
 }
 

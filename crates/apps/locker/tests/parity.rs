@@ -10,23 +10,27 @@
 //! fixture passes in v0 too" is that one command and not a second suite.
 //!
 //! This file reads the same bundle from the other side: `rows.json` becomes a
-//! vault (`contracts/schema/vault-ddl.sql` + the kit's one insert), the port's
-//! own statements and folds run over it, and the answers are compared with
-//! `queries.json` — **ids and ORDER included**, because the rows and the
-//! answers were canonicalised in one pass over one vault, so an id in
-//! `queries.json` names the same row as the same id in `rows.json`.
+//! vault (`contracts/schema/vault-ddl.sql` + the kit's one insert), **the
+//! phone's own loaders** (`crate::phone`: `load_items`, `load_search`,
+//! `load_item`, and the access fold) run over it, and the answers are
+//! compared with `queries.json` (#1047 T2: v0's shelf folds had no production
+//! caller and are deleted, so parity is held against the code the phone
+//! runs). Ids compare as they are, because the rows and the answers were
+//! canonicalised in one pass over one vault. v0's trash shelf is the kit's
+//! page read on the phone and stays here as the record
+//! ([`the_trash_case_stays_as_the_record`]).
 //!
 //! ## THE FOUR ANSWERS THAT DO NOT COMPARE, EACH NAMED
 //!
 //! Three are custody (D-1020-L6, D-1020-L7): `locker.watchtower`,
 //! `locker.totp_code` and `locker.export` all needed plaintext to compute, and
-//! after wave 4 the gateway holds no member key. The fixture records **v0's**
+//! the command plane holds no member key — only the phone's core does. The fixture records **v0's**
 //! shapes so the change is visible in a diff rather than silent, and
 //! [`the_manifest_names_every_answer_the_custody_change_moves`] asserts the
 //! manifest names each one.
 //!
 //! The fourth is a **v0 bug this port does not reproduce**: `locker.access`
-//! answers `{entries: [], vaultDenied: …}` through the real gateway, because
+//! answered `{entries: [], vaultDenied: …}` through v0's gateway, because
 //! `access_receipt` is not one of the vault's 96 catalog entities and the paged
 //! door refuses `FROM access_receipt`. See
 //! [`v0s_access_query_is_refused_by_its_own_door_and_the_port_answers`].
@@ -48,32 +52,30 @@
 //! nothing dropped — and the ordering claim is made where it can be:
 //! [`every_shelf_declares_the_order_v0_declares`] asserts each statement's own
 //! declared order against v0's, and the sequence over distinct instants is
-//! proven in `src/queries.rs`'s own tests. The manifest records the pair as
+//! the phone's shelf statement declares ([`every_shelf_declares_the_same_order`]).
+//! The manifest records the pair as
 //! `order` / `orderWhy`, the way Photos records its three `localeCompare`
 //! rosters (D-1020-D3-6).
 //!
-//! ## WHAT THE WATCH MAP COMES FROM, AND WHY THAT IS THE RIGHT SEAM
+//! ## WHAT v0 DERIVED AND THE PORT DOES NOT, NAMED
 //!
-//! `weak`, `reused` and a card's `last4` are derived from **plaintext**, which
-//! this fixture deliberately does not carry — every sealed cell in `rows.json`
-//! is a token. So the derivation cannot run here, and the comparison feeds the
-//! port's `decorate` the entries **v0's own `locker.watchtower` answered**
-//! ([`v0_watch`]). That is the seam on purpose: the scorer itself is v0's exact
-//! `strengthScore`, proven cell by cell in `src/watchtower.rs`'s own tests, and
-//! what parity is for here is the **fold** — which rows get a `severity`, which
-//! subtitle a card shows, which rows the review shelf lists, and in what order.
-//! Feeding the port its own derivation would have compared the port to itself.
+//! v0 decorated each row with `weak`, `reused` and a card's `last4`, derived
+//! by unsealing every password (`locker.watchtower`). The port does not score
+//! weak or reused at all (Q-1047-16): the fold is deleted, and so is the
+//! `watchtower` query. So [`from_case`] reads v0's answer **without** what that
+//! derivation produced — `weak` and `reused` dropped, a `warn` severity read as
+//! none, a card's `•••• 1234` read as `Card` — and compares everything else.
+//! The bundle keeps v0's own values as the record.
 
-use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use centraid_apps_kit::contract_vault::open_contract_vault;
+use centraid_apps_kit::contract_vault::{FrozenRowMapping, open_contract_vault_without};
 use centraid_apps_kit::reads::read_window;
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_apps_locker::queries::{self, Decorated, Decorations, Severity, Shelf, Vocabulary};
-use centraid_apps_locker::watchtower::WatchEntry;
-use centraid_apps_locker::{manifest, origin::MatchPolicy};
+use centraid_apps_locker::manifest;
+use centraid_apps_locker::phone::{self, Listed};
+use centraid_apps_locker::queries;
 use rusqlite::Connection;
 
 fn root() -> PathBuf {
@@ -96,7 +98,31 @@ fn v0_vault() -> Connection {
         .expect("the committed DDL is readable");
     let rows = fs::read_to_string(root().join("contracts/apps/locker/rows.json"))
         .expect("the fixture rows are readable");
-    open_contract_vault(&ddl, &rows).expect("the fixture vault is built")
+    open_contract_vault_without(
+        &ddl,
+        &rows,
+        // THE MAPPING, stated: `contracts/apps/locker/rows.json` is frozen and
+        // still carries `locker_item.connection_id`, the foreign key into
+        // `sync_connection` that rung five drops with the connector plane
+        // (#1029). Every one of its cells is NULL in the bundle. It also
+        // carries `locker_key.retired_at`, which rung seven drops with
+        // rotation (R-1047-D2); its one cell is NULL — the live generation.
+        // And it carries `locker_item.url_match_policy` and
+        // `locker_item_address.match_policy`, which rung eight drops with the
+        // matcher nothing ran (Q-1047-15); their cells are the schema default,
+        // which no fold in the port reads.
+        &FrozenRowMapping {
+            tables_gone: &[],
+            columns_gone: &[
+                ("locker_item", "connection_id"),
+                ("locker_item", "url_match_policy"),
+                ("locker_item_address", "match_policy"),
+                ("locker_key", "retired_at"),
+            ],
+            columns_added: &[],
+        },
+    )
+    .expect("the fixture vault is built")
 }
 
 /// Every query case in the bundle, in the order the generator wrote them.
@@ -113,133 +139,6 @@ fn case(query: &str, input: serde_json::Value) -> serde_json::Value {
         .into_iter()
         .find(|entry| entry["query"] == serde_json::json!(query) && entry["input"] == input)
         .unwrap_or_else(|| panic!("the bundle has no {query} case at {input}"))
-}
-
-/// v0's own derivation, read off its `watchtower` answer.
-///
-/// See this file's header: the plaintext is not in the fixture, so the scorer
-/// cannot run and the FOLD is what is compared.
-fn v0_watch() -> BTreeMap<String, WatchEntry> {
-    let commands = read_json("contracts/apps/locker/commands.json");
-    let answer = commands
-        .as_array()
-        .expect("the command bundle is a list")
-        .iter()
-        .find(|entry| entry["command"] == serde_json::json!("locker.watchtower"))
-        .expect("the bundle records the derivation v0 ran")["output"]["items"]
-        .as_array()
-        .cloned()
-        .expect("v0's derivation answers a list");
-    let map: BTreeMap<String, WatchEntry> = answer
-        .iter()
-        .filter_map(|row| {
-            Some((
-                row["item_id"].as_str()?.to_owned(),
-                WatchEntry {
-                    weak: row["weak"].as_bool().unwrap_or(false),
-                    reused: row["reused"].as_bool().unwrap_or(false),
-                    last4: row["last4"].as_str().map(str::to_owned),
-                },
-            ))
-        })
-        .collect();
-    // NOT VACUOUS. A derivation that answered nothing would make every
-    // `severity`, `subtitle` and review-shelf comparison below pass trivially.
-    assert_eq!(
-        map.len(),
-        6,
-        "v0 derived six items: five live and the archived one"
-    );
-    assert!(
-        map.values().any(|entry| entry.weak),
-        "no item is weak in the fixture — the severity comparison would say nothing"
-    );
-    assert!(
-        map.values().any(|entry| entry.reused),
-        "no item is reused in the fixture"
-    );
-    assert!(
-        map.values().any(|entry| entry.last4.is_some()),
-        "no card's last4 came through — the card subtitle comparison would say nothing"
-    );
-    map
-}
-
-/// Everything a shelf needs, read once off the fixture vault.
-///
-/// `watch` and `alias` are flags rather than always-on because **v0's four
-/// shelves do not decorate alike**, and a port that decorated them all the
-/// same way would be a port that answered something v0 never answered. See
-/// [`only_the_live_shelf_carries_the_connector_alias_in_v0`].
-fn decorations(connection: &Connection, watch: bool, alias: bool) -> Decorations {
-    let door = TestDoor::new(connection);
-    let concepts = read_window(&door, &queries::concepts_statement(), 2_000)
-        .expect("the concept scheme reads")
-        .rows;
-    let schemes = read_window(&door, &queries::schemes_statement(), 2_000)
-        .expect("the scheme table reads")
-        .rows;
-    let vocabulary = Vocabulary::of(&concepts, &schemes);
-    let ids = live_ids(connection);
-    let tag_rows = read_window(
-        &door,
-        &queries::tags_statement(&ids).expect("the tag statement builds"),
-        2_000,
-    )
-    .expect("the tag plane reads")
-    .rows;
-    let alias_rows = read_window(
-        &door,
-        &queries::alias_statement(&ids).expect("the alias statement builds"),
-        2_000,
-    )
-    .expect("the alias table reads")
-    .rows;
-    Decorations {
-        tags: queries::fold_tags(&tag_rows, &vocabulary),
-        starred: vocabulary
-            .starred_concept()
-            .map(|concept| queries::fold_starred(&tag_rows, &concept))
-            .unwrap_or_default(),
-        watch: if watch { Some(v0_watch()) } else { None },
-        alias: if alias {
-            alias_rows
-                .iter()
-                .filter_map(|row| {
-                    Some((
-                        centraid_apps_kit::row::text_of(row, "item_id")?,
-                        centraid_apps_kit::row::text_of(row, "alias")?,
-                    ))
-                })
-                .collect()
-        } else {
-            BTreeMap::new()
-        },
-    }
-}
-
-/// Every item id the fixture carries, for the two bounded sidecar reads.
-fn live_ids(connection: &Connection) -> Vec<String> {
-    let door = TestDoor::new(connection);
-    let mut ids: Vec<String> = Vec::new();
-    for shelf in [Shelf::Live, Shelf::Archived] {
-        let window =
-            read_window(&door, &queries::items_statement(shelf), 2_000).expect("a shelf reads");
-        for row in &window.rows {
-            if let Some(id) = centraid_apps_kit::row::text_of(row, "item_id") {
-                ids.push(id);
-            }
-        }
-    }
-    let window = read_window(&door, &queries::trash_statement(), 2_000).expect("trash reads");
-    for row in &window.rows {
-        if let Some(id) = centraid_apps_kit::row::text_of(row, "item_id") {
-            ids.push(id);
-        }
-    }
-    ids.sort_unstable();
-    ids.dedup();
-    ids
 }
 
 /// A value whose object keys are in sorted order, at every depth.
@@ -285,60 +184,65 @@ fn same_rows(mine: &[serde_json::Value], theirs: &[serde_json::Value], what: &st
     assert_eq!(mine.len(), theirs.len(), "{what}: the row COUNT moved");
 }
 
-/// One decorated row, as the fields the bundle carries.
-fn as_case(row: &Decorated) -> serde_json::Value {
+/// The fields of a row the PHONE answers and v0 answered alike (#1047 T2).
+///
+/// The phone's shelf row ([`Listed`]) carries the item's browsable half, its
+/// star and its tags. What v0 derived or decorated beyond that is NOT on a
+/// phone row and is not compared, each for a stated reason: `severity` (a
+/// render class derived from `compromised`, which is compared), a card's
+/// `•••• 1234` subtitle (derived by unsealing, Q-1047-16), and the connector
+/// `alias` (the phone answers it on the item, never on a list — see
+/// [`only_the_live_shelf_carries_the_connector_alias`]). `updated_at` is
+/// `<host-clock>` in the bundle.
+const COMPARED: [&str; 11] = [
+    "item_id",
+    "type",
+    "title",
+    "subtitle",
+    "favorite",
+    "tags",
+    "compromised",
+    "url",
+    "expiry",
+    "archived",
+    "password_set_at",
+];
+
+/// One phone row, as the compared fields.
+fn as_case(listed: &Listed) -> serde_json::Value {
+    let row = &listed.row;
     serde_json::json!({
         "item_id": row.item_id,
-        "type": row.item_type,
+        "type": listed.rendered_type(),
         "title": row.title,
-        "subtitle": row.subtitle,
-        "favorite": row.favorite,
-        "tags": row.tags,
+        "subtitle": listed.subtitle(),
+        "favorite": listed.starred,
+        "tags": listed.tags,
         "compromised": row.compromised,
-        "severity": match row.severity {
-            Severity::None => "",
-            Severity::Warn => "warn",
-            Severity::Danger => "danger",
-        },
         "url": row.url,
         "expiry": row.expiry,
-        "alias": row.alias,
-        "archived": row.archived,
+        "archived": listed.archived(),
         "password_set_at": row.password_set_at,
-        "purge_at": row.purge_at,
-        "weak": row.weak(),
-        "reused": row.reused(),
     })
 }
 
 /// The same fields off a bundle row, so the two are compared as one value.
 fn from_case(row: &serde_json::Value) -> serde_json::Value {
     let mut picked = serde_json::Map::new();
-    for key in [
-        "item_id",
-        "type",
-        "title",
-        "subtitle",
-        "favorite",
-        "tags",
-        "compromised",
-        "severity",
-        "url",
-        "expiry",
-        "alias",
-        "archived",
-        "password_set_at",
-        "purge_at",
-        "weak",
-        "reused",
-    ] {
-        // `updated_at` is `<host-clock>` in the fixture and the real instant in
-        // the vault the rows rebuild, so it is the one field a token makes
-        // incomparable. Every other field on the row is compared.
+    for key in COMPARED {
         picked.insert(
             key.to_owned(),
             row.get(key).cloned().unwrap_or(serde_json::Value::Null),
         );
+    }
+    // WHAT v0's DERIVATION PRODUCED, READ AS THE PORT ANSWERS WITHOUT IT
+    // (Q-1047-16; this file's header).
+    if picked["type"] == serde_json::json!("card")
+        && picked["subtitle"]
+            .as_str()
+            .is_some_and(|subtitle| subtitle.starts_with("•••• "))
+    {
+        picked.insert("subtitle".to_owned(), serde_json::json!("Card"));
     }
     serde_json::Value::Object(picked)
 }
@@ -478,6 +382,8 @@ fn the_manifest_names_every_answer_the_custody_change_moves() {
             "locker.watchtower"
         ]
     );
+    // `locker.watchtower` is recorded as v0's and is not a command any more
+    // (Q-1047-16).
     for (command, reason) in changes {
         let reason = reason.as_str().unwrap_or_default();
         assert!(
@@ -502,7 +408,28 @@ fn the_manifests_query_list_is_the_apps_query_list() {
         .map(|name| name.as_str().expect("a string"))
         .collect();
     assert_eq!(declared.len(), 8);
+    // THREE OF v0's EIGHT ARE RETIRED, named in the parity manifest with why:
+    // the autofill pair served a browser extension v0 does not have
+    // (R-1047-D3), and the Watchtower review scored weak and reused by
+    // unsealing every password (Q-1047-16). The port must NOT carry them, and
+    // every other one it must.
+    let retired = manifest_json["queriesRetired"]
+        .as_object()
+        .expect("the parity manifest names the retired queries");
+    let mut retired_names: Vec<&str> = retired.keys().map(String::as_str).collect();
+    retired_names.sort_unstable();
+    assert_eq!(
+        retired_names,
+        ["autofill-candidates", "autofill-item", "watchtower"]
+    );
     for name in &declared {
+        if retired.contains_key(*name) {
+            assert!(
+                manifest().query(name).is_none(),
+                "{name} is retired and the app still declares it"
+            );
+            continue;
+        }
         assert!(
             manifest().query(name).is_some(),
             "{name} is in the parity manifest and not in the app's"
@@ -515,7 +442,7 @@ fn the_manifests_query_list_is_the_apps_query_list() {
             query.name
         );
     }
-    // And every one of the eight has at least one case, so a query nobody
+    // And every one of v0's eight has at least one case, so a query nobody
     // fixtured is a red here rather than a gap nobody counted.
     for name in &declared {
         assert!(
@@ -539,27 +466,21 @@ fn the_manifests_query_list_is_the_apps_query_list() {
 // THE EIGHT QUERIES, AGAINST v0's OWN ANSWERS
 // ---------------------------------------------------------------------------
 
-/// The `items` shelf at all three of v0's inputs — rows, order, decoration and
-/// the foot line's counts.
+/// The `items` shelf at all three of v0's inputs, through the PHONE's loader
+/// (`phone::load_items`, #1047 T2) — rows, the window and whether it filled.
 #[test]
 fn the_items_shelf_answers_what_v0_answered() {
     let connection = v0_vault();
     let door = TestDoor::new(&connection);
-    let decorations = decorations(&connection, true, true);
-
-    for (input, shelf) in [
-        (serde_json::json!({}), Shelf::Live),
-        (serde_json::json!({ "limit": 20 }), Shelf::Live),
-        (serde_json::json!({ "archived": true }), Shelf::Archived),
+    for (input, archived) in [
+        (serde_json::json!({}), false),
+        (serde_json::json!({ "limit": 20 }), false),
+        (serde_json::json!({ "archived": true }), true),
     ] {
         let expected = case("items", input.clone());
-        let window = queries::items_window(input["limit"].as_i64());
-        let read = queries::read_shelf(&door, &queries::items_statement(shelf), window)
-            .expect("the shelf reads");
-        let answer = queries::items_answer(shelf, window, &read, &decorations, None);
-
-        // THE WINDOW, which is the one arithmetic v0 got wrong somewhere else
-        // and gets right here: 300 by default, clamped UP from 20.
+        let answer =
+            phone::load_items(&door, archived, input["limit"].as_i64()).expect("the shelf reads");
+        // THE WINDOW: 300 by default, clamped UP from 20.
         assert_eq!(
             answer.window as u64,
             expected["output"]["window"].as_u64().expect("a window"),
@@ -572,9 +493,6 @@ fn the_items_shelf_answers_what_v0_answered() {
                 .expect("truncated"),
             "truncated at {input}"
         );
-        assert_eq!(answer.archived, shelf == Shelf::Archived);
-
-        // THE ROWS, in v0's own order, with every field the bundle carries.
         let mine: Vec<serde_json::Value> = answer.items.iter().map(as_case).collect();
         let theirs: Vec<serde_json::Value> = expected["output"]["items"]
             .as_array()
@@ -582,82 +500,16 @@ fn the_items_shelf_answers_what_v0_answered() {
             .iter()
             .map(from_case)
             .collect();
-        same_rows(
-            &mine,
-            &theirs,
-            &format!("the {shelf:?} shelf's rows at {input}"),
-        );
+        same_rows(&mine, &theirs, &format!("the shelf's rows at {input}"));
         assert!(!mine.is_empty(), "the shelf is empty at {input}");
-
-        // THE REVIEW SUMMARY THAT RIDES THE SHELF. `None` here would mean the
-        // derivation did not run, which is a different answer from zero.
-        let summary = answer.watchtower.expect("the derivation ran");
-        let expected_summary = &expected["output"]["watchtower"];
-        assert_eq!(
-            summary.weak as u64,
-            expected_summary["weak"].as_u64().expect("weak"),
-            "weak at {input}"
-        );
-        assert_eq!(
-            summary.reused as u64,
-            expected_summary["reused"].as_u64().expect("reused"),
-            "reused at {input}"
-        );
-        assert_eq!(
-            summary.compromised as u64,
-            expected_summary["compromised"]
-                .as_u64()
-                .expect("compromised")
-        );
-        let listed: Vec<serde_json::Value> = summary.items.iter().map(as_case).collect();
-        let expected_listed: Vec<serde_json::Value> = expected_summary["items"]
-            .as_array()
-            .expect("a list")
-            .iter()
-            .map(from_case)
-            .collect();
-        same_rows(
-            &listed,
-            &expected_listed,
-            &format!("the review rows at {input}"),
-        );
     }
 }
 
-/// A ZEROED SUMMARY IS UNREACHABLE, and this is the half of that rule the
-/// fixture can prove: the same shelf read with no derivation answers `None`,
-/// never a summary saying nothing is weak.
-#[test]
-fn a_shelf_whose_derivation_did_not_run_answers_no_summary_rather_than_zero() {
-    let connection = v0_vault();
-    let door = TestDoor::new(&connection);
-    let decorations = decorations(&connection, false, true);
-    let read = queries::read_shelf(&door, &queries::items_statement(Shelf::Live), 300)
-        .expect("the shelf reads");
-    let answer = queries::items_answer(Shelf::Live, 300, &read, &decorations, None);
-    assert!(answer.watchtower.is_none());
-    // …and every row says "not asked" rather than "not weak".
-    assert!(answer.items.iter().all(|row| row.weak().is_none()));
-    assert!(
-        answer
-            .items
-            .iter()
-            .all(|row| row.severity != Severity::Warn),
-        "a row cannot be warned without a derivation"
-    );
-    assert!(!answer.items.is_empty());
-}
-
-/// `search` at all four of v0's terms, including the two that find nothing for
-/// two different reasons.
+/// `search` at all four of v0's terms, through `phone::load_search`.
 #[test]
 fn search_answers_what_v0_answered() {
     let connection = v0_vault();
     let door = TestDoor::new(&connection);
-    // NO ALIAS MAP: v0's `search.ts:73` calls `decorate` with four arguments
-    // and the fifth is the alias. See
-    // `only_the_live_shelf_carries_the_connector_alias_in_v0`.
-    let decorations = decorations(&connection, true, false);
     let mut found = 0usize;
     for term in ["bank", "ada@", "", "combination"] {
         let expected = case("search", serde_json::json!({ "term": term }));
@@ -667,31 +519,13 @@ fn search_answers_what_v0_answered() {
             .iter()
             .map(from_case)
             .collect();
-        // An empty term is NO SEARCH, not every row — v0's own rule, and the
-        // one case where the port must not even read.
-        let mine: Vec<serde_json::Value> = if term.is_empty() {
-            Vec::new()
-        } else {
-            let mut statement = queries::search_statement();
-            statement = statement.filter(
-                "(title LIKE ? OR username LIKE ?) AND deleted_at IS NULL",
-                vec![
-                    centraid_apps_kit::statement::PageBindValue::Text(format!("%{term}%")),
-                    centraid_apps_kit::statement::PageBindValue::Text(format!("%{term}%")),
-                ],
-            );
-            let read = queries::read_shelf(&door, &statement, queries::SEARCH_ROWS)
-                .expect("the search reads");
-            let rows: Vec<centraid_apps_locker::queries::ItemRow> = read
-                .rows
-                .iter()
-                .map(centraid_apps_locker::queries::ItemRow::of)
-                .collect();
-            queries::decorate(&rows, &decorations)
-                .iter()
-                .map(as_case)
-                .collect()
-        };
+        // An empty term is NO SEARCH, not every row — v0's own rule.
+        let mine: Vec<serde_json::Value> = phone::load_search(&door, term, 0)
+            .expect("the search reads")
+            .items
+            .iter()
+            .map(as_case)
+            .collect();
         same_rows(&mine, &theirs, &format!("search {term:?}"));
         found += mine.len();
     }
@@ -703,188 +537,35 @@ fn search_answers_what_v0_answered() {
     );
 }
 
-/// The trash shelf: purge dates, the star kept, and the dash subtitle.
+/// THE TRASH SHELF IS NOT THIS CRATE'S ON THE PHONE (#1047, R-1047-K5): it
+/// is the kit's one trash screen over a page read (`LOCKER_TRASH`, compared
+/// by the shared layer's `AppReadsSpec`). v0's answer stays the record; what
+/// is asserted here is that it still says what the kit's screen draws — one
+/// row, with its purge date.
 #[test]
-fn the_trash_shelf_answers_what_v0_answered() {
-    let connection = v0_vault();
-    let door = TestDoor::new(&connection);
-    // NO ALIAS MAP and NO WATCH MAP: v0's `trash.ts:44` passes three
-    // arguments. A trashed row is not audited and carries no connector handle.
-    let decorations = decorations(&connection, false, false);
+fn the_trash_case_stays_as_the_record() {
     let expected = case("trash", serde_json::json!({}));
-    let read = queries::read_shelf(&door, &queries::trash_statement(), queries::TRASH_ROWS)
-        .expect("the trash reads");
-    let rows: Vec<centraid_apps_locker::queries::ItemRow> = read
-        .rows
-        .iter()
-        .map(centraid_apps_locker::queries::ItemRow::of)
-        .collect();
-    let mine: Vec<serde_json::Value> = queries::decorate(&rows, &decorations)
-        .iter()
-        .map(|row| {
-            // The trash shelf carries no `weak`/`reused`: a trashed row is not
-            // audited, which is v0's own shape.
-            let mut value = as_case(row);
-            let object = value.as_object_mut().expect("an object");
-            object.remove("weak");
-            object.remove("reused");
-            object.remove("archived");
-            object.remove("alias");
-            value
-        })
-        .collect();
-    let theirs: Vec<serde_json::Value> = expected["output"]["items"]
-        .as_array()
-        .expect("a list")
-        .iter()
-        .map(|row| {
-            let mut value = from_case(row);
-            let object = value.as_object_mut().expect("an object");
-            object.remove("weak");
-            object.remove("reused");
-            object.remove("archived");
-            object.remove("alias");
-            value
-        })
-        .collect();
-    same_rows(&mine, &theirs, "the trash shelf");
-    assert_eq!(mine.len(), 1, "the corpus trashes exactly one row");
-    // AND THE PURGE DATE IS THERE, which is what this shelf exists to show.
+    let items = expected["output"]["items"].as_array().expect("a list");
+    assert_eq!(items.len(), 1, "the corpus trashes exactly one row");
     assert!(
-        mine[0]["purge_at"].is_string(),
+        items[0]["purge_at"].is_string(),
         "a trashed row with no purge date cannot be counted down"
     );
 }
 
-/// The Companion's candidate list — and the v0 finding it surfaced.
-#[test]
-fn the_autofill_candidates_answer_what_v0_answered() {
-    let connection = v0_vault();
-    let door = TestDoor::new(&connection);
-    let expected = case("autofill-candidates", serde_json::json!({}));
-    let watch = v0_watch();
-    let warned: BTreeSet<String> = watch
-        .iter()
-        .filter(|(_, entry)| entry.weak || entry.reused)
-        .map(|(id, _)| id.clone())
-        .collect();
-    let read = queries::read_shelf(
-        &door,
-        &queries::autofill_logins_statement(),
-        queries::LOGIN_ROWS,
-    )
-    .expect("the logins read");
-    let mine: Vec<serde_json::Value> = read
-        .rows
-        .iter()
-        .map(centraid_apps_locker::queries::ItemRow::of)
-        .zip(read.rows.iter())
-        .filter_map(|(row, raw)| {
-            // THE PRESENCE BIT COMES OFF THE PROJECTION (#1020, D-1020-CL5).
-            // The statement projects `otp_seed IS NOT NULL AS has_totp` — a
-            // boolean the vault answers, never the cell — and the close pass
-            // fixed the same omission in v0, so the two sides agree again. See
-            // `the_candidate_list_reports_a_one_time_code_without_carrying_one`.
-            let has_totp = matches!(
-                raw.get("has_totp"),
-                Some(centraid_apps_kit::Cell::Integer(n)) if *n != 0
-            );
-            centraid_apps_locker::queries::AutofillCandidate::of(&row, has_totp, &warned)
-        })
-        .map(|candidate| {
-            serde_json::json!({
-                "item_id": candidate.item_id,
-                "title": candidate.title,
-                "username": candidate.username,
-                "url": candidate.url,
-                "url_match_policy": match candidate.policy {
-                    MatchPolicy::ExactHost => "exact-host",
-                    MatchPolicy::RegistrableDomain => "registrable-domain",
-                },
-                "has_totp": candidate.has_totp,
-                "compromised": candidate.compromised,
-                "warning": candidate.warning,
-            })
-        })
-        .collect();
-    let theirs = expected["output"]["candidates"]
-        .as_array()
-        .expect("a list")
-        .clone();
-    same_rows(&mine, &theirs, "the candidate list");
-    assert_eq!(mine.len(), 4, "the corpus has four live logins");
-    // NOT VACUOUS: the warning bit is set on some rows and clear on others,
-    // which is the one bit this list carries beyond the metadata.
-    assert!(
-        mine.iter()
-            .any(|row| row["warning"] == serde_json::json!(true))
-    );
-    assert!(
-        mine.iter()
-            .any(|row| row["warning"] == serde_json::json!(false))
-    );
-}
-
-/// The six fill decisions, each a different sentence.
-#[test]
-fn a_fill_decision_answers_what_v0_answered() {
-    let connection = v0_vault();
-    let door = TestDoor::new(&connection);
-    for entry in v0_cases() {
-        if entry["query"] != serde_json::json!("autofill-item") {
-            continue;
-        }
-        let item_id = entry["input"]["item_id"].as_str().expect("an id");
-        let page_origin = entry["input"]["page_origin"].as_str().expect("an origin");
-        let read = queries::read_shelf(&door, &queries::autofill_item_statement(item_id), 1)
-            .expect("the login reads");
-        let row = read
-            .rows
-            .first()
-            .map(centraid_apps_locker::queries::ItemRow::of);
-        let outcome = queries::fill_match(row.as_ref(), Some(page_origin));
-        // V0 NEVER HANDS BACK A SECRET HERE EITHER: `fill` is null in every
-        // case, and the port's answer is the MATCH plus the seat-side grant.
-        assert!(
-            entry["output"]["fill"].is_null(),
-            "v0 returned a fill value for {item_id} at {page_origin}"
-        );
-        match outcome {
-            Ok(matched) => {
-                assert!(
-                    entry["output"]["match"].is_object(),
-                    "the port matched {page_origin} and v0 did not"
-                );
-                assert_eq!(
-                    serde_json::json!(matched.item_id),
-                    entry["output"]["match"]["item_id"]
-                );
-            }
-            Err(_) => {
-                assert!(
-                    !entry["output"]["match"].is_object(),
-                    "the port refused {page_origin} and v0 matched"
-                );
-            }
-        }
-    }
-}
-
 /// The detail pane at both of v0's ids, plus the wrong id that is `None` and
-/// never an error.
+/// never an error — through `phone::load_item`.
 #[test]
 fn the_item_pane_answers_what_v0_answered() {
     let connection = v0_vault();
     let door = TestDoor::new(&connection);
-    let decorations = decorations(&connection, true, true);
     let mut compared = 0usize;
     for entry in v0_cases() {
         if entry["query"] != serde_json::json!("item") {
             continue;
         }
         let item_id = entry["input"]["item_id"].as_str().expect("an id");
-        let row = queries::read_item_row(&door, item_id).expect("the row reads");
-        let Some(row) = row else {
+        let Some(detail) = phone::load_item(&door, item_id).expect("the item reads") else {
             assert!(
                 entry["output"]["item"].is_null(),
                 "the port found no {item_id} and v0 did"
@@ -896,15 +577,9 @@ fn the_item_pane_answers_what_v0_answered() {
             expected.is_object(),
             "v0 found no {item_id} and the port did"
         );
-        let detail = queries::item_detail(
-            row,
-            decorations.starred.contains(item_id),
-            decorations.tags.get(item_id).cloned().unwrap_or_default(),
-            decorations.alias.get(item_id).cloned(),
-            centraid_apps_locker::sidecars::Sidecars::default(),
-        );
+        let row = &detail.listed.row;
         assert_eq!(
-            serde_json::json!(detail.rendered_type),
+            serde_json::json!(detail.listed.rendered_type()),
             expected["type"],
             "the rendered type of {item_id}"
         );
@@ -912,19 +587,26 @@ fn the_item_pane_answers_what_v0_answered() {
             serde_json::json!(detail.degraded_from),
             expected["degraded_from"]
         );
-        assert_eq!(serde_json::json!(detail.favorite), expected["favorite"]);
-        assert_eq!(serde_json::json!(detail.tags), expected["tags"]);
+        assert_eq!(
+            serde_json::json!(detail.listed.starred),
+            expected["favorite"]
+        );
+        assert_eq!(serde_json::json!(detail.listed.tags), expected["tags"]);
         assert_eq!(serde_json::json!(detail.alias), expected["alias"]);
-        assert_eq!(serde_json::json!(detail.trashed), expected["trashed"]);
-        assert_eq!(serde_json::json!(detail.archived), expected["archived"]);
-        assert_eq!(serde_json::json!(detail.row.title), expected["title"]);
-        assert_eq!(serde_json::json!(detail.row.username), expected["username"]);
-        assert_eq!(serde_json::json!(detail.row.url), expected["url"]);
-        assert_eq!(serde_json::json!(detail.row.notes), expected["notes"]);
-        // EVERY SEALED CELL IS null IN V0'S OWN ANSWER — the gateway does not
-        // unseal a Locker row for a client (#996 R13, W6-D2), so the pane
-        // paints while the Locker is locked. The port carries no such field at
-        // all, which is the stronger version of the same fact.
+        assert_eq!(
+            serde_json::json!(row.deleted_at.is_some()),
+            expected["trashed"]
+        );
+        assert_eq!(
+            serde_json::json!(detail.listed.archived()),
+            expected["archived"]
+        );
+        assert_eq!(serde_json::json!(row.title), expected["title"]);
+        assert_eq!(serde_json::json!(row.username), expected["username"]);
+        assert_eq!(serde_json::json!(row.url), expected["url"]);
+        assert_eq!(serde_json::json!(row.notes), expected["notes"]);
+        // EVERY SEALED CELL IS null IN V0'S OWN ANSWER, and the phone carries
+        // each only as its presence — the stronger version of the same fact.
         for sealed in ["password", "otp_seed", "card_number", "cvv", "content"] {
             assert!(
                 expected[sealed].is_null(),
@@ -979,7 +661,7 @@ fn v0s_access_query_is_refused_by_its_own_door_and_the_port_answers() {
     let door = TestDoor::new(&connection);
     let window = queries::access_window(None);
     assert_eq!(window, queries::ACCESS_DEFAULT);
-    let read = queries::read_shelf(
+    let read = read_window(
         &door,
         &queries::access_statement(None).expect("the statement builds"),
         window,
@@ -991,18 +673,20 @@ fn v0s_access_query_is_refused_by_its_own_door_and_the_port_answers() {
         3,
         "the generator planted three receipts and the port reads them"
     );
-    // ALL THREE KINDS AND BOTH DECISIONS, which is what the port's fold has to
-    // get right and what v0's stub-driven suite was the only thing testing.
-    // Keyed by KIND rather than by index: `occurred_at` is `<host-clock>` for
-    // all forty-nine receipts, so this answer is one of the five the fixture
-    // cannot order (see the header).
+    // BOTH KINDS AND BOTH DECISIONS, which is what the port's fold has to get
+    // right and what v0's stub-driven suite was the only thing testing. Keyed
+    // by KIND rather than by index: `occurred_at` is `<host-clock>` for all
+    // forty-nine receipts, so this answer is one of the five the fixture
+    // cannot order (see the header). v0 planted a third receipt, a Companion
+    // FILL; the fill plane is deleted (R-1047-D3), so the port reads it as the
+    // reveal of a sealed cell it is — two reveals and an unlock.
     use centraid_apps_locker::queries::AccessKind;
     let mut kinds: Vec<_> = answer.entries.iter().map(|entry| entry.kind).collect();
     kinds.sort_by_key(|kind| format!("{kind:?}"));
     assert_eq!(
         kinds,
-        [AccessKind::Auth, AccessKind::Fill, AccessKind::Reveal],
-        "the three kinds, and a fill is not a reveal"
+        [AccessKind::Auth, AccessKind::Reveal, AccessKind::Reveal],
+        "an unlock and two reveals"
     );
     let of = |kind: AccessKind| {
         answer
@@ -1011,15 +695,13 @@ fn v0s_access_query_is_refused_by_its_own_door_and_the_port_answers() {
             .find(|entry| entry.kind == kind)
             .unwrap_or_else(|| panic!("no {kind:?} entry"))
     };
-    // A FILL CARRIES THE PAGE IT FILLED AND A REVEAL DOES NOT — the one field
-    // that separates two receipts with the same action.
-    assert_eq!(
-        of(AccessKind::Fill).origin.as_deref(),
-        Some("https://www.bank.example")
+    assert!(
+        answer
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == AccessKind::Reveal)
+            .all(|entry| entry.action == "reveal")
     );
-    assert!(of(AccessKind::Reveal).origin.is_none());
-    assert_eq!(of(AccessKind::Fill).action, "reveal");
-    assert_eq!(of(AccessKind::Reveal).action, "reveal");
     // A DENIAL IS LISTED LIKE AN ALLOWANCE — the boundary receipts both.
     assert!(
         !of(AccessKind::Auth).allowed,
@@ -1063,85 +745,6 @@ fn v0s_access_query_is_refused_by_its_own_door_and_the_port_answers() {
     );
 }
 
-/// V0's CANDIDATE LIST NEVER REPORTS A ONE-TIME CODE, and the port's does.
-///
-/// **The finding.** `autofill-candidates.ts:94` derives
-/// `has_totp: row.otp_seed != null` — over a row projected with
-/// `LOCKER_ITEM_COLUMNS` (`queries/items.ts:35`-`:39`), which **does not
-/// include `otp_seed`**. So `row.otp_seed` is always `undefined` and
-/// `has_totp` is always `false`: the Companion is never told an item carries a
-/// one-time code, for every item in every vault.
-///
-/// **Fixed at source in the close pass** (#1020, R-1020-35, D-1020-CL5). The
-/// fix is the projected `otp_seed IS NOT NULL` expression this lane said it
-/// needed: adding the column itself would hand the Companion ciphertext, so the
-/// paged door's grammar learned that a sealed column may be tested for null and
-/// still may not be read. Both trees project it now, and this test asserts the
-/// pair of claims that makes the fix safe — the Companion IS told, and the seed
-/// is NOT on the projection.
-#[test]
-fn the_candidate_list_reports_a_one_time_code_without_carrying_one() {
-    // The corpus HAS an item with an OTP seed: `locker.totp_code` ran against
-    // it and answered a code, so the fixture is not simply seedless.
-    let commands = read_json("contracts/apps/locker/commands.json");
-    let totp = commands
-        .as_array()
-        .expect("a list")
-        .iter()
-        .find(|entry| {
-            entry["command"] == serde_json::json!("locker.totp_code")
-                && entry["status"] == serde_json::json!("executed")
-        })
-        .expect("the corpus derives a one-time code from a real seed");
-    assert!(totp["output"]["code"].is_string(), "v0 answered a code");
-
-    // …and the candidate list says so: at least one item carries a code, and
-    // the list is not simply all-true either.
-    let expected = case("autofill-candidates", serde_json::json!({}));
-    let candidates = expected["output"]["candidates"].as_array().expect("a list");
-    assert!(!candidates.is_empty());
-    let marked = candidates
-        .iter()
-        .filter(|candidate| candidate["has_totp"] == serde_json::json!(true))
-        .count();
-    assert!(
-        marked > 0 && marked < candidates.len(),
-        "{marked} of {} candidates carry a code — a list that is all one way \
-         proves nothing about the projection",
-        candidates.len()
-    );
-
-    // AND THE SEED ITSELF IS STILL NOT PROJECTED. What stood here read v0's
-    // `items.ts` and `autofill-candidates.ts` to say the browsable column list
-    // never carried `otp_seed` and that v0 projected the PRESENCE rather than
-    // the cell. Those files went with `chore(retire): delete the v0 tree`
-    // (#1025 S4) — and the claim is stronger read off THIS port's own
-    // statements, which is what a member's device actually runs.
-    assert!(
-        !queries::items_statement(Shelf::Live)
-            .select
-            .contains("otp_seed"),
-        "the sealed cell is on the browsable projection: the fix went the wrong way"
-    );
-    let candidates = queries::autofill_logins_statement().select;
-    assert!(
-        candidates.contains("otp_seed IS NOT NULL AS has_totp"),
-        "the candidate list projects the PRESENCE of a seed, never the seed"
-    );
-    assert_eq!(
-        candidates.matches("otp_seed").count(),
-        1,
-        "the only mention of the sealed cell is the presence test"
-    );
-    // No answer in the bundle carries a seed, under any key.
-    assert!(
-        !serde_json::to_string(&expected)
-            .expect("it serialises")
-            .contains("otp_seed"),
-        "the candidate answer names the sealed column"
-    );
-}
-
 /// THE ORDER THE FIXTURE CANNOT REBUILD, ASSERTED WHERE IT CAN BE.
 ///
 /// The five multiset comparisons above lose v0's sequence because
@@ -1152,25 +755,12 @@ fn the_candidate_list_reports_a_one_time_code_without_carrying_one() {
 /// shelf by title is a red, and so is a v0 change to either column.
 #[test]
 fn every_shelf_declares_the_same_order() {
-    // The port's four shelves and its audit window.
-    for (what, order) in [
-        ("live", queries::items_statement(Shelf::Live).order.clone()),
-        (
-            "archived",
-            queries::items_statement(Shelf::Archived).order.clone(),
-        ),
-        ("search", queries::search_statement().order.clone()),
-        ("trash", queries::trash_statement().order.clone()),
-        ("watchtower", queries::watchtower_statement().order.clone()),
-        (
-            "autofill",
-            queries::autofill_logins_statement().order.clone(),
-        ),
-    ] {
-        assert_eq!(order.sort_column, "updated_at", "{what} sorts by");
-        assert_eq!(order.pk_column, "item_id", "{what} breaks ties by");
-        assert!(order.descending, "{what} is newest first");
-    }
+    // The phone's one shelf statement — live, archived and search all walk it
+    // (#1047 T2) — and its audit window.
+    let order = phone::shelves_statement().order.clone();
+    assert_eq!(order.sort_column, "updated_at", "the shelf sorts by");
+    assert_eq!(order.pk_column, "item_id", "the shelf breaks ties by");
+    assert!(order.descending, "the shelf is newest first");
     let audit = queries::access_statement(None)
         .expect("the statement builds")
         .order
@@ -1188,31 +778,16 @@ fn every_shelf_declares_the_same_order() {
     // port's own declarations, which is what a later change would break.
 }
 
-/// ONLY THE LIVE SHELF CARRIES THE CONNECTOR ALIAS IN v0, and the port
-/// reproduces that rather than tidying it.
+/// ONLY THE LIVE SHELF CARRIES THE CONNECTOR ALIAS IN v0 — and on the phone
+/// no shelf does: the alias rides the item page alone (#1047).
 ///
-/// `decorate`'s fifth parameter is `aliasByItem` and v0 passes it from exactly
-/// one of its four callers: `items.ts:418`. `search.ts:73` passes four
-/// arguments, `trash.ts:44` three, `watchtower.ts:48` four. So a connector
-/// alias appears on the live shelf and vanishes from the same row found by
-/// search — with no rule stated anywhere for why.
-///
-/// **Re-judged rather than cited** (AGENTS.md: a citation is not a
-/// justification). Nothing depends on the asymmetry: `alias` is optional on
-/// `DecoratedItem`, no surface branches on its absence, and the alias is
-/// plaintext at rest on a row the shelf already read — so it is neither a
-/// secret being withheld nor a read being saved (the alias map is ONE bounded
-/// read the live shelf already does). It reads as an omission, not a decision.
-///
-/// It is reproduced here because parity is the exit criterion and a port that
-/// answered more than v0 would be unverifiable against it. **Owner question:**
-/// should the port decorate all four shelves with the alias? Options: (a) keep
-/// v0's asymmetry, and this test is the record of it; (b) decorate all four,
-/// which costs one bounded read on search and watchtower and makes the
-/// connector handle stable wherever a row appears; (c) drop the alias from the
-/// live shelf too and let only the item pane carry it. **Recommendation: (b)**
-/// — the alias exists so a connector can name a row across a rotation, and a
-/// handle that depends on which screen found the row is not a handle.
+/// `decorate`'s fifth parameter was `aliasByItem` and v0 passed it from one of
+/// its four callers (`items.ts:418`), so a connector alias appeared on the live
+/// shelf and vanished from the same row found by search, with no rule stated.
+/// The phone answers the alias on `load_item` and on no list (the old owner
+/// question's option (c)); v0's asymmetry is kept below as the record, read
+/// off v0's own answers, and the phone's shelves are compared without it
+/// ([`COMPARED`]).
 #[test]
 fn only_the_live_shelf_carries_the_connector_alias() {
     // THE v0 SOURCE HALF IS DELETED (#1025 S4). It read `decorate(` out of four
@@ -1242,77 +817,5 @@ fn only_the_live_shelf_carries_the_connector_alias() {
     assert!(
         same["alias"].is_null(),
         "search carries the alias now: the finding is resolved"
-    );
-}
-
-/// The review shelf on its own — the query, not the summary that rides
-/// `items`.
-///
-/// It is the one shelf that reads **archived rows too**, which is the whole
-/// point of it: an old login nobody opens is exactly the one a breach reuses.
-#[test]
-fn the_review_shelf_answers_what_v0_answered() {
-    let connection = v0_vault();
-    let door = TestDoor::new(&connection);
-    // v0's `watchtower.ts:48` passes four arguments: no alias map.
-    let decorations = decorations(&connection, true, false);
-    let expected = case("watchtower", serde_json::json!({}));
-    let read = queries::read_shelf(&door, &queries::watchtower_statement(), queries::WATCH_ROWS)
-        .expect("the review shelf reads");
-    let rows: Vec<centraid_apps_locker::queries::ItemRow> = read
-        .rows
-        .iter()
-        .map(centraid_apps_locker::queries::ItemRow::of)
-        .collect();
-    let decorated = queries::decorate(&rows, &decorations);
-    let summary =
-        centraid_apps_locker::watchtower::summarise(&decorated, true).expect("the derivation ran");
-    assert_eq!(
-        summary.weak as u64,
-        expected["output"]["weak"].as_u64().expect("weak")
-    );
-    assert_eq!(
-        summary.reused as u64,
-        expected["output"]["reused"].as_u64().expect("reused")
-    );
-    assert_eq!(
-        summary.compromised as u64,
-        expected["output"]["compromised"]
-            .as_u64()
-            .expect("compromised")
-    );
-    let mine: Vec<serde_json::Value> = summary
-        .items
-        .iter()
-        .map(|row| {
-            let mut value = as_case(row);
-            value.as_object_mut().expect("an object").remove("alias");
-            value
-        })
-        .collect();
-    let theirs: Vec<serde_json::Value> = expected["output"]["items"]
-        .as_array()
-        .expect("a list")
-        .iter()
-        .map(|row| {
-            let mut value = from_case(row);
-            value.as_object_mut().expect("an object").remove("alias");
-            value
-        })
-        .collect();
-    same_rows(&mine, &theirs, "the review shelf");
-    assert_eq!(mine.len(), 3, "the corpus has three rows needing attention");
-
-    // THE ARCHIVED ROW IS ON IT. Without this the shelf could be reading the
-    // live shelf and nobody would know.
-    assert!(
-        mine.iter()
-            .any(|row| row["archived"] == serde_json::json!(true)),
-        "the review shelf missed the archived login — the one it exists for"
-    );
-    // …and the shelf read MORE rows than it listed, so the filter ran.
-    assert!(
-        decorated.len() > summary.items.len(),
-        "every row needs attention: the filter proves nothing"
     );
 }

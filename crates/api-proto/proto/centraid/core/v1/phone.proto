@@ -1,0 +1,812 @@
+// THE PHONE'S TWO FLOWS, OVER THE ABI (#1029 §2, §5, W15).
+//
+// The shell has exactly two things to ask this core that it could not ask
+// before: **back up what is waiting to my gateways**, and **bring my vaults
+// back from 24 words**. Two more ride with them because a shell cannot draw
+// either screen without them: **pair with a gateway** (the QR it scanned) and
+// **what is the state of my backup**.
+//
+// [#1080](https://github.com/srikanth235/centraid/issues/1080) rebuilt the
+// plane behind them — direct HTTPS to the member's own gateways, a snapshot of
+// the vault file, every original and derivative sealed and named from the 24
+// words — and added the doors beside the pass, in their own sections below:
+// the operating system's half of an upload (`handoff`, `settle`), the ledger
+// squared with a gateway (`reconcile`), the certificates a shell pins (`pins`),
+// one original fetched back (`fetch_original`), a gateway forgotten
+// (`forget_destination`), and the originals a member may delete from the
+// operating system's library because a gateway holds them (`releasable`,
+// `released`).
+//
+// ## Why four REQUEST KINDS and not four registered commands
+//
+// Same answer `vault.proto` gives for founding, one layer further out. A
+// `Command` runs through `centraid_vault::commands::Registry`, whose gate order
+// evaluates a `Principal` against `core_vault.self_party_id` and ends in a
+// receipt row. **A restore has no vault to be a principal in** — that is the
+// whole of what it is for — and a drain is not a write to the vault at all: it
+// moves sealed ciphertext of what the vault holds out to a gateway. Neither
+// is a command, and a command exempted from the gate order would be a second
+// command plane wearing the first one's name.
+//
+// ## The five symbols are not touched
+//
+// A new flow is a new arm on `Request.kind` through `centraid_call`
+// (`crates/core-ffi/CONTRACT.md` §10). There is no sixth symbol here and there
+// never will be: `nm -D --defined-only libcentraid_core_ffi.so | grep ' T
+// centraid_'` is 5 and `abi-five-symbols` counts the declarations on every
+// gate run.
+//
+// ## The gateway is blind, and so is this file
+//
+// Nothing here carries a key to or from a GATEWAY. `RestoreRequest` carries
+// the 24 words INWARD — from the member's own fingers into their own device's
+// core — and a restoring phone **derives**; it never downloads a key (#1029
+// §0, §5). Two secrets do cross this ABI, and only between the core and its
+// own shell on the same device: the words and seed of `PhraseRequest` (#1047
+// E1, for the screen that shows them once and the synchronised store), and a
+// gateway's bearer token inside `HandoffPart.headers` (#1080, for the
+// operating system's background upload, which needs the whole request and
+// runs while this core is suspended). The device secret a pair or a restore
+// used to mint left with the signed requests it signed (#1080): a gateway
+// admits a phone by the token its ledger keeps.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// `TransferRule`, the member's one setting for originals, is `SyncWindow`'s
+// selector and the drain's: one enum, so there is one rule.
+import "centraid/core/v1/command.proto";
+
+// ------------------------------------------------------------------ drain --
+
+// RUN ONE DRAIN PASS. Replaces `BackupNow` (`admin.proto`), which answered
+// `NotYetAvailable` and classed itself unbounded over a door that did not
+// exist.
+//
+// The pass (#1080): take a snapshot of the vault when one is due, seal what a
+// reachable gateway does not yet hold into the spool — the snapshot's changed
+// ranges, then every derivative, then the originals the rule admits, newest
+// first — `PUT` it, record each acknowledgement, and move the gateway's head
+// once every range of the snapshot is acknowledged. It answers with what the
+// GATEWAY acknowledged.
+//
+// **Idempotent, and a second call while one runs is REFUSED, not queued.** A
+// queue behind this door would make a background window's call sit waiting for
+// a foreground pass it cannot see, and expire holding nothing. The shell is
+// told `ERROR_CODE_INVALID_REQUEST` with "a drain is already running" and
+// decides for itself whether to wait.
+message DrainRequest {
+  // How long this pass may take, in milliseconds from when it starts. `0` is
+  // "no deadline" — the foreground case, where the member is watching a
+  // progress bar and the pass runs until the spool is empty.
+  //
+  // It is a DURATION and not a wall-clock instant on purpose: a background
+  // window hands out a budget ("you have 28 seconds"), not a moment, and a
+  // shell converting one to the other against a phone clock the gateway has
+  // already corrected would be converting against the wrong clock.
+  uint64 deadline_ms = 1;
+  // THE MEMBER'S TRANSFER RULE, as the shell keeps it (#1080). It decides
+  // which ORIGINALS may cross this link, and never whether thumbnails and
+  // previews may: they always may, because they are the grid. Unspecified is
+  // WIFI_ONLY (`command.proto`). Videos never cross a metered link, whatever
+  // the rule.
+  TransferRule rule = 2;
+  // THE LINK IS METERED: cellular, a hotspot, tethering. A shell that cannot
+  // tell sends `true` — guessing "unmetered" wrongly costs a member's data
+  // plan, and guessing "metered" wrongly costs a photograph some waiting.
+  bool metered = 3;
+  // THE PHONE IS ON EXTERNAL POWER. A shell that cannot tell sends `false`.
+  bool charging = 4;
+  // TAKE A SNAPSHOT OF THE VAULT NOW, whether or not one is due: "Back up
+  // now", and the app leaving the screen. Without it a snapshot is taken only
+  // when the schedule says one is due. It decides the snapshot's TIMING and
+  // nothing else: it is not the member asking (`asked`, below).
+  bool wants_snapshot = 5;
+  // LEAVE VIDEOS OUT of this pass's originals (#1080). False is the complete
+  // backup, so a shell that never sets it backs everything up; "include
+  // videos" on the backup screen is this negated.
+  bool exclude_videos = 6;
+  // THE MEMBER TAPPED "BACK UP NOW" IN THIS PASS (#1080, the root's ruling
+  // A24), and nothing else sets it: not the app leaving the screen, not a
+  // background window. Under `TRANSFER_RULE_MANUAL` it is what lets originals
+  // be sealed; on any rule it lets a video's original be sealed off the
+  // charger, and on a metered link it sends the snapshot — the records, a few
+  // MB — whatever the rule, while originals still follow it (R-1080-C38). A
+  // shell that sent `wants_snapshot` for both meant two things by one bit,
+  // and MANUAL means the member's own tap.
+  bool asked = 7;
+}
+
+// Why the pass stopped. Every arm is a fact about the spool or the gateway, and
+// none of them is a failure the shell should draw as one: two of the three are
+// ordinary.
+enum DrainStop {
+  DRAIN_STOP_UNSPECIFIED = 0;
+  // Nothing the rule admits is left to move: every part sealed for this pass
+  // is on a gateway and acknowledged. `need_bytes` may still name items whose
+  // bytes only the shell can read.
+  DRAIN_STOP_EMPTY = 1;
+  // The deadline came up first. `pending_bytes` is what is left; the next pass
+  // continues where this one stopped and re-sends nothing acknowledged.
+  DRAIN_STOP_DEADLINE = 2;
+  // No paired gateway answered, or none is paired. Nothing was lost — the
+  // spool is intact and the next pass starts where this one did.
+  DRAIN_STOP_UNREACHABLE = 3;
+  // The machine that answered is not the pinned gateway: its certificate is
+  // not the one this phone paired with, or it answered as another gateway
+  // (#1080, the audit's finding 5). Nothing was sent to it, and the spool is
+  // intact.
+  DRAIN_STOP_UNTRUSTED = 4;
+}
+
+message DrainResponse {
+  // 1 WAS `acked_txid`, the last txid a gateway acknowledged (#1029 §2). A
+  // snapshot plane has no txid (#1080): `acked_at_ms` and `confirmed_parts`
+  // say what a gateway acknowledged. The number is reserved, not reused.
+  reserved 1;
+  reserved "acked_txid";
+  // Sealed bytes still in the spool when the pass stopped. The number a shell
+  // draws as "3.2 MB left to back up".
+  uint64 pending_bytes = 2;
+  DrainStop stopped = 3;
+  // When the gateway acked, on the GATEWAY's clock — the only moment a member
+  // may be shown as "last backed up". Absent when this pass acked nothing.
+  optional int64 acked_at_ms = 4;
+  // PARTS A GATEWAY ACKNOWLEDGED IN THIS PASS (#1080). Acknowledgement is a
+  // `PUT`'s success, recorded in the device's ledger before it is counted.
+  uint32 confirmed_parts = 5;
+  // ITEMS WAITING ON BYTES ONLY THE SHELL CAN READ (#1080): originals that
+  // live in the operating system's library, which this core cannot open.
+  uint32 waiting_bytes_parts = 6;
+  // THE ITEMS THIS CORE WANTS STREAMED NEXT (#1080), at most 64, newest first.
+  // The shell streams each through the stage door with
+  // `STAGE_SOURCE_OS_LIBRARY`.
+  repeated NeedBytes need_bytes = 7;
+}
+
+// ONE ITEM WHOSE BYTES ONLY THE SHELL CAN READ (#1080), and everything the
+// shell needs to find it in the operating system's library and stream it.
+message NeedBytes {
+  // 32 raw bytes: the BLAKE3 of the whole plaintext, as the vault holds it.
+  bytes content_hash = 1;
+  // The library's own identifier for the item, as `StageBegin.os_ref` carried
+  // it when the item was imported.
+  string os_ref = 2;
+  // What the vault reads the bytes as.
+  string media_type = 3;
+  // The item's length in bytes, as the vault holds it.
+  uint64 size = 4;
+}
+
+// ------------------------------------------------------------------- pair --
+
+// PAIR WITH THE GATEWAY WHOSE PAIRING CODE THE MEMBER SCANNED (#1080).
+//
+// A gateway's `pair` verb prints the payload `{v: 2, gw, addrs, pin, secret,
+// exp_ms}` as JSON and as a QR; the phone's camera reads it and hands it here
+// whole. The core dials the addresses trusting only the certificate whose
+// BLAKE3 is `pin`, pairs this vault with the one-use `secret`, and keeps the
+// gateway in the device's ledger: its addresses, the certificate's DER and
+// the bearer token. A gateway that already holds this vault is taken over by
+// a claim signed with the vault's identity key, the claim a restore makes.
+message PairRequest {
+  // The scanned string, exactly as it was read. **Not a decoded struct**: the
+  // payload is the one message with no handshake in front of it, and a shell
+  // that parsed it would be a second parser to disagree with the gateway's
+  // own (`centraid_gateway::rules::payload`).
+  string payload = 1;
+}
+
+message PairResponse {
+  // 1 WAS `gateway_endpoint`, the laptop's iroh `EndpointId`; 2 WAS
+  // `record_published`, whether the identity record reached the pkarr
+  // resolver; 3 WAS `device_secret`, the device key a pairing minted (#1029
+  // W15, W17). A gateway is reached over HTTPS and named by `destination`,
+  // there is no resolver, and a gateway admits a phone by the bearer token
+  // the ledger keeps (#1080). The numbers are reserved, not reused.
+  reserved 1, 2, 3;
+  reserved "gateway_endpoint", "record_published", "device_secret";
+  // WHAT THE MEMBER COMPARES, AND IT IS NOT A HEX ID (#1029 W15-D5).
+  //
+  // `centraid_identity::safety_number_of_bytes` over this phone's vault
+  // identity key and the gateway certificate's BLAKE3 fingerprint — both 32
+  // bytes, sorted — grouped for reading aloud. The gateway's `serve` prints
+  // the same digits when the pairing lands, and `pairings` beside each vault,
+  // so the two screens agree. A 64-character hex id is a string people check
+  // four characters of and stop — which catches a typo and misses an
+  // attacker, who gets to choose the other sixty. The safety number is short
+  // enough to be read out in full, and being read out in full is the whole of
+  // what it is for.
+  //
+  // Empty means this build could not compute one; `pair.laptop` refuses such
+  // a pairing rather than show it — never "it matched".
+  string safety_number = 4;
+  // THE GATEWAY THIS PAIRING ADDED (#1080): its id, its label, the addresses
+  // it was reached at and the certificate this phone now pins. A phone may be
+  // paired with more than one; `BackupStatusResponse.destinations` lists them
+  // all.
+  Destination destination = 5;
+}
+
+// ---------------------------------------------------------------- restore --
+
+// BRING EVERY VAULT BACK FROM 24 WORDS (#1029 §5, #1080).
+//
+// The whole input, and F2 held structurally: there is no vault id here, no
+// key and no path on the lost phone, and no index the shell chose — `indices`
+// only ever repeats what an earlier restore answered as `unclaimed`. What this
+// core does with it is derive, dial the gateway the pairing payload names,
+// ask it which vaults it holds for this identity, and fetch. **A vault this
+// phone already holds is never touched**: its file is left as it is, open
+// session and all, and it is neither answered nor counted a miss.
+message RestoreRequest {
+  // 2 WAS `endpoint`, a laptop's iroh endpoint id typed when DNS could not
+  // answer; 3 WAS `direct_addrs`, its dialling hints (#1029 §5). The pairing
+  // payload names the gateway and carries its addresses (#1080). The numbers
+  // are reserved, not reused.
+  reserved 2, 3;
+  reserved "endpoint", "direct_addrs";
+  // The 24 words, as the member typed them. Parsed by
+  // `centraid_identity::phrase::RecoveryPhrase::parse`, which refuses a bad
+  // checksum rather than deriving from nonsense.
+  string phrase = 1;
+  // THE SEED IN PLACE OF THE WORDS (#1047, Q-1047-18, answered 2026-09-29).
+  //
+  // 64 raw bytes — what `RecoveryPhrase::seed` makes of the 24 words. A phone
+  // that received the seed through the platform's synchronised keychain holds
+  // no words and cannot type them; the seed is what every key derives from, so
+  // it restores exactly what the words would. EXACTLY ONE of `phrase` and
+  // `seed` is set: both is refused (two answers to "whose vaults"), and neither
+  // is refused as "not your 24 words". Like the phrase, it is never logged,
+  // never quoted in an error and never kept by the core past this request.
+  optional bytes seed = 4;
+  // BRING BACK ONLY THESE VAULTS (#1047 T1, R-1047-R6).
+  //
+  // Derivation indices, as `UnclaimedVault.index` named them: a vault that
+  // stayed with the old phone when a claim failed after another landed, asked
+  // for again on its own. Empty is the ordinary restore — every index, scanned
+  // upward to the gap limit. Set, the core probes exactly these and no others,
+  // skips any this phone already holds, and answers `gap_scanned` 0.
+  repeated uint32 indices = 5;
+  // THE GATEWAY TO RESTORE FROM (#1080): the pairing payload its `pair` verb
+  // printed, exactly as scanned — the same text `PairRequest.payload`
+  // carries. Required. The restore reaches the gateway under that payload's
+  // certificate pin, reads each vault's head with a read-only grant, fetches
+  // and checks the snapshot it names, and claims the vault at the next writer
+  // epoch only once the checks passed; then it fetches every derivative, so
+  // the grid is whole, and leaves the originals to the rule or a tap
+  // (`fetch_original`). The payload's one-use secret is never spent by a
+  // restore: a claim needs only the vault's identity key.
+  string payload = 6;
+}
+
+// One vault a restore brought back.
+message RestoredVault {
+  // The vault's identity public key, hex — which IS its id (#1029 §0).
+  string vault_id = 1;
+  // The derivation index this vault was found at. Reported so the shell can
+  // show "2 vaults" honestly and so a support log names which index a failure
+  // was at; **never reused** (F2) and never chosen by the shell.
+  uint32 index = 2;
+  // Where the restored file landed, under the directory the core was opened
+  // on.
+  string path = 3;
+  // 4 WAS `txid`, the txid a restored generation stood at (#1029 §5). A
+  // snapshot plane has no txid (#1080). The number is reserved, not reused.
+  reserved 4;
+  reserved "txid";
+  // Rows the snapshot's census promised, summed, and the restored file held.
+  // The number that makes "your vault is back" a claim rather than a hope: a
+  // perfect page tree over no rows passes `integrity_check` and is a total
+  // loss (§2).
+  int64 rows = 5;
+  // See `PairResponse.safety_number`. **Per vault**, because each vault has its
+  // own identity key — one number for all of them would confirm nothing about
+  // any of them.
+  string safety_number = 6;
+}
+
+message RestoreResponse {
+  // 3 WAS `device_secret`, the device key a restore minted (#1029 W15-D3). A
+  // gateway admits the restored phone by the bearer token its claim minted,
+  // which the restored vault's ledger keeps, so nothing is minted and nothing
+  // is handed to a shell to keep (#1080). The number is reserved, not reused.
+  reserved 3;
+  reserved "device_secret";
+  // Every vault the gateway holds for this identity, restored. Empty is a real
+  // answer and not a failure: an identity the gateway has never seen has no
+  // vaults, and a shell that drew an error would tell a member their words
+  // were wrong when they were right.
+  repeated RestoredVault vaults = 1;
+  // How many derivation indices were tried past the last one that answered.
+  // The gap limit, reported, so "we looked" is checkable.
+  uint32 gap_scanned = 2;
+  // VAULTS THAT CHECKED AND WHOSE WRITER EPOCH WOULD NOT MOVE (#1047 M1).
+  //
+  // Every vault is fetched, laid down and checked before any claim, so a
+  // vault that fails its checks refuses the whole restore and moves nothing.
+  // What can still fail is a claim itself, after an earlier vault's claim
+  // landed — the gateway dropped, or refused. Refusing the whole restore then
+  // would drop the vaults already claimed, and the old phone would be frozen
+  // on them with nothing restored anywhere. So the claimed vaults are answered
+  // in `vaults`, and each one that was not is named here: its file is
+  // removed, its writer is still the old phone, and a second restore takes
+  // it. Empty is the ordinary answer. When no claim landed at all the restore
+  // is refused instead, with the first claim's refusal. A second restore
+  // naming these in `RestoreRequest.indices` asks for them alone (R-1047-R6).
+  repeated UnclaimedVault unclaimed = 4;
+}
+
+// One vault a restore checked and could not claim (`RestoreResponse.unclaimed`).
+message UnclaimedVault {
+  // The derivation index, as `RestoredVault.index`.
+  uint32 index = 1;
+  // The vault's identity public key, hex, as `RestoredVault.vault_id`.
+  string vault_id = 2;
+  // Why the claim did not land, for a support log. Carries no key and no
+  // word.
+  string reason = 3;
+}
+
+// ----------------------------------------------------------------- status --
+
+// WHAT THE SHELL DRAWS ON THE BACKUP SCREEN. Reads local state and the last
+// thing the gateway said; it dials nothing of its own.
+message BackupStatusRequest {}
+
+message BackupStatusResponse {
+  // 1 WAS `acked_txid`, the last txid a gateway acked; 4 WAS `laptop_paired`
+  // (#1029 W15). A snapshot plane has no txid, and `destinations` is the
+  // pairing — empty is unpaired (#1080). The numbers are reserved, not
+  // reused.
+  reserved 1, 4;
+  reserved "acked_txid", "laptop_paired";
+  // WHEN A GATEWAY LAST ACKNOWLEDGED THE VAULT'S HEAD, on the GATEWAY's clock
+  // — the only moment a member may be shown as "last backed up". Absent: never.
+  optional int64 acked_at_ms = 2;
+  // Bytes still to back up: the number a shell draws as "3.2 MB left". The
+  // plaintext length of every file the vault knows that some gateway has not
+  // acknowledged whole, plus the snapshot parts waiting in the spool.
+  uint64 pending_bytes = 3;
+  // EVERY GATEWAY THIS PHONE IS PAIRED WITH (#1080). Like everything here, read
+  // from the device's ledger: nothing is dialled to draw a screen.
+  repeated Destination destinations = 5;
+  // When the newest snapshot a gateway's head names was taken, on this
+  // phone's clock: the moment the member's records are backed up as of.
+  // Absent: none yet.
+  optional int64 last_snapshot_ms = 6;
+  // CONTENT HASHES THE VAULT KNOWS, originals and derivatives alike (#1080).
+  // A body kept in its own row (a `data:` URI, as a note's is) is the
+  // records' and not counted here, nor is a file deleted forever or past its
+  // trash window.
+  uint64 content_total = 7;
+  // Of those, the ones every part of which a gateway acknowledged AND whose
+  // row is in the snapshot a gateway's head names: bytes no snapshot names
+  // would restore as nothing (#1080, the edge sweep).
+  uint64 content_confirmed = 8;
+  // Sealed bytes in the spool right now, waiting to move.
+  uint64 spool_bytes = 9;
+  // WHAT WAITS, AND WHY: one row per reason, with a count. Empty is nothing
+  // waiting.
+  repeated Waiting waiting = 10;
+  // A GATEWAY ANSWERED `VAULT_MOVED`: another phone holds this vault's writer
+  // epoch, and this one is read-only for it (#1029 F1). Nothing is wiped.
+  bool frozen = 11;
+}
+
+// One reason things wait, and how many (`BackupStatusResponse.waiting`).
+message Waiting {
+  WaitReason reason = 1;
+  uint64 count = 2;
+}
+
+// WHY CONTENT IS NOT BACKED UP YET (#1080). Every arm is a reason a member can
+// act on or wait out; none is a failure.
+enum WaitReason {
+  WAIT_REASON_UNSPECIFIED = 0;
+  // An original the transfer rule keeps off a metered link.
+  WAIT_REASON_WIFI = 1;
+  // Work kept for external power.
+  WAIT_REASON_CHARGER = 2;
+  // No paired gateway is reachable.
+  WAIT_REASON_GATEWAY = 3;
+  // An original whose bytes are in iCloud and not on this phone.
+  WAIT_REASON_ICLOUD = 4;
+  // An original in the operating system's library the shell has not streamed
+  // yet (`DrainResponse.need_bytes`).
+  WAIT_REASON_BYTES = 5;
+  // Nothing but time: the next pass, or the next background window the
+  // operating system grants, reaches it.
+  WAIT_REASON_WINDOW = 6;
+  // An original the MANUAL rule holds until the member taps Back up now
+  // (`DrainRequest.asked`); no pass on its own moves it.
+  WAIT_REASON_ASK = 7;
+  // The last pass stopped because the machine that answered is not the
+  // pinned gateway (`DRAIN_STOP_UNTRUSTED`). Not time but the member: the
+  // gateway was replaced or something else answers at its address.
+  WAIT_REASON_UNTRUSTED = 8;
+}
+
+// ----------------------------------------------------------- destinations --
+
+// ONE GATEWAY THIS PHONE IS PAIRED WITH (#1080).
+//
+// A gateway is any machine the member controls that runs `centraid-gateway` —
+// the laptop at home, a VPS, a NAS — and the pairing record is a list, so a
+// phone may hold more than one. Read from the device's ledger; nothing here is
+// a key or a token.
+message Destination {
+  // The gateway's own id, as its `GET /v2/info` answers it.
+  string gateway_id = 1;
+  // What the member called it when pairing.
+  string label = 2;
+  // The addresses it was last reached at, `host:port`. Kept so a background
+  // upload needs no browse of the LAN; a browse in the foreground refreshes
+  // them.
+  repeated string addrs = 3;
+  // THE CERTIFICATE THIS PHONE PINS, in DER. The gateway minted it at its
+  // first `serve`; the pairing payload carried its BLAKE3 fingerprint, and the
+  // core kept the DER once the two matched. A shell whose own TLS makes the
+  // connection — iOS's background `URLSession` — pins by byte equality with
+  // this in its authentication challenge.
+  bytes cert_der = 4;
+  // When this phone last reached the gateway, and when the gateway last
+  // acknowledged a part; 0 is never.
+  int64 last_seen_ms = 5;
+  int64 last_ack_ms = 6;
+}
+
+// FORGET ONE GATEWAY (#1080). The destination and every confirmation it gave
+// leave the device's ledger. What that gateway stores is left as it is: this
+// phone stops writing to it, and the member's disk is the member's to clear.
+// First, best-effort, the core asks the gateway to revoke this phone's token
+// (`POST /v2/v/{vault}/revoke`, the audit's finding 2), so a forgotten
+// gateway stops answering this phone; a gateway that cannot be reached does
+// not keep its row, and says so in `revoked`.
+message ForgetDestinationRequest {
+  // `Destination.gateway_id`.
+  string gateway_id = 1;
+}
+
+message ForgetDestinationResponse {
+  // False when the ledger held no such gateway, which is an answer and not a
+  // refusal.
+  bool forgotten = 1;
+  // True when the gateway answered that this phone's token opens nothing
+  // there any more. False when it could not be reached, answered as another
+  // machine, or the core holds no vault keys to name the vault with: the row
+  // is forgotten all the same, and the token stays live on that gateway until
+  // its operator runs `centraid-gateway pairings revoke <token id>`.
+  bool revoked = 2;
+}
+
+// ---------------------------------------------------------------- handoff --
+
+// HAND SEALED PARTS TO THE OPERATING SYSTEM TO UPLOAD (#1080 rulings 2, 7).
+//
+// The only transfer iOS continues while an app is suspended is a file upload
+// handed to a background `URLSession`, and it talks only to a URL. So the core
+// seals parts into its spool while the app is alive, and this answers a batch
+// of them as ready-made requests — a file, a URL, a method and every header —
+// with nothing left for the shell to compute. Each part answered is marked
+// handed off in the device's ledger; `settle` records what the operating
+// system reported, and `reconcile` asks the gateway about any it never did.
+// Android moves its parts in-process, inside `drain`, and never asks.
+message HandoffRequest {
+  // At most this many sealed bytes in the batch, and at most `max_parts`
+  // parts. Both are required: a zero is refused `ERROR_CODE_INVALID_REQUEST`
+  // and never read as "no limit", because batches stay modest — the operating
+  // system throttles an app whose uploads it cannot finish.
+  uint64 max_bytes = 1;
+  uint32 max_parts = 2;
+}
+
+message HandoffResponse {
+  // Empty is nothing to hand off: an empty spool, or no paired gateway.
+  repeated HandoffPart parts = 1;
+}
+
+// ONE SEALED PART, AS A REQUEST THE OPERATING SYSTEM CAN SEND BY ITSELF.
+message HandoffPart {
+  // The object's name: 64 lowercase hex characters keyed by the vault's backup
+  // key, so a gateway can neither read the part nor recognise it.
+  string name = 1;
+  // The sealed file in the spool, inside the app's own container. The shell
+  // hands it to the upload as it is and never opens it.
+  string path = 2;
+  // The object's URL on the gateway this part is for:
+  // `https://<addr>/v2/v/<vault>/o/<name>`.
+  string url = 3;
+  // The HTTP method: `PUT`.
+  string method = 4;
+  // Every header the request carries — the bearer token, `Content-Length` and
+  // `Content-Digest` among them. The shell adds none of its own.
+  repeated Header headers = 5;
+  // The sealed file's length in bytes.
+  uint64 size = 6;
+  // `Destination.gateway_id` of the gateway `url` names; `Settled` repeats it.
+  string gateway_id = 7;
+  // The vault this part belongs to, hex: whose core `settle` goes to. A shell
+  // that lost the handoff (the operating system relaunched it to finish an
+  // upload) reads it back off `url`'s path.
+  string vault_id = 8;
+  // WHETHER THE OPERATING SYSTEM MAY MOVE THIS PART OVER A METERED LINK
+  // (#1080, the root's ruling A10), so the member's rule holds for uploads
+  // that run while the app is suspended: thumbnails and previews always, a
+  // video's original never, a photograph's original under
+  // `TRANSFER_RULE_WIFI_AND_CELLULAR_PHOTOS`, and everything else — the
+  // vault's own snapshot among it — exactly when the rule lets photographs
+  // cross cellular. The rule is the one the last `drain` carried.
+  bool allows_cellular = 9;
+}
+
+// One HTTP header.
+message Header {
+  string name = 1;
+  string value = 2;
+}
+
+// ----------------------------------------------------------------- settle --
+
+// WHAT THE OPERATING SYSTEM REPORTED FOR PARTS IT MOVED (#1080 ruling 7).
+//
+// The shell's transfer delegate hears one completion per upload and passes
+// each, as it heard it, to the core of the vault the part belongs to. A 201 or
+// a 200 is the gateway's acknowledgement: the core records it in the ledger
+// and deletes the spool file. Anything else puts the part back in the queue
+// for a later pass. A name the ledger does not hold is ignored and not
+// counted.
+message SettleRequest {
+  repeated Settled settled = 1;
+}
+
+// One upload's completion, as the operating system reported it.
+message Settled {
+  // `HandoffPart.name`.
+  string name = 1;
+  // The HTTP status the upload received; 0 when it ended with no answer.
+  uint32 http_status = 2;
+  // The operating system's own error, for a log; empty when there was none.
+  // Never shown to a member as it is.
+  string error = 3;
+  // `HandoffPart.gateway_id`.
+  string gateway_id = 4;
+  // `HandoffPart.vault_id`.
+  string vault_id = 5;
+}
+
+message SettleResponse {
+  // Parts recorded as acknowledged.
+  uint32 confirmed = 1;
+  // Parts put back in the queue.
+  uint32 requeued = 2;
+}
+
+// -------------------------------------------------------------- reconcile --
+
+// SQUARE THE LEDGER WITH WHAT THE GATEWAY HOLDS (#1080 ruling 7).
+//
+// The device's ledger is a cache of the gateway's truth, so it is checked
+// rather than trusted: every name not yet confirmed is asked of the gateway
+// with `exists`, a name it holds is confirmed, and a part handed to the
+// operating system that never arrived goes back in the queue. A shell calls it
+// before handing a batch to the operating system; `reachable` false means
+// nothing should be handed off now.
+message ReconcileRequest {}
+
+message ReconcileResponse {
+  // Names the gateway held that the ledger had not confirmed.
+  uint32 confirmed = 1;
+  // Parts put back in the queue.
+  uint32 requeued = 2;
+  // Whether a paired gateway answered at all.
+  bool reachable = 3;
+}
+
+// ------------------------------------------------------------------- pins --
+
+// THE CERTIFICATES A SHELL'S OWN TLS PINS (#1080 ruling 1).
+//
+// A gateway's certificate is self-signed, with no certificate authority behind
+// it, so every connection pins it. The core pins its own; a shell that opens
+// its own — iOS's background `URLSession` — pins each paired gateway's DER by
+// byte equality in its authentication challenge. Read from the ledger; nothing
+// is dialled.
+message PinsRequest {}
+
+message PinsResponse {
+  repeated Destination destinations = 1;
+}
+
+// --------------------------------------------------------- fetch original --
+
+// BRING ONE ORIGINAL BACK FROM A GATEWAY (#1080).
+//
+// Only the hash is asked for: every part's name is computed from it and the
+// vault's backup key. The parts are opened and the whole is checked against
+// the hash before it lands in the app's own store, and a screen refreshes
+// through the ordinary `RowsChanged`.
+message FetchOriginalRequest {
+  // 32 raw bytes: the BLAKE3 of the whole plaintext, which is
+  // `StageHandle.content_hash` decoded from hex.
+  bytes content_hash = 1;
+}
+
+enum FetchOutcome {
+  FETCH_OUTCOME_UNSPECIFIED = 0;
+  // Fetched, checked against its hash, and stored; `path` names the file.
+  FETCH_OUTCOME_LANDED = 1;
+  // This phone already holds it, and nothing was fetched.
+  FETCH_OUTCOME_ALREADY_HELD = 2;
+  // No paired gateway answered. Nothing changed.
+  FETCH_OUTCOME_UNREACHABLE = 3;
+  // A gateway answered and does not hold it whole: it has not been backed up.
+  FETCH_OUTCOME_NOT_IN_BACKUP = 4;
+  // The machine that answered is not the pinned gateway. Nothing was taken
+  // from it (#1080, the audit's finding 5).
+  FETCH_OUTCOME_UNTRUSTED = 5;
+  // The copy on the gateway did not open: its bytes do not hash to their
+  // digest, a part does not open under this vault's key, or the parts are not
+  // the file their names derive from. Nothing landed.
+  FETCH_OUTCOME_DAMAGED = 6;
+}
+
+message FetchOriginalResponse {
+  FetchOutcome outcome = 1;
+  // The file in the app's own store when there is one; empty otherwise. An
+  // original already held in the operating system's library is the shell's to
+  // open.
+  string path = 2;
+}
+
+// ----------------------------------------------------------- free up space --
+
+// THE ORIGINALS A MEMBER MAY DELETE FROM THE OPERATING SYSTEM'S LIBRARY
+// (#1080, the root's rulings A19 and A20).
+//
+// An original the library holds is backed up from there and never copied into
+// the app (#1080 ruling 6). Once every part of it is acknowledged by a gateway,
+// the library's copy is no longer the only one, and a member short of space may
+// delete it. This answers which: originals whose bytes live only in the
+// library, every part of which some gateway acknowledged, not in an album the
+// member keeps on this phone, and never one the member edited in the library
+// (the backup holds the rendition, not the camera original) — oldest first. A
+// library item is offered whole or not at all: a Live Photo is two content
+// hashes under one identifier, and both must be safe. **The core never deletes
+// from the library.** The shell does, behind the operating system's own
+// confirmation, and reports what went through `released`.
+message ReleasableRequest {
+  // At most this many items. Required: a zero is refused
+  // `ERROR_CODE_INVALID_REQUEST`, never read as "no limit".
+  uint64 limit = 1;
+}
+
+message ReleasableResponse {
+  // Oldest first, a whole library item at a time.
+  repeated Releasable items = 1;
+  // The bytes every releasable item adds up to, `items` or not: the "Free up
+  // N GB" a shell draws.
+  uint64 total_bytes = 2;
+}
+
+// One original the library holds and a gateway holds too.
+message Releasable {
+  // 32 raw bytes: the BLAKE3 of the whole plaintext.
+  bytes content_hash = 1;
+  // The library's identifier, which the shell deletes by.
+  string os_ref = 2;
+  uint64 size = 3;
+  // What the vault reads the bytes as, so a shell can pick the library's
+  // collection to delete from.
+  string media_type = 4;
+}
+
+// THE LIBRARY ITEMS THE MEMBER DELETED, after the operating system's own
+// confirmation. The core records that their bytes are no longer on this phone
+// and announces the ordinary `RowsChanged`, so a grid draws them as fetchable.
+message ReleasedRequest {
+  // 32 raw bytes each, as `Releasable.content_hash`.
+  repeated bytes content_hash = 1;
+}
+
+message ReleasedResponse {
+  // How many of those this phone had recorded in the library, and now does
+  // not. A hash it never recorded is not counted.
+  uint32 recorded = 1;
+}
+
+// ----------------------------------------------------------------- phrase --
+
+// THE 24 WORDS, MINTED, JUDGED AND TURNED INTO A SEED — IN RUST (#1047 E1).
+//
+// BIP39 lives in `centraid_identity::phrase` and nowhere else: the shell has
+// no word list, no checksum and no PBKDF2, and a second implementation in
+// Kotlin would be a second opinion about which words are a member's vaults.
+// So the three things a words screen needs are one request kind. `mint` is 24
+// words from the operating system's CSPRNG, for the make-vault screen to show
+// ONCE. `check` judges each cell against the list, with suggestions, and gives
+// the whole phrase's verdict (count, unknown word, checksum) for the entry
+// grid. `seed` is the 64-byte seed the words derive, for the shell's
+// synchronised secure store (`CONTRACT.md` §4b), where every later open reads
+// it.
+//
+// **It needs no vault**, like `restore`: a phone making its first vault, or
+// restoring onto a fresh install, has none. It is bounded, and it is not a
+// command, so it writes no receipt — the words and the seed reach no row, no
+// log line and no error detail. A refused `seed` names the count or "not a
+// valid phrase", never a word.
+message PhraseRequest {
+  oneof op {
+    PhraseMint mint = 1;
+    PhraseCheck check = 2;
+    PhraseSeed seed = 3;
+  }
+}
+
+message PhraseMint {}
+
+// The cells as typed, in order. Each is trimmed and lowercased here, because
+// a keyboard's capital or a trailing space is not a wrong word.
+message PhraseCheck {
+  repeated string words = 1;
+}
+
+message PhraseSeed {
+  repeated string words = 1;
+}
+
+message PhraseResponse {
+  oneof answer {
+    PhraseMinted minted = 1;
+    PhraseChecked checked = 2;
+    PhraseSeeded seeded = 3;
+  }
+}
+
+// 24 lowercase English words, in order. Shown once and held by the shell only
+// until the seed they derive is stored.
+message PhraseMinted {
+  repeated string words = 1;
+}
+
+message PhraseChecked {
+  // One per cell sent, in order.
+  repeated PhraseWord words = 1;
+  Verdict verdict = 2;
+  // The 1-based position of the first cell that is not a list word, or 0.
+  uint32 first_unknown = 3;
+
+  enum Verdict {
+    VERDICT_UNSPECIFIED = 0;
+    // Fewer than 24 filled cells.
+    VERDICT_INCOMPLETE = 1;
+    // A filled cell is not on BIP39's English list; `first_unknown` names it.
+    VERDICT_UNKNOWN_WORD = 2;
+    // Every word is on the list and the checksum does not close: a word is
+    // in the wrong place, or is the wrong list word.
+    VERDICT_BAD_CHECKSUM = 3;
+    // A phrase `seed` will accept.
+    VERDICT_VALID = 4;
+    // More than 24 filled cells.
+    VERDICT_TOO_MANY = 5;
+  }
+}
+
+message PhraseWord {
+  // 1-based.
+  uint32 position = 1;
+  // The cell is empty.
+  bool empty = 2;
+  // The cell is a word on the list.
+  bool known = 3;
+  // Up to four list words beginning with what the cell holds, when it is
+  // filled and not yet a list word. Empty otherwise.
+  repeated string suggestions = 4;
+}
+
+// The 64-byte BIP39 seed, no passphrase (`phrase.rs`'s header). The shell
+// stores it in the synchronised secure store and drops it.
+message PhraseSeeded {
+  bytes seed = 1;
+}

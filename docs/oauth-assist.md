@@ -1,12 +1,14 @@
 # Centraid Assist OAuth
 
+> **Superseded, 2026-09-21 — not current state.** Centraid Assist, its OAuth courier Worker and the Cloudflare deployment that hosted it were deleted from v0 by the [scope amendment of 2026-09-21](https://github.com/srikanth235/centraid/issues/1029#issuecomment-5755559795), together with the assistant plane and the hosted tier. **No code in this repository implements any of it.** This document is kept as the design of record should the ceremony return; read every sentence below in the past tense. Current state: [SECURITY.md](../SECURITY.md) and [docs/gateway.md](gateway.md).
+
 Centraid Assist is the default Google connection path for desktop and the PWA. It works when the paired gateway has no public DNS name: the browser carries a short-lived authorization code back to the initiating client, and that client delivers it over its existing authenticated gateway transport.
 
 ## Privacy promise
 
 Assist is ceremony-only. OAuth tokens are stored only, sealed, on the user's gateway. Tokens never enter a browser URL, page, fragment, deep link, browser storage, Cloudflare KV/D1, or a Centraid connection service. Google's token response passes through Worker process memory only on its server-to-server return to the gateway. Assist deliberately does not request `openid`, `email`, or `profile`, so the ceremony Worker does not learn the connecting identity.
 
-The public [privacy policy](https://centraid.dev/docs/privacy/) describes the Google data lifecycle. The repository threat model is in [SECURITY.md](../SECURITY.md#centraid-assist-oauth-model-b-code-courier).
+The public [privacy policy](https://centraid.dev/docs/privacy/) describes the Google data lifecycle. The repository threat model is in [SECURITY.md](../SECURITY.md).
 
 ## What the user chooses
 

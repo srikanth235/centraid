@@ -34,6 +34,11 @@ use centraid_apps_kit::testdoor::TestDoor;
 const NOW: &str = "2026-03-06T00:00:00.000Z";
 const SEED: u64 = 679_003;
 
+/// The axis is seeded in instants; UTC reads its ranges as stated.
+fn utc() -> centraid_vault::time::zone::FireZone {
+    centraid_vault::time::zone::FireZone::named("Etc/UTC").expect("UTC is bundled")
+}
+
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -80,6 +85,7 @@ fn the_shrunken_axis_seeds_and_every_query_reads_it() {
         Some("2026-03-06T00:00:00.000Z"),
         Some("2026-03-08T00:00:00.000Z"),
         NOW,
+        &utc(),
     )
     .expect("a narrow window reads");
     assert!(denial.is_none());
@@ -101,8 +107,9 @@ fn the_shrunken_axis_seeds_and_every_query_reads_it() {
         assert!(event.original_start_local.is_some());
     }
 
-    let (grid, denial) = load_day_context(&door, Some("2026-03-06"), Some("2026-04-06"), NOW)
-        .expect("the grid reads");
+    let (grid, denial) =
+        load_day_context(&door, Some("2026-03-06"), Some("2026-04-06"), NOW, &utc())
+            .expect("the grid reads");
     assert!(denial.is_none());
     assert!(!grid.birthdays.is_empty(), "the birthday rail is not empty");
     assert!(
@@ -140,6 +147,7 @@ fn the_expansion_cap_errors_at_the_size_it_reaches() {
         Some("2026-03-06T00:00:00.000Z"),
         Some("2026-09-06T00:00:00.000Z"),
         NOW,
+        &utc(),
     )
     .expect_err("the cap is reached");
     match error {
@@ -167,6 +175,7 @@ fn the_year3_agenda_axis_measures_the_calendars_own_ceilings() {
         Some("2026-03-06T00:00:00.000Z"),
         Some("2026-03-07T00:00:00.000Z"),
         NOW,
+        &utc(),
     )
     .expect("one day reads");
     println!(
@@ -182,6 +191,7 @@ fn the_year3_agenda_axis_measures_the_calendars_own_ceilings() {
             Some("2026-03-06T00:00:00.000Z"),
             Some("2026-09-06T00:00:00.000Z"),
             NOW,
+            &utc(),
         )
         .is_err(),
         "six months of a year-3 calendar reaches MAX_TOTAL_INSTANCES"

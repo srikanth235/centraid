@@ -106,6 +106,9 @@ runs:
     # #1020 — the v1 workspace at the repo root. `~/.cargo/bin` is in the path
     # set so `cargo-deny` survives between gate runs; the install step in
     # gate.yml is a no-op on a warm cache and a real install on a cold one.
+    # The key carries the CPU architecture: `~/.cargo/bin` holds native
+    # binaries, so an arm64 runner restoring an x86_64 entry (same OS, same
+    # lockfile) dies with `rustup: cannot execute binary file` (#1075).
     - name: Restore Cargo (v1 workspace)
       id: cargo-v1
       if: inputs.cargo-cache == 'v1'
@@ -117,9 +120,9 @@ runs:
           ~/.cargo/git/db
           ~/.cargo/bin
           target
-        key: cargo-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+        key: cargo-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
         restore-keys: |
-          cargo-v1-${{ runner.os }}-
+          cargo-v1-${{ runner.os }}-${{ runner.arch }}-
 
     - name: Save Cargo (v1 workspace)
       if: >

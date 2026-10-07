@@ -32,6 +32,22 @@ android {
 
     buildFeatures { compose = true }
 
+    // A RELEASE BUILD IS SHRUNK AND OBFUSCATED BY R8. The libraries carry their
+    // own consumer rules; what they cannot know is in `proguard-rules.pro` —
+    // JNA, whose native dispatcher reaches back into Java by class and member
+    // NAME, and `:core`'s `CentraidLibrary`, whose method names ARE the C
+    // symbols. A debug build is unshrunk, so a rule missing there shows only in
+    // a release build.
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            // Nothing looks a resource up by name (`getIdentifier`): fonts are
+            // `R.font`, the XML is named by the manifest.
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
     // ALL APP DATA IS EXCLUDED FROM AUTO BACKUP AND DEVICE-TO-DEVICE TRANSFER
     // (`docs/mobile-offline.md:240-247`). In v0 this was written by
     // `plugins/withCentraidAndroidPrivacy.cjs` into a generated project; here
@@ -52,6 +68,18 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.work.runtime)
+    // Locker's unlock (#1047, D-5): `BiometricPrompt` needs a FragmentActivity,
+    // which `MainActivity` is for this reason alone.
+    implementation(libs.androidx.biometric)
+    // ...and a fragment runtime new enough to take Compose's request codes.
+    implementation(libs.androidx.fragment)
+    // Pairing's scan (#1047 E6): CameraX frames into ZXing's QR reader.
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
     // `debugImplementation`, NOT `androidRuntimeClasspath` (#1020, wave A).
     //
     // `androidRuntimeClasspath` is the accessor the AGP 9 KMP LIBRARY plugin
@@ -68,4 +96,12 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
+}
+
+// THE UNIT TESTS RUN ON JDK 21. `:shared` and `:core` compile with
+// `jvmToolchain(21)`, so their classes are Java 21 bytecode; a test task left
+// on the JVM that runs Gradle cannot load them where that JVM is older
+// (`UnsupportedClassVersionError` on every test, seen on a JDK 17 Mac).
+tasks.withType<Test>().configureEach {
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
 }

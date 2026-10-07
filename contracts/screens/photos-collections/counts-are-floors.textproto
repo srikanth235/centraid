@@ -1,0 +1,58 @@
+# TWO SHELVES, TWO DOORS, AND ONLY HALF OF THEM MAY PRINT A BARE NUMBER.
+#
+# The read door has no `COUNT(*)` and no join clause, so every count on this
+# screen is counted from the rows one page returned. When that page FILLED there
+# are more behind it, and the number is a floor.
+#
+# The pairs, chosen so a view that drew capped and uncapped identically fails:
+#
+#   - Trash says 2 and means 2: `item_count_capped` is unset, because the trash
+#     read returned fewer rows than its limit.
+#   - Portugal says 137 with `item_count_capped: true`. The honest phrasing is
+#     "at least 137". A screen printing "137 photos" is stating a total nobody
+#     counted.
+#   - The People door says 214 with `count_capped: true`; the Duplicates door
+#     says 3 and means 3.
+#
+# `needs_attention` is NOT capped and has no capped sibling, which is correct
+# and worth saying out loud: it is a badge, and a badge is "there is work" — a
+# floor and a total draw the same dot. Only the number a member reads as a
+# quantity needs to say whether it is one.
+#
+# `next_cursor` is present, which is what makes the capped flags consistent
+# rather than arbitrary: this screen's own page filled too.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+data {
+  shelves {
+    shelf { state_view { mode { kind: KIND_TRASH } } }
+    title: "Trash"
+    item_count: 2
+    cover_thumbnail_path: "thumbs/ast-0101.jpg"
+    member_owned: false
+  }
+  shelves {
+    shelf { album { collection_id: "col-0007" name: "Portugal" } }
+    title: "Portugal"
+    item_count: 137
+    item_count_capped: true
+    cover_thumbnail_path: "thumbs/ast-0201.jpg"
+    member_owned: true
+  }
+  doors {
+    kind: KIND_PEOPLE
+    count: 214
+    count_capped: true
+    needs_attention: 63
+  }
+  doors {
+    kind: KIND_DUPLICATES
+    count: 3
+    needs_attention: 3
+  }
+  next_cursor: "col-0007"
+}
+sheet: SHEET_NONE

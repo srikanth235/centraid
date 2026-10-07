@@ -64,15 +64,13 @@ pub struct RecoveryPhrase(Mnemonic);
 impl RecoveryPhrase {
     /// A fresh phrase from operating-system entropy.
     ///
-    /// `try_os_rng` rather than a thread-local generator, for the same reason
-    /// `centraid_net::ticket::fresh_secret` uses it: a predictable phrase hands
-    /// over every vault this person will ever have, so the source is the
+    /// `try_os_rng` rather than a thread-local generator: a predictable phrase
+    /// hands over every vault this person will ever have, so the source is the
     /// operating system and a failure to read it is an error, never a fallback.
     ///
     /// Behind the `mint` feature: a Worker verifies rather than mints, and
     /// `wasm32-unknown-unknown` has no operating-system generator to reach for
     /// (#1029 §3, W4C-1).
-    #[cfg(feature = "mint")]
     pub fn generate() -> Result<Self, PhraseError> {
         use rand::TryRngCore as _;
 
@@ -134,6 +132,29 @@ impl RecoveryPhrase {
     pub fn seed(&self) -> Seed {
         Seed(self.0.to_seed_normalized(""))
     }
+}
+
+/// Whether `word` is one of BIP39's 2,048 English words, as typed: the caller
+/// trims and lowercases, because a word-entry cell is judged one word at a time
+/// and the whole-phrase parse above does its own normalising (#1047 E1).
+pub fn is_word(word: &str) -> bool {
+    Language::English.find_word(word).is_some()
+}
+
+/// Up to `limit` list words that begin with `prefix`, in the list's order.
+///
+/// What a word-entry cell offers while a member is still typing: BIP39's
+/// English list is unique in its first four letters, so four typed letters
+/// narrow it to one word. An empty prefix offers nothing — every word would be
+/// a suggestion, which is no suggestion at all.
+pub fn words_starting_with(prefix: &str, limit: usize) -> Vec<&'static str> {
+    if prefix.is_empty() {
+        return Vec::new();
+    }
+    Language::English
+        .words_by_prefix_iter(prefix)
+        .take(limit)
+        .collect()
 }
 
 /// Deliberately not `Debug`-derived: a phrase that reaches a log or a panic
@@ -241,6 +262,22 @@ mod tests {
         let phrase = RecoveryPhrase::parse(ZERO_ENTROPY_PHRASE).expect("parses");
         assert!(phrase.matches(&format!("  {}  ", ZERO_ENTROPY_PHRASE.to_uppercase())));
         assert!(!phrase.matches(&ZERO_ENTROPY_PHRASE.replace(" art", " zoo")));
+    }
+
+    #[test]
+    fn a_cell_is_judged_against_the_english_list_and_offers_its_prefix() {
+        assert!(is_word("abandon"));
+        assert!(is_word("zoo"));
+        assert!(!is_word("abandonn"));
+        assert!(!is_word(""));
+        // Four letters name one word; fewer offer the run the list holds.
+        assert_eq!(words_starting_with("aban", 4), vec!["abandon"]);
+        assert_eq!(
+            words_starting_with("ab", 3),
+            vec!["abandon", "ability", "able"]
+        );
+        assert!(words_starting_with("", 4).is_empty());
+        assert!(words_starting_with("qx", 4).is_empty());
     }
 
     #[test]

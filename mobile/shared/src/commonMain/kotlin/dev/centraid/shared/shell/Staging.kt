@@ -6,8 +6,11 @@ import centraid.core.v1.StageBegin
 import centraid.core.v1.StageChunk
 import centraid.core.v1.StageEnd
 import centraid.core.v1.StageRequest
+import centraid.core.v1.StageSource
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
+import dev.centraid.shared.sync.ContentHash
+import okio.ByteString
 import okio.ByteString.Companion.toByteString
 
 /**
@@ -64,6 +67,14 @@ public object Staging {
     /** Why a stage did not finish, in words a member reads. */
     public data class Refused(public val sentence: String)
 
+    /**
+     * WHERE THE BYTES LIVE ON THIS PHONE (#1080 ruling 6). The core keeps a
+     * plaintext copy only of [OWNED] bytes; an [OS_LIBRARY] item is hashed
+     * and sealed as it streams and stays in the operating system's library,
+     * where its `osRef` finds it again.
+     */
+    public enum class Source { OWNED, OS_LIBRARY }
+
     public sealed interface Outcome {
         public data class Ok(public val staged: Staged) : Outcome
 
@@ -93,10 +104,38 @@ public object Staging {
     public suspend fun stage(
         core: CentraidCore,
         mediaType: String,
+        /** The length, or 0 when the platform does not know it before the read. */
         byteSize: Long,
+        source: Source = Source.OWNED,
+        /** The library's identifier for the item, with [Source.OS_LIBRARY]. */
+        osRef: String = "",
+        /** A derivative: the content hash (hex) of the original it was rendered from. */
+        forHash: String? = null,
+        /** `thumb`, `preview` or `poster` (a video's still), with [forHash]. */
+        tier: String = "",
+        /**
+         * The library item carries an edit (A20): its bytes are the current
+         * rendition, which the next edit replaces, so the core never offers it
+         * for deletion (`StageBegin.os_edited`). Sent only with
+         * [Source.OS_LIBRARY]: an owned item is no library item to delete.
+         */
+        osEdited: Boolean = false,
+        // LAST, so every caller's trailing lambda stays the reader.
         read: suspend (max: Int) -> ByteArray,
     ): Outcome {
-        val begun = when (val answer = core.send(StageRequest(begin = StageBegin(media_type = mediaType, byte_size = byteSize)))) {
+        val begin = StageBegin(
+            media_type = mediaType,
+            byte_size = byteSize,
+            source = when (source) {
+                Source.OWNED -> StageSource.STAGE_SOURCE_OWNED
+                Source.OS_LIBRARY -> StageSource.STAGE_SOURCE_OS_LIBRARY
+            },
+            os_ref = osRef,
+            for_hash = forHash?.let { ContentHash.raw(it) } ?: ByteString.EMPTY,
+            tier = tier,
+            os_edited = osEdited && source == Source.OS_LIBRARY,
+        )
+        val begun = when (val answer = core.send(StageRequest(begin = begin))) {
             is CoreOutcome.Failed -> return refusal(answer)
             is CoreOutcome.Answered -> answer.value.response?.stage?.begun
         } ?: return Outcome.No(Refused(UNANSWERED))

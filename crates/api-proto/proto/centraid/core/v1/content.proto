@@ -69,6 +69,24 @@ message ContentUrl {
   // A member-facing sentence, set only when `path` is absent. Never a path,
   // never a sha, never a stack.
   string absent_reason = 6;
+  // WHICH KIND OF PLACE THE BYTES ARE IN (#1080). A path is answered for the
+  // app's own store only; bytes in the operating system's library are named by
+  // `os_ref`, which the shell resolves through the library itself.
+  ContentSource source = 20;
+  // The library's identifier for the item, set with
+  // `CONTENT_SOURCE_OS_LIBRARY`.
+  string os_ref = 21;
+}
+
+// WHERE ONE CONTENT ITEM'S BYTES ARE ON THIS PHONE (#1080).
+enum ContentSource {
+  CONTENT_SOURCE_UNSPECIFIED = 0;
+  // A file in the app's own store; `path` names it.
+  CONTENT_SOURCE_STORE = 1;
+  // The operating system's library, under `os_ref`.
+  CONTENT_SOURCE_OS_LIBRARY = 2;
+  // Not on this phone; `absent_reason` says why.
+  CONTENT_SOURCE_NONE = 3;
 }
 
 message ContentUrls {
@@ -115,8 +133,52 @@ message StageBegin {
   // photograph promoted as `application/octet-stream` is one a grid will not
   // embed.
   string media_type = 1;
-  // The declared length, which is the allocation and the bound.
+  // The declared length: the bound, when one is declared. A session that
+  // sends more is refused at the chunk, and one that ends short is refused at
+  // `end`.
+  //
+  // 0 is "not known" (#1080) — an operating system's library does not always
+  // say how long an item is before it is read — and the session then takes
+  // what arrives: the bytes stream to a file, never into memory, and the
+  // sealing that runs beside an item from the library stops at the spool's
+  // budget and leaves the item to be asked for again (`NeedBytes`).
   uint64 byte_size = 2;
+  // WHERE THESE BYTES LIVE ON THIS PHONE (#1080 ruling 6). Unspecified is
+  // OWNED. See `StageSource`.
+  StageSource source = 3;
+  // The operating system library's own identifier for the item — a PhotoKit
+  // local identifier, a MediaStore id — set with `STAGE_SOURCE_OS_LIBRARY`,
+  // so the core can ask for the same bytes again by it (`NeedBytes.os_ref`).
+  string os_ref = 4;
+  // A DERIVATIVE OF ANOTHER FILE: 32 raw bytes, the content hash of the
+  // original it was rendered from, set with `tier`. The source is then OWNED:
+  // a derivative lives in the app's own store and is sealed like any other
+  // file.
+  bytes for_hash = 5;
+  // `thumb`, `preview` or `poster` (a video's still), set with `for_hash`.
+  string tier = 6;
+  // THE MEMBER EDITED THIS ITEM IN THE LIBRARY (#1080, the root's ruling
+  // A20): `PHAsset.hasAdjustments` on iOS, and false on Android. The bytes
+  // streamed are the current rendition, not the camera's original, so the
+  // core never offers the item for deletion from the library
+  // (`ReleasableRequest`). Set only with `STAGE_SOURCE_OS_LIBRARY`.
+  bool os_edited = 7;
+}
+
+// WHERE STAGED BYTES LIVE ON THIS PHONE (#1080 ruling 6).
+//
+// The phone keeps no second copy of what the operating system's library
+// already holds, so the core is told which of the two it is streaming.
+enum StageSource {
+  STAGE_SOURCE_UNSPECIFIED = 0;
+  // The app's own store holds the bytes: an edit, a document, a download, a
+  // derivative. The core keeps the plaintext as a file named by its hash.
+  STAGE_SOURCE_OWNED = 1;
+  // The operating system's library holds the bytes, under `os_ref`. The core
+  // hashes them and, when a gateway is paired and the spool has room, seals
+  // them into the spool in the same stream (#1080, the root's ruling A8); it
+  // keeps no plaintext copy.
+  STAGE_SOURCE_OS_LIBRARY = 2;
 }
 
 message StageChunk {
@@ -155,7 +217,9 @@ message StageChunked {
 message StageHandle {
   string content_hash = 1;
   uint64 byte_size = 2;
-  // Whether this core ALREADY held these bytes. A camera roll re-scanned is the
-  // ordinary case, and a shell that could not tell would re-upload the roll.
+  // Whether this core ALREADY held these bytes: the app's store had them, or
+  // the device's ledger had recorded them in the library. A camera roll
+  // re-scanned is the ordinary case, and a shell that could not tell would
+  // re-upload the roll.
   bool already_held = 3;
 }

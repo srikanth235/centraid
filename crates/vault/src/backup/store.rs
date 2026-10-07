@@ -1,345 +1,1060 @@
-//! The blob store: content-addressed bytes, moved by digest (#1020,
-//! D-1020-R5).
+//! The store the plane writes to and restores from: one destination, through
+//! one synchronous trait (#1080, gateway protocol v2).
 //!
-//! A backup artefact is named by what it *is*, not by where it came from, so
-//! moving it is a copy and verifying it is a hash. The trait is the seam: lane
-//! C's `net` provides an iroh-blobs implementation for moving a generation
-//! between hosts, and this module carries the local filesystem one, which is
-//! the only back-end v1 ships (R-1020: local filesystem only in v1; provider
-//! back-ends are out).
+//! [`Store`] is the protocol's object and head routes as Rust calls, so the
+//! snapshot, retention, restore and drill code runs unchanged against the real
+//! gateway client and against [`MemoryStore`]. A store is one vault at one
+//! destination under one token: the vault in the path and the token's epoch
+//! are the implementation's business, and a write refused because a newer
+//! writer claimed the vault arrives as [`StoreError::Moved`].
 //!
-//! ## Two rules the filesystem implementation exists to keep
+//! ## WHAT THE PROTOCOL GUARANTEES, AND THIS TRAIT RELIES ON
 //!
-//! **A put is atomic or it did not happen.** Bytes go to a temp file in the
-//! same directory and are renamed into place. A reader therefore sees a whole
-//! blob or no blob, never a prefix — and a prefix is the failure that survives
-//! every structural check and shows up as a restore that produces a corrupt
-//! vault.
+//! - `put` is acknowledged only once the destination verified the digest and
+//!   holds the bytes durably. **The acknowledgement IS the backup** (#1080
+//!   ruling 7).
+//! - `set_head` is a compare-and-set on `prev`, and registers the snapshot.
+//! - `delete` tombstones with a grace period and never deletes the head's
+//!   manifest ([`Refusal::HeadInUse`]); a tombstoned manifest deregisters its
+//!   snapshot.
+//! - A tombstoned object is missing to `exists` and to the listing, and is
+//!   still served by `get` and `get_many` until the purge takes its bytes
+//!   (the root's ruling A16): the grace is what lets a restore keep reading a
+//!   snapshot that retention drops while it reads.
+//! - `put_many` is the protocol's `bundle` and `get_many` its `fetch`: many
+//!   parts in one request, each answered as its own `put` or `get` would be
+//!   (the root's rulings A14 and A15). 64 KiB ranges make a snapshot hundreds
+//!   of parts, and one request per part would be hundreds of round trips.
 //!
-//! **A get verifies.** The digest is the name, so a blob whose bytes do not
-//! hash to their own name is reported as corruption rather than handed back.
-//! Silent bit-rot in a backup is the one failure mode a backup exists to
-//! prevent.
-//!
-//! `blob-door` is deliberately not involved: nothing here opens a socket. The
-//! gate's `no-listening-socket` rule holds for this crate without a feature
-//! flag.
+//! [`MemoryStore`] models exactly these, in memory, so a test can count what
+//! was uploaded and read back what a destination would hold.
 
-use std::collections::BTreeSet;
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, MutexGuard};
 
-#[derive(Debug, thiserror::Error)]
-pub enum BlobError {
-    #[error("blob {id} is not in the store")]
-    NotFound { id: String },
-    #[error("blob {id} hashes to {actual} — the store is corrupt")]
-    Corrupt { id: String, actual: String },
-    #[error("blob id {0:?} is not a hex digest")]
-    InvalidId(String),
-    #[error("blob store io at {path}: {source}")]
-    Io {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
+use super::naming::{Digest, Name};
+
+/// The most names one `exists` or `delete` call carries: the protocol's cap.
+pub const NAMES_PER_CALL: usize = 1000;
+
+/// The most entries one `list` page carries: the protocol's cap.
+pub const LIST_PAGE: usize = 1000;
+
+/// The most bytes one `put_many` sends or one `get_many` answers, every
+/// part's frame header included: the protocol's bundle cap, 256 MiB.
+pub const BUNDLE_BYTES: u64 = 256 * 1024 * 1024;
+
+/// What one part adds to a bundle beside its bytes: its frame header, the
+/// name and the digest in hex and the length as eight bytes.
+pub const FRAME_HEADER_BYTES: u64 = 64 + 64 + 8;
+
+/// One part a `put_many` sends: a spooled file, and what it must be.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Outgoing {
+    pub name: Name,
+    /// BLAKE3 of the file's bytes, as queued.
+    pub digest: Digest,
+    /// The file's length, as queued.
+    pub len: u64,
+    /// The spool file, read as the request is sent and never held whole.
+    pub path: PathBuf,
 }
 
-/// Public because the trait is implemented outside this crate — `crates/blobs`
-/// puts the byte plane's store behind it (#1025 S3).
-pub type Result<T> = std::result::Result<T, BlobError>;
-
-fn io_at(path: &Path) -> impl FnOnce(io::Error) -> BlobError + '_ {
-    move |source| BlobError::Io {
-        path: path.to_path_buf(),
-        source,
-    }
-}
-
-/// Content-addressed byte storage. The id is always the 64-lowercase-hex
-/// digest of the bytes, so an implementation can never be asked to invent a
-/// name.
-///
-/// **Two implementations, and they are not interchangeable** (#1025 S3).
-/// [`FsBlobStore`] keeps BACKUP ARTEFACTS, named by that digest, and is the only
-/// one this crate ships. A member's OWN bytes are kept by the byte plane's
-/// `centraid_blobs::ByteStore`, which is BLAKE3-named, holds partial blobs and
-/// is what `Vault::with_blobs` takes — `centraid_core::bytes` is the door that
-/// puts it behind this trait.
-pub trait BlobStore {
-    /// Store bytes, returning their digest. Idempotent: the same bytes twice
-    /// are one blob.
-    fn put(&self, bytes: &[u8]) -> Result<String>;
-    /// Fetch bytes by digest, verifying them.
-    fn get(&self, id: &str) -> Result<Vec<u8>>;
-    /// Whether the store holds a blob, without reading it.
-    fn has(&self, id: &str) -> Result<bool>;
-    /// Every digest the store holds, sorted.
-    fn ids(&self) -> Result<BTreeSet<String>>;
-    /// The stored size, for sizing a restore before fetching it.
-    fn size(&self, id: &str) -> Result<u64>;
-    /// The FILE these bytes are in, when this store holds them whole.
-    ///
-    /// THE ANSWER `Vault::content_location` GIVES A GRID (#1025 S3). Every cell
-    /// of a photo grid is a path the platform opens directly, and a store that
-    /// could only answer `get(&str) -> Vec<u8>` would mean the core buffering a
-    /// photograph so a view could buffer it again. `None` is a real answer — a
-    /// blob this device holds only part of, or not at all — and it is the
-    /// normal state of a seat whose rows have arrived and whose bytes have not.
-    fn path_of(&self, id: &str) -> Result<Option<PathBuf>>;
-}
-
-/// The digest that names a BACKUP artefact.
-///
-/// **BLAKE3, and it used to be content_hash** (#1025 S4, D-1025-S4-1). The clause
-/// that stood here said an artefact's identity is sealed by
-/// `contracts/golden/format-golden.json` across two languages, so changing it is
-/// a re-keying event and not housekeeping (D-1020-R1). Both halves were true and
-/// neither survives: there is one language now, the golden regenerates through
-/// its own generator in this slice, and **v0 backup artefacts are not restorable
-/// by v1 at all** — v0-no-legacy, so the re-keying event has no key to re-key.
-/// What that clause protected was a released predecessor, and there is none.
-///
-/// It is the same function as `crate::content::content_digest`, deliberately:
-/// two names for one hash is how a store ends up verifying a member's bytes
-/// with the wrong one.
-#[must_use]
-pub fn digest(bytes: &[u8]) -> String {
-    centraid_media::format::content_hash_hex(bytes)
-}
-
-fn check_id(id: &str) -> Result<()> {
-    if id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()) {
-        Ok(())
-    } else {
-        Err(BlobError::InvalidId(id.to_owned()))
-    }
-}
-
-/// A store of BACKUP ARTEFACTS over one directory, one file per blob named by
-/// its BLAKE3 digest.
-///
-/// **Backup only** (#1025 S3, D-1025-S3-1). It used to take a `Naming` and
-/// serve the content plane too, under `open_content`, which is how a device
-/// came to hold two content stores — this one, written by `Vault::with_blobs`,
-/// and iroh's, written by every transfer. `Naming` and `open_content` are gone
-/// with it; a member's bytes live in `centraid_blobs::ByteStore` and nowhere
-/// else.
-#[derive(Debug, Clone)]
-pub struct FsBlobStore {
-    root: PathBuf,
-}
-
-impl FsBlobStore {
-    /// Open (creating) a store of backup artefacts, named by their digest.
-    pub fn open(root: impl AsRef<Path>) -> Result<Self> {
-        let root = root.as_ref().to_path_buf();
-        fs::create_dir_all(&root).map_err(io_at(&root))?;
-        Ok(Self { root })
-    }
-
+impl Outgoing {
+    /// What this part costs a bundle: its bytes and its frame header.
     #[must_use]
-    pub fn root(&self) -> &Path {
-        &self.root
-    }
-
-    /// The file this id NAMES. Says nothing about whether it is there; the
-    /// trait's `path_of` is the one that does.
-    fn file_of(&self, id: &str) -> Result<PathBuf> {
-        check_id(id)?;
-        Ok(self.root.join(id))
+    pub const fn bundle_bytes(&self) -> u64 {
+        self.len.saturating_add(FRAME_HEADER_BYTES)
     }
 }
 
-impl BlobStore for FsBlobStore {
-    /// **Durable, and under a name two writers cannot both choose** (#1029 B13).
+/// The destination's answer to one part of a `put_many`: exactly what a
+/// `put` of that part alone would have answered.
+pub type PartAnswer = Result<Put, Refusal>;
+
+/// One destination's object and head routes.
+pub trait Store {
+    /// The gateway this store reaches. Confirmations are filed under it.
+    fn gateway_id(&self) -> &str;
+
+    /// Which of `names` (at most [`NAMES_PER_CALL`]) the destination does not
+    /// hold. A tombstoned object is not held.
     ///
-    /// Reference A: "`FsBlobStore::put` never fsyncs, and its temp name is only
-    /// `{id}.{pid}.tmp`, so two threads can collide." Both halves were real and
-    /// both are fixed by [`crate::backup::spool::write_durably`], which is the
-    /// one place this crate writes a file it intends to survive a crash:
+    /// # Errors
+    /// [`StoreError`] when the destination cannot be asked.
+    fn exists(&self, names: &[Name]) -> Result<Vec<Name>, StoreError>;
+
+    /// Store one sealed part of `len` bytes whose BLAKE3 is `digest`.
     ///
-    /// - the bytes are fsynced, **and so is the directory** — a rename is not
-    ///   durable until its directory is synced, and without that there is a
-    ///   window in which the bytes exist and the name does not, which for a
-    ///   backup object is the same as the object never having been written;
-    /// - the temp name carries 16 random bytes as well as the process id, so
-    ///   two threads of one process cannot meet on it. Without that, one writer
-    ///   renames a file the other is still filling, and the store ends up
-    ///   holding a half-written object under the digest of a whole one — which
-    ///   `get` would then report as corruption in the *store* rather than as
-    ///   the race it was.
-    fn put(&self, bytes: &[u8]) -> Result<String> {
-        let id = digest(bytes);
-        let target = self.file_of(&id)?;
-        if target.exists() {
-            return Ok(id);
+    /// # Errors
+    /// [`Refusal::DigestMismatch`] when the bytes are not `digest`,
+    /// [`Refusal::NameTaken`] when another digest holds the name, and the
+    /// destination's other refusals.
+    fn put(
+        &self,
+        name: &Name,
+        digest: &Digest,
+        len: u64,
+        body: &mut dyn Read,
+    ) -> Result<Put, StoreError>;
+
+    /// Store several parts in one request: the protocol's `bundle`. Each is
+    /// answered as its own `put` would be, in the order sent. The parts'
+    /// [`Outgoing::bundle_bytes`] sum to at most [`BUNDLE_BYTES`].
+    ///
+    /// The default sends each part as its own `put`.
+    ///
+    /// # Errors
+    /// [`StoreError`] when the request as a whole was not answered: the
+    /// destination unreachable, the writer [`StoreError::Moved`], a spool
+    /// file that cannot be read, or the bundle refused whole
+    /// ([`Refusal::TooLarge`]). A refusal of one part is in its answer.
+    fn put_many(&self, parts: &[Outgoing]) -> Result<Vec<(Name, PartAnswer)>, StoreError> {
+        let mut answers = Vec::with_capacity(parts.len());
+        for part in parts {
+            let mut body = File::open(&part.path)?;
+            let answer = match self.put(&part.name, &part.digest, part.len, &mut body) {
+                Ok(put) => Ok(put),
+                Err(StoreError::Refused(refusal)) => Err(refusal),
+                Err(error) => return Err(error),
+            };
+            answers.push((part.name, answer));
         }
-        crate::backup::spool::write_durably(&target, bytes).map_err(|error| BlobError::Io {
-            path: target.clone(),
-            source: io::Error::other(error.to_string()),
-        })?;
-        Ok(id)
+        Ok(answers)
     }
 
-    fn get(&self, id: &str) -> Result<Vec<u8>> {
-        let path = self.file_of(id)?;
-        let bytes = match fs::read(&path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                return Err(BlobError::NotFound { id: id.to_owned() });
+    /// Write one object's sealed bytes into `sink`, returning their length.
+    /// A tombstoned object is served until its purge.
+    ///
+    /// # Errors
+    /// [`StoreError::Missing`] for a name the destination does not hold.
+    fn get(&self, name: &Name, sink: &mut dyn Write) -> Result<u64, StoreError>;
+
+    /// Fetch several objects in one request: the protocol's `fetch`. `each`
+    /// is handed every object the destination holds of `names` (at most
+    /// [`NAMES_PER_CALL`], whose bytes fit [`BUNDLE_BYTES`]), with its name,
+    /// in the order asked and each name once; a name it is not handed is one
+    /// the destination does not hold. One object is in memory at a time.
+    /// Answers how many were handed over.
+    ///
+    /// The default reads each name with `get`.
+    ///
+    /// # Errors
+    /// [`StoreError`] when the request was not answered, and
+    /// [`StoreError::Io`] for an error `each` returns, which ends the fetch.
+    fn get_many(
+        &self,
+        names: &[Name],
+        each: &mut dyn FnMut(&Name, &[u8]) -> std::io::Result<()>,
+    ) -> Result<usize, StoreError> {
+        let mut seen = BTreeSet::new();
+        let mut handed = 0;
+        for name in names {
+            if !seen.insert(*name) {
+                continue;
             }
-            Err(error) => return Err(io_at(&path)(error)),
-        };
-        // The digest is the name. Bit-rot is reported, never returned — and it
-        // is THIS store's digest: a content blob verified with the backup
-        // plane's hash would be reported corrupt on every read.
-        let actual = digest(&bytes);
-        if actual != id {
-            return Err(BlobError::Corrupt {
-                id: id.to_owned(),
-                actual,
+            let mut bytes = Vec::new();
+            match self.get(name, &mut bytes) {
+                Ok(_) => {
+                    each(name, &bytes)?;
+                    handed += 1;
+                }
+                Err(StoreError::Missing(_)) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(handed)
+    }
+
+    /// The vault's head, or `None` before the first snapshot is registered.
+    ///
+    /// # Errors
+    /// [`StoreError`] when the destination cannot be asked.
+    fn head(&self) -> Result<Option<Head>, StoreError>;
+
+    /// Move the head to the manifest `name`, only if it stands at `prev`.
+    ///
+    /// # Errors
+    /// [`StoreError::HeadConflict`] carrying the current head when it does not
+    /// stand at `prev`; nothing moves.
+    fn set_head(
+        &self,
+        name: &Name,
+        prev: Option<&Name>,
+        taken_at_ms: u64,
+    ) -> Result<Head, StoreError>;
+
+    /// Every registered snapshot.
+    ///
+    /// # Errors
+    /// [`StoreError`] when the destination cannot be asked.
+    fn snapshots(&self) -> Result<Vec<SnapshotEntry>, StoreError>;
+
+    /// Up to `limit` held objects named after `after`, in name order.
+    ///
+    /// # Errors
+    /// [`StoreError`] when the destination cannot be asked.
+    fn list(&self, after: Option<&Name>, limit: usize) -> Result<Vec<ObjectEntry>, StoreError>;
+
+    /// Tombstone `names` (at most [`NAMES_PER_CALL`]).
+    ///
+    /// # Errors
+    /// [`StoreError`] when the destination cannot be asked; a per-name refusal
+    /// is in [`Deleted::refused`].
+    fn delete(&self, names: &[Name]) -> Result<Deleted, StoreError>;
+}
+
+/// What a `put` stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Put {
+    /// The bytes are new to the destination.
+    Stored,
+    /// The destination already held this name with this digest.
+    AlreadyStored,
+}
+
+/// A vault's head at one destination.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Head {
+    /// The manifest the head names.
+    pub name: Name,
+    pub taken_at_ms: u64,
+    /// The writer epoch that set it.
+    pub epoch: u64,
+    pub set_at_ms: u64,
+}
+
+/// One registered snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SnapshotEntry {
+    /// The snapshot's manifest.
+    pub name: Name,
+    pub taken_at_ms: u64,
+    pub registered_at_ms: u64,
+}
+
+/// One held object.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ObjectEntry {
+    pub name: Name,
+    pub size: u64,
+    pub digest: Digest,
+    pub stored_at_ms: u64,
+}
+
+/// What a `delete` did.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Deleted {
+    pub deleted: Vec<Name>,
+    pub refused: Vec<(Name, Refusal)>,
+}
+
+/// A refusal code the destination answered with. The spellings are the
+/// protocol's; a code is never a sentence.
+///
+/// Five of the protocol's codes are not refusals at this trait, because the
+/// plane acts on them as answers: `MOVED` is [`StoreError::Moved`],
+/// `HEAD_CONFLICT` is [`StoreError::HeadConflict`], `NOT_FOUND` is
+/// [`StoreError::Missing`], `NO_HEAD` is a [`Store::head`] of `None`, and
+/// `INTERNAL` — the destination's own fault, retried later — is
+/// [`StoreError::Unreachable`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Refusal {
+    /// The bytes sent are not the digest declared.
+    DigestMismatch,
+    /// The name is held under another digest. A name is a function of the
+    /// plaintext, so the destination already holds a sealing of these bytes.
+    NameTaken,
+    /// Over the protocol's byte cap: an object or a bundle.
+    TooLarge,
+    /// Over the protocol's count cap: more than [`NAMES_PER_CALL`] names.
+    TooMany,
+    DiskFull,
+    Unauthorized,
+    /// The head's own manifest cannot be deleted.
+    HeadInUse,
+    /// A request the destination could not read: a bug at this end.
+    BadRequest,
+    /// A byte range the object cannot satisfy.
+    BadRange,
+    /// A pairing secret offered for a vault the destination already holds.
+    VaultKnown,
+    /// A claim at an epoch other than the writer epoch plus one.
+    EpochConflict,
+    /// A code this build does not know, kept verbatim.
+    Other(String),
+}
+
+impl Refusal {
+    /// Every code this build names, for the tests that hold the table whole.
+    pub const NAMED: [&'static str; 11] = [
+        "DIGEST_MISMATCH",
+        "NAME_TAKEN",
+        "TOO_LARGE",
+        "TOO_MANY",
+        "DISK_FULL",
+        "UNAUTHORIZED",
+        "HEAD_IN_USE",
+        "BAD_REQUEST",
+        "BAD_RANGE",
+        "VAULT_KNOWN",
+        "EPOCH_CONFLICT",
+    ];
+
+    /// The protocol's spelling.
+    #[must_use]
+    pub fn code(&self) -> &str {
+        match self {
+            Self::DigestMismatch => "DIGEST_MISMATCH",
+            Self::NameTaken => "NAME_TAKEN",
+            Self::TooLarge => "TOO_LARGE",
+            Self::TooMany => "TOO_MANY",
+            Self::DiskFull => "DISK_FULL",
+            Self::Unauthorized => "UNAUTHORIZED",
+            Self::HeadInUse => "HEAD_IN_USE",
+            Self::BadRequest => "BAD_REQUEST",
+            Self::BadRange => "BAD_RANGE",
+            Self::VaultKnown => "VAULT_KNOWN",
+            Self::EpochConflict => "EPOCH_CONFLICT",
+            Self::Other(code) => code,
+        }
+    }
+
+    /// Read a code back.
+    #[must_use]
+    pub fn from_code(code: &str) -> Self {
+        match code {
+            "DIGEST_MISMATCH" => Self::DigestMismatch,
+            "NAME_TAKEN" => Self::NameTaken,
+            "TOO_LARGE" => Self::TooLarge,
+            "TOO_MANY" => Self::TooMany,
+            "DISK_FULL" => Self::DiskFull,
+            "UNAUTHORIZED" => Self::Unauthorized,
+            "HEAD_IN_USE" => Self::HeadInUse,
+            "BAD_REQUEST" => Self::BadRequest,
+            "BAD_RANGE" => Self::BadRange,
+            "VAULT_KNOWN" => Self::VaultKnown,
+            "EPOCH_CONFLICT" => Self::EpochConflict,
+            other => Self::Other(other.to_owned()),
+        }
+    }
+}
+
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.code())
+    }
+}
+
+/// Why a store call did not answer the question it was asked.
+#[derive(Debug, thiserror::Error)]
+pub enum StoreError {
+    /// The destination could not be reached, or the transfer broke. Retry
+    /// later; nothing is assumed stored.
+    #[error("the destination is unreachable: {0}")]
+    Unreachable(String),
+    /// The machine that answered is not the destination this device paired
+    /// with: another certificate, or another id. Nothing is sent to it.
+    #[error("the machine that answered is not the paired destination: {0}")]
+    Untrusted(String),
+    /// What the destination served does not hash to the digest it came with:
+    /// the copy it holds, or the bytes on the way, are damaged.
+    #[error("the copy on the destination did not open: {0}")]
+    Damaged(String),
+    /// A newer writer claimed this vault at `epoch`; this one's writes are
+    /// refused and its reads still answer.
+    #[error("MOVED: a writer at epoch {epoch} superseded this one")]
+    Moved { epoch: u64 },
+    /// `set_head` lost its compare-and-set. Nothing moved.
+    #[error("HEAD_CONFLICT: the head is not where this writer last left it")]
+    HeadConflict { current: Option<Head> },
+    #[error("refused: {0}")]
+    Refused(Refusal),
+    #[error("the destination holds no object {0}")]
+    Missing(Name),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
+
+/// Which of `names` `store` does not hold, asked [`NAMES_PER_CALL`] at a time.
+///
+/// # Errors
+/// The first [`StoreError`] a batch met.
+pub fn missing(store: &dyn Store, names: &[Name]) -> Result<BTreeSet<Name>, StoreError> {
+    let mut out = BTreeSet::new();
+    for batch in names.chunks(NAMES_PER_CALL) {
+        out.extend(store.exists(batch)?);
+    }
+    Ok(out)
+}
+
+/// Every object `store` holds, paged [`LIST_PAGE`] at a time.
+///
+/// # Errors
+/// The first [`StoreError`] a page met.
+pub fn list_all(store: &dyn Store) -> Result<Vec<ObjectEntry>, StoreError> {
+    let mut out: Vec<ObjectEntry> = Vec::new();
+    loop {
+        let page = store.list(out.last().map(|entry| &entry.name), LIST_PAGE)?;
+        let full = page.len() == LIST_PAGE;
+        out.extend(page);
+        if !full {
+            return Ok(out);
+        }
+    }
+}
+
+/// Tombstone `names`, [`NAMES_PER_CALL`] at a time.
+///
+/// # Errors
+/// The first [`StoreError`] a batch met.
+pub fn delete_all(store: &dyn Store, names: &[Name]) -> Result<Deleted, StoreError> {
+    let mut out = Deleted::default();
+    for batch in names.chunks(NAMES_PER_CALL) {
+        let deleted = store.delete(batch)?;
+        out.deleted.extend(deleted.deleted);
+        out.refused.extend(deleted.refused);
+    }
+    Ok(out)
+}
+
+// ─── MemoryStore ────────────────────────────────────────────────────────────
+
+/// How long a tombstone keeps its bytes before a purge drops them.
+pub const TOMBSTONE_GRACE_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+
+struct Held {
+    bytes: Vec<u8>,
+    digest: Digest,
+    stored_at_ms: u64,
+    /// Set while tombstoned: when it was deleted.
+    tombstoned_at_ms: Option<u64>,
+}
+
+#[derive(Default)]
+struct Shared {
+    objects: BTreeMap<Name, Held>,
+    head: Option<Head>,
+    snapshots: BTreeMap<Name, SnapshotEntry>,
+    writer_epoch: u64,
+    clock_ms: Option<u64>,
+    puts: u64,
+    bundles: u64,
+    fetches: u64,
+}
+
+impl Shared {
+    fn now_ms(&self) -> u64 {
+        self.clock_ms.unwrap_or_else(|| {
+            u64::try_from(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |elapsed| elapsed.as_millis()),
+            )
+            .unwrap_or(u64::MAX)
+        })
+    }
+
+    fn held(&self, name: &Name) -> Option<&Held> {
+        self.objects
+            .get(name)
+            .filter(|held| held.tombstoned_at_ms.is_none())
+    }
+
+    /// What `get` serves: a held object, or a tombstoned one whose bytes the
+    /// purge has not taken yet (A16).
+    fn served(&self, name: &Name) -> Option<&Held> {
+        self.objects.get(name)
+    }
+}
+
+/// A destination in memory: one vault, its objects, its head and its
+/// snapshots, shared by every handle cloned from it.
+///
+/// Each handle writes at the epoch it was made at. [`MemoryStore::claim`]
+/// makes the handle a restore takes over with, at the next epoch, after which
+/// every older handle's writes are refused [`StoreError::Moved`] and its reads
+/// still answer — the protocol's fence.
+#[derive(Clone)]
+pub struct MemoryStore {
+    shared: Arc<Mutex<Shared>>,
+    gateway_id: String,
+    epoch: u64,
+}
+
+impl MemoryStore {
+    /// An empty destination, its first writer at epoch 1.
+    #[must_use]
+    pub fn new(gateway_id: &str) -> Self {
+        Self {
+            shared: Arc::new(Mutex::new(Shared {
+                writer_epoch: 1,
+                ..Shared::default()
+            })),
+            gateway_id: gateway_id.to_owned(),
+            epoch: 1,
+        }
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Shared> {
+        // A test that panicked while holding the lock already failed; its
+        // state is still the store's state.
+        self.shared
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn writable(&self, shared: &Shared) -> Result<(), StoreError> {
+        if self.epoch < shared.writer_epoch {
+            return Err(StoreError::Moved {
+                epoch: shared.writer_epoch,
             });
         }
-        Ok(bytes)
+        Ok(())
     }
 
-    fn has(&self, id: &str) -> Result<bool> {
-        Ok(self.file_of(id)?.exists())
+    /// Take the vault over at the next writer epoch.
+    #[must_use]
+    pub fn claim(&self) -> Self {
+        let mut shared = self.lock();
+        shared.writer_epoch += 1;
+        Self {
+            shared: Arc::clone(&self.shared),
+            gateway_id: self.gateway_id.clone(),
+            epoch: shared.writer_epoch,
+        }
     }
 
-    /// One file per blob, named by its digest, so the path is the name.
-    fn path_of(&self, id: &str) -> Result<Option<PathBuf>> {
-        let path = self.file_of(id)?;
-        Ok(path.exists().then_some(path))
+    /// The epoch this handle writes at.
+    #[must_use]
+    pub const fn epoch(&self) -> u64 {
+        self.epoch
     }
 
-    fn ids(&self) -> Result<BTreeSet<String>> {
-        let entries = match fs::read_dir(&self.root) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(BTreeSet::new()),
-            Err(error) => return Err(io_at(&self.root)(error)),
+    /// Fix the destination's clock, so `stored_at_ms` and the purge are
+    /// deterministic.
+    pub fn set_clock_ms(&self, now_ms: u64) {
+        self.lock().clock_ms = Some(now_ms);
+    }
+
+    /// How many `put` calls stored new bytes.
+    #[must_use]
+    pub fn stored_puts(&self) -> u64 {
+        self.lock().puts
+    }
+
+    /// How many `put_many` requests were answered.
+    #[must_use]
+    pub fn bundles(&self) -> u64 {
+        self.lock().bundles
+    }
+
+    /// How many `get_many` requests were answered.
+    #[must_use]
+    pub fn fetches(&self) -> u64 {
+        self.lock().fetches
+    }
+
+    /// Every held object's name and sealed bytes — what a member's copy of
+    /// the destination's folder would hold.
+    #[must_use]
+    pub fn contents(&self) -> Vec<(Name, Vec<u8>)> {
+        self.lock()
+            .objects
+            .iter()
+            .filter(|(_, held)| held.tombstoned_at_ms.is_none())
+            .map(|(name, held)| (*name, held.bytes.clone()))
+            .collect()
+    }
+
+    /// Drop the bytes of every tombstone past its grace.
+    pub fn purge(&self) -> usize {
+        let mut shared = self.lock();
+        let now = shared.now_ms();
+        let before = shared.objects.len();
+        shared.objects.retain(|_, held| {
+            held.tombstoned_at_ms
+                .is_none_or(|at| now.saturating_sub(at) < TOMBSTONE_GRACE_MS)
+        });
+        before - shared.objects.len()
+    }
+}
+
+impl Store for MemoryStore {
+    fn gateway_id(&self) -> &str {
+        &self.gateway_id
+    }
+
+    fn exists(&self, names: &[Name]) -> Result<Vec<Name>, StoreError> {
+        let shared = self.lock();
+        Ok(names
+            .iter()
+            .filter(|name| shared.held(name).is_none())
+            .copied()
+            .collect())
+    }
+
+    fn put(
+        &self,
+        name: &Name,
+        digest: &Digest,
+        len: u64,
+        body: &mut dyn Read,
+    ) -> Result<Put, StoreError> {
+        self.writable(&self.lock())?;
+        let mut bytes = Vec::new();
+        body.read_to_end(&mut bytes)?;
+        if bytes.len() as u64 != len || Digest::of(&bytes) != *digest {
+            return Err(StoreError::Refused(Refusal::DigestMismatch));
+        }
+        let mut shared = self.lock();
+        self.writable(&shared)?;
+        let now = shared.now_ms();
+        if let Some(held) = shared.held(name) {
+            return if held.digest == *digest {
+                Ok(Put::AlreadyStored)
+            } else {
+                Err(StoreError::Refused(Refusal::NameTaken))
+            };
+        }
+        shared.objects.insert(
+            *name,
+            Held {
+                bytes,
+                digest: *digest,
+                stored_at_ms: now,
+                tombstoned_at_ms: None,
+            },
+        );
+        shared.puts += 1;
+        Ok(Put::Stored)
+    }
+
+    /// A bundle as the gateway answers one: refused whole for a superseded
+    /// writer or past [`BUNDLE_BYTES`], otherwise each part as its `put`.
+    fn put_many(&self, parts: &[Outgoing]) -> Result<Vec<(Name, PartAnswer)>, StoreError> {
+        self.writable(&self.lock())?;
+        let total = parts
+            .iter()
+            .map(Outgoing::bundle_bytes)
+            .fold(0_u64, u64::saturating_add);
+        if total > BUNDLE_BYTES {
+            return Err(StoreError::Refused(Refusal::TooLarge));
+        }
+        self.lock().bundles += 1;
+        let mut answers = Vec::with_capacity(parts.len());
+        for part in parts {
+            let mut body = File::open(&part.path)?;
+            let answer = match self.put(&part.name, &part.digest, part.len, &mut body) {
+                Ok(put) => Ok(put),
+                Err(StoreError::Refused(refusal)) => Err(refusal),
+                Err(error) => return Err(error),
+            };
+            answers.push((part.name, answer));
+        }
+        Ok(answers)
+    }
+
+    fn get(&self, name: &Name, sink: &mut dyn Write) -> Result<u64, StoreError> {
+        let shared = self.lock();
+        let held = shared.served(name).ok_or(StoreError::Missing(*name))?;
+        sink.write_all(&held.bytes)?;
+        Ok(held.bytes.len() as u64)
+    }
+
+    /// A fetch as the gateway answers one: refused past [`NAMES_PER_CALL`]
+    /// names or [`BUNDLE_BYTES`], otherwise every served object asked for, in
+    /// order, each once.
+    fn get_many(
+        &self,
+        names: &[Name],
+        each: &mut dyn FnMut(&Name, &[u8]) -> std::io::Result<()>,
+    ) -> Result<usize, StoreError> {
+        if names.len() > NAMES_PER_CALL {
+            return Err(StoreError::Refused(Refusal::TooMany));
+        }
+        let mut seen = BTreeSet::new();
+        let answer: Vec<(Name, Vec<u8>)> = {
+            let mut shared = self.lock();
+            shared.fetches += 1;
+            names
+                .iter()
+                .filter(|name| seen.insert(**name))
+                .filter_map(|name| shared.served(name).map(|held| (*name, held.bytes.clone())))
+                .collect()
         };
-        let mut ids = BTreeSet::new();
-        for entry in entries {
-            let entry = entry.map_err(io_at(&self.root))?;
-            if let Some(name) = entry.file_name().to_str()
-                && check_id(name).is_ok()
-            {
-                ids.insert(name.to_owned());
-            }
+        let total = answer
+            .iter()
+            .map(|(_, bytes)| bytes.len() as u64 + FRAME_HEADER_BYTES)
+            .fold(0_u64, u64::saturating_add);
+        if total > BUNDLE_BYTES {
+            return Err(StoreError::Refused(Refusal::TooLarge));
         }
-        Ok(ids)
+        for (name, bytes) in &answer {
+            each(name, bytes)?;
+        }
+        Ok(answer.len())
     }
 
-    fn size(&self, id: &str) -> Result<u64> {
-        let path = self.file_of(id)?;
-        match fs::metadata(&path) {
-            Ok(metadata) => Ok(metadata.len()),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                Err(BlobError::NotFound { id: id.to_owned() })
-            }
-            Err(error) => Err(io_at(&path)(error)),
+    fn head(&self) -> Result<Option<Head>, StoreError> {
+        Ok(self.lock().head)
+    }
+
+    fn set_head(
+        &self,
+        name: &Name,
+        prev: Option<&Name>,
+        taken_at_ms: u64,
+    ) -> Result<Head, StoreError> {
+        let mut shared = self.lock();
+        self.writable(&shared)?;
+        if shared.head.map(|head| head.name).as_ref() != prev {
+            return Err(StoreError::HeadConflict {
+                current: shared.head,
+            });
         }
+        if shared.held(name).is_none() {
+            return Err(StoreError::Missing(*name));
+        }
+        let now = shared.now_ms();
+        let head = Head {
+            name: *name,
+            taken_at_ms,
+            epoch: shared.writer_epoch,
+            set_at_ms: now,
+        };
+        shared.head = Some(head);
+        shared.snapshots.insert(
+            *name,
+            SnapshotEntry {
+                name: *name,
+                taken_at_ms,
+                registered_at_ms: now,
+            },
+        );
+        Ok(head)
+    }
+
+    fn snapshots(&self) -> Result<Vec<SnapshotEntry>, StoreError> {
+        let mut entries: Vec<SnapshotEntry> = self.lock().snapshots.values().copied().collect();
+        entries.sort_by_key(|entry| (entry.taken_at_ms, entry.name));
+        Ok(entries)
+    }
+
+    fn list(&self, after: Option<&Name>, limit: usize) -> Result<Vec<ObjectEntry>, StoreError> {
+        let shared = self.lock();
+        Ok(shared
+            .objects
+            .iter()
+            .filter(|(name, held)| {
+                held.tombstoned_at_ms.is_none() && after.is_none_or(|after| *name > after)
+            })
+            .take(limit)
+            .map(|(name, held)| ObjectEntry {
+                name: *name,
+                size: held.bytes.len() as u64,
+                digest: held.digest,
+                stored_at_ms: held.stored_at_ms,
+            })
+            .collect())
+    }
+
+    fn delete(&self, names: &[Name]) -> Result<Deleted, StoreError> {
+        let mut shared = self.lock();
+        self.writable(&shared)?;
+        let now = shared.now_ms();
+        let head = shared.head.map(|head| head.name);
+        let mut out = Deleted::default();
+        for name in names {
+            if head == Some(*name) {
+                out.refused.push((*name, Refusal::HeadInUse));
+                continue;
+            }
+            if let Some(held) = shared.objects.get_mut(name)
+                && held.tombstoned_at_ms.is_none()
+            {
+                held.tombstoned_at_ms = Some(now);
+            }
+            shared.snapshots.remove(name);
+            out.deleted.push(*name);
+        }
+        Ok(out)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backup::naming::PlaintextHash;
 
-    #[test]
-    fn a_blob_is_named_by_its_bytes_and_a_second_put_is_one_blob() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = FsBlobStore::open(dir.path()).unwrap();
-        let id = store.put(b"generation manifest bytes").unwrap();
-        assert_eq!(id, digest(b"generation manifest bytes"));
-        assert_eq!(store.put(b"generation manifest bytes").unwrap(), id);
-        assert_eq!(store.ids().unwrap().len(), 1);
-        assert_eq!(store.get(&id).unwrap(), b"generation manifest bytes");
-        assert!(store.has(&id).unwrap());
-        assert_eq!(store.size(&id).unwrap(), 25);
+    fn name_of(label: &str) -> Name {
+        Name::from_bytes(*PlaintextHash::of(label.as_bytes()).as_bytes())
+    }
+
+    fn put(store: &MemoryStore, name: &Name, bytes: &[u8]) -> Result<Put, StoreError> {
+        store.put(
+            name,
+            &Digest::of(bytes),
+            bytes.len() as u64,
+            &mut &bytes[..],
+        )
     }
 
     #[test]
-    fn a_missing_blob_and_an_invalid_id_are_different_answers() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = FsBlobStore::open(dir.path()).unwrap();
-        let absent = digest(b"never stored");
-        assert!(matches!(
-            store.get(&absent),
-            Err(BlobError::NotFound { .. })
-        ));
-        assert!(matches!(
-            store.get("../../etc/passwd"),
-            Err(BlobError::InvalidId(_))
-        ));
-        assert!(matches!(store.get("abc"), Err(BlobError::InvalidId(_))));
-    }
-
-    /// The one failure a backup exists to prevent: silent bit-rot.
-    #[test]
-    fn a_blob_whose_bytes_rotted_is_reported_as_corrupt_not_returned() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = FsBlobStore::open(dir.path()).unwrap();
-        let id = store.put(b"generation manifest bytes").unwrap();
-        let mut rotted = fs::read(dir.path().join(&id)).unwrap();
-        rotted[0] ^= 1;
-        fs::write(dir.path().join(&id), &rotted).unwrap();
-        let error = store.get(&id).unwrap_err();
-        assert!(
-            matches!(error, BlobError::Corrupt { .. }),
-            "bit-rot must be named: {error}"
-        );
-    }
-
-    #[test]
-    fn a_temp_file_is_never_mistaken_for_a_blob() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = FsBlobStore::open(dir.path()).unwrap();
-        store.put(b"real").unwrap();
-        fs::write(dir.path().join("deadbeef.1234.tmp"), b"half written").unwrap();
-        fs::write(dir.path().join("README"), b"not a blob").unwrap();
+    fn a_put_is_verified_stored_once_and_read_back() {
+        let store = MemoryStore::new("gw");
+        let name = name_of("a");
+        assert_eq!(store.exists(&[name]).expect("asks"), vec![name]);
+        assert_eq!(put(&store, &name, b"sealed").expect("stores"), Put::Stored);
         assert_eq!(
-            store.ids().unwrap(),
-            BTreeSet::from([digest(b"real")]),
-            "only hex-digest names are blobs"
+            put(&store, &name, b"sealed").expect("again"),
+            Put::AlreadyStored
         );
-    }
-
-    /// **B13.** Two writers cannot meet on a temp name, and a put leaves
-    /// nothing behind.
-    #[test]
-    fn a_put_is_durable_and_its_temp_name_cannot_collide() {
-        use std::collections::BTreeSet;
-
-        let dir = tempfile::tempdir().unwrap();
-        let store = FsBlobStore::open(dir.path()).unwrap();
-        let id = store.put(b"a sealed object").unwrap();
-        assert_eq!(store.get(&id).unwrap(), b"a sealed object");
-
-        let leftovers: Vec<_> = fs::read_dir(dir.path())
-            .unwrap()
-            .filter_map(std::result::Result::ok)
-            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
-            .collect();
-        assert!(leftovers.is_empty(), "no temp file survives a put");
-
-        // The name the defect named — `{id}.{pid}.tmp` — is one string for
-        // every writer in a process. This one is not.
-        let path = dir.path().join(&id);
-        let names: BTreeSet<String> = (0..128)
-            .map(|_| crate::backup::spool::unique_temp_name(&path))
-            .collect();
-        assert_eq!(names.len(), 128, "128 draws, 128 names");
+        assert!(matches!(
+            put(&store, &name, b"other bytes"),
+            Err(StoreError::Refused(Refusal::NameTaken))
+        ));
+        assert!(matches!(
+            store.put(&name_of("b"), &Digest::of(b"x"), 1, &mut &b"y"[..]),
+            Err(StoreError::Refused(Refusal::DigestMismatch))
+        ));
+        assert!(store.exists(&[name]).expect("asks").is_empty());
+        let mut back = Vec::new();
+        assert_eq!(store.get(&name, &mut back).expect("reads"), 6);
+        assert_eq!(back, b"sealed");
+        assert!(matches!(
+            store.get(&name_of("b"), &mut Vec::new()),
+            Err(StoreError::Missing(_))
+        ));
+        assert_eq!(store.stored_puts(), 1);
     }
 
     #[test]
-    fn a_store_over_a_directory_that_does_not_exist_yet_creates_it() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = FsBlobStore::open(dir.path().join("blobs").join("deep")).unwrap();
-        assert!(store.root().exists());
-        assert!(store.ids().unwrap().is_empty());
+    fn the_head_moves_only_from_where_the_writer_left_it() {
+        let store = MemoryStore::new("gw");
+        let (first, second) = (name_of("m1"), name_of("m2"));
+        assert!(matches!(
+            store.set_head(&first, None, 10),
+            Err(StoreError::Missing(_))
+        ));
+        put(&store, &first, b"one").expect("stores");
+        put(&store, &second, b"two").expect("stores");
+        let head = store.set_head(&first, None, 10).expect("the first head");
+        assert_eq!(head.name, first);
+        assert_eq!(store.head().expect("reads"), Some(head));
+        match store.set_head(&second, None, 20) {
+            Err(StoreError::HeadConflict { current }) => assert_eq!(current, Some(head)),
+            other => panic!("expected a conflict, got {other:?}"),
+        }
+        store.set_head(&second, Some(&first), 20).expect("moves");
+        let registered: Vec<Name> = store
+            .snapshots()
+            .expect("lists")
+            .iter()
+            .map(|entry| entry.name)
+            .collect();
+        assert_eq!(registered, vec![first, second]);
+    }
+
+    #[test]
+    fn delete_tombstones_spares_the_head_and_deregisters_a_manifest() {
+        let store = MemoryStore::new("gw");
+        store.set_clock_ms(1_000);
+        let (first, second, range) = (name_of("m1"), name_of("m2"), name_of("r"));
+        for (name, bytes) in [(&first, b"one"), (&second, b"two"), (&range, b"rng")] {
+            put(&store, name, bytes).expect("stores");
+        }
+        store.set_head(&first, None, 1).expect("heads");
+        store.set_head(&second, Some(&first), 2).expect("moves");
+        let deleted = store.delete(&[first, second, range]).expect("deletes");
+        assert_eq!(deleted.deleted, vec![first, range]);
+        assert_eq!(deleted.refused, vec![(second, Refusal::HeadInUse)]);
+        assert_eq!(
+            store.exists(&[first, second, range]).expect("asks"),
+            vec![first, range]
+        );
+        assert_eq!(store.snapshots().expect("lists").len(), 1);
+        assert_eq!(store.list(None, 10).expect("lists").len(), 1);
+
+        // Within the grace a re-upload resurrects; past it the bytes go.
+        assert_eq!(put(&store, &range, b"rng").expect("stores"), Put::Stored);
+        store.delete(&[range]).expect("deletes");
+        assert_eq!(store.purge(), 0, "inside the grace");
+        store.set_clock_ms(1_000 + TOMBSTONE_GRACE_MS);
+        assert_eq!(store.purge(), 2, "past it");
+    }
+
+    #[test]
+    fn a_claim_fences_the_older_writer_and_its_reads_still_answer() {
+        let old = MemoryStore::new("gw");
+        let name = name_of("a");
+        put(&old, &name, b"bytes").expect("stores");
+        let new = old.claim();
+        assert_eq!(new.epoch(), 2);
+        assert!(matches!(
+            put(&old, &name_of("b"), b"more"),
+            Err(StoreError::Moved { epoch: 2 })
+        ));
+        assert!(matches!(old.delete(&[name]), Err(StoreError::Moved { .. })));
+        assert!(matches!(
+            old.set_head(&name, None, 1),
+            Err(StoreError::Moved { .. })
+        ));
+        assert!(
+            old.exists(&[name])
+                .expect("a read still answers")
+                .is_empty()
+        );
+        new.set_head(&name, None, 1).expect("the new writer writes");
+        assert_eq!(old.head().expect("reads").map(|head| head.epoch), Some(2));
+    }
+
+    #[test]
+    fn the_helpers_page_and_batch_past_the_protocols_caps() {
+        let store = MemoryStore::new("gw");
+        let names: Vec<Name> = (0..2_500)
+            .map(|index| name_of(&index.to_string()))
+            .collect();
+        assert_eq!(missing(&store, &names).expect("asks").len(), 2_500);
+        for name in &names[..1_200] {
+            put(&store, name, name.as_bytes()).expect("stores");
+        }
+        assert_eq!(missing(&store, &names).expect("asks").len(), 1_300);
+        let listed = list_all(&store).expect("lists");
+        assert_eq!(listed.len(), 1_200);
+        assert!(listed.windows(2).all(|pair| pair[0].name < pair[1].name));
+        let deleted = delete_all(&store, &names[..1_200]).expect("deletes");
+        assert_eq!(deleted.deleted.len(), 1_200);
+        assert!(list_all(&store).expect("lists").is_empty());
+    }
+
+    #[test]
+    fn a_refusal_code_round_trips_and_an_unknown_one_is_kept() {
+        for code in Refusal::NAMED {
+            let refusal = Refusal::from_code(code);
+            assert!(!matches!(refusal, Refusal::Other(_)), "{code} is named");
+            assert_eq!(refusal.code(), code);
+        }
+        assert_eq!(
+            Refusal::from_code("SOMETHING_NEW"),
+            Refusal::Other("SOMETHING_NEW".to_owned())
+        );
+        assert_eq!(Refusal::from_code("SOMETHING_NEW").code(), "SOMETHING_NEW");
+    }
+
+    /// **A16.** A tombstone is missing to `exists` and the listing and is
+    /// still served by `get` and `get_many` until the purge takes its bytes,
+    /// so a restore that began from a snapshot retention drops keeps reading.
+    #[test]
+    fn a_tombstone_is_served_until_its_purge_and_missing_to_exists() {
+        let store = MemoryStore::new("gw");
+        store.set_clock_ms(1_000);
+        let name = name_of("range");
+        put(&store, &name, b"sealed range").expect("stores");
+        store.delete(&[name]).expect("tombstones");
+        assert_eq!(store.exists(&[name]).expect("asks"), vec![name]);
+        assert!(store.list(None, 10).expect("lists").is_empty());
+        assert!(store.contents().is_empty());
+        let mut back = Vec::new();
+        assert_eq!(store.get(&name, &mut back).expect("still served"), 12);
+        assert_eq!(back, b"sealed range");
+        let mut fetched = Vec::new();
+        store
+            .get_many(&[name], &mut |name, bytes| {
+                fetched.push((*name, bytes.to_vec()));
+                Ok(())
+            })
+            .expect("fetches");
+        assert_eq!(fetched, vec![(name, b"sealed range".to_vec())]);
+        assert!(
+            matches!(store.set_head(&name, None, 1), Err(StoreError::Missing(_))),
+            "a head never names a tombstone"
+        );
+
+        store.set_clock_ms(1_000 + TOMBSTONE_GRACE_MS);
+        assert_eq!(store.purge(), 1);
+        assert!(matches!(
+            store.get(&name, &mut Vec::new()),
+            Err(StoreError::Missing(_))
+        ));
+    }
+
+    fn outgoing(dir: &std::path::Path, label: &str, bytes: &[u8]) -> Outgoing {
+        let name = name_of(label);
+        let path = dir.join(name.to_hex());
+        std::fs::write(&path, bytes).expect("spools");
+        Outgoing {
+            name,
+            digest: Digest::of(bytes),
+            len: bytes.len() as u64,
+            path,
+        }
+    }
+
+    /// **A15.** A bundle is answered part by part exactly as each part's
+    /// `put` would be, and a fetch hands back what is held, in the order
+    /// asked, each name once.
+    #[test]
+    fn a_bundle_and_a_fetch_answer_each_part_as_one_call_would() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let store = MemoryStore::new("gw");
+        let held = outgoing(dir.path(), "held", b"held already");
+        put(&store, &held.name, b"held already").expect("stores");
+        let taken = outgoing(dir.path(), "taken", b"sealed again");
+        put(&store, &taken.name, b"an earlier sealing").expect("stores");
+        let fresh = outgoing(dir.path(), "fresh", b"new bytes");
+        let mut torn = outgoing(dir.path(), "torn", b"queued bytes");
+        torn.digest = Digest::of(b"other bytes");
+
+        let answers = store
+            .put_many(&[held.clone(), taken.clone(), fresh.clone(), torn.clone()])
+            .expect("a bundle");
+        assert_eq!(
+            answers,
+            vec![
+                (held.name, Ok(Put::AlreadyStored)),
+                (taken.name, Err(Refusal::NameTaken)),
+                (fresh.name, Ok(Put::Stored)),
+                (torn.name, Err(Refusal::DigestMismatch)),
+            ]
+        );
+        assert_eq!(store.bundles(), 1);
+
+        let absent = name_of("absent");
+        let mut order = Vec::new();
+        let handed = store
+            .get_many(
+                &[fresh.name, absent, held.name, fresh.name],
+                &mut |name, bytes| {
+                    order.push((*name, bytes.len()));
+                    Ok(())
+                },
+            )
+            .expect("a fetch");
+        assert_eq!(handed, 2);
+        assert_eq!(order, vec![(fresh.name, 9), (held.name, 12)]);
+        assert_eq!(store.fetches(), 1);
+
+        let too_many: Vec<Name> = (0..=NAMES_PER_CALL)
+            .map(|index| name_of(&index.to_string()))
+            .collect();
+        assert!(matches!(
+            store.get_many(&too_many, &mut |_, _| Ok(())),
+            Err(StoreError::Refused(Refusal::TooMany))
+        ));
+        let mut oversized = fresh.clone();
+        oversized.len = BUNDLE_BYTES;
+        assert!(matches!(
+            store.put_many(&[oversized]),
+            Err(StoreError::Refused(Refusal::TooLarge))
+        ));
+        let _successor = store.claim();
+        assert!(matches!(
+            store.put_many(&[fresh]),
+            Err(StoreError::Moved { epoch: 2 })
+        ));
     }
 }

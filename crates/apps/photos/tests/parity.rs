@@ -29,7 +29,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use centraid_apps_kit::contract_vault::open_contract_vault;
+use centraid_apps_kit::contract_vault::{
+    FrozenRowMapping, open_contract_vault, open_contract_vault_without,
+};
 use centraid_apps_kit::fixtures::{
     self, DEMO_ALBUM_FILES, DEMO_ALBUM_TITLE, DEMO_FACE_PEOPLE, DEMO_ROLL, SampleFrame, THUMB_EDGE,
     photos_demo,
@@ -637,7 +639,17 @@ fn v0_vault() -> Connection {
         .expect("the committed DDL is readable");
     let rows = fs::read_to_string(root().join("contracts/apps/photos/rows.json"))
         .expect("the fixture rows are readable");
-    open_contract_vault(&ddl, &rows).expect("the fixture vault is built")
+    // RUNG SIX'S REQUIRED `core_collection.kind`, which the frozen bundle
+    // predates: v0's Photos bundle holds only albums, so every collection row in it is one.
+    open_contract_vault_without(
+        &ddl,
+        &rows,
+        &FrozenRowMapping {
+            columns_added: &[("core_collection", "kind", "album")],
+            ..FrozenRowMapping::NONE
+        },
+    )
+    .expect("the fixture vault is built")
 }
 
 /// `PARITY_EPOCH` — the instant the generator froze its clock at — in ms.
@@ -1483,4 +1495,30 @@ fn every_statement_is_named_in_the_apps_own_namespace() {
         assert!(!query.select.is_empty());
         assert!(!query.from.is_empty());
     }
+}
+
+/// A NOTEBOOK IS NEVER AN ALBUM (rung six). `core_collection` holds Notes'
+/// notebooks too; the library's and search's album reads are `kind = 'album'`,
+/// so a notebook — even one named like the demo's album — is in neither.
+#[test]
+fn a_notebook_is_never_an_album() {
+    let connection = seeded();
+    fixtures::seed_collection(
+        &connection,
+        "notebook-1",
+        "demo-owner",
+        "notebook",
+        DEMO_ALBUM_TITLE,
+        "2026-03-15",
+    )
+    .expect("the notebook is seeded");
+    let door = TestDoor::new(&connection);
+    let data = load_library(&door, &LibraryInput::default(), NOW_MS).expect("the library reads");
+    let albums: Vec<&str> = data
+        .albums
+        .iter()
+        .map(|album| album.album_id.as_str())
+        .collect();
+    assert_eq!(albums.len(), 1, "only the demo's album: {albums:?}");
+    assert!(!albums.contains(&"notebook-1"));
 }

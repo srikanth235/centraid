@@ -2,7 +2,7 @@
 
 ## What goes wrong
 
-Agents hardcode hex/rgb, invent parallel CSS variables or Kotlin/Swift colour tables, import deep theme files, or hand-edit a generated token artifact as if it were the source of truth. Visual drift across desktop, extension and the two native shells follows.
+Agents hardcode hex/rgb, invent parallel CSS variables or Kotlin/Swift colour tables, import deep theme files, or hand-edit a generated token artifact as if it were the source of truth. Visual drift across the two native shells and the public web surfaces follows.
 
 ## Source of truth
 
@@ -19,7 +19,7 @@ Barrel: `@centraid/design` (`packages/design/src/index.ts`). Prefer `themes.ligh
 
 **Generated artifacts are regenerated, never edited.** The gate's `emitters` step (`pr`) and `mobile-jvm` step both rerun the emitters, run `bun run format`, and fail on `git diff --exit-code -- copy design mobile`. `copy/*.json` and `mobile/.../design/Copy.kt` are the exception: their upstream was retired and they are now edited by hand, as their own banners say.
 
-`desktop/renderer/public/styles.css` holds layout and a small set of named `--seat-*` neutrals, not a second palette; a new colour there is a token that belongs in `packages/design`.
+Every surface lowers `packages/design`; a colour written anywhere else is a token that belongs there instead.
 
 ## Two themes, and the key must equal the kind
 
@@ -71,7 +71,7 @@ An app does not declare a reading or scanning register, and its prose does not c
 - [ ] Setting a number? `font: var(--t-mono); font-variant-numeric: var(--t-mono-numeric);` — not `font-family: var(--font-code)`.
 - [ ] Reaching for `--font-code`? Only for code, an inline literal, or a file path.
 
-The CSS debt ledger is empty. `scripts/lint-design-tokens.mjs` (`bun run lint:design-tokens`, over `packages/design/src/elements` and `extension/static`) accepts only a current `--t-*` role or `--t-*-size` rung; arbitrary `var()` sizing does not count as token adoption. Radius declarations are closed over `--r-*`, the registry-emitted tile shape, the per-instance icon-chip radius, and the 26% app-mark geometry. Literal fallbacks, longhand literals, circles spelled as `50%`, and arithmetic over a radius token all fail. Do not repopulate the CSS debt ledger — `tests/budgets.json#designTokenCss` is intentionally empty.
+The CSS debt ledger is empty. `scripts/lint-design-tokens.mjs` (`bun run lint:design-tokens`) reads **one** target, `packages/design/src/elements` — `extension/static` stood beside it until the extension went with the v0 tree in [#1029](https://github.com/srikanth235/centraid/issues/1029), and a named target that does not exist made the gate throw rather than check. It accepts only a current `--t-*` role or `--t-*-size` rung; arbitrary `var()` sizing does not count as token adoption. Radius declarations are closed over `--r-*`, the registry-emitted tile shape, the per-instance icon-chip radius, and the 26% app-mark geometry. Literal fallbacks, longhand literals, circles spelled as `50%`, and arithmetic over a radius token all fail. Do not repopulate the CSS debt ledger — `tests/budgets.json#designTokenCss` is intentionally empty.
 
 ## Three values live under the 4px base, and they are named
 

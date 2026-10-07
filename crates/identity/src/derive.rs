@@ -5,6 +5,7 @@
 //! seed / vault'(i) / identity'    vault identity key     Ed25519  == vault_id == the address
 //! seed / vault'(i) / box'         box key                X25519
 //! seed / vault'(i) / root'        vault root key         32 raw bytes
+//! seed / vault'(i) / locker'      Locker key `K`         32 raw bytes
 //! ```
 //!
 //! ## HARDENED ONLY, AND WHY THAT IS NOT A CHOICE
@@ -26,13 +27,26 @@
 //! independent secrets that a contact can still bind together because both are
 //! published under one vault.
 //!
+//! ## `K` IS A LEAF OF THE VAULT, SO THE 24 WORDS CARRY THE LOCKER
+//!
+//! Locker's key `K` (AES-256-GCM over every sealed cell) is `locker'`, the
+//! vault node's fourth hardened child, and nothing else — no file, no random
+//! mint (#1047, Q-1047-11, owner ruling 2026-09-28). The backup carries the
+//! vault and never a key, so a `K` minted at random would have made a restore
+//! from the 24 words bring every Locker item back with its secrets
+//! unopenable; a derived `K` is re-derived by the restored phone at the same
+//! index. It is its own leaf for the box key's reason: rotating or exposing the
+//! root key must not be `K`, and the reverse.
+//!
 //! ## PATH INDICES, AND THE ONE THAT IS RESERVED
 //!
 //! A vault index is the level-1 index **as written** — vault 3 is `m/3'` — so
-//! the number in the account record and the number in the path are the same
-//! number and there is no offset to get wrong. The account key takes the top of
-//! the hardened space, [`ACCOUNT_INDEX`], which is therefore not a vault index
-//! any allocator may hand out; [`VaultMint`] refuses it.
+//! the number a caller asks for and the number in the path are the same number
+//! and there is no offset to get wrong. The top of the hardened space,
+//! [`ACCOUNT_INDEX`], is **retired and permanently reserved**: it held the
+//! account key until the scope amendment of 2026-09-21 struck the account, and
+//! it is not handed out as a vault index because a seed that once derived an
+//! account there must never derive a vault there. [`VaultMint`] refuses it.
 
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use hmac::{Hmac, KeyInit as _, Mac as _};
@@ -45,10 +59,15 @@ const MASTER_KEY_TAG: &[u8] = b"ed25519 seed";
 /// SLIP-0010 hardens by setting the top bit of the index.
 const HARDENED: u32 = 0x8000_0000;
 
-/// The account key's level-1 index: the last index in the hardened space.
+/// THE RETIRED SLOT: the last index in the hardened space.
 ///
-/// It sits at the top rather than at 0 so that vault indices can be the plain
-/// counting numbers starting at 0 and still never collide with it.
+/// It held the account key (`seed / account'`) until the scope amendment of
+/// 2026-09-21 struck the account — v0 has no account, no signed vault listing
+/// and no purchase, so nothing derives a key here any more. **The slot is not
+/// re-used.** It sits at the top rather than at 0, so vault indices are the
+/// plain counting numbers starting at 0 and never collide with it; keeping it
+/// reserved is what stops a seed that once derived an account here from later
+/// deriving a *vault* here.
 pub const ACCOUNT_INDEX: u32 = 0x7fff_ffff;
 
 /// The largest vault index that is not [`ACCOUNT_INDEX`].
@@ -60,6 +79,9 @@ const IDENTITY_INDEX: u32 = 0;
 const BOX_INDEX: u32 = 1;
 /// Level-2 index of a vault's root key.
 const ROOT_INDEX: u32 = 2;
+/// Level-2 index of a vault's Locker key `K` (#1047, Q-1047-11). Changing it
+/// makes every sealed Locker cell of every vault unopenable.
+const LOCKER_INDEX: u32 = 3;
 
 /// Every derived leaf is 32 bytes wide, whichever key it becomes.
 pub const KEY_BYTES: usize = 32;
@@ -137,14 +159,6 @@ fn hmac_sha512(key: &[u8], parts: &[&[u8]]) -> [u8; 64] {
     bytes
 }
 
-/// The person's account key: what a gateway account is keyed by, and what signs
-/// "vault V belongs to account A".
-///
-/// Contacts never see it (#1029 F2) — it is the one key whose publication would
-/// link a person's vaults to each other.
-#[derive(Clone)]
-pub struct AccountKey(SigningKey);
-
 /// A vault's identity key. Its public half **is** `vault_id` and the address;
 /// there is no second id to map (#1029 §0).
 #[derive(Clone)]
@@ -160,6 +174,12 @@ pub struct BoxKey(x25519_dalek::StaticSecret);
 #[derive(Clone)]
 pub struct VaultRootKey([u8; KEY_BYTES]);
 
+/// A vault's Locker key `K`: the AES-256-GCM key every sealed Locker cell is
+/// sealed under (`centraid_vault::custody::locker_key`). Held in memory by the
+/// core that derived it, never written down (#1047, Q-1047-11).
+#[derive(Clone)]
+pub struct LockerKey([u8; KEY_BYTES]);
+
 macro_rules! redacted_debug {
     ($ty:ty, $name:literal) => {
         impl core::fmt::Debug for $ty {
@@ -170,38 +190,18 @@ macro_rules! redacted_debug {
     };
 }
 
-redacted_debug!(AccountKey, "AccountKey");
 redacted_debug!(VaultIdentityKey, "VaultIdentityKey");
 redacted_debug!(BoxKey, "BoxKey");
 redacted_debug!(VaultRootKey, "VaultRootKey");
-
-impl AccountKey {
-    /// The public half, which the account's own pkarr record is published
-    /// under.
-    pub fn public(&self) -> VerifyingKey {
-        self.0.verifying_key()
-    }
-
-    /// The signing key, for "vault V belongs to account A".
-    pub const fn signing(&self) -> &SigningKey {
-        &self.0
-    }
-
-    /// `seed / account'`.
-    pub fn derive(seed: &crate::phrase::Seed) -> Self {
-        Self(SigningKey::from_bytes(
-            &Node::master(seed).child(ACCOUNT_INDEX).key,
-        ))
-    }
-}
+redacted_debug!(LockerKey, "LockerKey");
 
 impl VaultIdentityKey {
-    /// The public half: the vault id, the address, and the pkarr record's name.
+    /// The public half: the vault id, and what a gateway knows the vault by.
     pub fn public(&self) -> VerifyingKey {
         self.0.verifying_key()
     }
 
-    /// The signing key, for device certificates and published records.
+    /// The signing key, for the claims and read grants a gateway verifies.
     pub const fn signing(&self) -> &SigningKey {
         &self.0
     }
@@ -226,6 +226,13 @@ impl VaultRootKey {
     }
 }
 
+impl LockerKey {
+    /// The 32 bytes, for the Locker session that seals and opens cells.
+    pub const fn as_bytes(&self) -> &[u8; KEY_BYTES] {
+        &self.0
+    }
+}
+
 /// Every key one vault has.
 #[derive(Clone, Debug)]
 pub struct VaultKeys {
@@ -237,6 +244,8 @@ pub struct VaultKeys {
     pub box_key: BoxKey,
     /// `seed / vault'(i) / root'`.
     pub root: VaultRootKey,
+    /// `seed / vault'(i) / locker'`.
+    pub locker: LockerKey,
 }
 
 /// The only way to derive a vault's keys, and the reason it is a type rather
@@ -306,6 +315,7 @@ impl VaultMint {
             identity: VaultIdentityKey(SigningKey::from_bytes(&vault.child(IDENTITY_INDEX).key)),
             box_key: BoxKey(x25519_dalek::StaticSecret::from(vault.child(BOX_INDEX).key)),
             root: VaultRootKey(vault.child(ROOT_INDEX).key),
+            locker: LockerKey(vault.child(LOCKER_INDEX).key),
         };
         self.high_water = Some(index);
         Ok(keys)
@@ -391,14 +401,13 @@ mod tests {
     #[test]
     fn the_four_keys_of_a_vault_are_four_different_secrets() {
         let seed = seed();
-        let account = AccountKey::derive(&seed);
         let keys = VaultMint::fresh().mint(&seed, 0).expect("vault 0");
 
         let bytes: Vec<[u8; 32]> = vec![
-            account.signing().to_bytes(),
             keys.identity.signing().to_bytes(),
             keys.box_key.secret().to_bytes(),
             *keys.root.as_bytes(),
+            *keys.locker.as_bytes(),
         ];
         for (i, a) in bytes.iter().enumerate() {
             for b in bytes.iter().skip(i + 1) {
@@ -425,6 +434,29 @@ mod tests {
             first.identity.public().to_bytes(),
             second.identity.public().to_bytes()
         );
+    }
+
+    /// THE LOCKER KEY IS A FUNCTION OF THE 24 WORDS AND THE INDEX (#1047,
+    /// Q-1047-11): the same words re-derive it, which is what makes a restore
+    /// reopen sealed secrets, and different words or a sibling vault do not.
+    #[test]
+    fn the_locker_key_is_the_seeds_and_no_other_seeds() {
+        let seed = seed();
+        let first = restore_vault_keys(&seed, 0).expect("vault 0");
+        let again = restore_vault_keys(&seed, 0).expect("vault 0 again");
+        assert_eq!(first.locker.as_bytes(), again.locker.as_bytes());
+
+        let other = RecoveryPhrase::parse(
+            "legal winner thank year wave sausage worth useful legal winner thank year \
+             wave sausage worth useful legal winner thank year wave sausage worth title",
+        )
+        .expect("parses")
+        .seed();
+        let stranger = restore_vault_keys(&other, 0).expect("another person's vault 0");
+        assert_ne!(first.locker.as_bytes(), stranger.locker.as_bytes());
+
+        let sibling = restore_vault_keys(&seed, 1).expect("vault 1");
+        assert_ne!(first.locker.as_bytes(), sibling.locker.as_bytes());
     }
 
     #[test]
@@ -504,14 +536,11 @@ mod tests {
         let seed = seed();
         let keys = VaultMint::fresh().mint(&seed, 0).expect("vault 0");
         assert_eq!(
-            format!("{:?}", AccountKey::derive(&seed)),
-            "AccountKey(<redacted>)"
-        );
-        assert_eq!(
             format!("{:?}", keys.identity),
             "VaultIdentityKey(<redacted>)"
         );
         assert_eq!(format!("{:?}", keys.box_key), "BoxKey(<redacted>)");
         assert_eq!(format!("{:?}", keys.root), "VaultRootKey(<redacted>)");
+        assert_eq!(format!("{:?}", keys.locker), "LockerKey(<redacted>)");
     }
 }

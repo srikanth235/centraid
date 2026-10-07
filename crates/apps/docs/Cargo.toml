@@ -13,12 +13,18 @@ path = "src/lib.rs"
 
 [dependencies]
 centraid-apps-kit = { path = "../kit" }
+# CIVIL TIME AND THE SIZE PHRASE (#1046). The phone's drive answers its dates
+# in the device's zone and its sizes in words, and both rules already live in
+# the vault — `time::zone` for the one zone database, `page::format_byte_size`
+# for the one byte formatter Home's tile reads. Reached for those, SQL-free.
+centraid-vault = { path = "../../vault" }
+# The FTS door, for `search` from a term (D-1020-N1), as Agenda asks for its own.
+centraid-search = { path = "../../search" }
 serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 centraid-media = { path = "../../media" }
 centraid-ontology = { path = "../../ontology" }
-centraid-vault = { path = "../../vault" }
 proptest.workspace = true
 rusqlite.workspace = true

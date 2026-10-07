@@ -59,6 +59,7 @@ pub mod dates;
 pub mod journal;
 pub mod manifest;
 pub mod person;
+pub mod phone;
 pub mod queries;
 pub mod roster;
 
@@ -66,33 +67,9 @@ pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use dates::{DAYS_UNSET, days_until_month_day};
 pub use manifest::{APP_ID, manifest};
 
-/// A CONSENT DENIAL, as the payload carries it.
-///
-/// Every v0 People query wraps its body and answers `{…empty, vaultDenied:
-/// {code, message}}` rather than throwing (`queries/people.ts:222`-`:230`, and
-/// the same in all seven). `revoked_at` comes from the HOST, because a revoked
-/// app cannot read the consent tables to date its own revocation — so it is
-/// an `Option` this crate never fills in.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Denial {
-    pub code: Option<String>,
-    pub message: Option<String>,
-    pub revoked_at: Option<String>,
-}
-
-impl Denial {
-    /// The denial a door failure lowers to. The kit's error text is the
-    /// `message`; `code` stays absent because the kit does not mint one and an
-    /// invented code is a code a surface would switch on.
-    #[must_use]
-    pub fn from_door(error: &centraid_apps_kit::KitError) -> Self {
-        Self {
-            code: None,
-            message: Some(error.to_string()),
-            revoked_at: None,
-        }
-    }
-}
+/// A CONSENT DENIAL, as the payload carries it: the kit's one type, shared by
+/// every app so the core settles all of them through one door.
+pub use centraid_apps_kit::Denial;
 
 /// THE THREE STATES OF A READ (D-1020-PE1).
 ///

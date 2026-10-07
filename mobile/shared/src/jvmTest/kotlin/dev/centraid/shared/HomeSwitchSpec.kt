@@ -8,6 +8,7 @@ import centraid.screen.v1.HomeState
 import centraid.screen.v1.TileStatus
 import centraid.screen.v1.VaultLockup
 import dev.centraid.core.CentraidCore
+import dev.centraid.shared.platform.FakeDeviceClock
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.HomeReads
@@ -46,8 +47,12 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class HomeSwitchSpec : StringSpec({
 
-    /** Apps Home actually pages; locker has no read and stays seeded. */
-    val readable = HomeReads.READS.map { it.appId }.toSet()
+    /**
+     * Apps Home actually reads; locker has no read and stays seeded. Agenda's
+     * app query lands `TileRefused` against a core that answers every request
+     * with a page, which is settled — not LOADING — and is what this asks.
+     */
+    val readable = HomeReads.READ_APP_IDS
 
     fun emptyPage(): Envelope = Envelope(
         request_id = 0,
@@ -96,7 +101,12 @@ class HomeSwitchSpec : StringSpec({
         val foreground = AtomicReference(coreA)
         val host = ScreenHost(HomeMachine)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val runtime = HomeRuntime(core = { foreground.get() }, host = host, scope = scope).start()
+        val runtime = HomeRuntime(
+            core = { foreground.get() },
+            host = host,
+            scope = scope,
+            clock = FakeDeviceClock(),
+        ).start()
         delay(50)
 
         openNamed(host, "Vault A", "vault-a")
@@ -148,7 +158,7 @@ class HomeSwitchSpec : StringSpec({
         val host = ScreenHost(HomeMachine)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-        var runtime: Job = HomeRuntime({ coreA }, host, scope).start()
+        var runtime: Job = HomeRuntime({ coreA }, host, scope, FakeDeviceClock()).start()
         delay(50)
         openNamed(host, "Vault A", "vault-a")
         awaitReadsSettled(host)
@@ -165,7 +175,7 @@ class HomeSwitchSpec : StringSpec({
                 ),
             ),
         )
-        runtime = HomeRuntime({ coreB }, host, scope).start()
+        runtime = HomeRuntime({ coreB }, host, scope, FakeDeviceClock()).start()
         delay(500)
 
         host.state.value.data_!!.tiles

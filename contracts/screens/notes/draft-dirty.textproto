@@ -1,6 +1,7 @@
-# Edited and not yet saved. AN EDIT NEVER WRITES: `save` is DIRTY and no
-# command has been submitted, because autosave-per-keystroke would fill an
-# outbox with a hundred revisions of one note.
+# Edited and not yet saved. An edit schedules its save (the kit's autosave,
+# 900 ms after the last keystroke) and writes nothing itself: `autosave` is
+# DIRTY at edit 1, nothing is saved yet, and `baseline` is the note as the
+# vault has it. `save` is the same fact as the views still read it.
 seat {
   availability: AVAILABILITY_READY
   durability: DURABILITY_AUTHORITATIVE
@@ -14,3 +15,14 @@ draft {
   base_revision_id: "rev-0007"
 }
 save: SAVE_STATE_DIRTY
+autosave {
+  phase: PHASE_DIRTY
+  edit_seq: 1
+  base_revision_id: "rev-0007"
+}
+baseline {
+  title: "Winter plans"
+  body: "Book the cabin."
+  format: FORMAT_MARKDOWN
+  base_revision_id: "rev-0007"
+}

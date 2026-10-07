@@ -6,12 +6,6 @@
     "door": "hook",
     "why": "The affected packages' tests — the gate that actually catches breakage, and the wall clock every other rung-1 gate hides behind."
   },
-  "design:gallery": {
-    "class": "product",
-    "rung": 1,
-    "door": "hook",
-    "why": "Pixel baselines for the design gallery. No CI job owns it (it needs a downloaded browser), so rung 1 is its only enforcement."
-  },
   "knip": {
     "class": "contract",
     "rung": 1,
@@ -215,12 +209,6 @@
     "rung": 1,
     "door": "hook",
     "why": "The protocol route table: a declared route with no handler, or a handler with no route."
-  },
-  "lint:acp-min-versions": {
-    "class": "contract",
-    "rung": 1,
-    "door": "hook",
-    "why": "ACP minimum versions: a backend claiming a protocol level it cannot serve."
   },
   "lint:aria-labels": {
     "class": "product",

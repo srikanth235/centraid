@@ -55,6 +55,10 @@ use crate::error::{Result, VaultError};
 /// The note wrapper's logical entity type.
 pub const NOTE_TARGET_TYPE: &str = "knowledge.note";
 
+/// `core_collection.kind` for a Notes notebook (rung six). Photos' albums are
+/// the other kind, and nothing here reads or writes one.
+pub const NOTEBOOK_KIND: &str = "notebook";
+
 /// What a note's `format` means in media-type terms.
 const MEDIA_TYPE: &[(&str, &str)] = &[
     ("markdown", "text/markdown"),
@@ -227,22 +231,34 @@ fn pre_notebook_exists_if_given(ctx: &CommandCtx<'_, '_>) -> Result<Option<Strin
     let Some(notebook_id) = ctx.optional_str("notebook_id") else {
         return Ok(None);
     };
-    let count: i64 = ctx.connection().query_row(
-        "SELECT COUNT(*) FROM core_collection WHERE collection_id = ?1",
-        [notebook_id],
-        |row| row.get(0),
-    )?;
-    Ok((count != 1).then(|| "There is no notebook with that id.".to_owned()))
+    notebook_refusal(ctx, notebook_id)
 }
 
 fn pre_notebook_exists(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let notebook_id = ctx.required_str("notebook_id")?;
-    let count: i64 = ctx.connection().query_row(
-        "SELECT COUNT(*) FROM core_collection WHERE collection_id = ?1",
-        [notebook_id],
+    notebook_refusal(ctx, notebook_id)
+}
+
+/// A COLLECTION IS A NOTEBOOK ONLY IF IT SAYS SO (rung six).
+///
+/// `core_collection` holds Photos' albums too, told apart by `kind`. An album
+/// id gets its own sentence rather than "no notebook": the member picked a
+/// real thing, it is just the other app's, and filing a note into it — or
+/// deleting it from Notes, which would unfile every photograph in it — is the
+/// cross-app write this refusal exists to stop.
+fn notebook_refusal(ctx: &CommandCtx<'_, '_>, collection_id: &str) -> Result<Option<String>> {
+    let kind: Option<String> = rusqlite::OptionalExtension::optional(ctx.connection().query_row(
+        "SELECT kind FROM core_collection WHERE collection_id = ?1",
+        [collection_id],
         |row| row.get(0),
-    )?;
-    Ok((count != 1).then(|| "There is no notebook with that id.".to_owned()))
+    ))?;
+    Ok(match kind.as_deref() {
+        Some(NOTEBOOK_KIND) => None,
+        Some(_) => {
+            Some("That is a Photos album, not a notebook. Notes can only use notebooks.".to_owned())
+        }
+        None => Some("There is no notebook with that id.".to_owned()),
+    })
 }
 
 /// The body a note is currently made of, and the format it reads it as.
@@ -379,7 +395,6 @@ fn create_note() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -499,7 +514,6 @@ fn edit_note() -> CommandDefinition {
             })
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -559,7 +573,6 @@ fn move_note() -> CommandDefinition {
             Ok(serde_json::json!({ "note_id": note_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -587,15 +600,12 @@ fn create_notebook() -> CommandDefinition {
             CommandCondition {
                 predicate: "parent_exists_if_given",
                 check: |ctx| {
+                    // A notebook nests only in a notebook: an album is flat and
+                    // is Photos' own.
                     let Some(parent) = ctx.optional_str("parent_notebook_id") else {
                         return Ok(None);
                     };
-                    let count: i64 = ctx.connection().query_row(
-                        "SELECT COUNT(*) FROM core_collection WHERE collection_id = ?1",
-                        [parent],
-                        |row| row.get(0),
-                    )?;
-                    Ok((count != 1).then(|| "There is no notebook with that id.".to_owned()))
+                    notebook_refusal(ctx, parent)
                 },
             },
             CommandCondition {
@@ -603,11 +613,14 @@ fn create_notebook() -> CommandDefinition {
                 // notebooks with the same name are indistinguishable in every
                 // filing UI, and without this the duplicate could only be
                 // untangled by renaming one away — which rename itself refuses.
+                // Scoped to NOTEBOOKS: an album called "Travel" is Photos' and
+                // is never offered where a notebook is picked (rung six).
                 predicate: "name_unused",
                 check: |ctx| {
                     let name = ctx.required_str("name")?;
                     let count: i64 = ctx.connection().query_row(
-                        "SELECT COUNT(*) FROM core_collection WHERE name = ?1",
+                        "SELECT COUNT(*) FROM core_collection
+                          WHERE name = ?1 AND kind = 'notebook'",
                         [name],
                         |row| row.get(0),
                     )?;
@@ -621,7 +634,8 @@ fn create_notebook() -> CommandDefinition {
             check: |ctx| {
                 let notebook_id = created_notebook_id(ctx);
                 let count: i64 = ctx.connection().query_row(
-                    "SELECT COUNT(*) FROM core_collection WHERE collection_id = ?1",
+                    "SELECT COUNT(*) FROM core_collection
+                      WHERE collection_id = ?1 AND kind = 'notebook'",
                     [&notebook_id],
                     |row| row.get(0),
                 )?;
@@ -634,19 +648,20 @@ fn create_notebook() -> CommandDefinition {
             let parent = ctx.optional_str("parent_notebook_id").map(str::to_owned);
             // `sort_order` is SIBLING-SCOPED, and the parent match is `IS` (not
             // `=`) so NULL parents group together rather than never matching.
+            // Siblings are NOTEBOOKS: Photos' top-level albums are no part of
+            // this order.
             ctx.connection().execute(
                 "INSERT INTO core_collection
-                   (collection_id, owner_party_id, name, cover_content_id,
+                   (collection_id, owner_party_id, kind, name, cover_content_id,
                     parent_collection_id, sort_order, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, NULL, ?4,
+                 VALUES (?1, ?2, 'notebook', ?3, NULL, ?4,
                          (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM core_collection
-                           WHERE parent_collection_id IS ?4), ?5, ?5)",
+                           WHERE parent_collection_id IS ?4 AND kind = 'notebook'), ?5, ?5)",
                 rusqlite::params![notebook_id, actor_party_id(ctx)?, name, parent, ctx.now],
             )?;
             Ok(serde_json::json!({ "notebook_id": notebook_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -673,7 +688,7 @@ fn rename_notebook() -> CommandDefinition {
                     let name = ctx.required_str("name")?.to_owned();
                     let count: i64 = ctx.connection().query_row(
                         "SELECT COUNT(*) FROM core_collection
-                          WHERE name = ?1 AND collection_id <> ?2
+                          WHERE name = ?1 AND collection_id <> ?2 AND kind = 'notebook'
                             AND owner_party_id = (SELECT owner_party_id FROM core_collection
                                                    WHERE collection_id = ?2)",
                         rusqlite::params![name, notebook_id],
@@ -708,7 +723,6 @@ fn rename_notebook() -> CommandDefinition {
             Ok(serde_json::json!({ "notebook_id": notebook_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -769,12 +783,17 @@ fn delete_notebook() -> CommandDefinition {
                 rusqlite::params![notebook_id, NOTE_TARGET_TYPE],
                 |row| row.get(0),
             )?;
+            // NOTEBOOK ROWS ONLY, in the statement itself and not only in the
+            // precondition: an album's entries are its photographs' only
+            // placement, and nothing in Notes may be able to remove them.
             ctx.connection().execute(
-                "DELETE FROM core_collection_entry WHERE collection_id = ?1",
+                "DELETE FROM core_collection_entry
+                  WHERE collection_id = (SELECT collection_id FROM core_collection
+                                          WHERE collection_id = ?1 AND kind = 'notebook')",
                 [&notebook_id],
             )?;
             ctx.connection().execute(
-                "DELETE FROM core_collection WHERE collection_id = ?1",
+                "DELETE FROM core_collection WHERE collection_id = ?1 AND kind = 'notebook'",
                 [&notebook_id],
             )?;
             Ok(serde_json::json!({
@@ -783,7 +802,6 @@ fn delete_notebook() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -842,7 +860,6 @@ fn delete_note() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -906,7 +923,6 @@ fn restore_note() -> CommandDefinition {
             Ok(serde_json::json!({ "note_id": note_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -976,7 +992,6 @@ fn restore_note_version() -> CommandDefinition {
             Ok(serde_json::json!({ "note_id": note_id, "content_id": content_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -1020,6 +1035,12 @@ const RESTORE_VERSION_PRE: &[CommandCondition] = &[
 
 // ---------------------------------------------------------------------------
 // The schemas, verbatim from v0's `inputSchema` blocks.
+// Two departures: `body_text` is `minLength: 0` on create and edit — a note
+// may be cleared (owner ruling 2026-09-24) — and `title` is `minLength: 0` on
+// edit, because Notes draws an empty title as the body's first line (R-1047
+// F5's derived title), so a member who clears both the name and the body
+// saves an untitled note rather than keeping a name they removed (#1047 T1).
+// Create keeps `minLength: 1`: the editor refuses a new note with neither.
 // ---------------------------------------------------------------------------
 
 const CREATE_NOTE_SCHEMA: &str = r#"{
@@ -1032,7 +1053,7 @@ const CREATE_NOTE_SCHEMA: &str = r#"{
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
             },
             "title": { "type": "string", "minLength": 1 },
-            "body_text": { "type": "string", "minLength": 1 },
+            "body_text": { "type": "string", "minLength": 0 },
             "format": { "type": "string", "enum": ["markdown", "html", "plain"] },
             "notebook_id": { "type": "string", "minLength": 1 }
           }
@@ -1044,8 +1065,8 @@ const EDIT_NOTE_SCHEMA: &str = r#"{
           "additionalProperties": false,
           "properties": {
             "note_id": { "type": "string", "minLength": 1 },
-            "title": { "type": "string", "minLength": 1 },
-            "body_text": { "type": "string", "minLength": 1 },
+            "title": { "type": "string", "minLength": 0 },
+            "body_text": { "type": "string", "minLength": 0 },
             "format": { "type": "string", "enum": ["markdown", "html", "plain"] },
             "pinned": { "type": "integer", "minimum": 0, "maximum": 1 }
           }
@@ -1158,7 +1179,6 @@ mod tests {
     fn no_knowledge_command_carries_the_non_owner_park() {
         for definition in definitions() {
             assert!(!definition.confirm, "{}", definition.name);
-            assert!(!definition.online_only, "{}", definition.name);
             assert!(definition.sealed_input.is_empty(), "{}", definition.name);
             // `risk` is SALIENCE ONLY: every knowledge command is `low`,
             // including the two deletes, because both are reversible.

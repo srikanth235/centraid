@@ -31,17 +31,15 @@
 //! **A row's own `deleted_at` is ground truth. An app board that shows a
 //! soft-deleted row is wrong, and the harness does not adopt its answer.**
 //!
-//! Tasks and Agenda are the two app crates in the workspace that never filter
-//! `deleted_at` (characterised in `crates/evalworld/tests/world.rs`), so the
-//! FTS door and the Tasks board disagree about a trashed task. Scoring by the
-//! board would freeze that defect into the evaluation and then mark DOWN a
-//! candidate that correctly hides a row the member deleted — the evaluation
-//! would be enforcing the bug. Scoring by `deleted_at` costs nothing if the
-//! defect is fixed and is right either way.
+//! The Tasks board leaves a trashed task out (#1047) and Tasks has no trash
+//! read of its own, so the harness reads the trash beside the board: a suite
+//! asks "did I bin the library books task?" and then for it back, and a
+//! candidate needs the row to answer either. Scoring by the board alone would
+//! hide a row the member can still restore; scoring by `deleted_at` is right
+//! whichever door answered.
 //!
-//! The harness does not hide the disagreement from a candidate, though:
-//! [`Context::open`] returns every row the app door returned and stamps each
-//! with [`VaultRow::live`], read from the row's own `deleted_at`. What a
+//! [`Context::open`] returns every row it read and stamps each with
+//! [`VaultRow::live`], read from the row's own `deleted_at`. What a
 //! candidate does with that is a property of the candidate. What the SUITE may
 //! expect is fixed: a trashed row is never a correct answer.
 
@@ -65,7 +63,7 @@ pub mod nulls;
 pub mod reference;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use centraid_apps_kit::page::PageRequest;
 use centraid_apps_kit::reads::{PageDoor, read_by_id};
@@ -409,21 +407,13 @@ impl WorldTemplate {
         let founded = vault
             .found("Training vault", "Owner")
             .map_err(|error| format!("the vault does not found: {error}"))?;
-        let custody = centraid_vault::custody::MemberKeyCustody::with_store(
-            centraid_vault::custody::KeyStore::new(dir.path().join("keys")),
-            &founded.vault_id,
-        );
-        let key_id = vault.ids().next();
-        let now = centraid_vault::clock::format_iso_ms(now_ms);
+        // The generation's id only: the phone derives `K` from the 24 words and
+        // the vault never stores it (#1047, D-6). This world seals under
+        // `centraid_evalworld::HARNESS_LOCKER_KEY`, as every built world does.
         vault
-            .commit(|tx| {
-                centraid_vault::custody::found_locker_key(tx.connection(), &custody, &key_id, &now)
-                    .map_err(|error| centraid_vault::VaultError::Invariant {
-                        context: error.to_string(),
-                    })?;
-                Ok(())
-            })
+            .locker_generation()
             .map_err(|error| format!("the locker key: {error}"))?;
+        let now = centraid_vault::clock::format_iso_ms(now_ms);
         vault
             .close()
             .map_err(|error| format!("the vault does not close: {error}"))?;
@@ -482,7 +472,6 @@ impl WorldTemplate {
             shapes: std::cell::RefCell::new(centraid_ontology::snapshot::SnapshotCache::new()),
             scans: std::cell::Cell::new(0),
             scan_micros: std::cell::Cell::new(0),
-            keys_dir: into.path().join("keys"),
             _dir: into,
             vault: Some(vault),
             registry,
@@ -553,7 +542,6 @@ impl centraid_vault::clock::Clock for WorldClock {
 pub struct Dealt {
     /// The vault's clock — see [`WorldClock`].
     clock: std::sync::Arc<WorldClock>,
-    keys_dir: PathBuf,
     _dir: tempfile::TempDir,
     vault: Option<Vault>,
     registry: Registry,
@@ -1208,7 +1196,7 @@ impl<'world> Context<'world> {
             .map_err(|error| error.to_string())
     }
 
-    /// Seal a secret for a Locker row, under the member key.
+    /// Seal a secret for a Locker row, under the harness Locker key.
     ///
     /// **This is the seat's job, and it is why it is here.** `locker.add_item`
     /// refuses plaintext by name — "this gateway holds no key and cannot seal
@@ -1220,8 +1208,7 @@ impl<'world> Context<'world> {
     ///
     /// # Errors
     ///
-    /// The vault holds no live locker key, or this seat holds no key file for
-    /// it.
+    /// The vault holds no live locker key.
     pub fn seal(&self, item_id: &str, plaintext: &str) -> Result<String, String> {
         let started = std::time::Instant::now();
         let outcome = self.seal_inner(item_id, plaintext);
@@ -1230,26 +1217,14 @@ impl<'world> Context<'world> {
     }
 
     fn seal_inner(&self, item_id: &str, plaintext: &str) -> Result<String, String> {
-        let vault_id = self
-            .dealt
-            .vault()
-            .vault_id()
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "this vault is not founded".to_owned())?;
-        let key_id = self
-            .dealt
-            .vault()
-            .read(|connection| Ok(centraid_vault::custody::live_locker_key_id(connection)))
-            .map_err(|error| error.to_string())?
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "this vault has no live locker key".to_owned())?;
-        let custody = centraid_vault::custody::MemberKeyCustody::with_store(
-            centraid_vault::custody::KeyStore::new(&self.dealt.keys_dir),
-            &vault_id,
-        );
-        let key = custody.load(&key_id).map_err(|error| error.to_string())?;
-        centraid_vault::custody::encrypt_under_locker_key(&key, &key_id, item_id, plaintext)
-            .map_err(|error| error.to_string())
+        let key_id = self.locker_key_id()?;
+        centraid_vault::custody::encrypt_under_locker_key(
+            centraid_evalworld::HARNESS_LOCKER_KEY,
+            &key_id,
+            item_id,
+            plaintext,
+        )
+        .map_err(|error| error.to_string())
     }
 
     /// The live Locker key's id, which `locker.add_item` requires be declared.
@@ -4059,6 +4034,39 @@ fn board_of(
                     row("schedule.task", task.task_id, task.title, due, extra)
                 })
                 .collect::<Vec<VaultRow>>();
+            // THE TRASH, read beside the board. The board leaves a trashed
+            // task out (#1047), and Tasks has no trash read of its own, so
+            // "did I bin the library books task?" and the restore after it
+            // would have no row to answer with. The rows come back stamped
+            // not live from their own `deleted_at`, like every other row.
+            let trash = PageQuery::new(
+                "evalsuite.tasks.trash",
+                "task_id, title, status, due_at, completed_at, effort_min, parent_task_id",
+                "schedule_task",
+                PageOrder::desc("updated_at", "task_id"),
+            )
+            .filter("deleted_at IS NOT NULL", Vec::new());
+            let page = door
+                .page(&trash, &PageRequest::first(BOARD_LIMIT))
+                .map_err(|error| error.to_string())?;
+            tasks.extend(page.rows.iter().filter_map(|found| {
+                let mut extra = Vec::new();
+                for column in ["status", "completed_at", "parent_task_id"] {
+                    if let Some(value) = text(found, column) {
+                        extra.push((column, value));
+                    }
+                }
+                if let Some(effort) = integer(found, "effort_min") {
+                    extra.push(("effort_min", effort.to_string()));
+                }
+                Some(row(
+                    "schedule.task",
+                    text(found, "task_id")?,
+                    text(found, "title").unwrap_or_default(),
+                    text(found, "due_at"),
+                    extra,
+                ))
+            }));
             // THE PROJECTS, which the board already folds beside the tasks.
             // `schedule.project` is declared `surface: "kind"` on the Tasks
             // door, so "which projects do I have" has to be answerable from
@@ -4080,11 +4088,16 @@ fn board_of(
             tasks
         }
         App::Agenda => {
+            // UTC, as the board read before Agenda took the member's zone
+            // (#1047): every world's clock and every gold answer is in UTC.
+            let zone = centraid_vault::time::FireZone::named("Etc/UTC")
+                .map_err(|error| format!("the UTC zone: {error}"))?;
             let (upcoming, _denial) = centraid_apps_agenda::queries::load_upcoming(
                 door,
                 Some("2000-01-01T00:00:00.000Z"),
                 None,
                 now,
+                &zone,
             )
             .map_err(|error| error.to_string())?;
             upcoming
@@ -4172,7 +4185,6 @@ fn board_of(
                 centraid_apps_docs::queries::DriveInput {
                     limit: Some(BOARD_LIMIT),
                 },
-                now,
             )
             .map_err(|error| error.to_string())?;
             let folders: BTreeMap<String, String> = drive
@@ -4645,11 +4657,11 @@ fn board_of(
         }
         App::Locker => {
             // LOCKER HAS NO `load_*`: the app hands a surface statements and a
-            // decorator rather than one fold. The statement is the app's own,
-            // so this is still the app's door and not a query of the harness's.
-            let query = centraid_apps_locker::queries::items_statement(
-                centraid_apps_locker::queries::Shelf::Live,
-            );
+            // decorator rather than one fold. The statement is the app's own
+            // shelf, narrowed to the live items (the archived shelf is its own
+            // board), so this is still the app's door and not the harness's.
+            let query = centraid_apps_locker::phone::shelves_statement()
+                .filter("deleted_at IS NULL AND archived_at IS NULL", Vec::new());
             let page = door
                 .page(&query, &PageRequest::first(BOARD_LIMIT))
                 .map_err(|error| error.to_string())?;

@@ -59,6 +59,30 @@ pub struct CoreConfig {
     /// treated as "not checked", and `crate::identity::require_digest` is what
     /// says so out loud when a `dev` build is on either side.
     pub expected_digest: Option<String>,
+    /// THE VAULT'S OWN SEED, AND THE INDEX IT WAS MINTED AT (#1029 W15,
+    /// `CONTRACT.md` §4b).
+    ///
+    /// Sealing, naming and claiming need this vault's keys, which are derived
+    /// from the 24 words at this vault's index. **This library writes no key
+    /// down**, so the secret arrives the way `CONTRACT.md` §4a already says a
+    /// secret arrives: out of the platform's secure store, for the length of
+    /// the call that opens the core.
+    ///
+    /// `None` is a core that reads and writes its vault perfectly well and
+    /// cannot back up. That is an honest state a shell draws ("unlock to back
+    /// up"), not a failure: the alternative is a core that invents a key file
+    /// beside the vault it protects, in a place no shell asked for and no
+    /// backup excludes.
+    pub seed: Option<(centraid_identity::Seed, u32)>,
+    /// THE MOST THE SPOOL MAY EVER HOLD (#1080). `None` is
+    /// `centraid_vault::backup::spool::SPOOL_CEILING_BYTES`, 2 GiB; a tenth of
+    /// the free space still bounds it below either way.
+    ///
+    /// Injectable for the reason the clock is: a drill that proves a library
+    /// item many times the spool backs up a window at a time (R-1080-C39)
+    /// needs a spool of one part, not gigabytes of test data. A shell passes
+    /// nothing, and the C ABI cannot set it.
+    pub spool_ceiling: Option<u64>,
 }
 
 impl CoreConfig {
@@ -71,6 +95,8 @@ impl CoreConfig {
             clock: None,
             ids: None,
             expected_digest: None,
+            seed: None,
+            spool_ceiling: None,
         }
     }
 
@@ -82,6 +108,16 @@ impl CoreConfig {
     }
 
     /// Refuse to open unless this core's digest is `digest`.
+    /// Derive this vault's object keys from `seed` at `index`.
+    ///
+    /// The index is the vault's own derivation index and is **never chosen by
+    /// this library** (F2): it is what a found or a restore recorded.
+    #[must_use]
+    pub fn with_seed(mut self, seed: centraid_identity::Seed, index: u32) -> Self {
+        self.seed = Some((seed, index));
+        self
+    }
+
     #[must_use]
     pub fn expecting_digest(mut self, digest: impl Into<String>) -> Self {
         self.expected_digest = Some(digest.into());
@@ -106,6 +142,14 @@ impl CoreConfig {
     ) -> Self {
         self.clock = Some(clock);
         self.ids = Some(ids);
+        self
+    }
+
+    /// Hold the spool under `bytes`, whatever the free space. For a drill;
+    /// see [`CoreConfig::spool_ceiling`].
+    #[must_use]
+    pub fn with_spool_ceiling(mut self, bytes: u64) -> Self {
+        self.spool_ceiling = Some(bytes);
         self
     }
 }

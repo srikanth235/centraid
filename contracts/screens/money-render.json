@@ -1,0 +1,107 @@
+{
+  "$comment": "ONE MONEY LAW, TWO RENDERERS. Each case is a centraid.screen.v1.Money and the string both shells must draw for it: Android's formatMoney (asserted on the JVM by MoneyRenderSpec, which mirrors it) and iOS's Money.render (asserted by the K5 iOS test). The exponent is the message's, never assumed to be 2; a code ISO 4217 does not know is spelled after the amount. Locales are explicit: an EMPTY locale means the device's on both shells, which no fixture can pin.",
+  "cases": [
+    {
+      "name": "usd-en-us",
+      "minor": 123456,
+      "currency": "USD",
+      "exponent": 2,
+      "locale": "en-US",
+      "expected": "$1,234.56"
+    },
+    {
+      "name": "usd-negative",
+      "minor": -4250,
+      "currency": "USD",
+      "exponent": 2,
+      "locale": "en-US",
+      "expected": "-$42.50"
+    },
+    {
+      "name": "eur-de-de",
+      "minor": 123456,
+      "currency": "EUR",
+      "exponent": 2,
+      "locale": "de-DE",
+      "expected": "1.234,56 €"
+    },
+    {
+      "name": "gbp-zero",
+      "minor": 0,
+      "currency": "GBP",
+      "exponent": 2,
+      "locale": "en-GB",
+      "expected": "£0.00"
+    },
+    {
+      "name": "unknown-code-is-spelled",
+      "minor": 1234,
+      "currency": "XQZ",
+      "exponent": 2,
+      "locale": "en-US",
+      "expected": "12.34 XQZ"
+    }
+  ],
+  "sums": [
+    {
+      "name": "one-currency-sums",
+      "in": [
+        {
+          "minor": 100,
+          "currency": "USD",
+          "exponent": 2
+        },
+        {
+          "minor": 250,
+          "currency": "USD",
+          "exponent": 2
+        }
+      ],
+      "out": [
+        {
+          "minor": 350,
+          "currency": "USD",
+          "exponent": 2
+        }
+      ]
+    },
+    {
+      "name": "never-across-currencies",
+      "in": [
+        {
+          "minor": 100,
+          "currency": "USD",
+          "exponent": 2
+        },
+        {
+          "minor": 500,
+          "currency": "JPY",
+          "exponent": 0
+        },
+        {
+          "minor": -40,
+          "currency": "USD",
+          "exponent": 2
+        }
+      ],
+      "out": [
+        {
+          "minor": 60,
+          "currency": "USD",
+          "exponent": 2
+        },
+        {
+          "minor": 500,
+          "currency": "JPY",
+          "exponent": 0
+        }
+      ]
+    },
+    {
+      "name": "nothing-is-nothing",
+      "in": [],
+      "out": []
+    }
+  ],
+  "$excluded": "JPY (ja-JP), INR (en-IN) and BHD are excluded: the platform libraries' currency symbols and digit grouping differ between the JDK and CLDR/iOS."
+}

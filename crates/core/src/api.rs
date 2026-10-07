@@ -13,7 +13,6 @@
 //! | [`parked`] | live | the outcomes waiting on somebody's decision |
 //! | [`search`] | **stub** | the FTS plane is wave 4 |
 //! | [`resolve`] | **stub** | entity resolution is wave 4 |
-//! | [`reveal`] | live, by ROLE | the gateway reveals a sealed COLUMN and cannot reveal a Locker cell at all; a seat unwraps `K` itself (D-1020-L2) |
 //! | [`content`] | **stub** | content path minting is wave 3 |
 
 use centraid_api_proto::core_v1 as wire;
@@ -44,6 +43,15 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
                 &reference.owner_type,
                 &reference.owner_id,
             )?;
+            // THE STORE, THE LIBRARY, OR NOWHERE (#1080 ruling 6). A path is
+            // answered for the store only; an original the operating system's
+            // library holds is named by the library's identifier, for the
+            // shell to resolve.
+            let (source, os_ref) = match (&found.path, found.os_ref) {
+                (Some(_), _) => (wire::ContentSource::Store, String::new()),
+                (None, Some(os_ref)) => (wire::ContentSource::OsLibrary, os_ref),
+                (None, None) => (wire::ContentSource::None, String::new()),
+            };
             Ok(wire::ContentUrl {
                 content_id: found.content_id,
                 // A PATH AND NOT BYTES. See `centraid_vault::content`: the
@@ -54,6 +62,8 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
                 byte_size: found.byte_size,
                 embeddable: found.embeddable,
                 absent_reason: found.absent_reason,
+                source: source as i32,
+                os_ref,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -86,6 +96,39 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                 .to_owned(),
         });
     };
+    // A FLAG SET ON A SELECT WITH NO CURRENCY IS A CALLER'S BUG, and it is
+    // refused here rather than answered with a column of 2s: the exponent is
+    // OF a row's currency, and a row with none has no exponent to state.
+    if query.with_minor_units
+        && !query
+            .select
+            .iter()
+            .any(|column| output_name(column) == MINOR_UNITS_CURRENCY_COLUMN)
+    {
+        return Err(CoreError::InvalidRequest {
+            detail: "with_minor_units asks for the exponent of a `currency` column the select \
+                     does not name"
+                .to_owned(),
+        });
+    }
+    // A LOCAL DAY OF A COLUMN THE SELECT DOES NOT NAME is the same caller's
+    // bug, refused the same way; the zone is resolved once, and only when a
+    // day is asked for (`query.proto`'s `local_day_columns`).
+    if let Some(missing) = query.local_day_columns.iter().find(|wanted| {
+        !query
+            .select
+            .iter()
+            .any(|column| output_name(column) == wanted.as_str())
+    }) {
+        return Err(CoreError::InvalidRequest {
+            detail: format!("local_day_columns names `{missing}`, which the select does not name"),
+        });
+    }
+    let day_zone = if query.local_day_columns.is_empty() {
+        None
+    } else {
+        Some(crate::app_query::zone_of(vault, &query.tz)?)
+    };
     // THE SHAPE CROSSES THE BOUNDARY; THE SQL DOES NOT. Rendering the statement
     // here would be `crates/core` knowing the query language, which the
     // `sql-confinement` rule catches — and it is right to: the statement's
@@ -112,14 +155,15 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
             .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
         held_thumbnail: query.with_held_thumbnail,
         note_body: query.with_note_body,
+        document_size: query.with_document_size,
     })?;
 
     Ok(wire::Page {
         rows: answer
             .rows
             .into_iter()
-            .map(|image| wire::Row {
-                values: query
+            .map(|image| {
+                let mut values: Vec<wire::Value> = query
                     .select
                     .iter()
                     .map(|column| output_name(column).to_owned())
@@ -155,6 +199,18 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                             .with_note_body
                             .then(|| centraid_vault::page::NOTE_BODY_COLUMN.to_owned()),
                     )
+                    // AND THE DOCUMENT'S SIZE LAST, when it is asked for at
+                    // all (#1029, Home's Docs tile). Same positional contract
+                    // as the two above: appended, in a fixed place, so a shell
+                    // counts past its own `select` list to reach it. It is
+                    // TEXT — the phrase the vault composed — and a caller who
+                    // wanted the byte count behind it is a caller the field's
+                    // own comment refuses.
+                    .chain(
+                        query
+                            .with_document_size
+                            .then(|| centraid_vault::page::DOCUMENT_SIZE_COLUMN.to_owned()),
+                    )
                     .map(|column| {
                         image.get(&column).map_or_else(
                             || wire::Value {
@@ -163,7 +219,44 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
                             crate::convert::value_to_wire,
                         )
                     })
-                    .collect(),
+                    .collect();
+                // AND THE CURRENCY'S EXPONENT AFTER EVERYTHING ELSE, when it is
+                // asked for. Same positional contract as the three above. It is
+                // computed HERE and not by the vault because the one table of
+                // minor units is the kit's (`centraid_apps_kit::money`), and
+                // `Money.exponent` says where it comes from: "From the kit's
+                // table through the core, never guessed and never assumed to be
+                // 2" — a shell that kept its own copy would be the second table
+                // D-1020-CL3 closed.
+                if query.with_minor_units {
+                    let exponent = image
+                        .get(MINOR_UNITS_CURRENCY_COLUMN)
+                        .and_then(|value| match value {
+                            centraid_vault::value::Value::Text(code) => Some(code.as_str()),
+                            _ => None,
+                        })
+                        .map_or(0, centraid_apps_kit::money::minor_units);
+                    values.push(wire::Value {
+                        kind: Some(wire::value::Kind::Integer(i64::from(exponent))),
+                    });
+                }
+                // AND EACH NAMED INSTANT'S LOCAL DAY LAST, in the order the
+                // query names them (#1047). Same positional contract.
+                if let Some(zone) = &day_zone {
+                    for column in &query.local_day_columns {
+                        let day = image.get(column.as_str()).and_then(|value| match value {
+                            centraid_vault::value::Value::Text(text) => local_day_of(zone, text),
+                            _ => None,
+                        });
+                        values.push(wire::Value {
+                            kind: Some(day.map_or(
+                                wire::value::Kind::Null(wire::NullValue {}),
+                                wire::value::Kind::Text,
+                            )),
+                        });
+                    }
+                }
+                wire::Row { values }
             })
             .collect(),
         next: answer
@@ -171,6 +264,25 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
             .map(|(sort_key, pk)| wire::PageCursor { sort_key, pk }),
     })
 }
+
+/// The civil day a stored value falls on in `zone`: a date (`2026-10-12`) is
+/// its own day, and an instant is read there. Anything else is no day — never
+/// its first ten characters, which is the UTC slice this column replaces.
+fn local_day_of(zone: &centraid_vault::time::zone::FireZone, text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let is_date = bytes.len() == 10
+        && bytes.iter().enumerate().all(|(index, byte)| match index {
+            4 | 7 => *byte == b'-',
+            _ => byte.is_ascii_digit(),
+        });
+    if is_date {
+        return Some(text.to_owned());
+    }
+    centraid_apps_agenda::local::today(zone, text)
+}
+
+/// The column whose code `PageQuery.with_minor_units` states the exponent of.
+const MINOR_UNITS_CURRENCY_COLUMN: &str = "currency";
 
 /// The name a projected entry answers to in the row image.
 ///
@@ -269,10 +381,6 @@ pub fn describe(registry: &Registry, name: &str) -> Result<serde_json::Value> {
         "idempotency": entry.definition.idempotency.as_str(),
         "risk": entry.definition.risk.as_str(),
         "confirm": entry.definition.confirm,
-        // THE FLAG A SEAT READS to refuse a queue. It lives on the definition
-        // (D1's `CommandDefinition`) rather than in a list of action names,
-        // because a list is a second place to forget.
-        "onlineOnly": entry.definition.online_only,
         "sealedInput": entry.definition.sealed_input,
     }))
 }
@@ -298,11 +406,12 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
 // sealed column, the seat for a Locker cell — and the answer was the trust
 // premise: a Locker key must never be on a host the member does not hold.
 // There is one host (#1029 §6), so the question has one answer and nothing
-// ever called this function: a Locker reveal runs through `locker.reveal` in
-// `crates/vault/src/commands/locker.rs`, behind `crate::locker`'s unlock, and
+// ever called this function: a Locker reveal runs in `crate::locker::phone`,
+// behind the unlock, after `locker.reveal_receipt` writes its receipt, and
 // the SEALED-COLUMN arm served connector tokens, which leave with the
-// connectors. `SealedSubject` still has no Locker representation, so the
-// structural half of the rule is where it always was — in `crates/vault`.
+// connectors. The access plane's reveal judgement went with that arm
+// (R-1047-D2): `centraid_vault::Verb` is `read` and `act`, so no access path
+// can be written that opens a Locker cell even by mistake.
 
 /// MAKE THIS FILE A VAULT (#1029 W5, hand-off 1).
 ///
@@ -358,7 +467,85 @@ mod tests {
             }),
             with_held_thumbnail: false,
             with_note_body: false,
+            with_document_size: false,
+            with_minor_units: false,
+            local_day_columns: Vec::new(),
+            tz: String::new(),
         }
+    }
+
+    /// EACH NAMED INSTANT'S DAY IN THE STATED ZONE, appended last (#1047): the
+    /// trash's "Deleted" day is the member's, never a UTC slice. A column the
+    /// select does not name is refused, and so is a day asked with no zone on a
+    /// vault that names none.
+    #[test]
+    fn a_local_day_column_is_each_instants_day_in_the_stated_zone() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let mut asked = query(&["party_id", "created_at"], "party_id", "party_id");
+        asked.local_day_columns = vec!["created_at".to_owned()];
+        asked.tz = "Pacific/Kiritimati".to_owned();
+        let answer = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked.clone()),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("a page");
+        let zone =
+            centraid_vault::time::zone::FireZone::named("Pacific/Kiritimati").expect("bundled");
+        assert!(!answer.rows.is_empty());
+        for row in &answer.rows {
+            assert_eq!(row.values.len(), 3, "one day column, appended last");
+            let Some(wire::value::Kind::Text(created)) = &row.values[1].kind else {
+                panic!("created_at is text");
+            };
+            assert_eq!(
+                row.values[2].kind,
+                centraid_apps_agenda::local::today(&zone, created).map(wire::value::Kind::Text),
+                "the day {created} falls on at UTC+14"
+            );
+        }
+        assert_eq!(
+            local_day_of(&zone, "2026-10-12").as_deref(),
+            Some("2026-10-12"),
+            "a date is its own day"
+        );
+        assert_eq!(
+            local_day_of(&zone, "2026-10-12T20:00:00.000Z").as_deref(),
+            Some("2026-10-13"),
+            "an instant is read in the zone"
+        );
+
+        let mut unnamed = asked.clone();
+        unnamed.local_day_columns = vec!["updated_at".to_owned()];
+        let refused = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(unnamed),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect_err("a day of a column not selected");
+        assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
+
+        asked.tz = String::new();
+        let zoneless = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect_err("founding names no zone, so no day can be read");
+        assert_eq!(zoneless.code(), wire::ErrorCode::InvalidRequest);
+        let _ = std::fs::remove_dir_all(&scratch);
     }
 
     /// The refusal arrives with the code a shell branches on.
@@ -397,6 +584,82 @@ mod tests {
         .expect_err("an unprojected order column is refused");
         assert_eq!(unprojected.code(), wire::ErrorCode::InvalidRequest);
         assert!(unprojected.to_string().contains("created_at"));
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// The exponent is the KIT's, per row, appended last — and a select with no
+    /// `currency` to state it of is refused rather than answered with 2s.
+    #[test]
+    fn the_minor_units_column_is_the_kits_exponent_of_each_rows_currency() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = Registry::with_system_commands().expect("the registry");
+        let owner = centraid_vault::Principal::owner("test-device");
+        for (name, currency) in [("Tokyo", "JPY"), ("Kuwait", "KWD")] {
+            let outcome = vault
+                .execute(
+                    &registry,
+                    &owner,
+                    &Command::new(
+                        "tally.create_group",
+                        serde_json::json!({
+                            "name": name, "icon": "travel", "currency": currency, "member_ids": [],
+                        }),
+                    ),
+                )
+                .expect("a group");
+            assert_eq!(
+                outcome.status,
+                CommandStatus::Executed,
+                "{:?}",
+                outcome.reason
+            );
+        }
+
+        let mut asked = query(&["group_id", "currency"], "group_id", "group_id");
+        asked.from = "tally_group".to_owned();
+        asked.with_minor_units = true;
+        let answer = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked.clone()),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect("a page");
+        // Ordered by the pk, so the pair is sorted before it is compared: the
+        // claim is one exponent per row and each the kit's, not an order.
+        let mut exponents: Vec<_> = answer
+            .rows
+            .iter()
+            .map(|row| {
+                assert_eq!(row.values.len(), 3, "one computed column, appended last");
+                row.values[2].kind.clone()
+            })
+            .collect();
+        exponents.sort_by_key(|kind| format!("{kind:?}"));
+        assert_eq!(
+            exponents,
+            vec![
+                Some(wire::value::Kind::Integer(0)),
+                Some(wire::value::Kind::Integer(3)),
+            ]
+        );
+
+        asked.select = vec!["group_id".to_owned()];
+        let refused = page(
+            &vault,
+            &wire::PageRequest {
+                query: Some(asked),
+                limit: 10,
+                after: None,
+            },
+        )
+        .expect_err("no currency, no exponent");
+        assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
         let _ = std::fs::remove_dir_all(&scratch);
     }
 
@@ -535,23 +798,5 @@ mod tests {
                 ..
             })
         ));
-    }
-
-    /// THE KEY DOOR IS DELETED AT THE TYPE LEVEL (#1020, D-1020-L2).
-    ///
-    /// The router that used to ask "gateway or seat" is gone with the roles
-    /// (#1029 §1), and the half of the rule that was never about roles is
-    /// still enforced by `crates/vault`: `SealedSubject` has no Locker
-    /// representation, so no sealed-column path can be written to open a
-    /// Locker cell even by mistake.
-    #[test]
-    fn the_sealed_subject_has_no_locker_representation() {
-        let refusal =
-            centraid_vault::SealedSubject::new("locker", "item").expect_err("no such subject");
-        assert!(
-            refusal.to_string().contains("unwrapped only on the seat"),
-            "{refusal}"
-        );
-        assert!(centraid_vault::SealedSubject::new("sync", "connection_credential").is_ok());
     }
 }

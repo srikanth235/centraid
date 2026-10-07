@@ -26,12 +26,12 @@ use crate::inventory::State;
 use crate::{Seeder, at, day};
 
 /// Seed the whole world, app by app.
-pub(crate) fn seed(seeder: &mut Seeder, me: &str, keys_dir: &std::path::Path, vault_id: &str) {
+pub(crate) fn seed(seeder: &mut Seeder, me: &str) {
     // THE LONG TAIL FIRST, then the clock is jumped to where the story has
     // always started. Written first so that every story row's `created_at` is
     // exactly what it was when the world held 73 rows; the ids move, and stable
     // handles are what made that survivable. See `crate::bulk`.
-    let locker_key = found_key(seeder, keys_dir, vault_id);
+    let locker_key = found_key(seeder);
     crate::bulk::seed(
         seeder,
         me,
@@ -1986,47 +1986,24 @@ type SeededSecret = (
     Option<&'static str>,
 );
 
-/// MINT THE LOCKER KEY, on its own, before anything is sealed under it.
+/// NAME THE LOCKER GENERATION, on its own, before anything is sealed under it.
 ///
-/// Split out from the shelf so that the KEY exists before the long tail runs
-/// and the tail's own secrets can be sealed under the same custody as the
+/// Split out from the shelf so that the generation exists before the long tail
+/// runs and the tail's own secrets are sealed under the same key as the
 /// story's. A Locker with five items in it is a Locker a reader can afford to
 /// open and read end to end, which would have made the one app the search plane
 /// cannot reach the one app a board scan gets for free — exactly the artefact
 /// that would corrupt a search-versus-board comparison.
-pub(crate) fn found_key(
-    seeder: &mut Seeder,
-    keys_dir: &std::path::Path,
-    vault_id: &str,
-) -> Option<(Vec<u8>, String)> {
-    let custody = centraid_vault::custody::MemberKeyCustody::with_store(
-        centraid_vault::custody::KeyStore::new(keys_dir),
-        vault_id,
-    );
-    let key_id = seeder.mint();
-    let now = centraid_vault::clock::format_iso_ms(crate::NOW_MS - 40 * crate::DAY_MS);
-    // THE KEY FILE FIRST, THEN THE ROW, and both inside the commit the rest of
-    // the vault's writes go through. `found_locker_key` has its own error type
-    // — key custody is not a vault error — so the failure is carried out
-    // through a cell rather than through `?`, which would need a `From` this
-    // crate has no business adding to `VaultError`.
-    let mut minted: Result<Vec<u8>, String> = Err("the locker key was never minted".to_owned());
-    let committed = seeder.vault().commit(|tx| {
-        tx.set_producer("evalworld.locker_key");
-        minted =
-            centraid_vault::custody::found_locker_key(tx.connection(), &custody, &key_id, &now)
-                .map(|(_, key)| key)
-                .map_err(|error| format!("locker key custody: {error}"));
-        Ok(())
-    });
-    match (committed, minted) {
-        (Ok(_), Ok(key)) => Some((key, key_id)),
-        (Err(error), _) => {
+///
+/// The phone derives `K` from the 24 words and the vault stores only the
+/// generation's id (#1047, D-6), so a fixture has no words to derive from: it
+/// seals under [`crate::HARNESS_LOCKER_KEY`] and asks the vault's own door,
+/// [`centraid_vault::Vault::locker_generation`], for the id.
+pub(crate) fn found_key(seeder: &mut Seeder) -> Option<(Vec<u8>, String)> {
+    match seeder.vault().locker_generation() {
+        Ok(key_id) => Some((crate::HARNESS_LOCKER_KEY.to_vec(), key_id)),
+        Err(error) => {
             seeder.refusals.push(format!("locker key custody: {error}"));
-            None
-        }
-        (_, Err(why)) => {
-            seeder.refusals.push(why);
             None
         }
     }

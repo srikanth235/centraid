@@ -2,16 +2,15 @@
 //!
 //! ## One zone source, moved here so there is only one
 //!
-//! [`FireZone`] and [`ZoneUnset`] were `crates/automations::cron`'s. They are
-//! this module's now, and `crates/automations::cron` re-exports them, because
-//! recurrence needs the SAME resolution cron already had and a second reader
-//! would be exactly the drift `docs/cron-timezone.md` was written about. The
-//! direction is forced: `crates/automations` → `crates/assist` →
-//! `crates/vault`, so the shared type can only live at the bottom.
+//! [`FireZone`] and [`ZoneUnset`] are the one resolution of a zone name:
+//! recurrence, the task lifecycle and Agenda (`crates/apps/agenda`) all read
+//! it, and a second reader would be exactly the drift one zone source
+//! prevents. It lives at the bottom of the crate graph so every app above the
+//! vault can reach it.
 //!
-//! Two tiers, and a refusal where v0's third was (`docs/cron-timezone.md:17`
-//! -`:21`): the caller's own zone (a trigger's `tz`, a series' `start_tz`, a
-//! task's `tz`), then **the vault's** — `core_vault.settings_json`'s zone —
+//! Two tiers, and a refusal where v0's third was: the caller's own zone (a
+//! series' `start_tz`, a task's `tz`), then **the vault's** —
+//! `core_vault.settings_json`'s zone —
 //! and then nothing. v0's tier 3 read the HOST's clock, which on a VPS is UTC,
 //! so "every morning at seven" silently became seven in a place nobody lives.
 //!
@@ -20,10 +19,9 @@
 //! `tz-system`, so no code path — ours or the library's — can read `TZ` or
 //! `/etc/localtime`. The database is `tzdb-bundle-always`, compiled in.
 //!
-//! ## The DST policy, shared with cron
+//! ## The DST policy
 //!
-//! `docs/cron-timezone.md:13`, three sentences, and this module is the
-//! recurrence side of them:
+//! Three sentences, and this module is where they are enforced:
 //!
 //! - a **nonexistent** wall time (the spring-forward gap) is SKIPPED — it
 //!   exists at no instant, so nothing can deliver it;
@@ -134,9 +132,9 @@ impl FireZone {
 
     /// The resolved `jiff` zone.
     ///
-    /// Exposed because `crates/automations::cron` walks civil DATES through it
-    /// (a day's own span is 23, 24 or 25 hours, and that is how both copies of
-    /// a fall-back minute land in one walk). It is not a hole in the two-tier
+    /// Exposed for a caller that walks civil DATES through it (a day's own
+    /// span is 23, 24 or 25 hours, and that is how both copies of a fall-back
+    /// minute land in one walk). It is not a hole in the two-tier
     /// rule: a `TimeZone` can only be obtained by resolving one, and the
     /// bundled database is the only source this build links.
     #[must_use]
@@ -275,8 +273,29 @@ pub enum ZoneUnset {
     Unknown { name: String },
 }
 
-/// Cron's weekday numbering, from `jiff`'s. Exported because
-/// `crates/automations::cron` walks civil dates with it.
+/// THE SECOND TIER'S NAME, read off `core_vault.settings_json` — the one
+/// place its spellings are listed, so the command plane and the app-query arm
+/// cannot disagree about which key names a vault's zone.
+///
+/// `timeZone` is v0's spelling; `timezone` and `time_zone` are read because a
+/// settings blob is owner-edited JSON and all three have been written. An
+/// empty name, a settings value that does not parse and a blob that names no
+/// zone are all `None`: "this vault names no zone", which [`FireZone::resolve`]
+/// turns into [`ZoneUnset::Missing`] rather than into anybody's clock.
+#[must_use]
+pub fn zone_of_settings(settings_json: &str) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(settings_json).ok()?;
+    parsed
+        .get("timeZone")
+        .or_else(|| parsed.get("timezone"))
+        .or_else(|| parsed.get("time_zone"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+}
+
+/// Cron's weekday numbering (0 = Sunday), from `jiff`'s.
 #[must_use]
 pub const fn sunday_zero(weekday: Weekday) -> i8 {
     match weekday {
@@ -473,6 +492,21 @@ const fn days_in_month(year: i64, month: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_vaults_zone_is_read_under_each_spelling_and_nothing_is_none() {
+        for blob in [
+            r#"{"timeZone":"Asia/Kolkata"}"#,
+            r#"{"timezone":"Asia/Kolkata"}"#,
+            r#"{"time_zone":" Asia/Kolkata "}"#,
+        ] {
+            assert_eq!(zone_of_settings(blob).as_deref(), Some("Asia/Kolkata"));
+        }
+        // Founding writes `{}`: no zone, and no guess at one.
+        for blob in ["{}", r#"{"timeZone":""}"#, r#"{"timeZone":5}"#, "not json"] {
+            assert_eq!(zone_of_settings(blob), None, "{blob}");
+        }
+    }
 
     #[test]
     fn a_gap_wall_time_resolves_to_nothing() {

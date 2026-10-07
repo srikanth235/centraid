@@ -276,7 +276,7 @@ pub fn write_receipt(
     // `detail_json` is written through the canonical form, so its key order is
     // deterministic — which is what makes the hash reproducible and what keeps
     // the log's own redaction of `output` byte-stable.
-    let detail = crate::intents::canonical_json(&receipt.detail)?;
+    let detail = crate::canonical::canonical_json(&receipt.detail)?;
     let body = format!(
         "{previous_hash}\u{0}{seq}\u{0}{}\u{0}{}\u{0}{}\u{0}{}\u{0}{}\u{0}{occurred_at}\u{0}{detail}",
         receipt.authority_id.unwrap_or(""),

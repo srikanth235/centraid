@@ -173,7 +173,7 @@ pub fn findings_block(reports: &[RuleReport]) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Rule 1 — SQL only under crates/{ontology,vault,seat,search} and crates/apps/kit
+// Rule 1 — SQL only under crates/{ontology,vault,search} and crates/apps/kit
 // ---------------------------------------------------------------------------
 
 pub fn sql_confinement(root: &Path) -> RuleReport {
@@ -303,50 +303,42 @@ fn function_name(signature: &str) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
-// Rule 3 — no crate opens a listening TCP socket
+// Rule 3 — nothing but the gateway accepts an inbound connection
 // ---------------------------------------------------------------------------
 
-/// THE ONE FILE THAT IS ALLOWED TO BIND, AND WHY.
+/// THE ONE FILE THAT IS ALLOWED TO ACCEPT, AND WHY.
 ///
-/// The rule as #1020 wrote it said the blob door was "the only listener the
-/// product may ever have". That was true of the product #1020 described — a
-/// phone, a desktop shell and a browser Companion, all of them clients over
-/// iroh QUIC. #1029 §3 adds something #1020 had no word for: **a gateway
-/// anyone can self-host**, whose entire job is to be the thing a phone dials.
-/// A gateway that did not listen would not be a gateway, so the rule's subject
-/// grew and its wording had to say so.
+/// The phone is the vault and a client: it opens no inbound socket. The
+/// gateway a member runs on their own machine exists to be the thing the
+/// phone dials ([#1080](https://github.com/srikanth235/centraid/issues/1080)),
+/// so its one listener is the rule's one exemption. A gateway that did not
+/// listen would not be a gateway.
 ///
-/// **The rule was not weakened, it was pointed.** It still scans every crate,
-/// it still scans every other file inside `crates/gateway-server`, and the
-/// exemption is ONE FILE rather than a crate or a directory — a second
-/// listener, in this crate or any other, is still a finding. That is a tighter
-/// statement than "no crate listens" was, because it names where the socket is
-/// instead of only asserting there is none.
+/// **The rule is pointed, not relaxed.** It still scans every crate, it still
+/// scans every other file inside the gateway's own crate — its test harness,
+/// its routes, its integration tests — and the exemption is ONE FILE rather
+/// than a crate or a directory. A second listener, in that crate or any
+/// other, is a finding. That names where the socket is instead of only
+/// asserting there is none.
+///
+/// The rule's subject is the sentence **"the phone dials; it accepts no
+/// inbound connection"** (#1029, scope amendment 2026-09-21), and its patterns
+/// follow it rather than one transport: see [`listener_hits`].
 ///
 /// A file lands here only with a reason, and
 /// [`tests::the_listener_allowlist_has_no_dead_entries`] fails if an entry
-/// stops binding — an exemption nobody is looking at is how the next one gets
+/// stops accepting — an exemption nobody is looking at is how the next one gets
 /// added quietly.
-const LISTENER_ALLOWED: &[(&str, &str)] = &[
-    (
-        "crates/gateway-server/src/serve.rs",
-        "THE STANDALONE GATEWAY'S LISTENER (#1029 §3). One protocol, two \
-         deployments: the hosted one is a Cloudflare Worker and this one is a \
-         server a household runs, and a phone cannot tell which it is talking \
-         to. The bind is confined to this file, which accepts connections and \
-         hands them to `crates/gateway-server/src/http.rs` — it decides nothing \
-         about a request, and every rule it serves is `crates/gateway-core`'s",
-    ),
-    (
-        "crates/gateway-server/tests/common/mod.rs",
-        "A TEST DOUBLE FOR AN S3 BUCKET, in a `tests/` tree that ships in no \
-         artifact. The conformance suite runs against the S3 code path — the \
-         SigV4 signature, the attestation header, the HEAD that carries one and \
-         the GET that does not — and a mock `ByteStore` would exercise the enum \
-         arm and skip the protocol, which is exactly where the two checksum \
-         modes differ. That is only meaningful over a real socket (#1029 §3)",
-    ),
-];
+const LISTENER_ALLOWED: &[(&str, &str)] = &[(
+    "crates/gateway/src/server/serve.rs",
+    "THE GATEWAY'S LISTENER (#1080). The phone opens a TLS connection \
+     straight to the gateway the member runs; this file binds its one TCP \
+     port, completes each TLS handshake and answers the LAN's Bonjour \
+     queries, and hands every connection to \
+     `crates/gateway/src/server/http.rs`, which decides nothing: every \
+     rule it serves is `crates/gateway/src/rules`'. The rest of the crate, \
+     its harness and its tests are scanned like any other file",
+)];
 
 pub fn no_listening_socket(root: &Path) -> RuleReport {
     const NAME: &str = "no-listening-socket";
@@ -375,7 +367,7 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
         };
         for (line, pattern) in listener_hits(&source) {
             findings.push(format!(
-                "{rel}:{line}: `{pattern}` outside a `#[cfg(feature = \"blob-door\")]` block. iroh QUIC is the transport, and the only listeners this product has are the blob door (off by default) and the standalone gateway's, which is confined to {} (#1020, #1029 §3)",
+                "{rel}:{line}: `{pattern}`. The phone dials; it accepts no inbound connection (#1029, scope amendment 2026-09-21). The only thing in this product that accepts one is the gateway a member runs on their own laptop, confined to {} (#1020, #1029 §3)",
                 LISTENER_ALLOWED
                     .iter()
                     .map(|(path, _)| *path)
@@ -389,51 +381,61 @@ pub fn no_listening_socket(root: &Path) -> RuleReport {
     ))
 }
 
-/// Listener constructions that are NOT inside a `blob-door`-gated item.
+/// Every place a source file could accept an inbound connection.
 ///
-/// The guard is tracked by brace depth: the attribute arms the next `{`, and
-/// every hit until that brace closes is allowed.
+/// ## WHAT IS SCANNED, AND WHY EACH PATTERN IS THERE
+///
+/// | Pattern | What it would be |
+/// |---|---|
+/// | `TcpListener::bind`, `tokio::net::TcpListener` | a TCP listener, the rule's original subject |
+/// | `.alpns(` | a QUIC endpoint offering a protocol for an inbound handshake to negotiate |
+/// | `.accept()` | an accept loop, on any carrier |
+///
+/// The phone's client (`crates/gateway/src/client`) opens a TCP stream to
+/// an address and completes a TLS handshake on it, and that is a dialler: it
+/// binds no listener, offers nothing to an inbound handshake and accepts
+/// nothing. No QUIC stack is linked since #1080 removed the iroh transport;
+/// the `.alpns(` pattern stays so that one arriving is a finding rather than a
+/// listener this rule cannot see — which is how the rule came to be restated
+/// in the first place: a grep for `TcpListener` alone cannot see a QUIC
+/// listener at all.
+///
+/// ## THE `blob-door` ESCAPE HATCH IS GONE, AND IT WAS ALREADY DEAD (#1029 W13)
+///
+/// This used to skip any hit inside a `#[cfg(feature = "blob-door")]` item,
+/// tracked by brace depth, and both the rule's own message and the constitution
+/// described the blob door as "the only listener the product may ever have".
+/// **No crate in this workspace declares a `blob-door` feature** — `grep -rn
+/// blob-door --include=Cargo.toml` is empty — so nothing could be gated by it
+/// and the branch exempted nothing. What it did do is stand there as a way to
+/// exempt a listener by typing one attribute above it, with no allowlist row,
+/// no reason and nobody reading it.
+///
+/// The rule is stricter without it: the ONE way to land a listener is a row in
+/// [`LISTENER_ALLOWED`], which carries a reason and which
+/// [`tests::the_listener_allowlist_has_no_dead_entries`] fails on when it stops
+/// accepting. An exemption somebody has to write down is an exemption somebody
+/// can read.
 pub fn listener_hits(source: &str) -> Vec<(usize, &'static str)> {
-    const PATTERNS: [&str; 2] = ["TcpListener::bind", "tokio::net::TcpListener"];
-    const GUARD: &str = "#[cfg(feature = \"blob-door\")]";
-    let mut hits = Vec::new();
-    let mut depth: i32 = 0;
-    let mut guards: Vec<i32> = Vec::new();
-    let mut armed = false;
-    for (index, line) in source.lines().enumerate() {
-        let code = line.split("//").next().unwrap_or(line);
-        if line.contains(GUARD) {
-            armed = true;
-        } else {
-            let guarded = armed || !guards.is_empty();
-            if !guarded {
-                // One hit per line: `tokio::net::TcpListener::bind(…)` matches
-                // both patterns, and one line of code is one finding.
-                if let Some(pattern) = PATTERNS.iter().find(|pattern| code.contains(**pattern)) {
-                    hits.push((index + 1, *pattern));
-                }
-            }
-        }
-        for byte in code.bytes() {
-            match byte {
-                b'{' => {
-                    depth += 1;
-                    if armed {
-                        guards.push(depth - 1);
-                        armed = false;
-                    }
-                }
-                b'}' => {
-                    depth -= 1;
-                    while guards.last().is_some_and(|guard| depth <= *guard) {
-                        guards.pop();
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    hits
+    const PATTERNS: [&str; 4] = [
+        "TcpListener::bind",
+        "tokio::net::TcpListener",
+        ".alpns(",
+        ".accept()",
+    ];
+    source
+        .lines()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let code = line.split("//").next().unwrap_or(line);
+            // One hit per line: `tokio::net::TcpListener::bind(…)` matches two
+            // patterns, and one line of code is one finding.
+            PATTERNS
+                .iter()
+                .find(|pattern| code.contains(**pattern))
+                .map(|pattern| (index + 1, *pattern))
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -773,8 +775,13 @@ pub extern \"C\" fn centraid_open() {}
         assert!(report.findings.is_empty());
     }
 
+    /// **EVERY listener is a hit**, including one wearing the retired
+    /// `blob-door` attribute — no crate declares that feature, so the branch
+    /// that used to exempt it was an escape hatch nothing could reach and
+    /// anybody could type (#1029 W13, finding 24). The allowlist is the one way
+    /// through, and it has reasons in it.
     #[test]
-    fn an_unguarded_listener_is_caught_and_a_guarded_one_is_not() {
+    fn every_listener_is_a_hit_including_one_wearing_the_retired_attribute() {
         let source = "\
 fn open() {
     let _ = TcpListener::bind(\"0.0.0.0:0\");
@@ -785,8 +792,9 @@ fn door() {
 }
 ";
         let hits = listener_hits(source);
-        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert_eq!(hits.len(), 2, "{hits:?}");
         assert_eq!(hits[0].0, 2);
+        assert_eq!(hits[1].0, 6);
     }
 
     #[test]
@@ -802,32 +810,106 @@ fn door() {
         assert!(report.findings[0].contains("crates/net/src/lib.rs:2"));
     }
 
-    /// THE ALLOWLIST IS ONE FILE, NOT A CRATE. A second listener inside
-    /// `crates/gateway-server` is still a finding, which is the property that
-    /// makes this a pointed rule rather than a relaxed one.
+    /// THE ALLOWLIST IS ONE FILE, NOT A CRATE (#1080). `serve.rs` binds and
+    /// accepts; the same lines anywhere else in the gateway's crate — the test
+    /// harness, a route, an integration test — are findings, which is the
+    /// property that makes this a pointed rule rather than a relaxed one.
     #[test]
     fn a_second_listener_in_the_gateway_crate_is_still_caught() {
         let root = fixture_dir("listener-gateway");
         write(
             &root,
-            "crates/gateway-server/src/serve.rs",
-            "fn serve() {\n    let _ = tokio::net::TcpListener::bind(\"0.0.0.0:1\");\n}\n",
+            "crates/gateway/src/server/serve.rs",
+            "async fn bind() {\n    let _ = TcpListener::bind(\"0.0.0.0:8443\").await;\n    \
+             let _ = listener.accept().await;\n}\n",
         );
-        write(
-            &root,
-            "crates/gateway-server/src/sneaky.rs",
-            "fn other() {\n    let _ = TcpListener::bind(\"0.0.0.0:2\");\n}\n",
-        );
+        for sneaky in [
+            "crates/gateway/src/server/harness.rs",
+            "crates/gateway/tests/conformance_wire.rs",
+        ] {
+            write(
+                &root,
+                sneaky,
+                "async fn other() {\n    let _ = tokio::net::TcpListener::bind(\"127.0.0.1:0\").await;\n}\n",
+            );
+        }
         let report = no_listening_socket(&root);
-        assert_eq!(report.findings.len(), 1, "{:?}", report.findings);
+        assert_eq!(report.findings.len(), 2, "{:?}", report.findings);
         assert!(
-            report.findings[0].contains("crates/gateway-server/src/sneaky.rs:2"),
+            report.findings[0].contains("crates/gateway/src/server/harness.rs:2"),
+            "{:?}",
+            report.findings
+        );
+        assert!(
+            report.findings[1].contains("crates/gateway/tests/conformance_wire.rs:2"),
             "{:?}",
             report.findings
         );
     }
 
-    /// An allowlisted file that stopped binding is an exemption nobody is
+    /// THE RESTATED RULE'S OWN TEST (#1029, scope amendment 2026-09-21).
+    ///
+    /// "The phone dials; it accepts no inbound connection." A phone-side
+    /// endpoint that **offers an ALPN** or **calls `accept`** is doing the two
+    /// things an endpoint has to do on purpose to become a listener, and each
+    /// is a finding even though neither is a `TcpListener`.
+    #[test]
+    fn a_phone_endpoint_that_offers_an_alpn_or_accepts_is_a_finding() {
+        for (what, line) in [
+            (
+                "offering an ALPN",
+                "    let endpoint = Endpoint::builder(presets::N0).alpns(vec![ALPN.to_vec()]);",
+            ),
+            (
+                "calling accept",
+                "    while let Some(incoming) = endpoint.accept().await {}",
+            ),
+        ] {
+            let root = fixture_dir(&format!("listener-client-{}", what.replace(' ', "-")));
+            write(
+                &root,
+                "crates/core/src/phone/link.rs",
+                &format!("async fn dial() {{\n{line}\n}}\n"),
+            );
+            let report = no_listening_socket(&root);
+            assert_eq!(
+                report.findings.len(),
+                1,
+                "{what} went unnoticed: {:?}",
+                report.findings
+            );
+            assert!(
+                report.findings[0].contains("crates/core/src/phone/link.rs:2"),
+                "{:?}",
+                report.findings
+            );
+            assert!(
+                report.findings[0].contains("accepts no inbound connection"),
+                "the finding must say what the rule is: {:?}",
+                report.findings
+            );
+        }
+    }
+
+    /// AND THE SHAPE THE PHONE ACTUALLY TAKES IS CLEAN. A TCP stream to an
+    /// address and a TLS handshake on it is a dialler — a rule that called it
+    /// a listener would be a rule nobody could ship the phone under.
+    #[test]
+    fn a_dial_only_client_is_not_a_listener() {
+        let root = fixture_dir("listener-client-green");
+        write(
+            &root,
+            "crates/core/src/phone/link.rs",
+            "async fn dial() {\n    let stream = TcpStream::connect(addr).await?;\n    \
+             connector.connect(server_name, stream).await\n}\n",
+        );
+        assert!(
+            no_listening_socket(&root).findings.is_empty(),
+            "a dialler is not a listener"
+        );
+    }
+
+    /// An allowlisted file that stopped accepting is an exemption nobody is
     /// looking at, which is how the next one gets added quietly.
     #[test]
     fn the_listener_allowlist_has_no_dead_entries() {
@@ -840,7 +922,7 @@ fn door() {
                 .unwrap_or_else(|error| panic!("{path} is allowlisted and unreadable: {error}"));
             assert!(
                 !listener_hits(&source).is_empty(),
-                "{path} no longer opens a listener; drop its allowlist entry ({reason})"
+                "{path} no longer accepts an inbound connection; drop its allowlist entry ({reason})"
             );
         }
     }

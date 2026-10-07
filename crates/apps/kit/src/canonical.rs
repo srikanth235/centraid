@@ -23,11 +23,11 @@
 //! v0's number formatting).
 //!
 //! **The other two canonicalisers in this tree, and why they stay.**
-//! `crates/vault::intents::canonical_json` is the INTENT DIGEST's, and it
-//! refuses a non-finite number rather than writing `null` because a payload
-//! whose hash depends on that coercion is a payload two implementations
-//! disagree about; it is fallible for that reason alone and `crates/vault` is
-//! not on the app plane's import path. `crates/media::format::canonical_json`
+//! `crates/vault::canonical::canonical_json` is the AUDIT RECEIPT's and the
+//! BACKUP MANIFEST's, and it refuses a non-finite number rather than writing
+//! `null` because a digest that depends on that coercion is a digest two
+//! implementations disagree about; it is fallible for that reason alone and
+//! `crates/vault` is not on the app plane's import path. `crates/media::format::canonical_json`
 //! is the BACKUP WIRE FORMAT's, hashed on both sides of a file by two
 //! languages. The three agree on every value an app can produce — the test
 //! below pins this one against the shapes that matter — and each says in its

@@ -15,37 +15,27 @@ Never claim both are durable writers without a merge strategy — Centraid does 
 
 ### Gateway data directory — the running gateway wins
 
-One layout, stated in [`crates/centraid/src/cmd/mod.rs`](../crates/centraid/src/cmd/mod.rs):
+A gateway holds no vault: the vault is on the phone, and a gateway's data directory is its identity and a blind store of sealed objects ([#1080](https://github.com/srikanth235/centraid/issues/1080)). One layout, stated in [gateway.md](gateway.md#the-data-directory):
 
 | Path | Owner | Notes |
 | --- | --- | --- |
-| `<data-dir>/vault/<vaultId>/vault.db` | `centraid gateway`, the vault's one writer | Enrolled devices live here (`access_device`, `access_device_secret`). Direct SQL bypasses the command plane and its receipts, and is unsupported while the gateway runs |
-| `<data-dir>/keys/*` | `KeyStore` ([`crates/vault/src/custody`](../crates/vault/src/custody/README.md)) | Atomic `0600` envelopes. Export, backup and copy gestures never move this directory |
-| `<data-dir>/blobs/` | `centraid backup now` / `centraid recover` | The backup plane's content-addressed store |
+| `tls.key`, `tls.crt`, `gateway.id` | `centraid-gateway serve`, at its first start | The gateway's identity, minted together, mode 0600. Every paired phone pins the certificate, so a gateway that minted afresh is one they all refuse |
+| `state.db` | `serve`; `pair`, `pairings` and `scrub` open it beside a running `serve` | Vaults and writer epochs, the hashes of tokens and pairing secrets, heads, the object index and tombstones. Hand-editing is unsupported |
+| `objects/`, `incoming/` | `serve` | The sealed objects; uploads being staged, emptied at start |
+| `serve.json`, `sweeps.json` | `serve` | The address it last bound, which `pair` and `health` read; when the purge and the scrub last finished |
 
-Operator inputs are flags and environment, read at start: `--data-dir`, `--vault-name`, `--relay` / `--no-relay`, `--print-qr`, `--log` / `CENTRAID_LOG`, and `CENTRAID_EXPECTED_CORE_DIGEST` (a shell's claim about which core it was built against; a mismatch is refused). There is no gateway config file and no prefs store.
+Operator inputs are flags and environment, read at start: `--data-dir` (or `CENTRAID_GATEWAY_DATA_DIR`), and `serve`'s `--bind` (or `CENTRAID_GATEWAY_BIND`) and `--no-mdns`. There is no gateway config file and no prefs store.
 
 ### Vault ontology settings — vault commands win
 
 | Surface | Owner | Notes |
 | --- | --- | --- |
-| `core_vault.settings_json` and related rows | Journalled vault commands | The seal-key fingerprint is stamped here inside the sealing transaction. Direct SQL against `vault.db` bypasses consent and is unsupported |
+| `core_vault.settings_json` and related rows | Journalled vault commands | Direct SQL against `vault.db` bypasses consent and is unsupported |
 | `enrich_policy` | Vault founding ([`crates/vault/src/bootstrap.rs`](../crates/vault/src/bootstrap.rs)) | Seeded `gateway` for `photos` and `docs`; no command in this build changes it, and Photos reads it without being able to set it |
-
-### Desktop — the Electron main process wins
-
-| Path | Owner | Notes |
-| --- | --- | --- |
-| `<userData>/vaultdata/` | The `centraid seat` sidecar the main process spawns (`--data-dir`) | The seat's replica. `CENTRAID_DATA_DIR` overrides the path |
-| `<userData>/seat.sock` | The sidecar | Unix socket, mode 0600, peer-uid checked. `CENTRAID_SEAT_SOCKET` overrides the path |
-| `<userData>/seat.nonce` | The main process, rewritten on every spawn | Mode 0600; a file rather than a flag so it is in no `ps` listing |
-| `<userData>/install-id` | The updater's rollout bucket | Stable per install |
-
-Code: [`desktop/electron/src/main.ts`](../desktop/electron/src/main.ts), [`desktop/electron/src/main/sidecar.ts`](../desktop/electron/src/main/sidecar.ts).
 
 ### Mobile — the platform secure store wins
 
-One enrollment record per vault — the device's private identity key, the vault id, dialling hints — in the platform store, written and moved as one unit ([`Enrolments.kt`](../mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/Enrolments.kt)). The replica file is named by the vault id ([traps/seat-identity.md](traps/seat-identity.md)).
+Two secrets per vault in the platform store, and their sync postures are deliberately opposite ([#1029](https://github.com/srikanth235/centraid/issues/1029)): the **64-byte seed** is synced by default, because iCloud Keychain is end-to-end encrypted and a seed that does not survive a lost phone is a product with no recovery; the **device key** is `ThisDeviceOnly` and **never synced**, because a device key in a synced keychain would make two phones one device. Not in the platform store: each paired gateway's **token**, which lives in the vault's backup ledger `<stem>.backup.db` beside the gateway's addresses, pinned certificate and writer epoch — device-local, excluded from OS backup and never synced, because a token restored onto a second phone would make two phones one writer; a phone that loses the ledger pairs again ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 
 ### App manifests — files win
 
@@ -54,23 +44,23 @@ One enrollment record per vault — the device's private identity key, the vault
 | `crates/apps/<app>/manifest.json` | The release. Each app crate embeds its manifest with `include_str!`, so a shipped binary carries the manifest it was built with and nothing edits it at runtime |
 | Consent grants, install rows | Vault runtime |
 
-### OS service units (H5) — `centraid gateway install` wins
+### OS service units (H5) — `centraid-gateway install` wins
 
 | Path | Owner |
 | --- | --- |
-| LaunchAgent `dev.centraid.gateway.plist` / systemd user or system unit | `centraid gateway install [--system --instance <name>]` |
+| LaunchAgent `~/Library/LaunchAgents/<label>.plist` / systemd user unit `~/.config/systemd/user/<label>.service` | `centraid-gateway install --data-dir <dir> [--bind <addr>]` |
 
-The command writes the unit and **prints** the command that enables it; it never enables it. `--dry-run` prints the unit and writes nothing. Hand-edited units may be replaced on reinstall. Service install is **opt-in, default off** ([decisions.md](decisions.md) H5). The committed templates under [`deploy/`](../deploy/README.md) (`launchd/`, `systemd/`) and `deploy/vps/install.sh` are for hosts that install from a release.
+The command creates a missing data directory with mode 0700, writes the unit and **prints** the command that starts it; it never enables it. `--dry-run` prints the unit and its path and writes nothing. Hand-edited units may be replaced on reinstall. Service install is **opt-in, default off** ([decisions.md](decisions.md) H5). `deploy/vps/install.sh` installs from a release and _offers_ a service rather than enabling one, and the container image runs `serve` itself ([deploy/README.md](../deploy/README.md)).
 
-**Packaging / declarative modules (issue #504):** Docker, Nix flakes, and future NixOS modules must **not** become a second independent writer of the same unit files. The canonical generator is `centraid gateway install` (use `--dry-run` as the template source). A NixOS module, if added later, must call or bit-for-bit replicate that generator's output. Declarative host config may feed **into** the generator or the `gateway` flags.
+**Packaging / declarative modules (issue #504):** Docker, Nix flakes, and future NixOS modules must **not** become a second independent writer of the same unit files. The canonical generator is `centraid-gateway install` (use `--dry-run` as the template source). A NixOS module, if added later, must call or bit-for-bit replicate that generator's output. Declarative host config may feed **into** the generator or the `gateway` flags.
 
-### Pairing and enrollment — runtime only
+### Pairing — runtime only, on both ends
 
 | Path | Owner |
 | --- | --- |
-| Enrolled devices in `vault.db` | The running gateway, through the vault's device methods ([`crates/vault/src/devices.rs`](../crates/vault/src/devices.rs)) |
-| Pair tickets | The running gateway's memory only; a restart invalidates them |
-| `<data-dir>/keys/gateway.endpoint.key` | The gateway, created on first start with `--data-dir` |
+| A pairing secret's hash, in the gateway's `state.db` | `centraid-gateway pair` mints it and `POST /v2/pair` spends it; it survives a restart until it is used or its day runs out |
+| A vault's tokens and writer epoch, in the gateway's `state.db` | The running gateway, at pairing and at a claim |
+| Each paired gateway's addresses, certificate, token and epoch, in the phone's `<stem>.backup.db` | The phone's core |
 
 Do not hand-merge these mid-flight. Recovery: [recovery/pairing.md](recovery/pairing.md).
 

@@ -495,6 +495,41 @@ pub fn recurring_exceptions_statement() -> PageQuery {
     )
 }
 
+/// `tally.expense.one` — ONE expense by id, live or trashed: the detail screen
+/// opens an expense from Activity, a deep link or the trash, and the ledger
+/// window holds only the live 2,000.
+pub fn expense_by_id_statement(expense_id: &str) -> PageQuery {
+    query(
+        "tally.expense.one",
+        "expense_id, group_id, description, amount_minor, currency, paid_by, split_method, \
+         split_params_json, spent_on, category, created_at, updated_at, original_amount_minor, \
+         original_currency, settlement_currency, rate_scaled, rate_scale, rate_source, rate_date, \
+         recurring_template_id, deleted_at, purge_at",
+        "tally_expense",
+        PageOrder::asc("expense_id", "expense_id"),
+    )
+    .filter("expense_id = ?", vec![PageBindValue::from(expense_id)])
+}
+
+/// `tally.expense.memo` — the owner's running memo on an expense: a
+/// `knowledge_annotation` on the expense (#310), newest first. The table has
+/// no kind column, so an annotation on a `tally.expense` IS its memo.
+pub fn memo_statement(expense_id: &str) -> PageQuery {
+    query(
+        "tally.expense.memo",
+        "annotation_id, body_text, updated_at",
+        "knowledge_annotation",
+        PageOrder::desc("updated_at", "annotation_id"),
+    )
+    .filter(
+        "target_type = ? AND target_id = ?",
+        vec![
+            PageBindValue::from("tally.expense"),
+            PageBindValue::from(expense_id),
+        ],
+    )
+}
+
 /// How far apart two postings of one movement may sit, in whole days
 /// (`queries/matches.ts:31`).
 pub const MATCH_WINDOW_DAYS: i64 = 4;
@@ -628,7 +663,7 @@ fn window(
     read_window(door, statement, rows)
 }
 
-fn expense_row(row: &Row) -> Option<ExpenseRow> {
+pub(crate) fn expense_row(row: &Row) -> Option<ExpenseRow> {
     Some(ExpenseRow {
         expense_id: text_of(row, "expense_id")?,
         group_id: text_of(row, "group_id"),
@@ -656,7 +691,7 @@ fn expense_row(row: &Row) -> Option<ExpenseRow> {
 
 /// A person from a resolved name: the hue and the initials are
 /// `crates/design`'s, the one lowering of `packages/design` (#1020, D-1020-T1).
-fn person_of_name(party_id: &str, name: &str, is_me: bool) -> Person {
+pub(crate) fn person_of_name(party_id: &str, name: &str, is_me: bool) -> Person {
     Person {
         party_id: party_id.to_owned(),
         name: name.to_owned(),

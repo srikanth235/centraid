@@ -51,10 +51,10 @@ use crate::scenario::{
 use crate::{Seeder, at, day};
 
 /// Seed the whole second world, app by app.
-pub(crate) fn seed(seeder: &mut Seeder, me: &str, keys_dir: &std::path::Path, vault_id: &str) {
+pub(crate) fn seed(seeder: &mut Seeder, me: &str) {
     // THE LONG TAIL FIRST, then the clock is jumped to where the story starts
     // — the same ordering the first world uses and for the same reason.
-    let locker_key = found_key(seeder, keys_dir, vault_id);
+    let locker_key = found_key(seeder);
     crate::bulk2::seed(
         seeder,
         me,

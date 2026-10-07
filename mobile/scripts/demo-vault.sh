@@ -44,10 +44,21 @@ staging="${CENTRAID_DEMO_DIR:-/tmp/centraid-demo}"
 # genuinely empty over there, which is a state the grid already knows how to
 # say and does not have to invent.
 echo "==> seeding $staging"
-(cd "$root" && cargo run -q -p centraid --bin seed-demo-vault -- "$staging")
+demo_out="$(cd "$root" && cargo run -q -p centraid --bin seed-demo-vault -- "$staging")"
+echo "$demo_out"
+# THE DEMO LOCKER IS SEALED UNDER THE PUBLIC all-`abandon` WORDS (D-6), and a
+# phone opens it only KEYED — with that seed in its secure store (#1047 W2). A
+# shell has no BIP-39 of its own, so the seeder prints the seed as hex and each
+# place_* below relaunches a DEBUG build with it; a release build never reads it.
+demo_seed="$(printf '%s\n' "$demo_out" | sed -n 's/^CENTRAID_DEMO_SEED=//p')"
 (cd "$root" && cargo run -q -p centraid --bin seed-demo-vault -- "$staging" \
-  --file work-vault.db --name "Work" --only docs,tasks,agenda)
-vaults=("$staging/demo-vault.db" "$staging/work-vault.db")
+  --file work-vault.sqlite3 --name "Work" --only docs,tasks,agenda)
+# ONE DIRECTORY PER VAULT, AND THE FILE IS `vault.db` (#1047, Q-1047-17).
+# `Shelf` adopts `<vault dir>/<name>/vault.db` and nothing else, because the
+# core keeps a vault's backup home beside its file and two files in one
+# directory would share one. Each fixture is placed as `<stem>/vault.db` with
+# its byte store as `<stem>/vault.bytes` (`with_extension("bytes")`).
+vaults=("$staging/demo-vault.sqlite3" "$staging/work-vault.sqlite3")
 
 place_android() {
   local adb="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb"
@@ -58,12 +69,15 @@ place_android() {
   mkdir -p "$root/mobile/androidApp/src/main/assets"
   for vault in "${vaults[@]}"; do
     local name; name="$(basename "$vault")"
-    echo "==> android: $name -> assets + running app's files dir"
+    local stem="${name%.*}"
+    echo "==> android: $name -> assets + running app's files/$stem/vault.db"
+    # The asset keeps its flat name; `MainActivity` places it as
+    # `files/<stem>/vault.db`.
     cp "$vault" "$root/mobile/androidApp/src/main/assets/$name"
     # Also push it into a live install, so a re-seed does not need a rebuild.
     # `run-as` is the only door into an app's private storage on a debug build.
     "$adb" push "$vault" "/data/local/tmp/$name" >/dev/null
-    "$adb" shell "run-as dev.centraid sh -c 'cat /data/local/tmp/$name > files/$name'" \
+    "$adb" shell "run-as dev.centraid sh -c 'mkdir -p files/$stem && rm -f files/$stem/vault.db-wal files/$stem/vault.db-shm && cat /data/local/tmp/$name > files/$stem/vault.db'" \
       2>/dev/null || echo "   (the app is not installed yet; the asset copy will seed it on first run)"
     # THE BYTES TRAVEL WITH THE ROWS. `<stem>.bytes/` is the vault's one content
     # store (#1025 S3); a vault copied without it is a library of rows pointing
@@ -72,13 +86,23 @@ place_android() {
     # re-seed. Copied RECURSIVELY: it is iroh's store, an index and a `data/`
     # directory, not the one-file-per-hash CAS it replaced.
     local bytes="${vault%.*}.bytes"
-    local bytes_name="${name%.*}.bytes"
+    local bytes_name="$stem.bytes"
     if [ -d "$bytes" ]; then
       "$adb" push "$bytes" "/data/local/tmp/$bytes_name" >/dev/null 2>&1 || true
-      "$adb" shell "run-as dev.centraid sh -c 'rm -rf files/$bytes_name && cp -R /data/local/tmp/$bytes_name files/$bytes_name'" \
+      "$adb" shell "run-as dev.centraid sh -c 'rm -rf files/$stem/vault.bytes && cp -R /data/local/tmp/$bytes_name files/$stem/vault.bytes'" \
         2>/dev/null || true
     fi
   done
+  # RELAUNCH WITH THE DEMO SEED (#1047 W2). `-S` stops the running process so
+  # the shelf reopens every vault keyed; `MainActivity` reads the extra only
+  # when the build is debuggable. The seed lands in Block Store, so a later
+  # plain launch stays keyed.
+  if [ -n "$demo_seed" ]; then
+    echo "==> android: relaunching with the demo seed"
+    "$adb" shell am start -S -n dev.centraid/dev.centraid.android.MainActivity \
+      --es dev.centraid.DEV_SEED "$demo_seed" >/dev/null 2>&1 \
+      || echo "   (the app is not installed yet; re-run after installing)"
+  fi
 }
 
 place_ios() {
@@ -91,21 +115,30 @@ place_ios() {
   mkdir -p "$container/Documents"
   for vault in "${vaults[@]}"; do
     local name; name="$(basename "$vault")"
-    echo "==> ios: $name -> $container/Documents"
-    cp "$vault" "$container/Documents/$name"
+    local home="$container/Documents/${name%.*}"
+    echo "==> ios: $name -> $home/vault.db"
+    mkdir -p "$home"
+    cp "$vault" "$home/vault.db"
     # The WAL and the shared-memory file belong to the copy, not to this one.
-    rm -f "$container/Documents/$name-wal" "$container/Documents/$name-shm"
+    rm -f "$home/vault.db-wal" "$home/vault.db-shm"
     # THE BYTES TRAVEL WITH THE ROWS. `<stem>.bytes/` is the vault's one content
     # store (#1025 S3, D-1025-S3-1) — the same directory `SeatLink` opens and
     # the byte plane fetches into; a vault copied without it is a library of
     # rows pointing at bytes the device does not have.
     local bytes="${vault%.*}.bytes"
-    local bytes_name="${name%.*}.bytes"
-    rm -rf "$container/Documents/$bytes_name"
+    rm -rf "$home/vault.bytes"
     if [ -d "$bytes" ]; then
-      cp -R "$bytes" "$container/Documents/$bytes_name"
+      cp -R "$bytes" "$home/vault.bytes"
     fi
   done
+  # RELAUNCH WITH THE DEMO SEED (#1047 W2). `simctl` hands `SIMCTL_CHILD_*` to
+  # the app's environment; `ShellModel.devSeedHex` reads it under `#if DEBUG`
+  # only. The seed lands in the Keychain, so a later plain launch stays keyed.
+  if [ -n "$demo_seed" ]; then
+    echo "==> ios: relaunching with the demo seed"
+    SIMCTL_CHILD_CENTRAID_DEV_SEED="$demo_seed" \
+      xcrun simctl launch --terminate-running-process "$udid" dev.centraid.Centraid >/dev/null
+  fi
 }
 
 case "$target" in

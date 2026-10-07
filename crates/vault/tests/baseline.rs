@@ -16,12 +16,28 @@
 //!
 //! So the answer to "what is excluded from the comparison" is **nothing**. The
 //! founded schema and the corpus's schema are equal as sets and as text, EXCEPT
-//! for what the ladder adds above the baseline — rung two's four revision
-//! guards (#1020, D-1020-N2), rung three's four backup-index objects and rung
-//! four's four blob-custody objects (#1029 §2, §4), named in
-//! `LADDER_OBJECTS` and asserted as the whole of the difference. Any future
-//! exclusion has to be added to this table with its reason, and the assertion
-//! below is what forces that.
+//! for what the LADDER does above the baseline, in both directions:
+//!
+//! - what a rung ADDS and no later rung drops — rung two's four revision
+//!   guards (#1020, D-1020-N2), rung six's kind guard on `core_collection` and
+//!   rung seven's one-generation index on `locker_key` — named in
+//!   `LADDER_OBJECTS`. Rung three's four backup-index objects and rung four's
+//!   four blob-custody objects (#1029 §2, §4) are founded and dropped again by
+//!   rung ten (#1080), so a founded file holds none of them;
+//! - what rung five DROPS — the planes v1 does not have (#1029) — rung
+//!   seven's `locker_key_live_idx` and rung nine's `notifications_notice`,
+//!   named in `DROPPED_OBJECTS`;
+//! - the tables a rung ALTERS — `locker_item`, which loses the
+//!   `connection_id` column that pointed into `sync_connection` (rung five),
+//!   `core_collection`, which gains its required `kind` (rung six),
+//!   `locker_key`, which loses `retired_at` (rung seven), and
+//!   `locker_item_address`, which loses `match_policy` as `locker_item` loses
+//!   `url_match_policy` (rung eight) — named in `ALTERED_OBJECTS`.
+//!
+//! All three are named rather than matched by prefix, so a table that comes
+//! back, a drop that stops running and an object arriving from nowhere are each
+//! a failure with a name. Any future exclusion has to be added to this table
+//! with its reason, and the assertion below is what forces that.
 
 mod common;
 
@@ -30,27 +46,189 @@ use std::collections::BTreeMap;
 use centraid_vault::{APPLICATION_ID, Vault, head_version};
 
 /// What the ladder adds above the baseline: rung two's four revision guards
-/// (#1020, D-1020-N2), rung three's in-vault backup index and rung four's blob
-/// custody — a file key per blob, and where its bytes are (#1029 §2, §4).
+/// (#1020, D-1020-N2), rung six's guard that a collection's kind never
+/// changes, and rung seven's index that makes a second Locker generation
+/// unrepresentable (R-1047-D2). Rungs three and four added the old backup
+/// plane's index and blob custody (#1029 §2, §4); rung ten drops all eight
+/// objects again (#1080), so they are founded and gone.
 ///
 /// The corpus is a v0 file and knows nothing of the v1 ladder above rung one,
 /// so a founded v1 file legitimately carries exactly these and nothing else.
 /// Named here rather than filtered by prefix: a guard that stopped being
 /// created, or an object arriving from somewhere, both have to show up as a
 /// failure.
-const LADDER_OBJECTS: [&str; 12] = [
-    "backup_base_range",
-    "backup_base_range_by_hash",
-    "backup_blob_custody",
-    "backup_blob_custody_by_role",
-    "backup_blob_placement",
-    "backup_blob_placement_by_object",
-    "backup_object_range",
-    "backup_object_range_by_object",
+const LADDER_OBJECTS: [&str; 6] = [
+    "core_collection_kind_is_immutable",
     "core_entity_revision_no_self_parent",
     "core_entity_revision_parent_is_immutable",
     "core_entity_revision_parent_is_same_object",
     "core_link_no_revises_edge",
+    "locker_key_one_generation",
+];
+
+/// WHAT RUNG FIVE DROPS (#1029): the storage of every plane this umbrella
+/// deleted in code — sharing, the outbox, the replica plane, per-device blob
+/// wrapping, automations, connectors, agents and the conversation ledger band —
+/// with each dropped table's own indexes and triggers, the `fts_conversation`
+/// virtual table's five shadow tables, the `run_summary` view over the ledger
+/// and the `core_entity_revoke_on_purge` trigger whose whole body was an UPDATE
+/// on `share_authority` — and, from rung seven, `locker_key_live_idx`, the
+/// predicate index whose `retired_at` had no writer once rotation went
+/// (R-1047-D2) — and, from rung nine, `notifications_notice` with its two
+/// indexes, a table no plane has written or read since #1029.
+///
+/// `access_device` and `access_device_secret` are NOT here, and that is an
+/// open item rather than a ruling: their writer (`Vault::enrol_device`, the
+/// gateway's peer allowlist) left with the iroh plane in #1080, and no rung
+/// drops them yet.
+const DROPPED_OBJECTS: [&str; 123] = [
+    "access_agent",
+    "access_agent_secret",
+    "attachments",
+    "automation_state",
+    "automation_trigger_cursor",
+    "blob_device_content_key",
+    "blob_device_wrap_key",
+    "blob_device_wrap_key_touch_updated_at",
+    "blob_outbox",
+    "blob_outbox_touch_updated_at",
+    "blob_replica",
+    "conversation_archive",
+    "conversation_digest",
+    "conversation_harness_sessions",
+    "conversation_item_count_ad",
+    "conversation_item_count_ai",
+    "conversation_provider_consent",
+    "conversation_turn_locks",
+    "conversation_workspace_selection",
+    "conversations",
+    "core_entity_revoke_on_purge",
+    "fts_conversation",
+    "fts_conversation_config",
+    "fts_conversation_content",
+    "fts_conversation_conv_ad",
+    "fts_conversation_conv_ai",
+    "fts_conversation_conv_au",
+    "fts_conversation_data",
+    "fts_conversation_docsize",
+    "fts_conversation_idx",
+    "fts_conversation_item_ad",
+    "fts_conversation_item_ai",
+    "fts_conversation_turn_ad",
+    "harness_health",
+    "idx_attachments_hash",
+    "idx_attachments_item",
+    "idx_automation_trigger_cursor_updated",
+    "idx_blob_device_content_key_device",
+    "idx_blob_outbox_retry",
+    "idx_conversation_archive_conv",
+    "idx_conversation_archive_sha",
+    "idx_conversation_archive_unpruned",
+    "idx_conversation_digest_automation",
+    "idx_conversation_harness_latest",
+    "idx_conversation_provider_consent_active",
+    "idx_conversations_app",
+    "idx_conversations_automation",
+    "idx_conversations_user_updated",
+    "idx_harness_health_breaker",
+    "idx_items_by_model",
+    "idx_items_by_turn",
+    "idx_items_run_rollup",
+    "idx_items_turn_call",
+    "idx_outbox_item_authority",
+    "idx_outbox_item_connection",
+    "idx_outbox_item_published_message",
+    "idx_outbox_item_recipient_party",
+    "idx_outbox_item_status",
+    "idx_outbox_item_target",
+    "idx_replica_intent_device_status",
+    "idx_replica_invocation_commit_intent",
+    "idx_replica_log_epoch_commit",
+    "idx_replica_log_epoch_seq",
+    "idx_replica_log_row",
+    "idx_replica_parked_grant",
+    "idx_sync_connection_run_connection",
+    "idx_sync_external_entity",
+    "idx_sync_import_batch_connection",
+    "idx_sync_import_row_batch",
+    "idx_trigger_ingress_expiry",
+    "idx_trigger_ingress_source_position",
+    "idx_turns_conversation",
+    "idx_turns_idempotency",
+    "idx_turns_parent",
+    "idx_turns_started",
+    "items",
+    "locker_item_connection_idx",
+    "locker_key_live_idx",
+    "notifications_notice",
+    "notifications_notice_active_idx",
+    "notifications_notice_retention_idx",
+    "outbox_item",
+    "replica_intent_outcome",
+    "replica_intent_outcome_touch_updated_at",
+    "replica_invocation_commit",
+    "replica_log",
+    "replica_meta",
+    "replica_parked_payload",
+    "run_summary",
+    "share_authority",
+    "share_authority_granted_by",
+    "share_authority_live_answer",
+    "share_authority_principal",
+    "share_authority_request",
+    "share_authority_request_open",
+    "share_authority_subject",
+    "share_authority_use",
+    "share_delivery_config",
+    "share_fulfillment",
+    "share_fulfillment_touch_updated_at",
+    "share_party_vault_binding",
+    "share_party_vault_binding_live_party",
+    "share_party_vault_binding_not_self_ai",
+    "share_party_vault_binding_not_self_au",
+    "share_subscription",
+    "share_subscription_lineage",
+    "share_subscription_lineage_target",
+    "share_subscription_member",
+    "share_subscription_subscribed_page_idx",
+    "share_subscription_touch_updated_at",
+    "sync_connection",
+    "sync_connection_credential",
+    "sync_connection_credential_touch_updated_at",
+    "sync_connection_cursor",
+    "sync_connection_cursor_touch_updated_at",
+    "sync_connection_health",
+    "sync_connection_health_touch_updated_at",
+    "sync_connection_run",
+    "sync_external_entity",
+    "sync_import_batch",
+    "sync_import_row",
+    "trigger_ingress",
+    "turns",
+];
+
+/// The objects the ladder ALTERS rather than creates or drops.
+///
+/// - `core_collection` (rung six): the table gains its REQUIRED `kind`
+///   (`notebook` | `album`), so Notes and Photos stop reading each other's
+///   rows. The rung rebuilds the table and re-creates its indexes and triggers
+///   in the baseline's own text, so the table is the only one of them whose DDL
+///   differs from the corpus's.
+/// - `locker_key` (rung seven): the table loses `retired_at`, whose only
+///   writer was the rotation R-1047-D1 deleted; the Locker names one
+///   generation (R-1047-D2).
+/// - `locker_item` (rung five): `locker_item.connection_id` was a foreign key
+///   into `sync_connection`, "the connector this password belongs to". There is
+///   no connector runtime, so the column and its index go. Rung eight drops
+///   `url_match_policy` too (Q-1047-15), so the table's DDL differs from the
+///   corpus's by those two columns.
+/// - `locker_item_address` (rung eight): `match_policy` goes with the matcher
+///   nothing ran (Q-1047-15).
+const ALTERED_OBJECTS: [&str; 4] = [
+    "core_collection",
+    "locker_item",
+    "locker_item_address",
+    "locker_key",
 ];
 
 /// Every schema object of a file, keyed by `(type, name)`.
@@ -88,18 +266,23 @@ fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
         .expect("the founded schema reads");
 
     let mut findings: Vec<String> = Vec::new();
+    let mut dropped: Vec<&str> = Vec::new();
     for (key, sql) in &expected {
         match actual.get(key) {
+            None if DROPPED_OBJECTS.contains(&key.1.as_str()) => dropped.push(key.1.as_str()),
             None => findings.push(format!(
                 "{} `{}` is in the corpus and not founded",
                 key.0, key.1
             )),
             Some(found) if found != sql => {
-                findings.push(format!("{} `{}`: the DDL differs", key.0, key.1));
+                if !ALTERED_OBJECTS.contains(&key.1.as_str()) {
+                    findings.push(format!("{} `{}`: the DDL differs", key.0, key.1));
+                }
             }
             Some(_) => {}
         }
     }
+    dropped.sort_unstable();
     let mut beyond: Vec<&str> = Vec::new();
     for key in actual.keys() {
         if expected.contains_key(key) {
@@ -116,6 +299,9 @@ fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
     }
     beyond.sort_unstable();
     assert_eq!(findings.join("\n"), "");
+    // AND THE DROPS ARE THE LADDER'S, NAMED. A table that came back, or a drop
+    // that stopped running, is this assertion rather than a silent pass.
+    assert_eq!(dropped, DROPPED_OBJECTS);
     // AND THE DELTA IS THE LADDER, NAMED (#1020, close pass). A founded file is
     // the baseline PLUS every rung above it, so the difference from the corpus
     // is not "nothing" any more — it is exactly rung two's four guards and rung
@@ -130,7 +316,10 @@ fn a_founded_v1_file_carries_exactly_the_corpuss_schema() {
         "only {} objects in the corpus",
         expected.len()
     );
-    assert_eq!(expected.len() + LADDER_OBJECTS.len(), actual.len());
+    assert_eq!(
+        expected.len() + LADDER_OBJECTS.len() - DROPPED_OBJECTS.len(),
+        actual.len()
+    );
 }
 
 #[test]
@@ -161,8 +350,9 @@ fn the_three_excluded_classes_are_created_by_sqlite_itself() {
             ))
         })
         .expect("the counts read");
-    // 18 virtual tables × 5 shadow tables each.
-    assert_eq!(shadows, 90);
+    // 17 virtual tables × 5 shadow tables each: rung five drops
+    // `fts_conversation` with the ledger band it indexed (#1029).
+    assert_eq!(shadows, 85);
     assert_eq!(sequence, 1);
     assert!(autoindexes > 0, "no implicit index was created");
     // And none of the three appears in the baseline's own text.
@@ -187,7 +377,9 @@ fn the_fifty_seven_fts_sync_triggers_survive_the_baseline() {
             )?)
         })
         .expect("the count reads");
-    assert_eq!(triggers, 57);
+    // 57 in the corpus, less the six `fts_conversation_*` sync triggers rung
+    // five drops with the conversation ledger band (#1029).
+    assert_eq!(triggers, 51);
 }
 
 #[test]
@@ -260,10 +452,14 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     // says nothing about a v1 file (D-1020-D1-2).
     assert_eq!(user_version, head_version());
     // Rung two is the revision guards (#1020, D-1020-N2); rung three is the
-    // in-vault backup index and rung four is blob custody (#1029 §2, §4).
+    // in-vault backup index and rung four is blob custody (#1029 §2, §4); rung
+    // five is the cut (#1029); rung six is the collection kind; rung seven is
+    // the Locker's one generation (R-1047-D2); rung eight drops the Locker's
+    // match policy (Q-1047-15); rung nine drops the notices no plane writes;
+    // rung ten drops rungs three and four's backup index (#1080).
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above.
-    assert_eq!(user_version, 4);
+    assert_eq!(user_version, 10);
     assert_eq!(journal, "wal");
 }
 

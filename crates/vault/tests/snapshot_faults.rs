@@ -173,10 +173,9 @@ fn an_interrupted_build_leaves_no_artifact_and_the_next_one_succeeds() {
     // publishes nothing, the live vault is untouched by any fault, and a retry
     // succeeds. What changed is what a completed artifact IS. It is a complete
     // copy of the file, private bands and all, which is the plain statement of
-    // B1, and the protection is that a backup base is SEALED
-    // (`backup::base::build_base`, and
-    // `backup::base::tests::the_base_is_sealed_and_carries_no_readable_locker_key`
-    // is where that is asserted). A `DROP TABLE` for a reader who no longer
+    // B1, and the protection is that every backup part is SEALED
+    // (`centraid-sealed/2`, #1080; `tests/locker_plaintext_gate.rs` opens each
+    // part of a snapshot and asserts no Locker plaintext is in it). A `DROP TABLE` for a reader who no longer
     // exists was never the protection, and an assertion that kept looking for
     // one made it appear to be.
     assert!(

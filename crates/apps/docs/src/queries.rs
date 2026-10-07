@@ -11,7 +11,6 @@
 //! | Read | What it is |
 //! |---|---|
 //! | `docs.drive.filed` | **the drive's window is a PAGE.** One page of `core_tag`, newest `tagged_at` first, sized by the caller. Everything below joins over what it returned |
-//! | `docs.origins.subscriptions` | the SECOND door in ([`crate::origins`]): a delivered copy carries no folders-scheme tag, so the tag window cannot see it |
 //! | `ctx.vault.search` | `search`'s own FTS read, which is `crates/search`'s and not a [`PageQuery`] — the hits arrive here in RANK ORDER and the fold keeps that order |
 //!
 //! Everything else — the documents themselves, the stars, the labels, the
@@ -45,9 +44,7 @@ use centraid_apps_kit::representations::{RepresentationIndex, read_representatio
 use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
-use crate::origins::{SharedFromEntry, read_origins_by_document};
-use crate::shares::{DOCUMENT_TARGET_TYPE, ShareWindow, SharedWithEntry, read_shares_by_document};
-use crate::{Denial, Reading};
+use crate::Denial;
 
 /// The folders scheme. **An `https` URI, not a `urn:`, and that is not drift**:
 /// the literal is interpolated into condition SQL on the command side, where
@@ -260,6 +257,27 @@ pub fn provenance_statement(document_id: &str) -> PageQuery {
     )
 }
 
+/// `docs.document.body` — THE DECODED TEXT OF ONE CONTENT ITEM (#1046).
+///
+/// `core_content_text` is what the vault's one decoder wrote at write time
+/// (`index_content_text`): a row per `text/*` content item whose bytes decoded,
+/// `body_text NOT NULL`. So an ABSENT row is "no text for these bytes" and a
+/// row holding `""` is an empty text document — two facts a reader draws
+/// differently, and the reason this is its own read rather than a decode of
+/// `content_uri` here.
+pub fn body_statement(content_id: &str) -> PageQuery {
+    PageQuery::new(
+        "docs.document.body",
+        "content_id, body_text",
+        "core_content_text",
+        PageOrder::asc("content_id", "content_id"),
+    )
+    .filter(
+        "content_id = ?",
+        vec![PageBindValue::Text(content_id.to_owned())],
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Rows and payloads.
 // ---------------------------------------------------------------------------
@@ -299,16 +317,21 @@ pub struct DocumentRow {
     pub folder_id: Option<String>,
     pub starred: bool,
     pub trashed: bool,
+    /// When it went to the trash; `None` on a live row. Trash's own order.
+    pub deleted_at: Option<String>,
     pub purge_at: Option<String>,
     pub tags: Vec<LabelEntry>,
     pub custody_state: Option<String>,
-    /// **`Denied` is "we cannot see"; `Data(vec![])` is "shared with nobody".**
-    pub shared_with: Reading<Vec<SharedWithEntry>>,
-    /// The placement that brought it here, where it arrived from elsewhere.
-    pub shared_from: Option<SharedFromEntry>,
     /// The hit snippet, on a `search` row only.
     pub snippet: Option<String>,
 }
+
+/// Tags and provenance name a document by this type.
+///
+/// It lived in `shares.rs`, which leaves with the sharing plane (#1029, rung
+/// five); it was never about sharing — it is the `target_type` every
+/// document-scoped row in this vault carries.
+pub const DOCUMENT_TARGET_TYPE: &str = "core.document";
 
 /// What `drive` answers.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -320,8 +343,6 @@ pub struct DriveData {
     /// a row count.
     pub truncated: bool,
     pub window: usize,
-    /// ABSENT IS NOT EMPTY: whether the origin plane could be read at all.
-    pub shared_from_known: bool,
 }
 
 /// What `search` answers: the same rows, in **vault rank order**.
@@ -585,8 +606,6 @@ struct Decorations {
     custody: BTreeMap<String, String>,
     representations: RepresentationIndex,
     contents: BTreeMap<String, ContentRow>,
-    shares: Reading<BTreeMap<String, Vec<SharedWithEntry>>>,
-    origins: BTreeMap<String, SharedFromEntry>,
     snippets: BTreeMap<String, String>,
 }
 
@@ -615,6 +634,7 @@ fn fold_row(wrapper: &Row, decorations: &Decorations) -> Option<DocumentRow> {
         },
         starred: decorations.starred.contains(&document_id),
         trashed: text_of(wrapper, "deleted_at").is_some(),
+        deleted_at: text_of(wrapper, "deleted_at"),
         purge_at: text_of(wrapper, "purge_at"),
         tags: decorations
             .labels
@@ -622,15 +642,6 @@ fn fold_row(wrapper: &Row, decorations: &Decorations) -> Option<DocumentRow> {
             .cloned()
             .unwrap_or_default(),
         custody_state: decorations.custody.get(&content_id).cloned(),
-        // `Denied` is "reads denied"; `Data(vec![])` is "shared with nobody".
-        shared_with: match &decorations.shares {
-            Reading::Denied(denial) => Reading::Denied(denial.clone()),
-            Reading::Loading => Reading::Loading,
-            Reading::Data(by_document) => {
-                Reading::Data(by_document.get(&document_id).cloned().unwrap_or_default())
-            }
-        },
-        shared_from: decorations.origins.get(&document_id).cloned(),
         snippet: decorations.snippets.get(&document_id).cloned(),
         document_id,
         content_id,
@@ -662,7 +673,6 @@ fn read_decorations(
     wrappers: &[Row],
     folder_by_document: BTreeMap<String, String>,
     root_folder_id: Option<String>,
-    now: &str,
 ) -> KitResult<Result<Decorations, Denial>> {
     let document_ids: Vec<String> = wrappers
         .iter()
@@ -744,16 +754,6 @@ fn read_decorations(
     let representations =
         read_representations(door, &content_ids, DOC_JOIN_BOUND).unwrap_or_default();
 
-    let shares = read_shares_by_document(
-        door,
-        &ShareWindow {
-            document_ids: &document_ids,
-            folder_by_document: &folder_by_document,
-            parent_of: &taxonomy.folder_parents(),
-            now,
-        },
-    )?;
-
     Ok(Ok(Decorations {
         folder_by_document,
         root_folder_id,
@@ -762,8 +762,6 @@ fn read_decorations(
         custody,
         representations,
         contents,
-        shares,
-        origins: BTreeMap::new(),
         snippets: BTreeMap::new(),
     }))
 }
@@ -786,7 +784,6 @@ fn denied_drive(denial: Denial, window: usize) -> (DriveData, Option<Denial>) {
 pub fn load_drive(
     door: &dyn PageDoor,
     input: DriveInput,
-    now: &str,
 ) -> KitResult<(DriveData, Option<Denial>)> {
     let window = input.window();
     let taxonomy = match read_taxonomy(door) {
@@ -804,13 +801,6 @@ pub fn load_drive(
         Err(other) => return Err(other),
     };
     let (folders, root_folder_id) = fold_folders(&taxonomy);
-
-    // READ BEFORE THE FOLDERS-SCHEME GATE (`drive.ts:76`-`:80`). The scheme is
-    // created on first use, so a member who has never filed a document of their
-    // own has none — and returning early there told someone who HAD received one
-    // that nothing arrived, which is the exact claim this door exists to
-    // prevent.
-    let origins = read_origins_by_document(door, window)?;
 
     let folder_concept_ids: Vec<String> = taxonomy
         .concepts_in(FOLDER_SCHEME_URI)
@@ -864,10 +854,11 @@ pub fn load_drive(
         }
     }
 
-    let origin_map = origins.data().cloned().unwrap_or_default();
+    // THE FILED WINDOW IS THE WHOLE WINDOW. It used to be unioned with the
+    // documents a share placed here, which is the plane rung five drops
+    // (#1029): nothing delivers a copy into this vault any more.
     let windowed: Vec<String> = folder_by_document
         .keys()
-        .chain(origin_map.keys())
         .cloned()
         .collect::<BTreeSet<String>>()
         .into_iter()
@@ -880,7 +871,6 @@ pub fn load_drive(
                 root_folder_id,
                 truncated: false,
                 window,
-                shared_from_known: origins.known(),
             },
             None,
         ));
@@ -890,18 +880,16 @@ pub fn load_drive(
         Walked::Denied(denial) => return Ok(denied_drive(denial, window)),
         Walked::Rows(rows) => rows,
     };
-    let mut decorations = match read_decorations(
+    let decorations = match read_decorations(
         door,
         &taxonomy,
         &wrappers,
         folder_by_document,
         root_folder_id.clone(),
-        now,
     )? {
         Err(denial) => return Ok(denied_drive(denial, window)),
         Ok(decorations) => decorations,
     };
-    decorations.origins = origin_map;
 
     let mut documents: Vec<DocumentRow> = wrappers
         .iter()
@@ -926,7 +914,6 @@ pub fn load_drive(
             root_folder_id,
             truncated,
             window,
-            shared_from_known: origins.known(),
         },
         None,
     ))
@@ -943,11 +930,7 @@ pub fn load_drive(
 /// the filter that drops an untagged hit is not what excludes it — the index is
 /// (`search.ts:5`). A port that re-derived the exclusion from `deleted_at`
 /// would drop a document the index was right to return.
-pub fn load_search(
-    door: &dyn PageDoor,
-    hits: &[Row],
-    now: &str,
-) -> KitResult<(SearchData, Option<Denial>)> {
+pub fn load_search(door: &dyn PageDoor, hits: &[Row]) -> KitResult<(SearchData, Option<Denial>)> {
     if hits.is_empty() {
         return Ok((SearchData::default(), None));
     }
@@ -1010,7 +993,6 @@ pub fn load_search(
         &wrappers,
         folder_by_document,
         root_folder_id,
-        now,
     )? {
         Err(denial) => return Ok((SearchData::default(), Some(denial))),
         Ok(decorations) => decorations,
@@ -1231,6 +1213,184 @@ pub fn load_activity(
     Ok((ActivityData { events }, None))
 }
 
+/// What `document` answers: one row, where it is filed, and its text.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DocumentData {
+    /// `None` when no such document exists — a state, not an error.
+    pub row: Option<DocumentRow>,
+    /// The folder chain from the top level down to the document's folder.
+    pub path: Vec<FolderRow>,
+    /// The decoded text of the head's content: `None` is "no text row", and
+    /// `Some("")` is an empty text document ([`body_statement`]).
+    pub body: Option<String>,
+}
+
+/// The folder chain above `folder_id`, top level first. Capped at the number of
+/// folders, so a cycle no command can write still terminates.
+#[must_use]
+pub fn folder_path(folders: &[FolderRow], folder_id: Option<&str>) -> Vec<FolderRow> {
+    let mut path = Vec::new();
+    let mut at = folder_id.map(str::to_owned);
+    while let Some(id) = at {
+        if path.len() > folders.len() {
+            break;
+        }
+        let Some(folder) = folders.iter().find(|folder| folder.folder_id == id) else {
+            break;
+        };
+        path.push(folder.clone());
+        at = folder.parent_id.clone();
+    }
+    path.reverse();
+    path
+}
+
+/// `document` — ONE document, as the reader, the viewer and the properties
+/// sheet draw it (#1046). The same row the drive folds, found by id rather
+/// than through the filed window — so a document beyond the window, or one
+/// search found, opens exactly as a browsed one does.
+pub fn load_document(
+    door: &dyn PageDoor,
+    document_id: &str,
+) -> KitResult<(DocumentData, Option<Denial>)> {
+    if document_id.is_empty() {
+        return Ok((DocumentData::default(), None));
+    }
+    let wrappers = match walk(
+        door,
+        &documents_statement(&[document_id.to_owned()])?,
+        DOC_JOIN_BOUND,
+    )? {
+        Walked::Denied(denial) => return Ok((DocumentData::default(), Some(denial))),
+        Walked::Rows(rows) => rows,
+    };
+    if wrappers.is_empty() {
+        return Ok((DocumentData::default(), None));
+    }
+    let taxonomy = match read_taxonomy(door) {
+        Ok(taxonomy) => taxonomy,
+        Err(KitError::Door(message)) => {
+            return Ok((DocumentData::default(), Some(denial_of(message))));
+        }
+        Err(other) => return Err(other),
+    };
+    let (folders, root_folder_id) = fold_folders(&taxonomy);
+    let folder_concepts: BTreeSet<String> = taxonomy
+        .concepts_in(FOLDER_SCHEME_URI)
+        .into_iter()
+        .filter_map(|row| text_of(row, "concept_id"))
+        .collect();
+    let tags = match walk(
+        door,
+        &labels_statement(&[document_id.to_owned()])?,
+        DOC_PAIR_BOUND,
+    )? {
+        Walked::Denied(denial) => return Ok((DocumentData::default(), Some(denial))),
+        Walked::Rows(rows) => rows,
+    };
+    let folder_by_document: BTreeMap<String, String> = tags
+        .iter()
+        .filter_map(|row| Some((text_of(row, "target_id")?, text_of(row, "concept_id")?)))
+        .filter(|(_, concept_id)| folder_concepts.contains(concept_id))
+        .collect();
+    let decorations = match read_decorations(
+        door,
+        &taxonomy,
+        &wrappers,
+        folder_by_document,
+        root_folder_id,
+    )? {
+        Err(denial) => return Ok((DocumentData::default(), Some(denial))),
+        Ok(decorations) => decorations,
+    };
+    let Some(row) = wrappers
+        .iter()
+        .find_map(|wrapper| fold_row(wrapper, &decorations))
+    else {
+        return Ok((DocumentData::default(), None));
+    };
+    let body = match walk(door, &body_statement(&row.content_id), DOC_JOIN_BOUND)? {
+        Walked::Denied(denial) => return Ok((DocumentData::default(), Some(denial))),
+        Walked::Rows(rows) => rows.iter().find_map(|row| text_of(row, "body_text")),
+    };
+    Ok((
+        DocumentData {
+            path: folder_path(&folders, row.folder_id.as_deref()),
+            row: Some(row),
+            body,
+        },
+        None,
+    ))
+}
+
+/// `search` from a TERM: the FTS door's hits for `core.document`, laid onto
+/// their wrappers in rank order and folded by [`load_search`].
+///
+/// The index holds live documents only, which is why a trashed document never
+/// matches ([`load_search`]'s note). A term with no searchable word is an
+/// answer — no rows — and never an error.
+pub fn load_search_term(
+    door: &dyn PageDoor,
+    search: &dyn centraid_search::Search,
+    principal: &centraid_search::Principal,
+    term: &str,
+    limit: usize,
+) -> KitResult<(SearchData, Option<Denial>)> {
+    let term = term.trim();
+    if term.is_empty() || limit == 0 {
+        return Ok((SearchData::default(), None));
+    }
+    let request =
+        centraid_search::SearchRequest::new(DOCUMENT_TARGET_TYPE, term, limit.min(SEARCH_LIMIT));
+    let page = match search.query(principal, &request) {
+        Ok(centraid_search::Answer::Data { page, .. }) => page,
+        Ok(centraid_search::Answer::Denied(denial)) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: denial.code,
+                    message: denial.message,
+                    revoked_at: denial.revoked_at,
+                }),
+            ));
+        }
+        Err(centraid_search::SearchError::NoSearchableWords { .. }) => {
+            return Ok((SearchData::default(), None));
+        }
+        Err(other) => return Ok((SearchData::default(), Some(denial_of(other.to_string())))),
+    };
+    if page.rows.is_empty() {
+        return Ok((SearchData::default(), None));
+    }
+    let ids: Vec<String> = page.rows.iter().map(|target| target.id.clone()).collect();
+    let mut wrappers: BTreeMap<String, Row> =
+        match walk(door, &documents_statement(&ids)?, DOC_JOIN_BOUND)? {
+            Walked::Denied(denial) => return Ok((SearchData::default(), Some(denial))),
+            Walked::Rows(rows) => rows
+                .into_iter()
+                .filter_map(|row| text_of(&row, "document_id").map(|id| (id, row)))
+                .collect(),
+        };
+    let hits: Vec<Row> = page
+        .rows
+        .iter()
+        .filter_map(|target| {
+            let mut row = wrappers.remove(&target.id)?;
+            row.insert("_snippet".to_owned(), Cell::Text(target.snippet.clone()));
+            Some(row)
+        })
+        .collect();
+    load_search(door, &hits)
+}
+
+fn denial_of(message: String) -> Denial {
+    Denial {
+        code: None,
+        message: Some(message),
+        revoked_at: None,
+    }
+}
+
 /// The nine windows the whole app walks under [`SHARE_FAN_OUT`], plus the
 /// statements this module owns — named so a plan snapshot and a parity fixture
 /// can be compared against one list.
@@ -1249,10 +1409,8 @@ pub fn statement_names() -> Vec<&'static str> {
         "docs.history.revisions",
         "docs.history.contents",
         "docs.activity.provenance",
-        "docs.origins.subscriptions",
-        "docs.origins.lineage",
+        "docs.document.body",
     ];
-    names.extend(crate::shares::SHARE_WINDOWS);
     names.sort_unstable();
     names.dedup();
     names
@@ -1280,89 +1438,6 @@ mod tests {
         assert_eq!(DriveInput { limit: Some(1) }.window(), DRIVE_MIN);
         assert_eq!(DriveInput { limit: Some(500) }.window(), 500);
         assert_eq!(DriveInput { limit: Some(9_000) }.window(), DRIVE_MAX);
-    }
-
-    /// THE ROOT IS THE DRIVE, NOT A FOLDER. It is out of the rail, and a folder
-    /// filed under it is top-level.
-    #[test]
-    fn the_root_concept_is_not_a_folder_and_its_children_are_top_level() {
-        let taxonomy = Taxonomy {
-            schemes: vec![row(&[("scheme_id", "s1"), ("uri", FOLDER_SCHEME_URI)])],
-            concepts: vec![
-                row(&[
-                    ("concept_id", "root-1"),
-                    ("scheme_id", "s1"),
-                    ("notation", ROOT_FOLDER_NOTATION),
-                    ("pref_label", "Documents"),
-                ]),
-                row(&[
-                    ("concept_id", "leases"),
-                    ("scheme_id", "s1"),
-                    ("notation", "leases"),
-                    ("pref_label", "Leases"),
-                    ("broader_concept_id", "root-1"),
-                ]),
-                row(&[
-                    ("concept_id", "2024"),
-                    ("scheme_id", "s1"),
-                    ("notation", "2024"),
-                    ("pref_label", "2024"),
-                    ("broader_concept_id", "leases"),
-                ]),
-            ],
-        };
-        let (folders, root) = fold_folders(&taxonomy);
-        assert_eq!(root.as_deref(), Some("root-1"));
-        assert_eq!(folders.len(), 2, "the root is not in the rail");
-        // Sorted by name: "2024" before "Leases".
-        assert_eq!(folders[0].folder_id, "2024");
-        assert_eq!(folders[0].parent_id.as_deref(), Some("leases"));
-        assert_eq!(folders[1].folder_id, "leases");
-        assert_eq!(
-            folders[1].parent_id, None,
-            "a folder under the root is top-level"
-        );
-    }
-
-    /// THE COLUMN v0 DOES NOT SELECT. Without `broader_concept_id` in the
-    /// projection every folder reads as top-level AND the folder chain a share
-    /// walks up is one step long — so a share on a grandparent never reaches
-    /// the document. This is the red for R-1020-35 finding 1.
-    #[test]
-    fn the_taxonomy_read_selects_the_column_the_folder_chain_needs() {
-        let select = taxonomy_concepts_statement().select;
-        assert!(
-            select.contains("broader_concept_id"),
-            "v0's projection is `concept_id, scheme_id, pref_label, notation` and the two \
-             readers of `broader_concept_id` then see undefined: {select}"
-        );
-        // And the chain is what would be one step long without it.
-        let taxonomy = Taxonomy {
-            schemes: vec![row(&[("scheme_id", "s1"), ("uri", FOLDER_SCHEME_URI)])],
-            concepts: vec![
-                row(&[
-                    ("concept_id", "root-1"),
-                    ("scheme_id", "s1"),
-                    ("notation", "root"),
-                ]),
-                row(&[
-                    ("concept_id", "leases"),
-                    ("scheme_id", "s1"),
-                    ("broader_concept_id", "root-1"),
-                ]),
-                row(&[
-                    ("concept_id", "2024"),
-                    ("scheme_id", "s1"),
-                    ("broader_concept_id", "leases"),
-                ]),
-            ],
-        };
-        let chain = crate::shares::folder_chain(Some("2024"), &taxonomy.folder_parents());
-        assert_eq!(
-            chain,
-            ["2024", "leases", "root-1"],
-            "a share on `root-1` has to reach a document filed in `2024`"
-        );
     }
 
     /// A tag from another scheme is not a label. Printing one would put
@@ -1569,15 +1644,12 @@ mod tests {
         assert_eq!(chain, ["c1"]);
     }
 
-    /// Every statement this app runs is named once, and the nine share windows
-    /// are among them.
+    /// Every statement this app runs is named once. The nine share windows
+    /// used to be among them; rung five drops the tables they read (#1029).
     #[test]
-    fn every_statement_is_named_and_the_share_windows_are_included() {
+    fn every_statement_is_named_once() {
         let names = statement_names();
-        assert_eq!(names.len(), 14 + crate::shares::SHARE_WINDOWS.len());
-        for window in crate::shares::SHARE_WINDOWS {
-            assert!(names.contains(&window), "{window}");
-        }
+        assert_eq!(names.len(), 13);
         for name in &names {
             assert!(
                 name.starts_with("docs.") || name.starts_with("_shared/"),

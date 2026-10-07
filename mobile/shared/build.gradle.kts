@@ -67,10 +67,19 @@ kotlin {
     val xcframework =
         org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFrameworkConfig(project, "CentraidShared")
 
+    // A SIMULATOR-ONLY XCFRAMEWORK (#1047). The assemble task links every
+    // slice it holds, and each slice force-loads its own Rust archive, so on a
+    // machine that has built only `aarch64-apple-ios-sim` the task fails on the
+    // missing device archive. `-Pcentraid.iosSimulatorOnly=true` puts the one
+    // simulator slice in the XCFramework — what a simulator build and walk
+    // need, at the same path `project.yml` names. A device or release build
+    // leaves the property unset and gets all three.
+    val simulatorOnly = (findProperty("centraid.iosSimulatorOnly") as String?) == "true"
+
     listOf(iosArm64(), iosSimulatorArm64(), iosX64()).forEach { target ->
         target.binaries.framework {
             baseName = "CentraidShared"
-            xcframework.add(this)
+            if (!simulatorOnly || target.targetName == "iosSimulatorArm64") xcframework.add(this)
             val slice = (findProperty("centraid.coreFfiLibDir") as String?)
                 ?: rustTargetDir.dir("${rustTripleOf.getValue(target.targetName)}/$coreFfiProfile").asFile.path
             // `-force_load`, NOT `-L` + `-l`, and the difference is the whole
@@ -89,6 +98,18 @@ kotlin {
             // was: the link succeeded, the app built, the app ran, and nothing
             // called the core until this wave wired a read.
             linkerOpts("-force_load", "$slice/libcentraid_core_ffi.a")
+            // THE ARCHIVE IS AN INPUT OF THE LINK (#1080, the simulator restore).
+            // `-force_load` names it by path, so Gradle could not see it: a core
+            // rebuilt after the last Kotlin change left the link "up to date"
+            // and the XCFramework shipped the previous core, step 0 run or not
+            // (docs/traps/stale-core-slice.md). Declaring the file builds
+            // nothing — the slice is still cargo's, or `coreFfiLibDir`'s — it
+            // only makes a new archive a reason to link again.
+            linkTaskProvider.configure {
+                inputs.file("$slice/libcentraid_core_ffi.a")
+                    .withPropertyName("coreFfiArchive")
+                    .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.NONE)
+            }
             // THE FRAMEWORKS IROH NEEDS (#1020, D-1020-B7).
             //
             // The core gained an endpoint, and `netwatch` — iroh's interface
@@ -142,7 +163,6 @@ kotlin {
         // block, which is what makes "the app happens to bring it" stop working.
         if (androidEnabled) {
             androidMain.dependencies {
-                implementation(libs.androidx.security.crypto)
                 implementation(libs.androidx.work.runtime)
                 // BLOCK STORE AND ITS `Task`-to-coroutine adapter (#1029 W5B-3).
                 // The seed is the one secret that may follow a member to their
@@ -171,6 +191,10 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.turbine)
             implementation(libs.konsist)
+            // `sealedSubclasses` and `KClass.members` are full reflection: without
+            // kotlin-reflect on the compile classpath the compiler warns that
+            // the call may throw `KotlinReflectionNotSupportedError` at run time.
+            implementation(kotlin("reflect"))
         }
     }
 }

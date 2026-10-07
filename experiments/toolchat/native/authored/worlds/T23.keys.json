@@ -1,10 +1,10 @@
 {
   "aircon": {
-    "id": "2b8f3085-fe48-7961-8126-029d18256897",
+    "id": "f2e9e581-ddee-7d4b-82dc-80d28ad0a301",
     "kind": "task"
   },
   "anniversary": {
-    "id": "c3075218-dbed-7211-8d11-31c59e2cae16",
+    "id": "490398c4-7d77-7a19-8bb5-c8e91997a613",
     "kind": "event"
   },
   "anvar": {
@@ -12,15 +12,15 @@
     "kind": "person"
   },
   "assoc": {
-    "id": "a26f1a6f-23b2-7982-84a8-b0301dfa8273",
+    "id": "92345731-35c6-77f4-8953-586183bf3582",
     "kind": "locker item"
   },
   "autoclave": {
-    "id": "c5da4569-6396-7747-854a-4b7b1b4c8d42",
+    "id": "64cdbab6-c2be-7639-82ab-03768989e6a2",
     "kind": "task"
   },
   "autoclave_n": {
-    "id": "08e62eb6-829a-70d2-8c2a-345a6513ab82",
+    "id": "66c1f673-0411-7698-8efa-25195abadf43",
     "kind": "note"
   },
   "aziz": {
@@ -28,27 +28,27 @@
     "kind": "person"
   },
   "aziz_plov": {
-    "id": "2b35f277-1767-7f80-861b-e96472496c56",
+    "id": "7b05da07-3b9e-7256-8819-c390f2dcc987",
     "kind": "note"
   },
   "backpack": {
-    "id": "75383b5d-ec7b-7583-803d-6d480fc91425",
+    "id": "0bfbe9c4-0401-7d3d-8260-e75ef9bd9ed2",
     "kind": "task"
   },
   "backup": {
-    "id": "1f716618-3ee7-776d-864b-ee97a1f0c888",
+    "id": "4e2739a5-be62-797e-8060-b9c72fabd74e",
     "kind": "locker item"
   },
   "balloons": {
-    "id": "4492dcc8-73e2-7590-8145-706315fb4e25",
+    "id": "a7438d1a-fb7a-736f-8fa9-6da1012936a2",
     "kind": "task"
   },
   "bek_notes": {
-    "id": "f00c8700-c0ac-76ae-8efd-5c427f090dd9",
+    "id": "7d9f1252-08e9-7c2a-8b59-e69a23836a5a",
     "kind": "note"
   },
   "bek_review": {
-    "id": "f8d1e203-17aa-78af-8cd1-46a8e859736f",
+    "id": "7aa48ecd-d0b4-7cfa-8a95-16e31f1f2c20",
     "kind": "task"
   },
   "bekzod": {
@@ -56,67 +56,67 @@
     "kind": "person"
   },
   "cake": {
-    "id": "a20806ff-7c95-71d6-88b9-a741f98e0a1a",
+    "id": "53e1eaa9-cede-75d0-841f-e531b2bab9af",
     "kind": "task"
   },
   "call_javlon": {
-    "id": "388b0004-4eb0-78b9-8367-f7bad5b986e6",
+    "id": "a88d21fb-8d1e-77b4-8140-48a05969f4bf",
     "kind": "task"
   },
   "car_ins": {
-    "id": "2412e007-985c-7544-8b69-74d9973c5858",
+    "id": "4480f70c-64f5-71e8-8795-4b9c95450b1c",
     "kind": "task"
   },
   "car_noise": {
-    "id": "c7761a5e-dddc-794a-8c48-076cb2995351",
+    "id": "b040ca4d-e982-7310-8803-70829dc7d09a",
     "kind": "note"
   },
   "car_policy": {
-    "id": "2aec5cef-8b7f-7487-8426-61d9fde77711",
+    "id": "097ce9b3-1987-7d0e-8876-237c6148adf4",
     "kind": "document"
   },
   "car_service": {
-    "id": "75119493-5b92-7b17-8362-e990cb972cb2",
+    "id": "b45b7add-8006-76ce-8d6c-5879e6d13ef2",
     "kind": "event"
   },
   "cardio": {
-    "id": "a40be10b-86d4-74ac-8076-acb21a4e6dc6",
+    "id": "12f9df50-bd64-7dc2-845d-a30414f5d4c5",
     "kind": "event"
   },
   "cardio_old": {
-    "id": "2784a19f-efc2-7f68-84c9-69138694b4c5",
+    "id": "e7b7e9de-d6aa-7d38-8c70-66e1c887342c",
     "kind": "event"
   },
   "cards": {
-    "id": "2d88d0b6-5559-73d2-8a0a-21cb372bb319",
+    "id": "64942953-b7c1-79cf-843d-f95587dd7c7e",
     "kind": "task"
   },
   "catering": {
-    "id": "3da68500-e953-7d7c-8fa5-372d26543074",
+    "id": "48e1eb5c-64d1-7d38-874f-e17359eaf43a",
     "kind": "document"
   },
   "ceramic": {
-    "id": "ee2df230-9b36-70a5-8c73-98c3e2ea5a81",
+    "id": "1d51a40b-bea7-7294-8464-6bfc22340da5",
     "kind": "task"
   },
   "charvak": {
-    "id": "0fb777b1-a009-7782-897f-0969a95d5d13",
+    "id": "50d9f334-460a-795b-824b-a92a06591b64",
     "kind": "event"
   },
   "charvak_t": {
-    "id": "cd4a999b-78ec-7fe5-8bf2-a6210fb12e32",
+    "id": "5234bee0-5c8b-7460-8954-9b4bf2b26bdd",
     "kind": "task"
   },
   "chorsu": {
-    "id": "7404f858-afa0-72b2-8b47-72eb46594623",
+    "id": "df35b346-fe10-73c2-8089-7f26bca1ba91",
     "kind": "event"
   },
   "chuchvara": {
-    "id": "e8075c8b-55e0-752d-8640-9ce4825844b9",
+    "id": "91b975ff-a711-70e9-8e15-fc9e94ec8333",
     "kind": "note"
   },
   "click": {
-    "id": "328a0a07-92d6-7014-8d56-21be5ca5af50",
+    "id": "4c801a42-e876-732a-8202-c9ea8361a2f3",
     "kind": "locker item"
   },
   "clinic_a": {
@@ -136,27 +136,27 @@
     "kind": "notebook"
   },
   "clinic_wifi": {
-    "id": "744b6a77-1c7e-79b9-8468-b1a297e6012e",
+    "id": "e69cc9b3-f37e-77bc-8e5b-307828db53c8",
     "kind": "locker item"
   },
   "coffee_shahlo": {
-    "id": "e9e0e645-4e29-7579-8ed8-babbfafc3869",
+    "id": "18ac73e4-4369-7169-8026-f5d8a1564952",
     "kind": "event"
   },
   "collect": {
-    "id": "d949cff6-1fe5-7c05-8f5e-f3936e2f6f11",
+    "id": "ce8b30b4-dd3a-75c6-8ae6-884a9117eb53",
     "kind": "task"
   },
   "congress": {
-    "id": "238111dd-2b12-71ae-8b00-1a4b4f38e6f5",
+    "id": "defda962-56b2-7f1c-890c-9a7cf6edde01",
     "kind": "event"
   },
   "course_fee": {
-    "id": "bf7e32c1-48e6-725d-84df-a749cd41083c",
+    "id": "a07b237c-b8c7-784a-8936-f6a59d515a90",
     "kind": "task"
   },
   "course_invite": {
-    "id": "49c30f06-a493-72ca-88e3-182c6374a003",
+    "id": "0b22f4ba-33d2-7837-830c-664d6b69c6ca",
     "kind": "document"
   },
   "courses_nb": {
@@ -164,63 +164,63 @@
     "kind": "notebook"
   },
   "crm": {
-    "id": "ab2b7fc2-9005-7c58-8d12-e578fdcbd830",
+    "id": "46427d7b-5094-7604-811e-3639a88ebc42",
     "kind": "locker item"
   },
   "curtains": {
-    "id": "f8561e2f-d980-7a49-850f-0b5f613774b4",
+    "id": "9e6f894e-f45a-72a2-8b46-07c14b40c9cc",
     "kind": "task"
   },
   "d_anvar": {
-    "id": "0b3d920a-fb12-7acb-864a-e60bbd8c5c1a",
+    "id": "d3fd9c00-19e3-7f66-8a4c-4f7406886ec8",
     "kind": "debt"
   },
   "d_aziz": {
-    "id": "72010daa-c84f-71fc-8434-21549ff0e067",
+    "id": "bf11640b-319b-7794-8e46-5dd17b20041d",
     "kind": "debt"
   },
   "d_bekzod": {
-    "id": "5454e73c-2a0e-7612-8321-e24addb1e9d7",
+    "id": "0c24f87e-5d74-7191-8199-2fe6eaf062aa",
     "kind": "debt"
   },
   "d_gulnora": {
-    "id": "f00e930f-3229-7ff2-8bd5-631643ff5ba6",
+    "id": "58488334-bd41-7884-87f3-5f63a26467e9",
     "kind": "debt"
   },
   "d_javlon": {
-    "id": "86cf6dc5-3f3f-7ed8-882e-ac414b5a38a3",
+    "id": "01fce30c-8445-739d-8d46-e15e2b6fd5dd",
     "kind": "debt"
   },
   "d_kamola": {
-    "id": "bdd11f7a-06aa-770b-8f69-aac3ad5e60ee",
+    "id": "4611027e-21f2-755c-84cb-7fd411991ee6",
     "kind": "debt"
   },
   "d_malika_t": {
-    "id": "7c78570d-5967-7002-88b4-ae067d998c12",
+    "id": "25779fa7-401f-7299-8122-212393d44c61",
     "kind": "debt"
   },
   "d_nigora": {
-    "id": "d6ce4d97-8cf7-7629-8546-907cf32db1cf",
+    "id": "c3065fe0-a173-7f30-8848-2c8f9068ead2",
     "kind": "debt"
   },
   "d_otabek": {
-    "id": "050b3c70-97bf-7b51-8579-ef7aa342dbac",
+    "id": "67a8ec3b-21dd-7bb8-8be5-726d52a4f2e2",
     "kind": "debt"
   },
   "d_ravshan": {
-    "id": "51301592-31c9-7965-8785-a8e694673410",
+    "id": "f16fdc28-709c-7012-83ba-95b0f76d608c",
     "kind": "debt"
   },
   "d_sardor_p": {
-    "id": "f299fdb1-1ddc-73ca-869f-3f94d01e6172",
+    "id": "5036cdda-44ef-7417-8bb7-032387d8f1f3",
     "kind": "debt"
   },
   "d_shahlo": {
-    "id": "dffd9cec-9536-7d61-8dea-d4a77ec7f976",
+    "id": "cffa6a09-7141-7a8d-8ffc-0a71ef5cf58c",
     "kind": "debt"
   },
   "d_zarina": {
-    "id": "e2bf80d1-3333-706a-819a-7ead46405b05",
+    "id": "139ca547-e424-7d2c-8898-5e9626443b50",
     "kind": "debt"
   },
   "dacha_l": {
@@ -228,7 +228,7 @@
     "kind": "list"
   },
   "dacha_weekend": {
-    "id": "513123b1-c4de-7015-8298-19740ca82624",
+    "id": "086d1e9c-b23e-7c3e-8072-939f2fc9f219",
     "kind": "event"
   },
   "dilbar": {
@@ -240,23 +240,23 @@
     "kind": "person"
   },
   "dress": {
-    "id": "7615cffc-22da-7a79-8d97-7af285fad7b7",
+    "id": "62565549-b56a-7704-8c82-10ac89a19ca5",
     "kind": "task"
   },
   "elec_06": {
-    "id": "a4042297-92ca-7268-8433-765162c9ef45",
+    "id": "71d3a2d2-d28e-75e6-8701-ce5995af5448",
     "kind": "task"
   },
   "elec_07": {
-    "id": "17e42e0a-8b4a-7524-8b59-de80ab5e38a7",
+    "id": "0ab70dcc-b63d-7cc6-885d-d28b1eae700a",
     "kind": "task"
   },
   "elec_08": {
-    "id": "de7f1d63-5fd8-72bf-8639-61ba7fb3511a",
+    "id": "372aa432-ffba-757d-843b-aae8861ee850",
     "kind": "task"
   },
   "extinguishers": {
-    "id": "b265810f-3555-72c1-89cf-72d50583f0ae",
+    "id": "25767cb5-0c8c-7892-84e4-a2e3da37d250",
     "kind": "task"
   },
   "family_a": {
@@ -268,7 +268,7 @@
     "kind": "person"
   },
   "farida_arrives": {
-    "id": "0dddc741-e3c9-74de-88d7-3fc167bf5cf8",
+    "id": "d92e4a8b-b378-7565-83fe-3594876f67e4",
     "kind": "event"
   },
   "farrukh": {
@@ -276,39 +276,39 @@
     "kind": "person"
   },
   "feedback": {
-    "id": "c57ca78f-e221-7e26-8306-756dd72cc53c",
+    "id": "9f9784f7-bff5-78d1-82a5-d209d18d7e14",
     "kind": "note"
   },
   "fitting_1": {
-    "id": "7a3f96ac-9300-7b12-80ad-84faa89de04d",
+    "id": "e6d0e878-528a-7419-8592-b4be29790f94",
     "kind": "event"
   },
   "fitting_2": {
-    "id": "e8f7186d-5a8a-77e1-82d2-2f9ae46e917e",
+    "id": "7b3139d7-7010-7d5e-838d-e92dcd85539a",
     "kind": "event"
   },
   "flat_cert": {
-    "id": "1c0f9139-d7b9-7d42-8950-fdef645810cd",
+    "id": "07c284fc-84fc-7ffe-8818-9cff3fff0eab",
     "kind": "document"
   },
   "fotiha": {
-    "id": "4674594a-1762-755c-88dd-d8b4d9daa241",
+    "id": "32a8fcff-716b-773f-8611-f91c6471bcca",
     "kind": "event"
   },
   "gas": {
-    "id": "7896aad7-50ab-7db0-89a0-424814bb7565",
+    "id": "721d4297-b9fd-7e29-89a8-a1e3a70b6822",
     "kind": "task"
   },
   "gas_contract": {
-    "id": "c5447d7d-836c-7046-8511-f511cdb6421c",
+    "id": "30a265f3-7b71-7769-8393-2db00a2b9a7c",
     "kind": "document"
   },
   "gasket": {
-    "id": "9a11b405-2c2a-714d-8fca-6631f58c3ff6",
+    "id": "fce59b93-7b25-723e-8be0-8bf72b4fa03b",
     "kind": "task"
   },
   "gift": {
-    "id": "3926325b-6d4b-7f08-8adf-18804368a692",
+    "id": "00046b41-721a-77eb-85e5-2a6151bb88ea",
     "kind": "task"
   },
   "gift_fund": {
@@ -316,27 +316,27 @@
     "kind": "group"
   },
   "gift_ideas": {
-    "id": "66c1f673-0411-7698-8efa-25195abadf43",
+    "id": "b35bde65-9d5c-771d-8b8b-8aee0685c066",
     "kind": "note"
   },
   "gift_old": {
-    "id": "9fb6e4e8-e98e-7c25-805b-11345561097f",
+    "id": "106abf24-cb71-7353-8a9c-944ddfffe3c0",
     "kind": "task"
   },
   "gift_shop": {
-    "id": "077e9903-f8ba-7bfb-89c7-9302ff3d073b",
+    "id": "f1994925-37cb-76ba-80b6-c693e524dfcf",
     "kind": "event"
   },
   "gloves": {
-    "id": "740573c0-e5ad-775b-8300-22abf568eeb1",
+    "id": "34bab0a1-63e3-74fb-8008-38dca4c1f027",
     "kind": "task"
   },
   "gov": {
-    "id": "7d32b8b1-0ddf-7746-842e-7270a39e022c",
+    "id": "1f716618-3ee7-776d-864b-ee97a1f0c888",
     "kind": "locker item"
   },
   "guests": {
-    "id": "91b975ff-a711-70e9-8e15-fc9e94ec8333",
+    "id": "366b7d96-5c50-70ac-87db-ea89cad5da09",
     "kind": "note"
   },
   "gulnora": {
@@ -344,19 +344,19 @@
     "kind": "person"
   },
   "gym": {
-    "id": "2d2c0f67-938c-790e-8643-0a2efffdb624",
+    "id": "aacc2544-88fd-72d2-857d-e32d1510bf65",
     "kind": "task"
   },
   "gym_trial": {
-    "id": "4b61b4cf-f0d2-7da4-8828-4fcb63b6337a",
+    "id": "29a00e70-711a-71f1-8cc1-629f2070e060",
     "kind": "event"
   },
   "hall_contract": {
-    "id": "1cd69163-343d-78af-860b-ff2ce9a46c0f",
+    "id": "babfc4e2-e9c6-7090-84cb-fcd7c14b08e4",
     "kind": "document"
   },
   "hall_visit": {
-    "id": "10937899-bdbf-7f73-85be-382885f2ec6e",
+    "id": "f79e640c-9b0d-7293-8b88-28fe6b795dbc",
     "kind": "event"
   },
   "hasan": {
@@ -372,55 +372,55 @@
     "kind": "list"
   },
   "hotel": {
-    "id": "1a10b311-5438-7216-8bb3-1b286e947e20",
+    "id": "9b758a76-5cda-7335-85fa-74dc385120d8",
     "kind": "task"
   },
   "housewarming": {
-    "id": "c3b4a45a-5437-7fdc-8ff6-c4920bcfeeff",
+    "id": "437d250d-4d4f-780d-8f10-2ad8f85d70a3",
     "kind": "event"
   },
   "hygiene_training": {
-    "id": "066e5683-1ec0-73fd-8d8f-4fa8e41aec97",
+    "id": "bbc652e1-1d43-73a4-8f20-b45eb790053a",
     "kind": "event"
   },
   "id_card": {
-    "id": "a26453a5-c83d-7c5e-8b6e-5e64646196f3",
+    "id": "5112f402-24c7-70d9-8da2-fa3e4237a58e",
     "kind": "locker item"
   },
   "imaging": {
-    "id": "3bc7603f-0532-73fc-8792-6035249275dd",
+    "id": "d079bdaa-4bf0-782d-8d34-45150de20721",
     "kind": "locker item"
   },
   "income": {
-    "id": "e1735fe3-438f-7bce-8634-713499d06a67",
+    "id": "38690bcf-e7b4-756d-86ec-6e2a9cbc3c08",
     "kind": "document"
   },
   "ink": {
-    "id": "0249fd0f-a69f-736d-891e-f120e640c7db",
+    "id": "e00f4233-9b7f-7414-8b99-01923854a836",
     "kind": "task"
   },
   "insp_list": {
-    "id": "7b05da07-3b9e-7256-8819-c390f2dcc987",
+    "id": "88d53653-8e73-79c9-897b-fa0ba8818e97",
     "kind": "note"
   },
   "insp_prep": {
-    "id": "b4338184-d154-7170-89fd-1d0269ca69e8",
+    "id": "eabe13c5-cc1c-7d7f-849c-cd5129bacea8",
     "kind": "task"
   },
   "insp_report": {
-    "id": "bfeb4a77-2e4c-7efc-8003-96b7ce3b8e79",
+    "id": "5eed1fb1-1305-777e-8364-1b49981730b8",
     "kind": "document"
   },
   "inspection": {
-    "id": "6da41a51-4991-7c0f-88fa-742508ebbb69",
+    "id": "64a50686-b873-77f0-84c6-68001a664132",
     "kind": "event"
   },
   "invites": {
-    "id": "df8f0f1b-0275-7f7f-8a1d-a28757bb7f57",
+    "id": "63cc75f3-a4e9-7c9a-89a5-a752138cc7af",
     "kind": "task"
   },
   "invoice": {
-    "id": "e42a5a75-c434-7adc-8f4e-266242c39393",
+    "id": "70512949-f8d5-7a36-89d5-a3ee293fff8e",
     "kind": "document"
   },
   "islom": {
@@ -436,11 +436,11 @@
     "kind": "album"
   },
   "istanbul_course": {
-    "id": "922e6275-62c2-73e5-882a-4f8a82c569cb",
+    "id": "42fc6aa0-5c86-7773-85c9-636faee92cb6",
     "kind": "event"
   },
   "istanbul_hotels": {
-    "id": "c76f48d2-60bd-77ad-872e-9fd1a2494aec",
+    "id": "1b830bc7-ef77-7135-80c3-9c2a59bc59f9",
     "kind": "note"
   },
   "javlon": {
@@ -448,11 +448,11 @@
     "kind": "person"
   },
   "javlon_call_1": {
-    "id": "7b2cd91f-968c-7286-88ef-436508cb228f",
+    "id": "2d36b69e-873f-7a44-8f3c-efe6f448c75f",
     "kind": "event"
   },
   "javlon_call_2": {
-    "id": "0959bffa-4b88-7b91-803f-292d5cce89c4",
+    "id": "e6d379f4-635b-767d-80eb-8f3cda2bdbf5",
     "kind": "event"
   },
   "journal_nb": {
@@ -460,15 +460,15 @@
     "kind": "notebook"
   },
   "journal_read": {
-    "id": "4119e839-26a6-733d-8666-5b253ddcf8a1",
+    "id": "37526d18-11e1-7cd8-8f3e-029130920b94",
     "kind": "task"
   },
   "july_thoughts": {
-    "id": "d3c51476-7f93-729a-8560-8b3f5572094b",
+    "id": "9a4b0d11-81e1-79b3-8810-f4cc4d37aab8",
     "kind": "note"
   },
   "june_thoughts": {
-    "id": "4e6a53b5-f8e5-7b48-8ada-ed21a5ae4a89",
+    "id": "27a3a2e2-4bd8-7239-8a30-02002ae41cfe",
     "kind": "note"
   },
   "kamola": {
@@ -476,11 +476,11 @@
     "kind": "person"
   },
   "kg_contacts": {
-    "id": "9ad8a677-319a-7f61-8c06-23b412d4edb3",
+    "id": "ce163717-f22d-793b-8af8-eb6ddd27a66b",
     "kind": "note"
   },
   "kg_forms": {
-    "id": "fd839c0a-e540-71ac-8930-c77f60d6e38c",
+    "id": "12e54ab9-dd3e-76d9-8ede-ce02c063e964",
     "kind": "task"
   },
   "kids_a": {
@@ -496,15 +496,15 @@
     "kind": "notebook"
   },
   "lagman": {
-    "id": "95879836-fbd2-7233-804e-bdf2ce478325",
+    "id": "c57ca78f-e221-7e26-8306-756dd72cc53c",
     "kind": "note"
   },
   "lamb": {
-    "id": "4d5a2576-f468-7e4f-8652-571c4209781a",
+    "id": "34a2ac9b-1a69-7cd7-8511-b32e7a677248",
     "kind": "task"
   },
   "laptop": {
-    "id": "1301f661-d62f-7a3d-8b23-4b0cda1ce8fb",
+    "id": "70021d67-e98e-74f9-8ac2-db10499cf592",
     "kind": "locker item"
   },
   "laylo": {
@@ -512,23 +512,23 @@
     "kind": "person"
   },
   "laylo_bday": {
-    "id": "1ed39a74-552c-7b71-84e9-631e3660279f",
+    "id": "116356bf-db76-746b-8a77-c8db99a60709",
     "kind": "event"
   },
   "laylo_card": {
-    "id": "7943013b-9cf2-7a09-85f1-67ed9580e84e",
+    "id": "52c5cf4e-9dbd-7d8d-89b5-fbdf6e79edf9",
     "kind": "document"
   },
   "leak": {
-    "id": "e75dc105-f656-7dcb-8a40-badcc1e86c92",
+    "id": "458a4a64-c056-77e3-8d37-e9fe7fe63910",
     "kind": "task"
   },
   "lease": {
-    "id": "06cfa051-2780-7d2d-8ede-3aeb3122e7c5",
+    "id": "2fa1fec8-6bfb-7f03-86da-6155b3999581",
     "kind": "document"
   },
   "licence": {
-    "id": "67e9f2a5-e90a-7fb6-8113-6b34248d4a0e",
+    "id": "f3be523a-2933-7578-8de8-cc1a269897f1",
     "kind": "locker item"
   },
   "lola": {
@@ -548,7 +548,7 @@
     "kind": "person"
   },
   "marriage": {
-    "id": "0a989199-61f4-7ee9-8050-5189fe0008d5",
+    "id": "19affa0b-b9ec-713b-85db-26d1a9449dc3",
     "kind": "locker item"
   },
   "me": {
@@ -556,11 +556,11 @@
     "kind": "person"
   },
   "meds": {
-    "id": "2e294980-d4b1-7b2e-81ee-235843dd5f51",
+    "id": "f3e18440-555c-7c62-8c51-aee10170f151",
     "kind": "note"
   },
   "melons": {
-    "id": "44ae0e3c-28ba-7af9-87db-b7f046ae4e23",
+    "id": "e128fe37-96ff-7035-8439-c4d1ed015539",
     "kind": "task"
   },
   "nigora": {
@@ -568,35 +568,35 @@
     "kind": "person"
   },
   "notebooks_t": {
-    "id": "c202e5fa-572c-7752-8988-47ee9a9dc076",
+    "id": "a4088848-d9f5-7297-85fd-52360e203305",
     "kind": "task"
   },
   "old_email": {
-    "id": "3d0fa35b-8359-7b30-852f-9fea8fab9ca8",
+    "id": "8e7d2a39-10dd-7e21-8430-4a9f70d1ec24",
     "kind": "locker item"
   },
   "old_gym": {
-    "id": "39b20635-03e8-7812-8d95-bd43523af275",
+    "id": "6532a53f-a07d-7feb-812c-3d1427661956",
     "kind": "locker item"
   },
   "old_lease": {
-    "id": "f731c012-d33e-7b7a-8375-67b50e770624",
+    "id": "e50886d9-17c5-7391-8390-6be05c2ff847",
     "kind": "document"
   },
   "old_menu": {
-    "id": "7045a452-63d6-7cee-80b8-4acc1e3cb6ac",
+    "id": "df8e8f98-224e-7286-87bd-a0df005dd709",
     "kind": "note"
   },
   "old_prices": {
-    "id": "b50fc2d9-51a7-72b5-81e8-63bbc822a5f6",
+    "id": "4e03e758-144b-7d3b-89aa-3c87728465b9",
     "kind": "document"
   },
   "old_shopping": {
-    "id": "fabfdf57-4052-789b-8c5e-c1ed9f4b64ba",
+    "id": "d9e85ff3-3f97-7aa9-873d-7d6fba2cb4c4",
     "kind": "note"
   },
   "ortho_samir": {
-    "id": "029fc74a-8d7c-72a1-8de9-6f916d8c0bda",
+    "id": "5ab332f2-e5a8-745a-8c73-371e43e449aa",
     "kind": "event"
   },
   "otabek": {
@@ -608,159 +608,159 @@
     "kind": "person"
   },
   "oybek_pickup": {
-    "id": "30364b8c-b247-73d9-8102-5e71db2f203b",
+    "id": "5bded82b-ebb0-7238-82f9-9efe924ea29c",
     "kind": "event"
   },
   "p_anniv": {
-    "id": "601317f7-edf8-71c6-8358-c0411273d433",
+    "id": "56070f6b-2429-78b8-85de-728774756442",
     "kind": "photo"
   },
   "p_bike": {
-    "id": "e65b708b-bc6a-787d-88b6-f6355b4a7bab",
+    "id": "b99eeb4b-e99c-7ca5-8f88-c2022fe3ec58",
     "kind": "photo"
   },
   "p_blurry": {
-    "id": "a5b91fd4-14b9-7d44-8709-2147b1812958",
+    "id": "f4c373a8-3922-75ad-8403-638e9e1c6a37",
     "kind": "photo"
   },
   "p_blurry_old": {
-    "id": "0b5f12a0-2c1f-72cd-853e-f01f42822de0",
+    "id": "c459687d-8d3a-772d-81e6-fd4428c9910f",
     "kind": "photo"
   },
   "p_brave": {
-    "id": "f70433cc-2425-7a52-8fea-5bbe15f4733d",
+    "id": "8a903752-639d-7144-8795-e1ea54047131",
     "kind": "photo"
   },
   "p_cat": {
-    "id": "fd34b332-efc9-7ece-8e21-b7532f97975d",
+    "id": "dda442f6-416e-7f88-84ed-d9015837a2b6",
     "kind": "photo"
   },
   "p_chair": {
-    "id": "21e42972-4aa9-7aae-8e57-f792d3a55b63",
+    "id": "2a0953e1-360a-7514-8d2e-129379f52079",
     "kind": "photo"
   },
   "p_chorsu": {
-    "id": "4481fa86-52be-7690-8697-0bc8b5c9c98f",
+    "id": "8addd45d-1af9-7c20-80ad-d4e599712323",
     "kind": "photo"
   },
   "p_couple": {
-    "id": "948b2020-499a-7c94-856c-27ef73414708",
+    "id": "fded2feb-f524-7da6-8c12-317d03dbde3f",
     "kind": "photo"
   },
   "p_dashboard": {
-    "id": "e368dd11-e4c0-7e33-86d3-9872a7299217",
+    "id": "bc69658a-da8f-7f3a-85e0-de4c3b2abda9",
     "kind": "photo"
   },
   "p_dress": {
-    "id": "94d87de7-8e4b-7d29-87bc-b1708bec45be",
+    "id": "99d8b1c8-70d0-7e73-890a-a3a4cf7782de",
     "kind": "photo"
   },
   "p_fotiha": {
-    "id": "603fafaa-da6e-70ba-8855-f677eb0bfdd1",
+    "id": "357ce776-269c-736c-84b6-6f56177f1709",
     "kind": "photo"
   },
   "p_garden": {
-    "id": "207a03b1-8c96-70b9-8603-5f40e2c9ed4f",
+    "id": "d0fbc1a5-b6e6-73c5-880b-b665a26d2f81",
     "kind": "photo"
   },
   "p_hall": {
-    "id": "87fb094a-94c8-70e8-8856-7283b9b36cec",
+    "id": "d8119fc9-6cfd-7d35-8163-147456dec486",
     "kind": "photo"
   },
   "p_kazan": {
-    "id": "ea0eaec4-f492-7fa3-8ef3-01dea20851ed",
+    "id": "7929efdd-8fd1-757d-866d-4a6b4155d0ee",
     "kind": "photo"
   },
   "p_leak": {
-    "id": "c1f0f039-92ea-77ab-838e-2fb23328eae3",
+    "id": "70e0935c-eacc-795b-8723-dc34e0c129a6",
     "kind": "photo"
   },
   "p_melons": {
-    "id": "48c345fb-51dc-7b65-884d-8ea16862b331",
+    "id": "d7e7b896-46bf-7720-8939-0f55be8d2e96",
     "kind": "photo"
   },
   "p_mum": {
-    "id": "27e7def0-f57b-7a23-85d8-76857562edee",
+    "id": "11ed00e1-59c9-7998-8aa9-07ff552343c0",
     "kind": "photo"
   },
   "p_park": {
-    "id": "2e95ae4b-236d-77f1-8d29-9354d5a3f2b0",
+    "id": "8d748943-bb69-73fe-8391-c7b9e45418b4",
     "kind": "photo"
   },
   "p_pipe": {
-    "id": "8e2cc3cc-19e9-7576-891d-861a59428e32",
+    "id": "b9aa02ca-98e6-7e69-8a89-060fa88ecc77",
     "kind": "photo"
   },
   "p_plov_0726": {
-    "id": "4e2d95c4-3b10-7b84-809f-ca7a2e806081",
+    "id": "1608b31d-e8fb-7944-843b-983c3250ea1e",
     "kind": "photo"
   },
   "p_pool": {
-    "id": "981eb7c5-6558-7596-85f4-07f2b0e286ce",
+    "id": "6bc51266-3d0d-7e8b-817b-91178429e772",
     "kind": "photo"
   },
   "p_receipt": {
-    "id": "837798a0-2e85-75d2-8e82-e9de69d3471e",
+    "id": "5fa87dbd-d42d-77b4-8f48-cbd547c90884",
     "kind": "photo"
   },
   "p_registan": {
-    "id": "baaf153c-4a7c-7613-8988-834f36641681",
+    "id": "36260a39-9b28-79bf-8c20-8670c5d5e1ad",
     "kind": "photo"
   },
   "p_screenshot": {
-    "id": "9c5dfe71-0055-78d2-8547-9e65e92c352d",
+    "id": "8bfea7ed-3f4c-7d10-8aa0-0d4fc6103ef5",
     "kind": "photo"
   },
   "p_sunset": {
-    "id": "d3892ef9-c5b1-773b-8ed7-5dfeb43e5e9a",
+    "id": "68d552f8-32ad-77fd-8411-24661fec7fcf",
     "kind": "photo"
   },
   "p_table": {
-    "id": "11facb8f-be45-7c93-8090-3ce07c199ef2",
+    "id": "6dca9b4c-36f2-7e71-85a1-7a66879bdd6c",
     "kind": "photo"
   },
   "p_team": {
-    "id": "37ca8283-9cf4-731b-80b7-d7aad67b4138",
+    "id": "ca98d169-c284-7e65-81c3-f75081449be5",
     "kind": "photo"
   },
   "p_training": {
-    "id": "974f2977-422a-7a3b-8cc0-7a7a404066b4",
+    "id": "da6b9c63-4e73-7023-8f9d-0192f8c98580",
     "kind": "photo"
   },
   "p_waiting": {
-    "id": "d0276f2c-a13a-7c57-8c2e-8697af290094",
+    "id": "ce8310cd-6086-7634-8af0-e92d5acbe1e2",
     "kind": "photo"
   },
   "p_whiteboard": {
-    "id": "0fa7f8a9-8dde-739c-8b65-3d381caaf74b",
+    "id": "d40a7f2d-a45d-702f-8369-cf1c14125da1",
     "kind": "photo"
   },
   "p_xray": {
-    "id": "7dfd7edc-cee4-790e-8728-862c5cb099d6",
+    "id": "66771d21-8f88-79fd-8e3c-b9dfba28be5b",
     "kind": "photo"
   },
   "parents_kg": {
-    "id": "f429604c-2590-76dc-8878-a8a6b2b79d81",
+    "id": "c4eb103b-75b2-7271-8b75-ae3cb1bddcd0",
     "kind": "event"
   },
   "parents_school": {
-    "id": "6ba4eec6-a7ad-790b-8061-b3e9318082c6",
+    "id": "0f4c2060-ae89-798f-8417-b1ae63e1eb84",
     "kind": "event"
   },
   "party": {
-    "id": "f3fc464d-6f40-7945-89c6-eee488a6431c",
+    "id": "7b04b4f0-abeb-7874-849f-7cb66db13e57",
     "kind": "task"
   },
   "party_plan": {
-    "id": "fc13a557-a753-78c5-82de-497f9801444b",
+    "id": "3224654f-fce3-718e-8a60-383d9a1b9288",
     "kind": "note"
   },
   "passport": {
-    "id": "73cc9c46-db0c-7c38-8909-03695df62006",
+    "id": "1ac42fe8-7bd4-72f8-8900-0d2aaf4adc35",
     "kind": "locker item"
   },
   "pills": {
-    "id": "99499427-21b0-7235-8d75-5bb5e6534ca3",
+    "id": "f185a988-0087-7436-8e0c-1dfae6b01923",
     "kind": "task"
   },
   "plov": {
@@ -772,51 +772,51 @@
     "kind": "event"
   },
   "plov_0614": {
-    "id": "bf8e73e2-1a13-7fdd-8bb0-077ffde0f96c",
+    "id": "582254f6-b001-7d64-8fe3-bb98728d7fff",
     "kind": "event"
   },
   "plov_0621": {
-    "id": "e8ecae7e-78fd-75d2-81ca-4f3c9da6c132",
+    "id": "e9e73aba-2a27-73e8-81f1-143d56dc3a3e",
     "kind": "event"
   },
   "plov_0628": {
-    "id": "9066ff1f-dcb6-76fc-838b-2075eba0b054",
+    "id": "fe25212d-197d-7439-8371-a8ecf71c4ff3",
     "kind": "event"
   },
   "plov_0705": {
-    "id": "6657660a-bc31-7ff7-8e8a-ad278cd1ad0b",
+    "id": "8330edba-6e07-7bd5-85a1-e4a30eeda3e4",
     "kind": "event"
   },
   "plov_0712": {
-    "id": "8643628e-8693-7d7b-84c9-44ba0d1ee0fb",
+    "id": "3ef30753-925e-7149-8fd7-42e67a0b2343",
     "kind": "event"
   },
   "plov_0719": {
-    "id": "1f5d267d-af1b-7129-81f0-01e19ab8e554",
+    "id": "63664907-6be6-7091-8da1-cb9a83eec55c",
     "kind": "event"
   },
   "plov_0726": {
-    "id": "150ab314-573f-782f-86cd-5c346a9541a4",
+    "id": "2be4f28e-3e25-7116-8f38-4364e2dfbf9a",
     "kind": "event"
   },
   "plov_0802": {
-    "id": "c273f3af-9da5-79e2-809e-8149ab631bf0",
+    "id": "3981d6fa-af67-7199-88cd-ead6c5e34925",
     "kind": "event"
   },
   "plov_0809": {
-    "id": "cbef87ed-8733-7615-8a80-536b8eae46f0",
+    "id": "9bf52870-f73a-7a04-8822-e317dca0b248",
     "kind": "event"
   },
   "plov_0816": {
-    "id": "49e1a397-52c4-775a-8909-541c6593d56a",
+    "id": "e136cfa7-4671-7b1f-8e0a-c485eab616eb",
     "kind": "event"
   },
   "plov_0823": {
-    "id": "a75b7e6f-78f3-7417-8128-5ce9bd29e387",
+    "id": "acccaced-88bb-702f-8d53-6363b8a9179a",
     "kind": "event"
   },
   "plov_0830": {
-    "id": "412d3a97-6538-7559-84bb-23dc986d6f59",
+    "id": "9a1baf13-34fb-74c5-8b23-eabcaa5a8885",
     "kind": "event"
   },
   "plov_a": {
@@ -824,11 +824,11 @@
     "kind": "album"
   },
   "plumber_visit": {
-    "id": "29b51b97-eeca-7589-857c-f9eac9337f69",
+    "id": "9dd9ca77-16c8-7c5c-8fac-d27550747443",
     "kind": "event"
   },
   "prices": {
-    "id": "18c007d1-622a-7591-8a8b-a84350fd44f5",
+    "id": "351c7769-cfed-755f-8aa9-6b58684b7615",
     "kind": "note"
   },
   "ravshan": {
@@ -836,7 +836,7 @@
     "kind": "person"
   },
   "recalls": {
-    "id": "03996e7c-c724-7ed1-849d-b8bb7f901147",
+    "id": "f6247a72-4de0-72c9-8739-48b0258d15d1",
     "kind": "task"
   },
   "recipes_nb": {
@@ -844,23 +844,23 @@
     "kind": "notebook"
   },
   "resin": {
-    "id": "1e006086-6be9-76fd-8259-b7e51de60e74",
+    "id": "d5651f3b-5cae-7a04-8a15-6529866e7373",
     "kind": "task"
   },
   "resin_old": {
-    "id": "54a9f597-7d55-78a6-866b-088e4fc39cc7",
+    "id": "f9bdd939-49e5-7401-820e-7bf88a65d582",
     "kind": "task"
   },
   "rice": {
-    "id": "3f39b6ff-89fa-7d2c-82fa-f4ea34d633ea",
+    "id": "393e37bd-6504-738b-8763-1edfefb9610c",
     "kind": "task"
   },
   "rota": {
-    "id": "802c6c11-3a7d-7be8-88e0-a6790408793e",
+    "id": "098df3cf-40f0-7afb-8ff3-733331919868",
     "kind": "task"
   },
   "router": {
-    "id": "ede26cbd-f10a-712b-86f6-f6d5c734ec22",
+    "id": "aee88031-e072-7cd7-8f6c-c5323a9e35dd",
     "kind": "note"
   },
   "rustam": {
@@ -868,7 +868,7 @@
     "kind": "person"
   },
   "safe": {
-    "id": "2d782d2a-4e8d-770d-81a8-0dc3b85876b0",
+    "id": "17dbbd7a-b3c3-79e0-812c-8c993acc01c4",
     "kind": "locker item"
   },
   "samarkand_g": {
@@ -876,7 +876,7 @@
     "kind": "group"
   },
   "samarkand_trip": {
-    "id": "71f0a339-10a8-7a2f-8271-a83c139be4a4",
+    "id": "46e0a8a7-4808-73dd-82b8-49141a53cacf",
     "kind": "event"
   },
   "samir": {
@@ -884,7 +884,7 @@
     "kind": "person"
   },
   "samir_cert": {
-    "id": "3d759fc5-c0c4-7245-88df-ffb27a2d71a2",
+    "id": "b3cf22fe-99d1-7c04-8d4f-b611345005d1",
     "kind": "document"
   },
   "sardor_c": {
@@ -896,15 +896,15 @@
     "kind": "person"
   },
   "savings": {
-    "id": "e54a9c42-3df0-711e-88b0-e0711ec680ce",
+    "id": "1e376d37-0d43-7bb8-8207-587ea92bccde",
     "kind": "locker item"
   },
   "scan_a": {
-    "id": "71a6ebfb-8fb6-72b3-8266-16296c0c18e9",
+    "id": "93a261db-c454-7ebd-87c2-004b54148f1b",
     "kind": "document"
   },
   "scan_b": {
-    "id": "5085ec1e-4107-73fc-8947-6b5cb3af4d52",
+    "id": "3b20b7f1-8b53-76e5-848a-5cb469087b71",
     "kind": "document"
   },
   "scans_f": {
@@ -916,11 +916,11 @@
     "kind": "folder"
   },
   "school_list": {
-    "id": "88d53653-8e73-79c9-897b-fa0ba8818e97",
+    "id": "3835dc29-b6ac-7407-8a94-7aecafcc2265",
     "kind": "note"
   },
   "school_start": {
-    "id": "1bbf48dd-e9eb-7dd2-871e-8a65b13c484c",
+    "id": "26747a74-3ab1-7576-8f49-20ef48d56c3d",
     "kind": "event"
   },
   "shahlo": {
@@ -936,115 +936,115 @@
     "kind": "list"
   },
   "sms_api": {
-    "id": "19cbca0f-5c33-7fce-8eb8-c58bc1be1698",
+    "id": "1c0502ec-c5bd-76ea-8e4f-d59eca606cf8",
     "kind": "locker item"
   },
   "somsa": {
-    "id": "292dc7a0-577b-7146-8b25-33f3ba0adee1",
+    "id": "f00c8700-c0ac-76ae-8efd-5c427f090dd9",
     "kind": "note"
   },
   "staff_0706": {
-    "id": "26c88a86-dac1-79c7-8b2b-cb93032d4812",
-    "kind": "event"
-  },
-  "staff_0713": {
     "id": "aa8cc5c7-a006-74a9-8517-9792811e6d3d",
     "kind": "event"
   },
+  "staff_0713": {
+    "id": "e4c4fb37-19b7-7a12-8dc7-8570fb419d7f",
+    "kind": "event"
+  },
   "staff_0720": {
-    "id": "40d22ea8-6a0c-7f3e-82f5-5ebb87a4ba4a",
+    "id": "11de4725-c078-7d49-8106-aa797617fc1d",
     "kind": "event"
   },
   "staff_0727": {
-    "id": "6b2f4cd2-45f8-7c1f-8945-e67f31a55f52",
+    "id": "759a4211-9302-756f-817f-4ea8290f0583",
     "kind": "event"
   },
   "staff_0803": {
-    "id": "169c9b6a-70f3-79a5-8643-be44d1efb2a6",
+    "id": "796e6067-fbe7-7b56-83d0-1031064e7982",
     "kind": "event"
   },
   "staff_0810": {
-    "id": "35fac0e5-52c6-7f07-8293-da161a257395",
+    "id": "73d24ca9-b66c-78cc-8d8b-a4a6c29fc7cd",
     "kind": "event"
   },
   "staff_0817": {
-    "id": "265571cd-1268-708c-84cc-8a8e20289f3a",
+    "id": "72c9af04-5e5c-760e-8658-c1cd793f3089",
     "kind": "event"
   },
   "staff_0824": {
-    "id": "da88f535-eac3-7b75-820d-b7777c8fc20a",
+    "id": "12a0855f-67e4-79a9-824e-47a765b452a3",
     "kind": "event"
   },
   "staff_0831": {
-    "id": "c3ba3444-a98a-70c1-8cab-c6bc9dcb5b3c",
+    "id": "03fa519d-dfaa-739d-8e46-201188a4210c",
     "kind": "event"
   },
   "steril_log": {
-    "id": "cc994582-78e4-75e1-874f-b031100bd47c",
+    "id": "f4e3c74a-2afb-7c22-80a2-05a7e36c2bdd",
     "kind": "task"
   },
   "study_club": {
-    "id": "3bb2716e-ddcd-7d45-8ae0-bc0300f0c31a",
+    "id": "a53798cd-20aa-7467-8a6d-9244a0fc80a3",
     "kind": "event"
   },
   "supplier": {
-    "id": "43fd30bc-3bc3-72d2-85a4-8e8f4f8aec30",
+    "id": "be4e4a28-0641-7a38-8fff-d7ebd57bda3e",
     "kind": "event"
   },
   "supplies": {
-    "id": "60599eb3-b98e-76dd-8760-cf428caf60aa",
+    "id": "0804e3e5-1ceb-7cf0-8012-1d471d93ab21",
     "kind": "task"
   },
   "swim_0704": {
-    "id": "54aa1eb2-bb30-7fd7-8895-220f0e8c0fe7",
+    "id": "6b2c02a9-774d-7721-8185-4ebad538bb13",
     "kind": "event"
   },
   "swim_0711": {
-    "id": "6273f46b-f685-79e6-8688-e229f5c32b21",
+    "id": "93f2702e-7ed1-713e-8dd8-9157ca1899c0",
     "kind": "event"
   },
   "swim_0718": {
-    "id": "82a8bf53-df66-729f-8689-4d181d9c2811",
-    "kind": "event"
-  },
-  "swim_0725": {
-    "id": "fa201f7c-2828-732f-8b4a-d87631cd3ad3",
-    "kind": "event"
-  },
-  "swim_0801": {
     "id": "9e558138-3dc9-73e4-8734-83ab961ce244",
     "kind": "event"
   },
+  "swim_0725": {
+    "id": "38304cdd-4955-7582-83ac-7f14418d5120",
+    "kind": "event"
+  },
+  "swim_0801": {
+    "id": "75530ace-3faa-774c-845b-1e4c7b636059",
+    "kind": "event"
+  },
   "swim_0808": {
-    "id": "db69f4be-f097-786f-82d7-0afa64713f45",
+    "id": "c02db517-20ed-734e-82a1-7642628602ed",
     "kind": "event"
   },
   "swim_0815": {
-    "id": "315f5e91-75bb-78ba-8af7-e3d410f820b9",
+    "id": "737c897e-554c-7dfa-8578-071242d770b2",
     "kind": "event"
   },
   "swim_0822": {
-    "id": "af8b3ba7-6256-7a98-8a9e-bbeea75ac367",
+    "id": "00fa7751-7646-7be8-8275-35326f47717e",
     "kind": "event"
   },
   "swim_0829": {
-    "id": "8fc1e83e-8d88-7732-87bd-9f8a88144891",
+    "id": "3619bfb3-c392-70e1-84af-07c7fbb6ff4f",
     "kind": "event"
   },
   "swim_fee": {
-    "id": "c0239378-1dcc-7049-84f3-6b76ee31ffbf",
+    "id": "c6930f64-4cfa-7d4d-8fbf-5adece2bb4cd",
     "kind": "task"
   },
   "tax": {
-    "id": "8e024029-7245-7768-89cb-cb44fe0ceda2",
+    "id": "88412b03-b4a3-7014-8812-7fa9800cd8cb",
     "kind": "task"
   },
   "tax_2025": {
-    "id": "1d246af8-f9e6-7fc6-867d-63769b699787",
+    "id": "edc96e01-51ae-77ce-8d07-22bf3bd10389",
     "kind": "document"
   },
   "tax_docs": {
-    "id": "e0a57208-993b-7ab5-819f-79c770044bd2",
+    "id": "d4ef21e8-9b66-7eaf-8683-c1b0f11c715d",
     "kind": "note"
   },
   "tax_f": {
@@ -1052,15 +1052,15 @@
     "kind": "folder"
   },
   "tax_review": {
-    "id": "b381e04b-bfd5-75a1-86d4-44c580c941c8",
+    "id": "12778426-b1e4-7c14-87db-0f071fec3a1c",
     "kind": "event"
   },
   "team_dinner": {
-    "id": "e5397eed-4cb3-704e-8d47-eb2d7bc96a9a",
+    "id": "059b062f-1a64-77d3-8f22-0d1af274192a",
     "kind": "event"
   },
   "tech_call": {
-    "id": "7b30374f-7a98-744e-8d33-e436e35bf510",
+    "id": "12f63729-ea74-7c50-855e-d9ecfb39a527",
     "kind": "task"
   },
   "timur": {
@@ -1068,23 +1068,23 @@
     "kind": "person"
   },
   "toast": {
-    "id": "50391e4a-c4e0-7481-8592-e6e63f6d5657",
+    "id": "c5b27f95-83cd-749e-86bd-05867d038a7d",
     "kind": "task"
   },
   "toast_draft": {
-    "id": "351c7769-cfed-755f-8aa9-6b58684b7615",
+    "id": "7d7f5c5d-ae4f-7827-8267-e8b7100cfc1e",
     "kind": "note"
   },
   "treadmill": {
-    "id": "de1c506e-92d2-7e41-87dc-3b4a3d5efe6f",
+    "id": "b459cd59-5b6b-7d7c-8025-ebeafbb273ca",
     "kind": "task"
   },
   "tutor_1": {
-    "id": "a3f195a0-9b5a-7e1d-8f8c-55f9238723d3",
+    "id": "cb2d0f76-3b35-74bf-8ac4-d17d2f826d52",
     "kind": "event"
   },
   "tutor_2": {
-    "id": "3ccd082c-d8b2-756e-8bb4-ea0bf88468d7",
+    "id": "6d1346fb-01e0-7642-85a8-5e48f8f0fc4b",
     "kind": "event"
   },
   "umrah": {
@@ -1092,35 +1092,35 @@
     "kind": "group"
   },
   "uniform": {
-    "id": "d7e5614d-7036-7c19-8bb7-09d8f0ef2539",
+    "id": "74f86039-772f-7846-8273-f66d95c39c45",
     "kind": "task"
   },
   "usdt": {
-    "id": "034a5216-ef48-77c4-8d46-cc7966b5cf13",
+    "id": "39b20635-03e8-7812-8d95-bd43523af275",
     "kind": "locker item"
   },
   "vaccination": {
-    "id": "c98b7242-954a-7307-8d52-e37e87ed52fa",
+    "id": "e9e0e645-4e29-7579-8ed8-babbfafc3869",
     "kind": "event"
   },
   "visa": {
-    "id": "85321b57-3a1c-7062-81f9-0de3aee583e7",
+    "id": "cd191623-51fa-75aa-857a-2ab5afff9c67",
     "kind": "task"
   },
   "visa_card": {
-    "id": "00bd427d-4481-7722-8481-c0a1df926193",
+    "id": "86c41302-8734-71d6-8738-e7add40ffb87",
     "kind": "locker item"
   },
   "waste": {
-    "id": "823353dd-7869-7ffe-84d5-400f5a4f0c93",
+    "id": "535feca0-a536-7a5f-808b-ed11a7445d30",
     "kind": "task"
   },
   "waste_doc": {
-    "id": "0df24140-22ca-718e-8d01-6f95733ab3d5",
+    "id": "d2b67c98-9724-73c0-88d5-614886d9e539",
     "kind": "document"
   },
   "wedding": {
-    "id": "492411a9-89d4-7aa7-8227-7c78ef25cd16",
+    "id": "270aabed-de6b-71ad-8c96-d45f2f1c44ce",
     "kind": "event"
   },
   "wedding_a": {
@@ -1140,23 +1140,23 @@
     "kind": "notebook"
   },
   "wifi": {
-    "id": "f16fdc28-709c-7012-83ba-95b0f76d608c",
+    "id": "2573df48-2c62-7553-8185-84aafddd0de2",
     "kind": "locker item"
   },
   "xray_doc": {
-    "id": "c8b0f19a-463e-79d4-8961-76f063a570ad",
+    "id": "5db3c7c8-47fa-76af-8f86-9381944850e0",
     "kind": "document"
   },
   "xray_lic": {
-    "id": "143554ac-ee41-7caa-8567-ef82165a56d8",
+    "id": "d7820448-6261-7fac-840b-b5a03893c437",
     "kind": "task"
   },
   "xray_service": {
-    "id": "d869aa51-dfd1-7739-8604-a7ff7aa3fdf4",
+    "id": "d7554ab6-f5a0-7211-8dc8-aba402011984",
     "kind": "event"
   },
   "yoga": {
-    "id": "84311edb-1df5-70ab-87c7-164f58604508",
+    "id": "a0d41515-af33-752c-8bed-c14ece0b4748",
     "kind": "event"
   },
   "zarina": {

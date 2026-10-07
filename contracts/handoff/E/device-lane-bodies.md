@@ -1,45 +1,30 @@
 # The four device-lane bodies for `gate-nightly.yml`
 
-Lane G owns `gate-nightly.yml` and its `device-lanes` step, which today reports a loud `Skipped` with the self-hosted-runner contract for four named lanes: `ios-transfer-experiment`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass`. These are the `run:` bodies for when a runner exists ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3 lane E).
+Lane G owns `gate-nightly.yml` and its `device-lanes` step, which today reports a loud `Skipped` with the self-hosted-runner contract for four named lanes: `backup-measurement`, `android-macrobenchmark`, `ios-xctest-metrics`, `battery-per-background-pass`. These are the `run:` bodies for when a runner exists ([#1020](https://github.com/srikanth235/centraid/issues/1020) wave 3 lane E).
 
 **The `Skipped` stays until a runner does.** A body that ran on `ubuntu-latest` and reported nothing would be worse than the refusal it replaced: R-1020-20 says a parked `_`-prefixed ceiling in `tests/journeys.json` is promoted by the first run on a **named reference device**, never by a simulator, and a nightly that quietly produced simulator numbers is exactly how a parked ceiling gets promoted by accident.
 
 ---
 
-## `ios-transfer-experiment`
+## `backup-measurement`
 
-The protocol is `mobile/maestro/ios-transfer-experiment.md`. It is **not** a nightly: it is an 8-hour overnight run per transport on a charging device, and it happens once per transport rather than every night. The nightly cell should assert the EVIDENCE exists and is fresh, not re-run it.
+The protocol is `mobile/maestro/backup-measurement.md` ([#1080](https://github.com/srikanth235/centraid/issues/1080)), which replaced the iOS background-transfer experiment once #1080 settled the transport. It is **not** a nightly: its three claims are an evening (the first backup), a night (the app closed) and a restore, each on a named reference device. The nightly cell asserts the EVIDENCE exists, is complete and is fresh; it does not re-run it. The body is `device_backup_evidence` in `crates/xtask/src/gate.rs` (`cargo xtask gate --profile nightly --lane backup-measurement`), and this is what it does:
 
 ```yaml
-- name: ios-transfer-experiment
+- name: backup-measurement
   run: |
     set -euo pipefail
-    evidence=receipts/experiments/ios-transfer
+    evidence=receipts/experiments/backup
     if [ ! -d "$evidence" ]; then
-      echo "SKIPPED ios-transfer-experiment: no evidence in $evidence."
-      echo "The protocol is mobile/maestro/ios-transfer-experiment.md; it is an"
-      echo "8-hour overnight run on a named reference device, not a nightly."
+      echo "SKIPPED backup-measurement: no evidence in $evidence."
+      echo "The protocol is mobile/maestro/backup-measurement.md: an evening, a"
+      echo "night and a restore on a named reference device, not a nightly."
       exit 0
     fi
-    # The ruling depends on ONE number per transport. A stale one is worse than
-    # none: the transport may have changed underneath it.
-    newest=$(find "$evidence" -name '*-overnight.json' -newermt '-90 days' | wc -l)
-    test "$newest" -ge 1 || {
-      echo "FAILED: the transfer evidence is over 90 days old and the ruling rests on it."
-      exit 1
-    }
-    node -e '
-      const fs = require("node:fs");
-      const dir = "receipts/experiments/ios-transfer";
-      for (const file of fs.readdirSync(dir).filter((n) => n.endsWith("-overnight.json"))) {
-        const run = JSON.parse(fs.readFileSync(`${dir}/${file}`, "utf8"));
-        for (const key of ["assets", "bytes", "hours", "batteryDelta", "transport", "device", "iosVersion", "corpus"]) {
-          if (run[key] === undefined) throw new Error(`${file} is missing ${key}`);
-        }
-        if (/simulator/i.test(run.device)) throw new Error(`${file} names a simulator (R-1020-20)`);
-        console.log(`${run.transport} on ${run.device}/${run.iosVersion}: ${run.assets} assets/night`);
-      }
-    '
+    # Every claim's file carries the keys the protocol's "What to record"
+    # fixes, names no simulator or emulator (R-1020-20), and at least one is
+    # under 90 days old: the pipeline may have changed underneath a stale one.
+    cargo xtask gate --profile nightly --lane backup-measurement
 ```
 
 ---
@@ -122,10 +107,11 @@ The one lane that **cannot be automated on either platform** and should say so r
     echo
     echo "The owner's procedure, which IS the measurement:"
     echo "  1. charge to 100%, note the time"
-    echo "  2. run the transfer experiment's overnight cell for one transport"
-    echo "  3. read Settings -> Battery -> Centraid for the run window"
-    echo "  4. record batteryDelta in the *-overnight.json evidence file"
+    echo "  2. run the backup measurement's evening or night on a reference device"
+    echo "  3. read Settings -> Battery -> Centraid (iOS) or dumpsys batterystats"
+    echo "     (Android) for the run window"
+    echo "  4. record batteryDelta in that claim's evidence file"
     echo
-    echo "It is a row in mobile/maestro/ios-transfer-experiment.md's"
-    echo "measurement table, not a CI step."
+    echo "It is a field in mobile/maestro/backup-measurement.md's evidence,"
+    echo "not a CI step."
 ```

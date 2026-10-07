@@ -1,11 +1,10 @@
 #![forbid(unsafe_code)]
 //! `centraid` — the one binary (#1020, D-1020-C11).
 //!
-//! **The CLI is a client, not a privileged path.** `centraid devices revoke`
-//! and every other admin verb send the same `Command` messages an owner seat
-//! sends and produce the same receipts (#1020 Decision). There is no
-//! privileged code path here to audit separately, which is why `admin.proto`
-//! defines command *inputs* rather than a second envelope.
+//! **One verb, `doctor`.** The vault is on the phone and the gateway is
+//! `centraid-gateway` (`crates/gateway`), which installs its own service unit;
+//! what is left here is what an operator runs over a vault file by hand
+//! ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 //!
 //! **A subcommand that is not built yet FAILS.** Every verb whose
 //! implementation lands in a later lane returns
@@ -60,48 +59,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Write an OS service unit for a gateway and print the command that
-    /// enables it.
-    ///
-    /// **The gateway no longer RUNS from here** (#1029 §6). `centraid gateway`
-    /// served the iroh endpoint, the allowlist and the pairing lane to paired
-    /// seats; there are none. What survives is the service install, and it
-    /// moves to `crates/gateway-server` when that exists (#1029 W4b).
-    Gateway {
-        #[command(subcommand)]
-        command: GatewayCommand,
-    },
-    /// Check a vault and report. Read-only and lock-free, so it is safe against
-    /// a serving gateway — which is why the container health check runs it.
+    /// Check a vault file and report. Read-only and lock-free, so it never
+    /// changes the file it judges.
     Doctor {
         #[arg(long)]
         data_dir: Option<PathBuf>,
         /// Print the JSON report even when the vault is clean.
         #[arg(long)]
         json: bool,
-    },
-}
-
-#[derive(Subcommand)]
-enum GatewayCommand {
-    /// Write an OS service unit for this gateway and print the command that
-    /// enables it. It never enables it: a background service that starts
-    /// because a file was unpacked is a service nobody chose to run
-    /// (`scripts/install-gateway.mjs:5`–`:8`, D-1020-G1).
-    Install {
-        #[arg(long)]
-        data_dir: Option<PathBuf>,
-        /// Print the unit and the commands, write nothing.
-        #[arg(long)]
-        dry_run: bool,
-        /// A templated systemd SYSTEM unit instead of a per-user one — the VPS
-        /// shape, because a user unit does not survive without a login session
-        /// unless lingering is enabled (census §G seam G10).
-        #[arg(long)]
-        system: bool,
-        /// The `%i` in `centraid-gateway@%i`, for `--system`.
-        #[arg(long, default_value = "default")]
-        instance: String,
     },
 }
 
@@ -151,23 +116,6 @@ fn main() -> ExitCode {
 
     let code = runtime.block_on(async move {
         match cli.command {
-            Command::Gateway { command } => match command {
-                GatewayCommand::Install {
-                    data_dir,
-                    dry_run,
-                    system,
-                    instance,
-                } => cmd::gateway_install::run(cmd::gateway_install::InstallArgs {
-                    data_dir,
-                    dry_run,
-                    flavour: if system {
-                        cmd::gateway_install::Flavour::System
-                    } else {
-                        cmd::gateway_install::Flavour::User
-                    },
-                    instance,
-                }),
-            },
             Command::Doctor { data_dir, json } => {
                 cmd::doctor::run(cmd::doctor::DoctorArgs { data_dir, json })
             }

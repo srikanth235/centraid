@@ -4,7 +4,7 @@
 //! Four properties, each of which is the reason the type looks like this:
 //!
 //! 1. **The clock is checked on every call**, never scheduled. A timer in a
-//!    backgrounded tab or a suspended window may fire minutes late or never,
+//!    suspended app may fire minutes late or never,
 //!    and a session that expires only when a timer says so is a session that
 //!    does not expire.
 //! 2. **Expiry locks as a side effect.** A caller that asks after the window
@@ -17,75 +17,38 @@
 //!    explicit overwrite is the one thing this process can actually do.
 //!
 //! The key lives behind a `RefCell` rather than being taken by `&mut self`,
-//! because a reveal is a **read** from every caller's point of view and a
-//! surface holding `&Session` must be able to perform one. The cost is a
-//! runtime borrow, and the borrow is never held across a call.
+//! because a reveal is a **read** from every caller's point of view and
+//! `crate::locker::phone` holds the session behind one `Mutex` it only ever
+//! borrows. The cost is a runtime borrow, and the borrow is never held across
+//! a call.
 
 use std::cell::RefCell;
-
-use serde::{Deserialize, Serialize};
 
 /// The unlock session's life. Was `LOCKER_SESSION_TIMEOUT_MS`.
 pub const SESSION_TIMEOUT_MS: i64 = 5 * 60 * 1_000;
 
-/// The `Lock` surface's rule, restated where the derivation happens.
-pub const PASSPHRASE_MINIMUM: usize = 12;
-
-/// WHAT IS AT REST. No plaintext key, no passphrase, and **no verifier**.
+/// One reveal's window, used or not (`reveal.ts:21`).
 ///
-/// A verifier field would be a cheap oracle: a guesser could test a passphrase
-/// without doing the derivation. The AEAD tag is the verifier, and doing the
-/// Argon2id work — 64 MiB, three passes — is the price of one guess (#1025 S4,
-/// D-1025-S4-4).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WrappedKey {
-    #[serde(rename = "v")]
-    pub version: u8,
-    #[serde(rename = "vaultId")]
-    pub vault_id: String,
-    #[serde(rename = "keyId")]
-    pub key_id: String,
-    /// `argon2id`, and nothing else is read. See
-    /// [`crate::locker::unlock::WRAP_KDF`].
-    pub kdf: String,
-    /// Argon2id memory cost in KiB. AT REST because the blob says how it was
-    /// derived; floored at the unwrap so it cannot say "cheaply".
-    #[serde(rename = "memoryKib")]
-    pub memory_kib: u32,
-    /// Argon2id time cost — passes over that memory. Named `iterations` at rest
-    /// because that is what it is and what v0's field held.
-    pub iterations: u32,
-    /// Argon2id lanes.
-    pub parallelism: u32,
-    /// base64.
-    pub salt: String,
-    /// base64.
-    pub nonce: String,
-    /// base64 of AES-GCM(`K`), tag appended.
-    pub ciphertext: String,
-}
+/// *A reveal is a gesture, not a mode*, and the reason for thirty seconds is
+/// the shoulder standing behind the member. The shell drops the value when it
+/// runs out (`LockerRevealed.expires_in_ms`).
+pub const REVEAL_WINDOW_MS: i64 = 30_000;
 
-/// What a surface renders. Never the key, and never the passphrase.
+/// What a surface renders. Never the key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionState {
-    /// This device has no wrapped key at rest. The shell offers enrolment.
-    NotEnrolled,
-    /// There is a key at rest and the member has not opened it.
+    /// The member has not opened it, or it has closed.
     Locked,
     /// Open, with this many milliseconds left.
     Unlocked { remaining_ms: i64 },
 }
 
-/// One seat's unlock session.
+/// The phone's unlock session over one vault.
 pub struct Session {
     vault_id: String,
     timeout_ms: i64,
     /// `None` when locked. The key is **zeroed** before this becomes `None`.
     held: RefCell<Option<Held>>,
-    /// Whether there is a blob at rest — so `NotEnrolled` and `Locked` are two
-    /// states and not one (a member with no key needs a different screen from
-    /// a member with a locked one).
-    enrolled: bool,
 }
 
 struct Held {
@@ -95,25 +58,13 @@ struct Held {
 }
 
 impl Session {
-    /// A locked session over a seat that has a wrapped key at rest.
+    /// A locked session over one vault.
     #[must_use]
     pub fn locked(vault_id: &str) -> Self {
         Self {
             vault_id: vault_id.to_owned(),
             timeout_ms: SESSION_TIMEOUT_MS,
             held: RefCell::new(None),
-            enrolled: true,
-        }
-    }
-
-    /// A session over a seat with nothing at rest.
-    #[must_use]
-    pub fn not_enrolled(vault_id: &str) -> Self {
-        Self {
-            vault_id: vault_id.to_owned(),
-            timeout_ms: SESSION_TIMEOUT_MS,
-            held: RefCell::new(None),
-            enrolled: false,
         }
     }
 
@@ -125,22 +76,13 @@ impl Session {
         self
     }
 
-    /// An open session. **Test-only by name**, because production opens one by
-    /// unwrapping a passphrase and there must be no other way in.
-    #[must_use]
-    pub fn unlocked_for_test(vault_id: &str, key_id: &str, key: Vec<u8>, now_ms: i64) -> Self {
-        let session = Self::locked(vault_id);
-        session.open(key_id, key, now_ms);
-        session
-    }
-
     #[must_use]
     pub fn vault_id(&self) -> &str {
         &self.vault_id
     }
 
-    /// Open the session with an unwrapped key. The caller has already proven
-    /// the passphrase by the only means there is — the AEAD opened.
+    /// Open the session with `K`. The caller has already proven presence: the
+    /// shell's OS prompt answered yes (D-5), and `phone::unlock` loaded `K`.
     pub fn open(&self, key_id: &str, key: Vec<u8>, now_ms: i64) {
         *self.held.borrow_mut() = Some(Held {
             key_id: key_id.to_owned(),
@@ -156,8 +98,7 @@ impl Session {
             Some(held) if now_ms < held.expires_at_ms => SessionState::Unlocked {
                 remaining_ms: held.expires_at_ms - now_ms,
             },
-            _ if self.enrolled => SessionState::Locked,
-            _ => SessionState::NotEnrolled,
+            _ => SessionState::Locked,
         }
     }
 
@@ -230,11 +171,7 @@ mod tests {
     }
 
     #[test]
-    fn not_enrolled_and_locked_are_two_states() {
-        assert_eq!(
-            Session::not_enrolled("vault-1").state(0),
-            SessionState::NotEnrolled
-        );
+    fn a_new_session_is_locked() {
         assert_eq!(Session::locked("vault-1").state(0), SessionState::Locked);
     }
 
@@ -282,34 +219,5 @@ mod tests {
         assert_eq!(session.state(0), SessionState::Locked);
         // Locking twice is not an error.
         session.lock();
-    }
-
-    /// The blob at rest round-trips through the shape the shells store.
-    #[test]
-    fn the_wrapped_blob_serialises_with_the_shells_field_names() {
-        let wrapped = WrappedKey {
-            version: 1,
-            vault_id: "vault-1".to_owned(),
-            key_id: "key-1".to_owned(),
-            kdf: "argon2id".to_owned(),
-            memory_kib: 65_536,
-            iterations: 3,
-            parallelism: 1,
-            salt: "c2FsdA==".to_owned(),
-            nonce: "bm9uY2U=".to_owned(),
-            ciphertext: "Y2lwaGVy".to_owned(),
-        };
-        let json = serde_json::to_value(&wrapped).expect("serialises");
-        // The shape the shells store. v0's key names for the fields that
-        // survived; the KDF's own three parameters where `iterations` alone
-        // used to describe PBKDF2 (#1025 S4).
-        assert_eq!(json["v"], serde_json::json!(1));
-        assert_eq!(json["vaultId"], serde_json::json!("vault-1"));
-        assert_eq!(json["keyId"], serde_json::json!("key-1"));
-        assert_eq!(json["kdf"], serde_json::json!("argon2id"));
-        assert_eq!(json["memoryKib"], serde_json::json!(65_536));
-        assert_eq!(json["parallelism"], serde_json::json!(1));
-        let back: WrappedKey = serde_json::from_value(json).expect("round trips");
-        assert_eq!(back, wrapped);
     }
 }

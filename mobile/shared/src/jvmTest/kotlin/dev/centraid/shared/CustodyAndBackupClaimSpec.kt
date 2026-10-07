@@ -1,8 +1,6 @@
 package dev.centraid.shared
 
 import dev.centraid.shared.custody.PhraseMachine
-import dev.centraid.shared.platform.BackgroundTransfers
-import dev.centraid.shared.platform.FakeBackgroundTransfers
 import dev.centraid.shared.platform.FakeSyncedSecrets
 import dev.centraid.shared.platform.JvmSecureRandom
 import dev.centraid.shared.platform.SyncedSecrets
@@ -48,7 +46,7 @@ class CustodyAndBackupClaimSpec : StringSpec({
 
     "an acknowledgement with changes behind it leads with what is NOT backed up" {
         val line = BackupClaim.line(lastAckedAtMs = 1_770_000_000_000, unacked = 3, "2 minutes ago")
-        line shouldBe "3 changes not backed up. Last backed up 2 minutes ago."
+        line shouldBe "3 changes not backed up. Records last backed up 2 minutes ago."
         // The member would be wrong about the unsent half, so the unsent half
         // is what the sentence opens with.
         line.startsWith("3 changes not backed up").shouldBeTrue()
@@ -57,12 +55,12 @@ class CustodyAndBackupClaimSpec : StringSpec({
 
     "one change reads as one, because a member counts" {
         BackupClaim.line(1, 1, "an hour ago") shouldBe
-            "1 change not backed up. Last backed up an hour ago."
+            "1 change not backed up. Records last backed up an hour ago."
     }
 
     "an acknowledgement with an empty spool is the only thing that says backed up" {
         BackupClaim.line(1_770_000_000_000, 0, "2 minutes ago") shouldBe
-            "Backed up 2 minutes ago."
+            "Records backed up 2 minutes ago."
         BackupClaim.isBackedUp(1_770_000_000_000, 0).shouldBeTrue()
     }
 
@@ -105,32 +103,14 @@ class CustodyAndBackupClaimSpec : StringSpec({
         asked shouldBe listOf(1, 2, 3)
     }
 
-    "the check is answered by the phrase and not by the screen above it" {
+    "the check is answered by the phrase, forgiving case and spacing and nothing else" {
         val phrase = List(PhraseMachine.WORDS) { "word${it + 1}" }
-        val machine = PhraseMachine(listOf(2, 9, 20)) { position, typed ->
-            phrase[position - 1] == typed
-        }
-        machine.confirmed.shouldBeFalse()
-
-        machine.answer(2, "word2").shouldBeTrue()
-        machine.answer(9, "  WORD9 ").shouldBeTrue() // case and spaces forgiven
-        machine.confirmed.shouldBeFalse()
-        machine.answer(20, "word19").shouldBeFalse()
-        machine.confirmed.shouldBeFalse()
-        machine.verdict(20) shouldBe false
-
-        machine.answer(20, "word20").shouldBeTrue()
-        machine.confirmed.shouldBeTrue()
-        machine.correct shouldBe 3
-
-        machine.reset()
-        machine.confirmed.shouldBeFalse()
-        machine.verdict(2).shouldBeNull()
-    }
-
-    "an empty answer is never correct, however forgiving the check is" {
-        val machine = PhraseMachine(listOf(1)) { _, _ -> true }
-        machine.answer(1, "   ").shouldBeFalse()
+        PhraseMachine.matches(phrase, 2, "word2").shouldBeTrue()
+        PhraseMachine.matches(phrase, 9, "  WORD9 ").shouldBeTrue()
+        PhraseMachine.matches(phrase, 20, "word19").shouldBeFalse()
+        PhraseMachine.matches(phrase, 25, "word25").shouldBeFalse()
+        // AN EMPTY ANSWER IS NEVER CORRECT, however forgiving the check is.
+        PhraseMachine.matches(List(PhraseMachine.WORDS) { "" }, 1, "   ").shouldBeFalse()
     }
 
     "iOS and Android are told different things about their key, and Android is told the truth" {
@@ -175,41 +155,5 @@ class CustodyAndBackupClaimSpec : StringSpec({
         secrets.seed() shouldBe "ab".repeat(64)
         secrets.forgetSeed()
         secrets.seed().shouldBeNull()
-    }
-
-    // ------------------------------------------------------ background uploads --
-
-    "the force-quit sentence names both halves, because only one of them stops uploads" {
-        // A member who force-quits nightly and finds a stalled backup has not
-        // hit a bug. Saying only the first half would be worse than saying
-        // nothing: it would read as "Centraid stops when you close it".
-        BackgroundTransfers.FORCE_QUIT_SENTENCE shouldContain "swipe Centraid away"
-        BackgroundTransfers.FORCE_QUIT_SENTENCE shouldContain "uploads in progress stop"
-        BackgroundTransfers.FORCE_QUIT_SENTENCE shouldContain "if iOS closes the app itself"
-    }
-
-    "an uncooperative platform answers a sentence rather than throwing" {
-        // The same shape `BackgroundTasks.register` already uses: a silent
-        // absence of passes is what this seam exists to make visible.
-        val transfers = FakeBackgroundTransfers(
-            answer = BackgroundTransfers.Enqueued(
-                accepted = 0,
-                sentence = "Centraid cannot upload in the background on this device.",
-                refusal = "Background App Refresh is off",
-            ),
-        )
-        val answer = transfers.enqueue(
-            listOf(
-                BackgroundTransfers.Upload(
-                    objectName = "aa".repeat(32),
-                    url = "https://gw.example/v1/objects/x/y",
-                    spoolPath = "/spool/aa",
-                    headers = listOf("centraid-signature" to "beef"),
-                    expiresAtMs = 1,
-                ),
-            ),
-        )
-        answer.accepted shouldBe 0
-        answer.refusal shouldContain "Background App Refresh"
     }
 })

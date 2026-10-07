@@ -101,7 +101,9 @@ const TAGGABLE: &[(&str, &str, bool)] = &[
 ];
 
 /// Every `core.*` command this build carries: the nineteen of v0's twenty-seven
-/// that the parties plane and Docs' whole write surface need.
+/// that the parties plane and Docs' whole write surface need, plus Docs' two
+/// phone commands (#1047) — `core.create_text_document` and
+/// `core.purge_document`.
 ///
 /// The order is v0's own file order — parties, tags, then documents and folders
 /// — so the registry's `agent_command` record reads like the source it was
@@ -114,10 +116,12 @@ pub fn definitions() -> Vec<CommandDefinition> {
         tag_item(),
         untag_item(),
         add_document(),
+        create_text_document(),
         rename_document(),
         move_document(),
         trash_document(),
         restore_document(),
+        purge_document(),
         empty_document_trash(),
         star_document(),
         unstar_document(),
@@ -283,7 +287,6 @@ fn add_party() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id, "identifiers_bound": bound }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -380,7 +383,6 @@ fn update_party() -> CommandDefinition {
             Ok(serde_json::json!({ "party_id": party_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -490,7 +492,6 @@ fn tag_item() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -854,8 +855,7 @@ pub(crate) fn index_content_text(
            body_text = excluded.body_text,
            decoder = excluded.decoder,
            byte_size = excluded.byte_size,
-           updated_at = excluded.updated_at,
-           row_version = core_content_text.row_version + 1",
+           updated_at = excluded.updated_at",
         rusqlite::params![
             content_id,
             text,
@@ -1062,10 +1062,9 @@ pub(crate) fn mint_content_from_data_uri(ctx: &CommandCtx<'_, '_>, uri: &str) ->
     if let Some((content_id, deleted_at)) = existing {
         if deleted_at.is_some() {
             ctx.connection().execute(
-                "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL, updated_at = ?2,
-                        row_version = row_version + 1
+                "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL
                   WHERE content_id = ?1",
-                rusqlite::params![content_id, ctx.now],
+                [&content_id],
             )?;
         }
         return Ok(Minted {
@@ -1210,10 +1209,9 @@ pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, content_hash: &str) 
         (_, Some((content_id, byte_size, deleted_at))) => {
             if deleted_at.is_some() {
                 ctx.connection().execute(
-                    "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL,
-                            updated_at = ?2, row_version = row_version + 1
+                    "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL
                       WHERE content_id = ?1",
-                    rusqlite::params![content_id, ctx.now],
+                    [content_id],
                 )?;
             }
             (content_id.clone(), *byte_size, 1)
@@ -1238,6 +1236,7 @@ pub(crate) fn promote_staged_blob(ctx: &CommandCtx<'_, '_>, content_hash: &str) 
         }
     };
     promote_staged_variants(ctx, content_hash, &content_id)?;
+    promote_staged_renditions(ctx, content_hash, &content_id)?;
     let media_type = staged
         .map(|(media_type, _)| media_type)
         .or(media_type_for_content(ctx, &content_id)?)
@@ -1284,8 +1283,8 @@ pub(crate) fn media_type_for_content(
 ///
 /// Only the two INLINE semantic variants Docs can produce — `text` and
 /// `transcript` — are promoted here; a binary derivative (`thumb`, `preview`,
-/// `poster`) is a CAS rental whose bytes this build cannot verify without the
-/// blob door, and promoting a row that names bytes nothing stored is the
+/// `poster`) is [`promote_staged_renditions`]'s, which asks the blob door
+/// first, because promoting a row that names bytes nothing stored is the
 /// failure D-1020-DC8 refuses.
 fn promote_staged_variants(
     ctx: &CommandCtx<'_, '_>,
@@ -1334,6 +1333,83 @@ fn promote_staged_variants(
     drop(statement);
     for (staging_id, media_type, variant, inline_content) in staged {
         upsert_text_derivative(ctx, content_id, &variant, &media_type, &inline_content)?;
+        ctx.connection().execute(
+            "DELETE FROM blob_staging WHERE staging_id = ?1",
+            [&staging_id],
+        )?;
+    }
+    Ok(())
+}
+
+/// Staged BINARY derivatives riding beside a parent — a thumbnail, a preview
+/// or a poster the shell rendered with the platform's decoder and staged
+/// before the command that mints the parent (`Vault::stage_derivative`,
+/// #1080) — become the parent's `core_content_derivative` rows, each replacing
+/// its tier's earlier row.
+///
+/// **Only bytes the store holds are promoted**: the stage door puts a
+/// derivative's bytes in the store before it stages the row, so a row whose
+/// bytes are not there names bytes nothing kept, which is the failure
+/// D-1020-DC8 refuses — it is dropped, and the tier falls back as a missing
+/// one does. Promoted first, these rows are what makes [`derive_image_tiers`]
+/// find the tiers present and leave the Rust decoder idle: the shell's
+/// rendition wins, and the decoder is the fallback for an item nothing was
+/// staged for.
+fn promote_staged_renditions(
+    ctx: &CommandCtx<'_, '_>,
+    parent_sha: &str,
+    content_id: &str,
+) -> Result<()> {
+    if !has_a_staging_band(ctx) {
+        return Ok(());
+    }
+    let mut statement = ctx.connection().prepare(
+        "SELECT staging_id, content_hash, media_type, byte_size, variant FROM blob_staging
+          WHERE variant_of = ?1 AND variant IN ('thumb','preview','poster')
+          ORDER BY staged_at, staging_id",
+    )?;
+    let staged: Vec<(String, String, String, i64, String)> = statement
+        .query_map([parent_sha], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(statement);
+    for (staging_id, hash, media_type, byte_size, variant) in staged {
+        let held = ctx
+            .blobs()
+            .is_some_and(|blobs| blobs.has(&hash).unwrap_or(false));
+        if held {
+            ctx.connection().execute(
+                "DELETE FROM core_content_derivative WHERE content_id = ?1 AND variant = ?2",
+                rusqlite::params![content_id, variant],
+            )?;
+            ctx.connection().execute(
+                "INSERT INTO core_content_derivative
+                   (derivative_id, content_id, variant, content_hash, media_type, byte_size,
+                    text_content, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?7)",
+                rusqlite::params![
+                    ctx.next_id(),
+                    content_id,
+                    variant,
+                    hash,
+                    media_type,
+                    byte_size.max(0),
+                    ctx.now
+                ],
+            )?;
+        } else {
+            tracing::warn!(
+                %content_id, %variant,
+                "a staged derivative's bytes are not in the store; it is dropped"
+            );
+        }
         ctx.connection().execute(
             "DELETE FROM blob_staging WHERE staging_id = ?1",
             [&staging_id],
@@ -1946,19 +2022,9 @@ pub(crate) fn minted_id_is_free(
 /// document id last. A second statement would be a second `row_version` bump
 /// for one member gesture, which puts a seat's row ahead of the origin's for
 /// the same edit.
-///
-/// **EVERY `UPDATE core_document` HERE MOVES `row_version` ITSELF**, and every
-/// one has stamped `updated_at` from `ctx.now` (this statement, or the INSERT
-/// just before it). `core_document_touch_updated_at` is the
-/// fallback for a writer that did not stamp the row: it fires when the version
-/// did not move, and when `updated_at` reads back unchanged it writes the
-/// HOST's wall clock — which is also what an explicit stamp EQUAL to the old
-/// one looks like (a document filed and starred, moved or binned at one
-/// instant). Bumping the version in the statement is what the trigger would
-/// have done, so the count is the same and its `WHEN` guard stands aside.
 fn update_document(ctx: &CommandCtx<'_, '_>, sets: &[&str], binds: &[String]) -> Result<()> {
     let sql = format!(
-        "UPDATE core_document SET {}, row_version = row_version + 1 WHERE document_id = ?",
+        "UPDATE core_document SET {} WHERE document_id = ?",
         sets.join(", ")
     );
     let params: Vec<&dyn rusqlite::ToSql> = binds
@@ -1980,21 +2046,7 @@ fn add_document() -> CommandDefinition {
         preconditions: ADD_DOCUMENT_PRE,
         postconditions: &[CommandCondition {
             predicate: "document_filed",
-            check: |ctx| {
-                let document_id = created_id(ctx, "document_id");
-                let count: i64 = ctx.connection().query_row(
-                    "SELECT COUNT(*) FROM core_document d
-                      WHERE d.document_id = ?1 AND d.deleted_at IS NULL
-                        AND EXISTS(SELECT 1 FROM core_tag t
-                                     JOIN core_concept c ON c.concept_id = t.concept_id
-                                     JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-                                    WHERE t.target_type = ?2 AND t.target_id = d.document_id
-                                      AND s.uri = ?3)",
-                    rusqlite::params![document_id, DOCUMENT_TARGET_TYPE, FOLDER_SCHEME_URI],
-                    |row| row.get(0),
-                )?;
-                Ok((count != 1).then(|| "the document was not filed".to_owned()))
-            },
+            check: pre_document_filed,
         }],
         handler: |ctx| {
             // THE WRAPPER'S ID FIRST — see `created_id`.
@@ -2003,61 +2055,182 @@ fn add_document() -> CommandDefinition {
             let folder_id = ctx.optional_str("folder_id").map(str::to_owned);
             let extracted_text = ctx.optional_str("extracted_text").map(str::to_owned);
             let minted = minted_bytes(ctx)?;
-            ctx.connection().execute(
-                "INSERT INTO core_document
-                   (document_id, title, current_content_id, created_at, updated_at,
-                    deleted_at, purge_at)
-                 VALUES (?1, ?2, ?3, ?4, ?4, NULL, NULL)",
-                rusqlite::params![document_id, title, minted.content_id, ctx.now],
-            )?;
-            // THIS DOCUMENT'S READING OF THE BYTES (#996 R20(b)). The same sha
-            // filed twice as two documents carries two readings, so a second
-            // filing cannot inherit the first import's media type.
-            set_representation(
+            file_new_document(
                 ctx,
-                &minted.content_id,
-                DOCUMENT_TARGET_TYPE,
                 &document_id,
-                &minted.media_type,
-                Some("body"),
-            )?;
-            // The FIRST occurrence (#996 R20(a)): a document's original body is
-            // a version like any other, so the chain starts here rather than
-            // being inferred later from the absence of a parent edge.
-            let revision_id = record_body_revision(
-                ctx,
-                DOCUMENT_TARGET_TYPE,
-                &document_id,
-                &minted.content_id,
-                None,
-            )?;
-            // THE VERSION MOVES HERE, NOT IN THE TRIGGER (see
-            // `update_document`). This UPDATE leaves `updated_at` as the INSERT
-            // set it, so the trigger used to stamp every filed document with the
-            // host's wall clock (the R-1020-35 shape `knowledge.create_note`
-            // fixed).
-            ctx.connection().execute(
-                "UPDATE core_document SET current_revision_id = ?1, row_version = row_version + 1
-                  WHERE document_id = ?2",
-                rusqlite::params![revision_id, document_id],
-            )?;
-            if let Some(text) = extracted_text.filter(|text| !text.is_empty()) {
-                upsert_text_derivative(ctx, &minted.content_id, "text", "text/plain", &text)?;
-            }
-            let folder = match folder_id {
-                Some(folder_id) => folder_id,
-                None => root_folder_id(ctx)?,
-            };
-            file_into(ctx, &document_id, &folder)?;
-            Ok(serde_json::json!({
-                "document_id": document_id,
-                "content_id": minted.content_id,
-                "deduped": minted.deduped,
-                "byte_size": minted.byte_size,
-            }))
+                &title,
+                folder_id,
+                &minted,
+                extracted_text,
+            )
         },
         sealed_input: &[],
-        online_only: false,
+    }
+}
+
+/// A NEW DOCUMENT OVER BYTES ALREADY MINTED: the wrapper, its first version
+/// occurrence, its reading of the bytes, and its folder. The one body behind
+/// `core.add_document` and `core.create_text_document`, so a document written
+/// from the Add sheet's "Text" and one uploaded from a file are the same rows.
+fn file_new_document(
+    ctx: &CommandCtx<'_, '_>,
+    document_id: &str,
+    title: &str,
+    folder_id: Option<String>,
+    minted: &Minted,
+    extracted_text: Option<String>,
+) -> Result<serde_json::Value> {
+    // The FIRST occurrence (#996 R20(a)): a document's original body is
+    // a version like any other, so the chain starts here rather than
+    // being inferred later from the absence of a parent edge.
+    //
+    // RECORDED BEFORE THE ROW, so the row is inserted with its head in
+    // ONE statement — `knowledge.create_note`'s fix for R-1020-35. The
+    // second statement this replaces was an `UPDATE` whose `updated_at`
+    // did not move, which is exactly when
+    // `core_document_touch_updated_at` stamps SQLite's host `'now'`
+    // over the vault clock (QUALITY.md, #1046). The revision has no
+    // foreign key onto the wrapper, and `record_body_revision` finds no
+    // row yet — the right answer: the first occurrence has no parent.
+    let revision_id = record_body_revision(
+        ctx,
+        DOCUMENT_TARGET_TYPE,
+        document_id,
+        &minted.content_id,
+        None,
+    )?;
+    ctx.connection().execute(
+        "INSERT INTO core_document
+           (document_id, title, current_content_id, current_revision_id,
+            created_at, updated_at, deleted_at, purge_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5, NULL, NULL)",
+        rusqlite::params![document_id, title, minted.content_id, revision_id, ctx.now],
+    )?;
+    // THIS DOCUMENT'S READING OF THE BYTES (#996 R20(b)). The same sha
+    // filed twice as two documents carries two readings, so a second
+    // filing cannot inherit the first import's media type.
+    set_representation(
+        ctx,
+        &minted.content_id,
+        DOCUMENT_TARGET_TYPE,
+        document_id,
+        &minted.media_type,
+        Some("body"),
+    )?;
+    if let Some(text) = extracted_text.filter(|text| !text.is_empty()) {
+        upsert_text_derivative(ctx, &minted.content_id, "text", "text/plain", &text)?;
+    }
+    let folder = match folder_id {
+        Some(folder_id) => folder_id,
+        None => root_folder_id(ctx)?,
+    };
+    file_into(ctx, document_id, &folder)?;
+    Ok(serde_json::json!({
+        "document_id": document_id,
+        "content_id": minted.content_id,
+        "deduped": minted.deduped,
+        "byte_size": minted.byte_size,
+    }))
+}
+
+/// THE FILED-DOCUMENT POSTCONDITION both creating commands share: the minted
+/// document is live and carries a folders-scheme tag.
+fn pre_document_filed(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let document_id = created_id(ctx, "document_id");
+    let count: i64 = ctx.connection().query_row(
+        "SELECT COUNT(*) FROM core_document d
+          WHERE d.document_id = ?1 AND d.deleted_at IS NULL
+            AND EXISTS(SELECT 1 FROM core_tag t
+                         JOIN core_concept c ON c.concept_id = t.concept_id
+                         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+                        WHERE t.target_type = ?2 AND t.target_id = d.document_id
+                          AND s.uri = ?3)",
+        rusqlite::params![document_id, DOCUMENT_TARGET_TYPE, FOLDER_SCHEME_URI],
+        |row| row.get(0),
+    )?;
+    Ok((count != 1).then(|| "the document was not filed".to_owned()))
+}
+
+/// `core.create_text_document` — a new text document written on the phone
+/// (#1047: the Docs Add sheet's "Text"). The member's words become the bytes
+/// here, as `core.edit_document` makes them, so a shell never spells a `data:`
+/// URI; an absent `body_text` is an empty document the editor then fills.
+/// `media_type` is `text/plain` unless the caller says `text/markdown`.
+fn create_text_document() -> CommandDefinition {
+    CommandDefinition {
+        name: "core.create_text_document",
+        owner_schema: "core",
+        input_schema: r#"{
+          "type": "object",
+          "required": ["title"],
+          "additionalProperties": false,
+          "properties": {
+            "document_id": {
+              "type": "string", "minLength": 36, "maxLength": 36,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "title": { "type": "string", "minLength": 1 },
+            "folder_id": { "type": "string", "minLength": 1 },
+            "media_type": { "type": "string", "enum": ["text/plain", "text/markdown"] },
+            "body_text": { "type": "string" }
+          }
+        }"#,
+        idempotency: Idempotency::Once,
+        risk: Risk::Low,
+        confirm: false,
+        preconditions: &[
+            CommandCondition {
+                predicate: "document_id_is_free",
+                check: |ctx| {
+                    minted_id_is_free(
+                        ctx,
+                        "document_id",
+                        "core_document",
+                        "document_id",
+                        "document",
+                    )
+                },
+            },
+            CommandCondition {
+                predicate: "text_body_within_budget",
+                check: |ctx| {
+                    let body = ctx.optional_str("body_text").unwrap_or_default();
+                    Ok((body.len() > INLINE_BODY_BUDGET_BYTES).then(|| {
+                        format!(
+                            "that body is {} bytes, over the {INLINE_BODY_BUDGET_BYTES}-byte \
+                             inline budget — text bodies cannot redirect to blob storage \
+                             (the search index reads them in-transaction)",
+                            body.len()
+                        )
+                    }))
+                },
+            },
+            CommandCondition {
+                predicate: "folder_exists_if_given",
+                check: folder_exists_if_given,
+            },
+        ],
+        postconditions: &[CommandCondition {
+            predicate: "document_filed",
+            check: pre_document_filed,
+        }],
+        handler: |ctx| {
+            let document_id = minted_id(ctx, "document_id");
+            let title = ctx.required_str("title")?.to_owned();
+            let folder_id = ctx.optional_str("folder_id").map(str::to_owned);
+            let media_type = ctx
+                .optional_str("media_type")
+                .unwrap_or("text/plain")
+                .to_owned();
+            let body = ctx.optional_str("body_text").unwrap_or_default().to_owned();
+            let data_uri = format!(
+                "data:{media_type};charset=utf-8,{}",
+                encode_uri_component(&body)
+            );
+            let minted = mint_content_from_data_uri(ctx, &data_uri)?;
+            file_new_document(ctx, &document_id, &title, folder_id, &minted, None)
+        },
+        sealed_input: &[],
     }
 }
 
@@ -2170,14 +2343,12 @@ fn rename_document() -> CommandDefinition {
             let title = ctx.required_str("title")?.to_owned();
             // The WRAPPER's title only — bytes and version history untouched.
             ctx.connection().execute(
-                "UPDATE core_document SET title = ?1, updated_at = ?2, row_version = row_version + 1
-                  WHERE document_id = ?3",
+                "UPDATE core_document SET title = ?1, updated_at = ?2 WHERE document_id = ?3",
                 rusqlite::params![title, ctx.now, document_id],
             )?;
             Ok(serde_json::json!({ "document_id": document_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2227,14 +2398,12 @@ fn move_document() -> CommandDefinition {
             };
             file_into(ctx, &document_id, &folder)?;
             ctx.connection().execute(
-                "UPDATE core_document SET updated_at = ?1, row_version = row_version + 1
-                  WHERE document_id = ?2",
+                "UPDATE core_document SET updated_at = ?1 WHERE document_id = ?2",
                 rusqlite::params![ctx.now, document_id],
             )?;
             Ok(serde_json::json!({ "document_id": document_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2269,15 +2438,13 @@ fn trash_document() -> CommandDefinition {
             // trashes, its bytes — current AND every superseded revision — stay
             // live until the document itself purges.
             ctx.connection().execute(
-                "UPDATE core_document SET deleted_at = ?1, purge_at = ?2, updated_at = ?1,
-                        row_version = row_version + 1
+                "UPDATE core_document SET deleted_at = ?1, purge_at = ?2, updated_at = ?1
                   WHERE document_id = ?3",
                 rusqlite::params![ctx.now, until, document_id],
             )?;
             Ok(serde_json::json!({ "document_id": document_id, "purge_at": until }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2326,27 +2493,154 @@ fn restore_document() -> CommandDefinition {
             // It returns to the folder it was filed in: trash keeps the folder
             // tag (and the star), so a restored document lands where it was.
             ctx.connection().execute(
-                "UPDATE core_document SET deleted_at = NULL, purge_at = NULL, updated_at = ?1,
-                        row_version = row_version + 1
+                "UPDATE core_document SET deleted_at = NULL, purge_at = NULL, updated_at = ?1
                   WHERE document_id = ?2",
                 rusqlite::params![ctx.now, document_id],
             )?;
             Ok(serde_json::json!({ "document_id": document_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
-/// `core.empty_document_trash` — collapse the grace window on EVERY document
-/// already in the trash so the next lifecycle sweep destroys them (#1015, D1).
+/// DESTROY ONE TRASHED DOCUMENT — the path Photos' `media.purge_asset` takes
+/// (#1047, ruling D-1 of 2026-09-25, which supersedes 2026-09-10's "the
+/// gateway's lifecycle sweep is the only thing that destroys a document": that
+/// sweep went with the gateway in #1029, and one vault gets one answer).
 ///
-/// **Nothing is deleted here.** The gateway's sweep is the only thing that
-/// destroys a document, and it keeps its rent checks, its authority revocations
-/// and its provenance receipts — emptying the trash is a DATE, not a second
-/// destruction path. `purge_at` collapses onto the row's own `deleted_at`
-/// rather than onto `now`: a moment provably in the past, so the postcondition
-/// is exact without reading a clock.
+/// The document goes through the entity supertype, so its folder tag, star,
+/// labels, representation, links, annotations and collection entries go with
+/// it by the engine's cascades; its version occurrences go by hand (they name
+/// the document by value, not by key). Then every content item the document
+/// ever named — the head and each version's — is released through
+/// [`super::media::release_content_now`] when nothing else rents it: its
+/// `purge_at` is now, and the bytes are the store's to reclaim. A content item
+/// another document or a photograph still names is left exactly as it is.
+///
+/// Returns how many content items were released.
+pub(crate) fn destroy_document(ctx: &CommandCtx<'_, '_>, document_id: &str) -> Result<i64> {
+    let contents: Vec<String> = {
+        let connection = ctx.connection();
+        let mut statement = connection.prepare(
+            "SELECT current_content_id FROM core_document WHERE document_id = ?1
+             UNION
+             SELECT content_id FROM core_entity_revision
+              WHERE entity_type = ?2 AND entity_id = ?1 AND content_id IS NOT NULL",
+        )?;
+        statement
+            .query_map(
+                rusqlite::params![document_id, DOCUMENT_TARGET_TYPE],
+                |row| row.get::<_, String>(0),
+            )?
+            .collect::<rusqlite::Result<Vec<String>>>()?
+    };
+    // The wrapper first: its `current_revision_id` would otherwise be SET NULL
+    // on a row that is about to go anyway.
+    ctx.connection().execute(
+        "DELETE FROM core_entity WHERE entity_id = ?1",
+        [document_id],
+    )?;
+    // THE CHAIN FROM ITS NEWEST END. An occurrence is immutable (#916 R3), and
+    // deleting a parent under a child would SET NULL the child's
+    // `parent_revision_id` — a rewrite the vault refuses. So each pass deletes
+    // only the occurrences no remaining one names as its parent, until none
+    // is left; `core_entity_revision_entity_delete` takes the supertype rows.
+    loop {
+        let removed = ctx.connection().execute(
+            "DELETE FROM core_entity_revision
+              WHERE entity_type = ?1 AND entity_id = ?2
+                AND revision_id NOT IN (SELECT parent_revision_id FROM core_entity_revision
+                                         WHERE parent_revision_id IS NOT NULL)",
+            rusqlite::params![DOCUMENT_TARGET_TYPE, document_id],
+        )?;
+        if removed == 0 {
+            break;
+        }
+    }
+    let mut released = 0;
+    for content_id in &contents {
+        if super::media::release_content_now(ctx, content_id)? {
+            released += 1;
+        }
+    }
+    Ok(released)
+}
+
+/// NOTHING MAY STILL NAME A DESTROYED DOCUMENT: the row, its supertype, and
+/// every polymorphic pointer at it, in one predicate — `media.purge_asset`'s
+/// shape, so a clause dropped in a later edit fails here rather than in a
+/// member's drive.
+const DOCUMENT_GONE_SQL: &str = "SELECT (
+       (SELECT COUNT(*) FROM core_document WHERE document_id = ?1)
+     + (SELECT COUNT(*) FROM core_entity WHERE entity_id = ?1)
+     + (SELECT COUNT(*) FROM core_entity_revision
+         WHERE entity_type = 'core.document' AND entity_id = ?1)
+     + (SELECT COUNT(*) FROM core_tag
+         WHERE target_type = 'core.document' AND target_id = ?1)
+     + (SELECT COUNT(*) FROM core_collection_entry
+         WHERE target_type = 'core.document' AND target_id = ?1)
+     + (SELECT COUNT(*) FROM core_content_representation
+         WHERE owner_type = 'core.document' AND owner_id = ?1)
+     + (SELECT COUNT(*) FROM core_link
+         WHERE (from_type = 'core.document' AND from_id = ?1)
+            OR (to_type = 'core.document' AND to_id = ?1))
+     )";
+
+/// `core.purge_document` — "Delete forever" on one trashed document
+/// ([`destroy_document`]). Only a document already in the trash, whatever is
+/// left of its grace window: a live one is refused by name. Not `confirm:
+/// true`, for `media.purge_asset`'s reason — the owner's confirmation is the
+/// manifest's, in front of the command.
+fn purge_document() -> CommandDefinition {
+    CommandDefinition {
+        name: "core.purge_document",
+        owner_schema: "core",
+        input_schema: DOCUMENT_ID_ONLY,
+        idempotency: Idempotency::Once,
+        risk: Risk::High,
+        confirm: false,
+        preconditions: &[CommandCondition {
+            predicate: "document_is_trashed",
+            check: |ctx| {
+                let document_id = ctx.required_str("document_id")?;
+                let count: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM core_document
+                      WHERE document_id = ?1 AND deleted_at IS NOT NULL",
+                    [document_id],
+                    |row| row.get(0),
+                )?;
+                Ok((count != 1).then(|| {
+                    "Only a document that is already in the trash can be deleted forever."
+                        .to_owned()
+                }))
+            },
+        }],
+        postconditions: &[CommandCondition {
+            predicate: "document_destroyed",
+            check: |ctx| {
+                let document_id = ctx.required_str("document_id")?;
+                let left: i64 =
+                    ctx.connection()
+                        .query_row(DOCUMENT_GONE_SQL, [document_id], |row| row.get(0))?;
+                Ok((left != 0).then(|| "something still names the destroyed document".to_owned()))
+            },
+        }],
+        handler: |ctx| {
+            let document_id = ctx.required_str("document_id")?.to_owned();
+            let released = destroy_document(ctx, &document_id)?;
+            Ok(serde_json::json!({
+                "document_id": document_id,
+                "content_released": released,
+            }))
+        },
+        sealed_input: &[],
+    }
+}
+
+/// `core.empty_document_trash` — "Empty trash": [`destroy_document`] on every
+/// document in the trash (#1047, D-1 of 2026-09-25). It used to collapse each
+/// grace window and leave destruction to the gateway's lifecycle sweep; that
+/// sweep went with the gateway, so the date destroyed nothing.
 ///
 /// An empty trash is a NO-OP that still executes: a member who taps "Empty
 /// trash" on an empty trash is not shown a refusal. And **not** `confirm: true`
@@ -2356,39 +2650,48 @@ fn empty_document_trash() -> CommandDefinition {
     CommandDefinition {
         name: "core.empty_document_trash",
         owner_schema: "core",
-        input_schema: r#"{ "type": "object", "additionalProperties": false, "properties": {} }"#,
+        input_schema: r#"{
+          "type": "object",
+          "description": "Empty the Docs trash: every document in the trash is destroyed now, as core.purge_document destroys one — the row, its tags and its versions go, and its bytes are released when nothing else names them. A document that was restored is no longer in the trash and is untouched.",
+          "additionalProperties": false,
+          "properties": {}
+        }"#,
         idempotency: Idempotency::Idempotent,
         risk: Risk::High,
         confirm: false,
         preconditions: &[],
         postconditions: &[CommandCondition {
-            // NO DOCUMENT MAY SIT IN THE TRASH STILL WAITING OUT A WINDOW.
-            predicate: "trash_window_collapsed",
+            predicate: "trash_emptied",
             check: |ctx| {
-                let waiting: i64 = ctx.connection().query_row(
-                    "SELECT COUNT(*) FROM core_document
-                      WHERE deleted_at IS NOT NULL AND purge_at <> deleted_at",
+                let left: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM core_document WHERE deleted_at IS NOT NULL",
                     [],
                     |row| row.get(0),
                 )?;
-                Ok((waiting != 0).then(|| {
-                    format!("{waiting} trashed documents are still waiting out a grace window")
-                }))
+                Ok((left != 0).then(|| format!("{left} documents are still in the trash")))
             },
         }],
         handler: |ctx| {
-            let released = ctx.connection().execute(
-                "UPDATE core_document SET purge_at = deleted_at, updated_at = ?1,
-                        row_version = row_version + 1
-                  WHERE deleted_at IS NOT NULL",
-                [&ctx.now],
-            )?;
+            let trashed: Vec<String> = {
+                let connection = ctx.connection();
+                let mut statement = connection.prepare(
+                    "SELECT document_id FROM core_document WHERE deleted_at IS NOT NULL
+                      ORDER BY document_id",
+                )?;
+                statement
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<String>>>()?
+            };
+            let mut released = 0;
+            for document_id in &trashed {
+                released += destroy_document(ctx, document_id)?;
+            }
             Ok(serde_json::json!({
-                "documents_released": i64::try_from(released).unwrap_or(i64::MAX)
+                "documents_released": i64::try_from(trashed.len()).unwrap_or(i64::MAX),
+                "content_released": released,
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2420,14 +2723,12 @@ fn star_document() -> CommandDefinition {
             // every other surface reads.
             set_starred(ctx, &document_id, true)?;
             ctx.connection().execute(
-                "UPDATE core_document SET updated_at = ?1, row_version = row_version + 1
-                  WHERE document_id = ?2",
+                "UPDATE core_document SET updated_at = ?1 WHERE document_id = ?2",
                 rusqlite::params![ctx.now, document_id],
             )?;
             Ok(serde_json::json!({ "document_id": document_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2451,14 +2752,12 @@ fn unstar_document() -> CommandDefinition {
             let document_id = ctx.required_str("document_id")?.to_owned();
             set_starred(ctx, &document_id, false)?;
             ctx.connection().execute(
-                "UPDATE core_document SET updated_at = ?1, row_version = row_version + 1
-                  WHERE document_id = ?2",
+                "UPDATE core_document SET updated_at = ?1 WHERE document_id = ?2",
                 rusqlite::params![ctx.now, document_id],
             )?;
             Ok(serde_json::json!({ "document_id": document_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2616,7 +2915,6 @@ fn edit_document() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2727,7 +3025,6 @@ fn replace_document_content() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2864,8 +3161,7 @@ fn restore_document_version() -> CommandDefinition {
             )?;
             ctx.connection().execute(
                 "UPDATE core_document
-                    SET current_content_id = ?1, current_revision_id = ?2, updated_at = ?3,
-                        row_version = row_version + 1
+                    SET current_content_id = ?1, current_revision_id = ?2, updated_at = ?3
                   WHERE document_id = ?4",
                 rusqlite::params![content_id, revision_id, ctx.now, document_id],
             )?;
@@ -2886,7 +3182,6 @@ fn restore_document_version() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -2977,7 +3272,6 @@ fn create_folder() -> CommandDefinition {
             Ok(serde_json::json!({ "folder_id": folder_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3021,7 +3315,6 @@ fn rename_folder() -> CommandDefinition {
             Ok(serde_json::json!({ "folder_id": folder_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3107,7 +3400,6 @@ fn delete_folder() -> CommandDefinition {
             Ok(serde_json::json!({ "folder_id": folder_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3162,7 +3454,6 @@ fn untag_item() -> CommandDefinition {
             Ok(serde_json::json!({ "tag_id": tag_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3222,7 +3513,6 @@ fn set_extracted_text() -> CommandDefinition {
             Ok(serde_json::json!({ "content_id": content_id, "replaced": replaced }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -3377,13 +3667,13 @@ fn find_or_create_concept(
 //    `schema/entity-refs.ts`'s `ENTITY_POINTERS`; reading the schema instead
 //    means the list and the DDL cannot drift, which is the whole failure the
 //    registry existed to prevent.
-// 3. **The pointers the engine cannot see** — [`PARTY_POINTERS`], which is one
-//    column: `share_authority.principal_id` under `principal_kind = 'person'`.
-//    It is polymorphic on a kind that selects a party, a circle, a harness or
-//    an automation, so **no single `REFERENCES` clause can express it** and
-//    neither walk above can find it. A merge that skipped it would delete the
-//    folded-in party out from under a LIVE standing answer, and a share the
-//    owner had already granted would silently stop being delivered.
+// 3. **The pointers the engine cannot see** — [`PARTY_POINTERS`], which is
+//    EMPTY. Its one entry was `share_authority.principal_id` under
+//    `principal_kind = 'person'`, polymorphic on a kind no single `REFERENCES`
+//    clause could express; rung five drops the sharing plane with that table
+//    (#1029). The list stays rather than being deleted, because it is the seam
+//    the two mechanical walks above cannot cover, and the next column like it
+//    needs somewhere to be enumerated on the day it arrives.
 //
 // `merge_party_sweep` returns all three as one list, and
 // `the_sweep_finds_every_column_that_names_a_party` asserts that no column in
@@ -3400,7 +3690,7 @@ fn find_or_create_concept(
 //   `core_attachment`, `knowledge_annotation`,
 //   `schedule_recurrence_exception`, the four `enrich_*` tables, `outbox_item`,
 //   `sync_external_entity` and `share_subscription_lineage` — thirteen tables,
-//   every one of which points at *any* entity kind. A typed reference table per
+//   of which points at *any* entity kind. A typed reference table per
 //   (pointer × target kind) would be thirteen tables times the entity kinds
 //   each admits, and `core_tag` alone tags documents, notes, tasks, assets and
 //   parties.
@@ -3413,13 +3703,10 @@ fn find_or_create_concept(
 //   engine — which is exactly why this sweep has to read the pair shape rather
 //   than the parent name. That cost is real and it is paid once, here.
 //
-// **Verdict: the polymorphic reference stays, and the finding is elsewhere** —
-// it is that `share_authority.principal_id` is NOT one of them. It is the one
-// pointer with no type column the engine can read, it is the one a merge can
-// silently break, and it is enumerated in a hand-kept list. Making it a real
-// `(principal_type, principal_id)` pair into `core_entity` is the change that
-// would retire [`PARTY_POINTERS`] entirely; it is an owner hand-off in this
-// lane's receipt, not a schema edit from an app slot.
+// **Verdict: the polymorphic reference stays.** The finding used to be
+// elsewhere — `share_authority.principal_id`, the one pointer with no type
+// column the engine could read — and rung five removed it by removing its
+// table (#1029). The two mechanical walks are now the whole sweep.
 //
 // ### What a collision means, per table
 //
@@ -3438,37 +3725,19 @@ fn find_or_create_concept(
 /// A column that holds a party id with **no foreign key on it**, plus the
 /// predicate that says which of its rows do.
 ///
-/// One entry, and the header says why it cannot be discovered. A second entry
+/// EMPTY since rung five (#1029): the one entry was
+/// `share_authority.principal_id`, and the sharing plane is dropped. An entry
 /// arriving here is a schema change that should have been a composite FK.
-const PARTY_POINTERS: &[(&str, &str, &str, PointerCollision)] = &[(
-    "share_authority",
-    "principal_id",
-    "principal_kind = 'person'",
-    // A STANDING ANSWER IS NEVER SILENTLY DELETED: it is dated shut and THEN
-    // re-pointed, which is also the only order that works where the constraint
-    // covers live rows only.
-    PointerCollision::Revoke,
-)];
+const PARTY_POINTERS: &[(&str, &str, &str)] = &[];
 
 /// Columns whose NAME reads as a party pointer and which hold something else.
 ///
 /// The audit in `crates/vault/tests/people_commands.rs` scans every column in
 /// the file for a party-shaped name and asserts each one is either in the sweep
-/// or here. One entry, with the DDL's own reason:
-/// `share_authority_request.principal_id` carries **an automation's enrolment
-/// key** — the table has no `principal_kind` column and the baseline says
-/// outright that the id is "the same principal id
-/// `share_authority.principal_id` carries for an 'automation' row"
-/// (`contracts/migrations/001_baseline.sql`). A merge that re-pointed it would
-/// hand one automation's pending scope request to a person.
-pub const NOT_A_PARTY_POINTER: &[(&str, &str)] = &[("share_authority_request", "principal_id")];
-
-/// What happens to the loser when a pointer's re-point collides.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PointerCollision {
-    /// The row is an ANSWER: date it shut, then re-point it.
-    Revoke,
-}
+/// or here. EMPTY since rung five (#1029): its one entry was
+/// `share_authority_request.principal_id`, which carried an automation's
+/// enrolment key rather than a party, and the sharing plane is dropped.
+pub const NOT_A_PARTY_POINTER: &[(&str, &str)] = &[];
 
 /// What a UNIQUE collision means for a table the engine's FK walk reaches.
 ///
@@ -3637,7 +3906,7 @@ pub fn merge_party_sweep(connection: &rusqlite::Connection) -> Result<Vec<PartyR
             }
         }
     }
-    for (table, column, predicate, _) in PARTY_POINTERS {
+    for (table, column, predicate) in PARTY_POINTERS {
         refs.push(PartyRef {
             table: (*table).to_owned(),
             column: (*column).to_owned(),
@@ -3704,7 +3973,6 @@ fn repoint_row(
     reference: &PartyRef,
     key_values: &[rusqlite::types::Value],
     survivor: &str,
-    now: &str,
     tally: &mut FoldTally,
 ) -> Result<()> {
     let where_key = quoted(&reference.key);
@@ -3800,27 +4068,9 @@ fn repoint_row(
         Collision::Sum(_) | Collision::DropDuplicate => {}
     }
 
-    if let Some(PointerCollision::Revoke) = PARTY_POINTERS
-        .iter()
-        .find(|(table, column, _, _)| *table == reference.table && *column == reference.column)
-        .map(|(_, _, _, policy)| *policy)
-    {
-        let mut binds: Vec<rusqlite::types::Value> = vec![
-            rusqlite::types::Value::Text(now.to_owned()),
-            rusqlite::types::Value::Text(survivor.to_owned()),
-        ];
-        binds.extend(key_values.iter().cloned());
-        connection.execute(
-            &format!(
-                "UPDATE \"{}\" SET revoked_at = ?, \"{}\" = ? WHERE {where_key}",
-                reference.table, reference.column
-            ),
-            rusqlite::params_from_iter(binds.iter()),
-        )?;
-        tally.repointed += 1;
-        tally.revoked += 1;
-        return Ok(());
-    }
+    // A pointer with a policy of its own — a standing answer dated shut and
+    // then re-pointed — used to be handled here. `PARTY_POINTERS` is empty
+    // since rung five (#1029) and the policy left with the table it was for.
 
     connection.execute(
         &format!("DELETE FROM \"{}\" WHERE {where_key}", reference.table),
@@ -3874,35 +4124,44 @@ const PARTY_ENTITY_TYPE: &str = "core.party";
 ///
 /// The fold's rules, each one chosen so the merge cannot lose a fact:
 /// a real cadence beats "no cadence"; the LATER last-contacted wins, because
-/// "when did I last speak to them" is one question with one answer; and any
-/// other field the survivor lacks is taken from the loser.
+/// "when did I last speak to them" is one question with one answer; a live
+/// side beats a trashed one; and any other field the survivor lacks —
+/// nickname included — is taken from the loser.
 fn fold_people_profile(
     connection: &rusqlite::Connection,
     survivor: &str,
     merged: &str,
     now: &str,
 ) -> Result<()> {
-    type Profile = (
-        i64,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-    );
+    /// One profile's foldable facts.
+    struct Profile {
+        cadence_days: i64,
+        last_contacted_at: Option<String>,
+        avatar_color: Option<String>,
+        role: Option<String>,
+        met: Option<String>,
+        nickname: Option<String>,
+        deleted_at: Option<String>,
+        purge_at: Option<String>,
+    }
     let load = |party_id: &str| -> Option<Profile> {
         connection
             .query_row(
-                "SELECT cadence_days, last_contacted_at, avatar_color, role, met
+                "SELECT cadence_days, last_contacted_at, avatar_color, role, met, nickname,
+                        deleted_at, purge_at
                    FROM people_profile WHERE party_id = ?1",
                 [party_id],
                 |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                    ))
+                    Ok(Profile {
+                        cadence_days: row.get(0)?,
+                        last_contacted_at: row.get(1)?,
+                        avatar_color: row.get(2)?,
+                        role: row.get(3)?,
+                        met: row.get(4)?,
+                        nickname: row.get(5)?,
+                        deleted_at: row.get(6)?,
+                        purge_at: row.get(7)?,
+                    })
                 },
             )
             .ok()
@@ -3924,22 +4183,40 @@ fn fold_people_profile(
             (Some(left), Some(right)) => Some(if left >= right { left } else { right }),
         }
     };
+    // LIVE BEATS TRASHED: the folded person is live when either side was, so
+    // a merge never sends somebody the owner can see to the trash. Both
+    // trashed keeps the survivor's own window.
+    let (deleted_at, purge_at) = if kept.deleted_at.is_none() || extra.deleted_at.is_none() {
+        (None, None)
+    } else {
+        (kept.deleted_at, kept.purge_at)
+    };
+    // The loser's row goes FIRST: its entity delete cascades, and nothing may
+    // still hold the UNIQUE party id when the survivor's row is rewritten.
+    connection.execute("DELETE FROM people_profile WHERE party_id = ?1", [merged])?;
     connection.execute(
         "UPDATE people_profile
             SET cadence_days = ?1, last_contacted_at = ?2, avatar_color = ?3,
-                role = ?4, met = ?5, updated_at = ?6
-          WHERE party_id = ?7",
+                role = ?4, met = ?5, nickname = ?6, deleted_at = ?7, purge_at = ?8,
+                updated_at = ?9
+          WHERE party_id = ?10",
         rusqlite::params![
-            if kept.0 > 0 { kept.0 } else { extra.0 },
-            later(kept.1, extra.1),
-            kept.2.or(extra.2),
-            kept.3.or(extra.3),
-            kept.4.or(extra.4),
+            if kept.cadence_days > 0 {
+                kept.cadence_days
+            } else {
+                extra.cadence_days
+            },
+            later(kept.last_contacted_at, extra.last_contacted_at),
+            kept.avatar_color.or(extra.avatar_color),
+            kept.role.or(extra.role),
+            kept.met.or(extra.met),
+            kept.nickname.or(extra.nickname),
+            deleted_at,
+            purge_at,
             now,
             survivor
         ],
     )?;
-    connection.execute("DELETE FROM people_profile WHERE party_id = ?1", [merged])?;
     Ok(())
 }
 
@@ -3957,14 +4234,7 @@ pub fn fold_party(
     fold_people_profile(connection, survivor, merged, now)?;
     for reference in merge_party_sweep(connection)? {
         for key_values in rows_naming(connection, &reference, merged)? {
-            repoint_row(
-                connection,
-                &reference,
-                &key_values,
-                survivor,
-                now,
-                &mut tally,
-            )?;
+            repoint_row(connection, &reference, &key_values, survivor, &mut tally)?;
         }
     }
     connection.execute("DELETE FROM core_party WHERE party_id = ?1", [merged])?;
@@ -4051,7 +4321,6 @@ fn merge_party() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -4095,9 +4364,11 @@ mod tests {
     /// registered together by [`super::Registry::with_system_commands`], which
     /// is why this test counts the REGISTRY rather than `definitions()`. The
     /// two that remain are `core.merge_entity` and
-    /// `core.find_duplicate_parties` (census §A5).
+    /// `core.find_duplicate_parties` (census §A5). Docs' two phone commands
+    /// (#1047) — `core.create_text_document` and `core.purge_document` — are
+    /// this build's own and not v0's, so the schema is twenty-seven.
     #[test]
-    fn the_schema_carries_twenty_five_of_v0s_twenty_seven() {
+    fn the_schema_carries_twenty_five_of_v0s_twenty_seven_and_docs_two() {
         let registry =
             crate::commands::Registry::with_system_commands().expect("the registry builds");
         let names = registry.names();
@@ -4106,12 +4377,15 @@ mod tests {
             .copied()
             .filter(|name: &&str| name.starts_with("core."))
             .collect();
-        assert_eq!(core.len(), 25, "{core:?}");
+        assert_eq!(core.len(), 27, "{core:?}");
         assert_eq!(
             definitions().len(),
-            20,
+            22,
             "this file is still the larger half"
         );
+        for phone in ["core.create_text_document", "core.purge_document"] {
+            assert!(core.contains(&phone), "{phone} is Docs' (#1047)");
+        }
         for landed in [
             "core.link_entities",
             "core.unlink_entities",
@@ -4139,7 +4413,9 @@ mod tests {
         }
     }
 
-    /// The split off v0's own definitions, for the twenty IN THIS FILE.
+    /// The split off v0's own definitions, for the twenty IN THIS FILE — plus
+    /// Docs' two phone commands (#1047), both `once`: a text document is
+    /// created once, and a destroy cannot run twice.
     ///
     /// v0's whole `core` schema is 17 idempotent / 8 once / 2 retry-safe. Slot
     /// 4c's link half takes two `once` (`link_entities`, `attach`) and three
@@ -4161,11 +4437,12 @@ mod tests {
                 Idempotency::RetrySafe => retry_safe += 1,
             }
         }
-        assert_eq!((idempotent, once, retry_safe), (14, 5, 1));
+        assert_eq!((idempotent, once, retry_safe), (14, 7, 1));
     }
 
-    /// TWO GATES, NEVER ONE (census §A0). Docs' one manifest-confirmed action
-    /// is `empty-trash`, and the command behind it deliberately does not carry
+    /// TWO GATES, NEVER ONE (census §A0). Docs' manifest-confirmed actions are
+    /// `purge` and `empty-trash`, and the commands behind them deliberately do
+    /// not carry
     /// the command-level park: `confirm: true` parks a NON-OWNER invocation,
     /// and the owner's confirmation is in front of the command.
     ///
@@ -4193,13 +4470,8 @@ mod tests {
     }
 
     #[test]
-    fn nothing_here_is_online_only_or_seals_an_input() {
+    fn nothing_here_seals_an_input() {
         for definition in definitions() {
-            assert!(
-                definition.online_only.eq(&false),
-                "{} is marked online-only and Docs declares no ONLINE_ONLY_ACTIONS",
-                definition.name
-            );
             assert!(definition.sealed_input.is_empty(), "{}", definition.name);
         }
     }
@@ -4306,7 +4578,7 @@ mod tests {
         let bytes = b"a photograph";
         assert_eq!(
             crate::content::content_digest(bytes),
-            crate::backup::store::digest(bytes),
+            crate::backup::naming::PlaintextHash::of(bytes).to_string(),
             "one hash names a member's bytes and the artefact that backs them up"
         );
         assert_eq!(crate::content::content_digest(bytes).len(), 64);

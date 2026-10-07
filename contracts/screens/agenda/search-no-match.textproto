@@ -1,0 +1,30 @@
+# A TERM THAT MATCHED NOTHING. Search results are not a window, so the day
+# bar is hidden while the term answers, and the band's Search tab is the
+# current one.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_DAY
+anchor_day: "2026-03-11"
+search_open: true
+search_term: "cabin"
+data {
+  today: "2026-03-11"
+  now_local: "2026-03-11T09:42"
+  empty: AGENDA_EMPTY_NO_MATCH
+  empty_title: "Nothing matches that."
+  empty_body: "Try fewer words, or a different day."
+  waiting_count: 0
+  event_count: 0
+  event_count_label: "0 events"
+}
+sheet: SHEET_NONE
+band { key: "day" label: "Day" icon_key: "Clock" current: false }
+band { key: "schedule" label: "Schedule" icon_key: "List" current: false }
+band { key: "waiting" label: "Waiting" icon_key: "Inbox" current: false }
+band { key: "search" label: "Search" icon_key: "Search" current: true }
+band { key: "more" label: "More" icon_key: "more" current: false }
+toolbar { shown: false }
+chrome { title: "Agenda" search_placeholder: "Search events" search_label: "Search agenda" }

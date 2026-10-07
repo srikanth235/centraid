@@ -7,8 +7,10 @@ import dev.centraid.shared.shell.FirstMoves
 import dev.centraid.shared.shell.SpringboardPolicy
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 
@@ -109,6 +111,14 @@ class CatalogSpec : StringSpec({
         tabs.none { it.id == "more" }.shouldBeTrue()
     }
 
+    "the default band pins no place with nothing behind it (R-1047-F7b)" {
+        // Vault has no destination on either shell yet: pinned, it was a tab
+        // that navigated nowhere, which is Starred's defect.
+        BandPolicy.DEFAULT_PINS.contains("data").shouldBeFalse()
+        BandPolicy.bandTabs().map { it.id } shouldBe listOf("home")
+        BandPolicy.place("data").shouldNotBeNull().pinnedByDefault.shouldBeFalse()
+    }
+
     "System is reachable by link and never spends a band slot" {
         // Its route still resolves, so a saved link never dead-ends; it is a
         // custodian surface and does not earn one of five targets.
@@ -116,11 +126,15 @@ class CatalogSpec : StringSpec({
             .none { it.id == "gateway" }.shouldBeTrue()
     }
 
-    "a sixth pinned place overflows into More rather than shrinking the others" {
+    "every place pinned is capped at Home plus four; a sixth overflows into More" {
         // The cap is a CONSTRAINT: a sixth destination puts every target under
         // 44pt on a 390px screen.
         val everything = BandPolicy.PLACES.map { it.id }
-        BandPolicy.bandTabs(everything).size shouldBe BandPolicy.BAND_PLACE_SLOTS + 1
+        val bandable = BandPolicy.PLACES.count { it.id != "gateway" }
+        BandPolicy.bandTabs(everything).size shouldBe minOf(bandable, BandPolicy.BAND_PLACE_SLOTS + 1)
+        // Needs you and Activity went with their data planes (#1029).
+        BandPolicy.place("notifs") shouldBe null
+        BandPolicy.place("stats") shouldBe null
     }
 
     "a place's short name only ever DROPS words from its name" {

@@ -234,7 +234,6 @@
         "schema": "core",
         "table": "entity_revision",
         "verbs": "read",
-        "surface": "internal",
         "rowFilter": [
           {
             "column": "entity_type",
@@ -251,7 +250,8 @@
           "recorded_at",
           "undo_until",
           "undone_at"
-        ]
+        ],
+        "surface": "internal"
       },
       {
         "schema": "core",
@@ -279,28 +279,6 @@
       }
     ]
   },
-  "$derivedFieldsNote": "Facts this app's READER computes and hands back beside the row — GRAMMAR.md §2.2 admits them as Fields and they appear in no column list. `computedBy` names the reader or statement that produces one; `inputs` names the tables it reads, and manifest validation refuses an input this app's read scopes do not grant. `computedBy: null` says the grammar states a Field and nothing this product ships computes it.",
-  "derivedFields": [
-    {
-      "field": "balance",
-      "entity": "core.party",
-      "computedBy": "crates/apps/tally/src/balance.rs",
-      "inputs": [
-        "tally.expense",
-        "tally.expense_payer",
-        "tally.expense_split",
-        "tally.settlement",
-        "tally.group"
-      ]
-    },
-    {
-      "field": "member_party_ids",
-      "entity": "tally.group",
-      "computedBy": null,
-      "gap": "A group's members are reached through `social.circle_member`, and no shipped query hands the id list back beside the group row; the grammar's Field is served only by the eval harness (DIFF.md B4). It is also the two-hop walk DIFF.md B12 records.",
-      "inputs": ["tally.group", "social.circle", "social.circle_member"]
-    }
-  ],
   "actionSideEffect": "vault-write",
   "actions": [
     {
@@ -2079,5 +2057,27 @@
       "denied"
     ],
     "excluded": []
-  }
+  },
+  "$derivedFieldsNote": "Facts this app's READER computes and hands back beside the row — GRAMMAR.md §2.2 admits them as Fields and they appear in no column list. `computedBy` names the reader or statement that produces one; `inputs` names the tables it reads, and manifest validation refuses an input this app's read scopes do not grant. `computedBy: null` says the grammar states a Field and nothing this product ships computes it.",
+  "derivedFields": [
+    {
+      "field": "balance",
+      "entity": "core.party",
+      "computedBy": "crates/apps/tally/src/balance.rs",
+      "inputs": [
+        "tally.expense",
+        "tally.expense_payer",
+        "tally.expense_split",
+        "tally.settlement",
+        "tally.group"
+      ]
+    },
+    {
+      "field": "member_party_ids",
+      "entity": "tally.group",
+      "computedBy": null,
+      "gap": "A group's members are reached through `social.circle_member`, and no shipped query hands the id list back beside the group row; the grammar's Field is served only by the eval harness (DIFF.md B4). It is also the two-hop walk DIFF.md B12 records.",
+      "inputs": ["tally.group", "social.circle", "social.circle_member"]
+    }
+  ]
 }

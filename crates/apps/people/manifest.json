@@ -12,10 +12,7 @@
       {
         "schema": "people",
         "verbs": "read+act",
-        "surface": {
-          "important_date": "kind",
-          "profile": "kind"
-        }
+        "surface": { "important_date": "kind", "profile": "kind" }
       },
       {
         "schema": "core",
@@ -101,30 +98,6 @@
         "verbs": "read",
         "surface": "kind"
       },
-      {
-        "schema": "share",
-        "table": "party_vault_binding",
-        "verbs": "read",
-        "surface": "internal"
-      },
-      {
-        "schema": "share",
-        "table": "authority",
-        "verbs": "read",
-        "surface": "internal"
-      },
-      {
-        "schema": "share",
-        "table": "authority_use",
-        "verbs": "read",
-        "surface": "internal"
-      },
-      {
-        "schema": "share",
-        "table": "authority_request",
-        "verbs": "read",
-        "surface": "internal"
-      },
       { "schema": "social", "table": "save_contact_channel", "verbs": "act" },
       {
         "schema": "social",
@@ -145,7 +118,6 @@
         "schema": "core",
         "table": "entity_revision",
         "verbs": "read",
-        "surface": "internal",
         "rowFilter": [
           {
             "column": "entity_type",
@@ -162,48 +134,11 @@
           "recorded_at",
           "undo_until",
           "undone_at"
-        ]
+        ],
+        "surface": "internal"
       }
     ]
   },
-  "$derivedFieldsNote": "Facts this app's READER computes and hands back beside the row — GRAMMAR.md §2.2 admits them as Fields and they appear in no column list. `computedBy` names the reader or statement that produces one; `inputs` names the tables it reads, and manifest validation refuses an input this app's read scopes do not grant. `computedBy: null` is not an omission: it says the grammar states a Field and NOTHING THIS PRODUCT SHIPS computes it (DIFF.md B4-B7), which is the signal, made explicit.",
-  "derivedFields": [
-    {
-      "field": "owed_to_me",
-      "entity": "core.party",
-      "computedBy": null,
-      "gap": "People ships no obligation reader. `tally.obligation` is in this app's read scopes and no query returns a per-party total; the field's only implementation is the eval harness's reference reader, which is the thing being evaluated (DIFF.md B6).",
-      "inputs": ["tally.obligation", "core.party"]
-    },
-    {
-      "field": "owed_to_them",
-      "entity": "core.party",
-      "computedBy": null,
-      "gap": "As `owed_to_me`, the other direction. No shipped reader (DIFF.md B7).",
-      "inputs": ["tally.obligation", "core.party"]
-    },
-    {
-      "field": "owed_to_me_minor",
-      "entity": "core.party",
-      "computedBy": null,
-      "gap": "What the open debts in `owed_to_me` come to, in minor units — the amount as a field of its own, beside the ids that are the link. No shipped reader (DIFF.md B6).",
-      "inputs": ["tally.obligation", "core.party"]
-    },
-    {
-      "field": "owed_to_them_minor",
-      "entity": "core.party",
-      "computedBy": null,
-      "gap": "As `owed_to_me_minor`, the other direction. No shipped reader (DIFF.md B7).",
-      "inputs": ["tally.obligation", "core.party"]
-    },
-    {
-      "field": "next_occurrence",
-      "entity": "people.important_date",
-      "computedBy": null,
-      "gap": "The next anniversary of a `month_day`. The dates board sorts by the stored columns and never projects the next occurrence; no shipped reader computes it (DIFF.md B5).",
-      "inputs": ["people.important_date"]
-    }
-  ],
   "actionSideEffect": "vault-write",
   "actions": [
     {
@@ -239,7 +174,7 @@
     },
     {
       "name": "edit-person",
-      "description": "Revise a person's name, role line, avatar hue or how-you-met note through people.edit_person.",
+      "description": "Revise a person's name, role line, nickname, avatar hue or how-you-met note through people.edit_person.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -247,6 +182,7 @@
           "party_id": { "type": "string", "minLength": 1 },
           "display_name": { "type": "string", "minLength": 1 },
           "role": { "type": "string" },
+          "nickname": { "type": "string" },
           "avatar_color": { "type": "string" },
           "met": { "type": "string" }
         },
@@ -329,6 +265,40 @@
         }
       },
       "writes": ["people.profile"]
+    },
+    {
+      "name": "purge-person",
+      "description": "Delete a trashed person forever through people.purge_person: the party, the profile, their dates, handles, channels, notes, interactions and gift ideas. Refused while money, messages or other lasting records still name them; a task about them stays as the member's own.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": [
+        "core.activity",
+        "core.entity_revision",
+        "core.link",
+        "core.party",
+        "core.party_identifier",
+        "core.tag",
+        "knowledge.annotation",
+        "people.important_date",
+        "people.profile",
+        "schedule.task",
+        "social.contact_channel"
+      ]
     },
     {
       "name": "undo-person",
@@ -946,7 +916,7 @@
     },
     {
       "name": "person",
-      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history — plus their sharing standing: the vault(s) they are linked to (`vaults`) and what you have shared with them (`shared_with_them`). Both are null when the sharing reads are denied, which means unknown, not none. A share that has not reached them yet is said by the live grant plane, not by a second invitation list.",
+      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history.",
       "input": {
         "type": "object",
         "properties": { "party_id": { "type": "string", "minLength": 1 } },
@@ -1102,5 +1072,43 @@
       "denied"
     ],
     "excluded": []
-  }
+  },
+  "$derivedFieldsNote": "Facts this app's READER computes and hands back beside the row — GRAMMAR.md §2.2 admits them as Fields and they appear in no column list. `computedBy` names the reader or statement that produces one; `inputs` names the tables it reads, and manifest validation refuses an input this app's read scopes do not grant. `computedBy: null` is not an omission: it says the grammar states a Field and NOTHING THIS PRODUCT SHIPS computes it (DIFF.md B4-B7), which is the signal, made explicit.",
+  "derivedFields": [
+    {
+      "field": "owed_to_me",
+      "entity": "core.party",
+      "computedBy": null,
+      "gap": "People ships no obligation reader. `tally.obligation` is in this app's read scopes and no query returns a per-party total; the field's only implementation is the eval harness's reference reader, which is the thing being evaluated (DIFF.md B6).",
+      "inputs": ["tally.obligation", "core.party"]
+    },
+    {
+      "field": "owed_to_them",
+      "entity": "core.party",
+      "computedBy": null,
+      "gap": "As `owed_to_me`, the other direction. No shipped reader (DIFF.md B7).",
+      "inputs": ["tally.obligation", "core.party"]
+    },
+    {
+      "field": "owed_to_me_minor",
+      "entity": "core.party",
+      "computedBy": null,
+      "gap": "What the open debts in `owed_to_me` come to, in minor units — the amount as a field of its own, beside the ids that are the link. No shipped reader (DIFF.md B6).",
+      "inputs": ["tally.obligation", "core.party"]
+    },
+    {
+      "field": "owed_to_them_minor",
+      "entity": "core.party",
+      "computedBy": null,
+      "gap": "As `owed_to_me_minor`, the other direction. No shipped reader (DIFF.md B7).",
+      "inputs": ["tally.obligation", "core.party"]
+    },
+    {
+      "field": "next_occurrence",
+      "entity": "people.important_date",
+      "computedBy": null,
+      "gap": "The next anniversary of a `month_day`. The dates board sorts by the stored columns and never projects the next occurrence; no shipped reader computes it (DIFF.md B5).",
+      "inputs": ["people.important_date"]
+    }
+  ]
 }

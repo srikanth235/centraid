@@ -19,6 +19,116 @@ use centraid_core_ffi::{
 };
 use prost::Message as _;
 
+// -------------------------------------------------------- log capture -----
+
+/// Capturing one test's `tracing` output inside a binary whose OTHER tests reach
+/// the same callsites, on other threads, at the same moment.
+///
+/// `tracing::subscriber::with_default` alone is not enough here, and what it
+/// does instead of working is nothing at all — an empty log and no error.
+/// `tracing` caches one `Interest` per callsite for the whole PROCESS, and while
+/// only a single dispatcher has ever been registered, `tracing_core` takes its
+/// `Rebuilder::JustOne` path (`callsite.rs`), which resolves that dispatcher
+/// with `dispatcher::get_default()` — *the registering thread's* default. A
+/// thread-local default belongs to one thread, so when another test is the first
+/// to reach `centraid_open`'s `warn!`, the interest computed there is `never`,
+/// and `never` is then cached for that callsite for every thread and the rest of
+/// the run. The capturing test's own event is dropped before any writer sees it.
+/// `an_open_that_refuses_an_ordinary_file_never_answers_ok` and
+/// `a_panic_in_open_hands_back_no_handle` both reach that callsite, and the loss
+/// reproduced once in 30 runs of the full binary (#1029 W20).
+///
+/// So the subscriber is installed ONCE as the process-wide default: every thread
+/// then resolves the same dispatcher, and the interest cached for a callsite is
+/// the same answer whichever thread happens to register it. The interest cache is
+/// rebuilt at install, because a callsite reached before it is already cached at
+/// `never`. Routing is per thread — a thread that asked to capture gets its own
+/// lines, every other thread's go to `io::sink`, exactly as they did before.
+mod capture {
+    use std::cell::RefCell;
+    use std::io::{self, Write};
+    use std::sync::{Arc, Mutex, Once};
+
+    #[derive(Clone, Default)]
+    struct Kept(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for Kept {
+        fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+            self.0
+                .lock()
+                .expect("the log lock")
+                .extend_from_slice(buffer);
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    enum Writer {
+        Kept(Kept),
+        Dropped(io::Sink),
+    }
+
+    impl Write for Writer {
+        fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+            match self {
+                Self::Kept(kept) => kept.write(buffer),
+                Self::Dropped(sink) => sink.write(buffer),
+            }
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            match self {
+                Self::Kept(kept) => kept.flush(),
+                Self::Dropped(sink) => sink.flush(),
+            }
+        }
+    }
+
+    thread_local! {
+        static THIS_THREAD: RefCell<Option<Kept>> = const { RefCell::new(None) };
+    }
+
+    struct ByThread;
+
+    impl tracing_subscriber::fmt::MakeWriter<'_> for ByThread {
+        type Writer = Writer;
+
+        fn make_writer(&self) -> Self::Writer {
+            THIS_THREAD.with(|slot| match slot.borrow().clone() {
+                Some(kept) => Writer::Kept(kept),
+                None => Writer::Dropped(io::sink()),
+            })
+        }
+    }
+
+    /// Run `body` with this thread's `tracing` output captured, and answer what
+    /// it wrote.
+    pub fn from_this_thread(body: impl FnOnce()) -> String {
+        static INSTALLED: Once = Once::new();
+        INSTALLED.call_once(|| {
+            let subscriber = tracing_subscriber::fmt()
+                .with_writer(ByThread)
+                .with_max_level(tracing::Level::TRACE)
+                .finish();
+            tracing::subscriber::set_global_default(subscriber)
+                .expect("this binary installs no other global subscriber");
+            // A callsite reached before the line above is cached at `never`.
+            tracing::callsite::rebuild_interest_cache();
+        });
+
+        let kept = Kept::default();
+        THIS_THREAD.with(|slot| *slot.borrow_mut() = Some(kept.clone()));
+        body();
+        THIS_THREAD.with(|slot| *slot.borrow_mut() = None);
+
+        let bytes = kept.0.lock().expect("the log lock").clone();
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+}
+
 // -------------------------------------------------------------- harness -----
 
 struct Opened {
@@ -29,10 +139,28 @@ struct Opened {
 impl Opened {
     /// A gateway core over a fresh file, through `centraid_open`.
     fn gateway() -> Self {
+        Self::over_a_fresh_file(false)
+    }
+
+    /// The same, with the vault seed `CONTRACT.md` §4b describes — a core that
+    /// can seal, which is what a drain needs.
+    fn unlocked() -> Self {
+        Self::over_a_fresh_file(true)
+    }
+
+    fn over_a_fresh_file(with_seed: bool) -> Self {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
+        let vault = if with_seed {
+            format!(
+                r#","vault":{{"seed":"{}","index":0}}"#,
+                "ab".repeat(centraid_core::SEED_BYTES)
+            )
+        } else {
+            String::new()
+        };
         let config = format!(
-            r#"{{"path":{:?},"role":"gateway","create":true}}"#,
+            r#"{{"path":{:?},"role":"gateway","create":true{vault}}}"#,
             dir.join("vault.db").display().to_string()
         );
         let mut handle: *mut centraid_core::Handle = std::ptr::null_mut();
@@ -643,6 +771,97 @@ fn a_panic_in_open_hands_back_no_handle() {
     );
 }
 
+/// **A REFUSAL AT `open` SAYS WHY, IN THE LOG, BECAUSE THE CODE CANNOT**
+/// (#1029 W6b).
+///
+/// ## What is under test
+///
+/// `code_for_open`'s own documentation ends "the reason is in the log line the
+/// core already emits" — and no line was emitted, which made that sentence a
+/// promise the code did not keep. The ABI has six status codes and `CONTRACT.md`
+/// governs the table, so every refusal that is not one of the five named arms
+/// is [`CENTRAID_BAD_ARGUMENT`]: `-1` answers "the path is wrong", "this file is
+/// not a vault" and "this core is older than this vault" alike. Widening the
+/// table is not the fix — a second, smaller error vocabulary for three shells to
+/// learn is what `code_for` exists to refuse. The LINE is where the difference
+/// lives, so the line has to be written.
+///
+/// ## Why this refusal and not an easier one
+///
+/// `VaultError::DowngradeRefused` — a file a NEWER core migrated, handed to an
+/// OLDER one — is the refusal that most needs the line. It is the most
+/// actionable thing a shell author can hit (their library is behind their vault)
+/// and, through six status codes, it is indistinguishable from a typo in a path.
+/// That the refusal itself is correct is `crates/vault`'s `file.rs` and
+/// `crates/ontology`'s `golden_vault.rs`; what is asserted here is what crosses
+/// the ABI: a negative code, no handle written, and a line that names the reason.
+#[test]
+fn a_refusal_at_open_is_a_negative_code_no_handle_and_a_line_that_says_why() {
+    let dir = centraid_ontology::golden::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("the directory is made");
+    let path = dir.join("from-the-future.db");
+
+    // A REAL, FOUNDED VAULT — then stamped as having run a rung this build does
+    // not have. It has to be a real file: the downgrade check happens AFTER the
+    // application id and the header have been accepted, so a hand-written file
+    // would be refused earlier, as `NotAVault`, and would test a different arm.
+    {
+        let handle =
+            centraid_core::Core::open(centraid_core::CoreConfig::new(&path)).expect("a core opens");
+        handle
+            .with_vault(|vault| Ok(vault.found("Ahead", "Owner")?))
+            .expect("it founds");
+        handle.close();
+    }
+    // Through `centraid_vault`'s own re-exported `rusqlite`, and NOT by writing
+    // byte 60 of the SQLite header: the vault runs in WAL mode with
+    // `NO_CKPT_ON_CLOSE`, so after a close the main file is a 4KiB header and
+    // the rows — and the authoritative page one — are in the `-wal` sidecar. A
+    // patched header is read straight past, which is a test that silently
+    // measures nothing. `sql-confinement` is untouched: this is a pragma name,
+    // not a query.
+    let ahead = centraid_vault::head_version() + 1;
+    {
+        let connection = centraid_vault::rusqlite::Connection::open(&path).expect("the file opens");
+        connection
+            .pragma_update(None, "user_version", ahead)
+            .expect("the stamp writes");
+    }
+
+    let config = format!(
+        r#"{{"path":{:?},"create":false}}"#,
+        path.display().to_string()
+    );
+    let sentinel = 0x1234_usize as *mut centraid_core::Handle;
+    let mut handle = sentinel;
+    let mut code = CENTRAID_OK;
+    let log = capture::from_this_thread(|| {
+        // SAFETY: live config bytes and a live out-pointer.
+        code = unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) };
+    });
+
+    assert_eq!(
+        code, CENTRAID_BAD_ARGUMENT,
+        "a vault from a newer core must refuse with a negative code"
+    );
+    assert!(
+        std::ptr::eq(handle, sentinel),
+        "a failed open wrote a handle the caller would then close"
+    );
+
+    assert!(
+        log.contains("centraid_open refused"),
+        "the refusal emitted no line, so `-1` is again the whole story: {log}"
+    );
+    // THE LINE CARRIES THE REASON, NOT JUST THE CODE. A line that said only
+    // "refused with -1" would restate the number the caller already has.
+    assert!(
+        log.contains(&ahead.to_string()) && log.contains("schema version"),
+        "the line does not name the version this file is at: {log}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `open` NEVER ANSWERS `OK` WITHOUT A HANDLE — over an ordinary refusal, not
 /// a malformed configuration (#1029 W5).
 ///
@@ -689,4 +908,640 @@ fn an_open_that_refuses_an_ordinary_file_never_answers_ok() {
         "a failed open wrote a handle the caller would then close"
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ------------------------------------------- #1029 W15: the phone's flows ----
+
+/// Decode an answer envelope, or fail loudly with what came back instead.
+fn answer(bytes: &[u8]) -> wire::Envelope {
+    wire::Envelope::decode(bytes).expect("the answer is an envelope")
+}
+
+/// CLAUSE 4b. The seed crosses the boundary, and a malformed one is refused
+/// rather than replaced.
+///
+/// The three cases are the three a shell can actually produce: no `vault` key
+/// at all (every first launch, and a locked phone), a good one, and a `seed`
+/// that is the wrong length — which is what a shell handed a truncated
+/// Keychain item produces, and is the one that must NOT be read as "absent".
+#[test]
+fn the_vault_seed_crosses_the_abi_and_a_malformed_one_is_refused() {
+    use centraid_core_ffi::marshal::config_from_json;
+
+    let absent = config_from_json(br#"{"path":"/tmp/v.db"}"#).expect("no vault key is fine");
+    assert!(
+        absent.seed.is_none(),
+        "a shell that said nothing has no seed, and that is a state"
+    );
+
+    let seed_hex = "ab".repeat(centraid_core::SEED_BYTES);
+    let good = config_from_json(
+        format!(r#"{{"path":"/tmp/v.db","vault":{{"seed":"{seed_hex}","index":3}}}}"#).as_bytes(),
+    )
+    .expect("a good seed parses");
+    let (seed, index) = good.seed.expect("the seed crossed");
+    assert_eq!(
+        index, 3,
+        "the index is the vault's own and is never chosen here"
+    );
+    assert_eq!(
+        seed.as_bytes()[..],
+        [0xAB_u8; centraid_core::SEED_BYTES][..],
+        "the bytes that crossed are the bytes the shell sent"
+    );
+
+    for bad in [
+        // Too short: a truncated secure-store item.
+        r#"{"path":"/tmp/v.db","vault":{"seed":"abcd","index":0}}"#,
+        // Not hex at all.
+        r#"{"path":"/tmp/v.db","vault":{"seed":"not hex","index":0}}"#,
+        // A seed with no index is half a derivation, and F2 is about indices.
+        r#"{"path":"/tmp/v.db","vault":{"seed":"ab"}}"#,
+    ] {
+        // `CoreConfig` is not `Debug` (it holds `dyn Clock`), so the refusal
+        // is matched rather than unwrapped.
+        match config_from_json(bad.as_bytes()) {
+            Err(centraid_core::CoreError::InvalidRequest { .. }) => {}
+            Err(other) => panic!("a malformed seed is BAD_ARGUMENT, not {other}"),
+            Ok(_) => panic!("present and unreadable is an error, never a fresh key: {bad}"),
+        }
+    }
+}
+
+/// CLAUSE 4c. All four phone flows round-trip through `centraid_call`.
+///
+/// **What is asserted is the round trip, not the outcome.** Each kind is
+/// encoded into an `Envelope`, handed to the C symbol, and the answer decoded —
+/// so a kind the core does not dispatch, or one whose answer is filed under the
+/// wrong `Response` arm, fails here rather than in a shell. Two of the four
+/// answer with a typed response over a core with no laptop, and two refuse for
+/// a reason the shell draws; both are answers and neither is a hang.
+#[test]
+fn the_phones_four_flows_round_trip_through_call() {
+    // UNLOCKED, because a drain seals and sealing needs the keys clause 4b
+    // carries. A LOCKED core's drain is the clause's other half and is pinned
+    // by `a_locked_core_refuses_to_drain_rather_than_inventing_a_key` below.
+    let opened = Opened::unlocked();
+
+    // `backup_status` — a typed answer over a phone that has never paired.
+    let (code, bytes) = call(
+        opened.handle,
+        &envelope(
+            11,
+            wire::request::Kind::BackupStatus(wire::BackupStatusRequest {}),
+        ),
+    );
+    assert_eq!(code, CENTRAID_OK, "a status read answers");
+    let Some(wire::envelope::Body::Response(response)) = answer(&bytes).body else {
+        panic!("a status read is answered by a Response");
+    };
+    let Some(wire::response::Kind::BackupStatus(status)) = response.kind else {
+        panic!("a BackupStatusRequest is answered by a BackupStatusResponse");
+    };
+    assert!(
+        status.destinations.is_empty(),
+        "this core has never scanned a QR"
+    );
+    assert_eq!(
+        status.acked_at_ms, None,
+        "a moment that is not the gateway's is no moment at all"
+    );
+
+    // `drain` — the door `BackupNow` stood in for: an unpaired phone has
+    // nowhere to send bytes, which is `DRAIN_STOP_UNREACHABLE` and not a
+    // failure.
+    let (code, bytes) = call(
+        opened.handle,
+        &envelope(
+            12,
+            wire::request::Kind::Drain(wire::DrainRequest {
+                deadline_ms: 0,
+                ..wire::DrainRequest::default()
+            }),
+        ),
+    );
+    assert_eq!(code, CENTRAID_OK, "a drain answers");
+    let Some(wire::envelope::Body::Response(response)) = answer(&bytes).body else {
+        panic!("a drain is answered by a Response, never by a NotYetAvailable error");
+    };
+    let Some(wire::response::Kind::Drain(drain)) = response.kind else {
+        panic!("a DrainRequest is answered by a DrainResponse");
+    };
+    assert_eq!(
+        drain.stopped,
+        wire::DrainStop::Unreachable as i32,
+        "an unpaired phone has no laptop to reach"
+    );
+    assert_eq!(
+        drain.acked_at_ms, None,
+        "nothing was acked, so nothing is claimed"
+    );
+
+    // `pair` — a payload that is not a gateway's pairing code is refused by
+    // the core's own parser, so no shell ever writes a second one.
+    let (code, bytes) = call(
+        opened.handle,
+        &envelope(
+            13,
+            wire::request::Kind::PairPhone(wire::PairRequest {
+                payload: "not-a-pairing-code".to_owned(),
+            }),
+        ),
+    );
+    assert_eq!(code, CENTRAID_BAD_ARGUMENT, "a bad pairing code is refused");
+    let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
+
+    // `restore` — three words are not 24, and the refusal is the phrase's own
+    // checksum rather than a failure somewhere downstream.
+    let (code, bytes) = call(
+        opened.handle,
+        &envelope(
+            14,
+            wire::request::Kind::Restore(wire::RestoreRequest {
+                phrase: "abandon abandon abandon".to_owned(),
+                ..wire::RestoreRequest::default()
+            }),
+        ),
+    );
+    assert_eq!(code, CENTRAID_BAD_ARGUMENT, "three words are not a phrase");
+    let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
+}
+
+/// CLAUSE 4d. `originals` is a request kind like the phone's four: a keep
+/// round-trips through `call` and is answered with the list as it now stands,
+/// and a census over a founded vault with no photographs is a typed answer —
+/// counted, and zero, because this core opened its content store.
+#[test]
+fn the_originals_on_this_phone_round_trip_through_call() {
+    let opened = Opened::gateway();
+    let originals = |id: u64, op: wire::originals_request::Op| {
+        let (code, bytes) = call(
+            opened.handle,
+            &envelope(
+                id,
+                wire::request::Kind::Originals(wire::OriginalsRequest { op: Some(op) }),
+            ),
+        );
+        assert_eq!(code, CENTRAID_OK, "an originals ask answers");
+        let Some(wire::envelope::Body::Response(response)) = answer(&bytes).body else {
+            panic!("an originals ask is answered by a Response");
+        };
+        let Some(wire::response::Kind::Originals(originals)) = response.kind else {
+            panic!("an OriginalsRequest is answered by an OriginalsResponse");
+        };
+        originals
+    };
+
+    let kept = originals(
+        31,
+        wire::originals_request::Op::Keep(wire::KeepAlbumOriginals {
+            album_id: "album-1".to_owned(),
+            keep: true,
+        }),
+    );
+    assert_eq!(kept.kept_album_ids, vec!["album-1"]);
+    assert_eq!(kept.census, None, "a keep counts nothing");
+
+    let counted = originals(
+        32,
+        wire::originals_request::Op::Census(wire::OriginalsCensusRead {}),
+    );
+    assert_eq!(
+        counted.kept_album_ids,
+        vec!["album-1"],
+        "the list rides every answer"
+    );
+    let census = counted
+        .census
+        .expect("this core opened its content store, so it counts");
+    assert_eq!(census.on_phone.unwrap_or_default().count, 0);
+    assert_eq!(census.kept.unwrap_or_default().count, 0);
+}
+
+/// CLAUSE 4e. An app's own query is a request kind: a weekly series written
+/// through `call` comes back from `app_query` EXPANDED by the core, one row per
+/// occurrence with its own key, and a search with no limit is refused like a
+/// page with none — `BAD_ARGUMENT` with an `INVALID_REQUEST` body.
+#[test]
+fn the_app_queries_round_trip_through_call() {
+    let opened = Opened::gateway();
+    let ask = |id: u64, query: wire::app_query_request::Query| {
+        call(
+            opened.handle,
+            &envelope(
+                id,
+                wire::request::Kind::AppQuery(wire::AppQueryRequest { query: Some(query) }),
+            ),
+        )
+    };
+    let answered = |(code, bytes): (i32, Vec<u8>)| {
+        assert_eq!(code, CENTRAID_OK, "an app query answers");
+        let Some(wire::envelope::Body::Response(response)) = answer(&bytes).body else {
+            panic!("an app query is answered by a Response");
+        };
+        let Some(wire::response::Kind::AppQuery(answered)) = response.kind else {
+            panic!("an AppQueryRequest is answered by an AppQueryResponse");
+        };
+        answered.answer.expect("an answer")
+    };
+    let upcoming = |id: u64| {
+        let wire::app_query_response::Answer::AgendaUpcoming(upcoming) = answered(ask(
+            id,
+            wire::app_query_request::Query::AgendaUpcoming(wire::AgendaUpcomingRequest {
+                from: "2099-06-01T00:00:00.000Z".to_owned(),
+                to: "2099-06-22T00:00:00.000Z".to_owned(),
+                tz: "America/New_York".to_owned(),
+            }),
+        )) else {
+            panic!("upcoming is answered as upcoming");
+        };
+        upcoming
+    };
+
+    let calendar_id = upcoming(41).calendars[0].calendar_id.clone();
+    let (code, _) = call(
+        opened.handle,
+        &envelope(
+            42,
+            wire::request::Kind::Command(wire::Command {
+                name: "schedule.propose_event".to_owned(),
+                input: serde_json::to_vec(&serde_json::json!({
+                    "summary": "Morning run",
+                    "dtstart": "2099-06-01T07:00:00.000Z",
+                    "dtend": "2099-06-01T08:00:00.000Z",
+                    "calendar_id": calendar_id,
+                    "rrule": "FREQ=WEEKLY",
+                }))
+                .expect("json"),
+                invoke_key: "contract-4e".to_owned(),
+                ..wire::Command::default()
+            }),
+        ),
+    );
+    assert_eq!(code, CENTRAID_OK, "the series is written");
+    let runs = upcoming(43).events;
+    assert_eq!(runs.len(), 3, "three weeks of a weekly series: {runs:?}");
+    let keys: std::collections::BTreeSet<&str> =
+        runs.iter().map(|run| run.instance_key.as_str()).collect();
+    assert_eq!(keys.len(), 3, "each occurrence keyed on its own wall clock");
+    // Placed by the core in the stated zone: a floating 07:00 is 07:00 there.
+    assert!(
+        runs.iter()
+            .all(|run| run.local_start.ends_with("T07:00") && run.local_days.len() == 1),
+        "{runs:?}"
+    );
+
+    let wire::app_query_response::Answer::AgendaParties(parties) = answered(ask(
+        44,
+        wire::app_query_request::Query::AgendaParties(wire::AgendaPartiesRequest {}),
+    )) else {
+        panic!("parties is answered as parties");
+    };
+    assert!(parties.parties.iter().any(|party| party.is_you));
+
+    let (code, bytes) = ask(
+        45,
+        wire::app_query_request::Query::AgendaSearch(wire::AgendaSearchRequest {
+            term: "run".to_owned(),
+            limit: 0,
+            tz: "America/New_York".to_owned(),
+        }),
+    );
+    assert_eq!(
+        code, CENTRAID_BAD_ARGUMENT,
+        "a search with no limit is refused"
+    );
+    let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
+
+    // A ZONE THIS BUILD DOES NOT KNOW is refused the same way — never answered
+    // in UTC.
+    let (code, bytes) = ask(
+        46,
+        wire::app_query_request::Query::AgendaUpcoming(wire::AgendaUpcomingRequest {
+            from: String::new(),
+            to: String::new(),
+            tz: "Mars/Olympus_Mons".to_owned(),
+        }),
+    );
+    assert_eq!(code, CENTRAID_BAD_ARGUMENT, "an unknown zone is refused");
+    let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
+}
+
+/// CLAUSE 4b, the other half. A core opened with no seed reads and writes its
+/// vault and **refuses to drain**, with a sentence naming the seed — it never
+/// invents a key file beside the vault it protects.
+#[test]
+fn a_locked_core_refuses_to_drain_rather_than_inventing_a_key() {
+    let opened = Opened::gateway();
+    let (code, bytes) = call(
+        opened.handle,
+        &envelope(
+            21,
+            wire::request::Kind::Drain(wire::DrainRequest {
+                deadline_ms: 0,
+                ..wire::DrainRequest::default()
+            }),
+        ),
+    );
+    // `CENTRAID_OK` AND A REFUSING BODY is this ABI's shape for everything
+    // that is not a decode, a bad argument, a close or a panic (`code_for`):
+    // the status says the call ran and the closed `ErrorCode` says what the
+    // answer is. What matters here is that the answer is not a `DrainResponse`.
+    assert_eq!(code, CENTRAID_OK, "the call itself ran");
+    let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    // `CoreError::Unavailable` is `ERROR_CODE_PEER_UNREACHABLE` on the wire
+    // (`crates/core/src/error.rs`), which is the sentence a member reads.
+    assert_eq!(error.code, wire::ErrorCode::PeerUnreachable as i32);
+    for beside in ["vault.scratch", "vault.spool"] {
+        assert!(
+            !opened.dir.join(beside).exists(),
+            "a refused drain made {beside} beside the vault"
+        );
+    }
+}
+
+/// CLAUSE 4c, the companion W15-D5 added. **A member compares a designed short
+/// string, not a hex id**, so the field a shell renders is pinned here.
+///
+/// It is asserted on the SHAPE rather than on a live pairing: computing one
+/// needs a laptop, and what a shell depends on is that the field exists, is a
+/// string, and is empty only when the core could not compute one — never as a
+/// stand-in for "it matched".
+#[test]
+fn the_pair_and_restore_answers_carry_a_safety_number_a_member_can_read_aloud() {
+    // The rendering is `centraid_identity`'s, over two 32-byte strings as each
+    // side holds them — the vault's identity key and the gateway
+    // certificate's pin — decoding neither (#1080, the root's ruling A17).
+    let vault_key = [0x11_u8; 32];
+    // A pin is a BLAKE3 output, and about half of those are no curve point:
+    // the function reads both as bytes, so it has a number for every pin.
+    let pin = [0xEE_u8; 32];
+    let number = centraid_identity::safety_number_of_bytes(&vault_key, &pin).grouped();
+    assert!(
+        !number.is_empty() && number.chars().any(|character| character.is_ascii_digit()),
+        "a safety number is digits a member reads out: {number:?}"
+    );
+    // BOTH ORDERS RENDER THE SAME NUMBER, which is why neither end has to be
+    // told which of them is "first".
+    assert_eq!(
+        number,
+        centraid_identity::safety_number_of_bytes(&pin, &vault_key).grouped(),
+        "the two ends would read different numbers to each other"
+    );
+
+    // AND THE FIELD IS ON BOTH ANSWERS, at the numbers a shell encodes against.
+    let paired = wire::PairResponse {
+        safety_number: number.clone(),
+        ..wire::PairResponse::default()
+    };
+    assert_eq!(paired.safety_number, number);
+    let restored = wire::RestoredVault {
+        safety_number: number.clone(),
+        ..wire::RestoredVault::default()
+    };
+    assert_eq!(restored.safety_number, number);
+    assert!(
+        wire::PairResponse::default().safety_number.is_empty(),
+        "empty is 'could not compute', and is the default rather than a sentinel"
+    );
+}
+
+/// CLAUSE 4f. The 24 words are a request kind, answered over a core that
+/// holds NO VAULT (#1047 E1).
+///
+/// A first launch mints the words before any vault exists, and a fresh
+/// install judges them before a restore lays one down — so the open here is
+/// `create: false` over a path with no file, which is a handle and a state
+/// rather than a refusal. Minted words check valid and seed to 64 bytes; a
+/// swapped last word is a checksum verdict; a `seed` over it is `BAD_ARGUMENT`
+/// with an `ERROR_CODE_INVALID_REQUEST` body that quotes no word.
+#[test]
+fn the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault() {
+    let dir = centraid_ontology::golden::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("the directory is made");
+    let config = format!(
+        r#"{{"path":{:?},"create":false}}"#,
+        dir.join("nothing-here.sqlite3").display().to_string()
+    );
+    let mut handle: *mut centraid_core::Handle = std::ptr::null_mut();
+    // SAFETY: `config` lives for the call, and `handle` is a live local.
+    let code = unsafe { centraid_open(config.as_ptr(), config.len(), &raw mut handle) };
+    assert_eq!(code, CENTRAID_OK, "a core over no vault opens: {config}");
+    assert!(
+        !dir.join("nothing-here.sqlite3").exists(),
+        "asking for the words founds nothing"
+    );
+
+    let phrase = |id: u64, op: wire::phrase_request::Op| -> (i32, wire::Envelope) {
+        let (code, bytes) = call(
+            handle,
+            &envelope(
+                id,
+                wire::request::Kind::Phrase(wire::PhraseRequest { op: Some(op) }),
+            ),
+        );
+        (code, answer(&bytes))
+    };
+    let answered = |envelope: wire::Envelope| -> wire::phrase_response::Answer {
+        let Some(wire::envelope::Body::Response(response)) = envelope.body else {
+            panic!("a phrase request is answered by a Response");
+        };
+        let Some(wire::response::Kind::Phrase(phrase)) = response.kind else {
+            panic!("a PhraseRequest is answered by a PhraseResponse");
+        };
+        phrase.answer.expect("an answer")
+    };
+
+    let (code, minted) = phrase(1, wire::phrase_request::Op::Mint(wire::PhraseMint {}));
+    assert_eq!(code, CENTRAID_OK);
+    let wire::phrase_response::Answer::Minted(minted) = answered(minted) else {
+        panic!("mint answers words");
+    };
+    assert_eq!(minted.words.len(), 24);
+
+    let (code, checked) = phrase(
+        2,
+        wire::phrase_request::Op::Check(wire::PhraseCheck {
+            words: minted.words.clone(),
+        }),
+    );
+    assert_eq!(code, CENTRAID_OK);
+    let wire::phrase_response::Answer::Checked(checked) = answered(checked) else {
+        panic!("check answers a verdict");
+    };
+    assert_eq!(checked.verdict, wire::phrase_checked::Verdict::Valid as i32);
+    assert_eq!(checked.words.len(), 24);
+
+    let (code, seeded) = phrase(
+        3,
+        wire::phrase_request::Op::Seed(wire::PhraseSeed {
+            words: minted.words.clone(),
+        }),
+    );
+    assert_eq!(code, CENTRAID_OK);
+    let wire::phrase_response::Answer::Seeded(seeded) = answered(seeded) else {
+        panic!("seed answers bytes");
+    };
+    assert_eq!(seeded.seed.len(), centraid_core::SEED_BYTES);
+    assert_eq!(
+        seeded.seed[..],
+        centraid_identity::RecoveryPhrase::parse(&minted.words.join(" "))
+            .expect("the minted words parse")
+            .seed()
+            .as_bytes()[..],
+        "the seed is the one the identity crate derives from the same words"
+    );
+
+    // THE BIP39 VECTOR WITH ITS LAST WORD SWAPPED: every word a list word, the
+    // checksum open. Judged, then refused as a seed with no word in the body.
+    let mut swapped = vec!["abandon".to_owned(); 23];
+    swapped.push("zoo".to_owned());
+    let (_, checked) = phrase(
+        4,
+        wire::phrase_request::Op::Check(wire::PhraseCheck {
+            words: swapped.clone(),
+        }),
+    );
+    let wire::phrase_response::Answer::Checked(checked) = answered(checked) else {
+        panic!("check answers a verdict");
+    };
+    assert_eq!(
+        checked.verdict,
+        wire::phrase_checked::Verdict::BadChecksum as i32
+    );
+    let (code, refused) = phrase(
+        5,
+        wire::phrase_request::Op::Seed(wire::PhraseSeed { words: swapped }),
+    );
+    assert_eq!(
+        code, CENTRAID_BAD_ARGUMENT,
+        "a phrase that is not one is refused"
+    );
+    let Some(wire::envelope::Body::Error(error)) = refused.body else {
+        panic!("a refusal comes back as an Error body");
+    };
+    assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
+    assert!(
+        !error.detail.contains("abandon") && !error.detail.contains("zoo"),
+        "a refusal names no word: {}",
+        error.detail
+    );
+
+    // SAFETY: the handle came from `centraid_open` and is closed once.
+    unsafe { centraid_close(handle) };
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// CLAUSE 4g. The backup plane's doors are request kinds (#1080), and over a
+/// core paired with nothing each is an ANSWER a shell draws — nothing to hand
+/// off, nothing settled, no pin, no gateway reached — never a hang and never
+/// an empty answer pretending to be one. The stage door's v2 sources stage.
+#[test]
+fn the_backup_plane_doors_are_request_kinds_and_answer_an_unpaired_phone() {
+    let opened = Opened::unlocked();
+    let answered = |id: u64, door: wire::request::Kind| {
+        let (code, bytes) = call(opened.handle, &envelope(id, door.clone()));
+        assert_eq!(code, CENTRAID_OK, "{door:?}");
+        let Some(wire::envelope::Body::Response(response)) = answer(&bytes).body else {
+            panic!("{door:?} is answered by a Response");
+        };
+        response.kind.expect("an answer has a kind")
+    };
+    let Some(wire::response::Kind::Handoff(handoff)) = Some(answered(
+        41,
+        wire::request::Kind::Handoff(wire::HandoffRequest {
+            max_bytes: 8 << 20,
+            max_parts: 16,
+        }),
+    )) else {
+        panic!("a handoff answers");
+    };
+    assert!(handoff.parts.is_empty(), "nothing is paired to hand off to");
+    let Some(wire::response::Kind::Settle(settled)) = Some(answered(
+        42,
+        wire::request::Kind::Settle(wire::SettleRequest {
+            settled: vec![wire::Settled {
+                name: "ab".repeat(32),
+                http_status: 201,
+                ..wire::Settled::default()
+            }],
+        }),
+    )) else {
+        panic!("a settle answers");
+    };
+    assert_eq!((settled.confirmed, settled.requeued), (0, 0));
+    let Some(wire::response::Kind::Pins(pins)) = Some(answered(
+        43,
+        wire::request::Kind::Pins(wire::PinsRequest {}),
+    )) else {
+        panic!("pins answer");
+    };
+    assert!(pins.destinations.is_empty());
+    let Some(wire::response::Kind::Reconcile(reconciled)) = Some(answered(
+        44,
+        wire::request::Kind::Reconcile(wire::ReconcileRequest {}),
+    )) else {
+        panic!("a reconcile answers");
+    };
+    assert!(!reconciled.reachable);
+    let Some(wire::response::Kind::ForgetDestination(forgot)) = Some(answered(
+        45,
+        wire::request::Kind::ForgetDestination(wire::ForgetDestinationRequest {
+            gateway_id: "a-gateway".to_owned(),
+        }),
+    )) else {
+        panic!("a forget answers");
+    };
+    assert!(!forgot.forgotten);
+    let Some(wire::response::Kind::Releasable(releasable)) = Some(answered(
+        46,
+        wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 10 }),
+    )) else {
+        panic!("releasable answers");
+    };
+    assert!(releasable.items.is_empty());
+    let Some(wire::response::Kind::Released(released)) = Some(answered(
+        47,
+        wire::request::Kind::Released(wire::ReleasedRequest {
+            content_hash: vec![vec![7; 32]],
+        }),
+    )) else {
+        panic!("released answers");
+    };
+    assert_eq!(released.recorded, 0);
+
+    // THE REQUEST'S OWN REFUSALS: a zero limit, a hash that is not 32 bytes.
+    for (id, door) in [
+        (
+            48,
+            wire::request::Kind::Handoff(wire::HandoffRequest::default()),
+        ),
+        (
+            49,
+            wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
+                content_hash: vec![0xAB; 3],
+            }),
+        ),
+    ] {
+        let (code, bytes) = call(opened.handle, &envelope(id, door.clone()));
+        assert_eq!(code, CENTRAID_BAD_ARGUMENT, "{door:?}");
+        let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+            panic!("{door:?} is refused with an Error body");
+        };
+        assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
+    }
 }

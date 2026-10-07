@@ -28,8 +28,8 @@ const ruleKey = (lang, id) => `${lang}:${id}`;
 /**
  * Globs excluded from source analysis (Autoscan UI/API supports wildcards).
  *
- * Product signal lives under crates/, mobile/, desktop/, extension/ and
- * packages/* (minus generated/harness).
+ * Product signal lives under crates/, mobile/ and packages/* (minus
+ * generated/harness).
  * Tooling is owned elsewhere: oxlint/knip for scripts, actionlint+CodeQL for
  * .github, Vitest for tests. Sonar way fails PRs on *any* new BUG/VULNERABILITY
  * in scanned new code — keep non-product paths out so hygiene-only PRs do not
@@ -52,6 +52,10 @@ const SOURCE_EXCLUSIONS = [
   "packages/test-kit/**",
   "packages/**/dist/**",
   "**/*.wasm",
+  // SQLite DDL: Autoscan applies Oracle PL/SQL rules, and the three DDL
+  // snapshots (copies of one schema) dominate CPD. SQL is owned by the ladder
+  // and baseline tests and `cargo xtask rules`' sql-confinement.
+  "**/*.sql",
   "**/*.map",
   "receipts/**",
   "docs/**",
@@ -153,6 +157,19 @@ const NOISE_RULES = [
   ruleKey("githubactions", "S8233"), // workflow-level permissions (reviewed)
 ];
 
+/** Rules silenced on one path only: a known false positive in a file set. */
+const SCOPED_IGNORES = [
+  // Copy registry: `*_PASSWORD` names are UI copy keys whose values are
+  // sentences, checked against copy/<app>.json by KitTimeMoneyCopySpec.
+  {
+    ruleKey: "kotlin:S2068",
+    resourceKey:
+      "mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/**",
+  },
+  // Gradle root resolves nothing, so no lockfile; resolving projects commit one.
+  { ruleKey: "text:S8569", resourceKey: "mobile/build.gradle.kts" },
+];
+
 const GATE_CONDITIONS = [
   { metric: "new_security_rating", op: "GT", error: "1" },
   { metric: "new_reliability_rating", op: "GT", error: "1" },
@@ -240,13 +257,16 @@ async function setMulti(key, values) {
 }
 
 /**
- * Apply issue-ignore multicriteria for all noise rules.
+ * Apply issue-ignore multicriteria for all noise rules and scoped ignores.
  * @returns {Promise<void>}
  */
 async function setMulticriteria() {
-  const fieldValues = NOISE_RULES.map((rule) =>
-    JSON.stringify({ ruleKey: rule, resourceKey: "**/*" })
-  );
+  const fieldValues = [
+    ...NOISE_RULES.map((rule) =>
+      JSON.stringify({ ruleKey: rule, resourceKey: "**/*" })
+    ),
+    ...SCOPED_IGNORES.map((entry) => JSON.stringify(entry)),
+  ];
   const { status, json } = await api("POST", "/settings/set", {
     component: PROJECT,
     key: "sonar.issue.ignore.multicriteria",
@@ -257,7 +277,9 @@ async function setMulticriteria() {
       `multicriteria failed HTTP ${status}: ${JSON.stringify(json)}`
     );
   }
-  console.log(`  multicriteria: ${NOISE_RULES.length} rules (HTTP ${status})`);
+  console.log(
+    `  multicriteria: ${fieldValues.length} entries (HTTP ${status})`
+  );
 }
 
 /**

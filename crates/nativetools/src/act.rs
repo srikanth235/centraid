@@ -2561,26 +2561,13 @@ impl Session {
             ));
         };
         let key_id = row.extra.get("key_id").cloned().unwrap_or_default();
-        let vault_id = self
-            .handle
-            .vault
-            .vault_id()
-            .map_err(|e| e.to_string())?
-            .unwrap_or_default();
-        let custody = centraid_vault::custody::MemberKeyCustody::on_seat(
-            &crate::vaultio::seat_dir(&self.handle.path),
-            vault_id,
-        );
-        let secret = custody
-            .load(&key_id)
-            .map_err(|error| error.to_string())
-            .and_then(|bytes| {
-                centraid_vault::custody::locker_key::decrypt_under_locker_key(
-                    &bytes, &key_id, &row.id, &sealed,
-                )
-                .map_err(|error| error.to_string())
-            })
-            .map_err(|error| format!("error: this seat cannot open the secret: {error}"))?;
+        let secret = centraid_vault::custody::locker_key::decrypt_under_locker_key(
+            crate::vaultio::HARNESS_LOCKER_KEY,
+            &key_id,
+            &row.id,
+            &sealed,
+        )
+        .map_err(|error| format!("error: this seat cannot open the secret: {error}"))?;
         let name = self.named(&key);
         Ok(Plan::Run {
             steps: vec![Step {

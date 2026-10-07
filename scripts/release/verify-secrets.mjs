@@ -24,7 +24,6 @@ const MOBILE = [
   "APPLE_API_ISSUER_ID",
   "APPLE_API_PRIVATE_KEY",
 ];
-const WEB = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"];
 /** GHCR uses GITHUB_TOKEN + packages:write in Actions; local probe is informational. */
 const GATEWAY_IMAGE = ["GITHUB_TOKEN"];
 
@@ -32,7 +31,6 @@ const groups = {
   "desktop-apple": DESKTOP_APPLE,
   "desktop-azure": DESKTOP_AZURE,
   mobile: MOBILE,
-  web: WEB,
   "gateway-image": GATEWAY_IMAGE,
 };
 

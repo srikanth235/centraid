@@ -44,13 +44,14 @@ fn the_ddl_fixture_still_describes_the_corpus() {
     let golden = open_golden().expect("the corpus inflates");
     let vault = Vault::open(golden.db_path()).expect("the corpus opens");
     let live = ddl_fixture(&vault).expect("the DDL renders");
-    let fixture = std::fs::read_to_string(repo_root().join("contracts/schema/vault-ddl.sql"))
-        .expect("the DDL fixture is committed");
+    let fixture =
+        std::fs::read_to_string(repo_root().join("contracts/golden/issue-1020/vault-ddl.sql"))
+            .expect("the DDL fixture is committed");
     assert_eq!(
         first_difference(&fixture, &live),
         None,
         "regenerate with: cargo run -p centraid-ontology --bin export-ddl -- \
-         contracts/golden/issue-1020/vault.db.gz > contracts/schema/vault-ddl.sql"
+         contracts/golden/issue-1020/vault.db.gz > contracts/golden/issue-1020/vault-ddl.sql"
     );
 }
 
@@ -58,8 +59,9 @@ fn the_ddl_fixture_still_describes_the_corpus() {
 fn the_ddl_fixture_is_not_vacuous() {
     // A fixture that rendered to its header alone would compare equal to a
     // vault with no schema, which is the one way this gate could pass for free.
-    let fixture = std::fs::read_to_string(repo_root().join("contracts/schema/vault-ddl.sql"))
-        .expect("the DDL fixture is committed");
+    let fixture =
+        std::fs::read_to_string(repo_root().join("contracts/golden/issue-1020/vault-ddl.sql"))
+            .expect("the DDL fixture is committed");
     let statements = fixture.matches("\nCREATE ").count();
     assert!(
         statements > 500,

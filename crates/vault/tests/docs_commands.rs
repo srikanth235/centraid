@@ -1,4 +1,5 @@
-//! THE SIXTEEN `core.*` COMMANDS DOCS WRITES THROUGH (#1020 slot 4b).
+//! THE `core.*` COMMANDS DOCS WRITES THROUGH (#1020 slot 4b; #1047 added
+//! `core.purge_document` and `core.create_text_document`).
 //!
 //! `crates/vault/tests/tally_commands.rs` replays a generated script and
 //! compares rows; this suite is the other half of the same proof — the
@@ -15,8 +16,9 @@
 //!    occurrences, a restore is a new FORWARD one, and a content id from
 //!    another document's history is refused by name.
 //! 4. **The trash keeps the folder and the star**, so a restore lands where it
-//!    was; and `empty_document_trash` collapses a window rather than deleting
-//!    anything.
+//!    was; and "Delete forever" and "Empty trash" destroy through the path
+//!    Photos' purge takes (ruling D-1 of 2026-09-25): the row, its tags and its
+//!    versions go, and bytes nothing else names are released.
 //! 5. **A refusal is receipted, not thrown.** Every gate below is asserted
 //!    through `Vault::execute`'s own answer, which is the shape a surface
 //!    renders.
@@ -25,8 +27,9 @@ mod common;
 
 use centraid_media::format::content_hash_hex;
 use centraid_vault::access::Principal;
-use centraid_vault::backup::store::{BlobStore, FsBlobStore, digest};
+use centraid_vault::bytes::{BlobStore, FsBlobStore};
 use centraid_vault::commands::Registry;
+use centraid_vault::content::content_digest as digest;
 use centraid_vault::{Command, CommandOutcome, CommandStatus, Vault};
 use serde_json::{Value, json};
 
@@ -577,9 +580,9 @@ fn history_never_rewrites_and_a_version_belongs_to_one_document() {
 }
 
 /// THE TRASH KEEPS THE FOLDER AND THE STAR, so a restore lands where it was —
-/// and `empty_document_trash` collapses a window rather than destroying a row.
+/// and `empty_document_trash` destroys what is in it (D-1, 2026-09-25).
 #[test]
-fn the_trash_keeps_its_filing_and_emptying_it_collapses_a_window() {
+fn the_trash_keeps_its_filing_and_emptying_it_destroys() {
     let drive = Drive::open("docs-trash");
     let folder = drive.run("core.create_folder", json!({ "name": "Taxes" }));
     let folder_id = folder["folder_id"].as_str().expect("an id").to_owned();
@@ -656,32 +659,168 @@ fn the_trash_keeps_its_filing_and_emptying_it_collapses_a_window() {
         .expect("still filed");
     assert_eq!(filed, folder_id);
 
-    // EMPTYING THE TRASH IS A DATE. Trash it again, empty, and the window is
-    // collapsed onto the row's own `deleted_at` — a moment provably past.
+    // EMPTYING THE TRASH DESTROYS (D-1, 2026-09-25). Trash it again beside a
+    // live one, empty, and the trashed row is gone with every tag on it while
+    // the live one is untouched.
+    let kept = drive.run(
+        "core.add_document",
+        json!({ "title": "Lease", "data_uri": text_uri("twelve months") }),
+    );
+    let kept_id = kept["document_id"].as_str().expect("an id").to_owned();
     drive.run("core.trash_document", json!({ "document_id": document_id }));
     let emptied = drive.run("core.empty_document_trash", json!({}));
     assert_eq!(emptied["documents_released"], json!(1));
+    assert_eq!(emptied["content_released"], json!(1));
     assert_eq!(
         drive.count(
-            "SELECT COUNT(*) FROM core_document
-              WHERE document_id = ?1 AND purge_at = deleted_at",
+            "SELECT COUNT(*) FROM core_document WHERE document_id = ?1",
             &[&document_id]
         ),
-        1
+        0
     );
-    // NOTHING WAS DELETED HERE — the sweep is the only thing that destroys a
-    // document, and it has not run.
-    assert_eq!(drive.count("SELECT COUNT(*) FROM core_document", &[]), 1);
-    // A RESTORE PAST THE WINDOW REFUSES (#916 review 1.5), compared against the
-    // invocation's own instant.
-    let refused = drive.try_run(
-        "core.restore_document",
-        json!({ "document_id": document_id }),
+    assert_eq!(
+        drive.count(
+            "SELECT COUNT(*) FROM core_tag WHERE target_type = 'core.document' AND target_id = ?1",
+            &[&document_id]
+        ),
+        0,
+        "the folder tag and the star went with it"
     );
-    assert_eq!(refused.predicate.as_deref(), Some("document_in_trash"));
+    assert_eq!(
+        drive.count(
+            "SELECT COUNT(*) FROM core_document WHERE document_id = ?1 AND deleted_at IS NULL",
+            &[&kept_id]
+        ),
+        1,
+        "a live document is not in the trash and is untouched"
+    );
+    // THE FOLDER IS EMPTY NOW, SO IT DELETES.
+    drive.run("core.delete_folder", json!({ "folder_id": folder_id }));
     // AN EMPTY TRASH IS A NO-OP THAT STILL EXECUTES, never a refusal.
     let again = drive.run("core.empty_document_trash", json!({}));
-    assert_eq!(again["documents_released"], json!(1), "the same row, again");
+    assert_eq!(again["documents_released"], json!(0));
+}
+
+/// "DELETE FOREVER" ON ONE DOCUMENT (D-1, 2026-09-25): only a trashed one; the
+/// row, its versions and its representation go; bytes nothing else names are
+/// released, and bytes another document still names are not.
+#[test]
+fn purging_a_document_destroys_it_and_releases_only_its_own_bytes() {
+    let drive = Drive::open("docs-purge");
+    let added = drive.run(
+        "core.add_document",
+        json!({ "title": "Notes", "data_uri": text_uri("first") }),
+    );
+    let document_id = added["document_id"].as_str().expect("an id").to_owned();
+    drive.run(
+        "core.edit_document",
+        json!({ "document_id": document_id, "body_text": "second" }),
+    );
+    // A SECOND DOCUMENT OVER THE FIRST VERSION'S BYTES: those stay rented.
+    drive.run(
+        "core.add_document",
+        json!({ "title": "Copy", "data_uri": text_uri("first") }),
+    );
+
+    // A LIVE DOCUMENT IS REFUSED BY NAME.
+    let refused = drive.try_run("core.purge_document", json!({ "document_id": document_id }));
+    assert_eq!(refused.predicate.as_deref(), Some("document_is_trashed"));
+
+    drive.run("core.trash_document", json!({ "document_id": document_id }));
+    let purged = drive.run("core.purge_document", json!({ "document_id": document_id }));
+    assert_eq!(
+        purged["content_released"],
+        json!(1),
+        "the second version's bytes are released; the first's are still the copy's"
+    );
+    for (sql, what) in [
+        (
+            "SELECT COUNT(*) FROM core_document WHERE document_id = ?1",
+            "the row",
+        ),
+        (
+            "SELECT COUNT(*) FROM core_entity_revision
+              WHERE entity_type = 'core.document' AND entity_id = ?1",
+            "its versions",
+        ),
+        (
+            "SELECT COUNT(*) FROM core_content_representation
+              WHERE owner_type = 'core.document' AND owner_id = ?1",
+            "its reading of the bytes",
+        ),
+    ] {
+        assert_eq!(drive.count(sql, &[&document_id]), 0, "{what}");
+    }
+    assert_eq!(
+        drive.count(
+            "SELECT COUNT(*) FROM core_content_item
+              WHERE deleted_at IS NOT NULL AND purge_at IS NOT NULL",
+            &[]
+        ),
+        1,
+        "one content item released, with its purge date now"
+    );
+    // A SECOND PURGE OF THE SAME ID IS REFUSED — there is nothing in the trash.
+    let refused = drive.try_run("core.purge_document", json!({ "document_id": document_id }));
+    assert_eq!(refused.predicate.as_deref(), Some("document_is_trashed"));
+}
+
+/// THE ADD SHEET'S "TEXT" (#1047): a text document from words, with no `data:`
+/// URI in the caller — empty when no body is given, filed at the top level or
+/// in the folder named, and editable as any text document is.
+#[test]
+fn a_text_document_is_created_from_words() {
+    let drive = Drive::open("docs-create-text");
+    let folder = drive.run("core.create_folder", json!({ "name": "Drafts" }));
+    let folder_id = folder["folder_id"].as_str().expect("an id").to_owned();
+    let empty = drive.run(
+        "core.create_text_document",
+        json!({ "title": "Untitled", "folder_id": folder_id }),
+    );
+    let empty_id = empty["document_id"].as_str().expect("an id").to_owned();
+    assert_eq!(
+        drive.text(
+            "SELECT t.body_text FROM core_document d
+               JOIN core_content_text t ON t.content_id = d.current_content_id
+              WHERE d.document_id = ?1",
+            &[&empty_id]
+        ),
+        Some(String::new()),
+        "an empty document is a real, empty text"
+    );
+    drive.run(
+        "core.edit_document",
+        json!({ "document_id": empty_id, "body_text": "Now with words" }),
+    );
+
+    let markdown = drive.run(
+        "core.create_text_document",
+        json!({ "title": "Plan", "media_type": "text/markdown", "body_text": "# Plan & more" }),
+    );
+    let markdown_id = markdown["document_id"].as_str().expect("an id").to_owned();
+    assert_eq!(
+        drive.text(
+            "SELECT media_type FROM core_content_representation
+              WHERE owner_type = 'core.document' AND owner_id = ?1",
+            &[&markdown_id]
+        ),
+        Some("text/markdown".to_owned())
+    );
+    assert_eq!(
+        drive.text(
+            "SELECT t.body_text FROM core_document d
+               JOIN core_content_text t ON t.content_id = d.current_content_id
+              WHERE d.document_id = ?1",
+            &[&markdown_id]
+        ),
+        Some("# Plan & more".to_owned())
+    );
+    // A FOLDER THAT IS NOT ONE IS REFUSED BY NAME.
+    let refused = drive.try_run(
+        "core.create_text_document",
+        json!({ "title": "Lost", "folder_id": "no-such-folder" }),
+    );
+    assert_eq!(refused.predicate.as_deref(), Some("folder_exists_if_given"));
 }
 
 /// FILING IS ONE TAG. A move REPLACES, and the folder plane's own rules —
@@ -975,4 +1114,52 @@ fn the_byte_source_gates_each_refuse_by_name() {
 fn base64_of(bytes: &[u8]) -> String {
     use base64::Engine as _;
     base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+/// A FILED DOCUMENT IS STAMPED BY THE VAULT CLOCK. The first-occurrence
+/// pointer used to land in a second `UPDATE` whose `updated_at` did not move,
+/// which is exactly when `core_document_touch_updated_at` writes SQLite's host
+/// `'now'` over the injected instant (QUALITY.md, #1046). The clock here is
+/// frozen at 2026-01-01, which no host is.
+#[test]
+fn a_filed_documents_updated_at_is_the_vault_clock() {
+    let drive = Drive::open("docs-clock");
+    let added = drive.run(
+        "core.add_document",
+        json!({ "title": "Lease", "data_uri": text_uri("rent") }),
+    );
+    let document_id = added["document_id"].as_str().expect("an id").to_owned();
+    let now = drive.vault().clock().now_text();
+    assert_eq!(
+        drive
+            .text(
+                "SELECT updated_at FROM core_document WHERE document_id = ?1",
+                &[&document_id]
+            )
+            .as_deref(),
+        Some(now.as_str())
+    );
+    assert_eq!(
+        drive.count(
+            "SELECT COUNT(*) FROM core_document
+              WHERE document_id = ?1 AND current_revision_id IS NOT NULL AND row_version = 1",
+            &[&document_id]
+        ),
+        1,
+        "the head is written with the row, in one statement"
+    );
+}
+
+/// EMPTYING THE DOCS TRASH SAYS WHAT IT DOES: it destroys (D-1, 2026-09-25),
+/// and the schema every caller reads no longer says "not yet".
+#[test]
+fn empty_document_trash_states_that_it_destroys() {
+    let registry = Registry::with_system_commands().expect("the registry builds");
+    let schema = registry
+        .get("core.empty_document_trash")
+        .expect("registered")
+        .schema();
+    let description = schema["description"].as_str().unwrap_or_default();
+    assert!(description.contains("destroyed"), "{description}");
+    assert!(!description.contains("not yet"), "{description}");
 }

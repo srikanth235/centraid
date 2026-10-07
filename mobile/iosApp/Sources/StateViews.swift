@@ -23,108 +23,24 @@ import SwiftProtobuf
 /// before the bridge has published anything, and an empty `.data` case in its
 /// place would be a screen claiming an empty vault before it had read one.
 
-/// Loading, a failure with a sentence, or data. Three cases, always.
-enum ScreenContent<Value> {
-    case loading(Bool)
-    case failure(String, String)
-    case data(Value)
-}
-
-struct TallyRowView: Hashable {
-    let identifier: String
-    let description: String
-    let amount: String
-    let pending: Bool
-}
+// `ScreenContent` lives in `Kit/ScreenContent.swift` (K5).
 
 struct BandView: Hashable {
     let label: String
     let event: Data
+    /// The catalog mark a drawn band shows above the label; empty draws none.
+    var iconKey: String = ""
+    /// Whether this is the destination on screen — read off the state, never
+    /// written down by the view that draws it.
+    var selected: Bool = false
 }
 
-struct TallyListStateView {
-    let data: Data
-
-    private var state: Centraid_Screen_V1_TallyListState {
-        (try? Centraid_Screen_V1_TallyListState(serializedBytes: data)) ?? .init()
-    }
-
-    /// The list's own destinations, in the order the screen names them.
-    ///
-    /// **A BAND DESTINATION IS A PARAMETER, NOT A SECOND SCREEN** — so each of these carries a
-    /// `DestinationChanged` for the SAME machine, and never a route.
-    var bands: [BandView] {
-        [
-            (Centraid_Screen_V1_TallyListState.Destination.activity, "Activity"),
-            (.balances, "Balances"),
-            (.groups, "Groups"),
-        ].map { destination, label in
-            var event = Centraid_Screen_V1_TallyListEvent()
-            event.destination = .with { $0.destination = destination }
-            return BandView(label: label, event: event.encoded)
-        }
-    }
-
-    var content: ScreenContent<[TallyRowView]> {
-        let state = self.state
-        switch state.content {
-        case let .failure(failure):
-            return .failure(failure.sentence, failure.remedy)
-        case let .data(data):
-            // THE PENDING SET IS THE STATE'S, not the row's: a write in flight
-            // is the screen's knowledge and never a column in the vault.
-            let pending = Set(state.pendingExpenseIds)
-            return .data(
-                data.rows.map { row in
-                    TallyRowView(
-                        identifier: row.expenseID,
-                        description: row.description_p,
-                        amount: row.amount.spelled,
-                        pending: pending.contains(row.expenseID)
-                    )
-                }
-            )
-        // `loading`, and the `nil` a message with no content set decodes to,
-        // are the SAME screen — a state that has not read yet. Collapsing them
-        // into `.data([])` is the fourth state the read law forbids.
-        case let .loading(loading):
-            return .loading(loading.firstLoad)
-        case .none:
-            return .loading(true)
-        }
-    }
-
-    var recurringWithheld: Bool { state.recurringMaterialisationWithheld }
-
-    var refreshEvent: Data {
-        var event = Centraid_Screen_V1_TallyListEvent()
-        event.refreshed = .init()
-        return event.encoded
-    }
-}
-
-struct PhotoCellView: Hashable {
-    let identifier: String
-    let thumbnailPath: String?
-    /// WHAT THIS DEVICE HAS OF THIS PHOTOGRAPH (#1025 S5, D-1025-S7-62).
-    ///
-    /// The read derives it; this view carries it. A closed enum and not three
-    /// booleans, so a cell cannot be two states at once and draw two
-    /// affordances.
-    let held: Centraid_Screen_V1_PhotoCell.Held
-    /// The ORIGINAL's hash — what the download arrow asks for. Empty when this
-    /// replica has no live content row naming one, in which case no arrow is
-    /// drawn, because an affordance nothing can serve is worse than none.
-    let originalHash: String
-
-    /// The member's own rule is why the original is not here, and there is
-    /// something to ask for. The one state that carries the arrow.
-    var offersDownload: Bool {
-        held == .withheldByRule && !originalHash.isEmpty
-    }
-
-    var isFetching: Bool { held == .fetching }
-}
+// `PhotoCellView` IS GONE, AND WITH IT THE SECOND DERIVATION (#1029, photos
+// port). It restated `held`, `originalHash` and the `offersDownload` rule that
+// `PhotoCells.swift` now owns for every surface that draws photographs — and a
+// second spelling of "which cell gets the download arrow" is a second answer
+// waiting to disagree with the first. The views take the WIRE TYPE, which is
+// already decoded by the time a screen has a data case.
 
 struct PhotosGridStateView {
     let data: Data
@@ -133,41 +49,56 @@ struct PhotosGridStateView {
         (try? Centraid_Screen_V1_PhotosGridState(serializedBytes: data)) ?? .init()
     }
 
+    /// v0's three places, in v0's order and with v0's marks
+    /// (`photos-band.ts`): Library first, because the band is judged by how
+    /// few taps the timeline costs. More is not among them — it opens a sheet,
+    /// so the band draws it as its own bordered square.
+    ///
+    /// **"Collections", not "Albums".** The label once said Albums over a page
+    /// titled Collections that has an Albums section of its own, so one word
+    /// named two different things on one screen.
+    /// The event that moves the grid to `destination` — the band's own, and
+    /// the one the search bar's close sends to put the band back.
+    static func destinationEvent(_ destination: Centraid_Screen_V1_PhotosGridState.Destination) -> Data {
+        var event = Centraid_Screen_V1_PhotosGridEvent()
+        event.destination = .with { $0.destination = destination }
+        return event.encoded
+    }
+
     var bands: [BandView] {
-        [
-            (Centraid_Screen_V1_PhotosGridState.Destination.library, "Library"),
-            (.collections, "Albums"),
-            (.search, "Search"),
-        ].map { destination, label in
+        let current = destination
+        return [
+            (Centraid_Screen_V1_PhotosGridState.Destination.library, "Library", "Image"),
+            (.collections, "Collections", "Layers"),
+            (.search, "Search", "Search"),
+        ].map { destination, label, iconKey in
             var event = Centraid_Screen_V1_PhotosGridEvent()
             event.destination = .with { $0.destination = destination }
-            return BandView(label: label, event: event.encoded)
+            return BandView(
+                label: label,
+                event: event.encoded,
+                iconKey: iconKey,
+                // `unspecified` IS the library: the machine opens there, and a
+                // band with nothing lit would be a band saying "nowhere".
+                selected: destination == current
+                    || (destination == .library && current == .unspecified)
+            )
         }
     }
 
-    var content: ScreenContent<([PhotoCellView], Bool)> {
+    /// The cells, AS THE WIRE HOLDS THEM, and whether this device has a
+    /// thumbnail pack at all.
+    ///
+    /// No per-cell struct in between: `PhotoCellsGrid` renders
+    /// `Centraid_Screen_V1_PhotoCell` directly, so a mapping step here would
+    /// decode a message that is already decoded and give the held derivation a
+    /// second home.
+    var content: ScreenContent<([Centraid_Screen_V1_PhotoCell], Bool)> {
         switch state.content {
         case let .failure(failure):
             return .failure(failure.sentence, failure.remedy)
         case let .data(data):
-            return .data(
-                (
-                    data.cells.map { cell in
-                        // ABSENT IS A REAL ANSWER and the empty string is not
-                        // one: `thumbnail_path` is `optional` in the schema, so
-                        // `hasThumbnailPath` is the question, and a cell with no
-                        // path draws one of the two empty-cell sentences rather
-                        // than an image at "".
-                        PhotoCellView(
-                            identifier: cell.assetID,
-                            thumbnailPath: cell.hasThumbnailPath ? cell.thumbnailPath : nil,
-                            held: cell.held,
-                            originalHash: cell.originalHash
-                        )
-                    },
-                    data.thumbnailPackAbsent
-                )
-            )
+            return .data((data.cells, data.thumbnailPackAbsent))
         case let .loading(loading):
             return .loading(loading.firstLoad)
         case .none:
@@ -180,11 +111,11 @@ struct PhotosGridStateView {
     /// Both ids, because they answer two different questions: the hash
     /// addresses the bytes and the asset id is what the grid keys the cell by,
     /// so the reducer can start that one spinner without a round trip.
-    func fetchEvent(for cell: PhotoCellView) -> Data {
+    func fetchEvent(assetIdentifier: String, contentHash: String) -> Data {
         var event = Centraid_Screen_V1_PhotosGridEvent()
         event.fetchOriginal = .with {
-            $0.assetID = cell.identifier
-            $0.contentHash = cell.originalHash
+            $0.assetID = assetIdentifier
+            $0.contentHash = contentHash
         }
         return event.encoded
     }
@@ -205,21 +136,21 @@ struct PhotosGridStateView {
             // member watching a roll upload saw a number shrink with nothing to
             // say how much had been done, and a backup near the end and a backup
             // that had barely started both read as a small number.
-            return "Backing up: \(done) done, \(left) to go"
+            return "Importing: \(done) done, \(left) to go"
         case .enumerating:
             return "Looking through your camera roll."
         case .waitingForPower:
-            return waiting(done: done, left: left, "Centraid backs these up when this phone is charging.")
+            return waiting(done: done, left: left, "Centraid imports these when this phone is charging.")
         case .waitingForUnmetered:
-            return waiting(done: done, left: left, "Centraid backs these up on Wi-Fi.")
+            return waiting(done: done, left: left, "Centraid imports these on Wi-Fi.")
         case .parkedLowDisk:
-            return "Centraid has paused the backup."
+            return "Centraid has paused the import."
         case .done:
             return done > 0
-                ? "Your camera roll is backed up \u{2014} \(done) this time."
-                : "Your camera roll is backed up."
+                ? "Your camera roll is in your vault \u{2014} \(done) this time."
+                : "Your camera roll is in your vault."
         case .idle, .unspecified, .UNRECOGNIZED:
-            return "Camera roll backup is off."
+            return "Camera roll import is off."
         }
     }
 
@@ -272,6 +203,29 @@ struct PhotosGridStateView {
         event.permissionRequested = .init()
         return event.encoded
     }
+
+    /// WHICH SHEET IS OPEN, if one is.
+    ///
+    /// It was set and never read: `moreSheetEvent` moved the state and nothing
+    /// on either shell drew anything, so the `···` on the band was a control
+    /// that reduced correctly and did nothing a member could see.
+    var sheet: Centraid_Screen_V1_PhotosGridState.Sheet { state.sheet }
+
+    /// WHICH BAND IS SHOWING. A PARAMETER, NOT A SECOND SCREEN (law 2).
+    ///
+    /// The three destinations are one screen with one state; moving between
+    /// them is not a push, so back does not walk through the bands a member
+    /// happened to tap. `PhotosGridView` reads this to decide which BODY to
+    /// draw — the library grid, Collections or Search — which is why there is
+    /// no `Destination.PhotosCollections` in `nav/Navigation.kt` and never
+    /// will be.
+    var destination: Centraid_Screen_V1_PhotosGridState.Destination { state.destination }
+
+    func sheetEvent(_ sheet: Centraid_Screen_V1_PhotosGridState.Sheet) -> Data {
+        var event = Centraid_Screen_V1_PhotosGridEvent()
+        event.sheet = .with { $0.sheet = sheet }
+        return event.encoded
+    }
 }
 
 struct NoteDraftView {
@@ -312,21 +266,12 @@ struct NotesEditorStateView {
         }
     }
 
-    /// What the line above the editor says about the save.
+    /// THE AUTOSAVE, AS THE MACHINE HOLDS IT — `AutosaveStatus` draws it.
     ///
-    /// A member needs to know whether their words are safe, and the five
-    /// answers are genuinely different: nothing to do, not yet sent, going,
-    /// queued for a gateway this seat cannot reach, and refused.
-    var saveLabel: String {
-        switch state.save {
-        case .clean: return "Saved"
-        case .dirty: return "Unsaved changes"
-        case .saving: return "Saving"
-        case .queued: return "Waiting for your gateway"
-        case .refused: return "Not saved"
-        case .unspecified, .UNRECOGNIZED: return ""
-        }
-    }
+    /// The explicit Save went with #1015 D3 (close = done), and with it the
+    /// five-word `saveLabel` over `save`, including its `.queued` "Waiting for
+    /// your gateway", which nothing under autosave produces (K5).
+    var autosave: Centraid_Screen_V1_Autosave { state.autosave }
 
     var pinEvent: Data {
         var event = Centraid_Screen_V1_NotesEditorEvent()
@@ -334,9 +279,10 @@ struct NotesEditorStateView {
         return event.encoded
     }
 
-    var saveEvent: Data {
+    /// Open (and, from a failure, re-open) the editor on one note.
+    static func openedEvent(_ noteIdentifier: String) -> Data {
         var event = Centraid_Screen_V1_NotesEditorEvent()
-        event.save = .init()
+        event.opened = .with { $0.noteID = noteIdentifier }
         return event.encoded
     }
 
@@ -349,11 +295,10 @@ struct NotesEditorStateView {
     /// text (`NotesEditorView`'s `@State`), which is the only place a keystroke
     /// exists before it is saved, and hands it here.
     ///
-    /// An edit NEVER writes: it moves the draft to dirty and the member presses
-    /// Save. No autosave-per-keystroke — every keystroke would be a command with
-    /// its own `invoke_key`, an audit receipt and a replica round trip, and a
-    /// member typing a paragraph would fill their outbox with a hundred
-    /// revisions of one note.
+    /// An edit moves the draft to dirty; the machine's autosave writes it after
+    /// its debounce (`AutosaveLaw`, 900 ms, one invoke key per edit sequence),
+    /// so a member typing a paragraph fills their outbox with one revision and
+    /// not a hundred.
     static func titleEvent(_ title: String) -> Data {
         var event = Centraid_Screen_V1_NotesEditorEvent()
         event.title = .with { $0.title = title }
@@ -367,19 +312,14 @@ struct NotesEditorStateView {
     }
 }
 
-/// The three content cases, spelled out where a reader of the views will look.
-///
-/// PhotosGridView's `.data` case carries a tuple whose second member is
-/// `thumbnail_pack_absent`, because the two empty-cell sentences are two facts
-/// and a view cannot pick between them from the cells alone.
-extension ScreenContent {
-    var isFailure: Bool {
-        if case .failure = self { return true }
-        return false
-    }
-}
-
-private extension SwiftProtobuf.Message {
+// ONE `encoded`, FOR EVERY SCREEN IN THIS TARGET.
+//
+// Three views each grew a `private extension SwiftProtobuf.Message` with this
+// same body, and a fourth used `.encoded` without declaring one — which does
+// not compile, because a fileprivate helper is not visible from the file that
+// needed it. Same shape as the four cell renderers: written once is written
+// once.
+extension SwiftProtobuf.Message {
     /// The bytes that cross back into `CentraidShared`.
     ///
     /// A serialisation that throws yields EMPTY bytes rather than a crash, and
@@ -387,32 +327,4 @@ private extension SwiftProtobuf.Message {
     /// every reducer's `else` branch already answers with `Step(state)` — a tap
     /// that does nothing rather than a shell that dies on one.
     var encoded: Data { (try? serializedData()) ?? Data() }
-}
-
-private extension Centraid_Screen_V1_Money {
-    /// An amount, spelled with what the row actually carried.
-    ///
-    /// **THE EXPONENT IS NOT ASSUMED TO BE 2.** The schema says it comes "from
-    /// the kit's table through the core, never guessed", and `TallyReads` says
-    /// why it cannot state one yet: the table is `crates/apps/kit`'s
-    /// `minor_units`, it is code rather than a column, and no door on this seat
-    /// serves it. So a zero exponent spells the MINOR amount beside its code —
-    /// visibly a raw figure — rather than dividing by a hundred and labelling a
-    /// JPY expense in the vault's base money, which is v0's own bug
-    /// (`packages/design/src/format.ts:38`) and the one D-1020-CL3 closed.
-    var spelled: String {
-        if currency.isEmpty { return "" }
-        if exponent == 0 { return "\(minor) \(currency)" }
-        let divisor = pow(10.0, Double(exponent))
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = Int(exponent)
-        formatter.maximumFractionDigits = Int(exponent)
-        // THE VAULT'S LOCALE, NEVER THE DEVICE'S. A member reading their vault
-        // on a borrowed phone must see their own separators.
-        if !locale.isEmpty { formatter.locale = Locale(identifier: locale) }
-        let value = Double(minor) / divisor
-        let body = formatter.string(from: NSNumber(value: value)) ?? "\(value)"
-        return "\(body) \(currency)"
-    }
 }

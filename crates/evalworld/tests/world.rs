@@ -212,7 +212,12 @@ fn the_world_reads_back_through_the_app_door_and_the_fts_door() {
             let door = TestDoor::new(connection);
             let (board, _denial) = centraid_apps_tasks::queries::load_board(&door, Some(50), &now)
                 .expect("the board loads");
-            let titles: Vec<String> = board.open.iter().map(|task| task.title.clone()).collect();
+            let titles: Vec<String> = board
+                .open
+                .iter()
+                .chain(board.logbook.iter())
+                .map(|task| task.title.clone())
+                .collect();
 
             let search = SqliteDoor::open(connection).expect("the FTS door opens");
             let answer = search
@@ -242,6 +247,14 @@ fn the_world_reads_back_through_the_app_door_and_the_fts_door() {
         hits.len() >= 2,
         "the FTS door found {} dentist task(s); the within-app ambiguity is gone: {hits:?}",
         hits.len()
+    );
+    // A TRASHED TASK IS NOT ON THE BOARD. `schedule.delete_task` soft-deletes,
+    // and the board, like the FTS door, leaves the row out.
+    assert!(
+        !board_titles
+            .iter()
+            .any(|title| title == "Return the library books"),
+        "the board holds the trashed library task: {board_titles:?}"
     );
 }
 
@@ -301,82 +314,6 @@ fn building_over_a_founded_vault_is_refused_by_name() {
     );
 }
 
-/// A DEFECT THIS WORLD FOUND ON ITS FIRST RUN, PINNED WHERE IT WAS FOUND.
-///
-/// `schedule.delete_task` soft-deletes: it writes `deleted_at` and `purge_at`
-/// and the row stays restorable for the grace window. Two doors then read that
-/// row and they do not agree.
-///
-/// * The **FTS door** excludes it. `centraid_search`'s `schedule.task` domain
-///   declares `deleted_column: Some("deleted_at")`, so a trashed task leaves
-///   the index.
-/// * The **Tasks board** includes it. `centraid_apps_tasks::queries::
-///   open_statement` filters on `status` and nothing else, and neither
-///   `queries.rs` nor `board.rs` names `deleted_at` anywhere — the two app
-///   crates in the workspace that never do. Docs, Locker, Notes, People, Photos
-///   and Tally all filter it; Tasks and Agenda are the outliers, six to two.
-///
-/// So a member who deletes a task still sees it on their board, and a runtime
-/// reading through the app door would answer with a row the member deleted.
-///
-/// **This test asserts the divergence, not the behaviour.** It is a
-/// characterisation, deliberately written to go RED the moment somebody adds
-/// the missing predicate — at which point the fix is to delete this test and
-/// restore the plain assertion in
-/// `the_world_reads_back_through_the_app_door_and_the_fts_door`: that a trashed
-/// task is not on the board. It is here rather than quietly absent because a
-/// world that plants a trashed row and then says nothing about what the product
-/// does with it is a world that has hidden its own most interesting finding.
-#[test]
-fn a_trashed_task_leaves_the_index_and_stays_on_the_board() {
-    let (_dir, world) = world();
-    let vault = centraid_vault::Vault::open(&world.vault_path).expect("the world opens");
-    let now = world.inventory.now.clone();
-
-    let (on_the_board, in_the_index) = vault
-        .read(|connection| {
-            let door = TestDoor::new(connection);
-            let (board, _denial) = centraid_apps_tasks::queries::load_board(&door, Some(50), &now)
-                .expect("the board loads");
-            let on_the_board = board
-                .open
-                .iter()
-                .chain(board.logbook.iter())
-                .any(|task| task.title == "Return the library books");
-
-            let search = SqliteDoor::open(connection).expect("the FTS door opens");
-            let answer = search
-                .query(
-                    &centraid_search::Principal::Owner,
-                    &SearchRequest::new("schedule.task", "library", 10),
-                )
-                .expect("the FTS door answers");
-            let in_the_index = answer
-                .targets()
-                .unwrap_or_default()
-                .iter()
-                .any(|target| target.title == "Return the library books");
-            Ok((on_the_board, in_the_index))
-        })
-        .expect("the world reads");
-    vault.close().expect("it closes");
-
-    // THE ROW REALLY IS TRASHED — this is what stops the assertion below being
-    // vacuous. If `deleted_at` had never been written, the FTS door would hold
-    // the row too and the divergence would be a fiction.
-    assert!(
-        !in_the_index,
-        "the trashed task is still in the FTS index, so deleted_at was never written \
-         and this test proves nothing"
-    );
-    assert!(
-        on_the_board,
-        "the Tasks board now excludes a trashed task — the defect this test \
-         characterises is FIXED. Delete this test and restore the plain assertion in \
-         `the_world_reads_back_through_the_app_door_and_the_fts_door`."
-    );
-}
-
 /// **BOTH SIDES OF THE THIRTY-DAY GRACE WINDOW, WITH ROOM EITHER SIDE.**
 ///
 /// `core.restore_document` refuses a document whose window has run out, so the
@@ -403,7 +340,6 @@ fn the_grace_windows_are_not_on_a_knife_edge() {
                 centraid_apps_docs::queries::DriveInput {
                     limit: Some(100_000),
                 },
-                &world.inventory.now,
             )
             .expect("the drive loads");
             Ok(drive

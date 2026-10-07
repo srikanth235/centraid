@@ -51,6 +51,29 @@ class NavigationAndMountSpec : StringSpec({
             TallyListState.Destination.DESTINATION_BALANCES
     }
 
+    "iOS tells a route swapped in place that it opened, not only a pushed one" {
+        // A screen reads because it was OPENED (`ShellModel.opened`), and
+        // `CentraidApp` says so from the destination's `.task`. Notes' band
+        // places and its editor's Done SWAP the top of the path in place
+        // (`NotesScreens.swapPlace`, `closeEditor`), and SwiftUI keeps the
+        // destination's view — and its `.task` — across a swap at the same
+        // depth. An unkeyed `.task` therefore never ran for the new route, and
+        // the Library, Notebooks and Journal sat on their seeded skeleton for
+        // ever while the pushed editor read fine. Keyed on the route, a swap is
+        // a new task, and a pop back onto a route still re-runs it.
+        val root = java.io.File(
+            System.getProperty("centraid.mobileRoot")
+                ?: error("centraid.mobileRoot is unset; see mobile/shared/build.gradle.kts"),
+        )
+        val app = root.resolve("iosApp/Sources/CentraidApp.swift").readText()
+        val openers = Regex("""\.task(\([^)]*\))?\s*\{\s*shell\.opened\(route\)\s*\}""")
+            .findAll(app).map { it.value }.toList()
+        withClue("CentraidApp.swift no longer tells a destination it opened from a `.task`") {
+            openers.isNotEmpty().shouldBeTrue()
+        }
+        openers.forEach { opener -> opener shouldContain ".task(id: route)" }
+    }
+
     "names ride along the route, so an app bar has something to say at once" {
         // A route carries its display name, so the app bar never waits on a read.
         val folder = Destination.DocsFolder(folderId = "fld-1", folderName = "Taxes")
@@ -112,7 +135,7 @@ class NavigationAndMountSpec : StringSpec({
         // Not "names a placeholder file"; names nothing. The state carries a
         // reason a member can read and no key.
         val waiting = Mount.Waiting(Mount.Waiting.Reason.BOOTSTRAPPING)
-        (waiting is Mount.Waiting).shouldBeTrue()
+        waiting.because shouldBe Mount.Waiting.Reason.BOOTSTRAPPING
         Mount.Waiting.Reason.entries.size shouldBe 3
     }
 
@@ -128,35 +151,42 @@ class NavigationAndMountSpec : StringSpec({
         (first.fileName != second.fileName).shouldBeTrue()
     }
 
-    "no gateway id names anything under mobile/" {
+    "a vault is mounted by its own id, and no gateway id builds a mount, a file or a core" {
         // #1025 S5, D-1025-S5-2, asserted over the SOURCE rather than over one
         // type: `MountKey` losing its field is necessary and not sufficient —
         // the name could come back as a `CoreConfiguration` parameter, a file
         // name built in a shell, or a Swift property, and each of those is the
         // same defect wearing a different hat.
         //
+        // NARROWED TO ITS SUBJECT BY #1080 (seam contract A13). A gateway is a
+        // backup DESTINATION now — the pairing record is a list (ruling 8) —
+        // and its id names one on the wire, on the Backup screen and in the
+        // mover's settle routing. What it may never do is file, mount or open
+        // anything: one vault reached through two gateways is still ONE file,
+        // with one cursor and one outbox. So the scan looks where those are
+        // made — a `MountKey`, a replica's file name, a core's configuration,
+        // a vault's path — and finds no gateway spelling there.
+        //
         // Prose is exempt by construction: this looks for the identifier
-        // SPELLINGS a compiler would resolve, and the comments that explain why
-        // the gateway is gone say "gateway id" in words.
+        // SPELLINGS a compiler would resolve, on the lines that build the
+        // things a gateway must not name.
         val root = java.io.File(
             System.getProperty("centraid.mobileRoot")
                 ?: error("centraid.mobileRoot is unset; see mobile/shared/build.gradle.kts"),
         )
-        val forbidden = Regex("""\bgatewayId\b|\bgatewayHex\b|\bgateway_id\b""")
+        val gateway = Regex("""\bgatewayId\b|\bgatewayHex\b|\bgateway_id\b|\bgateway\.id\b""")
+        val mountSite = Regex("""MountKey\(|\.fileName\b|replica|\.sqlite3|\.db"|CoreConfiguration\(|vaultPath|vault_path|vaultDir""")
         val offenders = root.walkTopDown()
             // `build/` and `.build/` hold generated and stale artifacts — a
             // framework header from a previous link is not this tree's source.
             .onEnter { it.name != "build" && it.name != ".build" && it.name != "Generated" }
             .filter { it.isFile && (it.extension == "kt" || it.extension == "swift") }
+            .filterNot { it.name == "NavigationAndMountSpec.kt" }
             .flatMap { file ->
                 file.readLines().withIndex().mapNotNull { (line, text) ->
-                    // A line that CITES the deletion is the record of it, not a
-                    // use of it. `MountKey(gatewayId, vaultId)` in a doc comment
-                    // is what a reader needs to understand the rename.
-                    if (forbidden.containsMatchIn(text) && !text.contains("D-1025-S5-2") &&
-                        !text.trimStart().startsWith("*") && !text.trimStart().startsWith("//") &&
-                        !text.trimStart().startsWith("///")
-                    ) {
+                    val trimmed = text.trimStart()
+                    val prose = trimmed.startsWith("*") || trimmed.startsWith("//")
+                    if (!prose && mountSite.containsMatchIn(text) && gateway.containsMatchIn(text)) {
                         "${file.name}:${line + 1}: ${text.trim()}"
                     } else {
                         null
@@ -165,5 +195,26 @@ class NavigationAndMountSpec : StringSpec({
             }
             .toList()
         withClue(offenders) { offenders shouldBe emptyList() }
+        // AND THE CORE IS CONFIGURED BY NOTHING A GATEWAY NAMES.
+        dev.centraid.core.CoreConfiguration::class.java.declaredFields
+            .none { it.name.contains("gateway", ignoreCase = true) }
+            .shouldBeTrue()
+    }
+
+    "the narrowed scan still finds a gateway that builds a mount" {
+        // RED FIRST, KEPT: the narrowing must not have narrowed the law to
+        // nothing. The spellings that shipped before D-1025-S5-2 are caught.
+        val gateway = Regex("""\bgatewayId\b|\bgatewayHex\b|\bgateway_id\b|\bgateway\.id\b""")
+        val mountSite = Regex("""MountKey\(|\.fileName\b|replica|\.sqlite3|\.db"|CoreConfiguration\(|vaultPath|vault_path|vaultDir""")
+        listOf(
+            "val key = MountKey(gatewayId, vaultId)",
+            "val file = \"\$gatewayId.\$vaultId.replica.db\"",
+            "let path = dir.appendingPathComponent(\"\\(gatewayHex).sqlite3\")",
+        ).forEach { line ->
+            withClue(line) { (mountSite.containsMatchIn(line) && gateway.containsMatchIn(line)).shouldBeTrue() }
+        }
+        // A DESTINATION may be named by its gateway: that is what ruling 8 is.
+        val destination = "BackupEffect.Forget(gatewayId, label)"
+        (mountSite.containsMatchIn(destination) && gateway.containsMatchIn(destination)) shouldBe false
     }
 })

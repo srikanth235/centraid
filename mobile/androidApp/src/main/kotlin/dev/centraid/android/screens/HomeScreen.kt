@@ -1,5 +1,7 @@
 package dev.centraid.android.screens
 
+import dev.centraid.shared.shell.HomeWords
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,10 +36,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import dev.centraid.design.copy.WordsCopy
+import dev.centraid.shared.custody.CustodyCopy
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.FirstMove
@@ -102,6 +110,24 @@ public fun HomeScreen(
      * rather than pairing with one, because there is nothing to pair with.
      */
     onMakeVault: () -> Unit = {},
+    /**
+     * Open words.enter for a restore (#1047 E3): the empty switcher's way back
+     * for a fresh install's vaults. Defaulted for previews.
+     */
+    onRestore: () -> Unit = {},
+    /**
+     * The More sheet's custody rows (#1047 E6): show the 24 words again
+     * (words.show) and pair with the laptop (pair.laptop). Each is an intent;
+     * the activity closes this sheet and opens the screen. Defaulted for
+     * previews.
+     */
+    onShowWords: () -> Unit = {},
+    onPairLaptop: () -> Unit = {},
+    /**
+     * Open the Backup screen (#1080): Home's backup line is its door.
+     * Defaulted for previews.
+     */
+    onOpenBackup: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -118,6 +144,11 @@ public fun HomeScreen(
             },
             onDownloadSettings = onDownloadSettings,
         )
+        // THE BACKUP LINE (#1080): where this vault's backup stands, in the
+        // machine's words, and the door to the Backup screen. It is the
+        // backup's and not the lockup's: the lockup says where the VAULT is,
+        // and the phone is the vault.
+        dev.centraid.android.screens.backup.BackupLineRow(state.backup_line, onOpenBackup)
         HomeTitleRow(onSettings = onMakeVault)
         StatusRibbon(state.data_?.status, onEvent)
         val failure = state.failure
@@ -157,7 +188,99 @@ public fun HomeScreen(
             },
             onForget = onForget,
             onMakeVault = onMakeVault,
+            onRestore = onRestore,
         )
+    }
+    // THE ALL-APPS LISTING. The band's `more` has set this flag since wave A
+    // and nothing drew it, so the press did nothing a member could see.
+    if (state.all_apps_sheet_open) {
+        AllAppsSheet(
+            tiles = state.data_?.tiles.orEmpty(),
+            onEvent = onEvent,
+            onShowWords = onShowWords,
+            onPairLaptop = onPairLaptop,
+        )
+    }
+}
+
+/**
+ * THE ALL-APPS LISTING is a SHEET and never a destination.
+ *
+ * A row sends the same pick its tile sends, so the listing and the springboard
+ * cannot disagree about where an app goes; the navigation, and the closing that
+ * goes with it, are the activity's, which is where the routes live. Dismissing
+ * tells the machine the sheet is shut — without that the flag stays set over a
+ * sheet that is gone, and the next `more` sets a flag already set and draws
+ * nothing.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun AllAppsSheet(
+    tiles: List<HomeTile>,
+    onEvent: (HomeEvent) -> Unit,
+    onShowWords: () -> Unit,
+    onPairLaptop: () -> Unit,
+) {
+    // A CUSTODY ROW CLOSES THIS SHEET FIRST — one sheet at a time — then
+    // opens its screen over its own machine (iOS `AllAppsSheet`).
+    val custody = { open: () -> Unit ->
+        onEvent(HomeEvent(all_apps = HomeEvent.AllAppsSheetToggled(open_ = false)))
+        open()
+    }
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = {
+            onEvent(HomeEvent(all_apps = HomeEvent.AllAppsSheetToggled(open_ = false)))
+        },
+        containerColor = centraidColor("bg"),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp).testTag("home-all-apps-sheet")) {
+            for (tile in tiles) {
+                val name = CentraidCatalog.byId[tile.app_id]?.name
+                    ?: tile.app_id.replaceFirstChar { it.uppercase() }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onEvent(HomeEvent(move_picked = HomeEvent.MovePicked(move_id = tile.app_id)))
+                        }
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = PAGE_MARGIN)
+                        .testTag("home-all-apps-row-${tile.app_id}")
+                        .semantics { contentDescription = tile.open_label },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AppMark(appId = tile.app_id, size = 22.dp)
+                    Text(name, style = centraidType("smallStrong"), color = centraidColor("text"))
+                }
+            }
+            // THE CUSTODY ROWS (#1047 E6): the words again, and the laptop.
+            Box(
+                Modifier
+                    .padding(horizontal = PAGE_MARGIN, vertical = 8.dp)
+                    .fillMaxWidth()
+                    .height(HAIRLINE)
+                    .background(centraidColor("line")),
+            )
+            CustodyRow(WordsCopy.SHOW_AGAIN_ROW, "home-more-show-words") { custody(onShowWords) }
+            CustodyRow(CustodyCopy.PAIR_TITLE, "home-more-pair-laptop") { custody(onPairLaptop) }
+        }
+    }
+}
+
+@Composable
+private fun CustodyRow(label: String, tag: String, onPress: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onPress)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = PAGE_MARGIN)
+            .testTag(tag)
+            .semantics { role = Role.Button },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = centraidType("smallStrong"), color = centraidColor("text"))
     }
 }
 
@@ -184,8 +307,10 @@ public fun HomeScreen(
  *
  * **It used to be a LOCAL removal** — the gateway kept the vault and kept this
  * device enrolled, so a forget cost a copy and a re-pair got it back. The phone
- * is the vault (#1029 §1). There is no copy anywhere else, so the dialog has to
- * say what it now does.
+ * is the vault (#1029 §1): forgetting removes the only live copy. What can
+ * survive it is the sealed backup on each gateway the vault was paired with
+ * (#1080), as far as a gateway acknowledged it, and only the vault's 24 words
+ * bring that back — so the dialog has to say what it now does.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -195,6 +320,7 @@ private fun VaultSheet(
     onPick: (String) -> Unit,
     onForget: (String) -> Unit,
     onMakeVault: () -> Unit = {},
+    onRestore: () -> Unit = {},
 ) {
     // WHICH VAULT THE MEMBER IS BEING ASKED ABOUT, held by the sheet and not by
     // the row: a dialog owned by a row would be unmounted the instant the
@@ -209,7 +335,7 @@ private fun VaultSheet(
     ) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp).testTag("home-vault-sheet")) {
             Text(
-                text = "Vaults",
+                text = HomeWords.VAULTS_TITLE,
                 style = centraidType("title"),
                 color = centraidColor("text"),
                 modifier = Modifier.padding(horizontal = PAGE_MARGIN, vertical = 8.dp),
@@ -219,13 +345,13 @@ private fun VaultSheet(
             when {
                 vaults.isEmpty() -> {
                     Text(
-                        text = "This device holds no vault.",
+                        text = HomeWords.VAULTS_NONE,
                         style = centraidType("small"),
                         color = centraidColor("textSoft"),
                         modifier = Modifier.padding(horizontal = PAGE_MARGIN),
                     )
                     Text(
-                        text = "Make a vault",
+                        text = HomeWords.VAULTS_MAKE,
                         style = centraidType("smallStrong"),
                         color = centraidColor("link"),
                         modifier = Modifier
@@ -237,12 +363,29 @@ private fun VaultSheet(
                             .padding(horizontal = PAGE_MARGIN, vertical = 12.dp)
                             .heightIn(min = 44.dp)
                             .testTag("vault-sheet-make")
-                            .semantics { contentDescription = "Make a vault on this phone" },
+                            .semantics { contentDescription = HomeWords.VAULTS_MAKE_SPOKEN },
+                    )
+                    // AND THE WAY BACK: a fresh install's vaults come home
+                    // from the 24 words (#1047 E3), the switcher shut first.
+                    Text(
+                        text = WordsCopy.RESTORE_FIRST_ACTION,
+                        style = centraidType("smallStrong"),
+                        color = centraidColor("link"),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onPick("")
+                                onRestore()
+                            }
+                            .padding(horizontal = PAGE_MARGIN, vertical = 12.dp)
+                            .heightIn(min = 44.dp)
+                            .testTag("vault-sheet-restore")
+                            .semantics { role = Role.Button },
                     )
                 }
                 vaults.size == 1 -> {
                     Text(
-                        text = "This device holds one vault.",
+                        text = HomeWords.VAULTS_ONE,
                         style = centraidType("small"),
                         color = centraidColor("textSoft"),
                         modifier = Modifier.padding(horizontal = PAGE_MARGIN),
@@ -272,7 +415,7 @@ private fun VaultSheet(
                     )
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = vault.vault_name.ifEmpty { "Unnamed vault" },
+                            text = HomeWords.vaultName(vault.vault_name),
                             style = centraidType("smallStrong"),
                             color = centraidColor("text"),
                             maxLines = 1,
@@ -310,8 +453,7 @@ private fun VaultSheet(
                             .clickable { pendingForget = vault }
                             .testTag("vault-forget-${vault.vault_id}")
                             .semantics {
-                                contentDescription =
-                                    "Forget ${vault.vault_name.ifEmpty { "this vault" }}"
+                                contentDescription = HomeWords.forgetTitle(vault.vault_name)
                             },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -327,17 +469,13 @@ private fun VaultSheet(
     }
     val pending = pendingForget
     if (pending != null) {
-        val spoken = pending.vault_name.ifEmpty { "this vault" }
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { pendingForget = null },
             // IT NAMES THE VAULT. A confirmation that says "this vault" in a
             // sheet listing several is a confirmation that confirms nothing.
-            title = { Text("Forget $spoken?") },
+            title = { Text(HomeWords.forgetTitle(pending.vault_name)) },
             text = {
-                Text(
-                    "This deletes $spoken and everything in it — its rows and " +
-                        "its files. There is no copy anywhere else.",
-                )
+                Text(HomeWords.VAULTS_FORGET_BODY)
             },
             confirmButton = {
                 androidx.compose.material3.TextButton(
@@ -353,12 +491,12 @@ private fun VaultSheet(
                     },
                     modifier = Modifier.testTag("vault-forget-confirm"),
                 ) {
-                    Text("Forget", color = centraidColor("danger"))
+                    Text(HomeWords.VAULTS_FORGET, color = centraidColor("danger"))
                 }
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { pendingForget = null }) {
-                    Text("Keep")
+                    Text(HomeWords.VAULTS_KEEP)
                 }
             },
             containerColor = centraidColor("bg"),
@@ -425,7 +563,7 @@ private fun StatusRibbon(status: HomeStatus?, onEvent: (HomeEvent) -> Unit) {
         }
         // The all-apps listing is a SHEET, opened here and never routed to.
         Text(
-            "All apps",
+            HomeWords.ALL_APPS,
             style = centraidType("control"),
             // The LINK role, not Material's primary. A `TextButton` takes the
             // colour scheme's primary, which this table maps to `accent` — so
@@ -495,10 +633,39 @@ private val CONTROL_RADIUS = 7.dp
 /** One row, fixed count — only the cell CONTENTS change, never the count. */
 private const val MOSAIC_SLOTS = 4
 
-/** STATED, never derived: a percentage-width cell can resolve to zero height. */
+/**
+ * A FLOOR AND NOT A HEIGHT. `mosaicCss` is `flex:1;min-height:0` over
+ * `grid-auto-rows:1fr`, so the strip STRETCHES into whatever the card's 152
+ * floor leaves over and this is only the rung below which it will not go. It is
+ * STATED rather than derived for the reason it always was: a percentage-width
+ * cell has no intrinsic height of its own and can resolve to zero.
+ */
 private val MOSAIC_CELL_HEIGHT = 88.dp
 
 private val HAIRLINE = CentraidGeometry.HAIRLINE.dp
+
+/**
+ * THE HUE KEY'S SPELLING IN THE EMITTED TABLE, and nothing more.
+ *
+ * `PartyHueWheel` decides WHICH of the eight a face gets and `HomeReads` puts
+ * the answer on the wire; this is the eight-row spelling that turns that key
+ * into a `NativeTheme` role, and `HomeView.swift` carries the same eight. It is
+ * a map and not `"c" + key.replaceFirstChar(…)` because the string form would
+ * hand any key at all to `centraidColor`, which fails loudly and correctly for
+ * a role that does not exist — the wrong failure for a launcher tile drawing
+ * whatever a producer sent. `PartyHueWheelSpec` asserts every key here has a
+ * role in `NATIVE_COLOR_ROLES` and that both view trees name all eight.
+ */
+private val PARTY_HUE_ROLES: Map<String, String> = mapOf(
+    "rose" to "cRose",
+    "amber" to "cAmber",
+    "ochre" to "cOchre",
+    "forest" to "cForest",
+    "teal" to "cTeal",
+    "slate" to "cSlate",
+    "indigo" to "cIndigo",
+    "violet" to "cViolet",
+)
 
 /**
  * A NEGATIVE MARGIN, which Compose has no token for.
@@ -508,16 +675,35 @@ private val HAIRLINE = CentraidGeometry.HAIRLINE.dp
  * refuses negative padding, so the child is measured against widened
  * constraints and placed at the offset — the standard idiom, spelled once here
  * rather than at the call site.
+ *
+ * [toFloor] is the THIRD margin of the same rule — `mosaicCss` is
+ * `margin: R.gap.s -R.gap.m -R.gap.m`, so the strip cancels the card's bottom
+ * padding exactly as it cancels its sides. Downward there is nothing to
+ * offset: the child is measured [amount] TALLER than the slot it was given and
+ * the slot is reported back unchanged, so it draws past its own bottom and the
+ * card's `clip` is what shapes it. The reference drops this half in the
+ * waiting state (`grey ? '0' : '-' + R.gap.m`) because the sentence under the
+ * strip needs the 12 back, and a line of type bled past the card's edge is
+ * clipped rather than merely tight.
  */
-private fun Modifier.bleed(amount: Dp): Modifier = this
+private fun Modifier.bleed(amount: Dp, toFloor: Boolean): Modifier = this
     .layout { measurable, constraints ->
         val extra = amount.roundToPx() * 2
+        val down = if (toFloor) amount.roundToPx() else 0
         val widened = constraints.copy(
             maxWidth = constraints.maxWidth + extra,
             minWidth = (constraints.minWidth + extra).coerceAtMost(constraints.maxWidth + extra),
+            maxHeight = if (constraints.maxHeight == Constraints.Infinity) {
+                constraints.maxHeight
+            } else {
+                constraints.maxHeight + down
+            },
+            minHeight = if (constraints.minHeight == 0) 0 else constraints.minHeight + down,
         )
         val placeable = measurable.measure(widened)
-        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+        layout(placeable.width, (placeable.height - down).coerceAtLeast(0)) {
+            placeable.place(0, 0)
+        }
     }
     .offset(x = -amount)
 
@@ -574,8 +760,7 @@ private fun TileCard(tile: HomeTile, modifier: Modifier, onEvent: (HomeEvent) ->
     val app = CentraidCatalog.byId[tile.app_id]
     val name = app?.name ?: tile.app_id.replaceFirstChar { it.uppercase() }
     val count = countText(tile)
-    // The em dash is a glyph; a screen reader gets the label alone.
-    val spoken = if (tile.count == null) tile.count_label else "$count ${tile.count_label}"
+    // The em dash is a glyph; a screen reader gets `accessibility_label`.
     Column(
         modifier
             .heightIn(min = TILE_MIN_HEIGHT)
@@ -589,7 +774,7 @@ private fun TileCard(tile: HomeTile, modifier: Modifier, onEvent: (HomeEvent) ->
             // Keyed on the app id. The label carries the live count, so it
             // changes with the vault; the id does not.
             .testTag("home-tile-${tile.app_id}")
-            .semantics { contentDescription = "Open $name, $spoken".trim().removeSuffix(",") },
+            .semantics { contentDescription = tile.accessibility_label },
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(
@@ -666,11 +851,23 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp)
+                        // NO TOP OF ITS OWN. `mosaicCss`'s `R.gap.s` is not an
+                        // extra 8 — it is the half this tile does not otherwise
+                        // get. Every other body is wrapped in `bodyWrapCss`
+                        // (`padding-top: R.gap.s`); the mosaic is a DIRECT
+                        // child of the tile wrap. Both therefore read 16 under
+                        // the head, and our `spacedBy(16.dp)` already spends
+                        // both halves at once. Matches SwiftUI's `PhotoMosaic`.
+                        // THE STRIP IS THE CARD'S SLACK-TAKER (`mosaicCss` is
+                        // `flex:1;min-height:0`), and this is the weight that
+                        // says so: whatever the card's 152 floor leaves over
+                        // after the head goes to the photographs, never to a
+                        // band of card ground beneath them.
+                        .weight(1f)
                         // The CELLS are the mosaic: no ground, no min height.
-                        // The bleed cancels `TILE_PAD` so it is flush with the
-                        // card's edge.
-                        .bleed(TILE_PAD),
+                        // The bleed cancels `TILE_PAD` on the sides AND on the
+                        // floor, so the strip is flush with the card's edge.
+                        .bleed(TILE_PAD, toFloor = !waiting),
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     repeat(MOSAIC_SLOTS) { index ->
@@ -678,7 +875,13 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                         Box(
                             Modifier
                                 .weight(1f)
-                                .height(MOSAIC_CELL_HEIGHT)
+                                // A FLOOR, NEVER A HEIGHT: the strip stretches
+                                // (`grid-auto-rows:1fr`) and 88 is only the
+                                // rung below which a cell will not go — which
+                                // it needs, because a percentage-width cell has
+                                // no intrinsic height and can resolve to zero.
+                                .heightIn(min = MOSAIC_CELL_HEIGHT)
+                                .fillMaxHeight()
                                 // THE GROUND UNDER THE PHOTOGRAPH, and the whole
                                 // cell when there is none. A cell with no
                                 // addressable bytes is STILL A CELL: dropping it
@@ -705,7 +908,7 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                     // reason. What is true in every case is that the bytes are
                     // not here yet.
                     Text(
-                        "These photographs are not on this device yet.",
+                        HomeWords.PHOTOS_ABSENT,
                         style = centraidType("mono"),
                         color = centraidColor("textFaint"),
                     )
@@ -760,10 +963,14 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                 overflow = TextOverflow.Ellipsis,
             )
             if (notes.excerpt.isNotEmpty()) {
+                // SOFT INK, NOT FULL: `readBodyCss` is `color: t.ink2`, which
+                // the handoff's role map spells `--text-soft`. At full `text`
+                // the excerpt weighed the same as its title and the tile read
+                // as two headings.
                 Text(
                     notes.excerpt,
                     style = centraidType("small"),
-                    color = centraidColor("text"),
+                    color = centraidColor("textSoft"),
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -798,31 +1005,52 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                 // SATURATED discs, overlapping by a LOGICAL inset so the stack
                 // mirrors under RTL rather than stacking the wrong way.
                 people.faces.forEach { face ->
+                    // THE PARTY'S OWN HUE, not a grey disc. `face.color` is the
+                    // key `HomeReads` already resolved with the one port of the
+                    // identity wheel; all this does is spell the emitted role.
+                    // An unrecognised key draws the neutral disc rather than
+                    // reaching `centraidColor`, which fails LOUDLY by design —
+                    // a tile is not the place to take a shell down over a hue.
+                    val hue = face.color?.let { PARTY_HUE_ROLES[it] }
                     Box(
                         Modifier
                             .size(30.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(centraidColor("bgSunken"))
+                            .background(centraidColor(hue ?: "bgSunken"))
                             .border(1.5.dp, centraidColor("bgElev"), RoundedCornerShape(999.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
+                        // THE INITIALS STAY INSIDE THEIR OWN DISC (iOS's
+                        // `HomeView` twin): inset by the 7dp the next disc
+                        // covers ON BOTH SIDES, one line, shrunk to fit — two
+                        // letters at their natural width ran under the next
+                        // disc and read as one word ("GRMACO").
+                        val initialsStyle = centraidType("smallStrong")
+                        androidx.compose.foundation.text.BasicText(
                             face.initials,
-                            style = centraidType("smallStrong"),
-                            color = centraidColor("text"),
+                            // `textInv` is the SOLVED foreground for a filled
+                            // identity disc (`DESIGN.md`'s rule 7 — `onAccent`
+                            // in the hand-off's role map). Ink on a saturated
+                            // fill is the contrast failure this tile had.
+                            style = initialsStyle.copy(
+                                color = centraidColor(if (hue != null) "textInv" else "text"),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            ),
+                            maxLines = 1,
+                            softWrap = false,
+                            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(
+                                minFontSize = initialsStyle.fontSize * 0.5f,
+                                maxFontSize = initialsStyle.fontSize,
+                            ),
+                            modifier = Modifier.padding(horizontal = 7.dp),
                         )
                     }
                 }
             }
             Spacer(Modifier.weight(1f))
             Text(
-                // `more` comes off the header total — never a fabricated 0; an
-                // exhausted directory says so plainly.
-                if (people.more > 0) {
-                    "+${people.more} more in your directory"
-                } else {
-                    "That's everyone in your directory"
-                },
+                // The machine's words for `more` (off the header total).
+                people.more_label,
                 style = centraidType("small"),
                 color = centraidColor("text"),
                 maxLines = 1,
@@ -902,16 +1130,17 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                     )
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
+                // THE MACHINE'S WORD (R-1047-L7): "Locked" / "Open".
                 Text(
-                    if (locker.locked) "Locked" else "Unlocked",
+                    locker.state_label,
                     style = centraidType("eyebrow"),
                     color = appHue("locker"),
                 )
             }
             Spacer(Modifier.weight(1f))
             Text(
-                // Instructional — never claim a shelf count this tile cannot read.
-                if (locker.locked) "Opens with your passphrase" else "Open on this device",
+                // Instructional, and the machine's — never a title from inside.
+                locker.line,
                 style = centraidType("small"),
                 color = centraidColor("text"),
                 maxLines = 1,
@@ -949,7 +1178,7 @@ private fun ColumnScope.Skeleton(body: TileBody?) {
             .weight(1f, fill = true)
             .fillMaxWidth()
             .padding(top = 4.dp)
-            .semantics { contentDescription = "Loading" },
+            .semantics { contentDescription = HomeWords.LOADING },
         verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
         widths.forEach { fraction ->
@@ -981,10 +1210,9 @@ private fun DayOne(data: HomeData, onEvent: (HomeEvent) -> Unit) {
             .testTag("home-day-one"),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Nothing in here yet", style = centraidType("title"), color = centraidColor("text"))
+        Text(HomeWords.DAY_ONE_TITLE, style = centraidType("title"), color = centraidColor("text"))
         Text(
-            "Bring your photographs and documents in and this becomes the front of " +
-                "your own archive.",
+            HomeWords.DAY_ONE_BODY,
             style = centraidType("small"),
             color = centraidColor("textSoft"),
         )
@@ -1004,7 +1232,7 @@ private fun FirstMovesBand(moves: List<FirstMove>, onEvent: (HomeEvent) -> Unit)
         Modifier.fillMaxWidth().testTag("home-first-moves"),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("Fill this out", style = centraidType("eyebrow"), color = centraidColor("textFaint"))
+        Text(HomeWords.FIRST_MOVES, style = centraidType("eyebrow"), color = centraidColor("textFaint"))
         moves.forEach { MoveRow(it, onEvent) }
     }
 }
@@ -1050,7 +1278,7 @@ private fun MoveRow(move: FirstMove, onEvent: (HomeEvent) -> Unit) {
 private fun ThingsFoot(things: ThingCount?) {
     if (things == null || !things.settled) return
     Text(
-        if (things.capped) "at least ${things.total} things" else "${things.total} things",
+        (if (things.capped) "at least " else "") + "${things.total} " + (if (things.total == 1) "thing" else "things"),
         style = centraidType("mono"),
         color = centraidColor("textFaint"),
         modifier = Modifier.padding(top = 16.dp),

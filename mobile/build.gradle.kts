@@ -50,6 +50,28 @@ val repositoryRoot: java.io.File = rootDir.parentFile
 allprojects {
     extra["iosDeploymentTarget"] = iosDeploymentTarget
     extra["repositoryRoot"] = repositoryRoot
+
+    // EVERY RESOLVED CONFIGURATION IS LOCKED (#1047). Each project's
+    // `gradle.lockfile` is the reviewed answer to "which versions did this
+    // build resolve", so a transitive bump or a range re-pick is a diff rather
+    // than a silent change. The lock state is written in both modes (with and
+    // without `-Pcentraid.android=true`) into one file per project; the
+    // command is in mobile/README.md -> "Dependency locks".
+    dependencyLocking {
+        lockAllConfigurations()
+    }
+    // EXCEPT the Kotlin plugin's two IDE-import aggregates. They are the one
+    // place a mode leaks into a non-Android configuration: with the flag they
+    // carry `androidMain`'s AndroidX graph, without it they cannot (no Android
+    // variant is resolvable), so a single lock state cannot fit both modes. No
+    // compile, test or link task resolves them; the per-source-set
+    // configurations they aggregate are all locked.
+    configurations.matching {
+        it.name == "allSourceSetsCompileDependenciesMetadata" ||
+            it.name == "allTestSourceSetsCompileDependenciesMetadata"
+    }.configureEach {
+        resolutionStrategy.deactivateDependencyLocking()
+    }
 }
 
 tasks.register("mobileJvm") {

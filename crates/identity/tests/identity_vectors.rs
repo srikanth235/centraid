@@ -22,7 +22,7 @@
 
 use std::path::{Path, PathBuf};
 
-use centraid_identity::{AccountKey, RecoveryPhrase, VaultMint, safety_number};
+use centraid_identity::{RecoveryPhrase, VaultMint, safety_number};
 use serde_json::{Value, json};
 
 fn fixture_path() -> PathBuf {
@@ -58,6 +58,9 @@ fn generated() -> Value {
                 "boxPublicHex": hex::encode(keys.box_key.public().to_bytes()),
                 // Never leaves the phone, so only the vectors can see it move.
                 "rootKeyHex": hex::encode(keys.root.as_bytes()),
+                // Locker's `K` (#1047, Q-1047-11). If it moves, every sealed
+                // Locker secret stops opening after a restore from the words.
+                "lockerKeyHex": hex::encode(keys.locker.as_bytes()),
             })
         })
         .collect();
@@ -74,7 +77,6 @@ fn generated() -> Value {
         "why": "SLIP-0010 paths, domain tags and indices are format decisions (#1029 §0, W0.5-R1). A vault identity public key IS its address; a round trip cannot see it move, these bytes can.",
         "phrase": PHRASE,
         "seedHex": hex::encode(phrase.seed().as_bytes()),
-        "accountPublicHex": hex::encode(AccountKey::derive(&seed).public().to_bytes()),
         "vaults": vaults,
         "safetyNumber": safety_number(&first, &second).grouped(),
     })
@@ -113,17 +115,12 @@ fn the_committed_vectors_are_what_this_build_derives() {
     );
 }
 
-/// The four leaves under one seed are four independent secrets, asserted as
+/// The three leaves under one vault are three independent secrets, asserted as
 /// values rather than as a property the derivation code happens to have.
 #[test]
 fn the_pinned_public_values_are_all_distinct() {
     let vectors = generated();
-    let mut seen: Vec<String> = vec![
-        vectors["accountPublicHex"]
-            .as_str()
-            .expect("hex")
-            .to_owned(),
-    ];
+    let mut seen: Vec<String> = Vec::new();
     for vault in vectors["vaults"].as_array().expect("vaults") {
         for field in ["identityPublicHex", "boxPublicHex", "rootKeyHex"] {
             seen.push(vault[field].as_str().expect("hex").to_owned());

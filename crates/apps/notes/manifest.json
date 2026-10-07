@@ -217,7 +217,7 @@
           },
           "body_text": {
             "type": "string",
-            "minLength": 1
+            "minLength": 0
           },
           "format": {
             "type": "string",
@@ -266,11 +266,11 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 0
           },
           "body_text": {
             "type": "string",
-            "minLength": 1
+            "minLength": 0
           },
           "format": {
             "type": "string",

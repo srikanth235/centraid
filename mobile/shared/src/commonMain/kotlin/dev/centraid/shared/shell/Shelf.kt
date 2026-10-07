@@ -4,6 +4,8 @@ import centraid.screen.v1.VaultLockup
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
 import dev.centraid.core.CoreOutcome
+import dev.centraid.shared.custody.DevSeed
+import dev.centraid.shared.custody.VaultSecrets
 import dev.centraid.shared.platform.PlatformServices
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +14,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okio.FileSystem
-import okio.Path
 import okio.Path.Companion.toPath
 
 /**
@@ -71,10 +72,20 @@ import okio.Path.Companion.toPath
  *
  * ## THE DIRECTORY IS THE ROSTER, AND A FILE NAME IS NOT AN IDENTITY
  *
- * Every vault this device holds is a `*.sqlite3` file in one directory, and
- * that is the whole index. There is no manifest beside them, for the reason
- * [VaultRoster] gives: a vault's name lives inside the vault, and an index
- * would be a second place it lives that nothing keeps true.
+ * Every vault this device holds is a DIRECTORY of its own under the vault
+ * directory — `<dir>/<opaque>/vault.db`, beside its byte store and its backup
+ * home — and that is the whole index (#1047, Q-1047-17). There is no manifest
+ * beside them, for the reason [VaultRoster] gives: a vault's name lives inside
+ * the vault, and an index would be a second place it lives that nothing keeps
+ * true.
+ *
+ * **One directory per vault, founded or restored alike.** The core keeps a
+ * vault's backup home at `<vault file's directory>/backup`
+ * (`crates/core/src/phone`'s `home_root`), so two vault files in one directory
+ * would share one `laptop.json`, one spool and one object store — two vaults
+ * pairing, draining and restoring as one. A restore already lays each vault
+ * down in its own directory; [found] does the same, and the directory is the
+ * unit [forget] deletes whole.
  *
  * **The vault id is no longer in the file name, and losing it from there is
  * what deleted `Replicas.settle`.** `centraid-replica-<vaultId>.sqlite3` existed
@@ -88,9 +99,24 @@ import okio.Path.Companion.toPath
  * asks each file what vault it is, and a file that will not say is not a
  * holding.
  *
- * Files written under the old spelling still open: the listing takes every
- * `.sqlite3` in the directory and asks it, rather than matching a prefix.
- * SQLite's `-wal` and `-shm` sidecars are excluded by the suffix.
+ * A loose `.sqlite3` in the vault directory is not a holding: it would share
+ * the directory's backup home with every other loose file, which is the defect
+ * above. `mobile/scripts/demo-vault.sh` places its fixtures one directory each.
+ *
+ * ## EVERY OPEN IS KEYED WHEN IT CAN BE (#1047 W2, D-6)
+ *
+ * A core is KEYED when it is opened with the member's seed and this vault's
+ * derivation index; only then does it hold the vault's keys — Locker's `K`
+ * among them — and only then can Locker unlock or a drain seal. The seed is
+ * read out of [VaultSecrets] at the moment of each open, handed to
+ * `centraid_open` inside the [CoreConfiguration], and dropped: no field on
+ * this class, on a [Holding] or on any state holds it. What a holding keeps is
+ * [Holding.keyed], a fact about the open and not the key.
+ *
+ * Founding, launch, a woken holding and a switch (which wakes) all open
+ * through [openCore]. A vault with no seed on this phone, or no index
+ * recorded for it, opens UNKEYED — reads and writes as before — and Locker
+ * draws its no-words wall rather than a failure.
  */
 public class Shelf(
     /** Where every vault this device holds lives. */
@@ -98,7 +124,20 @@ public class Shelf(
     private val services: PlatformServices,
     private val dispatcher: CoroutineDispatcher,
     private val uiThreadName: String,
+    /**
+     * How a core is opened: the real ABI, unless a spec stands in for it to
+     * see the configuration every open carries. Null is a refusal.
+     */
+    private val opener: suspend (CoreConfiguration) -> CentraidCore? = { configuration ->
+        when (val outcome = CentraidCore.open(configuration, dispatcher, uiThreadName)) {
+            is CoreOutcome.Answered -> outcome.value
+            is CoreOutcome.Failed -> null
+        }
+    },
 ) {
+    /** Where the seed and each vault's index are kept. */
+    private val secrets = VaultSecrets(services.secureStore, services.syncedSecrets)
+
     /** ONE VAULT, AS THIS DEVICE HOLDS IT. */
     public data class Holding(
         public val vaultId: String,
@@ -135,6 +174,13 @@ public class Shelf(
          * Set by [freeze] and never cleared here. See [Moved] and [freeze].
          */
         public val moved: Moved? = null,
+        /**
+         * THIS CORE WAS OPENED WITH THE SEED AND THIS VAULT'S INDEX (#1047 W2).
+         *
+         * Only a keyed core holds the vault's keys, so only a keyed core can
+         * open Locker or seal a drain. A fact about the open, never the key.
+         */
+        public val keyed: Boolean = false,
     ) {
         /** Closed to give the OS its memory back, and reopened on next touch. */
         public val resting: Boolean get() = core == null
@@ -225,23 +271,25 @@ public class Shelf(
      *
      * ## Cooperation, not enforcement
      *
-     * Both phones hold the same seed, so no lease and no lock can DECIDE who
+     * Both phones hold the same seed, so no epoch and no lock can DECIDE who
      * owns a vault — either phone could ignore any answer it is given and go on
      * writing. What supersession buys is an ORDER (F3): the restored phone
-     * claims the next lease epoch, and a phone that learns its own epoch has
-     * been superseded stops writing because that is the cooperative thing to
-     * do, not because something stopped it.
+     * claims the gateway's next writer epoch (#1080), and a phone that learns
+     * its own epoch has been superseded stops writing because that is the
+     * cooperative thing to do, not because something stopped it.
      *
      * So this state does three things and no more: writes are refused
-     * ([Holding.readOnly]), the unacked spool is SHOWN ([Holding.frozenLine]),
+     * ([Holding.readOnly]), what no gateway acknowledged is SHOWN ([Holding.frozenLine]),
      * and it is KEPT. **Never wipe, never auto-take-back.** Wiping would
      * destroy a member's only copy of whatever this phone wrote last; taking
      * the vault back automatically would be two phones claiming one authority
      * in a loop, with the member watching it flip.
      *
-     * @property atIso when the other phone claimed the vault, RFC 3339.
-     * @property unacked how many changes this phone holds that the vault it
-     *   moved to has not seen. A count and never a deletion.
+     * @property atIso the instant the line dates from, RFC 3339: the last
+     *   acknowledgement on the gateway's clock, else the move's own time
+     *   (`freezeFor`, `movedFrom` in `sync/ReadFailures.kt`).
+     * @property unacked how many items this phone holds that no gateway
+     *   acknowledged. A count and never a deletion.
      */
     public data class Moved(
         public val atIso: String,
@@ -264,7 +312,7 @@ public class Shelf(
          * (`ERROR_CODE_VAULT_ALREADY_HELD`), or a core that answered the found
          * and then could not name what it made.
          *
-         * The file is deleted on this path. A `.sqlite3` in the directory that
+         * The vault's directory is deleted on this path. A `vault.db` that
          * names no vault would be listed by every later [load], refused by
          * `VaultRoster.identify` every time, and invisible to the member who
          * made it.
@@ -340,7 +388,7 @@ public class Shelf(
     /**
      * OPEN EVERY VAULT THIS DEVICE HOLDS (#1025 S7-9, reshaped by #1029 §1).
      *
-     * Every `.sqlite3` in the directory is opened — one way, with no role and
+     * Every `<name>/vault.db` in the directory is opened — one way, with no role and
      * without creating anything — and it STAYS open. A file that will not open,
      * or that will not say which vault it is, is simply not a holding: a row
      * that fails on tap is a door that does not open, and a file the shelf
@@ -348,10 +396,18 @@ public class Shelf(
      *
      * Then the FOREGROUND is chosen: the vault the member last had in front.
      */
-    public suspend fun load(): Unit = gate.withLock {
+    public suspend fun load(dev: DevSeed? = null): Unit = gate.withLock {
+        // A DEV SEED IS STORED FIRST, exactly as a restore would leave it, so
+        // every open below takes the ordinary keyed path. See [DevSeed].
+        if (dev != null) runCatching { secrets.rememberSeed(dev.seedHex) }
+        // A FOUND THE PROCESS DID NOT LIVE TO RECORD (#1047 E4). Its index was
+        // spent against one path before the core founded anything; [adopt]
+        // records it under the id that file names, or deletes a file the found
+        // never finished. Cleared after the listing either way.
+        val pending = secrets.pendingFound()
         val found = mutableListOf<Holding>()
         for (path in vaultFiles(vaultDir)) {
-            val holding = adopt(path) ?: continue
+            val holding = adopt(path, dev, pending?.takeIf { it.path == path }) ?: continue
             // TWO FILES, ONE VAULT, is a thing a directory can hold — a copy
             // taken by hand, a restore written beside the original — and two
             // holdings under one id would give the switcher two rows that
@@ -363,6 +419,15 @@ public class Shelf(
                 continue
             }
             found += holding
+        }
+        if (pending != null) {
+            // KILLED BEFORE THE CORE MADE THE FILE: an empty directory and an
+            // index nothing was sealed under, both given back.
+            if (!fs.exists(pending.path.toPath())) {
+                deleteVault(pending.path)
+                secrets.releaseVaultIndex(pending.index)
+            }
+            secrets.clearPendingFound()
         }
         holdings.value = found
         val remembered = services.secureStore.read(FOREGROUND_KEY)
@@ -383,11 +448,11 @@ public class Shelf(
      * names a fresh file, opens it with `create`, and the core founds the vault
      * inside it.
      *
-     * The file is named by [freshVaultFile] and the name is arbitrary — the
-     * vault's own id is read back off the file afterwards ([identify]) and the
-     * two are never reconciled, because the file name is not an identity. That
-     * is what makes this one act rather than the write-then-rename `Replicas`
-     * had to do.
+     * The directory is named by [freshVaultFile] and the name is arbitrary —
+     * the vault's own id is read back off the file afterwards ([identify]) and
+     * the two are never reconciled, because the file name is not an identity.
+     * That is what makes this one act rather than the write-then-rename
+     * `Replicas` had to do.
      *
      * **THE DOOR LANDED** (#1029 W5, hand-off 1). `Core::open` with `create`
      * lays the migrations down and [VaultRoster.found] writes the two rows that
@@ -410,30 +475,45 @@ public class Shelf(
         ownerName: String = DEFAULT_OWNER_NAME,
     ): FoundOutcome = gate.withLock {
         val path = freshVaultFile()
-        val core = openCore(path, create = true)
-            ?: return@withLock FoundOutcome.Refused(FoundRefusal.NO_CORE)
-        if (!VaultRoster.found(core, displayName = name, ownerName = ownerName)) {
-            core.close()
+        // THE INDEX IS SPENT BEFORE THE OPEN (#1047 E4, the crash window), and
+        // it can be, because it does not depend on the vault id: a keyed core
+        // is a seed and an index, and the id is read back afterwards. One past
+        // the highest this phone ever recorded, so a vault it once held is
+        // never re-derived — and recorded as pending against THIS path, so a
+        // process killed between the found and the record below is finished
+        // by the next [load] rather than leaving a keyed vault nothing opens
+        // keyed. No seed, no index: an index names a node under a seed, and
+        // with no seed there is no node.
+        val index = if (secrets.seed() != null) secrets.reserveVaultIndex(path) else null
+        // A REFUSAL DELETES THE DIRECTORY AND GIVES THE INDEX BACK: nothing was
+        // sealed under it and nothing left this phone.
+        suspend fun refuse(core: CentraidCore?, because: FoundRefusal): FoundOutcome {
+            core?.close()
             deleteVault(path)
-            return@withLock FoundOutcome.Refused(FoundRefusal.NOT_FOUNDED)
+            if (index != null) secrets.releaseVaultIndex(index)
+            return FoundOutcome.Refused(because)
+        }
+        val (core, keyed) = openCore(path, create = true, index = index)
+            ?: return@withLock refuse(null, FoundRefusal.NO_CORE)
+        if (!VaultRoster.found(core, displayName = name, ownerName = ownerName)) {
+            return@withLock refuse(core, FoundRefusal.NOT_FOUNDED)
         }
         val named = VaultRoster.identify(core)
         if (named == null || named.vault_id.isEmpty()) {
-            core.close()
-            deleteVault(path)
-            return@withLock FoundOutcome.Refused(FoundRefusal.NOT_FOUNDED)
+            return@withLock refuse(core, FoundRefusal.NOT_FOUNDED)
         }
         if (holdings.value.any { it.vaultId == named.vault_id }) {
-            core.close()
-            deleteVault(path)
-            return@withLock FoundOutcome.Refused(FoundRefusal.ALREADY_HELD)
+            return@withLock refuse(core, FoundRefusal.ALREADY_HELD)
         }
+        if (keyed && index != null) secrets.rememberVaultIndex(named.vault_id, index)
+        secrets.clearPendingFound()
         val holding = Holding(
             vaultId = named.vault_id,
             path = path,
             name = named.vault_name,
             color = named.color,
             core = core,
+            keyed = keyed,
         )
         holdings.value = holdings.value + holding
         foregroundId = holding.vaultId
@@ -453,12 +533,12 @@ public class Shelf(
      * holding drops off the shelf, and the file, its byte store and its SQLite
      * sidecars are deleted.
      *
-     * **This is the one thing on this class that destroys a member's rows.** On
-     * a phone that IS the vault there is no copy anywhere else to fall back to:
-     * `forget` used to mean "this phone is not holding that gateway's vault any
-     * more", and it now means the vault is gone. Whatever calls it owes the
-     * member a confirmation and a backup; this function is not the place for
-     * either, and #1029 W5 owns the restore that makes the trade survivable.
+     * **This is the one thing on this class that destroys a member's rows.**
+     * The phone IS the vault: what survives is a paired gateway's sealed copy,
+     * which the 24 words and that gateway's pairing payload restore (#1080),
+     * and a vault never backed up has no copy anywhere else. The vault's
+     * directory goes whole — its backup ledger and spool with it. Whatever
+     * calls this owes the member a confirmation that says so.
      *
      * The next foreground is the first remaining holding, or none — a device
      * holding zero vaults is a state of the device and shows the empty shelf.
@@ -468,6 +548,9 @@ public class Shelf(
         going.core?.close()
         holdings.value = holdings.value.filter { it.vaultId != vaultId }
         deleteVault(going.path)
+        // THE INDEX GOES WITH THE VAULT; the high-water mark does not, so a
+        // later found never reuses it.
+        secrets.forgetVaultIndex(vaultId)
         if (foregroundId == vaultId) {
             foregroundId = holdings.value.firstOrNull()?.vaultId
             services.secureStore.write(FOREGROUND_KEY, foregroundId.orEmpty())
@@ -520,7 +603,104 @@ public class Shelf(
     public suspend fun closeAll(): Unit = gate.withLock {
         holdings.value.forEach { it.core?.close() }
         holdings.value = holdings.value.map { it.copy(core = null) }
+        custody?.close()
+        custody = null
     }
+
+    // -----------------------------------------------------------------------
+    // The words — a core with no vault, a restore, a re-key (#1047 E1)
+    // -----------------------------------------------------------------------
+
+    private var custody: CentraidCore? = null
+
+    /**
+     * A CORE THAT HOLDS NO VAULT, for the words and for a restore.
+     *
+     * Minting, judging and seeding the 24 words and restoring from them are
+     * core requests that need no vault (`phone.proto`), and a first launch or
+     * a fresh install has none to ask through. Opened once, unkeyed, with
+     * `create` false at [CUSTODY_FILE] — which founds nothing — and closed
+     * with the rest in [closeAll].
+     */
+    public suspend fun custodyCore(): CentraidCore? = gate.withLock {
+        custody?.let { return@withLock it }
+        val path = vaultDir.toPath().resolve(CUSTODY_FILE).toString()
+        runCatching { fs.createDirectories(vaultDir.toPath()) }
+        val opened = openCore(path, create = false, index = null)?.first
+        custody = opened
+        opened
+    }
+
+    /** One vault a restore laid down: where, and the index it was found at. */
+    public data class Restored(public val path: String, public val index: Int)
+
+    /**
+     * HOLD WHAT A RESTORE BROUGHT BACK, KEYED (#1047 E1, R-1047-E3).
+     *
+     * Each file is asked which vault it is — the id the shelf keys on is the
+     * one the file names (`core_vault`), which is not the identity key a
+     * restore reports — and that id is given the index the restore found it at,
+     * before the keyed reopen. The
+     * SEED must already be stored: `custody.Enrollment` stores it first. Answers how
+     * many vaults were added.
+     */
+    public suspend fun adoptRestored(restored: List<Restored>): Int = gate.withLock {
+        var added = 0
+        for (vault in restored) {
+            val (probe, _) = openCore(vault.path, create = false, index = null) ?: continue
+            val named = VaultRoster.identify(probe)
+            probe.close()
+            if (named == null || named.vault_id.isEmpty()) continue
+            if (holdings.value.any { it.vaultId == named.vault_id }) continue
+            secrets.rememberVaultIndex(named.vault_id, vault.index)
+            val (core, keyed) = openCore(vault.path, create = false, index = vault.index)
+                ?: openCore(vault.path, create = false, index = null)
+                ?: continue
+            holdings.value = holdings.value + Holding(
+                vaultId = named.vault_id,
+                path = vault.path,
+                name = named.vault_name,
+                color = named.color,
+                core = core,
+                keyed = keyed,
+            )
+            if (foregroundId == null) {
+                foregroundId = named.vault_id
+                services.secureStore.write(FOREGROUND_KEY, named.vault_id)
+            }
+            added += 1
+        }
+        if (added > 0) publish()
+        added
+    }
+
+    /**
+     * REOPEN EVERY UNKEYED HOLDING THAT CAN NOW BE KEYED (#1047 E1, R-1047-E5).
+     *
+     * What handing the words back does: the seed is stored again, and every
+     * holding with a recorded index is closed and reopened with it. A holding
+     * with no recorded index stays as it is — the shelf never guesses one.
+     * Answers how many holdings are keyed afterwards.
+     */
+    public suspend fun rekey(): Int = gate.withLock {
+        var changed = false
+        holdings.value = holdings.value.map { holding ->
+            val index = keyedIndex(holding.vaultId)
+            if (holding.keyed || index == null) return@map holding
+            holding.core?.close()
+            val (core, keyed) = openCore(holding.path, create = false, index = index)
+                ?: openCore(holding.path, create = false, index = null)
+                ?: return@map holding.copy(core = null, keyed = false)
+            changed = true
+            holding.copy(core = core, keyed = keyed)
+        }
+        if (changed) publish()
+        holdings.value.count { it.keyed }
+    }
+
+    /** How many holdings have an index recorded on this phone. */
+    public suspend fun indexedHoldings(): Int =
+        holdings.value.count { secrets.vaultIndex(it.vaultId) != null }
 
     // -----------------------------------------------------------------------
     // Rest — the OS asking for memory back
@@ -563,19 +743,16 @@ public class Shelf(
      * **The only way in, and there is no way out.** Taking a vault back is a
      * deliberate act and never an automatic one, so there is no `thaw` here:
      * the act that would undo this is a member choosing to make THIS phone the
-     * authority again, which claims the next lease epoch — and the lease is
-     * #1029 W5's, with the restore it belongs to.
+     * authority again, which is a restore's claim at the gateway's next writer
+     * epoch (#1080).
      *
      * ## Who calls this
      *
-     * Whatever learns the vault moved, which is W5's restore client: it holds
-     * the lease and hears the supersession. **There is no typed error to key
-     * this on yet** — `error.proto` has no `ERROR_CODE_VAULT_MOVED`,
-     * `crates/api-proto` is another lane's, and inventing a code number here
-     * would be a second mechanism that disagreed with the first one minted.
-     * When that code lands, the mapping goes beside the others in
-     * `sync/ReadFailures.kt` and calls THIS function; the state, the refusal
-     * and the line do not move.
+     * `HomeSession.vaultMoved`, when a pass stops `MOVED` or `backup_status`
+     * says the vault is frozen (`freezeFor`), or when a refusal carries
+     * `ERROR_CODE_VAULT_MOVED` (`movedFrom`); both readers are in
+     * `sync/ReadFailures.kt`. The state, the refusal and the line are this
+     * class's alone.
      *
      * Deletes nothing, closes nothing and keeps the core open: a frozen vault
      * is fully readable, which is the point of freezing rather than forgetting.
@@ -627,21 +804,58 @@ public class Shelf(
     private suspend fun wake(vaultId: String?): CentraidCore? {
         val holding = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return null
         holding.core?.let { return it }
-        val opened = openCore(holding.path, create = false) ?: return null
+        val (opened, keyed) =
+            openCore(holding.path, create = false, index = keyedIndex(holding.vaultId))
+                ?: return null
         holdings.value = holdings.value.map {
-            if (it.vaultId == holding.vaultId) it.copy(core = opened) else it
+            if (it.vaultId == holding.vaultId) it.copy(core = opened, keyed = keyed) else it
         }
         publish()
         return opened
     }
 
-    /** Open a file and ask it which vault it is. Null for either refusal. */
-    private suspend fun adopt(path: String): Holding? {
-        val core = openCore(path, create = false) ?: return null
-        val named = VaultRoster.identify(core)
-        if (named == null || named.vault_id.isEmpty()) {
-            core.close()
+    /**
+     * Open a file and ask it which vault it is. Null for either refusal.
+     *
+     * TWO OPENS WHEN THE VAULT CAN BE KEYED. Which index to derive at is a
+     * fact about the VAULT, and a file name is not an identity — so the file
+     * is opened unkeyed to ask it, and reopened keyed once its id names an
+     * index. A keyed reopen that is refused falls back to the unkeyed open
+     * rather than losing the vault from the shelf.
+     */
+    private suspend fun adopt(
+        path: String,
+        dev: DevSeed?,
+        /** The found in flight at this path when the process died, if any. */
+        pending: VaultSecrets.PendingFound? = null,
+    ): Holding? {
+        val opened = openCore(path, create = false, index = null)
+        val named = opened?.first?.let { VaultRoster.identify(it) }
+        if (opened == null || named == null || named.vault_id.isEmpty()) {
+            opened?.first?.close()
+            // A FOUND THAT NEVER FINISHED — the file is there and names no
+            // vault — is the refusal the process did not live to clean up.
+            if (pending != null) {
+                deleteVault(path)
+                secrets.releaseVaultIndex(pending.index)
+            }
             return null
+        }
+        val probe = opened.first
+        if (pending != null && secrets.vaultIndex(named.vault_id) == null) {
+            secrets.rememberVaultIndex(named.vault_id, pending.index)
+        }
+        if (dev != null && secrets.vaultIndex(named.vault_id) == null) {
+            secrets.rememberVaultIndex(named.vault_id, dev.index)
+        }
+        val index = keyedIndex(named.vault_id)
+        val (core, keyed) = if (index == null) {
+            probe to false
+        } else {
+            probe.close()
+            openCore(path, create = false, index = index)
+                ?: openCore(path, create = false, index = null)
+                ?: return null
         }
         return Holding(
             vaultId = named.vault_id,
@@ -649,13 +863,22 @@ public class Shelf(
             name = named.vault_name,
             color = named.color,
             core = core,
+            keyed = keyed,
         )
+    }
+
+    /** [vaultId]'s index when this phone also holds the seed, else null. */
+    private suspend fun keyedIndex(vaultId: String): Int? {
+        val index = secrets.vaultIndex(vaultId) ?: return null
+        return if (secrets.seed() != null) index else null
     }
 
     /**
      * THE ONE OPEN (#1029 §1).
      *
-     * A path and whether this call may found a vault there, and nothing else.
+     * A path, whether this call may found a vault there, and the index to key
+     * it at (#1047 W2) — null for an unkeyed open. Answers the core and whether
+     * it was KEYED: an index with no seed on this phone opens unkeyed.
      * It carried a `role` — `SEAT_REPLICATED`, always, hard-coded — and the
      * enrolment record this device held for the vault; the first named a plane
      * that is deleted and the second a relationship that no longer exists.
@@ -669,15 +892,25 @@ public class Shelf(
      * is about to write is answered "there is nothing here" rather than handed
      * an empty one.
      */
-    private suspend fun openCore(path: String, create: Boolean): CentraidCore? = when (
-        val outcome = CentraidCore.open(
-            CoreConfiguration(databasePath = path, create = create),
-            dispatcher,
-            uiThreadName,
-        )
-    ) {
-        is CoreOutcome.Answered -> outcome.value
-        is CoreOutcome.Failed -> null
+    private suspend fun openCore(
+        path: String,
+        create: Boolean,
+        index: Int?,
+    ): Pair<CentraidCore, Boolean>? {
+        // THE SEED LIVES FOR THIS CALL AND NO LONGER (#1047 W2, `CONTRACT.md`
+        // §4b). Read out of the store here, carried by one configuration into
+        // `centraid_open`, and dropped with it; nothing on this class keeps it.
+        // A `String` cannot be zeroed, so the defence is scope, not scrubbing.
+        val seed = index?.let { secrets.seed() }
+        val core = opener(
+            CoreConfiguration(
+                databasePath = path,
+                create = create,
+                vaultSeedHex = seed,
+                vaultIndex = if (seed == null) 0 else index,
+            ),
+        ) ?: return null
+        return core to (seed != null)
     }
 
     // -----------------------------------------------------------------------
@@ -685,65 +918,56 @@ public class Shelf(
     // -----------------------------------------------------------------------
 
     /**
-     * Every vault file in the directory, sorted by name.
+     * Every vault file under the directory, sorted: `<dir>/<name>/vault.db`.
      *
      * Sorted so the same device picks the same foreground twice running rather
-     * than whichever file the filesystem happened to enumerate first. `-wal` and
-     * `-shm` are excluded by the suffix: they are SQLite's sidecars, not vaults,
-     * and opening one as a vault fails at the door.
-     *
-     * **It matches no prefix**, which is what lets files written under the old
-     * `centraid-replica-<vaultId>.sqlite3` spelling keep opening beside the ones
-     * [freshVaultFile] makes. A vault says what it is; a file name does not.
+     * than whichever directory the filesystem happened to enumerate first. One
+     * directory per vault, founded or restored (Q-1047-17, the header); the
+     * directory's name is opaque, because a vault says what it is and a name
+     * does not.
      */
     private fun vaultFiles(directory: String): List<String> {
         val dir = directory.toPath()
         if (!fs.exists(dir)) return emptyList()
         return fs.list(dir)
-            .filter { it.name.endsWith(SUFFIX) }
+            .filter { fs.metadataOrNull(it)?.isDirectory == true }
+            .map { it.resolve(VAULT_FILE) }
+            .filter { fs.exists(it) }
             .map { it.toString() }
             .sorted()
     }
 
     /**
-     * A file name no vault in this directory is using.
+     * A vault directory no vault is using, and the file in it:
+     * `<dir>/centraid-vault-<hex>/vault.db`.
      *
      * The middle is random rather than a counter: a counter would have to be
      * stored somewhere, and a second place to keep it is a second thing that can
      * be wrong. `SecureRandom` is used because it is the RNG this module has —
      * `kotlin.random.Random` is seeded from the clock, and two vaults founded in
-     * the same tick is exactly the collision it would produce.
+     * the same tick is exactly the collision it would produce. The directory is
+     * made here; the core founds the file inside it.
      */
     private fun freshVaultFile(): String {
         val dir = vaultDir.toPath()
         while (true) {
-            val name = PREFIX + hex(services.secureRandom.bytes(NAME_BYTES)) + SUFFIX
-            val candidate = dir.resolve(name)
-            if (!fs.exists(candidate)) return candidate.toString()
+            val home = dir.resolve(PREFIX + hex(services.secureRandom.bytes(NAME_BYTES)))
+            if (fs.exists(home)) continue
+            fs.createDirectories(home)
+            return home.resolve(VAULT_FILE).toString()
         }
-    }
-
-    /** The vault file, its byte store and SQLite's sidecars, together. */
-    private fun deleteVault(path: String) {
-        val file = path.toPath()
-        runCatching { fs.delete(file, mustExist = false) }
-        SIDECARS.forEach { suffix ->
-            runCatching { fs.delete(file.parent!!.resolve(file.name + suffix), mustExist = false) }
-        }
-        runCatching { fs.deleteRecursively(byteStoreOf(file), mustExist = false) }
     }
 
     /**
-     * `<stem>.sqlite3` -> `<stem>.bytes`.
-     *
-     * THE LAST EXTENSION IS REPLACED, NOT APPENDED. This was `name + ".bytes"`
-     * for one simulator run, and the run is how it was found: a file's store
-     * stayed behind while the vault beside it opened a fresh, empty one. Every
-     * photograph was orphaned and nothing failed — a library of rows pointing at
-     * nothing renders as a grid of placeholders rather than as an error.
+     * A vault's directory, whole: the file, SQLite's sidecars, its byte store
+     * (`vault.bytes`) and its backup home. The directory is the vault's own
+     * (Q-1047-17), so nothing else is in it.
      */
-    private fun byteStoreOf(file: Path): Path =
-        file.parent!!.resolve(file.name.substringBeforeLast('.', file.name) + ".bytes")
+    private fun deleteVault(path: String) {
+        val home = path.toPath().parent ?: return
+        if (home == vaultDir.toPath()) return
+        runCatching { fs.deleteRecursively(home, mustExist = false) }
+    }
 
     private fun hex(bytes: ByteArray): String =
         bytes.joinToString("") { byte ->
@@ -762,10 +986,26 @@ public class Shelf(
          */
         public const val FOREGROUND_KEY: String = "shelf.foreground"
 
-        /** What [freshVaultFile] writes. A label on a file, never an identity. */
+        /** What [freshVaultFile] names a vault's directory. A label, never an identity. */
         internal const val PREFIX: String = "centraid-vault-"
 
-        internal const val SUFFIX: String = ".sqlite3"
+        /**
+         * WHAT EVERY VAULT FILE IS CALLED, one per directory (Q-1047-17) —
+         * founded here or laid down by a restore (`crates/core/src/phone/
+         * restore.rs`). `public` because a shell that PLACES a vault has to
+         * spell it the same way (`mobile/scripts/demo-vault.sh`, Android's
+         * asset copy).
+         */
+        public const val VAULT_FILE: String = "vault.db"
+
+        /**
+         * THE PATH OF THE CORE THAT HOLDS NO VAULT (#1047 E1).
+         *
+         * The words requests and a restore need a core and no vault; this
+         * path is never a file (`create` is false), and its directory is the
+         * vault directory so a restore lays each vault down beside the others.
+         */
+        public const val CUSTODY_FILE: String = "custody-probe.sqlite3"
 
         /** 128 bits of file name. Enough that a collision is not a case. */
         private const val NAME_BYTES: Int = 16
@@ -793,10 +1033,8 @@ public class Shelf(
          *
          * The make-vault sheet on both shells is a button and no text field, so
          * the found has to carry a string and this is it. It lives here rather
-         * than in `CentraidCopy` because that table is GENERATED from `copy/`
-         * and hand-editing it is what the mobile-jvm gate's clean-tree
-         * assertion refuses; a name a member can change from inside the vault
-         * is also not app copy in the sense that table holds.
+         * than in `design/copy` because a name a member can change from
+         * inside the vault is not app copy in the sense that table holds.
          *
          * **A DEFAULT AND NOT A PLACEHOLDER.** It is written to
          * `core_vault.display_name`, the one place a vault's name lives, so a
@@ -810,11 +1048,10 @@ public class Shelf(
          *
          * A display name on a `core_party` of kind `person`, and the only party
          * in a fresh vault. There is no email address, no phone number and no
-         * account here and nowhere for one to arrive — the same rule
-         * `lease.proto` states for the gateway plane.
+         * account here and nowhere for one to arrive: a gateway, too, knows a
+         * vault by its id and a phone by a token (`docs/gateway.md`).
          */
         public const val DEFAULT_OWNER_NAME: String = "Me"
 
-        private val SIDECARS = listOf("-wal", "-shm")
     }
 }

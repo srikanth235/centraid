@@ -115,7 +115,7 @@ impl World {
             .expect("the bytes store");
         self.scratch
             .vault
-            .stage_bytes(&[centraid_vault::intents::NeededBytes {
+            .stage_bytes(&[centraid_vault::content::NeededBytes {
                 hash: hash.clone(),
                 byte_size: i64::try_from(bytes.len()).expect("a small blob"),
                 media_type: media_type.to_owned(),

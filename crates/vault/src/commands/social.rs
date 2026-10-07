@@ -250,7 +250,6 @@ fn resolve_identity() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -466,7 +465,6 @@ fn draft_message() -> CommandDefinition {
             }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -551,7 +549,6 @@ fn send_message() -> CommandDefinition {
             Ok(serde_json::json!({ "message_id": message_id, "delivery": "sent" }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 
@@ -638,7 +635,6 @@ fn mark_thread_read() -> CommandDefinition {
             Ok(serde_json::json!({ "thread_id": thread_id }))
         },
         sealed_input: &[],
-        online_only: false,
     }
 }
 

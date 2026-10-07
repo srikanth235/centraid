@@ -1,5 +1,4 @@
 {
-  "accountPublicHex": "87110304fac9bd6b62d598556399609c5c47bc3b11f3da25203366170542470c",
   "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
   "safetyNumber": "38394 36422 07209 27357 06879 57260 38834 97705 12477 24050 94056 44949",
   "schema": "centraid-identity-vectors/1",
@@ -9,18 +8,21 @@
       "boxPublicHex": "5db03b32ccb73475d77d660fee6bd1439f0bc2a076ef51ff5f4d337cb8d3680d",
       "identityPublicHex": "f2ee1ee5284af1a30f9db9bf045dde9a6e85191768356b4fd9d6c28fad7c5d18",
       "index": 0,
+      "lockerKeyHex": "7adc5c3e3802d72eec56dcd60c537e4f4f192c6327f68a6bb47c6243f0ad4e0b",
       "rootKeyHex": "3e493b959a5ad11b4c9373f8e82cd4d19033a7a62d419c3b831c5d8e0d1a0587"
     },
     {
       "boxPublicHex": "6cb33b3f9496b2942e5d6bb347c67b02323ec2b8184ae3da91d511beff90777a",
       "identityPublicHex": "71a86af705176a1e249cbe59f9c20dd15aba2a62b57eaada6e8d3fbd74d69fc8",
       "index": 1,
+      "lockerKeyHex": "5e3c26d3b7b00dfc4603b02cdc247e4bdaeb6ad0b0b1f0c8363c953493cee104",
       "rootKeyHex": "dba3d055ce3b4b06ab4ad5742eb7cc59eb14a1f96aaa706609ba822a46baee57"
     },
     {
       "boxPublicHex": "87192cbff0d03105774ae58897c2abe0c42bf52e894f4fa38f201625b7db4156",
       "identityPublicHex": "fad8dae060ba246068673b5fc11bb92243d69cbaaa8707e934bf71a42823d71a",
       "index": 4,
+      "lockerKeyHex": "0c3a4b31ac5620dc91da37e73817f2480ab3e9b738ce1c59527c38c12e84b55b",
       "rootKeyHex": "9691d1906f4ca953270e38fd5b6692a59cede128b88983baa4342e5621081ca9"
     }
   ],

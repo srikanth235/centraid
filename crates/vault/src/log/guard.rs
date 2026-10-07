@@ -27,9 +27,10 @@
 //! rather than a row image. A rollback reports nothing, because the census is
 //! only read on the success path.
 //!
-//! The capture hook #1029 §2 wants — the one that spools changed PAGES before a
-//! checkpoint — is **not** here. W3 places it, and this module leaves the seam
-//! rather than half-building it.
+//! The hook counts nothing else. A backup counts rows on its own scratch copy
+//! of the file, off the request path
+//! ([#1080](https://github.com/srikanth235/centraid/issues/1080)), so the
+//! commit pair carries no row census.
 //!
 //! **Nesting is a deliberate no-op.** An inner `commit` runs its body inside
 //! the outer pair: one pair is one transaction, and a nested one that opened
@@ -102,8 +103,20 @@ pub struct CommitResult<T> {
     pub tables: Vec<String>,
 }
 
-/// The set the hook fills and the guard reads.
-type Census = Arc<Mutex<(BTreeSet<String>, usize)>>;
+/// What the hook fills and the guard reads: the tables and the row count.
+///
+/// The signed per-table delta that moved a running row census stood here
+/// too; the census is counted on the backup snapshot's scratch copy now, off
+/// the request path, and the counter went
+/// ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
+#[derive(Debug, Default)]
+struct Tally {
+    tables: BTreeSet<String>,
+    rows: usize,
+}
+
+/// The tally the hook fills and the guard reads.
+type Census = Arc<Mutex<Tally>>;
 
 impl Vault {
     /// Run a write inside the commit pair.
@@ -138,7 +151,7 @@ impl Vault {
         // THE HOOK IS INSTALLED INSIDE THE TRANSACTION and removed before the
         // guard returns, so a read between commits carries no hook at all and
         // one commit's census can never absorb another's.
-        let census: Census = Arc::new(Mutex::new((BTreeSet::new(), 0)));
+        let census: Census = Arc::new(Mutex::new(Tally::default()));
         if let Err(error) = install_hook(connection, &census) {
             self.depth.set(0);
             let _ = connection.execute_batch("ROLLBACK");
@@ -164,7 +177,9 @@ impl Vault {
                 // READ AFTER THE COMMIT, and cleared only then. A census read
                 // before it would be a screen redrawn from a transaction that
                 // could still roll back.
-                let (tables, rows) = take_census(connection, &census);
+                let tally = take_census(connection, &census);
+                let rows = tally.rows;
+                let tables: Vec<String> = tally.tables.into_iter().collect();
                 tracing::debug!(rows, tables = tables.len(), "commit");
                 Ok(CommitResult {
                     value,
@@ -188,40 +203,6 @@ impl Vault {
     pub fn in_commit(&self) -> bool {
         self.depth.get() > 0
     }
-
-    /// EVERY ROW THIS VAULT HOLDS, BY TABLE (#1029 §1, F4).
-    ///
-    /// The running census a phone compares against: the shrink guard's
-    /// phone-side warning is "the total is below half of what it was, or one
-    /// app's rows are down more than 90%", and that question cannot be asked
-    /// of a gateway holding ciphertext — only here, where the rows are
-    /// readable.
-    ///
-    /// `sqlite_%` tables are excluded: they are SQLite's own bookkeeping and a
-    /// member has no app whose rows they are.
-    pub fn census(&self) -> Result<Vec<(String, i64)>> {
-        self.read(|connection| {
-            let mut statement = connection.prepare(
-                r"SELECT name FROM sqlite_master
-                    WHERE type = 'table'
-                      AND name NOT LIKE 'sqlite\_%' ESCAPE '\'
-                    ORDER BY name",
-            )?;
-            let tables: Vec<String> = statement
-                .query_map([], |row| row.get::<_, String>(0))?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-            let mut census = Vec::with_capacity(tables.len());
-            for table in tables {
-                let sql = format!(
-                    "SELECT count(*) FROM {}",
-                    crate::log::identifiers::quoted(&table)
-                );
-                let rows: i64 = connection.query_row(&sql, [], |row| row.get(0))?;
-                census.push((table, rows));
-            }
-            Ok(census)
-        })
-    }
 }
 
 /// FTS5's own shadow tables, by suffix.
@@ -235,7 +216,7 @@ impl Vault {
 const FTS_SHADOW_SUFFIXES: [&str; 5] = ["_content", "_data", "_docsize", "_idx", "_config"];
 
 /// Whether a table name is a change a screen could care about.
-fn is_reportable(table: &str) -> bool {
+pub(crate) fn is_reportable(table: &str) -> bool {
     if table.starts_with("sqlite_") {
         return false;
     }
@@ -254,9 +235,9 @@ fn install_hook(connection: &Connection, census: &Census) -> Result<()> {
                 return;
             }
             if let Ok(mut held) = shared.lock() {
-                held.1 += 1;
-                if !held.0.contains(table) {
-                    held.0.insert(table.to_owned());
+                held.rows += 1;
+                if !held.tables.contains(table) {
+                    held.tables.insert(table.to_owned());
                 }
             }
         },
@@ -269,14 +250,12 @@ fn install_hook(connection: &Connection, census: &Census) -> Result<()> {
 /// The hook is removed FIRST: the closure owns a clone of the `Arc`, and
 /// leaving it installed would leave one commit's set alive to be written to by
 /// the next statement on this connection.
-fn take_census(connection: &Connection, census: &Census) -> (Vec<String>, usize) {
+fn take_census(connection: &Connection, census: &Census) -> Tally {
     let _ = connection.update_hook(None::<fn(Action, &str, &str, i64)>);
     let Ok(mut held) = census.lock() else {
-        return (Vec::new(), 0);
+        return Tally::default();
     };
-    let tables = std::mem::take(&mut held.0).into_iter().collect();
-    let rows = std::mem::replace(&mut held.1, 0);
-    (tables, rows)
+    std::mem::take(&mut *held)
 }
 
 #[cfg(test)]

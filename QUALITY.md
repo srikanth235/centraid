@@ -2,6 +2,9 @@
 
 ## Open
 
+- **The docs site still describes the old backup plane** ([#1080](https://github.com/srikanth235/centraid/issues/1080))**.** `scripts/docs-site/src/content/backups.html` and `data.html` describe the v0 recovery kit and the provider plane, and `start.html` §01–§05 and `index.html`'s first path card describe the desktop shell #1029 deleted; the `.astro` pages' titles and keywords name iroh and the desktop shell. The docs lane of #1080 was stopped before its third round reached them. The state docs under `docs/` are current; the site is not.
+- **The local gate's warm budget is exceeded by every run** ([#1080](https://github.com/srikanth235/centraid/issues/1080))**.** `cargo xtask gate --profile local` scores a warm run against 120 s and takes about 290 s with every step green (the #1029 receipt recorded 152.7 s, #1020 285.7 s), so the budget has not held since before #1080. Part of the time is the restore drills running twice per loop: the `test` step runs them with the workspace and the `restore-drill` step runs them again by name. Either the budget is wrong or the drills should run once; neither was changed under #1080.
+- **`custody` is still the Kotlin package name for pairing and restore** ([#1080](https://github.com/srikanth235/centraid/issues/1080))**.** `dev.centraid.shared.custody` (10 files), `Shelf.custodyCore` and `CustodyCopy` keep a word the vocabulary retired; a rename reaches 11 lines of both shells. Left for a rename-only change.
 - **`.mjs` scripts should be TypeScript.** Hundreds of `.mjs` files under
   `scripts/` and `.governance/law/` exist because their call sites say
   `node …`, not because the runtime needs JS: Bun runs `.ts` natively and
@@ -40,6 +43,71 @@
   deliberately don't assert those bytes.
 
 ## Resolved
+
+- #1047 — **A vault that stayed with the old phone had no way back on its
+  own** (F8, [R-1047-R6](docs/decisions.md#a-restore-that-holds-1047-r3)).
+  `RestoreRequest` named no index, so the core restored every index or none,
+  and a second restore would have laid the claimed vaults down again under an
+  open session. `RestoreRequest.indices` now names the indices an earlier
+  answer called `unclaimed`, a restore never touches a vault this phone
+  already holds, and words.enter's DONE offers "Try again"
+  (`WordsEntryState.retry_label`, `Enrollment.restoreStayed`) from the stored
+  seed. On the way: `CoreRestoreDoor` read the 64-byte seed with the 32-byte
+  endpoint decoder, so every held-seed restore answered "could not reach your
+  laptop" without asking the core. Locks: `drain_wire.rs`
+  `a_vault_that_stayed_comes_back_on_its_own_while_the_adopted_one_stays_open`,
+  `WordsEntrySpec`, `EnrollmentSpec`, `WordsShelfSpec`.
+
+- #1047 — **`knowledge.edit_note` refused an empty title** (`minLength: 1`)
+  while Notes derives a title from the body's first line, so a member who
+  cleared both the name and the body kept the old name in the vault, and the
+  next read put it back in the field. `edit_note`'s `title` (and the manifest's
+  `edit-note`) takes `""` now, and the editor sends a cleared name empty when
+  the body has no first line. `create_note` keeps `minLength: 1`: the editor
+  refuses a new note with neither. Locks: `knowledge_commands.rs`
+  `a_note_title_may_be_cleared_by_an_edit`, the Notes manifest test,
+  `NotesAppSpec` "a cleared name saves as cleared…".
+
+- #1047 — **The shells did not draw `RestoreResponse.unclaimed`.** The core
+  named each vault it checked and could not claim, and `CoreRestoreDoor`
+  mapped only `vaults`, so words.enter reported the claimed vaults and said
+  nothing of the rest. `RestoreAnswer.unclaimed` now carries each one by index
+  and id (never the core's support-log `reason`), and words.enter's DONE draws
+  one `WordsEntryState.stayed` sentence per vault, numbered with the restored
+  lines in one sequence by index, under "Some of your vaults are back"
+  (`WordsCopy.RESTORED_SOME_TITLE`, `RESTORED_STAYED`, `RESTORED_STAYED_BODY`).
+  Locks: `WordsEntrySpec` "a vault that stayed with the other phone is named…",
+  `WordsShelfSpec` "the restore door carries every vault's path and index…",
+  `EnrollmentSpec` "a restore that left a vault with the old phone holds only
+  what it claimed…".
+
+- #1047 — **`tally.set_expense_memo` wrote columns `knowledge_annotation` does
+  not have.** It inserted `kind`/`body`, so any non-empty memo failed the
+  write; it now writes `body_text` (`crates/vault/src/commands/tally.rs`), and
+  the memo the expense reads back is the one set. Lock:
+  `crates/core/src/app_query/tally_tests.rs`
+  `a_memo_set_on_an_expense_is_answered_and_an_empty_one_clears_it`.
+
+- #1029 — **`core_collection` says whether it is a notebook or an album.** Rung
+  six (`contracts/migrations/006_collection_kind.sql`) adds a required,
+  immutable `kind`; every writer states it, every reader in Notes and Photos
+  (Rust and the shell) filters on it, `knowledge.*` and `media.*` refuse the
+  other kind's id with a sentence, and deleting a notebook can no longer touch
+  an album's placements. An existing vault is classified by the rule the rung
+  states. Locks: `crates/vault/tests/collection_kind.rs`; ruling
+  [R-COLL-1…4](docs/decisions.md#notes-and-photos-a-collection-says-which-it-is-1029).
+
+- #1046 — **Three vault-writer bugs the app_query arms surfaced, and the empty
+  note.** `core.add_document` and `schedule.add_task` stamped SQLite's host
+  `'now'`: the document now records its first revision before the row and
+  inserts it with the head in one statement (`knowledge.create_note`'s fix), and
+  the task binds `ctx.now` to both timestamps — `schedule.edit_task` sets
+  `updated_at` too, which the touch trigger otherwise stamps from the host.
+  `knowledge.create_note`/`edit_note` take `body_text` with `minLength: 0`
+  (owner ruling: a note may be cleared), and Notes' manifest agrees. Locks:
+  `a_filed_documents_updated_at_is_the_vault_clock`,
+  `a_task_is_stamped_by_the_vault_clock_on_add_and_edit`,
+  `a_note_body_may_be_created_empty_and_cleared_by_an_edit`.
 
 - #1005 — **The arrival fixture pinned the whole working tree, so it was red on
   every checkout but the one that recorded it.** `collectReceipts` read every

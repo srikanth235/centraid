@@ -1,4 +1,4 @@
-//! THE ELEVEN ACTIONS, as command invocations.
+//! THE TWELVE ACTIONS, as command invocations.
 //!
 //! Every Tasks action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app. So this module is a table, not
@@ -14,9 +14,6 @@
 //! **`invoke_key` is mandatory** (D-1020-D3-5).
 //!
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10).
-//!
-//! **`online_only` is empty for Tasks, and that is a checked claim.** No
-//! Tasks action is online-only. Filing a task in a tunnel is the point.
 
 use std::collections::BTreeMap;
 
@@ -109,7 +106,6 @@ pub struct ActionRow {
     pub action: &'static str,
     pub command: &'static str,
     pub confirm: Confirm,
-    pub online_only: bool,
 }
 
 const fn act(action: &'static str, command: &'static str) -> ActionRow {
@@ -117,15 +113,21 @@ const fn act(action: &'static str, command: &'static str) -> ActionRow {
         action,
         command,
         confirm: Confirm::None,
-        online_only: false,
     }
 }
 
-/// The eleven, in the manifest's own order.
+/// The thirteen, in the manifest's own order.
 pub const ACTIONS: &[ActionRow] = &[
     act("add", "schedule.add_task"),
     act("set-status", "schedule.set_task_status"),
     act("delete", "schedule.delete_task"),
+    // EMPTYING THE TRASH (#1015 D1), behind the manifest's confirmation.
+    ActionRow {
+        confirm: Confirm::Required,
+        ..act("purge", "schedule.purge_task")
+    },
+    // RESTORE UNDOES THE DELETE GESTURE (the trash's one verb every app has).
+    act("restore", "schedule.restore_task"),
     act("edit", "schedule.edit_task"),
     act("save-project", "schedule.save_project"),
     act("save-section", "schedule.save_section"),
@@ -159,6 +161,8 @@ pub fn act_scope_tables() -> Vec<&'static str> {
         "save_section",
         "organize_task",
         "delete_task",
+        "purge_task",
+        "restore_task",
         "attach",
         "detach",
         "tag_item",
@@ -182,17 +186,17 @@ mod tests {
             copy
         };
         assert_eq!(commands, unique, "one command per action");
-        assert_eq!(ACTIONS.len(), 11);
+        assert_eq!(ACTIONS.len(), 13);
     }
 
     #[test]
-    fn seven_of_the_eleven_are_the_schedule_schema() {
+    fn nine_of_the_thirteen_are_the_schedule_schema() {
         assert_eq!(
             ACTIONS
                 .iter()
                 .filter(|row| row.command.starts_with("schedule."))
                 .count(),
-            7
+            9
         );
         assert_eq!(
             ACTIONS
@@ -224,8 +228,71 @@ mod tests {
         assert!(PENDING_COMMANDS.is_empty(), "nothing is owed to this app");
     }
 
+    /// EVERY INPUT KEY AN ACTION DECLARES IS ONE ITS COMMAND ACCEPTS. The
+    /// `schedule.*` commands are `additionalProperties: false`, so a key the
+    /// manifest names and the vault does not is a write that is refused
+    /// outright: `organize-task` declared `recurrence_tz` while the vault takes
+    /// `tz`, and an anchor or zone change from the detail screen silently did
+    /// nothing (#1046's audit).
     #[test]
-    fn no_action_is_online_only_because_filing_in_a_tunnel_is_the_point() {
-        assert!(ACTIONS.iter().all(|row| !row.online_only));
+    fn every_declared_input_key_is_one_the_command_accepts() {
+        let registry = centraid_vault::commands::Registry::with_system_commands()
+            .expect("the vault's own registry");
+        for row in ACTIONS
+            .iter()
+            .filter(|row| row.command.starts_with("schedule."))
+        {
+            let declared = crate::manifest::manifest()
+                .action(row.action)
+                .expect("the manifest declares it");
+            let accepted = registry
+                .get(row.command)
+                .expect("registered")
+                .schema()
+                .get("properties")
+                .and_then(serde_json::Value::as_object)
+                .expect("a command schema has properties");
+            for key in declared
+                .input
+                .get("properties")
+                .and_then(serde_json::Value::as_object)
+                .into_iter()
+                .flat_map(serde_json::Map::keys)
+            {
+                assert!(
+                    accepted.contains_key(key),
+                    "`{}` declares `{key}` and `{}` does not accept it",
+                    row.action,
+                    row.command
+                );
+            }
+        }
+    }
+
+    /// THE OTHER DIRECTION, FOR `edit`: every key `schedule.edit_task` takes
+    /// is one the app can send. `clear_effort` was a vault key the detail
+    /// screen could not reach, so an estimate could be set and never unset.
+    #[test]
+    fn edit_declares_every_key_edit_task_accepts() {
+        let registry = centraid_vault::commands::Registry::with_system_commands()
+            .expect("the vault's own registry");
+        let accepted = registry
+            .get("schedule.edit_task")
+            .expect("registered")
+            .schema();
+        let declared = &crate::manifest::manifest()
+            .action("edit")
+            .expect("declared")
+            .input;
+        for key in accepted["properties"]
+            .as_object()
+            .expect("properties")
+            .keys()
+        {
+            assert!(
+                declared["properties"].get(key).is_some(),
+                "`edit` does not declare `{key}`"
+            );
+        }
     }
 }

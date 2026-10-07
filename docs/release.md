@@ -112,7 +112,7 @@ The escape is `--allow-uncandidated`, which passes and **prints the reason it wa
 - [ ] GitHub Release body matches changelog
 - [ ] **Desktop** (if shipped): multi-OS package jobs green; installers attached **only when signing enrolled**
 - [ ] **Gateway image** (if shipped): GHCR job green; `latest` only if non-beta
-- [ ] **Prebuilt core**: `prebuilt-core-required` green; every artifact reports one digest
+- [ ] **Prebuilt core**: `prebuilt-core-required` green; every artifact reports one `gitSha` and one `schemaVersion`
 - [ ] **Mobile** (if shipped): `release.yml` dispatched with `surfaces: mobile`; store tracks checked
 
 ## D4 — Patch vs minor
@@ -145,17 +145,14 @@ Do not fork process text into skills.
 
 | Workflow | Trigger | Notes |
 | --- | --- | --- |
-| `release.yml` | `v*` / `companion-v*` tags, dispatch | **the only tag listener**; fans out to the lanes below, `release-check` is the one verdict |
-| `lane-release-desktop.yml` | `workflow_call` | macOS + Windows + Linux; Environment `release` |
+| `release.yml` | `v*` tags, dispatch | **the only tag listener**; fans out to the lanes below, `release-check` is the one verdict |
 | `lane-release-mobile.yml` | `workflow_call` (dispatch only, never a tag) | Environment `mobile-release`; Gradle (Android) and XcodeGen + Xcode (iOS) builds of `mobile/` |
-| `lane-release-gateway-image.yml` | `workflow_call` | GHCR optional image, built from [`deploy/docker/Dockerfile`](../deploy/docker/Dockerfile) |
+| `lane-release-gateway-image.yml` | `workflow_call` | GHCR optional gateway image ([deploy/README.md](../deploy/README.md)) |
 | `lane-prebuilt-core.yml` | `workflow_call` | **the prebuilt core** ([#1020](https://github.com/srikanth235/centraid/issues/1020)): six binary triples, the four Android ABIs, the iOS XCFramework, a symbol file beside each, and `prebuilt-core-required` as the one verdict. Also invoked by `gate.yml` on pushes to `main` with `binary-only: true` |
-| `lane-release-extension.yml` | `workflow_call` (`companion-v*`) | packages `extension/`, the browser Companion |
 | `gate.yml` | PR / main push | `cargo xtask gate --profile pr`, plus `dependency-review` |
 | `candidate.yml` | main push / dispatch | rung 3 — the promotion lanes; on green its `promote` job moves `refs/candidates/latest`, publishes `test-report/candidate.json` and appends to `test-report/candidates.json`. `release.yml`'s `require-candidate` reads both |
-| `oauth-worker.yml` | path-filtered main push | protected deploy only when explicit flag + production evidence gates pass |
 
-Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the desktop signing identity, the mobile store credentials and GHCR push never reach a lane that has no business with them.
+Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the mobile store credentials and GHCR push never reach a lane that has no business with them. The desktop and Companion lanes were deleted with their surfaces ([#1029](https://github.com/srikanth235/centraid/issues/1029)); `scripts/release/surfaces.mjs` is the catalog, and its test refuses a row naming a workflow that is not on disk.
 
 ## The prebuilt core: triples, keys, identity, symbols
 
@@ -165,42 +162,39 @@ Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the
 
 **The identity stamp** answers _is the artifact a shell just loaded the one this tree produced?_ Every build bakes in `{gitSha, digest, schemaVersion}` (`crates/core/build.rs`; the digest is the key above). `centraid --version --json` prints it, the release publishes the same document as `centraid-<triple>.identity.json`, and three places check it: `deploy/vps/install.sh` at install, `CENTRAID_EXPECTED_CORE_DIGEST` at gateway start, and `crates/core-ffi`'s `open` handshake. A mismatch is a refusal, never a warning — a stale core starts, answers, and answers from a schema the shell stopped speaking. A local build with no release stamp is marked `dev` and says so.
 
-**Required targets gate the publish**, the rest are reported: `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin` and `x86_64-pc-windows-msvc` are required; `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin` and `aarch64-pc-windows-msvc` are optional. `prebuilt-core-required` also asserts that every published artifact reports **one** digest, because they were all built from one tree.
+**Required targets gate the publish**, the rest are reported: `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin` and `x86_64-pc-windows-msvc` are required; `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin` and `aarch64-pc-windows-msvc` are optional. `prebuilt-core-required` also asserts that every published artifact reports **one** `gitSha` and **one** `schemaVersion`, because they were all built from one tree. It cannot assert one _digest_: the digest is the artifact key, the key hashes the triple, so each artifact's digest differs by construction — each build leg proves its own binary reports its own triple's key before it publishes.
 
 **A symbol file beside every artifact.** `[profile.release]` keeps line-table debuginfo with `split-debuginfo = "packed"` and the lane publishes `centraid.dwp` (Linux), `centraid.dSYM` (macOS) or `centraid.pdb` (Windows) beside a **stripped** binary. Stripping happens at packaging, after the symbols have been lifted out; a profile that stripped would have thrown them away before anything could keep them.
 
-## Installing a gateway on a host, and the release smoke
+## Installing a gateway on a host
 
 [`deploy/README.md`](../deploy/README.md) is the one home for the image, the units and the installer. Three rules an operator can rely on:
 
 1. `deploy/vps/install.sh` verifies **before** it unpacks (`SHA256SUMS`), then checks the installed binary's identity stamp against the release's `identity.json`.
 2. It **never installs an OS service silently**. `--with-service` prints the commands; only `--yes` writes a unit, and enabling is always left to the operator.
-3. `centraid gateway install --dry-run` writes nothing at all.
+3. `centraid-gateway install --dry-run` writes nothing at all.
 
-`cargo xtask gate --profile release`'s `vps-smoke` step exercises all three inside a clean, digest-pinned Docker container: install, `--dry-run` writes nothing (checked by listing `/etc/systemd/system` before and after), the gateway founds a vault, a seat pairs over iroh, a WAL capture tick seals a segment, `centraid backup now` ships a generation with a non-empty tail, `centraid doctor` is clean, the container restarts over the same data directory and opens the existing vault rather than founding a second one — and finally the same artifact with a tampered `identity.json` is refused. The transcript lands at `target/xtask/release/vps-smoke/transcript.txt`.
+No gate step installs into a container: a gateway's end-to-end is its own conformance suite, run over the wire against a real server on a loopback port, and the restore drill ([TESTING.md](../TESTING.md)).
 
 ### OWNER HAND-OFF — the real VPS run
 
-The container proves the device-less half. The commands for a real host, and the transcript to expect:
+The tests prove a gateway on loopback. The commands for a real host, and what to expect:
 
 ```bash
-# On a fresh VPS, as a user with sudo:
+# On a fresh VPS, as the user the gateway will run as:
 curl --proto '=https' --tlsv1.2 -sSfL \
   https://raw.githubusercontent.com/srikanth235/centraid/main/deploy/vps/install.sh -o install.sh
-sha256sum install.sh                      # compare against the release notes
-bash install.sh --version vX.Y.Z --with-service --system --instance home
-# reads: "checksum ok", "identity ok", "installed /usr/local/bin/centraid",
-#        then the two commands it did NOT run
-sudo systemd-creds encrypt --name=centraid-keystore - /etc/centraid/credentials/centraid-gateway@home.keystore.cred
-bash install.sh --version vX.Y.Z --with-service --system --instance home --yes
-sudo systemctl enable --now centraid-gateway@home
-systemctl status centraid-gateway@home    # active (running), Restart=on-failure
-sudo -u '#'"$(systemctl show -p UID --value centraid-gateway@home)" \
-  centraid doctor --data-dir /var/lib/centraid/home   # exit 0, "clean"
-sudo systemctl restart centraid-gateway@home          # comes back, no second vault founded
+sha256sum install.sh                                    # compare against the release notes
+bash install.sh --version vX.Y.Z                        # reads "checksum ok", "identity ok", "installed …"
+centraid-gateway install --data-dir ~/centraid-gateway --dry-run   # the unit and its path, nothing written
+centraid-gateway install --data-dir ~/centraid-gateway  # written, not enabled; it prints the command that starts it
+loginctl enable-linger "$USER"                          # a user unit runs with nobody logged in
+centraid-gateway health --data-dir ~/centraid-gateway   # {"gateway_id":"…","protocol":2,"time_ms":…}
+centraid-gateway pair --data-dir ~/centraid-gateway     # scan it from a phone that is NOT on the VPS's network
+sudo reboot                                             # then `health` again: the same gateway id, the same pin
 ```
 
-What the container cannot prove and this run must: that `DynamicUser` + `StateDirectory` actually start (the unit has never been loaded by a real systemd), that `systemd-creds` hands the secret over, that the service survives a reboot, and that a seat on another machine pairs across a real network rather than over loopback. Record the transcript in the issue.
+What the tests cannot prove and this run must: that the unit starts under a real systemd and survives a reboot, that a phone on another network pairs with the VPS's public address and pins its certificate, and that a pass uploads across a real network and a restore reads it back. Record the transcript in the issue.
 
 ## What a release workflow owes the egress ratchet
 
