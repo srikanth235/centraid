@@ -3,9 +3,11 @@
 //!
 //! What a shell relies on and cannot check for itself: a read turn runs find then answer with its
 //! events in order, its cards mapped to the chat's own, and its line composed by the runtime; a
-//! decline, a Locker ask and a write attempt each end typed and write nothing; a stop between steps
-//! ends the turn and costs the model no further call; a reopened thread, a vault that changed and a
-//! retry each start a fresh session; and an attachment never leaves its own path.
+//! decline and a Locker ask end typed; a write parks behind a card, writes nothing until the member
+//! taps, writes once when they do and nothing when they dismiss it or the rows changed; a stop
+//! between steps ends the turn and costs the model no further call; a reopened thread and a retry
+//! start a fresh session while a vault that changed does not; an event question reads the
+//! member's own days; and an attachment never leaves its own path.
 
 mod common;
 
@@ -13,6 +15,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use centraid_assist::model::{Control, GenerateRequest, Generation, Model, ModelError};
+use centraid_assist::native::park::Confirmed;
 use centraid_assist::prompt::estimate_tokens;
 use centraid_assist::testing::ScriptedModel;
 use centraid_core::api_proto as wire;
@@ -108,15 +111,36 @@ fn thread(sample: &common::chat::Sample, id: &str) -> wire::ChatThread {
     }
 }
 
-/// How many task rows the vault holds, through the same door the runtime reads.
-fn task_rows(sample: &common::chat::Sample) -> usize {
+/// `(title, status)` of every task row, through the same door the runtime reads.
+fn tasks(sample: &common::chat::Sample) -> Vec<(String, String)> {
     use centraid_assist::native::Door as _;
+    use centraid_assist::native::door::text;
     sample
         .handle
         .assist_door()
-        .table("schedule_task", "task_id", "task_id", "task_id")
+        .table(
+            "schedule_task",
+            "task_id, title, status",
+            "task_id",
+            "task_id",
+        )
         .expect("the tasks read")
-        .len()
+        .iter()
+        .map(|row| {
+            (
+                text(row, "title").unwrap_or_default(),
+                text(row, "status").unwrap_or_default(),
+            )
+        })
+        .collect()
+}
+
+fn status_of(sample: &common::chat::Sample, title: &str) -> String {
+    tasks(sample)
+        .into_iter()
+        .find(|(name, _)| name == title)
+        .map(|(_, status)| status)
+        .expect("the task is there")
 }
 
 /// The tables the change events on the queue name: what a screen would have been told. Assist
@@ -348,37 +372,295 @@ fn an_ask_for_a_secret_is_declined_sealed_egress_and_reads_no_locker() {
     }
 }
 
-#[test]
-fn a_write_attempt_writes_nothing_and_says_so() {
-    let model = script(&[step(
-        "plan: write",
-        "act",
-        &[
-            ("verb", "create"),
-            ("kind", "task"),
-            ("args", "name: Buy milk"),
-        ],
-    )]);
-    let sample = native_sample(model);
-    let before = task_rows(&sample);
-    let _ = changes_on_the_queue(&sample); // what founding announced
-    let session = sample.start("");
-    let sent = sample.send(session, 1, "add a task to buy milk");
+const DRY_CLEANING: &str = "Pick up the dry cleaning";
 
+/// Look for the dry cleaning, then complete it: a write in two steps, the first a read.
+fn complete_dry_cleaning() -> Vec<[String; 2]> {
+    vec![
+        step(
+            "plan: look",
+            "find",
+            &[("kind", "task"), ("name", "dry cleaning")],
+        ),
+        step(
+            "plan: write",
+            "act",
+            &[("verb", "complete"), ("rows", "@1")],
+        ),
+    ]
+}
+
+fn pending_of(
+    sample: &common::chat::Sample,
+    session: u64,
+) -> centraid_assist::native_turn::PendingCard {
+    sample
+        .handle
+        .assist_pending(session)
+        .expect("the chat exists")
+        .expect("a write is waiting")
+}
+
+#[test]
+fn a_write_parks_behind_a_card_and_nothing_is_written_until_the_member_taps() {
+    let sample = native_sample(script(&complete_dry_cleaning()));
+    let session = sample.start("");
+    let _ = changes_on_the_queue(&sample); // what founding announced
+    let before = tasks(&sample);
+    let sent = sample.send(session, 1, "complete the dry cleaning task");
+
+    // THE TURN ENDS IN A PROPOSAL, in words; the card rides beside it for the core to surface
     let answer = answered(&sent);
+    assert!(answer.text.starts_with("Proposed: "), "{}", answer.text);
+    assert!(answer.text.contains(DRY_CLEANING), "{}", answer.text);
     assert_eq!(
-        answer.text,
-        "Chat cannot change your vault yet. Nothing changed."
+        story(&sample.drain_assist_events()),
+        ["activity:tasks/find", "activity:tasks/act", "answer"],
+        "the pending card has no wire form yet"
     );
-    assert!(answer.cards.is_empty());
-    assert_eq!(task_rows(&sample), before, "no task was made");
-    // no Activity for a write that is not run, and nothing for a screen to redraw but the chat
-    assert_eq!(story(&sample.drain_assist_events()), ["answer"]);
+    let card = pending_of(&sample, session);
+    assert_eq!(card.verbs, ["complete"]);
+    assert_eq!(card.commands, ["schedule.set_task_status"]);
+    assert!(!card.destructive);
+
+    // NOTHING HAS TOUCHED THE VAULT: no row moved and no screen was told
+    assert_eq!(tasks(&sample), before);
+    assert_eq!(status_of(&sample, DRY_CLEANING), "needs-action");
     assert!(
         changes_on_the_queue(&sample)
             .iter()
             .all(|table| table.starts_with("chat_") || table.starts_with("core_")),
-        "no app table was touched"
+        "no app table was touched by planning"
+    );
+
+    // THE TAP WRITES, through the door, and the change feed names the table
+    let tapped = sample
+        .handle
+        .assist_confirm(session, &card.id)
+        .expect("a confirm answers");
+    assert!(
+        matches!(tapped.outcome, Confirmed::Done { steps: 1, .. }),
+        "{tapped:?}"
+    );
+    assert_eq!(tapped.line, "Done.");
+    assert_eq!(status_of(&sample, DRY_CLEANING), "completed");
+    let tables = changes_on_the_queue(&sample);
+    assert!(
+        tables.iter().any(|table| table == "schedule_task"),
+        "{tables:?}"
+    );
+
+    // THE SAME CARD TAPPED AGAIN writes nothing: it answers what it answered, and no screen is told
+    let again = sample
+        .handle
+        .assist_confirm(session, &card.id)
+        .expect("a second confirm answers");
+    assert_eq!(again, tapped);
+    assert!(changes_on_the_queue(&sample).is_empty());
+    assert_eq!(
+        tasks(&sample)
+            .iter()
+            .filter(|(_, status)| status == "completed")
+            .count(),
+        before
+            .iter()
+            .filter(|(_, status)| status == "completed")
+            .count()
+            + 1
+    );
+}
+
+#[test]
+fn a_dismissed_card_writes_nothing_and_cannot_be_confirmed_afterwards() {
+    let sample = native_sample(script(&complete_dry_cleaning()));
+    let session = sample.start("");
+    sample.send(session, 1, "complete the dry cleaning task");
+    let card = pending_of(&sample, session);
+    let before = tasks(&sample);
+    let _ = changes_on_the_queue(&sample);
+
+    assert!(sample.handle.assist_dismiss(session, &card.id).unwrap());
+    assert_eq!(tasks(&sample), before);
+    assert!(sample.handle.assist_pending(session).unwrap().is_none());
+    let late = sample.handle.assist_confirm(session, &card.id).unwrap();
+    assert_eq!(late.outcome, Confirmed::Unknown);
+    assert_eq!(late.line, "Nothing is waiting on that.");
+    assert_eq!(tasks(&sample), before);
+    assert!(
+        changes_on_the_queue(&sample)
+            .iter()
+            .all(|table| !table.starts_with("schedule_")),
+        "a dismissal tells no screen anything"
+    );
+    // and a card that was never made is nobody's
+    assert!(
+        !sample
+            .handle
+            .assist_dismiss(session, "no-such-card")
+            .unwrap()
+    );
+}
+
+#[test]
+fn a_new_message_dismisses_the_card_that_was_waiting() {
+    let mut steps = complete_dry_cleaning();
+    steps.push(step("plan: no", "decline", &[("reason", "out_of_scope")]));
+    let sample = native_sample(script(&steps));
+    let session = sample.start("");
+    sample.send(session, 1, "complete the dry cleaning task");
+    let card = pending_of(&sample, session);
+    sample.send(session, 2, "never mind, what is the capital of France");
+    assert!(sample.handle.assist_pending(session).unwrap().is_none());
+    assert_eq!(
+        sample
+            .handle
+            .assist_confirm(session, &card.id)
+            .unwrap()
+            .outcome,
+        Confirmed::Unknown
+    );
+    assert_eq!(status_of(&sample, DRY_CLEANING), "needs-action");
+}
+
+#[test]
+fn a_card_whose_row_changed_since_it_was_planned_is_stale_and_writes_nothing() {
+    let sample = native_sample(script(&complete_dry_cleaning()));
+    let session = sample.start("");
+    sample.send(session, 1, "complete the dry cleaning task");
+    let card = pending_of(&sample, session);
+
+    // a screen edits that very task while the card waits
+    use centraid_assist::native::Door as _;
+    let id = {
+        use centraid_assist::native::door::text;
+        sample
+            .handle
+            .assist_door()
+            .table("schedule_task", "task_id, title", "task_id", "task_id")
+            .unwrap()
+            .iter()
+            .find(|row| text(row, "title").as_deref() == Some(DRY_CLEANING))
+            .and_then(|row| text(row, "task_id"))
+            .unwrap()
+    };
+    let edit = sample
+        .handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::Command(wire::Command {
+                name: "schedule.edit_task".to_owned(),
+                input: serde_json::to_vec(&serde_json::json!({"task_id": id, "priority": 1}))
+                    .unwrap(),
+                invoke_key: "test:edit-task".to_owned(),
+                ..wire::Command::default()
+            })),
+        })
+        .expect("the edit runs");
+    assert!(matches!(edit.kind, Some(wire::response::Kind::Command(_))));
+    let _ = changes_on_the_queue(&sample);
+
+    let tapped = sample.handle.assist_confirm(session, &card.id).unwrap();
+    assert!(
+        matches!(&tapped.outcome, Confirmed::Stale { rows } if rows.iter().any(|r| r.contains("dry cleaning"))),
+        "{tapped:?}"
+    );
+    assert_eq!(tapped.line, "That changed since. Ask again.");
+    assert_eq!(status_of(&sample, DRY_CLEANING), "needs-action");
+    assert!(
+        changes_on_the_queue(&sample)
+            .iter()
+            .all(|table| !table.starts_with("schedule_")),
+        "a stale card wrote nothing"
+    );
+}
+
+#[test]
+fn a_chain_of_two_writes_parks_as_one_card_and_a_tap_makes_both() {
+    let sample = native_sample(script(&[
+        step(
+            "plan: first",
+            "act",
+            &[
+                ("verb", "complete"),
+                ("kind", "task"),
+                ("name", "dry cleaning"),
+                ("more", "true"),
+            ],
+        ),
+        step(
+            "plan: second",
+            "act",
+            &[
+                ("verb", "complete"),
+                ("kind", "task"),
+                ("name", "Rotate the tires"),
+            ],
+        ),
+    ]));
+    let session = sample.start("");
+    let before = tasks(&sample);
+    sample.send(session, 1, "complete the dry cleaning and the tires");
+    let card = pending_of(&sample, session);
+    assert_eq!(card.verbs, ["complete", "complete"]);
+    assert_eq!(card.commands.len(), 2);
+    assert_eq!(tasks(&sample), before, "planning wrote nothing");
+
+    let tapped = sample.handle.assist_confirm(session, &card.id).unwrap();
+    assert!(
+        matches!(tapped.outcome, Confirmed::Done { steps: 2, .. }),
+        "{tapped:?}"
+    );
+    assert_eq!(status_of(&sample, DRY_CLEANING), "completed");
+    assert_eq!(
+        status_of(&sample, "Rotate the tires before the drive"),
+        "completed"
+    );
+}
+
+#[test]
+fn a_confirmed_write_is_seen_by_the_next_question_in_the_same_chat() {
+    let sample = native_sample(script(&[
+        step(
+            "plan: look",
+            "find",
+            &[("kind", "task"), ("name", "dry cleaning")],
+        ),
+        step(
+            "plan: write",
+            "act",
+            &[("verb", "complete"), ("rows", "@1")],
+        ),
+        step(
+            "plan: ask again",
+            "answer",
+            &[
+                ("kind", "task"),
+                ("where", "status = \"completed\""),
+                ("name", "dry cleaning"),
+            ],
+        ),
+    ]));
+    let session = sample.start("");
+    sample.send(session, 1, "complete the dry cleaning task");
+    let card = pending_of(&sample, session);
+    sample.handle.assist_confirm(session, &card.id).unwrap();
+    let sent = sample.send(session, 2, "is it done?");
+    let answer = answered(&sent);
+    assert_eq!(answer.text, "Found 1 task.", "{answer:?}");
+    assert_eq!(answer.cards[0].title, DRY_CLEANING);
+    assert_eq!(answer.cards[0].meta, "completed");
+}
+
+#[test]
+fn a_busy_chat_cannot_be_tapped() {
+    let sample = native_sample(script(&complete_dry_cleaning()));
+    let session = sample.start("");
+    sample.send(session, 1, "complete the dry cleaning task");
+    let card = pending_of(&sample, session);
+    assert!(
+        sample
+            .handle
+            .assist_confirm(session + 99, &card.id)
+            .is_err()
     );
 }
 
@@ -450,6 +732,131 @@ fn an_engine_that_fails_mid_turn_is_a_typed_refusal() {
     );
 }
 
+fn send_in(
+    sample: &common::chat::Sample,
+    session: u64,
+    turn: u64,
+    text: &str,
+    tz: &str,
+) -> wire::AssistSent {
+    match sample
+        .assist(Ask::Send(wire::AssistSendRequest {
+            session_id: session,
+            text: text.to_owned(),
+            tz: tz.to_owned(),
+            turn_id: turn,
+            ..wire::AssistSendRequest::default()
+        }))
+        .expect("a send answers")
+        .kind
+    {
+        Some(wire::assist_response::Kind::Sent(sent)) => sent,
+        other => panic!("{other:?}"),
+    }
+}
+
+/// `YYYY-MM-DD` of a day count since 1970-01-01 (Hinnant's civil-from-days).
+fn ymd(days: i64) -> String {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// The wall time the chat reads for an event stored at 22:30 UTC two days from now, asked about in
+/// a zone. (The sample's own events are floating, which no zone moves.)
+fn night_call_in(tz: &str) -> (String, String) {
+    use centraid_assist::native::Door as _;
+    use centraid_assist::native::door::text;
+    let sample = native_sample(script(&[
+        step(
+            "plan: look",
+            "find",
+            &[("kind", "event"), ("name", "Night call")],
+        ),
+        step("plan: answer", "answer", &[("rows", "@1")]),
+    ]));
+    let door = sample.handle.assist_door();
+    let calendar = text(
+        &door
+            .table(
+                "schedule_calendar",
+                "calendar_id, created_at",
+                "created_at",
+                "calendar_id",
+            )
+            .unwrap()[0],
+        "calendar_id",
+    )
+    .unwrap();
+    let day = ymd(door.now_ms().div_euclid(86_400_000) + 2);
+    let proposed = sample
+        .handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::Command(wire::Command {
+                name: "schedule.propose_event".to_owned(),
+                input: serde_json::to_vec(&serde_json::json!({
+                    "summary": "Night call",
+                    "dtstart": format!("{day}T22:30:00.000Z"),
+                    "dtend": format!("{day}T23:30:00.000Z"),
+                    "start_tz": "Etc/UTC",
+                    "recurrence_semantics": "zoned",
+                    "calendar_id": calendar,
+                }))
+                .unwrap(),
+                invoke_key: "test:night-call".to_owned(),
+                ..wire::Command::default()
+            })),
+        })
+        .expect("the event is proposed");
+    assert!(matches!(
+        proposed.kind,
+        Some(wire::response::Kind::Command(_))
+    ));
+    let session = sample.start("");
+    let sent = send_in(&sample, session, 1, "when is the night call?", tz);
+    let answer = answered(&sent);
+    assert_eq!(answer.cards.len(), 1, "{answer:?}");
+    (day, answer.cards[0].subtitle.clone())
+}
+
+#[test]
+fn an_event_question_in_another_zone_is_answered_on_that_zones_days() {
+    let (day, in_utc) = night_call_in("Etc/UTC");
+    let (_, in_auckland) = night_call_in("Pacific/Auckland");
+    // UTC: that evening, 22:30
+    assert!(in_utc.ends_with(&format!("{day} 22:30")), "{in_utc}");
+    // Auckland (UTC+13 in October): the next morning, 11:30 on the NEXT local day
+    let next = ymd(days_of(&day) + 1);
+    assert!(
+        in_auckland.ends_with(&format!("{next} 11:30")),
+        "{in_auckland} (day {day})"
+    );
+}
+
+/// Days since 1970-01-01 of a `YYYY-MM-DD`.
+fn days_of(day: &str) -> i64 {
+    let mut parts = day.split('-').map(|part| part.parse::<i64>().unwrap());
+    let (year, month, date) = (
+        parts.next().unwrap(),
+        parts.next().unwrap(),
+        parts.next().unwrap(),
+    );
+    let y = year - i64::from(month <= 2);
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + date - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
 // ---------------------------------------------------------------------------
 // 3. Sessions: fresh, kept, and the path an attachment keeps
 // ---------------------------------------------------------------------------
@@ -487,22 +894,17 @@ fn a_reopened_thread_starts_a_fresh_session_and_the_stored_turns_stay_what_they_
 }
 
 #[test]
-fn a_session_is_kept_until_the_vault_changes_under_it_and_then_starts_over() {
+fn a_session_keeps_the_conversation_across_a_screens_write_and_reads_what_the_screen_wrote() {
     let model = script(&[
         read_tasks()[0].clone(),
         read_tasks()[1].clone(),
-        step("plan: again", "answer", &[("kind", "task"), ("limit", "1")]),
-        step("plan: again", "answer", &[("kind", "task"), ("limit", "1")]),
+        step("plan: lists", "answer", &[("kind", "list")]),
     ]);
     let sample = native_sample(model.clone());
     let session = sample.start("");
     sample.send(session, 1, "what tasks do I have?");
 
-    // nothing changed: turn two continues the conversation
-    sample.send(session, 2, "the first one");
-    assert!(model.prompts()[4].contains("what tasks do I have?"));
-
-    // a screen writes (a command through the ABI): the picture the session holds is old
+    // a screen writes (a command through the ABI) while the chat is open
     let ran = sample
         .handle
         .call(&wire::Request {
@@ -515,13 +917,21 @@ fn a_session_is_kept_until_the_vault_changes_under_it_and_then_starts_over() {
         })
         .expect("the command runs");
     assert!(matches!(ran.kind, Some(wire::response::Kind::Command(_))));
-    sample.send(session, 3, "the first one again");
-    let prompt = &model.prompts()[6];
-    assert!(prompt.contains("the first one again"));
+
+    // the next question is answered over the world as it is now, and the conversation is whole
+    let sent = sample.send(session, 2, "which lists do I have?");
+    let titles: Vec<&str> = answered(&sent)
+        .cards
+        .iter()
+        .map(|card| card.title.as_str())
+        .collect();
+    assert!(titles.contains(&"New list"), "{titles:?}");
+    let prompt = &model.prompts()[4];
     assert!(
-        !prompt.contains("what tasks do I have?"),
-        "a fresh session forgets what it read before the change"
+        prompt.contains("what tasks do I have?"),
+        "the session was kept"
     );
+    assert!(prompt.contains("which lists do I have?"));
 }
 
 #[test]

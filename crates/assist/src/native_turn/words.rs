@@ -47,13 +47,21 @@ pub enum Say {
     Nothing,
     /// `Total {field}: {value}.`
     Total,
-    /// A write was asked for and writes are not on.
-    WritesOff,
+    /// `Proposed: {what}.`: a write waiting for the member's tap.
+    Proposed,
+    /// A confirmed card ran.
+    Applied,
+    /// A confirmed card's rows changed since it was planned.
+    Stale,
+    /// `Not done. {reason}`: the vault refused a step of a confirmed card.
+    NotDone,
+    /// A tap on a card that is no longer waiting.
+    NothingWaiting,
 }
 
 impl Say {
     /// Every sentence, for the test that holds them against the copy file.
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 22] = [
         Self::Balance,
         Self::BalanceEven,
         Self::BalanceOwed,
@@ -71,7 +79,11 @@ impl Say {
         Self::Lowest,
         Self::Nothing,
         Self::Total,
-        Self::WritesOff,
+        Self::Proposed,
+        Self::Applied,
+        Self::Stale,
+        Self::NotDone,
+        Self::NothingWaiting,
     ];
 
     /// The key in `copy/chat.json`.
@@ -95,7 +107,11 @@ impl Say {
             Self::Lowest => "SAID_LOWEST",
             Self::Nothing => "SAID_NOTHING",
             Self::Total => "SAID_TOTAL",
-            Self::WritesOff => "SAID_WRITES_OFF",
+            Self::Proposed => "SAID_PROPOSED",
+            Self::Applied => "SAID_APPLIED",
+            Self::Stale => "SAID_STALE",
+            Self::NotDone => "SAID_NOT_DONE",
+            Self::NothingWaiting => "SAID_NOTHING_WAITING",
         }
     }
 
@@ -186,6 +202,8 @@ mod tests {
             (Say::Highest, vec!["field", "value"]),
             (Say::Lowest, vec!["field", "value"]),
             (Say::Total, vec!["field", "value"]),
+            (Say::Proposed, vec!["what"]),
+            (Say::NotDone, vec!["reason"]),
         ];
         for (which, names) in fills {
             let filled: Vec<(&str, &str)> = names.iter().map(|name| (*name, "x")).collect();
@@ -205,6 +223,8 @@ mod tests {
                     | Say::Highest
                     | Say::Lowest
                     | Say::Total
+                    | Say::Proposed
+                    | Say::NotDone
             ) {
                 assert!(!say(which).contains('{'), "{}", which.key());
             }

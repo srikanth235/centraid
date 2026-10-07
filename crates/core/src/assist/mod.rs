@@ -20,8 +20,11 @@
 //! wave 2c retires it; nothing on the wire chooses. Everything around the turn is shared: the
 //! slot, `BUSY`, stop, the event queue, and the saved turn, whose stored shape does not change. A
 //! turn with an attachment takes the attached path on either (R-1088-9). A native chat's session
-//! lives in its [`Slot`], in memory (R-1088-10): a new chat, a reopened thread, a retry, a new day
-//! and a vault that changed since the chat last finished each start a fresh one.
+//! lives in its [`Slot`], in memory (R-1088-10): a new chat, a reopened thread, a retry and a turn
+//! that did not end each start a fresh one. A write the model makes parks behind a card
+//! (R-1088-2): [`Handle::assist_pending`] says what waits, [`Handle::assist_confirm`] makes it, once,
+//! and [`Handle::assist_dismiss`] drops it. They carry no proto yet; wave 2c adds the fields and the
+//! card, and the stored thread's state for a proposal that was applied or dismissed (migration 012).
 //!
 //! # A TURN RUNS ON THE CALLING THREAD, AND NOTHING HOLDS THE VAULT WHILE THE
 //! # MODEL THINKS
@@ -56,7 +59,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_assist::native_turn::{NativeChat, NativePlane};
+use centraid_assist::native::park::Confirmed;
+use centraid_assist::native_turn::{NativeChat, NativePlane, PendingCard, confirmed_line};
 use centraid_assist::prompt::Budget;
 use centraid_assist::suggest::suggest;
 use centraid_assist::turn::Event as TurnEvent;
@@ -86,18 +90,11 @@ fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// A chat's native session, and how many changes the vault had announced when the chat last
-/// finished with it (R-1088-10: in memory, inert on reopen, never stored).
-struct NativeSlot {
-    chat: NativeChat,
-    changes: u64,
-}
-
 struct Slot {
     session: Mutex<Session>,
     /// The native plane's session for this chat: `None` until its first native turn, and `None`
     /// again after a new chat. A reopened thread starts with none (R-1088-10).
-    native: Mutex<Option<NativeSlot>>,
+    native: Mutex<Option<NativeChat>>,
     cancel: Cancel,
     running: AtomicBool,
     /// The stored thread this chat saves into: `None` until its first turn is
@@ -330,9 +327,12 @@ fn refusal_to_wire(refusal: &Refusal) -> wire::AssistRefusal {
     }
 }
 
-fn event_to_wire(event: &TurnEvent) -> wire::assist_event::Kind {
+/// The wire's event for a turn's, or `None` for one that has no wire form yet: the pending write's
+/// card (#1088), which the core surfaces through [`Handle::assist_pending`] until wave 2c adds its
+/// proto fields and maps it here.
+fn event_to_wire(event: &TurnEvent) -> Option<wire::assist_event::Kind> {
     use wire::assist_event::Kind as K;
-    match event {
+    Some(match event {
         TurnEvent::Activity { app, tool } => K::Activity(wire::AssistActivity {
             app: app.id().to_owned(),
             tool: (*tool).to_owned(),
@@ -357,7 +357,8 @@ fn event_to_wire(event: &TurnEvent) -> wire::assist_event::Kind {
             notices: notices_to_wire(notices),
         }),
         TurnEvent::Failed(refusal) => K::Failed(refusal_to_wire(refusal)),
-    }
+        TurnEvent::Pending(_) => return None,
+    })
 }
 
 fn state_to_wire(state: ModelState) -> wire::AssistModelState {
@@ -739,7 +740,9 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
             TurnEvent::Cards(cards) => cards_seen.clone_from(cards),
             _ => {}
         }
-        emit(handle, session_id, turn_id, event_to_wire(&event));
+        if let Some(kind) = event_to_wire(&event) {
+            emit(handle, session_id, turn_id, kind);
+        }
     };
     // A TOOL TURN GOES TO THE PLANE THE HUB IS SET TO; AN ATTACHMENT NEVER DOES
     // (R-1088-9): a photograph or a document is read over the question by the
@@ -806,25 +809,17 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
             refused(session_id, turn_id, &refusal, saved.as_ref())
         }
     };
-    if native {
-        // THE PICTURE IS AS NEW AS THE END OF THIS TURN, its own save included:
-        // what changes the vault from here on makes the next turn start over.
-        if let Some(held) = locked(&slot.native).as_mut() {
-            held.changes = handle.events().change_count();
-        }
-    }
     Ok(response)
 }
 
-/// One turn on the native plane (#1088): the chat's native session, kept from
-/// its last turn or opened fresh, and the model driving it.
+/// One turn on the native plane (#1088): the chat's native session, kept from its last turn or
+/// opened fresh, and the model driving it.
 ///
-/// A session is opened fresh when it has none (a new chat, a reopened thread:
-/// R-1088-10), when the member asked the question again (a retry cannot take
-/// the earlier attempt back out of a session), when the day has turned (its
-/// "today" is fixed at open), and when the vault changed since the chat last
-/// finished with it (its picture of the vault is read once, at open). A fresh
-/// session forgets the earlier turns' `#n`; the stored thread still shows them.
+/// A session is opened fresh when it has none (a new chat, a reopened thread: R-1088-10), when the
+/// member asked the question again (a retry cannot take the earlier attempt back out of a session),
+/// and after a turn that did not end. Between kept turns the session's clock follows the request and
+/// its world is read again (`Session::set_clock`), so a write made elsewhere or by a confirmed card
+/// is seen, and the earlier turns' `#n` still mean what they meant.
 fn native_turn(
     handle: &Handle,
     slot: &Slot,
@@ -835,26 +830,92 @@ fn native_turn(
     sink: &mut dyn FnMut(TurnEvent),
 ) -> std::result::Result<Answered, Refusal> {
     let mut held = locked(&slot.native);
-    let changes = handle.events().change_count();
-    let keep = !regenerate
-        && held
-            .as_ref()
-            .is_some_and(|kept| kept.changes == changes && !kept.chat.is_stale(tz));
-    if !keep {
+    if regenerate || held.is_none() {
         let chat =
             NativeChat::open(Box::new(handle.assist_door()), tz).map_err(Refusal::QueryFailed)?;
-        *held = Some(NativeSlot { chat, changes });
+        *held = Some(chat);
     }
-    let Some(kept) = held.as_mut() else {
+    let Some(chat) = held.as_mut() else {
         return Err(Refusal::QueryFailed("no native session".to_owned()));
     };
-    let outcome = NativePlane::new(model).run_turn(&mut kept.chat, text, &slot.cancel, sink);
+    let outcome = NativePlane::new(model).run_turn(chat, text, tz, &slot.cancel, sink);
     if outcome.is_err() {
         // A turn that did not end (a stop, an engine failure) leaves its session
         // between a question and its answer; the next one starts clean.
         *held = None;
     }
     outcome
+}
+
+// ---------------------------------------------------------------------------
+// The member's tap on a pending write (#1088, R-1088-2).
+// ---------------------------------------------------------------------------
+
+/// What a tap on a pending write did, and the line the member reads for it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Confirmation {
+    pub outcome: Confirmed,
+    /// Composed from the outcome and the chat's copy (`native_turn::confirmed_line`).
+    pub line: String,
+}
+
+impl Handle {
+    /// The write waiting for the member's tap in a chat, if its last turn ended in one. In memory
+    /// only (R-1088-10): a reopened thread, a new chat and a new message have none.
+    ///
+    /// # Errors
+    /// [`CoreError::InvalidRequest`] for a chat this handle does not hold.
+    pub fn assist_pending(&self, session_id: u64) -> Result<Option<PendingCard>> {
+        let slot = self
+            .assist
+            .slot(session_id)
+            .ok_or_else(|| invalid("no such chat"))?;
+        Ok(locked(&slot.native).as_ref().and_then(NativeChat::pending))
+    }
+
+    /// The member tapped the card: run its steps, once, through the door. The change feed fires for
+    /// every step that ran, so every screen that reads those tables refreshes. A card tapped twice
+    /// writes once.
+    ///
+    /// The turn's saved message is not changed by this: the stored schema has no state for a
+    /// proposal that was applied or dismissed (migration 012, wave 2c).
+    ///
+    /// # Errors
+    /// [`CoreError::InvalidRequest`] for a chat this handle does not hold, or one whose turn is
+    /// still running.
+    pub fn assist_confirm(&self, session_id: u64, pending_id: &str) -> Result<Confirmation> {
+        let slot = self
+            .assist
+            .slot(session_id)
+            .ok_or_else(|| invalid("no such chat"))?;
+        if slot.running.load(Ordering::SeqCst) {
+            return Err(invalid("a turn is still running in that chat"));
+        }
+        let mut held = locked(&slot.native);
+        let outcome = match held.as_mut() {
+            Some(chat) => chat.confirm(pending_id),
+            None => Confirmed::Unknown,
+        };
+        let line = confirmed_line(&outcome);
+        Ok(Confirmation { outcome, line })
+    }
+
+    /// The member dismissed the card: nothing was written. `false` when `pending_id` is not what
+    /// the chat is waiting on.
+    ///
+    /// # Errors
+    /// As [`Self::assist_confirm`].
+    pub fn assist_dismiss(&self, session_id: u64, pending_id: &str) -> Result<bool> {
+        let slot = self
+            .assist
+            .slot(session_id)
+            .ok_or_else(|| invalid("no such chat"))?;
+        if slot.running.load(Ordering::SeqCst) {
+            return Err(invalid("a turn is still running in that chat"));
+        }
+        let mut held = locked(&slot.native);
+        Ok(held.as_mut().is_some_and(|chat| chat.dismiss(pending_id)))
+    }
 }
 
 #[cfg(test)]

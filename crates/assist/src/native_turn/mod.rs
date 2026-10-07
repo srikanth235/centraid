@@ -21,19 +21,23 @@
 //! chat's copy ([`words`]). The rows are [`cards`]: the chat's existing `Card`, mapped from the
 //! thirteen kinds into the seven apps.
 //!
-//! # WRITES
+//! # WRITES PARK (R-1088-2)
 //!
-//! A write parks behind a confirm card (R-1088-2), and parking is the session's, not this loop's.
-//! Until it lands a call to `act` is not run: the loop gives the session the typed decline
-//! `out_of_scope` in its place and says [`Say::WritesOff`](words::Say). The door's own `run` refuses
-//! too, so a path around this loop writes nothing either.
+//! A chat's session runs `Writes::Park`: a turn's writes are planned against a patched copy of the
+//! world, shown to the model as it was trained to see a write, and the turn ends in one pending
+//! write that has touched nothing. The loop says it in words ([`Say::Proposed`](words::Say)) and
+//! sinks an [`Event::Pending`] with the card, for the core to surface. The member's tap is
+//! [`NativeChat::confirm`] (the session runs the steps through the door, one key per step) or
+//! [`NativeChat::dismiss`]; a new message dismisses it too. A Locker call never parks: the session
+//! declines it `sealed_egress` before it plans anything.
 //!
 //! # A CHAT'S SESSION
 //!
 //! A [`NativeChat`] is one chat's session and its conversation, in memory (R-1088-10): never
-//! stored, never replayed. A reopened thread starts a fresh one. Its picture of the vault is read
-//! when it opens, so the caller decides when a picture is too old to keep
-//! ([`NativeChat::is_stale`]).
+//! stored, never replayed. A reopened thread starts a fresh one. Each turn the session's clock
+//! follows the request ([`Session::set_clock`](crate::native::Session::set_clock)): the person's
+//! civil now and zone, and the world read again, so a write made on a screen, or by a confirmed
+//! card, or the turn of the day, is seen by the next question without losing the conversation.
 
 pub mod cards;
 pub mod log;
@@ -45,6 +49,7 @@ use crate::attach::Notice;
 use crate::model::{Cancel, Model, ModelError};
 use crate::native::door::Door;
 use crate::native::meta::{Kind, STEP_CAP, TOOLS};
+use crate::native::park::{Confirmed, PendingWrite, Writes};
 use crate::native::parse::parse_call;
 use crate::native::step::{StepOptions, decode_step};
 use crate::native::think::TraceMode;
@@ -60,20 +65,10 @@ use words::{Say, say, say_with};
 /// size, not a product limit: the trained messages are a sentence.
 pub const MESSAGE_MAX: usize = 800;
 
-/// What happens to a call to `act`. Parking is the other value, and arrives with the session's
-/// park mode (R-1088-2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Writes {
-    /// The call is not run; the turn ends in `decline out_of_scope`, said as [`Say::WritesOff`].
-    #[default]
-    Refused,
-}
-
 /// One chat's native session and the conversation the model reads.
 pub struct NativeChat {
     session: Session,
     log: Log,
-    opened_on: jiff::civil::Date,
 }
 
 /// The civil date and time of an instant in an IANA zone; UTC when the zone is empty or unknown.
@@ -96,9 +91,10 @@ impl NativeChat {
         let now = civil_at(door.now_ms(), tz);
         let flags = Flags {
             locker: false,
+            writes: Writes::Park,
             ..Flags::default()
         };
-        let mut session = Session::with_door(door, now, "", flags)?;
+        let mut session = Session::with_door_in(door, now, tz, "", flags)?;
         let prompt = session.prompt();
         let system = prompt["rendered"]
             .as_str()
@@ -107,15 +103,23 @@ impl NativeChat {
         Ok(Self {
             session,
             log: Log::new(system),
-            opened_on: now.date(),
         })
     }
 
-    /// Whether the day has turned since this session opened. Its `today` is fixed at open, so a
-    /// chat that crosses midnight must start over rather than answer "today" for yesterday.
+    /// The write waiting for the member's tap, if the last turn ended in one.
     #[must_use]
-    pub fn is_stale(&self, tz: &str) -> bool {
-        civil_at(self.session.door.now_ms(), tz).date() != self.opened_on
+    pub fn pending(&self) -> Option<PendingCard> {
+        self.session.pending().map(PendingCard::of)
+    }
+
+    /// The member tapped the card. See [`Confirmed`]; the member-facing line is [`confirmed_line`].
+    pub fn confirm(&mut self, id: &str) -> Confirmed {
+        self.session.confirm(id)
+    }
+
+    /// The member dismissed the card. `false` when `id` is not the pending write.
+    pub fn dismiss(&mut self, id: &str) -> bool {
+        self.session.dismiss(id)
     }
 
     /// The conversation as the model reads it, ready for the next message.
@@ -127,11 +131,62 @@ impl NativeChat {
     }
 }
 
+/// A write waiting for the member's tap, as the core hands it on: what a confirm card shows.
+/// Wave 2c maps it to the proto; until then the core's API hands it out as it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingCard {
+    /// The id to confirm or dismiss it by.
+    pub id: String,
+    /// The verbs of the turn's write calls, in order.
+    pub verbs: Vec<String>,
+    /// The commands a confirm would run, in order.
+    pub commands: Vec<String>,
+    /// What will change, a line for each row, in the runtime's words.
+    pub preview: Vec<String>,
+    /// Whether the card should ask twice: a delete, a cancel, a money write, or anything the
+    /// vault cannot take back.
+    pub destructive: bool,
+    /// What the vault cannot take back, if anything.
+    pub not_undoable: Vec<String>,
+}
+
+impl PendingCard {
+    fn of(pending: &PendingWrite) -> Self {
+        Self {
+            id: pending.id.clone(),
+            verbs: pending
+                .verbs
+                .iter()
+                .map(|verb| (*verb).to_owned())
+                .collect(),
+            commands: pending
+                .steps
+                .iter()
+                .map(|step| step.command.clone())
+                .collect(),
+            preview: pending.preview.clone(),
+            destructive: pending.destructive(),
+            not_undoable: pending.not_undoable.clone(),
+        }
+    }
+}
+
+/// What the member reads after tapping a card, composed from the outcome (R-1088-10). The vault's
+/// own sentence rides on a refusal; nothing here is generated.
+#[must_use]
+pub fn confirmed_line(outcome: &Confirmed) -> String {
+    match outcome {
+        Confirmed::Done { .. } => say(Say::Applied),
+        Confirmed::Stale { .. } => say(Say::Stale),
+        Confirmed::Refused { reason, .. } => say_with(Say::NotDone, &[("reason", reason)]),
+        Confirmed::Unknown => say(Say::NothingWaiting),
+    }
+}
+
 /// What a native turn needs besides its chat.
 pub struct NativePlane<'a> {
     pub model: &'a dyn Model,
     pub options: StepOptions,
-    pub writes: Writes,
 }
 
 impl<'a> NativePlane<'a> {
@@ -141,7 +196,6 @@ impl<'a> NativePlane<'a> {
         Self {
             model,
             options: StepOptions::default(),
-            writes: Writes::Refused,
         }
     }
 
@@ -154,10 +208,11 @@ impl<'a> NativePlane<'a> {
         &self,
         chat: &mut NativeChat,
         text: &str,
+        tz: &str,
         cancel: &Cancel,
         sink: &mut dyn FnMut(Event),
     ) -> Result<Answered, Refusal> {
-        let result = self.turn(chat, text, cancel, sink);
+        let result = self.turn(chat, text, tz, cancel, sink);
         match &result {
             Ok(answered) => sink(Event::Answer {
                 text: answered.text.clone(),
@@ -173,9 +228,17 @@ impl<'a> NativePlane<'a> {
         &self,
         chat: &mut NativeChat,
         text: &str,
+        tz: &str,
         cancel: &Cancel,
         sink: &mut dyn FnMut(Event),
     ) -> Result<Answered, Refusal> {
+        // THE SESSION'S CLOCK FOLLOWS THE REQUEST: the person's now and zone, the world read
+        // again, a card still waiting dismissed. A session that outlives a write, a confirmed
+        // card or midnight reads the vault as it is.
+        let now = civil_at(chat.session.door.now_ms(), tz);
+        chat.session
+            .set_clock(now, tz)
+            .map_err(Refusal::QueryFailed)?;
         let message: String = text.trim().chars().take(MESSAGE_MAX).collect();
         let user = chat.session.user(&message);
         chat.log.compact(&user["compacted"]);
@@ -185,7 +248,6 @@ impl<'a> NativePlane<'a> {
         // A RETRACTION ENDS THE TURN IN THE RUNTIME, before any call (`decline never_mind`): no
         // message is asked of the model and the log holds only the user turn.
         let mut last = user.get("ended").cloned();
-        let mut writes_off = false;
         let mut step = 0;
         while last.is_none() && step < STEP_CAP + 2 {
             step += 1;
@@ -207,28 +269,10 @@ impl<'a> NativePlane<'a> {
             }
             let sent = first_call(&written.text);
             let call = parse_call(sent).ok();
-            // A WRITE IS NOT RUN WHILE WRITES ARE REFUSED. A call the Locker policy declines
-            // (a Locker kind, `reveal`) is the session's own to answer, and it does so before it
-            // runs or reads anything, so it is let through: "secrets stay in Locker" is the
-            // true reason, not "writes are off".
-            let writing = self.writes == Writes::Refused
-                && call
-                    .as_ref()
-                    .is_some_and(|call| call["tool"] == "act" && !locker_declined(call));
-            if !writing
-                && let Some((app, tool)) = call.as_ref().and_then(|call| activity_of(chat, call))
-            {
+            if let Some((app, tool)) = call.as_ref().and_then(|call| activity_of(chat, call)) {
                 sink(Event::Activity { app, tool });
             }
-            let reply = if writing {
-                // The typed decline stands in for the write, and the session knows it as its own
-                // turn's end: nothing was run, nothing is half-done.
-                writes_off = true;
-                chat.session
-                    .call("decline", &json!({"reason": "out_of_scope"}))
-            } else {
-                chat.session.call_text(sent)
-            };
+            let reply = chat.session.call_text(sent);
             chat.log.assistant(sent);
             chat.log.tool(
                 usize_of(&reply["obs"]),
@@ -245,9 +289,14 @@ impl<'a> NativePlane<'a> {
                 notices: Vec::new(),
             });
         };
-        let concluded = conclude(&chat.session, &reply, writes_off)?;
+        let concluded = conclude(&chat.session, &reply)?;
         if !concluded.cards.is_empty() {
             sink(Event::Cards(concluded.cards.clone()));
+        }
+        if reply["effect"]["pending"].is_object()
+            && let Some(card) = chat.pending()
+        {
+            sink(Event::Pending(card));
         }
         Ok(concluded)
     }
@@ -266,21 +315,6 @@ fn first_call(text: &str) -> &str {
     let close = crate::native::identity::MODEL.tool_call_close;
     text.find(close)
         .map_or(text, |at| &text[..at + close.len()])
-}
-
-/// Whether the session declines this call on the Locker policy before it reads or runs anything
-/// (`Session::locker_off_decline`): it names a Locker kind, or it is `reveal`.
-fn locker_declined(call: &Value) -> bool {
-    let args = &call["args"];
-    let kind_named = args["kind"].as_str().is_some_and(|kinds| {
-        kinds.split(',').any(|part| {
-            Kind::parse(part) == Some(Kind::LockerItem) || part.to_lowercase().contains("locker")
-        })
-    });
-    let reveal = args["verb"].as_str().is_some_and(|verb| {
-        crate::native::meta::Verb::parse(verb) == Some(crate::native::meta::Verb::Reveal)
-    });
-    kind_named || reveal
 }
 
 /// The activity a call announces: the app it looks in and the tool it uses. Only a call that
@@ -535,15 +569,16 @@ fn balance_line(session: &Session, value: &Value, body: &str) -> String {
 
 /// The turn's end, as the member reads it: the cards of its rows and a line composed from its
 /// effect.
-fn conclude(session: &Session, reply: &Value, writes_off: bool) -> Result<Answered, Refusal> {
+fn conclude(session: &Session, reply: &Value) -> Result<Answered, Refusal> {
     let effect = &reply["effect"];
     let said = |text: String| Answered {
         text,
         cards: Vec::new(),
         notices: Vec::new(),
     };
-    if writes_off {
-        return Ok(said(say(Say::WritesOff)));
+    if let Some(pending) = effect["pending"]["preview"].as_array() {
+        let what: Vec<&str> = pending.iter().filter_map(Value::as_str).collect();
+        return Ok(said(say_with(Say::Proposed, &[("what", &what.join("; "))])));
     }
     if let Some(reason) = effect["decline"]["reason"].as_str() {
         return Ok(said(say(Say::of_decline(reason))));
@@ -569,9 +604,9 @@ fn conclude(session: &Session, reply: &Value, writes_off: bool) -> Result<Answer
     if effect["cap"].as_bool().unwrap_or(false) {
         return Ok(said(say(Say::Cap)));
     }
-    // A write that landed, an `already`, a `created`: nothing in this plane produces one while
-    // writes are refused, so reaching here is a runtime that ended a turn in a way this loop does
-    // not know how to say, and a typed failure is better than a guess.
+    // A write that landed, an `already`: a parking session produces neither, so reaching here is a
+    // runtime that ended a turn in a way this loop does not know how to say, and a typed failure
+    // is better than a guess.
     Err(Refusal::QueryFailed(format!(
         "a turn ended without an answer: {}",
         reply["text"].as_str().unwrap_or_default()

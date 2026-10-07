@@ -127,6 +127,9 @@ pub enum Event {
         cards: Vec<Card>,
         notices: Vec<Notice>,
     },
+    /// The turn ended in a write that waits for the member's tap (native plane, R-1088-2). The
+    /// `Answer` that follows says it in words; this is the card, for the core to surface.
+    Pending(crate::native_turn::PendingCard),
     /// The turn is over and did not answer.
     Failed(Refusal),
 }
