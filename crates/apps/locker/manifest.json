@@ -12,8 +12,7 @@
       {
         "schema": "locker",
         "table": "item",
-        "verbs": "read",
-        "surface": "kind"
+        "verbs": "read"
       },
       {
         "schema": "locker",
@@ -23,20 +22,17 @@
       {
         "schema": "core",
         "table": "tag",
-        "verbs": "read",
-        "surface": "internal"
+        "verbs": "read"
       },
       {
         "schema": "core",
         "table": "concept",
-        "verbs": "read",
-        "surface": "internal"
+        "verbs": "read"
       },
       {
         "schema": "core",
         "table": "concept_scheme",
-        "verbs": "read",
-        "surface": "internal"
+        "verbs": "read"
       },
       {
         "schema": "locker",
@@ -81,14 +77,12 @@
       {
         "schema": "locker",
         "table": "item_alias",
-        "verbs": "read",
-        "surface": "internal"
+        "verbs": "read"
       },
       {
         "schema": "locker",
         "table": "item_field",
-        "verbs": "read",
-        "surface": "facet"
+        "verbs": "read"
       },
       {
         "schema": "locker",
@@ -98,14 +92,12 @@
       {
         "schema": "locker",
         "table": "item_address",
-        "verbs": "read",
-        "surface": "internal"
+        "verbs": "read"
       },
       {
         "schema": "locker",
         "table": "item_passkey",
-        "verbs": "read",
-        "surface": "internal"
+        "verbs": "read"
       },
       {
         "schema": "locker",
@@ -132,26 +124,22 @@
           "recorded_at",
           "undo_until",
           "undone_at"
-        ],
-        "surface": "internal"
+        ]
       },
       {
         "schema": "core",
         "table": "attachment",
-        "verbs": "read",
-        "surface": "internal"
+        "verbs": "read"
       },
       {
         "schema": "core",
         "table": "content_item",
-        "verbs": "read",
-        "surface": "internal"
+        "verbs": "read"
       },
       {
         "schema": "core",
         "table": "content_representation",
-        "verbs": "read",
-        "surface": "internal"
+        "verbs": "read"
       },
       {
         "schema": "access",
@@ -163,8 +151,7 @@
             "op": "in",
             "value": ["locker.item", "locker.auth"]
           }
-        ],
-        "surface": "internal"
+        ]
       },
       {
         "schema": "locker",

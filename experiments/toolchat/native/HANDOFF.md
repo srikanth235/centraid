@@ -25,7 +25,8 @@ This is the state on 2026-10-06, written for the next coding agent.
   - **Test is not refrozen or scored on the phase-7 runtime** (owner deferred).
 - 82 % is a val number: every fix, ruling and soup choice was derived on val. Expect test lower until it is scored.
 - **The branch is on main** (`f5487678`, #1080) **plus #1078's on-device chat** (the `ios-app-simulator-aaef2f` branch), merged 2026-10-07. Main wins every overlap; the record is in the receipt's merge section.
-  - The four native crates are ported to main's APIs. Harness worlds seal Locker cells under a fixed `HARNESS_LOCKER_KEY` (`crates/evalworld`, `crates/nativetools/src/vaultio.rs`) and name the generation through `Vault::locker_generation`, because the phone derives `K` from the 24 words.
+  - `crates/nativetools` is ported to main's APIs. Harness worlds seal Locker cells under a fixed `HARNESS_LOCKER_KEY` (`crates/nativetools/src/vaultio.rs`) and name the generation through `Vault::locker_generation`, because the phone derives `K` from the 24 words.
+  - Everything S2 does not depend on is gone from the branch (2026-10-07, D-1044-17): the canonical-English harness (`crates/evalsuite`, `crates/evalworld`, `crates/candidates`, `experiments/canon-model`, the `joined-*.jsonl` corpora and its manifest, registry and command declarations), the earlier toolchat rounds `v2` to `v8` and their scripts, and the `afm-spike`, `frontier-probe`, `qwen-mobile` and `qwen-sanity` experiments. They remain in history (`69d89575f` and earlier); the receipt's cleanup section lists them.
   - Val v7.4 refreezes byte-identical on the merged runtime.
   - #1078's product assistant (`crates/assist`, `crates/assist-llama`, `crates/core/src/assist`) is a separate, read-only tool registry of 18 `<app>.<verb>` reads over llama.cpp. Wiring this task's model and its 8 tools into it is integration work that has not started.
 
@@ -110,7 +111,6 @@ Expected from steps 5–7: about 86–88 % on val (RFT +2–4 points, DPO +1–3
 ## Known failing checks (not this phase's; fix or rule)
 
 - `train/test_trace3.py` `LlamaBackendStub`: 2 tests. The llama.cpp think grammar refuses a golden think. Scoring uses the HF backend, so no score is affected.
-- `cargo test -p centraid-evalsuite --test bins` `validate_suite_is_clean_on_all_three_corpora`: suite.json turn s85/t1 is advisory DEFECTS.md #B9. It needs `target/eval-world` built first.
 - `eval/build_sets.py check`: the 9 structural test-redesign failures above.
 - `data/README.md` says AMB drills are never kept. That predates the composed ask and should be re-checked against a train build.
 - Run the trainer tests from inside `train/` (`python -m unittest test_batching`). From the parent folder, `import train` resolves to the package and three `test_batching` tests error.

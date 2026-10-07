@@ -5079,30 +5079,6 @@ pub fn clear_custody_rollup(connection: &Connection) -> KitResult<()> {
     Ok(())
 }
 
-/// Stage one face PROPOSAL on an asset: the detector's derived row, nameless
-/// and `proposed`, exactly as [`photos_demo`] stages them (#712 changed the
-/// answering of proposals, not the finding of them). A world that wants a
-/// face named then answers it through `media.answer_face_proposal`.
-pub fn stage_face_proposal(
-    connection: &Connection,
-    region_id: &str,
-    asset_id: &str,
-    bbox_json: &str,
-    confidence: f64,
-    now: &str,
-) -> KitResult<()> {
-    connection
-        .execute(
-            "INSERT INTO media_face_region
-               (region_id, asset_id, bbox_json, confidence, review_state,
-                created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, 'proposed', ?5, ?5)",
-            rusqlite::params![region_id, asset_id, bbox_json, confidence, now],
-        )
-        .map_err(door)?;
-    Ok(())
-}
-
 /// Answer a face proposal `confirm`: the region is that person's, judged by
 /// this member.
 ///

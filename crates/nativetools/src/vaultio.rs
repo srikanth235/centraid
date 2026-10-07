@@ -57,9 +57,8 @@ pub fn millis_of(datetime: jiff::civil::DateTime) -> i64 {
         .unwrap_or_default()
 }
 
-/// THE LOCKER KEY EVERY HARNESS WORLD IS SEALED UNDER — the same bytes as
-/// `centraid_evalworld::HARNESS_LOCKER_KEY`, so a world either crate builds
-/// opens in the other. It protects nothing: every value it seals is invented.
+/// THE LOCKER KEY EVERY HARNESS WORLD IS SEALED UNDER. It protects nothing:
+/// every value it seals is invented.
 pub const HARNESS_LOCKER_KEY: &[u8; 32] = b"centraid harness locker key 0001";
 
 /// Where the content store of a vault file lives.
