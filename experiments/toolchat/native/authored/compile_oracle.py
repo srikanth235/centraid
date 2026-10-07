@@ -19,9 +19,12 @@ Per think the result holds: `v31` (the call `compile_call(think, dates, "v3.1")`
 message), `v4raw` (the same under v4), `v4think` (the v4 text of the think, or the skip: reason and detail) and `v4` (the
 call of that text under v4). `compare` reports, per field, how many results agree and lists the first disagreements.
 
-Implementations: `py` is `authored/trace.py`'s own compiler (gone once the Rust one is the only one: the recorded file of
-that run is the oracle), `client` is `runtime_think.py` (the Rust compiler through `nativetools think`; NATIVETOOLS names the
-binary), `rust` is the same binary spoken to directly, without the client's context building or cache.
+Implementations: `py` is the Python compiler `authored/trace.py` had before the runtime's replaced it (commit b4b006f32 and
+earlier): it is no longer in the tree, so `py` loads it from ORACLE_PY_TRACE, a copy of that file
+(`git show b4b006f32:experiments/toolchat/native/authored/trace.py > /tmp/trace_old.py`); `client` is `runtime_think.py` (the Rust
+compiler through `nativetools think`; NATIVETOOLS names the binary), `rust` is the same binary spoken to directly, without the
+client's context building or cache. The run of `py` over the train data is the oracle the Rust compiler was held to: 67,889
+thinks (the train data's, the golden file's, and every third one again as a mutant) with the same result in every field.
 """
 from __future__ import annotations
 
@@ -134,10 +137,17 @@ def corpus(train: str | None, golden: str | None, mutants: int, limit: int | Non
 # ---------------------------------------------------------------------------------------------
 
 class PyImpl:
-    """authored/trace.py's compiler (while it exists)."""
+    """The Python compiler of authored/trace.py as of b4b006f32, from ORACLE_PY_TRACE."""
 
     def __init__(self):
-        self.T = load_trace()
+        path = os.environ.get("ORACLE_PY_TRACE")
+        if not path:
+            sys.exit("--impl py needs ORACLE_PY_TRACE=<the trace.py of b4b006f32>: git show b4b006f32:experiments/toolchat/native/authored/trace.py")
+        spec = importlib.util.spec_from_file_location("authored_trace", path)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["authored_trace"] = mod
+        spec.loader.exec_module(mod)
+        self.T = mod
 
     def compile(self, think, dates, mode):
         T = self.T
@@ -204,9 +214,9 @@ class RustImpl:
         return ["ok", r["call"]] if "call" in r else ["err", r["refused"]["class"], r["refused"]["message"]]
 
     def v4(self, think, history, dates):
-        req = {"op": "v4", "think": think, "dates": dates if dates is not None else ("" if not history else self.R.dates_line_of(history))}
+        req = {"op": "v4", "think": think, "dates": dates if dates is not None else ""}
         if history:
-            req["dates"] = self.R.dates_line_of(history)
+            req["dates"] = self.R.authored_trace().dates_line_of(history)
             req["context"] = self.R.context_of(think, history)
         r = self.ask(req)
         return ["ok", r["think"]] if "think" in r else ["skip", r["skip"]["reason"], r["skip"]["detail"]]
@@ -234,7 +244,7 @@ def cmd_record(a):
     impl = IMPLS[a.impl]()
     t0, n = time.time(), 0
     with gzip.open(a.out, "wt", encoding="utf-8", compresslevel=3) as out:
-        for entry in corpus(a.train, a.golden, a.mutants, a.limit):
+        for entry in corpus(a.train, a.golden, a.mutants, a.limit, a.seed):
             out.write(json.dumps(run(impl, entry), ensure_ascii=False, separators=(",", ":")) + "\n")
             n += 1
             if n % 5000 == 0:
@@ -292,6 +302,7 @@ def main():
     r.add_argument("--golden", default=str(HERE / "golden_v3.json"))
     r.add_argument("--mutants", type=int, default=0, help="every N-th think also as a mutant (0: none)")
     r.add_argument("--limit", type=int, default=0, help="at most N train thinks")
+    r.add_argument("--seed", type=int, default=7, help="the seed of the mutants")
     c = sub.add_parser("compare")
     c.add_argument("a")
     c.add_argument("b")

@@ -1,4 +1,4 @@
-//! The CLI round trip the Python side drives: export, seed, copy, session.
+//! The CLI round trip the Python side drives: export, seed, copy, session, think.
 
 use std::io::Write as _;
 use std::process::{Command, Stdio};
@@ -252,4 +252,67 @@ fn the_no_compose_flag_restores_the_old_replies() {
             .starts_with("ambiguous: \"Neha\" fits"),
         "{old}"
     );
+}
+
+#[test]
+fn think_answers_one_line_per_request_with_no_vault() {
+    let mut child = Command::new(BIN)
+        .arg("think")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let requests = [
+        json!({"op": "compile", "mode": "v4", "dates": null,
+               "think": "intent: write \"cancel it\"\nverb: cancel\npick: #7 (name)"}),
+        json!({"op": "compile", "mode": "v3.1", "dates": "dates: friday = 2026-03-20",
+               "think": "intent: read\nkind: event\nwhen: \"friday\" = dates[0]"}),
+        json!({"op": "compile", "mode": "v4", "dates": null, "think": "intent: write\nkind: event"}),
+        json!({"op": "v4", "dates": null,
+               "think": "intent: write\nverb: complete\nscope: one\nrefer: none\npick: #31 ok"}),
+        json!({"op": "v4", "dates": null,
+               "context": {"message": "tick off the rent", "focus": null,
+                           "rows": {"31": {"name": "Pay rent", "line": "#31 task \"Pay rent\""}}},
+               "think": "intent: write\nverb: complete\nscope: one\nrefer: none\npick: #31 ok"}),
+        json!({"op": "v4", "dates": null, "think": "intent: read\nvia: find\nkind: task"}),
+        json!({"op": "compile", "mode": "v5", "think": "intent: read"}),
+    ];
+    let mut stdin = child.stdin.take().unwrap();
+    for request in &requests {
+        writeln!(stdin, "{request}").unwrap();
+    }
+    drop(stdin);
+    let out = child.wait_with_output().unwrap();
+    let answers: Vec<String> = String::from_utf8(out.stdout)
+        .unwrap()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(answers.len(), requests.len(), "{answers:?}");
+    // the arguments come in the order a call writes them, which a JSON map would sort away
+    assert_eq!(
+        answers[0],
+        r##"{"call":{"tool":"act","args":{"verb":"cancel","rows":"#7"}}}"##
+    );
+    assert_eq!(
+        answers[1],
+        r#"{"call":{"tool":"answer","args":{"kind":"event","when":"{\"date\":\"2026-03-20\"}"}}}"#
+    );
+    let refused: Value = serde_json::from_str(&answers[2]).unwrap();
+    assert_eq!(refused["refused"]["class"], "CompileError");
+    assert_eq!(refused["refused"]["message"], "an act without a verb slot");
+    let v4: Value = serde_json::from_str(&answers[3]).unwrap();
+    assert_eq!(
+        v4["think"],
+        "intent: write\nverb: complete\npick: #31 (kind)"
+    );
+    let v4: Value = serde_json::from_str(&answers[4]).unwrap();
+    assert_eq!(
+        v4["think"],
+        "intent: write\nverb: complete\npick: #31 (name)"
+    );
+    let skipped: Value = serde_json::from_str(&answers[5]).unwrap();
+    assert_eq!(skipped["skip"]["reason"], "find");
+    let error: Value = serde_json::from_str(&answers[6]).unwrap();
+    assert!(error["error"].as_str().unwrap().contains("mode"), "{error}");
 }

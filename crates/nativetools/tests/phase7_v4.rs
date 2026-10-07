@@ -7,7 +7,9 @@
 mod common;
 
 use centraid_nativetools::Session;
+use centraid_nativetools::compile::{PICK_REASONS, SINGLE_ROW_VERBS};
 use centraid_nativetools::meta::{Kind, VERBS};
+use centraid_nativetools::think::{self, TraceMode};
 use common::{number, seeded};
 use serde_json::{Value, json};
 
@@ -218,60 +220,51 @@ fn a_v4_trace_that_does_not_compile_is_refused_with_its_slot() {
     }
 }
 
-/// The text between `NAME = ` and its closing bracket in `authored/trace.py`.
-fn python_literal(name: &str) -> String {
-    let source = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../experiments/toolchat/native/authored/trace.py"
-    ))
-    .expect("authored/trace.py");
-    let start = source
-        .find(&format!("\n{name} = "))
-        .unwrap_or_else(|| panic!("trace.py has no {name}"));
-    let rest = &source[start + 1..];
-    let close = rest.find(['}', ')']).unwrap();
-    rest[..close].to_owned()
-}
-
-fn quoted(text: &str) -> Vec<String> {
-    text.split('"')
-        .skip(1)
-        .step_by(2)
-        .map(str::to_owned)
-        .collect()
-}
-
 #[test]
-fn the_python_side_agrees_on_the_closed_words_and_the_kind_of_a_verb() {
-    // the one kind a verb applies to (`trace.py` VERB_KIND) is exactly the verbs of the table with one kind
-    let literal = quoted(&python_literal("VERB_KIND"));
-    let python: Vec<(String, String)> = literal
-        .chunks(2)
-        .map(|pair| (pair[0].clone(), pair[1].clone()))
-        .collect();
-    let mut runtime: Vec<(String, String)> = VERBS
+fn the_closed_words_and_the_kind_of_a_verb_are_the_runtimes() {
+    // the one kind a verb applies to is exactly the verbs of the table with one kind: a v4 think that names a row by `name`
+    // alone takes it (`think.rs`, `compile.rs` `kind_a_verb_fixes`)
+    let mut taken: Vec<(String, String)> = Vec::new();
+    for spec in VERBS {
+        let think = format!("intent: write\nverb: {}\nname: x", spec.name);
+        let Ok(call) = think::compile_think(&think, None, TraceMode::V4) else {
+            panic!("{think} compiles");
+        };
+        if let Some((_, kind)) = call.args.iter().find(|(key, _)| key == "kind") {
+            taken.push((spec.name.to_owned(), kind.clone()));
+        }
+    }
+    let mut table: Vec<(String, String)> = VERBS
         .iter()
         .filter_map(|spec| match spec.commands {
             [(kind, _)] => Some((spec.name.to_owned(), kind.name().to_owned())),
             _ => None,
         })
         .collect();
-    runtime.sort();
-    let mut python_sorted = python.clone();
-    python_sorted.sort();
-    assert_eq!(python_sorted, runtime);
-    for (_, kind) in &python {
+    taken.sort();
+    table.sort();
+    assert_eq!(taken, table);
+    assert!(!taken.is_empty());
+    for (_, kind) in &taken {
         assert!(Kind::parse(kind).is_some(), "{kind}");
     }
-    // the reasons of a pick
-    let reasons = quoted(&python_literal("PICK4_REASONS"));
+    // the reasons of a pick: the runtime's list is the one a v4 think may write, and no other word is
     assert_eq!(
-        reasons,
+        PICK_REASONS,
         ["name", "kind", "date", "focus", "created", "asked", "nick"]
     );
+    for reason in PICK_REASONS {
+        let think = format!("intent: write\nverb: star\npick: #5 ({reason})");
+        assert!(
+            think::compile_think(&think, None, TraceMode::V4).is_ok(),
+            "{think}"
+        );
+    }
+    let think = "intent: write\nverb: star\npick: #5 (position)";
+    assert!(think::compile_think(think, None, TraceMode::V4).is_err());
     // the verbs a selector stands for one row under
     assert_eq!(
-        quoted(&python_literal("SINGLE_ROW_VERBS")),
+        SINGLE_ROW_VERBS,
         [
             "edit",
             "reschedule",

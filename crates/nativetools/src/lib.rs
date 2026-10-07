@@ -13,8 +13,10 @@
 //! fill a slot a read leaves out from a few words the SPEC names (`ground::Defaults`). It
 //! never writes SQL: reads go through the app kit's paged door and writes through `Vault::execute`.
 //!
-//! `compile` turns the slots of a v3 trace into the call the runtime executes (`compile`), and
-//! `export` writes the error table beside the other contract files (`export::errors`).
+//! `compile` turns the slots of a v3 trace into the call the runtime executes (`compile`), `think`
+//! is the same compile step with no vault, reading a think's text (the decoder's and the data
+//! builders' compiler, and the v3.1 to v4 rewrite of a think), and `export` writes the error table
+//! beside the other contract files (`export::errors`).
 //!
 //! The `nativetools` binary is what the Python side drives (JSON lines).
 
@@ -41,6 +43,7 @@ pub mod resolve;
 pub mod search;
 pub mod seed;
 pub mod session;
+pub mod think;
 pub mod trace;
 pub mod values;
 pub mod vaultio;

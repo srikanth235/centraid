@@ -18,9 +18,12 @@
 //! Running `stated` through `call` gives the same effect as running `call`, and the notes then
 //! appear under the observation as they do for any call.
 //!
-//! The assembly follows `authored/trace.py::compile_call`: the tool is `via`, else the intent's
-//! own; the rows are the explicit `rows` / `row` slot, else the `ok` rows of `pick`, and only when
-//! no other handle slot is explicit.
+//! The assembly follows the stateless compiler (`think.rs`, which reads a think's text with no
+//! vault and is the compiler the decoder and the data builders use): the tool is `via`, else the
+//! intent's own; the rows are the explicit `rows` / `row` slot, else the `ok` rows of `pick`, and
+//! only when no other handle slot is explicit. What both state is stated once, here: the order of
+//! a call's arguments, the date spellings, the default tool, where a pick's rows go and the kind a
+//! verb fixes.
 //!
 //! - `where` is a list of typed conditions, never a string: `{"field","op","value"}` with op in
 //!   `= != < <= > >=`, `contains`, `in` (a list), `is empty`, `is set`, or
@@ -59,7 +62,7 @@ use crate::normalize::name_lift_report;
 use crate::session::Session;
 use crate::whr;
 
-/// The order the arguments are written in a call (`authored/trace.py::CALL_ORDER`).
+/// The order the arguments are written in a call.
 pub const CALL_ORDER: [&str; 23] = [
     "verb",
     "op",
@@ -119,7 +122,7 @@ const SLOTS: [&str; 29] = [
     "question",
 ];
 /// The slots that name rows or results (`reason` is plain text).
-const HANDLE_SLOTS: [&str; 7] = [
+pub(crate) const HANDLE_SLOTS: [&str; 7] = [
     "rows",
     "row",
     "within",
@@ -129,12 +132,12 @@ const HANDLE_SLOTS: [&str; 7] = [
     "options",
 ];
 
-/// The reasons of a v4 `pick`: why this row is the one (`authored/trace.py` `PICK4_REASONS`).
-const PICK_REASONS: [&str; 7] = ["name", "kind", "date", "focus", "created", "asked", "nick"];
+/// The reasons of a v4 `pick`: why this row is the one.
+pub const PICK_REASONS: [&str; 7] = ["name", "kind", "date", "focus", "created", "asked", "nick"];
 /// The reasons that say the row is not named by the message but comes from an earlier turn.
 const REFER_REASONS: [&str; 3] = ["focus", "asked", "created"];
 /// The verbs that act on one row at a time: a selector under one of them stands for one row.
-const SINGLE_ROW_VERBS: [&str; 6] = [
+pub const SINGLE_ROW_VERBS: [&str; 6] = [
     "edit",
     "reschedule",
     "log",
@@ -208,12 +211,7 @@ impl Session {
                     format!("via is find, search, open or compute, not \"{other}\""),
                 );
             }
-            None => match intent {
-                "read" | "count" => "answer",
-                "write" => "act",
-                "ask" => "ask",
-                _ => "decline",
-            },
+            None => default_tool(intent),
         };
         let mut resolved = Resolved::default();
         let mut args: Map<String, Value> = Map::new();
@@ -307,8 +305,8 @@ impl Session {
             );
         }
         // a v3.1 pick states the rows only when no other handle slot does; a v4 pick always does
-        if (v4 || !explicit) && !picked.rows.is_empty() {
-            let key = if tool == "open" { "row" } else { "rows" };
+        if pick_states_rows(v4, explicit) && !picked.rows.is_empty() {
+            let key = rows_key(tool);
             if tool == "open" {
                 args.insert(key.to_owned(), json!(picked.rows[0]));
             } else {
@@ -790,6 +788,46 @@ impl Session {
     }
 }
 
+/// The tool a trace's intent calls when no `via` says otherwise (`read` and `count` an `answer`, a write an `act`).
+pub(crate) fn default_tool(intent: &str) -> &'static str {
+    match intent {
+        "read" | "count" => "answer",
+        "write" => "act",
+        "ask" => "ask",
+        _ => "decline",
+    }
+}
+
+/// The argument a call states its rows under: `row` for an `open`, else `rows`.
+pub(crate) fn rows_key(tool: &str) -> &'static str {
+    if tool == "open" { "row" } else { "rows" }
+}
+
+/// Does a pick state the rows of the call? A v4 pick always does; a v3.1 pick only when no other handle slot is explicit.
+pub(crate) fn pick_states_rows(v4: bool, explicit_handle_slot: bool) -> bool {
+    v4 || !explicit_handle_slot
+}
+
+/// The one kind a verb applies to (`complete`: task, `cancel`: event, `log`: person, ...), when it applies to exactly one:
+/// what an act that names a row by `name` alone takes as its `kind` in a v4 trace.
+pub(crate) fn kind_a_verb_fixes(verb: Option<&str>) -> Option<&'static str> {
+    let kinds = verb.and_then(Verb::parse)?.kinds();
+    match kinds.as_slice() {
+        [only] => Some(only.name()),
+        _ => None,
+    }
+}
+
+/// v4: does an act that names a row by `name` alone (no other handle slot) and says no `kind` take the kind its verb fixes?
+pub(crate) fn infers_kind(
+    tool: &str,
+    has_kind: bool,
+    has_name: bool,
+    has_handle_slot: bool,
+) -> bool {
+    tool == "act" && !has_kind && has_name && !has_handle_slot
+}
+
 /// v4: an act that names a row by `name` alone (no rows, no other handle slot) and says no `kind` takes the one kind its verb
 /// applies to.
 fn infer_kind(
@@ -799,20 +837,18 @@ fn infer_kind(
     inferred: &mut Vec<String>,
 ) {
     // any handle slot (`within` carries its own kind, `linked_to` its own context) leaves the kind to the model
-    if tool != "act"
-        || args.contains_key("kind")
-        || !args.contains_key("name")
-        || HANDLE_SLOTS.iter().any(|key| args.contains_key(*key))
-    {
+    let has_handle_slot = HANDLE_SLOTS.iter().any(|key| args.contains_key(*key));
+    if !infers_kind(
+        tool,
+        args.contains_key("kind"),
+        args.contains_key("name"),
+        has_handle_slot,
+    ) {
         return;
     }
-    let verb = slots
-        .get("verb")
-        .and_then(Value::as_str)
-        .and_then(Verb::parse);
-    if let Some([only]) = verb.map(Verb::kinds).as_deref() {
-        args.insert("kind".to_owned(), json!(only.name()));
-        inferred.push(format!("kind: {}", only.name()));
+    if let Some(only) = kind_a_verb_fixes(slots.get("verb").and_then(Value::as_str)) {
+        args.insert("kind".to_owned(), json!(only));
+        inferred.push(format!("kind: {only}"));
     }
 }
 
@@ -874,14 +910,13 @@ struct Picked {
     into_set: Vec<(String, String)>,
 }
 
-/// The keys of a date expression in the order a call writes them (`train/decode.py`
-/// `DATE_KEY_ORDER`).
-const DATE_KEY_ORDER: [&str; 9] = [
+/// The keys of a date expression in the order a call writes them.
+pub(crate) const DATE_KEY_ORDER: [&str; 9] = [
     "from", "to", "date", "unit", "rel", "name", "weekday", "time", "anchor",
 ];
 
 /// A date expression as call text: compact JSON, keys in the order a call writes them.
-fn date_text(expr: &Value) -> String {
+pub(crate) fn date_text(expr: &Value) -> String {
     match expr {
         Value::Object(object) => {
             let mut parts: Vec<String> = Vec::new();
@@ -1019,7 +1054,7 @@ fn quoted(text: &str) -> String {
 
 /// A `dates:` resolution as a date expression: a day, a day with a clock, or a range (an open
 /// end is left out). A clock alone is not a date.
-fn reading_expr(resolution: &str, which: Option<&str>) -> Result<Value, String> {
+pub(crate) fn reading_expr(resolution: &str, which: Option<&str>) -> Result<Value, String> {
     let resolution = without_source(resolution.trim());
     if let Some((first, second)) = resolution.split_once(" / ") {
         let pick = |text: &str, tag: &str| {
