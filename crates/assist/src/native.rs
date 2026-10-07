@@ -42,6 +42,7 @@ pub mod search;
 pub mod session;
 pub mod think;
 pub mod trace;
+pub mod transcript;
 pub mod values;
 pub mod vaultio;
 pub mod whr;

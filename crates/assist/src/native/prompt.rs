@@ -438,7 +438,7 @@ pub fn kind_card(currency: &str) -> Vec<String> {
 
 /// Qwen's own sentence that tells the model how to call a function, written
 /// from the model's identity so the markers are the ones the parser reads.
-fn call_format() -> String {
+pub(crate) fn call_format() -> String {
     format!(
         "If you choose to call a function ONLY reply in the following format with NO suffix:\n\n\
 {tc}\n{fo}example_function_name>\n{po}example_parameter_1>\nvalue_1\n{pc}\n{po}example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n{pc}\n{fc}\n{tcc}\n\n\

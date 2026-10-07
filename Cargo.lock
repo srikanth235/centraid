@@ -568,6 +568,7 @@ dependencies = [
  "centraid-ontology",
  "centraid-search",
  "centraid-vault",
+ "flate2",
  "jiff",
  "serde",
  "serde_json",
