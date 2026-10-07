@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "$ref": "#/definitions/relative"
+    },
+    {
+      "$ref": "#/definitions/absolute"
+    },
+    {
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "from": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/relative"
+            },
+            {
+              "$ref": "#/definitions/absolute"
+            }
+          ]
+        },
+        "to": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/relative"
+            },
+            {
+              "$ref": "#/definitions/absolute"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    }
+  ],
+  "definitions": {
+    "absolute": {
+      "additionalProperties": false,
+      "properties": {
+        "date": {
+          "pattern": "^[0-9]{4}-[01][0-9]-[0-3][0-9]$",
+          "type": "string"
+        },
+        "time": {
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "date"
+      ],
+      "type": "object"
+    },
+    "relative": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "enum": [
+            "today",
+            "row"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "maximum": 12,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "rel": {
+          "type": "integer"
+        },
+        "time": {
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+          "type": "string"
+        },
+        "unit": {
+          "enum": [
+            "minute",
+            "hour",
+            "day",
+            "week",
+            "month",
+            "year"
+          ],
+          "type": "string"
+        },
+        "weekday": {
+          "maximum": 7,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "unit",
+        "rel"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "name only with unit month; weekday only with unit week; time only with unit day, a week with a weekday, or a date; anchor row only inside act",
+  "title": "date expression (SPEC §4.4)"
+}

@@ -31,6 +31,8 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import decode  # noqa: E402
 
+_R = decode.fmt.render  # the shared renderer: the model's special strings come from it
+
 
 class HFBackend:
     def __init__(self, ckpt: str, device: str | None = None, dtype: str = "float32", think_limit: int = 200,
@@ -139,33 +141,35 @@ def compiled_message(text: str, compile, again=None) -> tuple[str, str]:
     if "call" not in reply:
         return text, how if how == "retry-fallback" else "fallback"
     call = T.runtime_call(reply)
-    head = drawn[:drawn.index("</think>")]
-    return head + "</think>\n\n" + decode.fmt.render.call_text(call["tool"], call["args"]), how
+    head = drawn[:drawn.index(_R.THINK_CLOSE)]
+    return head + _R.THINK_CLOSE + "\n\n" + _R.call_text(call["tool"], call["args"]), how
 
 
 def _call_key(text: str) -> str:
     """The tool call of a model message with whitespace dropped (equal keys = the same call)."""
-    start = text.rfind("<tool_call>")
-    end = text.find("</tool_call>", start)
-    call = text[start:end + len("</tool_call>")] if start >= 0 and end >= 0 else text
+    start = text.rfind(_R.TOOL_CALL_OPEN)
+    end = text.find(_R.TOOL_CALL_CLOSE, start)
+    call = text[start:end + len(_R.TOOL_CALL_CLOSE)] if start >= 0 and end >= 0 else text
     return re.sub(r"\s+", "", call)
 
 
 # ---- eval driver history -> the shared renderer's prompt
 
-CALL_RE = re.compile(r"<tool_call>\n<function=([a-z_]+)>\n((?:<parameter=[a-z_]+>\n(?:(?!</parameter>).)*\n</parameter>\n)*)"
-                     r"</function>\n</tool_call>", re.S)
-PARAM_RE = re.compile(r"<parameter=([a-z_]+)>\n((?:(?!</parameter>).)*)\n</parameter>\n", re.S)
+_TC, _TCC, _FO, _FC, _PO, _PC = (re.escape(x) for x in (
+    _R.TOOL_CALL_OPEN, _R.TOOL_CALL_CLOSE, _R.FUNCTION_OPEN, _R.FUNCTION_CLOSE, _R.PARAMETER_OPEN, _R.PARAMETER_CLOSE))
+CALL_RE = re.compile(rf"{_TC}\n{_FO}([a-z_]+)>\n((?:{_PO}[a-z_]+>\n(?:(?!{_PC}).)*\n{_PC}\n)*)"
+                     rf"{_FC}\n{_TCC}", re.S)
+PARAM_RE = re.compile(rf"{_PO}([a-z_]+)>\n((?:(?!{_PC}).)*)\n{_PC}\n", re.S)
 
 
 def assistant_record(text: str) -> dict | None:
     """A raw assistant message (`<think>\\n…</think>\\n\\n<tool_call>…</tool_call>`) as a render.py
     record, parameter values kept as their exact strings (render.py writes a string value as is,
     so the call re-renders byte for byte). None when it is not one think block + one call."""
-    body = text[len("<think>\n"):] if text.startswith("<think>\n") else text
-    if body.count("</think>") != 1:
+    body = text[len(_R.THINK_OPEN):] if text.startswith(_R.THINK_OPEN) else text
+    if body.count(_R.THINK_CLOSE) != 1:
         return None
-    think, _, rest = body.partition("</think>")
+    think, _, rest = body.partition(_R.THINK_CLOSE)
     m = CALL_RE.fullmatch(rest.strip("\n"))
     if not m:
         return None
@@ -190,8 +194,8 @@ def prompt_from_history(system_rendered: str, history: list[dict]) -> str:
             continue
         out.append(decode.fmt.render.render(seg)[0] if seg else "")
         seg = []
-        raw = m["content"][len("<think>\n"):] if m["content"].startswith("<think>\n") else m["content"]
-        out.append("<|im_start|>assistant\n<think>\n" + raw + "<|im_end|>\n")
+        raw = m["content"][len(_R.THINK_OPEN):] if m["content"].startswith(_R.THINK_OPEN) else m["content"]
+        out.append(_R.ASSISTANT_OPEN + raw + _R.IM_END + "\n")
     out.append(decode.fmt.render.render_prompt_for_generation(seg))
     return "".join(out)
 

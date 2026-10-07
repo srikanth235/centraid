@@ -55,6 +55,10 @@ export default defineConfig({
     // The public site's token sheet is lowered from @centraid/design by
     // scripts/site-tokens.mjs; `lint:site-tokens` asserts it byte-for-byte.
     "scripts/*-site/public/assets/centraid-tokens.css",
+    // The native tool task's export (#1088): `nativetools export` writes these
+    // files, and `crates/nativetools/tests/export_fixture.rs` asserts them
+    // byte for byte against the live export.
+    "contracts/assist/export/**",
     // The frozen eval sets of the native tool task (#1044): every file's sha256
     // is recorded in eval/FROZEN.md and `eval/build_sets.py check` compares it,
     // so a reformat is a new set version, not a style fix.

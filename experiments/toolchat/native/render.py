@@ -1,6 +1,7 @@
 """The one renderer for native sessions (SPEC §6.4, §11.7): data, trainer and eval driver import it.
 
-Qwen3.5's token format, except that EVERY assistant message keeps its thinking (Qwen's default
+Qwen3.5's token format (its identity and special strings are `identity.json` of the Rust runtime's export, read once
+below), except that EVERY assistant message keeps its thinking (Qwen's default
 chat template drops the thinking of turns before the last user message; the harness keeps it so
 a follow-up sees how the earlier turn was read).
 
@@ -20,10 +21,35 @@ from __future__ import annotations
 
 import functools
 import json
+from pathlib import Path
 
-TOKENIZER = "Qwen/Qwen3.5-0.8B"
-IM_START, IM_END = "<|im_start|>", "<|im_end|>"
-THINK_OPEN = "<think>\n"
+
+def _load_identity() -> dict:
+    """The model's identity (`identity.json`, the Rust constant `nativetools::identity::MODEL`): the tokenizer id and
+    the special strings of the chat and tool-call format. Read from the `export/` next to this file when it is there (a
+    job tree the bundle staged carries a fresh `nativetools export`), else from the committed export
+    (`contracts/assist/export/`, which `crates/nativetools/tests/export_fixture.rs` proves equals a fresh one)."""
+    here = Path(__file__).resolve().parent
+    candidates = [here / "export" / "identity.json"]
+    if len(here.parents) > 2:
+        candidates.append(here.parents[2] / "contracts" / "assist" / "export" / "identity.json")
+    for path in candidates:
+        if path.is_file():
+            return json.loads(path.read_text(encoding="utf-8"))
+    raise FileNotFoundError("identity.json: not in " + ", ".join(str(c) for c in candidates)
+                            + " (cargo run -p centraid-nativetools --bin nativetools -- export contracts/assist/export)")
+
+
+MODEL = _load_identity()
+TOKENIZER = MODEL["tokenizer"]
+IM_START, IM_END = MODEL["im_start"], MODEL["im_end"]
+THINK_OPEN, THINK_CLOSE = MODEL["think_open"], MODEL["think_close"]
+TOOL_CALL_OPEN, TOOL_CALL_CLOSE = MODEL["tool_call_open"], MODEL["tool_call_close"]
+FUNCTION_OPEN, FUNCTION_CLOSE = MODEL["function_open"], MODEL["function_close"]
+PARAMETER_OPEN, PARAMETER_CLOSE = MODEL["parameter_open"], MODEL["parameter_close"]
+TOOL_RESPONSE_OPEN, TOOL_RESPONSE_CLOSE = MODEL["tool_response_open"], MODEL["tool_response_close"]
+ASSISTANT_HEADER = f"{IM_START}assistant\n"           # what the template's generation prompt writes
+ASSISTANT_OPEN = ASSISTANT_HEADER + THINK_OPEN        # ... and the harness's, which opens the thinking too
 
 
 @functools.lru_cache(maxsize=1)
@@ -55,15 +81,15 @@ def _arg_value(v) -> str:
 
 def call_text(tool: str, args: dict) -> str:
     """One native tool call, exactly as the template writes it (the runtime's `call_text` parses it)."""
-    out = f"<tool_call>\n<function={tool}>\n"
+    out = f"{TOOL_CALL_OPEN}\n{FUNCTION_OPEN}{tool}>\n"
     for k, v in args.items():
-        out += f"<parameter={k}>\n{_arg_value(v)}\n</parameter>\n"
-    return out + "</function>\n</tool_call>"
+        out += f"{PARAMETER_OPEN}{k}>\n{_arg_value(v)}\n{PARAMETER_CLOSE}\n"
+    return out + f"{FUNCTION_CLOSE}\n{TOOL_CALL_CLOSE}"
 
 
 def _assistant_body(m: dict) -> str:
     think = (m.get("think") or "").strip()
-    return f"{think}\n</think>\n\n{call_text(m['tool'], m['args'])}{IM_END}"
+    return f"{think}\n{THINK_CLOSE}\n\n{call_text(m['tool'], m['args'])}{IM_END}"
 
 
 def render(messages: list[dict]) -> tuple[str, list[tuple[int, int]]]:
@@ -86,14 +112,14 @@ def render(messages: list[dict]) -> tuple[str, list[tuple[int, int]]]:
         elif role == "user":
             put(f"{IM_START}user\n{m['content'].strip()}{IM_END}\n")
         elif role == "assistant":
-            put(f"{IM_START}assistant\n{THINK_OPEN}")
+            put(ASSISTANT_OPEN)
             body = _assistant_body(m)
             spans.append((pos, pos + len(body)))
             put(body + "\n")
         elif role == "tool":
             if prev != "tool":
                 put(f"{IM_START}user")
-            put(f"\n<tool_response>\n{m['content'].strip()}\n</tool_response>")
+            put(f"\n{TOOL_RESPONSE_OPEN}\n{m['content'].strip()}\n{TOOL_RESPONSE_CLOSE}")
             nxt = messages[i + 1]["role"] if i + 1 < len(messages) else None
             if nxt != "tool":
                 put(f"{IM_END}\n")
@@ -113,7 +139,7 @@ def user_content(text: str, preground: str | None) -> str:
 
 def render_prompt_for_generation(messages: list[dict]) -> str:
     text, _ = render(messages)
-    return text + f"{IM_START}assistant\n{THINK_OPEN}"
+    return text + ASSISTANT_OPEN
 
 
 def tokens_with_loss(text: str, spans: list[tuple[int, int]]) -> tuple[list[int], list[tuple[int, int]]]:
@@ -156,7 +182,7 @@ def self_test() -> None:
     ids, tsp = tokens_with_loss(got, spans)
     for a, b in tsp:
         piece = tokenizer().decode(ids[a:b])
-        assert piece.endswith(IM_END) and "<tool_response>" not in piece and "user\n" not in piece
+        assert piece.endswith(IM_END) and TOOL_RESPONSE_OPEN not in piece and "user\n" not in piece
 
 
 if __name__ == "__main__":

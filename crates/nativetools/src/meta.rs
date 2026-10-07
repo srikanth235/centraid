@@ -5,13 +5,17 @@
 //! the kind card, the `where` parser's fields, the runtime's reads and writes
 //! and the generator's vocabulary (through `nativetools export`) are all
 //! generated from these rows. `tests/meta.rs` proves every mapped column exists in a
-//! freshly founded vault and every mapped command is registered.
+//! freshly founded vault, every mapped command is registered, and every enum
+//! is exactly its column's CHECK list (the part the model leaves out is
+//! declared in `UNEXPOSED`).
 //!
 //! Derived rather than restated where the vault states it: the Locker item
-//! types are `centraid_vault::commands::locker::ITEM_TYPES`, and the fields
+//! types are `centraid_vault::commands::locker::ITEM_TYPES` (built in a
+//! `const` block, not copied), and the fields
 //! `reveal` can open are the Locker columns the ontology registry marks
 //! sealed.
 
+use centraid_vault::commands::locker::ITEM_TYPES;
 use serde::Serialize;
 
 /// Rows shown per result; the rest are counted and reachable through `@n`.
@@ -369,24 +373,34 @@ const EVENT_STATUS: &[(&str, &str)] = &[
 ];
 const DEBT_DIRECTION: &[(&str, &str)] = &[("owes_me", "owed"), ("i_owe", "owe")];
 const DEBT_STATUS: &[(&str, &str)] = &[("open", "open"), ("settled", "settled")];
-/// Locker item types: the vault's own list, spelled identically.
-const LOCKER_TYPES: &[(&str, &str)] = &[
-    ("login", "login"),
-    ("card", "card"),
-    ("note", "note"),
-    ("identity", "identity"),
-    ("wifi", "wifi"),
-    ("password", "password"),
-    ("ssh_key", "ssh_key"),
-    ("api_credential", "api_credential"),
-    ("passport", "passport"),
-    ("bank_account", "bank_account"),
-    ("driving_licence", "driving_licence"),
-    ("software_licence", "software_licence"),
-    ("crypto_wallet", "crypto_wallet"),
-    ("membership", "membership"),
-    ("document", "document"),
-];
+/// Locker item types: the vault's own list, derived from
+/// `centraid_vault::commands::locker::ITEM_TYPES` and spelled identically.
+static LOCKER_TYPES: [(&str, &str); ITEM_TYPES.len()] = {
+    let mut types = [("", ""); ITEM_TYPES.len()];
+    let mut index = 0;
+    while index < ITEM_TYPES.len() {
+        types[index] = (ITEM_TYPES[index], ITEM_TYPES[index]);
+        index += 1;
+    }
+    types
+};
+
+/// A value of a CHECK-constrained enum column that the model deliberately
+/// cannot say. `tests/meta.rs` proves, for every enum field, that the vault
+/// values the model can say plus these are exactly the CHECK's list: no
+/// silent subset. The reason must say why the model does not get the value.
+#[derive(Debug, Clone, Copy)]
+pub struct Unexposed {
+    pub table: &'static str,
+    pub column: &'static str,
+    pub value: &'static str,
+    pub reason: &'static str,
+}
+
+/// The CHECK values the model's enums leave out. Empty: every enum the model
+/// speaks is the whole of its column's list.
+pub const UNEXPOSED: &[Unexposed] = &[];
+
 /// `log kind:` values, stored as the activity kind notation.
 pub const LOG_KINDS: &[&str] = &["call", "message", "visit", "coffee"];
 
@@ -703,7 +717,7 @@ pub static KINDS: &[KindSpec] = &[
         date: None,
         fields: &[
             field("type", Enum, at("locker_item", "type"))
-                .values(LOCKER_TYPES)
+                .values(&LOCKER_TYPES)
                 .create(),
             field("username", Text, at("locker_item", "username"))
                 .edit("locker.edit_item")

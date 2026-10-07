@@ -2498,3 +2498,15 @@ D-1044-16, the owner's rulings of 2026-10-06 after the hard-core audit of S2's f
 - Rejected or deferred: rulings 2 to 4 (no change: counting heads lists rows, an early link to the notebook in view stays gold, offer-then-confirm needed no rule). Open for the owner: a bare perfect tense ("has tobi had") as a window to today; series-ask options in date order; the messaging rewrite reading "remind her about it".
 
 Superseded by this section: the per-run comparisons against the ckpt-100 and v2 checkpoints, the voting experiment, and the "val is recompiled from the authored sessions" rule of the earlier FROZEN.md.
+
+## One assistant plane (#1088)
+
+Ruled with the owner on [#1088](https://github.com/srikanth235/centraid/issues/1088), 2026-10-07. Decision rows are numbered R-1088-1 upward.
+
+| Ruling | Why |
+| --- | --- |
+| **R-1088-1** — **phase B (scoring through llama.cpp on a GGUF) runs after [#1044](https://github.com/srikanth235/centraid/issues/1044)'s open training steps (S2 live score, screen, sample, RFT, DPO)** | S2 is compared on one ruler: every checkpoint of the open steps is scored by the same free-decoding script before the scoring path changes underneath it. |
+| **R-1088-2** — **on the phone every `act` (write) parks behind a confirm card and runs only on the member's tap; relaxing it to destructive verbs only needs evidence** | A 0.8B model's write is a proposal; the member's tap is the only authority that is not a model output. Evidence that a class of writes never misfires is what earns the relaxation, not a guess. |
+| **R-1088-3** — **`reveal` and the Locker kinds stay out of the on-device tool set in the first release** | The phone's chat plane already keeps Locker out of the prompt by construction ([#1078](https://github.com/srikanth235/centraid/issues/1078)); one rule for both planes means no secret ever reaches a model's context. |
+| **R-1088-4** — **`crates/assist` is the crate that survives; `nativetools`' library folds into it, and its binary stays for the trainer** | The phone links `assist`; two crates that each spell the prompt, the call format and the model's tokens are two sources for one fact. The trainer still needs a binary that renders, exports and runs the runtime. |
+| **R-1088-5** — **built and frozen data artefacts move to the bucket with manifests and hashes in the repo; authored session sources stay in the repo. The move needs the owner's go when phase E runs** | Sources are reviewable text and provenance; built sets are large, regenerable and frozen, so the repo keeps the hash that proves which bytes were scored. Moving bytes out of the repo is irreversible enough to need a go. |

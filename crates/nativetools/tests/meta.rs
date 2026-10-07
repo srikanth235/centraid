@@ -36,24 +36,109 @@ fn every_mapped_column_exists_in_a_founded_vault() {
     }
 }
 
+/// The values of `column`'s `CHECK (column IN (...))` in `table`'s block of
+/// the rendered DDL, in the DDL's order.
+fn check_values(table: &str, column: &str) -> Vec<String> {
+    let sql = create_sql(table);
+    let marker = format!("CHECK ({column} IN (");
+    let start = sql
+        .find(&marker)
+        .unwrap_or_else(|| panic!("{table}.{column} has no CHECK ({column} IN (...)) in the DDL"));
+    let rest = &sql[start + marker.len()..];
+    rest[..rest.find("))").expect("the CHECK closes")]
+        .split(',')
+        .map(|value| value.trim().trim_matches('\'').to_owned())
+        .collect()
+}
+
+/// Every enum field with a CHECK list: the vault values the model can say
+/// plus the ones `meta::UNEXPOSED` declares are exactly that list. A debt's
+/// `direction` and `status` are derived from `from_party` and `settled_at`,
+/// not a CHECK, and are out of this test's reach.
 #[test]
-fn every_enum_vault_value_is_one_the_tables_check_accepts() {
+fn every_enum_is_exactly_what_the_table_states() {
+    let mut seen = Vec::new();
     for spec in KINDS {
         for field in spec.fields.iter().filter(|field| !field.values.is_empty()) {
             if matches!(field.name, "direction" | "status") && spec.kind == Kind::Debt {
-                continue; // derived from from_party / settled_at, not a CHECK
+                continue;
             }
-            let sql = create_sql(field.source.table);
-            for (_, vault) in field.values {
+            let (table, column) = (field.source.table, field.source.column);
+            seen.push((table, column));
+            let stated = check_values(table, column);
+            let mut spoken: Vec<String> = field
+                .values
+                .iter()
+                .map(|(_, vault)| (*vault).to_owned())
+                .collect();
+            let mut declared = Vec::new();
+            for gap in meta::UNEXPOSED
+                .iter()
+                .filter(|gap| (gap.table, gap.column) == (table, column))
+            {
                 assert!(
-                    sql.contains(&format!("'{vault}'")),
-                    "{}.{} lacks '{vault}'",
-                    field.source.table,
-                    field.source.column
+                    !gap.reason.trim().is_empty(),
+                    "{table}.{column}: '{}' is left out of the model's enum with no reason",
+                    gap.value
                 );
+                declared.push(gap.value.to_owned());
             }
+            let mut covered = spoken.clone();
+            covered.extend(declared.iter().cloned());
+            covered.sort();
+            let mut wanted = stated.clone();
+            wanted.sort();
+            let missing: Vec<&String> = wanted.iter().filter(|v| !covered.contains(v)).collect();
+            let unknown: Vec<&String> = covered.iter().filter(|v| !wanted.contains(v)).collect();
+            assert!(
+                missing.is_empty() && unknown.is_empty(),
+                "{table}.{column}: the CHECK states {stated:?}; the model's enum has {spoken:?} \
+                 and meta::UNEXPOSED declares {declared:?}. In the CHECK but neither spoken nor \
+                 declared: {missing:?}. Spoken or declared but not in the CHECK: {unknown:?}"
+            );
+            spoken.sort();
+            let both: Vec<&String> = spoken.iter().filter(|v| declared.contains(v)).collect();
+            assert!(
+                both.is_empty(),
+                "{table}.{column}: {both:?} is spoken and declared left out"
+            );
         }
     }
+    for gap in meta::UNEXPOSED {
+        assert!(
+            seen.contains(&(gap.table, gap.column)),
+            "meta::UNEXPOSED names {}.{}, which no enum field maps",
+            gap.table,
+            gap.column
+        );
+    }
+    // The three CHECK-backed enums the model speaks today.
+    assert_eq!(
+        seen.len(),
+        3,
+        "an enum field was added or removed: {seen:?}"
+    );
+}
+
+/// A command's own input schema is a second statement of the same list: the
+/// task status `edit` runs `schedule.set_task_status`, whose schema enumerates
+/// the statuses it accepts.
+#[test]
+fn the_task_status_enum_is_the_edit_commands_schema_enum() {
+    let status = Kind::Task.spec().field("status").unwrap();
+    let command = status.edit.expect("task status is editable");
+    let registry = centraid_vault::Registry::with_system_commands().unwrap();
+    let schema = registry.get(command).unwrap().schema();
+    let mut accepted: Vec<&str> = schema["properties"]["status"]["enum"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{command} has no status enum"))
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect();
+    let mut spoken: Vec<&str> = status.values.iter().map(|(_, vault)| *vault).collect();
+    accepted.sort_unstable();
+    spoken.sort_unstable();
+    assert_eq!(spoken, accepted, "{command}: the model's task statuses");
 }
 
 #[test]

@@ -1,0 +1,13 @@
+person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: groups, events, tasks, notes, photos, debts · verbs: create edit delete restore star unstar add_to remove_from log settle_up · balance: me versus that person; positive = they owe me
+group: name, currency · links: members · verbs: create edit delete · balance: with linked_to a person: that person's net position in the group; positive = the group owes them
+event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore
+task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (1 highest..9 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from
+note: name, date (created), body, pinned (yes|no) · links: notebook, people · verbs: create edit delete restore add_to remove_from
+document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from
+photo: name, date (taken), starred (yes|no) · links: albums, people · verbs: edit delete restore star unstar add_to remove_from
+album: name · links: photos · verbs: create edit delete
+debt: name, date (incurred), amount (USD), direction (owes_me|i_owe), status (open|settled) · links: person · verbs: create settle_debt
+locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal
+notebook: name · links: notes · verbs: create edit delete
+folder: name · links: documents · verbs: create edit delete
+list: name, area · links: tasks · verbs: create edit
