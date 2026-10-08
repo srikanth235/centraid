@@ -5,7 +5,10 @@
 //! every place's groups are the crate's (`queries`, `local`, `views`); this
 //! module resolves the zone ([`super::zone_of`]'s rule) and the vault clock,
 //! runs the loader, and converts. `today` is the vault clock's day in the
-//! request's zone — never the host's clock and never UTC by default.
+//! request's zone — never the host's clock and never UTC by default. The same
+//! zone is the calendar a repeating task with a date for its due reads today
+//! on (#1090): its periods are civil days, so "today's" is live until the
+//! member's day ends.
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_tasks as tasks;
@@ -68,7 +71,7 @@ pub(super) fn board(
     let view = view_of(asked)?;
     settle(
         door,
-        tasks::load_board(door, limit_of(asked.limit), now),
+        tasks::load_board(door, limit_of(asked.limit), now, &zone),
         |data| {
             let open = placed(&data.open, &zone, &today);
             let logbook = placed(&data.logbook, &zone, &today);
@@ -125,7 +128,7 @@ pub(super) fn task(
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
-    let loaded = tasks::load_task(door, &asked.task_id, now).and_then(|(detail, denial)| {
+    let loaded = tasks::load_task(door, &asked.task_id, now, &zone).and_then(|(detail, denial)| {
         // The chrome only for a task that is there to be filed somewhere.
         let chrome = if denial.is_none() && detail.task.is_some() {
             tasks::queries::load_chrome(door)?
@@ -172,7 +175,7 @@ pub(super) fn projects(
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
-    settle(door, tasks::load_board(door, None, now), |data| {
+    settle(door, tasks::load_board(door, None, now, &zone), |data| {
         let open = placed(&data.open, &zone, &today);
         Answer::TasksProjects(wire::TasksProjects {
             projects: data
@@ -226,6 +229,7 @@ pub(super) fn search(
             &asked.term,
             usize::try_from(asked.limit).unwrap_or(usize::MAX),
             now,
+            &zone,
         )))
     })??;
     settle(door, loaded, |data| {
@@ -249,7 +253,7 @@ pub(super) fn catch_up(
 ) -> Result<Answer> {
     let zone = zone_of(vault, &asked.tz)?;
     let today = today_in(&zone, now)?;
-    settle(door, tasks::load_board(door, None, now), |data| {
+    settle(door, tasks::load_board(door, None, now, &zone), |data| {
         let piles = views::catch_up(&placed(&data.open, &zone, &today));
         let rows = |pile: &[Placed]| pile.iter().map(task_to_wire).collect();
         Answer::TasksCatchUp(wire::TasksCatchUp {
