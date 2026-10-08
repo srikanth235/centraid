@@ -12,6 +12,7 @@
     python3 artefacts.py pin REVISION                      # record the commit of the published version in the manifest
     python3 artefacts.py model-card --model DIR --data-version TAG --name NAME [--score LINE]... --out FILE
     python3 artefacts.py publish-model DIR --repo OWNER/NAME --tag NAME [--card FILE] [--dry-run]   # a promoted model, tagged
+    python3 artefacts.py publish-gguf GGUF --repo OWNER/NAME --tag NAME [--sidecar FILE] [--dry-run]   # its GGUF, to a PUBLIC repository
     python3 artefacts.py rehash [--only NAME_OR_PATH_PREFIX ...]   # rewrite sha256 and size of the files in place
     python3 artefacts.py paths [--class rebuild|version|heldout|public]
     python3 artefacts.py gitignore                         # the .gitignore block for the manifest paths
@@ -311,6 +312,9 @@ class HubClient:
 
     def create_private(self, repo: str, repo_type: str) -> None:
         self.api.create_repo(repo, repo_type=repo_type, private=True, exist_ok=False)
+
+    def create_public(self, repo: str, repo_type: str) -> None:
+        self.api.create_repo(repo, repo_type=repo_type, private=False, exist_ok=False)
 
     def tags(self, repo: str, repo_type: str) -> list[str]:
         return [t.name for t in self.api.list_repo_refs(repo, repo_type=repo_type).tags]
@@ -808,32 +812,39 @@ def tree_files(directory: Path) -> dict[str, Path]:
     return {p.relative_to(directory).as_posix(): p for p in sorted(directory.rglob("*")) if p.is_file()}
 
 
-def publish_tree(client, repo: str, repo_type: str, files: dict[str, Path], tag: str, message: str) -> str:
+def publish_tree(client, repo: str, repo_type: str, files: dict[str, Path], tag: str, message: str, public: bool = False) -> str:
     """The files to the repository's main branch in one commit (paths not in `files` deleted), then `tag` on that commit. The
-    repository is created private when missing and refused when public; an existing tag is never moved. The commit's id."""
+    repository is created private when missing and refused when public; an existing tag is never moved. The commit's id.
+
+    `public=True` is the other rule, for the one thing that is published openly (a GGUF of the model, `publish-gguf`): the repository
+    is created public when missing and refused when it exists private, so a public publish never lands somewhere that looks
+    published and is not, and a private one never lands somewhere open."""
     what = {"dataset": "the held-out sets", "model": "a model trained on them"}[repo_type]
+    want, name = (False, "public") if public else (True, "private")
     state = client.repo_private(repo, repo_type)
-    if state is False:
+    if state is not None and state is not want:
+        if public:
+            raise Refusal(f"{repo} exists and is private: refusing to publish there (make it public on the Hub, or name another repository)")
         raise Refusal(f"{repo} exists and is public: refusing to put {what} there")
     if state is None:
-        client.create_private(repo, repo_type)
-        print(f"created {repo} ({repo_type}, private)")
+        (client.create_public if public else client.create_private)(repo, repo_type)
+        print(f"created {repo} ({repo_type}, {name})")
         state = client.repo_private(repo, repo_type)
-    if state is not True:
-        raise Refusal(f"{repo} is not confirmed private after creation: refusing to upload")
+    if state is not want:
+        raise Refusal(f"{repo} is not confirmed {name} after creation: refusing to upload")
     if tag in client.tags(repo, repo_type):
         raise Refusal(f"{repo} already has the tag {tag}: a published version is never rewritten (publish the next one)")
     stale = [p for p in client.list_files(repo, repo_type) if p not in files and p not in KEEP_ON_PUBLISH]
     revision = client.commit(repo, repo_type, files, stale, message)
     client.tag(repo, repo_type, tag, revision)
-    if client.repo_private(repo, repo_type) is not True:
-        raise Refusal(f"{repo} is not private after the upload; check its visibility now")
+    if client.repo_private(repo, repo_type) is not want:
+        raise Refusal(f"{repo} is not {name} after the upload; check its visibility now")
     return revision
 
 
-def publish_plan(repo: str, repo_type: str, files: dict[str, Path], tag: str) -> None:
+def publish_plan(repo: str, repo_type: str, files: dict[str, Path], tag: str, public: bool = False) -> None:
     total = sum(p.stat().st_size for p in files.values())
-    print(f"publish to {repo} ({repo_type}, private) as {tag}: {len(files)} file(s), {mb(total)}, one commit on main, then the tag")
+    print(f"publish to {repo} ({repo_type}, {'PUBLIC' if public else 'private'}) as {tag}: {len(files)} file(s), {mb(total)}, one commit on main, then the tag")
     for rel, path in sorted(files.items()):
         print(f"  {path.stat().st_size:>12,}  {rel}")
 
@@ -998,6 +1009,118 @@ def cmd_publish_model(args: argparse.Namespace) -> int:
         print(f"FAIL {type(exc).__name__}: {scrub(str(exc), token)}")
         return 1
     print(f"published {len(files)} file(s) to {args.repo}: tag {args.tag} is commit {revision}")
+    return 0
+
+
+# ---------------------------------------------------------------------------------------------
+# publish-gguf: the one thing that is published openly
+# ---------------------------------------------------------------------------------------------
+
+BASE_MODEL = "Qwen/Qwen3.5-0.8B"
+# The vision projector the phone pairs with the weights (crates/assist-llama/tests/real_vision.rs): the base model's, since
+# fine-tuning leaves the vision tower alone and `train/to_gguf.py` converts the text weights only.
+MMPROJ = {"repo": "unsloth/Qwen3.5-0.8B-GGUF", "file": "mmproj-F16.gguf", "revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+          "bytes": 204987232, "sha256": "56e4c6cfe73b0c82e3e82bc518d7591997e61d81f723fc41a586f4fa69ea2453"}
+GGUF_QUANTS = ("Q4_0", "Q8_0", "F16")
+SIDECAR_SCHEMA = 1
+
+
+def gguf_problems(gguf: Path, sidecar: dict) -> list[str]:
+    """What stops a GGUF from being published: the sidecar `train/to_gguf.py` wrote must describe THIS file, and must say where
+    the model came from (the private repository, tag and commit, the data version) and which llama.cpp read it."""
+    bad: list[str] = []
+    if sidecar.get("schema") != SIDECAR_SCHEMA:
+        bad.append(f"the sidecar's schema is {sidecar.get('schema')!r}, not {SIDECAR_SCHEMA}")
+    entry = (sidecar.get("files") or {}).get("gguf") or {}
+    if entry.get("file") != gguf.name:
+        bad.append(f"the sidecar describes {entry.get('file')!r}, not {gguf.name}")
+    elif entry.get("bytes") != gguf.stat().st_size or entry.get("sha256") != sha256_of(gguf):
+        bad.append(f"{gguf.name} is not the bytes the sidecar records: convert it again, or give the sidecar of this file")
+    if entry.get("quant") not in GGUF_QUANTS:
+        bad.append(f"the sidecar's quant is {entry.get('quant')!r}, one of {', '.join(GGUF_QUANTS)}")
+    source = sidecar.get("source") or {}
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", str(source.get("repo") or "")):
+        bad.append("the sidecar does not name the private source repository (to_gguf.py --source-repo OWNER/NAME)")
+    if not source.get("tag"):
+        bad.append("the sidecar does not name the source tag (to_gguf.py --source-tag)")
+    if not COMMIT.fullmatch(str(source.get("revision") or "")):
+        bad.append("the sidecar does not carry the source revision, 40 hex digits (to_gguf.py --source-revision)")
+    if not TAG.fullmatch(str(source.get("data_version") or "")):
+        bad.append("the sidecar does not name the data version, data-vN (the checkpoint's train_meta.json, or to_gguf.py --data-version)")
+    if not COMMIT.fullmatch(str((sidecar.get("llama_cpp") or {}).get("commit") or "")):
+        bad.append("the sidecar does not name the llama.cpp commit")
+    return bad
+
+
+def render_gguf_card(sidecar: dict, gguf: str, sidecar_file: str) -> str:
+    """The Hub card of a published GGUF: what it is and is not, where it came from, what read it, and the bytes."""
+    entry = sidecar["files"]["gguf"]
+    source, cpp = sidecar["source"], sidecar["llama_cpp"]
+    name = sidecar.get("name") or gguf
+    lines = ["---", f"base_model: {BASE_MODEL}", "license: apache-2.0", "library_name: gguf", "pipeline_tag: text-generation",
+             "tags:", "- centraid", "- native-tool-task", "- gguf", f"- {entry['quant']}", f"- {source['data_version']}", "---", "",
+             f"# {name} ({entry['quant']})", "",
+             f"A GGUF of a fine-tune of [{BASE_MODEL}](https://huggingface.co/{BASE_MODEL}) (Apache-2.0) for the native tool task "
+             "([#1044](https://github.com/srikanth235/centraid/issues/1044)) of [Centraid](https://github.com/srikanth235/centraid): "
+             "a personal, local-first superapp whose assistant runs on the phone. The model drives a personal vault through eight tools "
+             "([`SPEC.md`](https://github.com/srikanth235/centraid/blob/main/experiments/toolchat/native/SPEC.md)): each step it writes a short "
+             "*think* in a fixed slot format, and the app's runtime reads the think and writes the call.", "",
+             "**This is not a general chat model.** It was trained to continue the exact prompt the Centraid runtime renders (the tool list, "
+             "the vault block, the history) and to write the think the runtime compiles; outside that runtime it has no use. "
+             "It is published so the on-device model can be fetched, checked against its hash and reproduced.", "",
+             "## Provenance", "",
+             f"- Base model: `{BASE_MODEL}`.",
+             f"- Fine-tuned model: the private repository `{source['repo']}`, tag `{source['tag']}`, revision `{source['revision']}`.",
+             f"- Data version: `{source['data_version']}` of the native tool task's private dataset repository (authored, synthetic households; "
+             "no personal data).",
+             f"- Converted with llama.cpp `{cpp['commit']}` (<{cpp['repo']}>), the commit `{cpp['engine']}`, the engine the app links, vendors: "
+             f"`convert_hf_to_gguf.py` to F16, then `llama-quantize` to `{entry['quant']}`. `{sidecar_file}` records the checkpoint's file hashes, "
+             "the converter and quantizer hashes and the tool versions; `train/to_gguf.py` in the repository rebuilds this file byte for byte.", "",
+             "## Vision", "",
+             "A photograph is read by a separate projector the app loads beside these weights; fine-tuning left the vision tower as it was, so the "
+             f"projector is the base model's: `{MMPROJ['file']}` of [`{MMPROJ['repo']}`](https://huggingface.co/{MMPROJ['repo']}) at revision "
+             f"`{MMPROJ['revision']}` ({MMPROJ['bytes']:,} bytes, sha256 `{MMPROJ['sha256']}`). It is not part of this repository.", "",
+             "## Files", "", "| file | bytes | sha256 |", "| --- | --- | --- |",
+             f"| `{gguf}` | {entry['bytes']:,} | `{entry['sha256']}` |", ""]
+    return "\n".join(lines)
+
+
+def cmd_publish_gguf(args: argparse.Namespace) -> int:
+    gguf: Path = args.gguf
+    sidecar_path: Path = args.sidecar or gguf.with_name(gguf.name + ".json")
+    for needed in (gguf, sidecar_path):
+        if not needed.is_file():
+            print(f"FAIL {needed} is not a file{' (train/to_gguf.py writes it beside the GGUF)' if needed == sidecar_path else ''}")
+            return 1
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    bad = gguf_problems(gguf, sidecar)
+    if bad:
+        for line in bad:
+            print(f"FAIL {line}")
+        return 1
+    with tempfile.TemporaryDirectory(prefix="publish-gguf-") as scratch:
+        card = Path(scratch) / "README.md"
+        card.write_text(render_gguf_card(sidecar, gguf.name, gguf.name + ".json"), encoding="utf-8")
+        files = {"README.md": card, gguf.name: gguf, gguf.name + ".json": sidecar_path}
+        publish_plan(args.repo, "model", files, args.tag, public=True)
+        if args.dry_run:
+            print("\n--- README.md ---\n" + card.read_text(encoding="utf-8") + "--- end ---")
+            print("dry run: nothing created, nothing sent")
+            return 0
+        token = token_from_env()
+        if not token:
+            print(f"FAIL {HF_ENV} is not set (the plan above is what would be sent; --dry-run prints the card too)")
+            return 1
+        try:
+            revision = publish_tree(hub_client(token), args.repo, "model", files, args.tag,
+                                    f"GGUF {args.tag} of the native tool task (#1088)", public=True)
+        except Refusal as why:
+            print(f"FAIL {why}")
+            return 1
+        except Exception as exc:  # noqa: BLE001
+            print(f"FAIL {type(exc).__name__}: {scrub(str(exc), token)}")
+            return 1
+    print(f"published {len(files)} file(s) to {args.repo} (public): tag {args.tag} is commit {revision}")
     return 0
 
 
@@ -1210,6 +1333,12 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--card", type=Path, metavar="FILE", help="the model card (artefacts.py model-card), sent as README.md: the "
                    "checkpoint directory is not written to")
     p.add_argument("--dry-run", action="store_true")
+    p = sub.add_parser("publish-gguf", help="a GGUF with its sidecar and a card to a PUBLIC model repository, tagged")
+    p.add_argument("gguf", type=Path)
+    p.add_argument("--repo", required=True, metavar="OWNER/NAME")
+    p.add_argument("--tag", required=True, metavar="NAME")
+    p.add_argument("--sidecar", type=Path, metavar="FILE", help="the sidecar train/to_gguf.py wrote (default: GGUF.json beside it)")
+    p.add_argument("--dry-run", "--plan", action="store_true", dest="dry_run", help="print what would be sent, and the card; send nothing")
     p = sub.add_parser("rehash")
     p.add_argument("--only", nargs="+", metavar="NAME_OR_PATH_PREFIX")
     sub.add_parser("paths").add_argument("--class", dest="klass", choices=["rebuild", "version", "heldout", "public"])
@@ -1224,7 +1353,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     handlers = {"check": cmd_check, "fetch": cmd_fetch, "verify-rebuild": cmd_verify_rebuild, "verify-version": cmd_verify_version,
                 "verify-heldout": cmd_verify_heldout, "version": cmd_version, "publish": cmd_publish, "pin": cmd_pin,
-                "model-card": cmd_model_card, "publish-model": cmd_publish_model, "rehash": cmd_rehash, "paths": cmd_paths,
+                "model-card": cmd_model_card, "publish-model": cmd_publish_model, "publish-gguf": cmd_publish_gguf, "rehash": cmd_rehash, "paths": cmd_paths,
                 "gitignore": cmd_gitignore, "format": cmd_format}
     try:
         return handlers[args.cmd](args)

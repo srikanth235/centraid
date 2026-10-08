@@ -1,4 +1,4 @@
-"""artefacts.py, offline: the manifest, check, fetch, the data version, publish, the model card and the JSON layout
+"""artefacts.py, offline: the manifest, check, fetch, the data version, publish, the model card, the GGUF's publish and the JSON layout
 (#1088, R-1088-14, R-1088-16).
 
     python3 -m unittest test_artefacts -v      # from experiments/toolchat/native
@@ -59,6 +59,10 @@ class FakeHub:
         self.state.repos[(repo_type, repo)] = {"private": True, "commits": {}, "main": None, "tags": {},
                                                "files": {".gitattributes": b"*.gz filter=lfs\n"}}
         self.state.created.append((repo_type, repo))
+
+    def create_public(self, repo, repo_type):
+        self.create_private(repo, repo_type)
+        self.state.repos[(repo_type, repo)]["private"] = False
 
     def tags(self, repo, repo_type):
         return sorted(self.state.repos[(repo_type, repo)]["tags"])
@@ -1067,6 +1071,131 @@ class PublishModel(Case):
 
     def test_it_needs_the_token(self):
         self.assertIn("HF_TOKEN is not set", self.publish(token=None)[1])
+
+
+class PublishGguf(Case):
+    """`publish-gguf`: the one publish that is public. The GGUF's sidecar is what to_gguf.py wrote; here it is made by hand."""
+
+    def setUp(self):
+        super().setUp()
+        self.gguf = write(self.base / "out" / "s2-Q4_0.gguf", b"GGUF" + bytes(range(200)))
+        self.side = {
+            "schema": 1, "name": "s2",
+            "files": {"gguf": {"file": "s2-Q4_0.gguf", "bytes": self.gguf.stat().st_size, "sha256": sha(self.gguf.read_bytes()), "quant": "Q4_0"}},
+            "source": {"checkpoint": "/ckpt/s2", "repo": "owner/native-s2", "tag": "S2", "revision": REVISION, "data_version": "data-v7"},
+            "llama_cpp": {"repo": "https://github.com/ggml-org/llama.cpp", "commit": "26394b4e6749a41c3633db040e0987500a5f7013",
+                          "engine": "llama-cpp-sys-2 0.1.158"},
+        }
+        self.sidecar = self.save_sidecar()
+
+    def save_sidecar(self):
+        return write(self.base / "out" / "s2-Q4_0.gguf.json", json.dumps(self.side).encode())
+
+    def publish(self, *extra, token=TOKEN):
+        return self.run_tool("publish-gguf", str(self.gguf), "--repo", "o/s2-gguf", "--tag", "S2-q4", *extra, token=token)
+
+    def test_a_dry_run_says_public_lists_the_files_prints_the_card_and_sends_nothing(self):
+        code, out = self.publish("--plan", token=None)
+        self.assertEqual(code, 0, out)
+        self.assertIn("(model, PUBLIC) as S2-q4: 3 file(s)", out)
+        for rel in ("README.md", "s2-Q4_0.gguf", "s2-Q4_0.gguf.json"):
+            self.assertIn(rel, out)
+        self.assertIn("base_model: Qwen/Qwen3.5-0.8B", out)
+        self.assertEqual((self.hub.tokens, self.hub.commits, self.hub.created), ([], [], []))
+
+    def test_it_creates_a_public_repository_commits_once_and_tags(self):
+        code, out = self.publish()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.hub.created, [("model", "o/s2-gguf")])
+        self.assertIs(self.hub.repos[("model", "o/s2-gguf")]["private"], False)
+        self.assertEqual(self.hub.commits[0][:3], ("model", "o/s2-gguf", ["README.md", "s2-Q4_0.gguf", "s2-Q4_0.gguf.json"]))
+        self.assertEqual(self.hub.tagged[0][:3], ("model", "o/s2-gguf", "S2-q4"))
+        files = self.hub.repos[("model", "o/s2-gguf")]["files"]
+        self.assertEqual(files["s2-Q4_0.gguf"], self.gguf.read_bytes())
+        self.assertEqual(files["s2-Q4_0.gguf.json"], self.sidecar.read_bytes())
+
+    def test_the_card_names_what_it_must(self):
+        card = art.render_gguf_card(self.side, "s2-Q4_0.gguf", "s2-Q4_0.gguf.json")
+        for needed in ("base_model: Qwen/Qwen3.5-0.8B", "license: apache-2.0", "Apache-2.0", "eight tools", "SPEC.md", "not a general chat model",
+                       "`owner/native-s2`", "tag `S2`", f"revision `{REVISION}`", "`data-v7`", "26394b4e6749a41c3633db040e0987500a5f7013",
+                       "llama-cpp-sys-2 0.1.158", "`Q4_0`", self.side["files"]["gguf"]["sha256"], f"{self.gguf.stat().st_size:,}",
+                       "unsloth/Qwen3.5-0.8B-GGUF", "mmproj-F16.gguf", "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+                       "56e4c6cfe73b0c82e3e82bc518d7591997e61d81f723fc41a586f4fa69ea2453", "204,987,232"):
+            self.assertIn(needed, card)
+        self.assertTrue(card.startswith("---\n"))
+
+    def test_it_refuses_a_private_repository_and_a_moved_tag(self):
+        self.hub.repos[("model", "o/s2-gguf")] = {"private": True, "commits": {}, "main": None, "tags": {}, "files": {}}
+        self.assertIn("exists and is private", self.publish()[1])
+        self.hub.repos[("model", "o/s2-gguf")]["private"] = False
+        self.hub.repos[("model", "o/s2-gguf")]["tags"] = {"S2-q4": "x"}
+        self.assertIn("already has the tag S2-q4", self.publish()[1])
+        self.assertEqual(self.hub.commits, [])
+
+    def test_it_needs_the_token_from_the_environment_and_shows_the_plan_without_it(self):
+        code, out = self.publish(token=None)
+        self.assertEqual(code, 1)
+        self.assertIn("HF_TOKEN is not set", out)
+        self.assertIn("(model, PUBLIC)", out)
+        self.assertEqual(self.hub.commits, [])
+
+    def test_the_sidecar_must_describe_this_file(self):
+        write(self.gguf, self.gguf.read_bytes() + b"x")  # same name and nothing else
+        code, out = self.publish("--dry-run")
+        self.assertEqual(code, 1)
+        self.assertIn("is not the bytes the sidecar records", out)
+        self.side["files"]["gguf"]["file"] = "other.gguf"
+        self.save_sidecar()
+        self.assertIn("describes 'other.gguf'", self.publish("--dry-run")[1])
+        self.assertEqual(self.hub.commits, [])
+
+    def test_the_sidecar_must_say_where_the_model_came_from_and_what_read_it(self):
+        for path, key, why in (("source", "repo", "private source repository"), ("source", "tag", "source tag"),
+                               ("source", "revision", "source revision"), ("source", "data_version", "data version"),
+                               ("llama_cpp", "commit", "llama.cpp commit")):
+            saved = self.side[path].pop(key)
+            self.save_sidecar()
+            code, out = self.publish("--dry-run")
+            self.assertEqual(code, 1, key)
+            self.assertIn(why, out)
+            self.side[path][key] = saved
+        self.side["source"]["revision"] = "main"
+        self.save_sidecar()
+        self.assertIn("source revision", self.publish("--dry-run")[1])
+
+    def test_a_missing_sidecar_or_a_quant_nobody_checked_is_refused(self):
+        self.sidecar.unlink()
+        self.assertIn("is not a file", self.publish("--dry-run")[1])
+        self.save_sidecar()
+        self.side["files"]["gguf"]["quant"] = "Q2_K"
+        self.save_sidecar()
+        self.assertIn("quant is 'Q2_K'", self.publish("--dry-run")[1])
+
+    def test_a_sidecar_can_be_given_by_path(self):
+        elsewhere = write(self.base / "elsewhere.json", self.sidecar.read_bytes())
+        self.sidecar.unlink()
+        code, out = self.publish("--sidecar", str(elsewhere), "--dry-run")
+        self.assertEqual(code, 0, out)
+
+    def test_the_token_reaches_neither_the_output_nor_a_file(self):
+        code, out = self.publish()
+        self.assertNotIn(TOKEN, out)
+        for content in self.hub.repos[("model", "o/s2-gguf")]["files"].values():
+            self.assertNotIn(TOKEN.encode(), content)
+        with mock.patch.object(FakeHub, "commit", side_effect=RuntimeError(f"401 for {TOKEN}")):
+            self.hub.repos.clear()
+            code, out = self.publish()
+        self.assertEqual(code, 1)
+        self.assertNotIn(TOKEN, out)
+
+    def test_the_private_publishes_stay_private(self):
+        model = self.base / "model"
+        write(model / "config.json", b"{}")
+        write(model / "model.safetensors", b"w")
+        write(model / "README.md", b"- Data version: `data-v7`\n")
+        code, out = self.run_tool("publish-model", str(model), "--repo", "o/s2", "--tag", "S2", token=TOKEN)
+        self.assertEqual(code, 0, out)
+        self.assertIs(self.hub.repos[("model", "o/s2")]["private"], True)
 
 
 class Paths(Case):
