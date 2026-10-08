@@ -54,7 +54,7 @@ explains keeps the failing gold, so the session is dropped as it is without the 
 reported (the first call of the reference resolves a name and ends the turn on that row, where the authored chain
 dead-ends on purpose, so the derived effect may be the wrong answer): the turn keeps its gold and the session is
 dropped, listed under "name-match, dropped"; the reference calls are repaired at the source.
-OUT/<W>.gold.jsonl carries the regenerated gold (`build_sets.py trainfit --train-gold` and authored/dist.py read it);
+OUT/<W>.gold.jsonl carries the regenerated gold (authored/dist.py and eval/rollout.py read it);
 each report entry gets a `changes` list (turn, convention, old and new gold, evidence); per world the counts of
 sessions kept, dropped (and why) and turns changed by convention are printed. Without the flag the gold stays as
 authored.
@@ -115,7 +115,8 @@ def seed(w: str, worlds_dir: Path = HERE / "worlds") -> None:
     if proc.returncode:
         raise SystemExit(f"seed {w} failed: {proc.stderr[-2000:]}")
     rep = json.loads(proc.stdout)
-    keys_path = worlds_dir / f"{w}.keys.json"  # the committed formatting; written only when the content differs
+    keys_path = lib.keys_file(w, worlds_dir)  # beside the world, or in $EVAL_KEYS; written only when the content differs
+    keys_path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(rep["keys"], indent=2, sort_keys=True) + "\n"
     if not keys_path.exists() or json.loads(keys_path.read_text()) != rep["keys"]:
         tmp = keys_path.with_name(f".{keys_path.name}.{os.getpid()}")  # replaced whole: a test module reading it beside this build never sees half

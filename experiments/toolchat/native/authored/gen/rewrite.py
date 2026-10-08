@@ -315,7 +315,9 @@ def replay(sess: dict) -> dict:
 
 
 def key_map(w: str, worlds_dir: Path) -> dict[str, str]:
-    return {v["id"]: k for k, v in json.loads((worlds_dir / f"{w}.keys.json").read_text()).items()}
+    import lib
+
+    return {v["id"]: k for k, v in json.loads(lib.keys_file(w, worlds_dir).read_text()).items()}
 
 
 def work(w: str, sessions_dir: str, worlds_dir: str | None, base_dir: str | None) -> dict:

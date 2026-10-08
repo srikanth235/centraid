@@ -1,20 +1,24 @@
 """Unit tests of the phase-5 generators (authored/gen).
 
-    python3 -m unittest authored/gen/test_gen.py          # from experiments/toolchat/native, no runtime needed
+    NATIVETOOLS=... python3 -m unittest authored/gen/test_gen.py          # from experiments/toolchat/native
     GEN_INTEGRATION=1 NATIVETOOLS=... EVAL_VAULTS=... python3 -m unittest authored.gen.test_gen.Integration
 
-The unit tests read only authored/worlds and authored/sessions (never write there) and run in a few seconds. The
-integration test builds two sessions of T01 with a recovery insertion through authored/build.py and the runtime.
+The unit tests read only authored/worlds and authored/sessions (never write there). The keys of T01 and T02 are a by-product
+of seeding and none is kept in the tree (R-1088-16), so the module seeds both into a temporary directory first and points
+EVAL_KEYS there: no test reads or writes a tracked keys file. The integration test builds two sessions of T01 with a
+recovery insertion through authored/build.py and the runtime.
 """
 from __future__ import annotations
 
 import datetime
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import collide  # noqa: E402
@@ -22,6 +26,21 @@ import common  # noqa: E402
 import deadend  # noqa: E402
 import recover  # noqa: E402
 import rewrite  # noqa: E402
+
+NATIVE = Path(__file__).resolve().parents[2]
+
+
+def setUpModule():
+    """Seed T01 and T02 with the runtime (eval/seed_worlds.py) into a temporary directory and read their keys from there."""
+    tmp = tempfile.TemporaryDirectory(prefix="test_gen-")
+    unittest.addModuleCleanup(tmp.cleanup)
+    seeded = subprocess.run([sys.executable, str(NATIVE / "eval" / "seed_worlds.py"), "--vaults", str(Path(tmp.name) / "vaults"),
+                             "--keys-dir", str(Path(tmp.name) / "keys"), "T01", "T02"], capture_output=True, text=True)
+    if seeded.returncode:
+        raise RuntimeError(f"could not seed T01 and T02 (set NATIVETOOLS to the nativetools binary):\n{seeded.stderr[-1500:]}")
+    patch = mock.patch.dict(os.environ, {"EVAL_KEYS": str(Path(tmp.name) / "keys")})
+    patch.start()
+    unittest.addModuleCleanup(patch.stop)
 
 SRC = '''from gold import *
 

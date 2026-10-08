@@ -118,8 +118,7 @@ class DriverRetraction(unittest.TestCase):
             def step(self, transcript, ctx):
                 raise AssertionError("the runtime ended the turn: no model step")
 
-        world = json.loads((Path(__file__).parent / "worlds" / "A.json").read_text())
-        session = {"id": "r-1", "world": "A", "today": "2026-10-14", "me": world["me"],
+        session = {"id": "r-1", "world": "A", "today": "2026-10-14", "me": "Priya Raman",
                    "turns": [{"user": "never mind"}]}
         with mock.patch.object(driver, "Runtime", FakeRuntime):
             record = driver.run_session(session, NoModel())
@@ -141,8 +140,7 @@ class RuntimeFlags(unittest.TestCase):
 
     @staticmethod
     def flags_of(backend) -> list[str]:
-        world = json.loads((Path(__file__).parent / "worlds" / "A.json").read_text())
-        session = {"id": "f-1", "world": "A", "today": "2026-10-14", "me": world["me"],
+        session = {"id": "f-1", "world": "A", "today": "2026-10-14", "me": "Priya Raman",
                    "turns": [{"user": "never mind", "ref": []}]}
         FakeRuntime.started.clear()
         with mock.patch.object(driver, "Runtime", FakeRuntime):

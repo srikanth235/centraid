@@ -1,6 +1,6 @@
 """The loop breaker through the eval driver, with scripted backends (no model, no network).
 
-    python3 -m unittest test_loop          (needs target/debug/nativetools and the seeded vaults)
+    python3 -m unittest test_loop          (needs target/debug/nativetools: the test seeds a public world itself)
 
 Runtime side (hint, nudge, cut) is covered by crates/nativetools/tests/tools.rs and reanchor.rs; this checks the
 driver's rung: resample once, between the hint and the nudge, and only on a backend that can.
@@ -8,22 +8,21 @@ driver's rung: resample once, between the hint and the nudge, and only on a back
 
 from __future__ import annotations
 
-import json
 import unittest
-from pathlib import Path
 
+import pubworld
 from lib import format_call
 from run import Backend, StepOut, run_session
 
 WORLD = "A"
+ME = pubworld.seed_public("T05", WORLD)["me"]  # the household is the public world T05, seeded into a temporary directory
 FIND = format_call("find", {"kind": "task"})
 ANSWER = format_call("answer", {"kind": "task"})
 HINT_HEAD = "error: repeated call. You already made this exact call and it returned: "
 
 
 def session() -> dict:
-    me = json.loads((Path(__file__).parent / "worlds" / f"{WORLD}.json").read_text())["me"]
-    return {"id": "loop-1", "world": WORLD, "today": "2026-10-14", "me": me, "turns": [{"user": "what tasks do i have"}]}
+    return {"id": "loop-1", "world": WORLD, "today": "2026-10-14", "me": ME, "turns": [{"user": "what tasks do i have"}]}
 
 
 class Scripted(Backend):

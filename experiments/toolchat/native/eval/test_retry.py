@@ -1,6 +1,6 @@
 """Retry on a runtime signal (NATIVE_RETRY), through the eval driver with scripted backends (no model).
 
-    python3 -m unittest test_retry          (needs the nativetools binary and the seeded vault of world A)
+    python3 -m unittest test_retry          (needs the nativetools binary: test_loop seeds the public household it runs on)
 
 The runtime cannot take a call back, so a retry is the turn's next step: the same step re-drawn with sampling, the
 failed call excluded, on the history as it stood before that call (run.py docstring).

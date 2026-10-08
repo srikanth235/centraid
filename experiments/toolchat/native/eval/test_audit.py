@@ -5,7 +5,7 @@ worlds; and M5d and M5e, a recurring event or task named without a date is asked
 
     python3 -m unittest test_audit -v      # from experiments/toolchat/native/eval
 
-Sessions and runs are made up on world A (hand-built as the runtime reports them), never a held-out message.
+Sessions and runs are made up on the fixture world (`fixture_world.py`; hand-built as the runtime reports them), never a held-out message.
 """
 
 from __future__ import annotations
@@ -18,13 +18,15 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+import fixture_world
 import gold
 import regen
 import view_world
 from lib import load_keys
 from score import Ids
 
-KEYS = load_keys("A")
+WORLD = fixture_world.install()  # a made-up household with the rows these tests name (the held-out worlds are not public)
+KEYS = load_keys(WORLD)
 RUNTIME = Path(__file__).resolve().parents[4] / "crates" / "assist" / "src" / "native"
 GROUND = RUNTIME / "ground.rs"
 DAY0 = {"unit": "day", "rel": 0}
@@ -74,7 +76,7 @@ def turn(user: str, *accepts: dict, ref: list[dict]) -> dict:
 
 
 def session(*turns: dict) -> dict:
-    return {"id": "s1", "set": "val", "world": "A", "today": "2026-10-14T08:40", "me": "me", "tags": [],
+    return {"id": "s1", "set": "val", "world": WORLD, "today": "2026-10-14T08:40", "me": "me", "tags": [],
             "turns": list(turns)}
 
 
@@ -87,11 +89,11 @@ def listing(kind: str, when: dict = DAY0, **extra) -> list[dict]:
 
 
 def sess_of(world_session: dict | None = None) -> regen.Sess:
-    return regen.Sess(world_session or session(), Ids("A"))
+    return regen.Sess(world_session or session(), Ids(WORLD))
 
 
 def kind_of(key: str) -> str | None:
-    return regen.world_kinds("A").get(key)
+    return regen.world_kinds(WORLD).get(key)
 
 
 TICK = turn("tick off the faucet", gold.diff(gold.upd("faucet", status="completed", completed=gold.ANY)),
@@ -594,7 +596,7 @@ class BarePlural(unittest.TestCase):
 # M5d and M5e: a recurring event or task named without a date is asked about
 # ---------------------------------------------------------------------------------------------
 
-YOGA = [f"yoga{i}" for i in range(17)]  # "Yoga with Ananya" seventeen times, world A
+YOGA = [f"yoga{i}" for i in range(17)]  # "Yoga with Ananya" seventeen times, in the fixture world
 RENT = [f"rent{i}" for i in range(4)]  # "Pay rent", tasks
 SERIES_ARGS = {"verb": "reschedule", "kind": "event", "name": "yoga"}
 TASK_ARGS = {"verb": "reschedule", "kind": "task", "name": "pay rent"}
@@ -913,8 +915,8 @@ class ViewWorld(unittest.TestCase):
                 self.assertEqual(view_world.lookup_today("Z5"), "2032-09-10T11:12")
                 self.assertIsNone(view_world.lookup_today("Z7"))
 
-    def test_the_authored_val_worlds_view(self):
-        for name in ("T03", "T12", "T23"):
+    def test_the_authored_worlds_view(self):
+        for name in ("T01", "T02", "T04"):  # public train worlds: the held-out val worlds are not in a public checkout
             out = io.StringIO()
             with redirect_stdout(out), mock.patch("sys.argv", ["view_world.py", name]):
                 view_world.main()
@@ -922,7 +924,7 @@ class ViewWorld(unittest.TestCase):
 
     def test_an_explicit_today_wins(self):
         out = io.StringIO()
-        with redirect_stdout(out), mock.patch("sys.argv", ["view_world.py", "T03", "--today", "2026-12-24T09:00"]):
+        with redirect_stdout(out), mock.patch("sys.argv", ["view_world.py", "T01", "--today", "2026-12-24T09:00"]):
             view_world.main()
         self.assertIn("today: 2026-12-24T09:00 (Thursday)", out.getvalue().splitlines()[0])
 
