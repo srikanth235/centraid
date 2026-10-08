@@ -4,6 +4,7 @@
     python3 run.py --set sets/val.jsonl --model ref    --out runs/val-ref.jsonl     # gold check
     python3 run.py --set sets/val.jsonl --model replay --replay runs/x.jsonl --out runs/y.jsonl
     python3 run.py --set sets/val.jsonl --model hf --checkpoint PATH --out ...       # trainer fills in
+    python3 run.py --set sets/val.jsonl --model gguf --gguf MODEL-Q4_0.gguf --out ... --jobs 2   # the phone's decode, on CPU
 
 Per turn: send the user text (a retraction ends the turn right there, `user["ended"]`: one synthetic step
 with `model: ""` and `runtime: "never_mind"`, no model step), then loop model -> `call_text` -> runtime
@@ -37,14 +38,21 @@ Backends
   hf      the trained Qwen model (train/hf_backend.py), decoded free: greedy, nothing masked. The call it executes is the
           one the session's `compile` op builds from the think's slots; each step records `compile` (compiled | retry |
           fallback | retry-fallback | none) and the run's counts go to <out>.stats.json.
+  gguf    a GGUF file decoded by `assist-step` (crates/assist-llama), the phone's own decode step (`decode_step`, the engine, the
+          quantized weights): the prompt is rendered exactly as `hf` renders it and sent with its `dates:` line, and the reply is
+          the message the phone would write, its call rendered from the think by the Rust compiler (no `compile` op). Greedy only
+          (`resample` is None). `--gguf PATH` or `$CENTRAID_GGUF`; the binary is `$ASSIST_STEP_BIN`, else the cargo release target.
+          `--jobs N` starts N `assist-step` processes (one per worker thread, each loads the model: ~0.6 GB at Q4_0, and the
+          cores are shared between them). The run record's `model` is `gguf:<file>@<sha256 prefix>`, the file it scored.
 Each backend fixes the session's `--tools` spelling of the tools block: sonnet `full` (untrained,
-needs described schemas), hf `sig` (what the fine-tuned model saw); `--tools` overrides it.
+needs described schemas), hf and gguf `sig` (what the fine-tuned model saw); `--tools` overrides it.
   replay  re-sends the model messages recorded in an earlier run file.
 """
 
 from __future__ import annotations
 
 import argparse
+import atexit
 import concurrent.futures as cf
 import hashlib
 import json
@@ -53,6 +61,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -288,6 +297,191 @@ class HFBackend(Backend):
         return StepOut(text=text, think_cut=bool(info.get("think_cut")), **compile_key(info))
 
 
+# ---- the GGUF backend: the phone's decode step in a child process
+
+STEP_BIN_ENV = "ASSIST_STEP_BIN"
+GGUF_ENV = "CENTRAID_GGUF"
+STEP_THREADS_ENV = "ASSIST_STEP_THREADS"
+REPO = HERE.parents[3]
+
+
+def step_binary() -> str:
+    """`assist-step`: $ASSIST_STEP_BIN, else the cargo release target ($CARGO_TARGET_DIR, then the repository's `target/`)."""
+    if os.environ.get(STEP_BIN_ENV):
+        return os.environ[STEP_BIN_ENV]
+    roots = [Path(os.environ["CARGO_TARGET_DIR"])] if os.environ.get("CARGO_TARGET_DIR") else []
+    for root in [*roots, REPO / "target"]:
+        if (root / "release" / "assist-step").is_file():
+            return str(root / "release" / "assist-step")
+    raise SystemExit(f"--model gguf needs assist-step: set {STEP_BIN_ENV}, or `cargo build --release -p centraid-assist-llama "
+                     "--features engine --bin assist-step`")
+
+
+_IDENTITY: dict = {}
+_IDENTITY_LOCK = threading.Lock()
+
+
+def gguf_identity(path: str) -> tuple[str, int]:
+    """(sha256, bytes) of the GGUF, read once per process: the run record names the file it scored by this."""
+    with _IDENTITY_LOCK:
+        if path not in _IDENTITY:
+            digest = hashlib.sha256()
+            with open(path, "rb") as handle:
+                for block in iter(lambda: handle.read(1 << 20), b""):
+                    digest.update(block)
+            _IDENTITY[path] = (digest.hexdigest(), os.path.getsize(path))
+        return _IDENTITY[path]
+
+
+class GGUFError(RuntimeError):
+    """The `assist-step` process failed a request (an `error` reply, or it ended)."""
+
+
+class StepProcess:
+    """One `assist-step` process: it loads the model once and answers one JSON line with one JSON line (the protocol is
+    `crates/assist-llama/src/wire.rs`). Not thread-safe: a worker thread owns its process."""
+
+    def __init__(self, binary: str, gguf: str, threads: int):
+        self.errors = tempfile.TemporaryFile()  # llama.cpp's log: kept for the message of a failure, never piped (a full pipe stalls it)
+        self.proc = subprocess.Popen([binary, "--model", gguf, "--threads", str(threads)], stdin=subprocess.PIPE,
+                                     stdout=subprocess.PIPE, stderr=self.errors, text=True, encoding="utf-8", bufsize=1)
+        try:
+            self.ready = self.read()
+        except GGUFError:
+            self.close()
+            raise
+        if not self.ready.get("ready"):
+            self.close()
+            raise GGUFError(f"assist-step did not start: {self.ready}")
+
+    def tail(self) -> str:
+        self.errors.seek(0)
+        return self.errors.read().decode("utf-8", "replace")[-600:]
+
+    def read(self) -> dict:
+        line = self.proc.stdout.readline()
+        if not line:
+            code = self.proc.wait()
+            raise GGUFError(f"assist-step ended (exit {code}): {self.tail()}")
+        reply = json.loads(line)
+        if "error" in reply:
+            raise GGUFError(reply["error"])
+        return reply
+
+    def step(self, request: dict) -> dict:
+        try:
+            self.proc.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
+            self.proc.stdin.flush()
+        except BrokenPipeError as error:
+            raise GGUFError(f"assist-step ended (exit {self.proc.wait()}): {self.tail()}") from error
+        return self.read()
+
+    def close(self) -> None:
+        """End the process: its stdin closes (it reads the end as its cue and exits), and a process that has not gone in five seconds is killed."""
+        try:
+            self.proc.stdin.close()
+        except OSError:
+            pass  # a process that died leaves a broken pipe to flush
+        try:
+            self.proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.wait()
+        self.proc.stdout.close()
+        self.errors.close()
+
+
+_PROCS = threading.local()  # `.by_key`: one StepProcess per (binary, model, threads) on this worker thread
+_ALL_PROCS: list[StepProcess] = []
+_ALL_LOCK = threading.Lock()
+GGUF_STATS = {"steps": 0, "ms": 0, "prompt_tokens": 0, "new_tokens": 0, "think_cut": 0, "processes": 0}
+
+
+@atexit.register
+def close_step_processes() -> None:
+    with _ALL_LOCK:
+        for proc in _ALL_PROCS:
+            proc.close()
+        _ALL_PROCS.clear()
+
+
+def _by_key() -> dict:
+    if not hasattr(_PROCS, "by_key"):
+        _PROCS.by_key = {}
+    return _PROCS.by_key
+
+
+def step_process(binary: str, gguf: str, threads: int) -> StepProcess:
+    procs = _by_key()
+    key = (binary, gguf, threads)
+    if key not in procs:
+        procs[key] = StepProcess(binary, gguf, threads)
+        with _ALL_LOCK:
+            _ALL_PROCS.append(procs[key])
+            GGUF_STATS["processes"] += 1
+    return procs[key]
+
+
+def drop_step_process(binary: str, gguf: str, threads: int) -> None:
+    """After a failure: the process is closed and the next step on this thread starts a fresh one."""
+    proc = _by_key().pop((binary, gguf, threads), None)
+    if proc is not None:
+        proc.close()
+        with _ALL_LOCK:
+            if proc in _ALL_PROCS:
+                _ALL_PROCS.remove(proc)
+
+
+class GGUFBackend(Backend):
+    """A GGUF decoded by `assist-step`, the phone's decode step over the phone's engine: what this scores is what the phone
+    writes from the same prompt, the quantized weights included. The prompt is rendered by `prompt_from_transcript` (the `hf`
+    backend's, the Rust renderer through `nativetools think`) and goes with its `dates:` line (`dates_line_in_prompt`, what the
+    hf decoder reads a `dates[i]` of the think against); the think limit and message budget are the phone's unless
+    NATIVE_THINK_LIMIT / NATIVE_MAX_NEW say otherwise. Greedy only: NATIVE_SAMPLE=1 is refused and `resample` is None, so the
+    runtime's nudge handles a repeated call. A worker thread owns one process (`--jobs N` is N processes; threads per process
+    default to the cores divided by N, or $ASSIST_STEP_THREADS)."""
+
+    tools_mode = "sig"  # what the fine-tuned model was trained on
+
+    def __init__(self, gguf: str | None = None, jobs: int = 1, binary: str | None = None, threads: int | None = None):
+        gguf = gguf or os.environ.get(GGUF_ENV)
+        if not gguf:
+            raise SystemExit(f"--model gguf needs --gguf PATH (or {GGUF_ENV})")
+        if not os.path.isfile(gguf):
+            raise SystemExit(f"--gguf {gguf}: no such file")
+        if os.environ.get("NATIVE_SAMPLE", "0") == "1":
+            raise SystemExit("--model gguf decodes greedily; NATIVE_SAMPLE=1 is not supported")
+        sys.path.insert(0, str(HERE.parent / "train"))
+        import hf_backend
+
+        self.render = hf_backend.prompt_from_transcript
+        self.dates_of = hf_backend.decode.fmt.dates_line_in_prompt
+        self.gguf = str(Path(gguf).resolve())
+        self.binary = binary or step_binary()
+        cores = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
+        self.threads = threads or int(os.environ.get(STEP_THREADS_ENV) or max(1, cores // max(1, jobs)))
+        sha, _ = gguf_identity(self.gguf)
+        self.name = f"gguf:{Path(self.gguf).name}@{sha[:12]}"
+        self.limits = {key: int(os.environ[env]) for key, env in (("think_limit", "NATIVE_THINK_LIMIT"), ("max_new", "NATIVE_MAX_NEW"))
+                       if os.environ.get(env)}
+
+    def step(self, transcript: Transcript, ctx: dict) -> StepOut:
+        prompt = self.render(transcript)
+        request = {"prompt": prompt, "dates": self.dates_of(prompt), **self.limits}
+        try:
+            reply = step_process(self.binary, self.gguf, self.threads).step(request)
+        except GGUFError:
+            drop_step_process(self.binary, self.gguf, self.threads)
+            raise
+        with _ALL_LOCK:
+            GGUF_STATS["steps"] += 1
+            GGUF_STATS["ms"] += reply["ms"]
+            GGUF_STATS["prompt_tokens"] += reply.get("prompt_tokens") or 0
+            GGUF_STATS["new_tokens"] += reply.get("new_tokens") or 0
+            GGUF_STATS["think_cut"] += int(bool(reply["think_cut"]))
+        return StepOut(text=reply["text"], think_cut=bool(reply["think_cut"]))
+
+
 class ReplayBackend(Backend):
     """Re-sends the model messages of a recorded run (same session ids, same turn/step order)."""
 
@@ -467,11 +661,13 @@ def make_backend(args) -> Backend:
         backend = SonnetBackend(args.claude_model)
     elif args.model == "hf":
         backend = HFBackend(args.checkpoint)
+    elif args.model == "gguf":
+        backend = GGUFBackend(args.gguf, jobs=args.jobs)
     elif args.model == "replay":
         backend = ReplayBackend(args.replay)
     else:
         raise SystemExit(f"unknown model {args.model}")
-    tools = args.tools or (os.environ.get("NATIVE_TOOLS") if args.model == "hf" else None)
+    tools = args.tools or (os.environ.get("NATIVE_TOOLS") if args.model in ("hf", "gguf") else None)
     if tools:  # NATIVE_TOOLS: kernel.py's per-arm tools-block spelling (arm "free@sig")
         backend.tools_mode = tools
     return backend
@@ -480,12 +676,13 @@ def make_backend(args) -> Backend:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--set", required=True)
-    parser.add_argument("--model", required=True, choices=["ref", "sonnet", "hf", "replay"])
+    parser.add_argument("--model", required=True, choices=["ref", "sonnet", "hf", "gguf", "replay"])
     parser.add_argument("--out", required=True)
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--only", help="comma list of session ids")
     parser.add_argument("--claude-model", default="sonnet")
     parser.add_argument("--checkpoint")
+    parser.add_argument("--gguf", help=f"the GGUF file --model gguf scores (default ${GGUF_ENV})")
     parser.add_argument("--replay")
     parser.add_argument("--tools", choices=["sig", "compact", "full"],
                         help="override the backend's tools-block spelling (sonnet: full, hf: sig)")
@@ -517,12 +714,14 @@ def main() -> None:
             handle.write(json.dumps(results[session["id"]], ensure_ascii=False) + "\n")
     counts = compile_counts(results.values())
     retried = retry_counts(results.values())
-    if counts or retried:
+    gguf = dict(GGUF_STATS) if args.model == "gguf" else None
+    if counts or retried or gguf:
         stats = {"sessions": len(results), **({"compile": counts} if counts else {}),
-                 **({"retry": retried} if retried else {})}
+                 **({"retry": retried} if retried else {}), **({"gguf": gguf} if gguf else {})}
         Path(args.out + ".stats.json").write_text(json.dumps(stats, indent=1))
     print(f"wrote {len(results)} sessions to {args.out}" + (f"; compile {json.dumps(counts)}" if counts else "")
-          + (f"; retry {json.dumps(retried)}" if retried else ""))
+          + (f"; retry {json.dumps(retried)}" if retried else "")
+          + (f"; gguf {json.dumps(gguf)}" if gguf else ""))
 
 
 if __name__ == "__main__":
