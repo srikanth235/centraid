@@ -9,7 +9,7 @@ A world is authored/worlds/<W>.json (a household, seeded only through `nativetoo
 reuses the vault already seeded); its sessions are authored/sessions/<W>.py in the eval gold vocabulary
 (eval/gold.py); a ref call the runtime rejects is wrapped `bad(call)` (a repair trajectory; no loss on it).
 `--sessions-dir` and `--worlds-dir` read the sessions and the worlds from other directories (the recipe-authored
-sessions of A to D: eval/sessions/e1 and eval/worlds).
+sessions of A to D, which their author keeps, and the eval worlds of the data version; the collision worlds).
 The `<think>` before each call is the slot trace of CONTRACT_V3.md (section 7, v3.1), written mechanically from the
 call and the prompt in front of it (authored/trace.py), never authored: a row is its `#n`, a date the dates line reads
 as exactly is `dates[i]`, a `where` is typed segments. The call is a deterministic rendering of its think
