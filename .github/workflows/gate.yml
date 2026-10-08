@@ -246,3 +246,112 @@ jobs:
     uses: ./.github/workflows/lane-prebuilt-core.yml
     with:
       binary-only: true
+
+  # THE NATIVE HARNESS'S CPU PYTHON TESTS (#1044), on every pull request and every
+  # push to `main`, unfiltered: `experiments/toolchat/native` is Python, and nothing
+  # in `cargo xtask gate --profile pr` runs Python. It is a job of its own, outside
+  # that command and its 1500 s budget, because it needs what the gate does not: a
+  # Python toolchain, ~200 MB of CPU torch, a tokenizer from the model hub and a
+  # build of the `nativetools` binary the tests drive. (The gate still reads and
+  # scans the tree: the Rust tests read `authored/golden_v3.json`, and `secrets`
+  # scans every file.)
+  #
+  # What it runs is `experiments/toolchat/native/run_cpu_tests.py`: all 26 test
+  # modules of `authored/`, `authored/gen/`, `eval/` and `train/`, each in an
+  # interpreter of its own, none skipped and none left out. Two tests of `authored/test_noise.py` are red on this tree for a
+  # reason the owner has yet to rule on (HANDOFF.md, "Known failing checks"); the
+  # script names them, runs them every time, and fails when they start to pass.
+  # Nothing here needs model weights or a GPU. Reproduce a run by following the
+  # steps below by hand, or read them as the setup the script's docstring lists.
+  #
+  # Its inputs are pinned by content, not by name: `requirements-ci.txt` carries a
+  # hash for every package (`pip install --require-hashes`), the tokenizer is
+  # fetched at a commit and checked against SHA-256 sums, and the actions are SHAs.
+  native-python:
+    runs-on: ubuntu-latest
+    # A cold run is a ~3 minute Rust build, a ~1 minute install and the suite, ~30
+    # minutes on four cores (31.5 measured), most of it the trainer's tiny-model tests
+    # (train/test_dpo.py alone is ~9). The bound is a backstop at twice that, not a
+    # second budget.
+    timeout-minutes: 60
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          # `audit` for the reason `gate` uses it: crates.io, PyPI, the PyTorch
+          # index and the model hub are not an allowlist anybody has learned yet.
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The same channel read as the `gate` job's, from the one version file.
+      - id: channel
+        run: |
+          set -euo pipefail
+          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
+          if [ -z "$channel" ]; then
+            echo "::error::native-python: rust-toolchain.toml has no [toolchain] channel"
+            exit 1
+          fi
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: ${{ steps.channel.outputs.channel }}
+      # No Cargo cache: the `gate` job owns the `cargo-v1` entry, and a second job
+      # saving under its key on `main` could leave it holding only this build.
+      - name: Build the nativetools binary
+        run: cargo build --locked -p centraid-nativetools --bin nativetools
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          # The minor the training image runs (train/vm/run_job.sh).
+          python-version: "3.11"
+      - name: Install the pinned Python dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --require-hashes --only-binary=:all: --no-deps \
+            -r experiments/toolchat/native/requirements-ci.txt
+      # The trainer's tiny-model tests build a random model from the config of
+      # Qwen3.5-0.8B and tokenize with its tokenizer: six small files, 23 MB, and no
+      # weights. The commit pins the tree; the sums pin each file. The tests then
+      # read them offline, where `from_pretrained` resolves `main` through refs/main.
+      - name: Fetch the Qwen3.5-0.8B tokenizer and config
+        env:
+          HF_HOME: ${{ runner.temp }}/hf
+          QWEN_REVISION: 2fc06364715b967f1860aea9cf38778875588b17
+        run: |
+          set -euo pipefail
+          attempt=1
+          until hf download Qwen/Qwen3.5-0.8B --revision "${QWEN_REVISION}" \
+            config.json tokenizer.json tokenizer_config.json vocab.json merges.txt chat_template.jinja; do
+            if [ "$attempt" -ge 3 ]; then
+              exit 1
+            fi
+            echo "::warning::hf download failed (attempt ${attempt}); retrying"
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+          repo="${HF_HOME}/hub/models--Qwen--Qwen3.5-0.8B"
+          mkdir -p "${repo}/refs"
+          printf '%s' "${QWEN_REVISION}" > "${repo}/refs/main"
+          cd "${repo}/snapshots/${QWEN_REVISION}"
+          sha256sum -c - <<'SUMS'
+          273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80  chat_template.jinja
+          b90b86f35c8e6925ef74ee04d0e758f0a845c83a42089ad82bbaa948de9b4204  config.json
+          a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d  merges.txt
+          5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42  tokenizer.json
+          49e2b6e395f959f077f1e992b338919c0d4a9732fc6e613995e06557f843500c  tokenizer_config.json
+          ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003  vocab.json
+          SUMS
+      # `test_loop` and `test_retry` drive the eval harness over a seeded vault of
+      # world A. Seeding is deterministic and leaves the tracked keys file as it is.
+      - name: Seed world A
+        env:
+          NATIVETOOLS: ${{ github.workspace }}/target/debug/nativetools
+        run: python experiments/toolchat/native/eval/seed_worlds.py --vaults "${RUNNER_TEMP}/vaults" A
+      - name: Run the CPU suite
+        env:
+          NATIVETOOLS: ${{ github.workspace }}/target/debug/nativetools
+          HF_HOME: ${{ runner.temp }}/hf
+          HF_HUB_OFFLINE: "1"
+          EVAL_VAULTS: ${{ runner.temp }}/vaults
+          GEN_INTEGRATION: "1"
+          NOISE_INTEGRATION: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python experiments/toolchat/native/run_cpu_tests.py
