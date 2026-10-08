@@ -234,6 +234,9 @@ class TasksSpec : StringSpec({
         row.pending shouldBe true
         row.can_check shouldBe false
         row.meta shouldBe "not in the vault yet"
+        // A SECOND ADD with nothing typed — the title cleared at the first, and the bridge mints a
+        // new id for every gesture — files no second task (#1089).
+        TasksHomeMachine.reduce(added.state, TasksHomeInput.Add("another-id")).effects.shouldBeEmpty()
 
         // COMMITTED: the status line says where it landed, and the next
         // answer — which carries the task — replaces the pending row.

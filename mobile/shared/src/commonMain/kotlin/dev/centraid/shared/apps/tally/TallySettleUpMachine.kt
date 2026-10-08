@@ -123,8 +123,10 @@ public object TallySettleUpMachine :
             if (transfer.group_id.isNotEmpty()) append(",\"group_id\":").append(jsonString(transfer.group_id))
             append("}")
         }
-        // A PAYMENT RECORDED TWICE BY A DOUBLE TAP IS ONE; the same payment in
-        // another sitting is another (the sitting's token).
+        // THE KEY ONLY CORRELATES THE ANSWER. A double tap in flight is one write
+        // ([WriteLaw]); a commit closes the draft ([settled]), so a second Record
+        // has nothing to record. The same payment in another sitting is another
+        // (the sitting's token): the core remembers no key (R-1088-12).
         val key = InvokeKeys.of(COMMAND, transfer.key, minor.toString(), held.screen.draft_token)
         return WriteLaw.submit(Writes, held.copy(screen = held.screen.copy(draft = checked)), COMMAND, input, key)
     }

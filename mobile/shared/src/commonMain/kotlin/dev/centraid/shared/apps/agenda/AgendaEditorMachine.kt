@@ -592,6 +592,7 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
     // ---------------------------------------------------------------------
 
     private fun save(state: AgendaEditorScreen): Step<AgendaEditorScreen> {
+        if (committed(state)) return Step(state)
         if (!canSave(state)) return Step(state.copy(saveTried = state.draft != null))
         if (state.screen.mode == AgendaEditorState.Mode.MODE_CREATE) return submit(state, propose(state))
         val event = eventOf(state) ?: return Step(state)
@@ -613,6 +614,7 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
     }
 
     private fun skip(state: AgendaEditorScreen): Step<AgendaEditorScreen> {
+        if (committed(state)) return Step(state)
         val event = eventOf(state) ?: return Step(state)
         val occurrence = event.original_start_local ?: return Step(state)
         return WriteLaw.submit(
@@ -749,6 +751,15 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
     private fun busy(state: AgendaEditorScreen): Boolean =
         state.screen.write?.phase == WriteState.Phase.PHASE_IN_FLIGHT
 
+    /**
+     * A COMMITTED WRITE ENDS THE SITTING (#1089): `dismissed` is set with it and
+     * the shell leaves, but nothing remembers the commit (R-1088-12), and each
+     * attempt is a new key (`try=N`) — so a Save or a Skip before the shell has
+     * gone would file the event, or its edit, again.
+     */
+    private fun committed(state: AgendaEditorScreen): Boolean =
+        state.screen.write?.phase == WriteState.Phase.PHASE_COMMITTED
+
     /** Why Save is not armed, or empty. */
     internal fun blocked(state: AgendaEditorScreen): String {
         val draft = state.draft ?: return ""
@@ -764,6 +775,7 @@ public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEdit
     private fun canSave(state: AgendaEditorScreen): Boolean =
         state.draft != null &&
             !busy(state) &&
+            !committed(state) &&
             blocked(state).isEmpty() &&
             (state.screen.mode == AgendaEditorState.Mode.MODE_CREATE || dirty(state))
 

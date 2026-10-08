@@ -279,7 +279,7 @@ There is one query engine: no Kotlin or Swift code joins tables or expands an rr
 | `BandLaw` | tapping the tab you are on does nothing |
 | `SearchLaw` | closing search clears the term and its answer |
 | `AutosaveLaw` | 900 ms after typing stops, flush on leave, one invoke key per edit, only changed fields, a vault change never overwrites typing ([R-1047-K3](../docs/decisions.md#the-app-ports-and-the-shell-kit-1047)) |
-| `WriteLaw`, `InvokeKeys` | one write in flight per key; only `EXECUTED` counts as committed |
+| `WriteLaw`, `InvokeKeys` | one write in flight per key; only `EXECUTED` counts as committed; a settled write is forgotten (the invoke key is a correlation key, the core remembers none, [R-1088-12](../docs/decisions.md)), so an editor that stays up after a committed create or save ends its sitting itself: Save not armed, form gone ([#1089](https://github.com/srikanth235/centraid/issues/1089)) |
 | `TrashSpec` → `TrashMachine` / `TrashReads` | one trash screen per app (`"<app>.trash"`); `purgeCommand = null` means the app has no destroy path and the screen offers restore only |
 | `ScreenBridge` | the one bridge shape: `attach`, `observe`, `send` (Swift), `forward` (Compose), `current`, `departed`, `leave`, `close` |
 | `MoneyFold`, `time/CivilDays`, `time/CivilWords` | money sums per currency, and day words over civil dates the core answered |

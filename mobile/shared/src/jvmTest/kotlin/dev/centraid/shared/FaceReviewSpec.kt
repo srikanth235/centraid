@@ -321,6 +321,25 @@ class FaceReviewSpec : StringSpec({
         write.invokeKey shouldBe "people.add_person:r-1:Ada"
     }
 
+    "a second Create while the first add_person is in flight makes no second person (#1089)" {
+        // The core remembers no key (R-1088-12): the picker stays open over the
+        // question while the create is in flight, so a double tap reaches here twice.
+        val state = FaceReviewMachine.reduce(
+            opened(),
+            FaceReviewReads.arrived(candidates("r-1", "r-2")),
+        ).state.copy(naming = true)
+        val tap = FaceReviewEvent(confirmed = FaceReviewEvent.Confirmed(region_id = "r-1", new_name = "Ada"))
+        val first = FaceReviewMachine.reduce(state, tap)
+        (first.effects.single() as ScreenEffect.SubmitWrite).command shouldBe "people.add_person"
+        FaceReviewMachine.reduce(first.state, tap).effects.shouldBeEmpty()
+        // REFUSED: the cursor is put back and the same name tries again.
+        val refused = FaceReviewMachine.reduce(
+            first.state,
+            FaceReviewEvent(write_settled = FaceReviewEvent.WriteSettled(region_id = "r-1", committed = false, sentence = "Not now.")),
+        ).state
+        (FaceReviewMachine.reduce(refused, tap).effects.single() as ScreenEffect.SubmitWrite).command shouldBe "people.add_person"
+    }
+
     "the new person's id comes back as PersonCreated, and the confirm follows it" {
         // `people.add_person` MINTS THE ID and this machine never does; the bridge
         // reads it off the outcome and hands it back, and the confirm that

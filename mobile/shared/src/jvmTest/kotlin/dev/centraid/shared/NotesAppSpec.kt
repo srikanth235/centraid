@@ -353,6 +353,9 @@ class NotesAppSpec : StringSpec({
         ).state
         done.creating shouldBe false
         done.draft_name shouldBe ""
+        // THE COMMIT ENDS THE SITTING (#1089): the name is spent, so a second Create files no second notebook.
+        NotesNotebooksMachine.reduce(done, NotesNotebooksEvent(create_confirmed = NotesNotebooksEvent.CreateConfirmed()))
+            .effects.shouldBeEmpty()
     }
 
     "notebooks: the Unfiled row carries the core's count, and says when it is of the window only (#1047)" {
@@ -528,8 +531,11 @@ class NotesAppSpec : StringSpec({
         ).state
         refused.compose!!.status_label shouldBe "The vault is full."
         refused.compose.can_save shouldBe true
-        NotesJournalMachine.reduce(saving.state, NotesJournalEvent(write_settled = WriteSettled(invoke_key = key, committed = true)))
-            .state.compose shouldBe null
+        val filed = NotesJournalMachine.reduce(saving.state, NotesJournalEvent(write_settled = WriteSettled(invoke_key = key, committed = true)))
+            .state
+        filed.compose shouldBe null
+        // THE COMMIT ENDS THE SITTING (#1089): the sheet is gone, so a second Save files no second entry.
+        NotesJournalMachine.reduce(filed, NotesJournalEvent(compose_saved = NotesJournalEvent.ComposeSaved())).effects.shouldBeEmpty()
         NotesJournalMachine.reduce(refused, NotesJournalEvent(compose_closed = NotesJournalEvent.ComposeClosed())).state.compose shouldBe null
     }
 
@@ -761,6 +767,40 @@ class NotesAppSpec : StringSpec({
         val edit = edited.effects.last() as ScreenEffect.SubmitWrite
         edit.command shouldBe NotesEditorMachine.SAVE_COMMAND
         edit.inputJson shouldBe "{\"note_id\":\"$id\",\"body_text\":\"Buy milk and eggs\"}"
+    }
+
+    "editor: words typed while the create is in flight are an edit of the note it made, never a second create (#1089)" {
+        // The core keeps no replay ledger (R-1088-12): a second `create_note` under
+        // the same minted id is not one the vault will answer from memory.
+        val id = "0b7e3a52-1c7d-4d5e-9f00-1234567890ab"
+        val opened = NotesEditorMachine.reduce(
+            NotesEditorMachine.initial(),
+            NotesEditorEvent(opened = NotesEditorEvent.Opened(note_id = id, is_new = true)),
+        ).state
+        val typed = NotesEditorMachine.reduce(opened, NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "Buy milk")))
+        val tick = (typed.effects.single() as ScreenEffect.Schedule).token
+        val create = NotesEditorMachine.reduce(typed.state, NotesEditorEvent(tick = NotesEditorEvent.Ticked(token = tick)))
+        val write = create.effects.single() as ScreenEffect.SubmitWrite
+        write.command shouldBe NotesEditorMachine.CREATE_COMMAND
+        // Typing on while the create is in flight, and a save asked for: it waits.
+        val more = NotesEditorMachine.reduce(create.state, NotesEditorEvent(body = NotesEditorEvent.BodyEdited(body = "Buy milk and eggs")))
+        val waiting = NotesEditorMachine.reduce(more.state, NotesEditorEvent(save = NotesEditorEvent.SaveRequested()))
+        waiting.effects.filterIsInstance<ScreenEffect.SubmitWrite>().shouldBeEmpty()
+        val committed = NotesEditorMachine.reduce(
+            waiting.state,
+            NotesEditorEvent(write_settled = WriteSettled(invoke_key = write.invokeKey, committed = true)),
+        )
+        committed.state.is_new shouldBe false
+        val next = committed.effects.filterIsInstance<ScreenEffect.SubmitWrite>().single()
+        next.command shouldBe NotesEditorMachine.SAVE_COMMAND
+        next.inputJson shouldBe "{\"note_id\":\"$id\",\"title\":\"Buy milk and eggs\",\"body_text\":\"Buy milk and eggs\"}"
+        // A save asked for with nothing changed since the commit sends nothing.
+        val settledAgain = NotesEditorMachine.reduce(
+            committed.state,
+            NotesEditorEvent(write_settled = WriteSettled(invoke_key = next.invokeKey, committed = true)),
+        ).state
+        NotesEditorMachine.reduce(settledAgain, NotesEditorEvent(save = NotesEditorEvent.SaveRequested()))
+            .effects.filterIsInstance<ScreenEffect.SubmitWrite>().shouldBeEmpty()
     }
 
     "editor: a title derived from the body stays derived after the re-read — the field stays empty (#1047 F5)" {

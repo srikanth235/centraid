@@ -616,6 +616,9 @@ class LockerSpec : StringSpec({
         val done = editor.reduce(save.state, LockerInput.Settled(WriteSettled(invoke_key = write.invokeKey, committed = true))).state
         done.screen.done.shouldBeTrue()
         done.screen.encode().decodeToString() shouldNotContain password
+        // THE COMMIT ENDS THE SITTING (#1089): the form is gone with it, so a second Save files no second item.
+        editor.reduce(done, editorView(LockerEditorEvent(save = LockerEditorEvent.SaveTapped())))
+            .effects.filterIsInstance<ScreenEffect.SubmitWrite>().shouldBeEmpty()
     }
 
     "the editor takes a setup key or an otpauth link, and says why it will not take another" {

@@ -459,6 +459,71 @@ class TallyScreensSpec : StringSpec({
         committed.screen.done shouldBe true
     }
 
+    "a Save after the commit files nothing more: a committed expense ends its sitting (#1089)" {
+        // The core keeps no replay ledger (R-1088-12): the same key sent again
+        // runs the command again, so a second `add_expense` is a second expense.
+        val opened = open(
+            TallyEditorMachine,
+            TallyEditorEvent(opened = TallyEditorEvent.Opened(mode = TallyEditorState.Mode.MODE_ADD, draft_token = "t1")),
+        )
+        var held = answeredWith(TallyEditorMachine, opened, AppQueryResponse(tally_dashboard = dashboard()))
+        held = step(TallyEditorMachine, held, TallyEditorEvent(description = TallyEditorEvent.DescriptionChanged(text = "Dinner")))
+        held = step(TallyEditorMachine, held, TallyEditorEvent(amount = TallyEditorEvent.AmountChanged(text = "10.01")))
+        held.screen.data_?.can_save shouldBe true
+        val saved = TallyEditorMachine.reduce(held, view(TallyEditorEvent(save = TallyEditorEvent.SaveTapped())))
+        val write = saved.effects.single() as ScreenEffect.SubmitWrite
+        write.command shouldBe "tally.add_expense"
+        val committed = TallyEditorMachine.reduce(
+            saved.state,
+            TallyInput.Settled(WriteSettled(invoke_key = write.invokeKey, committed = true)),
+        ).state
+        committed.screen.done shouldBe true
+        // The shell dismisses on `done`; until it has, Save is not armed and a tap is nothing.
+        TallyEditorMachine.reduce(committed, view(TallyEditorEvent(save = TallyEditorEvent.SaveTapped()))).effects.shouldBeEmpty()
+        committed.screen.data_?.can_save shouldBe false
+        // Typing into the closing editor does not re-arm it: the sitting is over.
+        val retyped = step(TallyEditorMachine, committed, TallyEditorEvent(amount = TallyEditorEvent.AmountChanged(text = "12")))
+        retyped.screen.data_?.can_save shouldBe false
+        TallyEditorMachine.reduce(retyped, view(TallyEditorEvent(save = TallyEditorEvent.SaveTapped()))).effects.shouldBeEmpty()
+        // A REFUSED save is not a committed one: the words stay and Save tries again.
+        val refused = TallyEditorMachine.reduce(
+            saved.state,
+            TallyInput.Settled(WriteSettled(invoke_key = write.invokeKey, committed = false, failure = dev.centraid.shared.screen.Reads.refused("no"))),
+        ).state
+        refused.screen.data_?.can_save shouldBe true
+        (TallyEditorMachine.reduce(refused, view(TallyEditorEvent(save = TallyEditorEvent.SaveTapped()))).effects.single() as ScreenEffect.SubmitWrite)
+            .command shouldBe "tally.add_expense"
+    }
+
+    "an edit that committed ends its sitting too: the same Save again is not a second revision (#1089)" {
+        val opened = open(
+            TallyEditorMachine,
+            TallyEditorEvent(opened = TallyEditorEvent.Opened(mode = TallyEditorState.Mode.MODE_EDIT, expense_id = "e1", draft_token = "t2")),
+        )
+        val answered = TallyEditorMachine.reduce(
+            opened,
+            TallyInput.Answered(
+                listOf(
+                    AppQueryResponse(tally_dashboard = dashboard()),
+                    AppQueryResponse(tally_expense = expense(trashed = false)),
+                    AppQueryResponse(tally_group = groupLedger(optedIn = false)),
+                ),
+            ),
+        ).state
+        val renamed = step(TallyEditorMachine, answered, TallyEditorEvent(description = TallyEditorEvent.DescriptionChanged(text = "Dinner out")))
+        renamed.screen.data_?.can_save shouldBe true
+        val saved = TallyEditorMachine.reduce(renamed, view(TallyEditorEvent(save = TallyEditorEvent.SaveTapped())))
+        val write = saved.effects.single() as ScreenEffect.SubmitWrite
+        write.command shouldBe "tally.edit_expense"
+        val committed = TallyEditorMachine.reduce(
+            saved.state,
+            TallyInput.Settled(WriteSettled(invoke_key = write.invokeKey, committed = true)),
+        ).state
+        committed.screen.done shouldBe true
+        TallyEditorMachine.reduce(committed, view(TallyEditorEvent(save = TallyEditorEvent.SaveTapped()))).effects.shouldBeEmpty()
+        committed.screen.data_?.can_save shouldBe false
+    }
+
     "leaving the editor with changes asks first; without, it is done" {
         val opened = open(TallyEditorMachine, TallyEditorEvent(opened = TallyEditorEvent.Opened(draft_token = "t")))
         val clean = answeredWith(TallyEditorMachine, opened, AppQueryResponse(tally_dashboard = dashboard()))
@@ -501,8 +566,11 @@ class TallyScreensSpec : StringSpec({
         val write = record.effects.single() as ScreenEffect.SubmitWrite
         write.command shouldBe "tally.settle_up"
         write.inputJson shouldBe "{\"from_party\":\"dana\",\"to_party\":\"me\",\"amount_minor\":2000,\"currency\":\"EUR\",\"group_id\":\"g1\"}"
-        TallySettleUpMachine.reduce(record.state, TallyInput.Settled(WriteSettled(invoke_key = write.invokeKey, committed = true)))
-            .state.screen.draft.shouldBeNull()
+        val recorded = TallySettleUpMachine.reduce(record.state, TallyInput.Settled(WriteSettled(invoke_key = write.invokeKey, committed = true)))
+            .state
+        recorded.screen.draft.shouldBeNull()
+        // THE COMMIT CLOSES THE DRAFT (#1089): a second Record has nothing to record and files no second payment.
+        TallySettleUpMachine.reduce(recorded, view(TallySettleUpEvent(record = TallySettleUpEvent.RecordTapped()))).effects.shouldBeEmpty()
     }
 
     "an empty typed division asks for its own figures; You pay, Dana pays (#1047)" {

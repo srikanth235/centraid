@@ -129,6 +129,50 @@ class AgendaEditorSpec : StringSpec({
         drive(saved.state, AgendaEditorReads().settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", write.invokeKey)).state.screen.dismissed shouldBe true
     }
 
+    "a Save after the commit files nothing more: a committed event ends its sitting (#1089)" {
+        // The core keeps no replay ledger (R-1088-12): a second `propose_event` is a second event.
+        val typed = drive(
+            answered(drive(AgendaEditorMachine.initial(), openNew("")).state),
+            edit(AgendaEditorEvent(title = AgendaEditorEvent.TitleChanged(text = "Dentist"))),
+        ).state
+        val saved = drive(typed, save())
+        val write = saved.effects.single() as ScreenEffect.SubmitWrite
+        write.command shouldBe "schedule.propose_event"
+        val committed = drive(
+            saved.state,
+            AgendaEditorReads().settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", write.invokeKey),
+        ).state
+        committed.screen.dismissed shouldBe true
+        // The shell leaves on `dismissed`; until it has, Save is not armed and a tap is nothing.
+        drive(committed, save()).effects.shouldBeEmpty()
+        committed.screen.data_.shouldNotBeNull().can_save shouldBe false
+
+        // A REFUSED save is not a committed one: the words stay and Save tries again.
+        val refused = drive(
+            saved.state,
+            AgendaEditorReads().settled(CommandStatus.COMMAND_STATUS_FAILED, "Not now.", write.invokeKey),
+        ).state
+        refused.screen.dismissed shouldBe false
+        refused.screen.data_.shouldNotBeNull().can_save shouldBe true
+        (drive(refused, save()).effects.single() as ScreenEffect.SubmitWrite).command shouldBe "schedule.propose_event"
+    }
+
+    "an edit that committed ends its sitting too: the same Save again sends nothing (#1089)" {
+        val event = timed("e1", "Review", "2026-06-15T14:00", "2026-06-15T15:00")
+        val loaded = answered(drive(AgendaEditorMachine.initial(), openEdit(event)).state, event)
+        val changed = drive(loaded, edit(AgendaEditorEvent(title = AgendaEditorEvent.TitleChanged(text = "Design review")))).state
+        val saved = drive(changed, save())
+        val write = saved.effects.single() as ScreenEffect.SubmitWrite
+        write.command shouldBe "schedule.edit_event"
+        val committed = drive(
+            saved.state,
+            AgendaEditorReads().settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", write.invokeKey),
+        ).state
+        committed.screen.dismissed shouldBe true
+        drive(committed, save()).effects.shouldBeEmpty()
+        committed.screen.data_.shouldNotBeNull().can_save shouldBe false
+    }
+
     "the day math: a start moves the end with it, all-day is days, and an inverted range cannot save" {
         val titled = drive(
             answered(drive(AgendaEditorMachine.initial(), openNew("")).state),

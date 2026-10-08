@@ -457,10 +457,13 @@ class DocsSpec : StringSpec({
         drive(DocsDriveEvent(folder_created = DocsDriveEvent.FolderCreated()), n).effects.shouldBeEmpty()
         n = drive(DocsDriveEvent(folder_name = DocsDriveEvent.FolderNameEdited(name = "Insurance")), n).state
         n.sheet!!.new_folder!!.can_create shouldBe true
-        writes(drive(DocsDriveEvent(folder_created = DocsDriveEvent.FolderCreated()), n)).single().let {
+        val filing = drive(DocsDriveEvent(folder_created = DocsDriveEvent.FolderCreated()), n)
+        writes(filing).single().let {
             it.command shouldBe "core.create_folder"
             it.inputJson shouldBe """{"name":"Insurance","parent_folder_id":"f-home"}"""
         }
+        // THE SHEET CLOSES WITH THE SUBMIT (#1089): a second Create has no sheet and no name, so it files no second folder.
+        drive(DocsDriveEvent(folder_created = DocsDriveEvent.FolderCreated()), filing.state).effects.shouldBeEmpty()
         // The Folders tab from a folder page goes to the top level.
         val top = drive(DocsDriveEvent(band = DocsDriveEvent.BandPicked(key = "folders")), s)
         top.state.folder_id shouldBe ""
