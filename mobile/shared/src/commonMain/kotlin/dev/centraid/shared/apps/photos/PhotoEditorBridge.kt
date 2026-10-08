@@ -274,9 +274,9 @@ public class PhotoEditorBridge {
      *    `tz_offset_min` and caption (as `title`) and its `source_asset_id`.
      *    `CameraRoll.offer`, for a file this phone drew rather than one Photos
      *    handed it, and keyed on the CONTENT HASH for that function's reason:
-     *    the same bytes saved twice are one intent, the core's replay ledger
-     *    short-circuits the second, and `add_asset` dedupes on the content row
-     *    besides.
+     *    the same bytes saved twice are one intent, and `add_asset` adopts the
+     *    asset on the content row for the second (`deduped: 1`). The core
+     *    remembers no key (no replay ledger, #1029 §1, R-1088-12).
      * 3. `media.set_asset_place` — only when the original has a place. Not on
      *    the ingest, because `add_asset` can only MINT a place from a
      *    coordinate, and the original's place is a row that already exists —

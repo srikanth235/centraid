@@ -370,8 +370,8 @@ class PlacesSpec : StringSpec({
         // ladder learns which place is Home, so writing one from a sheet that
         // never asked would answer a question the member was not shown.
         write.inputJson shouldBe "{\"place_id\":\"p1\",\"name\":\"The cabin\"}"
-        // STABLE FOR THE SAME INTENT. A replayed command with the same key must
-        // not re-execute a rename that already committed.
+        // STABLE FOR THE SAME INTENT: the same rename is the same key. (The
+        // core remembers no key; this is correlation, not a ledger.)
         write.invokeKey shouldBe "media.name_place:p1:The cabin"
         PlacesMachine.reduce(
             PlacesMachine.initial(),

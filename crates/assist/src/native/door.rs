@@ -31,9 +31,12 @@
 //! * [`Door::run_keyed`] is `api::invoke` with `invoke_key` = the key it is given,
 //!   `<PendingWrite::id>:<step index>`. The key is derived from the pending write and the step's
 //!   place in it, so a confirm that is delivered twice (a retry after a dropped reply, a replayed
-//!   request) finds its steps already recorded by the vault's invocation ledger and writes nothing
-//!   more; the session answers the second confirm from memory as well, but the ledger is what holds
-//!   across a restart. The door must NOT mint a fresh key per call.
+//!   request) finds its steps already RUN in the door's own memory of keys and writes nothing more.
+//!   **The vault keeps no ledger of `invoke_key`s** (#1029 §1, R-1088-12): `api::invoke` requires
+//!   one and runs the command, so the door is the only thing that stops a second run, and it
+//!   remembers a key only while it lives, which is as long as the session that holds it; the
+//!   session answers the second confirm from memory as well. The door must NOT mint a fresh key
+//!   per call.
 //! * The change feed fires as it does for a screen's write (`ChangeFeed::tables_changed`), once per
 //!   step that ran, so every screen that reads those tables refreshes. The harness has no feed and
 //!   fires none.
@@ -126,8 +129,10 @@ pub trait Door: Send {
 
     /// Run one command of a confirmed pending write: [`run`](Self::run) under a key that names
     /// the step (`<pending id>:<step index>`), so a confirm sent twice cannot write twice. The
-    /// harness keeps no ledger of keys and just runs it; the core passes the key to
-    /// `api::invoke` as the `invoke_key` (see the module docs, "park and confirm").
+    /// vault keeps no ledger of keys (#1029 §1, R-1088-12), so an implementation that must hold
+    /// that line remembers them itself. The harness does not and just runs it; the core passes
+    /// the key to `api::invoke` as the `invoke_key` and keeps its own memory of the keys that
+    /// ran (`crates/core/src/assist/door.rs`; see the module docs, "park and confirm").
     fn run_keyed(&self, key: &str, command: &str, input: Value) -> Result<Ran, String> {
         let _ = key;
         self.run(command, input)

@@ -703,10 +703,10 @@ class PhotoLightboxSpec : StringSpec({
         )
         favorite.command shouldBe "media.set_favorite"
         favorite.inputJson shouldBe """{"asset_id":"asset-1","favorite":1}"""
-        // THE KEY IS CONTENT-DERIVED AND NEVER AN ORDINAL: without a stable key
-        // a replayed command re-executes one that already committed. It carries
-        // the VALUE as well as the id, so favourite-then-unfavourite are two
-        // intents and not one replayed.
+        // THE KEY IS CONTENT-DERIVED AND NEVER AN ORDINAL: it is the
+        // correlation key an answer is paired with, so it must name the same
+        // write the same way. It carries the VALUE as well as the id, so
+        // favourite-then-unfavourite are two intents and not one.
         favorite.invokeKey shouldBe "media.set_favorite:asset-1:1"
         writeOf(
             PhotoLightboxEvent(favorite = PhotoLightboxEvent.FavoriteToggled(favorite = false)),

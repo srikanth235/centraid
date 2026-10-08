@@ -319,6 +319,14 @@ fn output_name(entry: &str) -> &str {
 /// answer becomes a change event on the queue a shell drains. Before it, the
 /// only producer of change events was the seat's applier — so on a phone with
 /// no seat nothing ever pushed one, and every screen was a poll or a lie.
+///
+/// **`invoke_key` is the shell's correlation key, and nothing remembers it.**
+/// The request must carry one — it is how a shell pairs this answer with the
+/// write that caused it (`ScreenWrites.settled`) — but it stops here: the vault
+/// is handed a name and an input, and there is no replay ledger (#1029 §1,
+/// R-1088-12). The same key sent twice runs the command twice
+/// (`tests/replay.rs` pins it), so a write a shell may re-offer is idempotent by
+/// its own content or by an id the phone minted.
 pub fn invoke(
     vault: &Vault,
     registry: &Registry,
@@ -359,8 +367,9 @@ pub(crate) fn invoke_raw(
     if request.invoke_key.is_empty() {
         // REQUIRED, unlike v0, where the fallback was the call's ORDINAL and
         // only stable for a handler making the same call sequence every time.
-        // Without it a replayed intent can re-execute a command that already
-        // committed.
+        // It is the shell's correlation key (an answer is paired with the write
+        // that caused it by this string) and it is not used past this check: no
+        // ledger answers a repeat of it (#1029 §1, R-1088-12).
         return Err(CoreError::InvalidRequest {
             detail: "a command carries no invoke_key; an ordinal fallback is only stable for a \
                      handler that makes the same calls every time"

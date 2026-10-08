@@ -29,12 +29,26 @@
 //! 7. **Postconditions**, written as `post` check rows.
 //! 8. **The receipt.** A deny is receipted too.
 //!
-//! ## Replay idempotency
+//! ## There is no replay ledger
 //!
-//! An invocation carrying an `intent_id` is looked up in
-//! `replica_intent_outcome` under `(vault_id, intent_id, payload_hash)` first.
-//! A duplicate delivery therefore **executes once** and the second delivery is
-//! answered from the ledger.
+//! `execute` takes a name and an input, and nothing else: no intent id, no
+//! device, no payload hash. `replica_intent_outcome`, which answered a seat
+//! resubmitting an intent over a network that could lose the answer, was
+//! deleted on purpose (#1029 §1, rung five), and it stays deleted (R-1088-12).
+//! The caller is the shell on the device the file is on, so a command that
+//! arrives twice **was made twice**: the second delivery runs the handler again.
+//!
+//! The `invoke_key` a shell sends is its own correlation key, which pairs an
+//! answer with the write that caused it. The core requires it
+//! (`centraid_core::api::invoke`) and it never reaches this module.
+//!
+//! So a write a shell may re-offer must be idempotent by its own content, or by
+//! an id the phone minted before the first attempt. The ones that do re-offer:
+//! the camera roll's re-walk (`media.add_asset` adopts the asset that already
+//! wraps the same bytes), Docs' "Try again" (only after a failure, which rolled
+//! back; the filing is keyed by a pre-minted document id that a second offer is
+//! refused on), and the chat's confirm (the core door's own key memory). Each is
+//! pinned by a test named in `docs/decisions.md` R-1088-12.
 
 pub mod chat;
 pub mod core;
@@ -67,7 +81,9 @@ pub const ONTOLOGY_VERSION: &str = "1.0";
 pub enum Idempotency {
     /// Running it twice lands the same state.
     Idempotent,
-    /// It must run exactly once; a retry is answered from the ledger.
+    /// It must not be run twice for one intent. **Nothing answers a second run
+    /// from a ledger** (#1029 §1, R-1088-12): a caller that may re-offer it keys
+    /// it by its own content or by an id it minted first.
     Once,
     /// It may be retried freely because it writes nothing a second run would
     /// duplicate — a recompute, a probe.
@@ -450,7 +466,9 @@ pub struct CommandOutcome {
     pub reason: Option<String>,
     /// The raw predicate that failed, for the audit trail.
     pub predicate: Option<String>,
-    /// This answer came from the ledger; the handler did not run again.
+    /// Always `false`: nothing sets it. There is no replay ledger to answer from
+    /// (#1029 §1, R-1088-12), so the handler ran for every outcome this module
+    /// returns. The field outlived the ledger and a test still asserts it.
     pub replayed: bool,
 }
 
@@ -493,13 +511,15 @@ impl Vault {
             });
         }
 
-        // NO REPLAY LEDGER (#1029 §1). `replica_intent_outcome` answered a
-        // SEAT resubmitting an intent its gateway may already have run: the
-        // network between them could lose an answer, so the same write could
-        // arrive twice and the ledger was what made the second one a replay
-        // rather than a second execution. There is no network between the
-        // caller and this vault — the caller is the shell on the device the
-        // file is on — so a command that arrives twice was made twice.
+        // NO REPLAY LEDGER (#1029 §1, R-1088-12). `replica_intent_outcome`
+        // answered a SEAT resubmitting an intent its gateway may already have
+        // run: the network between them could lose an answer, so the same write
+        // could arrive twice and the ledger was what made the second one a
+        // replay rather than a second execution. There is no network between
+        // the caller and this vault — the caller is the shell on the device the
+        // file is on — so a command that arrives twice was made twice. A write
+        // the shell may re-offer is idempotent by its own content or by an id
+        // the phone minted; see the module doc.
         // Gate 2. Validation, with the scrub on every message.
         let invalid: Vec<String> = entry
             .validator

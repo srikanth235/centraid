@@ -287,7 +287,8 @@ public object PeoplePersonMachine : ScreenMachine<PeoplePersonState, PeoplePerso
                     append('}')
                 }
                 // ONE LOG PER SHEET: the key names what is on screen, so a
-                // double tap dedups and the next log is a new command.
+                // double tap while the first is in flight is one write and the
+                // next log is a new command.
                 val key = InvokeKeys.of(LOG_COMMAND, state.party_id, kind, note, "after=${data.touches.size}")
                 write(state, LOG_COMMAND, input, key, PendingWrite.Kind.KIND_LOG_TOUCH, PeopleWords.touchKind(kind))
             }
