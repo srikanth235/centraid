@@ -1457,7 +1457,7 @@ fn every_other_decline_keeps_its_canned_sentence_and_asks_for_no_free_words() {
 }
 
 #[test]
-fn a_free_reply_that_fails_says_nothing_or_is_stopped_falls_back_to_the_canned_sentence() {
+fn a_free_reply_that_fails_or_says_nothing_falls_back_to_the_canned_sentence() {
     let canned = "Outside what chat can do here.";
     let [think, call] = step("plan: no", "decline", &[("reason", "out_of_scope")]);
 
@@ -1469,26 +1469,64 @@ fn a_free_reply_that_fails_says_nothing_or_is_stopped_falls_back_to_the_canned_s
     assert_eq!(story(&sample.drain_assist_events()), ["answer"]);
 
     // the model says nothing
-    let sample = native_sample(model_of(vec![
-        think.clone(),
-        call.clone(),
-        "  \n".to_owned(),
-    ]));
+    let sample = native_sample(model_of(vec![think, call, "  \n".to_owned()]));
     let session = sample.start("");
     assert_eq!(answered(&sample.send(session, 1, "text Sam")).text, canned);
+}
 
-    // the member stops it mid-way: the turn still answers, in the sentence, and not in half a
-    // reply (the words that streamed were drawn, and the answer replaces them)
+#[test]
+fn a_stop_during_the_free_reply_ends_the_turn_cancelled_like_every_other_stop() {
+    let [think, call] = step("plan: no", "decline", &[("reason", "out_of_scope")]);
     let stopped = ScriptedModel::new([think, call, FREE_WORDS.to_owned()]).cancelling_during(2, 2);
     let sample = native_sample(Arc::new(stopped));
     let session = sample.start("");
     let sent = sample.send(session, 1, "text Sam");
-    assert_eq!(answered(&sent).text, canned);
+    assert_eq!(
+        refusal_of(&sent),
+        wire::AssistRefusalReason::Cancelled as i32
+    );
+    // what streamed before the stop is what is kept, marked stopped
     let stored = thread(&sample, &sent.thread_id);
-    assert_eq!(stored.messages[1].text, canned);
     assert_eq!(
         stored.messages[1].outcome,
-        wire::ChatStoredOutcome::Answered as i32
+        wire::ChatStoredOutcome::Stopped as i32
+    );
+    assert!(FREE_WORDS.starts_with(&stored.messages[1].text));
+    assert!(!stored.messages[1].text.is_empty());
+}
+
+#[test]
+fn a_decline_the_runtime_composes_keeps_its_sentence_even_when_its_reason_is_out_of_scope() {
+    // A verb that does not apply to the kind: the model asks to complete a note, and the runtime
+    // refuses the write and ends the turn `out_of_scope`. Free words after a refused write could
+    // say it was made, so no second generation is asked for.
+    let model = model_of(
+        [
+            step("plan: look", "find", &[("kind", "note")]),
+            step(
+                "plan: write",
+                "act",
+                &[("verb", "complete"), ("rows", "@1")],
+            ),
+        ]
+        .into_iter()
+        .flatten()
+        .chain([FREE_WORDS.to_owned()])
+        .collect(),
+    );
+    let sample = native_sample(model.clone());
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "complete my notes");
+    assert_eq!(answered(&sent).text, "Outside what chat can do here.");
+    assert_eq!(
+        model.prompts().len(),
+        4,
+        "two steps, and no free generation"
+    );
+    assert!(
+        !story(&sample.drain_assist_events())
+            .iter()
+            .any(|word| word == "token")
     );
 }
 

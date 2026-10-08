@@ -30,7 +30,9 @@
 //! generation ([`Plane::chat`]: no tools, no grammar, 256 tokens), because "Outside what chat can do
 //! here." is a poor reply to "hi". The generation is told it has read nothing and can send, call and
 //! change nothing, so "text Sam" is never answered as if it were done. Every other decline keeps
-//! its canned sentence, and so does this one when the generation fails, is stopped or says nothing.
+//! its canned sentence, and so does this one when the generation fails or says nothing; a stop ends
+//! the turn as any stop does. Only the MODEL's own decline gets words: one the runtime composes (a
+//! refused write) keeps its sentence.
 //! The words are the turn's `Answered` text, saved like any answer, so a reopened thread shows what
 //! was said.
 //!
@@ -336,7 +338,7 @@ impl<'a> NativePlane<'a> {
         };
         let mut concluded = conclude(&chat.session, &reply)?;
         if declined_out_of_scope(&reply)
-            && let Some(words) = self.free_words(chat, &message, cancel, sink)
+            && let Some(words) = self.free_words(chat, &message, cancel, sink)?
         {
             concluded.text = words;
         }
@@ -354,21 +356,29 @@ impl<'a> NativePlane<'a> {
 }
 
 impl NativePlane<'_> {
-    /// The words of a decline `out_of_scope`: one free generation over what this chat said last,
-    /// streamed as it is written. `None` when it fails, is stopped or says nothing, and the turn
-    /// then says the canned sentence.
+    /// The words of the model's own decline `out_of_scope`: one free generation over what this
+    /// chat said last, streamed as it is written. `None` when it fails or says nothing, and the
+    /// turn then says the canned sentence.
+    ///
+    /// # Errors
+    /// [`Refusal::Cancelled`] when the member stops it: a stop ends this turn as it ends every
+    /// other.
     fn free_words(
         &self,
         chat: &NativeChat,
         message: &str,
         cancel: &Cancel,
         sink: &mut dyn FnMut(Event),
-    ) -> Option<String> {
+    ) -> Result<Option<String>, Refusal> {
         let plane = Plane {
             model: self.model,
             budget: Budget::DEFAULT,
         };
-        plane.chat(&chat.said, message, cancel, sink).ok()
+        match plane.chat(&chat.said, message, cancel, sink) {
+            Ok(words) => Ok(Some(words)),
+            Err(Refusal::Cancelled) => Err(Refusal::Cancelled),
+            Err(_) => Ok(None),
+        }
     }
 }
 
@@ -384,9 +394,16 @@ impl NativeChat {
     }
 }
 
-/// Whether the turn ended in a decline whose reason is `out_of_scope`.
+/// Whether the turn ended in the MODEL's own `decline out_of_scope`. A decline the runtime
+/// composes (`composed`: a verb that does not apply, a write it refused, a Locker call) keeps its
+/// sentence whatever its reason word is: free words after a refused write could say it was made.
 fn declined_out_of_scope(reply: &Value) -> bool {
-    reply["effect"]["decline"]["reason"].as_str() == Some("out_of_scope")
+    let effect = &reply["effect"];
+    effect["decline"]["reason"].as_str() == Some("out_of_scope")
+        && !["composed", "locker_off"]
+            .iter()
+            .any(|key| effect[*key].as_bool().unwrap_or(false))
+        && effect["refusal"].is_null()
 }
 
 fn failed(error: ModelError) -> Refusal {
