@@ -926,7 +926,7 @@ def render_card(meta: dict, config: dict, name: str, data_version: str, data_rep
              f"- Data version: `{data_version}` of the private dataset repository `{data_repo}`. The version holds the training "
              "build(s) as trained, val and test as refrozen against that version's vault and runtime, and `version.json`.",
              f"- Git commit: `{commit or 'unrecorded'}` of `srikanth235/centraid`.",
-             f"- Trained: {meta.get('steps', '?')} steps, {meta.get('examples', '?')} examples, "
+             f"- Trained (the `train_meta.json` in this directory): {meta.get('steps', '?')} steps, {meta.get('examples', '?')} examples, "
              f"{meta.get('tokens', '?')} tokens ({meta.get('label_tokens', '?')} with loss), "
              f"{round(meta.get('train_seconds', 0) / 3600, 2)} h."]
     if notes:
@@ -934,7 +934,7 @@ def render_card(meta: dict, config: dict, name: str, data_version: str, data_rep
     lines += ["", "## Scores", ""]
     lines += [f"- {score}" for score in scores] if scores else ["- none recorded"]
     lines += ["", "## Training config", "",
-              "`args` of `train_meta.json`, as the trainer ran:", "", "```json", json.dumps(args, indent=1, sort_keys=True), "```",
+              "`args` of the `train_meta.json` in this directory, as the trainer ran:", "", "```json", json.dumps(args, indent=1, sort_keys=True), "```",
               "", "## Model config", "", "`config.json`:", "", "```json", json.dumps(config, indent=1, sort_keys=True), "```",
               "", "## Files", "", "| file | bytes | sha256 |", "| --- | --- | --- |"]
     lines += [f"| `{rel}` | {f['size']:,} | `{f['sha256']}` |" for rel, f in sorted(files.items())]
