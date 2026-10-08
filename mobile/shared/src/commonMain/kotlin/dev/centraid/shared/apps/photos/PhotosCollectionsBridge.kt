@@ -258,8 +258,8 @@ public class PhotosCollectionsBridge {
      * mid-edit.
      *
      * `invoke_key` is the screen's, which is content-derived rather than
-     * ordinal — it is what keeps a replayed command from re-executing one that
-     * already committed.
+     * ordinal — the correlation key the answer comes back under. The core
+     * remembers no key (no replay ledger, #1029 §1, R-1088-12).
      */
     private suspend fun submit(session: HomeSession, write: ScreenEffect.SubmitWrite) {
         if (session.shelf.foregroundHolding()?.readOnly == true) {

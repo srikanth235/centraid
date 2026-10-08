@@ -209,7 +209,8 @@ public class TrashMachine(public val spec: TrashSpec) : ScreenMachine<TrashListS
                 WriteLaw.submit(Writes, dismissed(state), purge, idInput(purgeId), InvokeKeys.of(purge, purgeId))
             state.empty_all == true && empty != null -> {
                 // One key per emptying of THIS list: the ids on screen, so a
-                // double tap dedups and an emptying after new deletions is new.
+                // double tap while the first is in flight is one write and an
+                // emptying after new deletions is a new command.
                 val shown = list.dataOf(state)?.rows?.joinToString(",") { it.id } ?: ""
                 WriteLaw.submit(Writes, dismissed(state), empty, "{}", InvokeKeys.of(empty, spec.appId, shown))
             }

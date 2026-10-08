@@ -181,9 +181,9 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
                 } else {
                     // THE NAME IS TRIMMED ONCE, and both the input and the key
                     // are built from the same trimmed value. Trimming only one
-                    // of them would make "Home" and "Home " two intents that
-                    // send one identical command, which is exactly the replay
-                    // `invoke_key` exists to collapse.
+                    // of them would make "Home" and "Home " two keys for one
+                    // identical command, and the key is what an answer is
+                    // paired with.
                     val name = renamed.name.trim()
                     Step(
                         // A NEW ATTEMPT CLEARS THE LAST REFUSAL. Leaving it up
@@ -195,11 +195,12 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
                             ScreenEffect.SubmitWrite(
                                 command = RENAME_COMMAND,
                                 inputJson = renameInput(renamed.place_id, name),
-                                // THE KEY IS THE INTENT, NOT AN ORDINAL. A
-                                // replayed command with the same key must not
-                                // re-execute, and naming the same place the
-                                // same thing twice IS one intent; naming it
-                                // something else is another.
+                                // THE KEY IS THE INTENT, NOT AN ORDINAL.
+                                // Naming the same place the same thing twice IS
+                                // one intent; naming it something else is
+                                // another. (The core remembers no key, so a
+                                // second send runs; `media.name_place` is
+                                // idempotent, so it lands the same name.)
                                 invokeKey = "$RENAME_COMMAND:${renamed.place_id}:$name",
                             ),
                         ),

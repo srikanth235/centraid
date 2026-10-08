@@ -49,8 +49,11 @@ import dev.centraid.shared.screen.Step
  * "That request does not make sense to this build" on every window for ever
  * (`NotesEditorMachine.SAVE_COMMAND`). N commands with N stable invoke keys
  * also means a resolve that is interrupted half way has committed exactly the
- * deletions it committed, and a repeat re-sends the rest without re-executing
- * the ones that landed.
+ * deletions it committed, and a repeat re-sends whatever the screen still lists:
+ * the vault refuses a member that already landed ("that photograph is already in
+ * the trash") and trashes the rest. The key does not do that — the core
+ * remembers no key (#1029 §1, R-1088-12) — `media.delete_asset`'s own
+ * precondition does.
  */
 public object DuplicateReviewMachine :
     ScreenMachine<DuplicateReviewState, DuplicateReviewEvent> {
@@ -337,8 +340,8 @@ public object DuplicateReviewMachine :
                     //
                     // v0's fallback was the call's ORDINAL and was only stable
                     // for a handler that made the same call sequence every time
-                    // (apps census §2.1); without a stable key a replayed
-                    // command re-executes one that already committed. Trashing
+                    // (apps census §2.1). The key is the shell's correlation
+                    // key, so it must name the same write the same way. Trashing
                     // asset X is the same act however a member arrived at it,
                     // so the key names the asset and nothing else — not the
                     // cluster, which would make the same deletion two different

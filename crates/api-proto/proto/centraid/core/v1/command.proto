@@ -19,10 +19,13 @@ message Command {
   // against `agent_command.input_schema_json` held in the vault, so a proto
   // message per command would put `buf breaking` in the way of adding one.
   bytes input = 2;
-  // WHICH OF A HANDLER'S CALLS THIS IS. Required, unlike v0, where the fallback
-  // was the call's ORDINAL and only stable for a handler that makes the same
-  // call sequence every time (census, apps §2.1). Without it a replayed intent
-  // can re-execute a command that already committed.
+  // THE SHELL'S CORRELATION KEY: it pairs the answer with the write that caused
+  // it (`ScreenWrites.settled`). Required, unlike v0, where the fallback was the
+  // call's ORDINAL and only stable for a handler that makes the same call
+  // sequence every time (census, apps §2.1). The core requires it and the vault
+  // never sees it: there is NO replay ledger (#1029 §1, R-1088-12), so the same
+  // key sent twice runs the command twice. A write the shell may re-offer is
+  // idempotent by its own content or by an id the phone minted first.
   string invoke_key = 3;
   // Who is asking. Never inferred from the connection inside the core: the
   // gateway resolves the enrolled device to a principal at the ALPN boundary
