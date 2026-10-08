@@ -12,18 +12,27 @@ const TZ: &str = "America/New_York";
 struct Scratch {
     dir: std::path::PathBuf,
     handle: Handle,
+    /// The vault clock, held so a test can move it (#1090).
+    clock: std::sync::Arc<centraid_vault::clock::FixedClock>,
     writes: std::cell::Cell<u32>,
 }
 
 impl Scratch {
     fn founded() -> Self {
+        Self::founded_at(NOW)
+    }
+
+    /// Founded with the vault clock stopped at `now` — the way to stand inside
+    /// the hours a run happened to miss (#1090).
+    fn founded_at(now: &str) -> Self {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
-        let now = centraid_vault::time::recurrence::parse_instant_ms(NOW).expect("an instant");
+        let now = centraid_vault::time::recurrence::parse_instant_ms(now).expect("an instant");
+        let clock = std::sync::Arc::new(centraid_vault::clock::FixedClock::at(now));
         let handle = Core::open(CoreConfig::new(dir.join("vault.db")).with_clock(
-            std::sync::Arc::new(centraid_vault::clock::FixedClock::at(now)),
+            clock.clone(),
             std::sync::Arc::new(centraid_vault::clock::ClockIds::new(Box::new(
-                centraid_vault::clock::FixedClock::at(now),
+                clock.clone(),
             ))),
         ))
         .expect("it opens");
@@ -33,8 +42,16 @@ impl Scratch {
         Self {
             dir,
             handle,
+            clock,
             writes: std::cell::Cell::new(0),
         }
+    }
+
+    /// Move the vault clock to `instant`, which may not be earlier than now.
+    fn advance_to(&self, instant: &str) {
+        use centraid_vault::clock::Clock;
+        let to = centraid_vault::time::recurrence::parse_instant_ms(instant).expect("an instant");
+        self.clock.advance_ms(to - self.clock.now_ms());
     }
 
     fn ask(
@@ -76,6 +93,31 @@ impl Scratch {
             outcome.reason
         );
         serde_json::from_slice(&outcome.output).expect("the output is JSON")
+    }
+
+    /// A command the vault is expected to refuse: its status and its sentence.
+    fn refused(&self, name: &str, input: serde_json::Value) -> (i32, String) {
+        self.writes.set(self.writes.get() + 1);
+        let response = self
+            .handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Command(wire::Command {
+                    name: name.to_owned(),
+                    input: serde_json::to_vec(&input).expect("json"),
+                    invoke_key: format!("docs-query-test-{}", self.writes.get()),
+                    ..wire::Command::default()
+                })),
+            })
+            .unwrap_or_else(|error| panic!("{name} errored rather than refusing: {error}"));
+        let Some(wire::response::Kind::Command(outcome)) = response.kind else {
+            panic!("a command answered with something else");
+        };
+        assert_ne!(
+            outcome.status,
+            wire::CommandStatus::Executed as i32,
+            "{name} was expected to be refused"
+        );
+        (outcome.status, outcome.reason)
     }
 
     fn add(&self, title: &str, body: &str, folder_id: Option<&str>) -> String {
@@ -242,6 +284,101 @@ fn a_trashed_document_is_excluded_from_the_drive_and_dated_in_trash() {
         panic!("search answered as something else");
     };
     assert!(found.documents.is_empty());
+}
+
+/// THE GRACE WINDOW IS THIRTY DAYS OF TWENTY-FOUR HOURS, and the countdown is
+/// counted the way the vault counts it (#1090). `purge_at` is the trashing
+/// instant plus 30 x 86 400 000 ms; counting the civil days between two local
+/// dates instead made a document trashed in the hour after midnight 29 days
+/// from its purge when daylight saving ended inside the window (31 when it
+/// began): a fall-back day is 25 hours long, so the same instant sits a
+/// calendar day earlier. Each row is New York; the first two are the hours
+/// the mobile round-trip spec fell into, and the last is a control.
+#[test]
+fn a_fresh_trash_row_counts_thirty_days_whatever_the_calendar_did_in_between() {
+    for (trashed_at, purge_local_day) in [
+        // 00:10 EDT on 8 October; the clocks fall back on 1 November, so the
+        // purge is at 23:10 EST on the 6th.
+        ("2026-10-08T04:10:00.000Z", "2026-11-06"),
+        // 23:59 EDT on the 7th: the same purge day, a minute earlier.
+        ("2026-10-08T03:59:00.000Z", "2026-11-06"),
+        // 23:30 EST on 20 February; the clocks spring forward on 8 March, so
+        // the purge is at 00:30 EDT on 23 March, 31 calendar days on.
+        ("2026-02-21T04:30:00.000Z", "2026-03-23"),
+        // No transition inside the window.
+        ("2026-06-01T12:00:00.000Z", "2026-07-01"),
+    ] {
+        let scratch = Scratch::founded_at(trashed_at);
+        let document = scratch.add("Old lease", "rent", None);
+        scratch.run(
+            "core.trash_document",
+            serde_json::json!({ "document_id": document }),
+        );
+        let trash = scratch.shelf(wire::DocsShelf::Trash);
+        let row = &trash.documents[0];
+        assert_eq!(row.trashed_at, trashed_at);
+        assert_eq!(row.purge_local_day, purge_local_day, "trashed {trashed_at}");
+        assert_eq!(
+            row.purge_in_days, 30,
+            "trashed {trashed_at} ({}), purging {} ({purge_local_day})",
+            trash.now_local, row.purge_at,
+        );
+    }
+}
+
+/// THE COUNTDOWN IS THE VAULT'S GATE (#1090). `purge_in_days > 0` is what
+/// enables Restore on the phone, and `core.restore_document` refuses once
+/// `purge_at <= now` — an instant. A count of civil days said 0 for the last
+/// local day of the window, hours before the vault would refuse, so the phone
+/// called the window lapsed while it was open. Whole days left, rounded up,
+/// is positive exactly while the vault will restore.
+#[test]
+fn the_countdown_is_positive_exactly_while_the_vault_will_restore() {
+    let trashed_at = "2026-10-08T04:10:00.000Z";
+    let scratch = Scratch::founded_at(trashed_at);
+    let document = scratch.add("Old lease", "rent", None);
+    scratch.run(
+        "core.trash_document",
+        serde_json::json!({ "document_id": document }),
+    );
+    let days_left =
+        |scratch: &Scratch| scratch.shelf(wire::DocsShelf::Trash).documents[0].purge_in_days;
+
+    // Whole days, rounded up: 30 for the first 24 hours, then 29, and so on.
+    assert_eq!(days_left(&scratch), 30);
+    scratch.advance_to("2026-10-09T04:09:59.999Z");
+    assert_eq!(days_left(&scratch), 30, "a millisecond short of a day");
+    scratch.advance_to("2026-10-09T04:10:00.000Z");
+    assert_eq!(days_left(&scratch), 29);
+    scratch.advance_to("2026-11-06T04:10:00.000Z");
+    assert_eq!(days_left(&scratch), 1, "the last day, with a day to run");
+
+    // 23:10 EST on the 6th is the purge; at 22:10 it is still the last local
+    // day and the vault still restores.
+    scratch.advance_to("2026-11-07T03:10:00.000Z");
+    assert_eq!(days_left(&scratch), 1, "an hour before the window closes");
+    scratch.run(
+        "core.restore_document",
+        serde_json::json!({ "document_id": document }),
+    );
+
+    let lapsed = Scratch::founded_at(trashed_at);
+    let document = lapsed.add("Old lease", "rent", None);
+    lapsed.run(
+        "core.trash_document",
+        serde_json::json!({ "document_id": document }),
+    );
+    lapsed.advance_to("2026-11-07T04:09:59.999Z");
+    assert_eq!(days_left(&lapsed), 1, "a millisecond before purge_at");
+    lapsed.advance_to("2026-11-07T04:10:00.000Z");
+    assert_eq!(days_left(&lapsed), 0, "at purge_at the window has run out");
+    let (_, reason) = lapsed.refused(
+        "core.restore_document",
+        serde_json::json!({ "document_id": document }),
+    );
+    assert!(reason.contains("grace window"), "{reason}");
+    lapsed.advance_to("2026-11-08T16:10:00.000Z");
+    assert!(days_left(&lapsed) < 0, "a day and a half late is negative");
 }
 
 /// THE FOLDER TREE: nesting is `parent_id`, a folder directly under the root
