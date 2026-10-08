@@ -26,6 +26,10 @@ A report gives sessions, clean turns (turns not downstream of a session's first 
 
 The runtime is `centraid_assist::native` (`crates/assist/src/native/`, #1088); `crates/nativetools` keeps the `nativetools` binary the Python tools drive (`NATIVETOOLS` names it), the world seeder and the export. Its export (`nativetools export DIR`: tool schemas, kind card, tables, rendered prompts, `identity.json`) is committed under `contracts/assist/export/` and checked against a fresh export by `crates/nativetools/tests/export_fixture.rs`; `bundle.py` still ships a fresh export in the job tree.
 
+## Tests
+
+The Python tests (`test_*.py` in `authored/`, `authored/gen/`, `eval/` and `train/`: 26 modules, no model weights and no GPU) run on every pull request as the `native-python` job of `.github/workflows/gate.yml`, outside `cargo xtask gate`. The job builds `nativetools`, installs `requirements-ci.txt` by hash, caches the Qwen3.5-0.8B tokenizer and config offline, seeds world A and runs `python3 run_cpu_tests.py`, whose docstring lists the environment it needs. The script fails on any skipped test, and on any red test it does not list in `KNOWN_RED` (today the two `Lexicon` tests of `authored/test_noise.py`, HANDOFF.md "Known failing checks"). `train/smoke.py` and everything under `train/vm/` need the model's weights or a GPU and run in no CI job. The Rust tests that read this tree (`crates/nativetools/tests/think.rs` reads `authored/golden_v3.json`) run in the `gate` job, and gitleaks scans the whole tree there with the synthetic worlds allowlisted by path in `.gitleaks.toml` (D-1044-19).
+
 ## The loop
 
 1. Author or regenerate sessions; `authored/build.py` per train world; `authored/gate.py` and `authored/dist.py` on the gold.

@@ -39,6 +39,18 @@ paths = [
   # Rust integration tests and the demo-vault seeder: placeholder passwords.
   '''(?i)^crates/.*/tests/''',
   '''(?i)^crates/centraid/src/bin/seed-demo-vault\.rs$''',
+  # The native tool task's synthetic personas (#1044): the invented households
+  # (their Locker passwords, card numbers and one-time codes are made-up
+  # strings that exist to be looked up and read back), the scripts that write
+  # them, and the evaluation sessions replayed over them. Each entry names one
+  # kind of file: `experiments/` as a whole is NOT allowlisted, nor are the
+  # Python modules there that build no world, so a real credential anywhere
+  # else under it is still found. No real credential belongs in these paths.
+  '''(?i)^experiments/toolchat/native/authored/worlds/[^/]+\.json$''',
+  '''(?i)^experiments/toolchat/native/authored/worlds/T[0-9]+_build\.py$''',
+  '''(?i)^experiments/toolchat/native/eval/worlds/[^/]+\.json$''',
+  '''(?i)^experiments/toolchat/native/eval/worlds/[A-Z]_build\.py$''',
+  '''(?i)^experiments/toolchat/native/eval/sets/[^/]+\.jsonl$''',
   # Generated or vendored browser bindings (not human-authored secrets).
   '''(?i)apps/web/src/generated/''',
   '''(?i)apps/web/public/''',
