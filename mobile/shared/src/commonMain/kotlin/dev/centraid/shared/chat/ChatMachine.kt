@@ -4,11 +4,14 @@ import centraid.core.v1.AssistCard
 import centraid.core.v1.AssistEvent
 import centraid.core.v1.AssistModelState
 import centraid.core.v1.AssistNotice
+import centraid.core.v1.AssistPending
 import centraid.core.v1.AssistReading
 import centraid.core.v1.AssistReadingKind
 import centraid.core.v1.AssistRefusal
 import centraid.core.v1.AssistRefusalReason
 import centraid.core.v1.AssistSent
+import centraid.core.v1.AssistSettleOutcome
+import centraid.core.v1.AssistSettled
 import centraid.core.v1.AssistStarted
 import centraid.core.v1.AssistVisionState
 import centraid.core.v1.ChatStoredAttachment
@@ -21,6 +24,8 @@ import centraid.screen.v1.ChatCard
 import centraid.screen.v1.ChatEvent
 import centraid.screen.v1.ChatMessage
 import centraid.screen.v1.ChatModelStep
+import centraid.screen.v1.ChatPending
+import centraid.screen.v1.ChatPendingStep
 import centraid.screen.v1.ChatState
 import centraid.screen.v1.ChatThreadItem
 import dev.centraid.design.copy.ChatCopy
@@ -67,6 +72,25 @@ import okio.ByteString
  * [ChatMessage.id] is monotonic within the thread on screen and is what a view
  * diffs by and what `copy` names.
  *
+ * ## A write the model proposes is a card, and a tap makes it (#1088, R-1088-2)
+ *
+ * The core never writes on the model's say-so: the turn ends in an answer that
+ * carries the write it PARKED ([AssistPending], on the stream and again on the
+ * answer, which is the reliable copy). This machine draws it as a confirm card
+ * under the answer ([ChatPending]) in [ProposalPhase.WAITING]. Confirm moves it
+ * to WORKING and asks the core to run it ([ChatEffect.Confirm]); the core's
+ * [AssistSettled] settles it to APPLIED, STALE or NOT_DONE with the core's own
+ * line. Cancel settles it to NOT_DONE at once and tells the core
+ * ([ChatEffect.Dismiss]). A new question supersedes a card still WAITING (the core
+ * drops it too): it goes INERT, buttons gone. A card in flight is never
+ * superseded, so a tap that did write is never shown as one that did not. The
+ * card lives only in the thread on screen: a reopened chat is a fresh session
+ * and shows the old "Proposed: …" text and no card (R-1088-10).
+ *
+ * There is NO UNDO on an applied card. The runtime's undo is a verb the MODEL
+ * writes, and it parks like any write; the core has no request that parks one
+ * without the model, so an Undo control here would have nothing to call.
+ *
  * ## The drawer
  *
  * The header's menu opens the DRAWER: past chats, newest first, the open one
@@ -105,6 +129,7 @@ public object ChatMachine {
         is ChatInput.Suggested -> suggested(chat, input)
         is ChatInput.Core -> core(chat, input.event)
         is ChatInput.Settled -> settled(chat, input)
+        is ChatInput.Confirmed -> confirmed(chat, input)
         is ChatInput.VisionStatus -> visionStatus(chat, input.state, input.bytes)
         is ChatInput.VisionLoaded -> visionLoaded(chat, input.state)
         is ChatInput.Threads -> threadsRead(chat, input)
@@ -130,6 +155,8 @@ public object ChatMachine {
         event.attached?.let { return attached(chat, it) }
         event.attachment_removed?.let { return removed(chat, it.id) }
         event.drawer?.let { return drawerToggled(chat, it.opened) }
+        event.pending_confirmed?.let { return confirmTapped(chat, it.pending_id) }
+        event.pending_cancelled?.let { return cancelTapped(chat, it.pending_id) }
         event.thread_opened?.let { return threadOpened(chat, it.thread_id) }
         event.thread_renamed?.let { return threadRenamed(chat, it.thread_id, it.title) }
         event.thread_deleted?.let { return threadDeleted(chat, it.thread_id) }
@@ -192,7 +219,8 @@ public object ChatMachine {
         // what waits in the composer, and the composer empties.
         val carried = if (regenerate) chat.lastSent else chat.pending
         val messages = buildList {
-            addAll(chat.messages)
+            // A card still waiting is superseded by the new question: the core drops it too.
+            addAll(chat.messages.map { it.superseded() })
             if (!regenerate) add(Msg(id = user, user = true, text = line, attachments = carried))
             add(Msg(id = answer, user = false, streaming = true))
         }
@@ -391,7 +419,10 @@ public object ChatMachine {
             val spoken = if (chat.activity == ChatCopy.THINKING) chat.copy(activity = "") else chat
             return ChatStep(render(spoken.withAnswer { it.copy(text = it.text + token.text) }))
         }
-        event.answer?.let { answer -> return answered(chat, answer.text, answer.cards, answer.notices) }
+        event.pending?.let { pending ->
+            return ChatStep(render(chat.withAnswer { it.withProposal(pending) }))
+        }
+        event.answer?.let { answer -> return answered(chat, answer.text, answer.cards, answer.notices, answer.pending) }
         event.failed?.let { failed -> return failed(chat, failed) }
         return ChatStep(chat)
     }
@@ -417,7 +448,7 @@ public object ChatMachine {
         val refresh = if (saved) listOf(ChatEffect.ReadThreads) else emptyList()
         if (!adopted.running) return ChatStep(render(adopted), refresh)
         if (sent == null) return failed(adopted, null).let { it.copy(effects = it.effects + refresh) }
-        val step = sent.answered?.let { answered(adopted, it.text, it.cards, it.notices) }
+        val step = sent.answered?.let { answered(adopted, it.text, it.cards, it.notices, it.pending) }
             ?: failed(adopted, sent.refused)
         return step.copy(effects = step.effects + refresh)
     }
@@ -427,10 +458,13 @@ public object ChatMachine {
         text: String,
         cards: List<AssistCard>,
         notices: List<AssistNotice> = emptyList(),
+        pending: AssistPending? = null,
     ): ChatStep {
         val note = if (AssistNotice.ASSIST_NOTICE_DOC_TRUNCATED in notices) ChatCopy.NOTE_DOC_TRUNCATED else ""
+        // The card rode the stream before the answer and rides the answer too, so one that
+        // was dropped from a full queue still arrives; `withProposal` keeps the one it has.
         val settled = chat.withAnswer {
-            it.copy(text = text, cards = cards.map(::card), streaming = false, note = note)
+            it.copy(text = text, cards = cards.map(::card), streaming = false, note = note).withProposal(pending)
         }
         return ChatStep(render(settled.copy(running = false, activity = "", error = "")))
     }
@@ -462,10 +496,12 @@ public object ChatMachine {
     private fun failed(chat: Chat, refusal: AssistRefusal?): ChatStep {
         val reason = refusal?.reason ?: AssistRefusalReason.ASSIST_REFUSAL_REASON_UNSPECIFIED
         val last = chat.messages.lastOrNull()
-        val hasContent = last != null && !last.user && (last.text.isNotEmpty() || last.cards.isNotEmpty())
+        val hasContent = last != null && !last.user &&
+            (last.text.isNotEmpty() || last.cards.isNotEmpty() || last.proposal != null)
         val messages = when {
             last == null || last.user -> chat.messages
-            hasContent -> chat.messages.dropLast(1) + last.copy(streaming = false, stopped = true)
+            // A turn that failed after parking a write does not offer it: the turn is over.
+            hasContent -> chat.messages.dropLast(1) + last.superseded().copy(streaming = false, stopped = true)
             else -> chat.messages.dropLast(1)
         }
         val error = errorLine(reason)
@@ -484,6 +520,87 @@ public object ChatMachine {
             )
         }
         return ChatStep(render(next))
+    }
+
+    // ------------------------------------------------------------ proposals --
+
+    /** Replace the message holding card [id] in [phase] with [change] of it; null when none does. */
+    private fun Chat.changingProposal(id: String, phase: ProposalPhase, change: (Proposal) -> Proposal): Chat? {
+        val at = messages.indexOfFirst { message -> message.proposal?.let { it.id == id && it.phase == phase } == true }
+        if (at < 0) return null
+        val held = messages[at]
+        val proposal = held.proposal ?: return null
+        return copy(messages = messages.toMutableList().also { it[at] = held.copy(proposal = change(proposal)) })
+    }
+
+    /**
+     * Confirm was tapped. Only a card WAITING, on a settled turn, is run; the card goes to
+     * WORKING so a second tap finds nothing waiting, and the core runs it once.
+     */
+    private fun confirmTapped(chat: Chat, id: String): ChatStep {
+        if (!ready(chat) || chat.running || id.isEmpty()) return ChatStep(chat)
+        val working = chat.changingProposal(id, ProposalPhase.WAITING) { it.copy(phase = ProposalPhase.WORKING) }
+            ?: return ChatStep(chat)
+        return ChatStep(render(working.copy(error = "")), listOf(ChatEffect.Confirm(chat.session, id)))
+    }
+
+    /**
+     * Cancel was tapped: the card settles at once ("Not done.") and the core is told. A core
+     * that does not hear it still holds a card nothing can tap, and the next message drops it.
+     */
+    private fun cancelTapped(chat: Chat, id: String): ChatStep {
+        if (!ready(chat) || chat.running || id.isEmpty()) return ChatStep(chat)
+        val cancelled = chat.changingProposal(id, ProposalPhase.WAITING) {
+            it.copy(phase = ProposalPhase.NOT_DONE, line = notDoneLine())
+        } ?: return ChatStep(chat)
+        return ChatStep(render(cancelled), listOf(ChatEffect.Dismiss(chat.session, id)))
+    }
+
+    /** The core's answer to a confirm: how it ended and the line to say. */
+    private fun confirmed(chat: Chat, input: ChatInput.Confirmed): ChatStep {
+        val settled: AssistSettled? = input.settled
+        // THE CALL ITSELF FAILED: nothing ran (the core refuses a tap on a chat still running or
+        // gone, and a closed core runs nothing), so the card is offered again rather than
+        // claiming an outcome nobody saw.
+        if (settled == null) {
+            val offered = chat.changingProposal(input.pendingId, ProposalPhase.WORKING) {
+                it.copy(phase = ProposalPhase.WAITING)
+            } ?: return ChatStep(chat)
+            return ChatStep(render(offered.copy(error = ChatCopy.ERROR_GENERIC)))
+        }
+        val next = chat.changingProposal(input.pendingId, ProposalPhase.WORKING) { held ->
+            val phase = when (settled.outcome) {
+                AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_APPLIED -> ProposalPhase.APPLIED
+                AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_STALE -> ProposalPhase.STALE
+                // A refusal, a card that was already gone, anything this build has no name for.
+                else -> ProposalPhase.NOT_DONE
+            }
+            held.copy(phase = phase, line = settled.line.ifEmpty { notDoneLine() })
+        } ?: return ChatStep(chat)
+        return ChatStep(render(next))
+    }
+
+    /** `Not done.`: the copy's sentence with no reason to give. */
+    private fun notDoneLine(): String = ChatCopy.SAID_NOT_DONE.replace("{reason}", "").trim()
+
+    /** A card still WAITING when something newer happens goes inert; any other phase has already ended or is in flight. */
+    private fun Msg.superseded(): Msg {
+        val held = proposal ?: return this
+        if (held.phase != ProposalPhase.WAITING) return this
+        return copy(proposal = held.copy(phase = ProposalPhase.INERT, line = notDoneLine()))
+    }
+
+    /** The card the core sent, once: the stream and the answer both carry it, in either order. */
+    private fun Msg.withProposal(wire: AssistPending?): Msg {
+        if (wire == null || wire.pending_id.isEmpty() || proposal?.id == wire.pending_id) return this
+        return copy(
+            proposal = Proposal(
+                id = wire.pending_id,
+                steps = wire.steps.map { ProposalStep(summary = it.summary, destructive = it.destructive) },
+                more = wire.more,
+                destructive = wire.destructive,
+            ),
+        )
     }
 
     // -------------------------------------------------------------- threads --
@@ -1011,6 +1128,35 @@ public object ChatMachine {
         thumbnail_path = pending.thumbnailPath,
     )
 
+    /** A parked write, as the card the view draws. The labels are the copy's: the view owns no word. */
+    private fun proposalCard(proposal: Proposal): ChatPending {
+        val more = if (proposal.more > 0) ChatCopy.MORE_STEPS.replace("{n}", "${proposal.more}") else ""
+        return ChatPending(
+            pending_id = proposal.id,
+            state = when (proposal.phase) {
+                ProposalPhase.WAITING -> ChatPending.State.STATE_WAITING
+                ProposalPhase.WORKING -> ChatPending.State.STATE_WORKING
+                ProposalPhase.APPLIED -> ChatPending.State.STATE_APPLIED
+                ProposalPhase.NOT_DONE -> ChatPending.State.STATE_NOT_DONE
+                ProposalPhase.STALE -> ChatPending.State.STATE_STALE
+                ProposalPhase.INERT -> ChatPending.State.STATE_INERT
+            },
+            steps = proposal.steps.map { ChatPendingStep(summary = it.summary, destructive = it.destructive) },
+            more_line = more,
+            confirm_label = ChatCopy.CONFIRM,
+            cancel_label = ChatCopy.CANCEL,
+            destructive = proposal.destructive,
+            settled_line = proposal.line,
+            accessibility_label = buildList {
+                add(ChatCopy.A11Y_PROPOSAL)
+                if (proposal.destructive) add(ChatCopy.A11Y_DESTRUCTIVE)
+                addAll(proposal.steps.map { it.summary })
+                if (more.isNotEmpty()) add(more)
+                if (proposal.line.isNotEmpty()) add(proposal.line)
+            }.joinToString(". "),
+        )
+    }
+
     private fun message(message: Msg): ChatMessage = ChatMessage(
         id = message.id,
         role = if (message.user) ChatMessage.Role.ROLE_USER else ChatMessage.Role.ROLE_ASSISTANT,
@@ -1020,6 +1166,7 @@ public object ChatMachine {
         stopped = message.stopped,
         attachments = message.attachments.map(::attachment),
         note = message.note,
+        pending = message.proposal?.let(::proposalCard),
         accessibility_label = buildString {
             append(if (message.user) ChatCopy.A11Y_YOU else ChatCopy.A11Y_ANSWER)
             if (message.text.isNotEmpty()) append(": ").append(spokenText(message.text))
@@ -1049,6 +1196,27 @@ public data class Msg(
     public val attachments: List<Pending> = emptyList(),
     /** One line beside an answer (a document was cut), or empty. */
     public val note: String = "",
+    /** The write this answer proposes, until the thread is left. */
+    public val proposal: Proposal? = null,
+)
+
+/** Where a proposed write stands. It moves forward once and never back, except WORKING to WAITING when the call failed. */
+public enum class ProposalPhase { WAITING, WORKING, APPLIED, NOT_DONE, STALE, INERT }
+
+/** One line of a proposed write, as the core composed it. */
+public data class ProposalStep(public val summary: String, public val destructive: Boolean)
+
+/** A write the model proposed and the core parked, waiting on the member's tap. */
+public data class Proposal(
+    /** What the core named it by; what a confirm or a cancel names. */
+    public val id: String,
+    public val steps: List<ProposalStep>,
+    /** Rows the write changes beyond [steps]. */
+    public val more: Int = 0,
+    public val destructive: Boolean = false,
+    public val phase: ProposalPhase = ProposalPhase.WAITING,
+    /** How it ended, once it has. */
+    public val line: String = "",
 )
 
 /** Where an attachment comes from. What the core is handed, by name or by bytes. */
@@ -1177,6 +1345,9 @@ public sealed interface ChatInput {
     /** The core's answer to loading the projector; null when it was refused. */
     public data class VisionLoaded(public val state: AssistVisionState?) : ChatInput
 
+    /** The core's answer to a confirm tap on card [pendingId]; null when the call itself failed. */
+    public data class Confirmed(public val pendingId: String, public val settled: AssistSettled?) : ChatInput
+
     /** The drawer's list, read; null rows when the core would not answer. [nowMs] is the device clock. */
     public data class Threads(public val rows: List<ThreadRow>?, public val nowMs: Long) : ChatInput
 
@@ -1224,6 +1395,12 @@ public sealed interface ChatEffect {
     public data object StartVisionDownload : ChatEffect
 
     public data class Cancel(public val session: Long) : ChatEffect
+
+    /** Ask the core to run the parked write [pendingId] names. Its answer returns as [ChatInput.Confirmed]. */
+    public data class Confirm(public val session: Long, public val pendingId: String) : ChatEffect
+
+    /** Tell the core the member cancelled [pendingId]. Nothing is written and nothing comes back. */
+    public data class Dismiss(public val session: Long, public val pendingId: String) : ChatEffect
 
     public data class Clear(public val session: Long) : ChatEffect
 

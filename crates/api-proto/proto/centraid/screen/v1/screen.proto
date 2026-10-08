@@ -11659,7 +11659,8 @@ message BackupScreenEvent {
 // `chat`. A tab on the bottom bar (Home · Chat · More), not an app: it has no
 // tile and no route of its own, and a chat opened from an app is the same
 // screen with `scope_app` set. The model runs ON THIS PHONE over the core's
-// `Request::Assist` (`assist.proto`); v1 is read-only.
+// `Request::Assist` (`assist.proto`). It reads; and a write it proposes is a
+// CONFIRM CARD on its answer (`ChatPending`) that runs only on the member's tap.
 //
 // THE ANSWER IS CARDS. A reply is one short line of model text and the rows it
 // found — a task, a photograph, a ledger line, a person — each a reference
@@ -11837,12 +11838,70 @@ message ChatMessage {
   // One line beside an answer: "Read the first part of the document." Empty
   // when there is none.
   string note = 9;
+  // The write this answer proposes, drawn as a confirm card under the line.
+  // Absent on an answer that proposes nothing and on a user message. The view
+  // draws it only once the answer has stopped streaming.
+  ChatPending pending = 10;
 
   enum Role {
     ROLE_UNSPECIFIED = 0;
     ROLE_USER = 1;
     ROLE_ASSISTANT = 2;
   }
+}
+
+// A WRITE THE MODEL PROPOSED, as the confirm card under its answer (#1088,
+// R-1088-2). On the phone every write the model makes waits here; only the
+// member's tap on Confirm makes it, and nothing the model wrote reaches the
+// vault before that. The lines are the core's (`AssistPendingStep.summary`),
+// composed from the rows the write changes and not from the model's text.
+//
+// The card settles once. WAITING offers Confirm and Cancel; a tap moves it to
+// WORKING while the core runs the steps, and then to APPLIED, STALE or
+// NOT_DONE with `settled_line` saying how it ended. There is no toast and no
+// Undo: an applied card says "Done." and stays where it was.
+message ChatPending {
+  // What a confirm or a cancel names; empty never.
+  string pending_id = 1;
+  State state = 2;
+  // One line for each row the write changes, in order.
+  repeated ChatPendingStep steps = 3;
+  // "and 3 more" when the write changes more rows than `steps` lists, else empty.
+  string more_line = 4;
+  // "Confirm" and "Cancel". Drawn while WAITING (enabled) and WORKING (not).
+  string confirm_label = 5;
+  string cancel_label = 6;
+  // The card asks twice: Confirm is drawn as the outlined destructive control
+  // (DESIGN.md), never filled.
+  bool destructive = 7;
+  // How the card ended, one clause: "Done.", "Not done.", "That changed since.
+  // Ask again." Empty while WAITING or WORKING.
+  string settled_line = 8;
+  // "Proposed change, removes something: Delete task "Old"."
+  string accessibility_label = 9;
+
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    // Confirm and Cancel are offered.
+    STATE_WAITING = 1;
+    // Confirm was tapped and the core is running the steps.
+    STATE_WORKING = 2;
+    // The steps ran. `settled_line` is the core's sentence.
+    STATE_APPLIED = 3;
+    // Cancelled, or the vault refused a step, or the card was gone when tapped.
+    STATE_NOT_DONE = 4;
+    // A row the write addresses changed while the card waited: nothing ran.
+    STATE_STALE = 5;
+    // A newer message superseded the card before it was answered: no buttons.
+    STATE_INERT = 6;
+  }
+}
+
+message ChatPendingStep {
+  // The whole line, as the core composed it.
+  string summary = 1;
+  // This line deletes or removes, cancels, or settles money.
+  bool destructive = 2;
 }
 
 // ONE ATTACHMENT, as the composer and the transcript draw it.
@@ -11896,6 +11955,8 @@ message ChatEvent {
     ThreadRenamed thread_renamed = 15;
     ThreadDeleted thread_deleted = 16;
     AllThreadsDeleted all_threads_deleted = 17;
+    PendingConfirmed pending_confirmed = 18;
+    PendingCancelled pending_cancelled = 19;
   }
   reserved 12;
 
@@ -12019,4 +12080,15 @@ message ChatEvent {
 
   // INTENT: delete every chat in this vault, after the shell's confirmation.
   message AllThreadsDeleted {}
+
+  // INTENT: Confirm on the confirm card `pending_id` names. The card is the
+  // confirmation: the shell asks nothing more.
+  message PendingConfirmed {
+    string pending_id = 1;
+  }
+
+  // INTENT: Cancel on the confirm card `pending_id` names. Nothing is written.
+  message PendingCancelled {
+    string pending_id = 1;
+  }
 }

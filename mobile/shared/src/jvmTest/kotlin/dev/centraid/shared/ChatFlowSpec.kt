@@ -7,15 +7,20 @@ import centraid.core.v1.AssistCards
 import centraid.core.v1.AssistDocuments
 import centraid.core.v1.AssistEvent
 import centraid.core.v1.AssistModelState
+import centraid.core.v1.AssistPending
+import centraid.core.v1.AssistPendingStep
 import centraid.core.v1.AssistRefusal
 import centraid.core.v1.AssistRefusalReason
 import centraid.core.v1.AssistSent
+import centraid.core.v1.AssistSettleOutcome
+import centraid.core.v1.AssistSettled
 import centraid.core.v1.AssistStarted
 import centraid.core.v1.AssistStatus
 import centraid.core.v1.AssistToken
 import centraid.core.v1.AssistVisionState
 import centraid.core.v1.ChatThread
 import centraid.screen.v1.ChatEvent
+import centraid.screen.v1.ChatPending
 import centraid.screen.v1.ChatState
 import dev.centraid.shared.chat.ChatDoor
 import dev.centraid.shared.chat.ChatFlow
@@ -60,6 +65,18 @@ internal class ScriptedChatDoor : ChatDoor {
     val clears = mutableListOf<Long>()
     val calls = mutableListOf<String>()
 
+    // The member's taps on a parked write's card, and what the core answers to them.
+    val confirms = mutableListOf<Pair<Long, String>>()
+    val dismisses = mutableListOf<Pair<Long, String>>()
+    var confirmAnswer: (String) -> AssistSettled? = { id ->
+        AssistSettled(
+            session_id = 7,
+            pending_id = id,
+            outcome = AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_APPLIED,
+            line = "Done.",
+        )
+    }
+
     override suspend fun status(): AssistModelState? = statusAnswer.also { calls += "status" }
 
     override suspend fun load(): AssistModelState? = loadAnswer.also { calls += "load" }
@@ -92,6 +109,23 @@ internal class ScriptedChatDoor : ChatDoor {
     override suspend fun clear(session: Long) {
         clears += session
         calls += "clear"
+    }
+
+    override suspend fun confirm(session: Long, pendingId: String): AssistSettled? {
+        confirms += session to pendingId
+        calls += "confirm:$pendingId"
+        return confirmAnswer(pendingId)
+    }
+
+    override suspend fun dismiss(session: Long, pendingId: String): AssistSettled? {
+        dismisses += session to pendingId
+        calls += "dismiss:$pendingId"
+        return AssistSettled(
+            session_id = session,
+            pending_id = pendingId,
+            outcome = AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_DISMISSED,
+            line = "Not done.",
+        )
     }
 
     override suspend fun suggest(app: String): List<String> = suggestions.also { calls += "suggest:$app" }
@@ -442,5 +476,92 @@ class ChatFlowSpec : StringSpec({
         val again = rig.door.sends.last()
         again.regenerate shouldBe true
         again.attachments.map { it.label } shouldBe listOf("Truckee river bend")
+    }
+
+    // --- a parked write's card, through the flow (#1088) ------------------------
+
+    val cardFor = AssistPending(
+        pending_id = "p1",
+        verbs = listOf("complete"),
+        steps = listOf(
+            AssistPendingStep(
+                verb = "complete",
+                kind = "task",
+                title = "Pick up the dry cleaning",
+                summary = "Complete task \"Pick up the dry cleaning\"",
+            ),
+        ),
+    )
+
+    /** A turn that parked a write and settled: the card waits for a tap. */
+    fun Rig.proposeAWrite() {
+        open()
+        say("Complete the dry cleaning task")
+        val send = door.sends.single()
+        door.bus.tryEmit(AssistEvent(session_id = 7, turn_id = 1, pending = cardFor))
+        val answer = AssistAnswer(text = "Proposed: Complete task \"Pick up the dry cleaning\".", pending = cardFor)
+        send.reply.complete(AssistSent(session_id = 7, turn_id = 1, answered = answer))
+        door.bus.tryEmit(AssistEvent(session_id = 7, turn_id = 1, answer = answer))
+    }
+
+    "Confirm asks the core once for the card's id and draws the core's line, with no write from the shell" {
+        val rig = Rig()
+        rig.proposeAWrite()
+        rig.state.messages.last().pending!!.state shouldBe ChatPending.State.STATE_WAITING
+        rig.door.confirms.shouldBeEmpty()
+
+        rig.flow.send(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = "p1")))
+        rig.door.confirms shouldBe listOf(7L to "p1")
+        val card = rig.state.messages.last().pending!!
+        card.state shouldBe ChatPending.State.STATE_APPLIED
+        card.settled_line shouldBe "Done."
+
+        // a second tap reaches nothing
+        rig.flow.send(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = "p1")))
+        rig.door.confirms shouldHaveSize 1
+        rig.door.dismisses.shouldBeEmpty()
+    }
+
+    "Cancel tells the core to drop the card and writes nothing" {
+        val rig = Rig()
+        rig.proposeAWrite()
+        rig.flow.send(ChatEvent(pending_cancelled = ChatEvent.PendingCancelled(pending_id = "p1")))
+        rig.door.dismisses shouldBe listOf(7L to "p1")
+        rig.door.confirms.shouldBeEmpty()
+        val card = rig.state.messages.last().pending!!
+        card.state shouldBe ChatPending.State.STATE_NOT_DONE
+        card.settled_line shouldBe "Not done."
+    }
+
+    "a stale card says so, and a core that did not answer leaves the card to tap again" {
+        val rig = Rig()
+        rig.proposeAWrite()
+        rig.door.confirmAnswer = { id ->
+            AssistSettled(
+                session_id = 7,
+                pending_id = id,
+                outcome = AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_STALE,
+                line = "That changed since. Ask again.",
+            )
+        }
+        rig.flow.send(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = "p1")))
+        rig.state.messages.last().pending!!.state shouldBe ChatPending.State.STATE_STALE
+        rig.state.messages.last().pending!!.settled_line shouldBe "That changed since. Ask again."
+
+        val silent = Rig()
+        silent.proposeAWrite()
+        silent.door.confirmAnswer = { null }
+        silent.flow.send(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = "p1")))
+        silent.state.messages.last().pending!!.state shouldBe ChatPending.State.STATE_WAITING
+        silent.state.error shouldBe "Chat could not answer. Retry."
+    }
+
+    "a new question while the card waits makes it inert, and the core is never asked to run it" {
+        val rig = Rig()
+        rig.proposeAWrite()
+        rig.say("What is due today?")
+        rig.state.messages.first { it.pending != null }.pending!!.state shouldBe ChatPending.State.STATE_INERT
+        rig.flow.send(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = "p1")))
+        rig.door.confirms.shouldBeEmpty()
     }
 })

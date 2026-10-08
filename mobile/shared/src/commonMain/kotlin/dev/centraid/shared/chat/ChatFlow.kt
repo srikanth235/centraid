@@ -3,6 +3,8 @@ package dev.centraid.shared.chat
 import centraid.core.v1.AssistAttachment
 import centraid.core.v1.AssistCancelRequest
 import centraid.core.v1.AssistClearRequest
+import centraid.core.v1.AssistConfirmRequest
+import centraid.core.v1.AssistDismissRequest
 import centraid.core.v1.AssistDocuments
 import centraid.core.v1.AssistDocumentsRequest
 import centraid.core.v1.AssistEvent
@@ -13,6 +15,7 @@ import centraid.core.v1.AssistRequest
 import centraid.core.v1.AssistResponse
 import centraid.core.v1.AssistSendRequest
 import centraid.core.v1.AssistSent
+import centraid.core.v1.AssistSettled
 import centraid.core.v1.AssistStartRequest
 import centraid.core.v1.AssistStatus
 import centraid.core.v1.AssistStatusRequest
@@ -98,6 +101,16 @@ public interface ChatDoor {
     public suspend fun cancel(session: Long)
 
     public suspend fun clear(session: Long)
+
+    /**
+     * The member tapped Confirm on the parked write [pendingId] names: the core runs its steps
+     * once and answers how it ended and the line to say. Null when the call itself failed
+     * (nothing ran).
+     */
+    public suspend fun confirm(session: Long, pendingId: String): AssistSettled?
+
+    /** The member tapped Cancel: the core drops the parked write and writes nothing. Null when the call failed. */
+    public suspend fun dismiss(session: Long, pendingId: String): AssistSettled?
 
     /** Three questions this vault can answer; empty when it would not say. */
     public suspend fun suggest(app: String): List<String>
@@ -220,6 +233,19 @@ public class CoreChatDoor(
     override suspend fun clear(session: Long) {
         ask(AssistRequest(clear = AssistClearRequest(session_id = session)))
     }
+
+    // A tap is for the core that holds the card: the supplier moves with the foreground.
+    override suspend fun confirm(session: Long, pendingId: String): AssistSettled? =
+        ask(
+            AssistRequest(confirm = AssistConfirmRequest(session_id = session, pending_id = pendingId)),
+            sessionCore,
+        )?.settled
+
+    override suspend fun dismiss(session: Long, pendingId: String): AssistSettled? =
+        ask(
+            AssistRequest(dismiss = AssistDismissRequest(session_id = session, pending_id = pendingId)),
+            sessionCore,
+        )?.settled
 
     override suspend fun documents(): AssistDocuments? =
         ask(AssistRequest(documents = AssistDocumentsRequest(limit = 50)))?.documents
@@ -397,6 +423,12 @@ public class ChatFlow(
             ChatEffect.LoadVision -> reduce(ChatInput.VisionLoaded(door.loadVision()))
             ChatEffect.StartVisionDownload -> startVisionDownload()
             is ChatEffect.Cancel -> door.cancel(effect.session)
+            is ChatEffect.Confirm ->
+                reduce(ChatInput.Confirmed(effect.pendingId, door.confirm(effect.session, effect.pendingId)))
+            // The card settled when Cancel was tapped; the core's answer changes nothing on screen.
+            is ChatEffect.Dismiss -> {
+                door.dismiss(effect.session, effect.pendingId)
+            }
             is ChatEffect.Clear -> door.clear(effect.session)
             is ChatEffect.Copy -> copyToClipboard(effect.text)
             ChatEffect.ReadThreads -> reduce(ChatInput.Threads(door.threads(), door.nowMillis()))
@@ -554,6 +586,16 @@ public class ChatBridge {
 
     public fun copy(messageId: Long) {
         forward(ChatEvent(copied = ChatEvent.Copied(message_id = messageId)))
+    }
+
+    /** Confirm on the confirm card [pendingId] names. */
+    public fun confirmPending(pendingId: String) {
+        forward(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = pendingId)))
+    }
+
+    /** Cancel on the confirm card [pendingId] names. */
+    public fun cancelPending(pendingId: String) {
+        forward(ChatEvent(pending_cancelled = ChatEvent.PendingCancelled(pending_id = pendingId)))
     }
 
     public fun downloadTapped() {

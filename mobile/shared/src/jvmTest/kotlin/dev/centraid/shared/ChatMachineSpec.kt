@@ -7,16 +7,21 @@ import centraid.core.v1.AssistCards
 import centraid.core.v1.AssistEvent
 import centraid.core.v1.AssistModelState
 import centraid.core.v1.AssistNotice
+import centraid.core.v1.AssistPending
+import centraid.core.v1.AssistPendingStep
 import centraid.core.v1.AssistReading
 import centraid.core.v1.AssistReadingKind
 import centraid.core.v1.AssistRefusal
 import centraid.core.v1.AssistRefusalReason
 import centraid.core.v1.AssistSent
+import centraid.core.v1.AssistSettleOutcome
+import centraid.core.v1.AssistSettled
 import centraid.core.v1.AssistToken
 import centraid.core.v1.AssistVisionState
 import centraid.screen.v1.ChatAttachment
 import centraid.screen.v1.ChatEvent
 import centraid.screen.v1.ChatMessage
+import centraid.screen.v1.ChatPending
 import centraid.screen.v1.ChatState
 import dev.centraid.design.copy.ChatCopy
 import dev.centraid.shared.chat.Chat
@@ -730,5 +735,192 @@ class ChatMachineSpec : StringSpec({
         val ignored = reduce(chat, view(ChatEvent(download = ChatEvent.DownloadTapped(vision = true))))
         ignored.effects.shouldBeEmpty()
         ignored.chat.state.phase shouldBe ChatState.Phase.PHASE_NEEDS_MODEL
+    }
+
+    // --- a proposed write, as a card (#1088, R-1088-2) --------------------------
+
+    val dryCleaning = "Complete task \"Pick up the dry cleaning\""
+
+    fun proposal(id: String = "p1", destructive: Boolean = false, more: Int = 0) = AssistPending(
+        pending_id = id,
+        verbs = listOf(if (destructive) "delete" else "complete"),
+        steps = listOf(
+            AssistPendingStep(
+                verb = if (destructive) "delete" else "complete",
+                kind = "task",
+                title = "Pick up the dry cleaning",
+                summary = if (destructive) "Delete task \"Pick up the dry cleaning\"" else dryCleaning,
+                destructive = destructive,
+            ),
+        ),
+        destructive = destructive,
+        more = more,
+    )
+
+    fun pendingEvent(turn: Long, card: AssistPending) = coreEvent(turn) { it.copy(pending = card) }
+
+    fun answerWith(turn: Long, card: AssistPending?) =
+        coreEvent(turn) { it.copy(answer = AssistAnswer(text = "Proposed: $dryCleaning.", pending = card)) }
+
+    /** A turn that parked a write: the card on the stream, the answer not yet in. */
+    fun proposed(card: AssistPending = proposal()): Chat = reduce(asked(), pendingEvent(1, card)).chat
+
+    /** The same turn settled: a card waiting for a tap. */
+    fun waitingCard(card: AssistPending = proposal()): Chat = reduce(proposed(card), answerWith(1, card)).chat
+
+    fun confirmTap(id: String = "p1") =
+        view(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = id)))
+
+    fun cancelTap(id: String = "p1") =
+        view(ChatEvent(pending_cancelled = ChatEvent.PendingCancelled(pending_id = id)))
+
+    fun confirmedAs(outcome: AssistSettleOutcome, line: String, id: String = "p1") =
+        ChatInput.Confirmed(id, AssistSettled(session_id = 7, pending_id = id, outcome = outcome, line = line))
+
+    fun cardOf(chat: Chat): ChatPending = chat.state.messages.last().pending!!
+
+    "a write the model parks arrives as a card under its answer, in the core's words, waiting for a tap" {
+        val streaming = proposed()
+        // Drawn only once the answer stops streaming; the message says it is still streaming.
+        streaming.state.messages.last().streaming shouldBe true
+        val chat = waitingCard()
+        val card = cardOf(chat)
+        card.state shouldBe ChatPending.State.STATE_WAITING
+        card.pending_id shouldBe "p1"
+        card.steps.map { it.summary } shouldBe listOf(dryCleaning)
+        card.steps.map { it.destructive } shouldBe listOf(false)
+        card.destructive shouldBe false
+        card.confirm_label shouldBe "Confirm"
+        card.cancel_label shouldBe "Cancel"
+        card.settled_line shouldBe ""
+        card.more_line shouldBe ""
+        card.accessibility_label shouldBe "Proposed change. $dryCleaning"
+        chat.state.messages.last().streaming shouldBe false
+        chat.state.messages.last().text shouldBe "Proposed: $dryCleaning."
+    }
+
+    "a turn that proposed nothing has no card" {
+        val chat = reduce(asked(), answerWith(1, null)).chat
+        chat.state.messages.last().pending shouldBe null
+    }
+
+    "the stream and the answer carry the same card, so either alone is enough and both are one" {
+        // The stream's card was dropped from a full queue: the terminal event still has it.
+        cardOf(reduce(asked(), answerWith(1, proposal())).chat).state shouldBe ChatPending.State.STATE_WAITING
+        // The events were all dropped: the send call's own answer has it.
+        val sent = AssistSent(session_id = 7, turn_id = 1, answered = AssistAnswer(text = "Proposed.", pending = proposal()))
+        cardOf(reduce(asked(), ChatInput.Settled(1, sent)).chat).pending_id shouldBe "p1"
+        // Both, in either order: still one card, and a tap made between them is not undone.
+        val tapped = reduce(waitingCard(), confirmTap()).chat
+        val again = reduce(tapped, ChatInput.Settled(1, sent)).chat
+        cardOf(again).state shouldBe ChatPending.State.STATE_WORKING
+        again.state.messages shouldHaveSize 2
+    }
+
+    "Confirm moves the card to working and asks the core once, whatever is tapped after" {
+        val step = reduce(waitingCard(), confirmTap())
+        step.effects shouldBe listOf(ChatEffect.Confirm(7L, "p1"))
+        cardOf(step.chat).state shouldBe ChatPending.State.STATE_WORKING
+        // A second tap while the core works asks nothing.
+        reduce(step.chat, confirmTap()).effects.shouldBeEmpty()
+        reduce(step.chat, cancelTap()).effects.shouldBeEmpty()
+    }
+
+    "the core's answer settles the card with its own line, and an applied card offers no undo" {
+        val working = reduce(waitingCard(), confirmTap()).chat
+        val applied = reduce(working, confirmedAs(AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_APPLIED, "Done.")).chat
+        val card = cardOf(applied)
+        card.state shouldBe ChatPending.State.STATE_APPLIED
+        card.settled_line shouldBe "Done."
+        card.accessibility_label shouldBe "Proposed change. $dryCleaning. Done."
+        // The card has Confirm and Cancel labels and nothing else to tap: there is no Undo.
+        applied.state.messages.last().text shouldBe "Proposed: $dryCleaning."
+        // Settled once: a second answer for the same card changes nothing.
+        reduce(applied, confirmedAs(AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_STALE, "That changed since. Ask again.")).chat
+            .let { cardOf(it).state shouldBe ChatPending.State.STATE_APPLIED }
+    }
+
+    "a card whose rows moved says so, and a refusal or a card that was gone is not done" {
+        val working = reduce(waitingCard(), confirmTap()).chat
+        val stale = cardOf(reduce(working, confirmedAs(AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_STALE, "That changed since. Ask again.")).chat)
+        stale.state shouldBe ChatPending.State.STATE_STALE
+        stale.settled_line shouldBe "That changed since. Ask again."
+
+        val refused = cardOf(reduce(working, confirmedAs(AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_REFUSED, "Not done. That date is past.")).chat)
+        refused.state shouldBe ChatPending.State.STATE_NOT_DONE
+        refused.settled_line shouldBe "Not done. That date is past."
+
+        val gone = cardOf(reduce(working, confirmedAs(AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_NOTHING_WAITING, "Nothing is waiting on that.")).chat)
+        gone.state shouldBe ChatPending.State.STATE_NOT_DONE
+        gone.settled_line shouldBe "Nothing is waiting on that."
+    }
+
+    "Cancel settles the card to not done at once and tells the core, which writes nothing" {
+        val step = reduce(waitingCard(), cancelTap())
+        step.effects shouldBe listOf(ChatEffect.Dismiss(7L, "p1"))
+        val card = cardOf(step.chat)
+        card.state shouldBe ChatPending.State.STATE_NOT_DONE
+        card.settled_line shouldBe "Not done."
+        // Nothing more to tap.
+        reduce(step.chat, confirmTap()).effects.shouldBeEmpty()
+        reduce(step.chat, cancelTap()).effects.shouldBeEmpty()
+    }
+
+    "a confirm whose call failed offers the card again with one error line, and claims no outcome" {
+        val working = reduce(waitingCard(), confirmTap()).chat
+        val failed = reduce(working, ChatInput.Confirmed("p1", null)).chat
+        cardOf(failed).state shouldBe ChatPending.State.STATE_WAITING
+        failed.state.error shouldBe ChatCopy.ERROR_GENERIC
+        // and a tap clears the line and asks again
+        val retried = reduce(failed, confirmTap())
+        retried.effects shouldBe listOf(ChatEffect.Confirm(7L, "p1"))
+        retried.chat.state.error shouldBe ""
+    }
+
+    "a new question supersedes a card still waiting, but never one the core is running" {
+        val waiting = waitingCard()
+        val next = reduce(waiting, sent("Something else")).chat
+        next.state.messages.first { it.pending != null }.pending!!.state shouldBe ChatPending.State.STATE_INERT
+        next.state.messages.first { it.pending != null }.pending!!.settled_line shouldBe "Not done."
+        // An inert card cannot be tapped, even by a late tap.
+        reduce(next, confirmTap()).effects.shouldBeEmpty()
+
+        val working = reduce(waitingCard(), confirmTap()).chat
+        val asking = reduce(working, sent("Something else")).chat
+        asking.state.messages.first { it.pending != null }.pending!!.state shouldBe ChatPending.State.STATE_WORKING
+        // and the core's answer still lands on it
+        val applied = reduce(asking, confirmedAs(AssistSettleOutcome.ASSIST_SETTLE_OUTCOME_APPLIED, "Done.")).chat
+        applied.state.messages.first { it.pending != null }.pending!!.state shouldBe ChatPending.State.STATE_APPLIED
+    }
+
+    "a card that asks twice is drawn destructive, line by line, and says how many rows it does not list" {
+        val chat = waitingCard(proposal(destructive = true, more = 3))
+        val card = cardOf(chat)
+        card.destructive shouldBe true
+        card.steps.single().destructive shouldBe true
+        card.more_line shouldBe "and 3 more"
+        card.accessibility_label shouldBe
+            "Proposed change. Removes something. Delete task \"Pick up the dry cleaning\". and 3 more"
+    }
+
+    "taps that are not for a waiting card do nothing: another id, no id, a turn still running, a chat with no session" {
+        reduce(waitingCard(), confirmTap("other")).effects.shouldBeEmpty()
+        reduce(waitingCard(), confirmTap("")).effects.shouldBeEmpty()
+        reduce(waitingCard(), cancelTap("other")).effects.shouldBeEmpty()
+        // The card is on the stream but the turn has not settled: the core would refuse the tap.
+        reduce(proposed(), confirmTap()).effects.shouldBeEmpty()
+        reduce(proposed(), cancelTap()).effects.shouldBeEmpty()
+        reduce(ChatMachine.initial(), confirmTap()).effects.shouldBeEmpty()
+    }
+
+    "a turn that fails after parking a write offers no card to tap" {
+        val chat = reduce(proposed(), settledRefused(1, AssistRefusalReason.ASSIST_REFUSAL_REASON_MODEL_FAILED)).chat
+        val held = chat.state.messages.last()
+        held.pending!!.state shouldBe ChatPending.State.STATE_INERT
+        reduce(chat, confirmTap()).effects.shouldBeEmpty()
+    }
+
+    "a new chat leaves no card behind" {
+        reduce(waitingCard(), newChat).chat.state.messages.shouldBeEmpty()
     }
 })
