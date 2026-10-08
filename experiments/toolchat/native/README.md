@@ -59,3 +59,33 @@ NATIVETOOLS=$NT python3 eval/rollout.py export --screen-run screen/run.jsonl --s
 ```
 
 Decisions: `docs/decisions.md`, the #1044 section. Evidence: `receipts/issue-1044-*.md`. Where the work stands and what comes next: `HANDOFF.md`.
+
+## Artefacts
+
+The built and frozen files of this task are not source (R-1088-14). `artefacts.json` lists each one: logical name, path, sha256, size, where it comes from, and how it comes back. `artefacts.py` is the one tool, standard library only except the Hub calls (`huggingface_hub`, pinned by hash in `requirements-ci.txt`); the token is read from `HF_TOKEN` and from nowhere else.
+
+| class | files | MB | how it comes back |
+| --- | --- | --- | --- |
+| source (stays in the tree) | `authored/sessions/` 469 and `eval/sessions/` 26 (the authored, hand-written and e1 session sources), the 42 world builders | 6.9 | not applicable |
+| regenerable | 45 world JSON files (`authored/worlds/T*.json`, `eval/worlds/A..G.json`) and the 7 keys files a fresh seeding reproduces (A B C D T03 T12 T23) | 5.2 | the manifest's `rebuild` command: the world's builder, then `artefacts.py format` (the repository's JSON layout); `eval/seed_worlds.py` for a keys file. All 52 rebuild byte for byte (`artefacts.py verify-rebuild`) |
+| frozen | `eval/sets/` 5 files, `data/` 2 files, the 38 keys files whose ids a fresh seeding no longer gives | 17.2 | a private Hugging Face Hub dataset repository, at the revision the manifest records |
+
+```
+python3 artefacts.py check                      # every file in place and equal to the manifest
+python3 artefacts.py fetch [--dry-run]          # materialise what is missing, at the original paths, each file verified
+python3 artefacts.py fetch --rebuild-only       # no token: the regenerable files only
+python3 artefacts.py verify-rebuild             # rebuild the regenerable files in a scratch copy, compare bytes
+python3 artefacts.py verify-hub                 # download the frozen files at their revision, compare sha256
+```
+
+`fetch` needs `NATIVETOOLS` for the keys files (they seed from the world JSON) and `HF_TOKEN` for the frozen ones. A file that is present but differs is never overwritten without `--force`, and a download or rebuild whose bytes differ fails and leaves nothing at the path. The tests that read the keys file of a train world (`authored/gen/test_gen.py`, `eval/test_build_sets.py`) need the frozen ones: nothing in the CPU suite reads `eval/sets/` or `data/`.
+
+The owner's steps, once, from the repository root:
+
+```
+HF_TOKEN=... python3 experiments/toolchat/native/artefacts.py upload --repo srikanth235/centraid-native-data
+git add experiments/toolchat/native/artefacts.json && git commit -m "build(native): record the Hub revision of the frozen artefacts (#1088)"
+HF_TOKEN=... NATIVETOOLS=target/debug/nativetools experiments/toolchat/native/move_out.sh
+```
+
+`upload` creates the dataset repository private when it is missing, refuses one that is public, sends the 45 frozen files in one commit and writes the commit id into the manifest. `move_out.sh` checks that the manifest records it, moves every file aside, fetches them back (rebuilds and downloads) and checks them, and only then takes them out of the index, writes the `.gitignore` block (`artefacts.py gitignore`), applies `move_out.gate.patch` (the `native-python` job runs `fetch` before it seeds world A, rebuilding only when the secret is absent) and removes itself and the patch. It commits nothing.

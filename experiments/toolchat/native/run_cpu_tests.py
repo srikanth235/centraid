@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The native harness's CPU test suite, exactly as CI runs it (the `native-python` job of .github/workflows/gate.yml, #1044).
 
-    python3 experiments/toolchat/native/run_cpu_tests.py [DIR ...]       # DIR: authored authored/gen eval train (default: all four)
+    python3 experiments/toolchat/native/run_cpu_tests.py [DIR ...]       # DIR: . authored authored/gen eval train (default: all five)
 
 Each `test_*.py` runs in an interpreter of its own, started inside its directory, as every module documents (`python -m
 unittest test_x`). The environment is the caller's:
@@ -31,7 +31,7 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DIRS = ("authored", "authored/gen", "eval", "train")
+DIRS = (".", "authored", "authored/gen", "eval", "train")
 
 # directory/module -> {test id: why it is red on this tree}
 KNOWN_RED: dict[str, dict[str, str]] = {
