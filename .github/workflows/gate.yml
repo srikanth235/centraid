@@ -204,9 +204,9 @@ jobs:
   # `engine` feature and `centraid-core-ffi`'s `llama` feature are OFF in a
   # workspace build — `gate` compiles, lints and tests the rest of the tree
   # without llama.cpp, including the engine-free half of `centraid-assist-llama`
-  # (`generate`, `Config`) and the ABI's no-engine behaviour — and THIS job
+  # (`generate`, `wire`, `Config`) and the ABI's no-engine behaviour — and THIS job
   # builds, lints and tests the two crates with the engine ON: the loader, the
-  # process-wide host, the `assist-eval-llama` binary, `centraid-core-ffi`'s
+  # process-wide host, the `assist-eval-llama` and `assist-step` binaries, `centraid-core-ffi`'s
   # engine-wired tests, and the five-symbol `nm` check over a cdylib that
   # carries llama.cpp. What no pull-request job checks is a phone's
   # cross-compile of the engine (Android NDK, iOS Metal), which

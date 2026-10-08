@@ -8,6 +8,7 @@
 //! | Module | What it owns | Built |
 //! |---|---|---|
 //! | [`generate`] | The generation loop — cancel polling, chunked prefill, images as prefill, stop strings, UTF-8 — over a [`generate::Backend`] a test can fake. | always |
+//! | [`wire`] | The JSON lines `assist-step` speaks: request, reply, error, ready. | always |
 //! | `engine` | llama.cpp as that backend: weights, an optional vision projector (`mtmd`), a fresh context per generation, the grammar + greedy sampler chain. | `engine` feature |
 //!
 //! # THE `engine` FEATURE: LLAMA.CPP BUILDS WHERE THE PHONE'S CORE IS BUILT
@@ -21,7 +22,7 @@
 //! [`generate`] and [`Config`] — the generation loop and everything it is
 //! tested with — are built, linted and tested by the gate, and what `engine`
 //! adds (`engine`, [`LlamaLoader`], [`LlamaModel`], `process_host`, the
-//! `assist-eval-llama` binary and the two real-model suites) is built, linted
+//! `assist-eval-llama` and `assist-step` binaries and the two real-model suites) is built, linted
 //! and tested by the `engine` job in `.github/workflows/gate.yml`, with
 //! `--features engine` (or `centraid-core-ffi/llama`, which implies it).
 //!
@@ -52,6 +53,7 @@
 #[cfg(feature = "engine")]
 pub mod engine;
 pub mod generate;
+pub mod wire;
 
 #[cfg(feature = "engine")]
 use std::sync::{Arc, OnceLock};

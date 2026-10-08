@@ -24,6 +24,8 @@ engine = ["dep:llama-cpp-2"]
 
 [dependencies]
 centraid-assist = { path = "../assist" }
+serde.workspace = true
+serde_json.workspace = true
 # `default-features = false` drops `openmp` (iOS has no libomp; ggml's own
 # thread pool is what runs), `common` (llama.cpp's examples library: this crate
 # needs the core grammar sampler only) and the Android shared-libc++ default.
@@ -55,6 +57,11 @@ llama-cpp-2 = { version = "=0.1.158", default-features = false, features = [
 [[bin]]
 name = "assist-eval-llama"
 path = "src/bin/assist-eval-llama.rs"
+required-features = ["engine"]
+
+[[bin]]
+name = "assist-step"
+path = "src/bin/assist-step.rs"
 required-features = ["engine"]
 
 [[test]]
