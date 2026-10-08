@@ -979,7 +979,7 @@ class ModelCard(Case):
         self.assertTrue(text.startswith("---\nbase_model: Qwen/Qwen3.5-0.8B\n"))
         self.assertIn("- o/n\n", text)  # the dataset repository, from the manifest
         self.assertIn("Data version: `data-v7` of the private dataset repository `o/n`", text)
-        self.assertIn("Git commit: `" + "d" * 40 + "`", text)
+        self.assertIn("Card written at commit `" + "d" * 40 + "`", text)
         self.assertIn("- val 537/655 live (runtime nt12, val v7.x)", text)
         self.assertIn("- val 542/655 by replay (runtime nt15, val v7.4)", text)
         self.assertIn("- S2 is a weight soup of three members", text)

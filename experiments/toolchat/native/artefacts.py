@@ -925,8 +925,8 @@ def render_card(meta: dict, config: dict, name: str, data_version: str, data_rep
              "one model that drives the vault through eight tools, scored on held-out households.", "",
              "## Provenance", "",
              f"- Data version: `{data_version}` of the private dataset repository `{data_repo}`. The version holds the training "
-             "build(s) as trained, val and test as refrozen against that version's vault and runtime, and `version.json`.",
-             f"- Git commit: `{commit or 'unrecorded'}` of `srikanth235/centraid`.",
+             "build(s) as trained, val and test as its `version.json` records them (refrozen on that version's runtime, or kept as frozen), and the worlds.",
+             f"- Card written at commit `{commit or 'unrecorded'}` of `srikanth235/centraid`. The commit the weights were trained at is the job bundle's.",
              f"- Trained (the `train_meta.json` in this directory): {meta.get('steps', '?')} steps, {meta.get('examples', '?')} examples, "
              f"{meta.get('tokens', '?')} tokens ({meta.get('label_tokens', '?')} with loss), "
              f"{round(meta.get('train_seconds', 0) / 3600, 2)} h."]

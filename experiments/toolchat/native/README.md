@@ -69,7 +69,7 @@ version.json                                       version, parent, made, git co
                                                    the commands the runtime maps its verbs to); the seeds; the refreeze report; a note per training build;
                                                    the sha256 and size of every file
 train/<name>/train.jsonl.gz, train-val.jsonl.gz    each training build exactly as trained, with the trainer's own validation slice
-eval/val.jsonl, test.jsonl, split.json             val and test as refrozen against that version's vault and runtime
+eval/val.jsonl, test.jsonl, split.json             val and test as its refreeze report records them: refrozen against its vault and runtime, or kept as frozen (data-v7's test v6)
 screen/roll-screen.jsonl, screen/worlds/*          the RFT screen set and the worlds it ran in (with their keys)
 worlds/<id>.json                                   every world as built now, train and held-out (no keys)
 sources/<tree path>                                the held-out sources: the world builders (eval/worlds/*_build.py, build_worlds.py, authored/worlds/T03, T12, T23) and the
