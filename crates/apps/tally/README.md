@@ -27,7 +27,7 @@ Tally's doctrine, from the manifest's own description (`manifest.json`):
 | **SQL, in any form** | `cargo xtask rules`' `sql-confinement` scans this crate — source and tests — and finds none. A statement here is a projection, a `from`, a predicate and an order, as data; the kit is the only place that turns one into a statement |
 | **A provider SDK** | the only dependencies are the kit and `serde_json`. Provider-backed judgment is the assistant's plane, and there is no generic inference verb |
 | **A write from a query** | `queries` holds statements and a `PageDoor`, whose one method reads |
-| **An invocation with no `invoke_key`** | the field is required on `Invocation`. A fallback to the call's ordinal would be stable only for a handler that makes the same call sequence every time — a replayed intent whose handler branched differently would re-execute a committed command under another call's key |
+| **An invocation with no `invoke_key`** | the field is required on `Invocation`. A fallback to the call's ordinal would be stable only for a handler that makes the same call sequence every time. The key is the caller's correlation key and never reaches the vault, which keeps no replay ledger ([#1029](https://github.com/srikanth235/centraid/issues/1029) §1, [R-1088-12](../../../docs/decisions.md#one-assistant-plane-1088)) |
 | **A denial turned into an error** | `Outcome::Denied` is a state the surface renders. `Err` is reserved for a door that is not there at all, and it fails closed |
 | **An unbounded read** | every window is a stated number and every walk errors at its ceiling |
 | **A stored balance** | nothing in `balance` writes, and the export states `balances_excluded` |

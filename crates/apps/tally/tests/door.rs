@@ -57,7 +57,7 @@ fn invocation(command: &'static str, input: serde_json::Value) -> Invocation {
             .iter()
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect::<BTreeMap<_, _>>(),
-        // MANDATORY, and the vault's replay ledger is keyed on it.
+        // MANDATORY on an `Invocation`; the vault is never handed it.
         invoke_key: format!("test:{command}"),
         optional: false,
     }
@@ -233,9 +233,8 @@ fn two_hundred_expenses_through_the_real_command_path() {
                 ]
             }),
         );
-        // A DISTINCT KEY PER WRITE: the same key twice is a replay, and a
-        // measurement of two hundred replays would be a measurement of the
-        // ledger lookup.
+        // A DISTINCT KEY PER WRITE, as a caller pairing two hundred answers
+        // with their calls would give. The vault is handed none of them.
         call.invoke_key = format!("bulk:{index}");
         let outcome = door.invoke(&call).expect("the door is there");
         assert!(
@@ -268,24 +267,35 @@ fn two_hundred_expenses_through_the_real_command_path() {
     assert_eq!(expenses, WRITES);
 }
 
-/// A DEMONSTRATED RED for the mandatory key: the same intent delivered twice
-/// executes ONCE, and the second delivery is answered from the ledger.
+/// THERE IS NO REPLAY LEDGER (#1029 §1, R-1088-12): the same `invoke_key`
+/// delivered twice runs the command twice.
+///
+/// This door used to hand the vault an intent id and read the second delivery
+/// back from the ledger. The ledger is gone, `Vault::execute` takes no key, and
+/// a command that arrives twice was made twice, so a caller that may re-offer a
+/// write must make it idempotent by its own content or an id it minted (the core
+/// pins the same fact through its own command path in `crates/core/tests/
+/// replay.rs`). `tally.add_friend` with no `party_id` mints a party every time.
 #[test]
-fn a_replayed_intent_executes_once() {
+fn the_same_key_delivered_twice_runs_twice() {
     let scratch = Scratch::founded("replay");
     let registry = Registry::with_system_commands().expect("the registry builds");
     registry
         .install(&scratch.vault)
         .expect("the record installs");
-    let door =
-        VaultDoor::new(&scratch.vault, &registry, Principal::owner("phone")).for_device("phone-1");
+    let door = VaultDoor::new(&scratch.vault, &registry, Principal::owner("phone"));
     let call = invocation("tally.add_friend", json!({ "name": "Cleo" }));
     let first = door.invoke(&call).expect("the door is there");
-    assert!(matches!(first, Outcome::Executed { .. }));
     let second = door.invoke(&call).expect("the door is there");
-    // The replay answers Executed with no output — the handler did not run
-    // again, which is the whole point of the ledger.
-    assert!(matches!(second, Outcome::Executed { .. }));
+    let party = |outcome: &Outcome| match outcome {
+        Outcome::Executed { output } => output["party_id"].as_str().map(str::to_owned),
+        other => panic!("a friend was not added: {other:?}"),
+    };
+    assert_ne!(
+        party(&first),
+        party(&second),
+        "the second delivery ran: it enrolled a party of its own"
+    );
     // Counted through the APP's own read path — a statement as data through
     // the kit's door — because an app crate holds no SQL, and its tests are
     // scanned by `sql-confinement` for exactly the same reason its handlers
@@ -304,7 +314,7 @@ fn a_replayed_intent_executes_once() {
             .len())
         })
         .expect("the roster reads");
-    assert_eq!(friends, 1, "a duplicate delivery enrolled a second friend");
+    assert_eq!(friends, 2, "one key, two deliveries, two friends");
     // And the vault's own error type is what an absent door is NOT: the two
     // are different failures and the test names both.
     let _ = VaultError::UnknownCommand {

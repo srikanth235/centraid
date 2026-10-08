@@ -8,9 +8,10 @@
 //! **`invoke_key` is mandatory** (D-1020-D3-5). v0's `invokeKey` is optional
 //! and falls back to the call's **ordinal**, which "is only stable for a
 //! handler that makes the same call sequence every time" (v0's own comment).
-//! A replayed intent whose handler branched differently then re-executes a
-//! committed command under another call's key. The port makes the key a
-//! required field, so the fallback does not exist to be relied on.
+//! The port makes the key a required field, so the fallback does not exist to
+//! be relied on. The key is the caller's correlation key: it pairs an answer
+//! with the call that caused it, and it never reaches the vault, which keeps no
+//! replay ledger (#1029 §1, R-1088-12).
 //!
 //! **A denial is a value, never an `Err`** (#1020 apps seam 10). v0 wraps every
 //! action in `runVaultAction`, which answers HTTP 200 with
