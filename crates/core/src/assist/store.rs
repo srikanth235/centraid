@@ -41,7 +41,6 @@ use base64::Engine as _;
 use centraid_api_proto::core_v1 as wire;
 use centraid_assist::attach::ImageData;
 use centraid_assist::native::park::Confirmed;
-use centraid_assist::native_turn::words::{Say, say_with};
 use centraid_assist::prompt::Turn;
 use centraid_assist::{App, Attachments, Card, Notice, Refusal, Session};
 
@@ -128,15 +127,6 @@ pub const fn settled_word(outcome: &Confirmed) -> Option<&'static str> {
         Confirmed::Refused { .. } => Some("failed"),
         Confirmed::Unknown => None,
     }
-}
-
-/// The line a dismissed proposal keeps: the sentence a dismissal answers with, `Not done.`
-/// (`SAID_NOT_DONE` with no reason to give).
-#[must_use]
-pub fn dismissed_text() -> String {
-    say_with(Say::NotDone, &[("reason", "")])
-        .trim_end()
-        .to_owned()
 }
 
 /// A thumbnail of the pixels the model read, as a `data:` URI.
@@ -534,7 +524,11 @@ mod tests {
 
     #[test]
     fn a_dismissal_keeps_the_sentence_it_answered_with() {
-        assert_eq!(dismissed_text(), "Not done.");
+        // One source: the line a dismissal answers with is the line it keeps.
+        assert_eq!(
+            centraid_assist::native_turn::dismissed_line(true),
+            "Not done."
+        );
     }
 
     #[test]

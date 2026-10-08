@@ -85,7 +85,9 @@ import okio.ByteString
  * drops it too): it goes INERT, buttons gone. A card in flight is never
  * superseded, so a tap that did write is never shown as one that did not. The
  * card lives only in the thread on screen: a reopened chat is a fresh session
- * and shows the old "Proposed: …" text and no card (R-1088-10).
+ * that holds no write (R-1088-10), so a stored `proposed` answer is drawn with
+ * its "Proposed: …" text and an INERT card, and an applied, dismissed, stale or
+ * failed one as the line the member was told, which is the text the vault kept.
  *
  * There is NO UNDO on an applied card. The runtime's undo is a verb the MODEL
  * writes, and it parks like any write; the core has no request that parks one
@@ -672,6 +674,7 @@ public object ChatMachine {
                             stopped = message.outcome == ChatStoredOutcome.CHAT_STORED_OUTCOME_STOPPED ||
                                 message.outcome == ChatStoredOutcome.CHAT_STORED_OUTCOME_REFUSED,
                             note = if (AssistNotice.ASSIST_NOTICE_DOC_TRUNCATED in message.notices) ChatCopy.NOTE_DOC_TRUNCATED else "",
+                            proposal = storedProposal(message.outcome),
                         ),
                     )
                 }
@@ -694,6 +697,20 @@ public object ChatMachine {
         )
         return ChatStep(render(opened))
     }
+
+    /**
+     * The card a stored answer draws, if any (R-1088-10). A `proposed` answer is a write no session
+     * holds any more: its text is the "Proposed: …" line and its card is INERT, nothing to tap and
+     * nothing run, with no id because the core has nothing by that name. The four ends need no
+     * card: the vault replaced the answer's text with the line the member was told ("Done.",
+     * "Not done.", "That changed since. Ask again."), and that text is what the message draws.
+     */
+    private fun storedProposal(outcome: ChatStoredOutcome): Proposal? =
+        if (outcome == ChatStoredOutcome.CHAT_STORED_OUTCOME_PROPOSED) {
+            Proposal(id = "", steps = emptyList(), phase = ProposalPhase.INERT, line = notDoneLine())
+        } else {
+            null
+        }
 
     /** A stored attachment as a chip: what it was, never its bytes, and whether a retry can send it again. */
     private fun pendingOf(held: ChatStoredAttachment, index: Int): Pending {

@@ -16,17 +16,17 @@
 //!
 //! A tool turn is answered by the routed plane (#1078: a route, one of eighteen reads, a phrase)
 //! or by the native one (the model drives `centraid_assist::native_turn` over the same runtime the
-//! fine-tuning loop trains), whichever [`Hub::plane`] says. The routed plane is the default until
-//! wave 2c retires it; nothing on the wire chooses. Everything around the turn is shared: the
-//! slot, `BUSY`, stop, the event queue, and the saved turn, whose stored shape does not change. A
-//! turn with an attachment takes the attached path on either (R-1088-9). A native chat's session
+//! fine-tuning loop trains), whichever [`Hub::plane`] says. The routed plane is still the default
+//! and is retired by #1088's next wave; nothing on the wire chooses. Everything around the turn is
+//! shared: the slot, `BUSY`, stop, the event queue, and the saved turn. A turn with an attachment takes the attached path on either (R-1088-9). A native chat's session
 //! lives in its [`Slot`], in memory (R-1088-10): a new chat, a reopened thread, a retry and a turn
 //! that did not end each start a fresh one. A write the model makes parks behind a card
 //! (R-1088-2): [`Handle::assist_pending`] says what waits, [`Handle::assist_confirm`] makes it, once,
 //! and [`Handle::assist_dismiss`] drops it. On the wire the card is `AssistPending` (an event, and
 //! the answer's own copy), the tap is `AssistConfirmRequest` or `AssistDismissRequest`, and both
-//! answer `AssistSettled`; wave 2c adds the stored thread's state for a proposal that was applied or
-//! dismissed (migration 012).
+//! answer `AssistSettled`. The vault keeps how each proposal ended (migration 012: `proposed`,
+//! `applied`, `dismissed`, `stale`, `failed`), and `chat.thread` sends that word on the wire; a
+//! `proposed` message in a thread just reopened has no card waiting on it (R-1088-10).
 //!
 //! # A TURN RUNS ON THE CALLING THREAD, AND NOTHING HOLDS THE VAULT WHILE THE
 //! # MODEL THINKS
@@ -138,7 +138,7 @@ pub struct Hub {
 ///
 /// `Routed` is #1078's: the route grammar, one of eighteen reads, a phrase step. `Native` is the
 /// one assistant plane: the model drives the same runtime the fine-tuning loop trains. Both live
-/// until wave 2c retires the first, so the default stays `Routed` and the choice is the core's, not
+/// until #1088's next wave retires the first, so the default stays `Routed` and the choice is the core's, not
 /// the wire's: no request carries it. A turn with an attachment is neither's business and always
 /// takes the attached path (R-1088-9).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -166,8 +166,8 @@ impl Hub {
     }
 
     /// Choose the plane that answers tool turns, from the next turn on. The core's own switch:
-    /// nothing on the wire sets it, and nothing in a shipped build calls it until wave 2c flips the
-    /// default (#1088).
+    /// nothing on the wire sets it, and nothing in a shipped build calls it until #1088's next wave flips the
+    /// default.
     pub fn use_plane(&self, kind: PlaneKind) {
         *locked(&self.plane) = kind;
     }
@@ -871,11 +871,10 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
     let response = match outcome {
         Ok(answered) => {
             // A native turn that ended in a write waiting for the member's tap is saved as a
-            // proposal; the tap settles it (`assist_confirm`, `assist_dismiss`).
-            let parked = native
-                && locked(&slot.native)
-                    .as_ref()
-                    .is_some_and(|chat| chat.pending().is_some());
+            // proposal; the tap settles it (`assist_confirm`, `assist_dismiss`). The sink saw
+            // that card as the runtime emitted it, just before the turn returned, so the stored
+            // word and the card on the answer cannot disagree; the routed plane emits none.
+            let parked = pending_seen.is_some();
             let said = store::Said {
                 outcome: store::answered_word(parked),
                 text: answered.text.clone(),
@@ -1011,13 +1010,8 @@ impl Handle {
             .as_mut()
             .is_some_and(|chat| chat.dismiss(pending_id));
         if dismissed {
-            store::settle_slot(
-                self,
-                &slot,
-                pending_id,
-                "dismissed",
-                &store::dismissed_text(),
-            );
+            // The sentence the dismissal answered with is the line the thread keeps.
+            store::settle_slot(self, &slot, pending_id, "dismissed", &dismissed_line(true));
         }
         Ok(dismissed)
     }

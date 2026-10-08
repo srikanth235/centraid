@@ -13,6 +13,7 @@ import centraid.core.v1.ChatStoredOutcome
 import centraid.core.v1.ChatThread
 import centraid.core.v1.ChatThreadRow
 import centraid.screen.v1.ChatEvent
+import centraid.screen.v1.ChatPending
 import centraid.screen.v1.ChatState
 import dev.centraid.design.copy.ChatCopy
 import dev.centraid.shared.chat.AttachSource
@@ -299,6 +300,91 @@ class ChatHistorySpec : StringSpec({
         refused.state.messages shouldHaveSize 1
         refused.state.error shouldBe ChatCopy.ERROR_NO_TOOL
         refused.state.can_retry shouldBe true
+    }
+
+    "a reopened thread draws a stored proposal as an inert card, because no session holds the write" {
+        val loading = reduce(ready(), view(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = "t-new")))).chat
+        val opened = reduce(
+            loading,
+            ChatInput.ThreadOpened(
+                "t-new",
+                stored(
+                    "tasks",
+                    question("complete the dry cleaning task"),
+                    answer(
+                        "Proposed: Complete task \"Dry cleaning\".",
+                        outcome = ChatStoredOutcome.CHAT_STORED_OUTCOME_PROPOSED,
+                        cards = listOf(card("t-1")),
+                    ),
+                ),
+                started(),
+            ),
+        ).chat
+        val held = opened.state.messages.last()
+        // The proposal's own words stay; the card has no buttons to offer and no write to name.
+        held.text shouldBe "Proposed: Complete task \"Dry cleaning\"."
+        held.cards shouldHaveSize 1
+        held.stopped shouldBe false
+        val pending = held.pending!!
+        pending.state shouldBe ChatPending.State.STATE_INERT
+        pending.pending_id shouldBe ""
+        pending.settled_line shouldBe "Not done."
+        pending.steps.shouldBeEmpty()
+        opened.state.error shouldBe ""
+
+        // A tap on it, were a shell to send one, finds nothing waiting and calls nothing.
+        val confirm = reduce(opened, view(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = ""))))
+        confirm.effects.shouldBeEmpty()
+        val named = reduce(opened, view(ChatEvent(pending_confirmed = ChatEvent.PendingConfirmed(pending_id = "p-1"))))
+        named.effects.shouldBeEmpty()
+        named.chat.state.messages.last().pending!!.state shouldBe ChatPending.State.STATE_INERT
+    }
+
+    "a reopened thread draws how each proposal ended as the line the member was told, with no card" {
+        val loading = reduce(ready(), view(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = "t-new")))).chat
+        val ends = mapOf(
+            ChatStoredOutcome.CHAT_STORED_OUTCOME_APPLIED to "Done.",
+            ChatStoredOutcome.CHAT_STORED_OUTCOME_DISMISSED to "Not done.",
+            ChatStoredOutcome.CHAT_STORED_OUTCOME_STALE to ChatCopy.SAID_STALE,
+            ChatStoredOutcome.CHAT_STORED_OUTCOME_FAILED to "Not done. The vault refused a step.",
+        )
+        for ((outcome, line) in ends) {
+            val opened = reduce(
+                loading,
+                ChatInput.ThreadOpened(
+                    "t-new",
+                    stored("tasks", question("complete the dry cleaning task"), answer(line, outcome = outcome, cards = listOf(card("t-1")))),
+                    started(),
+                ),
+            ).chat
+            val held = opened.state.messages.last()
+            // The vault replaced the proposal's text with the line, and the rows it named are still there.
+            held.text shouldBe line
+            held.cards shouldHaveSize 1
+            held.pending shouldBe null
+            held.stopped shouldBe false
+            held.streaming shouldBe false
+            opened.state.error shouldBe ""
+            opened.state.messages shouldHaveSize 2
+        }
+    }
+
+    "a word this build has no name for restores as an ordinary answer, never as a card" {
+        val loading = reduce(ready(), view(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = "t-new")))).chat
+        val opened = reduce(
+            loading,
+            ChatInput.ThreadOpened(
+                "t-new",
+                stored(
+                    "tasks",
+                    question("what is due?"),
+                    answer("Rent.", outcome = ChatStoredOutcome.CHAT_STORED_OUTCOME_UNSPECIFIED),
+                ),
+                started(),
+            ),
+        ).chat
+        opened.state.messages.last().text shouldBe "Rent."
+        opened.state.messages.last().pending shouldBe null
     }
 
     "a stored camera-roll image keeps its chip and cannot be asked again, so Retry is not offered" {
