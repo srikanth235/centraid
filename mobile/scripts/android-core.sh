@@ -45,13 +45,15 @@ export "CARGO_TARGET_${upper}_LINKER=$toolchain/${cc_prefix}${api}-clang"
 export "CC_${triple//-/_}=$toolchain/${cc_prefix}${api}-clang"
 export "CXX_${triple//-/_}=$toolchain/${cc_prefix}${api}-clang++"
 export "AR_${triple//-/_}=$toolchain/llvm-ar"
-# llama.cpp (the on-device chat's engine) is built by CMake against the NDK's
-# own toolchain file, and its build script finds the NDK and the API level from
-# these two — the linker/CC variables above are not what it reads. `cmake` must
-# be on PATH (docs/toolchain.md).
+# llama.cpp (the on-device chat's engine, `--features llama` below) is built by
+# CMake against the NDK's own toolchain file, and its build script finds the NDK
+# and the API level from these two — the linker/CC variables above are not what
+# it reads. `cmake` must be on PATH (docs/toolchain.md).
 export ANDROID_NDK="$sdk/ndk/$ndk_version"
 export ANDROID_PLATFORM="android-$api"
-(cd "$root" && cargo build -p centraid-core-ffi --target "$triple")
+# `--features llama`: a phone's library carries the engine, and the feature is off
+# by default so the PR gate's workspace build compiles no llama.cpp (R-CHAT-10).
+(cd "$root" && cargo build -p centraid-core-ffi --features llama --target "$triple")
 
 out="$root/mobile/androidApp/src/main/jniLibs/$abi"
 mkdir -p "$out"

@@ -360,6 +360,11 @@ fn has_linked_artifact(names: &[String], member: &str) -> bool {
 ///      `:core:jvmTest` runs a REAL ABI round trip against the real cdylib.
 ///      It is not a skip when they are missing — a binding test that skipped
 ///      would read green on a machine where the ABI does not work at all.
+///      **Without `--features llama`:** no Kotlin spec loads a model, and
+///      llama.cpp's cold `cmake` build would not fit this profile's 420 s
+///      (R-CHAT-10). The cdylib reports a model file as `NO_ENGINE`, which
+///      `AssistRoundTripSpec` accepts; the engine-wired answer is asserted in
+///      Rust by the `engine` job in `gate.yml`.
 ///   2. `./gradlew mobileJvm` = `:shared:jvmTest :core:jvmTest
 ///      :shared:koverXmlReport`.
 ///   3. The generated-artifact drift check. The token table, the copy tables

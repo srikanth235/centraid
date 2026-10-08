@@ -48,6 +48,20 @@ nm -D --defined-only <target>/debug/libcentraid_core_ffi.so | grep ' T centraid_
 
 Two different questions about "five", both asked: the xtask rule `abi-five-symbols` counts the **declarations** in this crate's source, and `tests/symbols.rs` counts what the linker **exported**. A symbol can be declared and not exported, or exported by a dependency, and only the artifact settles it.
 
+## Features
+
+| Feature | Default | What it does |
+| --- | --- | --- |
+| `llama` | **off** | Links the on-device chat's engine (`crates/assist-llama` with its `engine` feature, i.e. llama.cpp) and registers it on the process-wide model slot in `centraid_open`. Without it a model file that is there reads as `NO_ENGINE`. |
+| `debug-fault` | off | The fault door ([`CONTRACT.md`](CONTRACT.md) clause 9). |
+
+**A phone's library is built `--features llama`**: the prebuilt-core lane's Android and iOS legs, `mobile/scripts/android-core.sh` and the iOS hand-off in [`mobile/README.md`](../../mobile/README.md). It is off by default so that `cargo build|clippy|test --workspace` — the PR gate — compiles no llama.cpp, a `cmake` build of about five minutes cold ([R-CHAT-10](../../docs/decisions.md#the-on-device-chat-keeps-its-history-in-the-vault)). The JVM tests build the library without it: no Kotlin spec loads a model, and what they assert about a model file is `NO_ENGINE`. The engine-on half of this crate is built, linted and tested by the `engine` job in `.github/workflows/gate.yml`:
+
+```sh
+cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-assist-llama/engine,centraid-core-ffi/llama -- -D warnings
+cargo test -p centraid-assist-llama -p centraid-core-ffi --features centraid-assist-llama/engine,centraid-core-ffi/llama
+```
+
 ## Miri
 
 ```sh

@@ -149,7 +149,7 @@ Do not fork process text into skills.
 | `lane-release-mobile.yml` | `workflow_call` (dispatch only, never a tag) | Environment `mobile-release`; Gradle (Android) and XcodeGen + Xcode (iOS) builds of `mobile/` |
 | `lane-release-gateway-image.yml` | `workflow_call` | GHCR optional gateway image ([deploy/README.md](../deploy/README.md)) |
 | `lane-prebuilt-core.yml` | `workflow_call` | **the prebuilt core** ([#1020](https://github.com/srikanth235/centraid/issues/1020)): six binary triples, the four Android ABIs, the iOS XCFramework, a symbol file beside each, and `prebuilt-core-required` as the one verdict. Also invoked by `gate.yml` on pushes to `main` with `binary-only: true` |
-| `gate.yml` | PR / main push | `cargo xtask gate --profile pr`, plus `dependency-review` |
+| `gate.yml` | PR / main push | `cargo xtask gate --profile pr`, plus `engine` (the on-device chat's llama.cpp build, outside the gate's budget) and `dependency-review` |
 | `candidate.yml` | main push / dispatch | rung 3 — the promotion lanes; on green its `promote` job moves `refs/candidates/latest`, publishes `test-report/candidate.json` and appends to `test-report/candidates.json`. `release.yml`'s `require-candidate` reads both |
 
 Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the mobile store credentials and GHCR push never reach a lane that has no business with them. The desktop and Companion lanes were deleted with their surfaces ([#1029](https://github.com/srikanth235/centraid/issues/1029)); `scripts/release/surfaces.mjs` is the catalog, and its test refuses a row naming a workflow that is not on disk.

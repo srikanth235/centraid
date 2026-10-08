@@ -44,7 +44,7 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 
 `local` is scored **warm or cold**. The runner calls a tree warm only when every workspace member has a linked artifact under the target directory (`CARGO_TARGET_DIR` when set); a cold run is charged to `coldLocalProfileSeconds` in [`compile-time.json`](contracts/ledgers/compile-time.json) and fails where that key states no ceiling. `--cold` forces the cold branch. **The restore drill is in `local`, and so in every profile**: the product's promise is proved on every loop rather than only before a tag.
 
-`gate.yml` also runs a `dependency-review` job on pull requests (a GitHub Action over the dependency diff, so it cannot be a gate step). Governance is **not** a step: `.governance/run.sh` runs in [`governance.yml`](.github/workflows/governance.yml) as its own check.
+`gate.yml` also runs an `engine` job on every pull request — clippy and `cargo test` over `centraid-assist-llama` and `centraid-core-ffi` with llama.cpp compiled in, which the gate's `--workspace` steps leave out because the cold build would overrun the `pr` profile's budget ([R-CHAT-10](docs/decisions.md#the-on-device-chat-keeps-its-history-in-the-vault)) — and a `dependency-review` job on pull requests (a GitHub Action over the dependency diff, so it cannot be a gate step). Governance is **not** a step: `.governance/run.sh` runs in [`governance.yml`](.github/workflows/governance.yml) as its own check.
 
 ### What the steps prove
 

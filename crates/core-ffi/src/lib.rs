@@ -148,7 +148,8 @@ pub unsafe extern "C" fn centraid_open(
         // ONE MODEL SLOT PER PROCESS, WITH THE ENGINE IN IT. A phone holds
         // several vault handles and one half-gigabyte model, so every handle
         // shares the host `centraid-assist-llama` built (and registered its
-        // loader on) the first time anybody asked. Without this line a model
+        // loader on) the first time anybody asked. Without this line — which is
+        // the `llama` feature, off in the PR gate's workspace build — a model
         // file is `NO_ENGINE`: there, and nothing to read it with.
         #[cfg(feature = "llama")]
         handle
