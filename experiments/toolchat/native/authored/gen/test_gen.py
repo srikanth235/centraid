@@ -139,6 +139,35 @@ class Common(unittest.TestCase):
             self.assertTrue(common.usable_sites("TX", s, d))
 
 
+class HeldOutSources(unittest.TestCase):
+    """The authored sessions of the val worlds (T03, T12, T23) are held out of the public tree (artefacts.json, the `session/`
+    entries): a tool asked for one of those worlds when the sources are not there stops and says where they come from, and a
+    train world is loaded as before."""
+
+    def test_a_val_world_without_its_sources_stops_and_names_the_data_version(self):
+        with tempfile.TemporaryDirectory() as t:
+            for world in common.split.VAL:
+                with self.assertRaises(SystemExit) as stop:
+                    common.load_sessions(world, Path(t))
+                self.assertIn("held out", str(stop.exception))
+                self.assertIn("artefacts.py fetch", str(stop.exception))
+                with self.assertRaises(SystemExit):
+                    common.session_files(world, Path(t))
+
+    def test_a_train_world_is_not_held_out_and_a_world_without_sources_is_left_to_the_loader(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            write_src(d)
+            (d / "TX_02.py").write_text("# part two\n")
+            self.assertEqual([f.name for f in common.session_files("TX", d)], ["TX.py", "TX_02.py"])
+            self.assertEqual([f.name for f in common.session_files("TY", d)], ["TY.py"])  # absent: the loader's own error
+
+    def test_a_train_world_resolves_to_its_own_files_and_the_tools_default_to_train_worlds(self):
+        first = common.split.session_files("T01")[0]
+        self.assertEqual((first.name, first.is_file()), ("T01.py", True))
+        self.assertFalse(set(common.TRAIN_WORLDS) & set(common.split.VAL))  # every `--worlds train` is no val world
+
+
 class Recover(unittest.TestCase):
     KEYS = {"b": {"id": "1", "kind": "task"}, "e": {"id": "2", "kind": "event"}, "n": {"id": "3", "kind": "note"}}
 

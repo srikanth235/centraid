@@ -1122,9 +1122,15 @@ def main():
     lines += detail
 
     ev_dir = NATIVE / "eval" / "sets"
-    evs = [json.loads(l) for f in ("val.jsonl", "test.jsonl") if (ev_dir / f).exists() for l in open(ev_dir / f)]
+    sets = [ev_dir / f for f in ("val.jsonl", "test.jsonl") if (ev_dir / f).exists()]
+    evs = [json.loads(l) for f in sets for l in open(f)]
     out["contamination"] = overlap(ses, evs)
-    lines.append(f"\n## Overlap with val/test text ({len(out['contamination'])} messages at 4-gram Jaccard >= 0.5)\n")
+    out["contamination_checked_against"] = [f.name for f in sets]
+    heading = f"\n## Overlap with val/test text ({len(out['contamination'])} messages at 4-gram Jaccard >= 0.5)"
+    if len(sets) < 2:  # the sets are held out of a public checkout (artefacts.json): a clean result there says nothing
+        heading += (f"; checked against {', '.join(f.name for f in sets) or 'no set'} only, the others are held out "
+                    "(`python3 artefacts.py fetch`)")
+    lines.append(heading + "\n")
     # The eval text itself is never printed: authors read this report and must not see val/test messages.
     lines += [f"- {h['session']}: {h['authored']!r} ~ an eval message ({h['jaccard']}); reword it" for h in out["contamination"]]
     if out["contamination"]:

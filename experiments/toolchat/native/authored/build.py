@@ -94,6 +94,7 @@ sys.path[:0] = [str(NATIVE / "eval"), str(NATIVE / "train"), str(NATIVE)]
 
 import fmt  # noqa: E402  (train/fmt.py: the function the decoder renders a call with, and the loader of authored/trace.py)
 import noise  # noqa: E402  (authored/noise.py: message noise, for --augment)
+import split  # noqa: E402  (authored/split.py: where a world's session sources are, and which are held out)
 import gold  # noqa: E402
 import lib  # noqa: E402
 import regen  # noqa: E402
@@ -129,7 +130,7 @@ def seed(w: str, worlds_dir: Path = HERE / "worlds") -> None:
 def load_sessions(w: str, sessions_dir: Path = HERE / "sessions") -> list[dict]:
     """sessions/<W>.py (it calls `world(...)`), then sessions/<W>_*.py in name order."""
     gold._SESSIONS.clear()
-    files = [sessions_dir / f"{w}.py"] + sorted(sessions_dir.glob(f"{w}_*.py"))
+    files = split.session_files(w, sessions_dir)  # a val world's sources are held out: this says so when they are not in the tree
     for f in files:
         spec = importlib.util.spec_from_file_location(f"authored_{f.stem}", f)
         mod = importlib.util.module_from_spec(spec)
