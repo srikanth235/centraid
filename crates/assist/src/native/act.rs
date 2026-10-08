@@ -4331,7 +4331,6 @@ pub(crate) fn diff(before: &World, after: &World) -> Diff {
     Diff { rows, links }
 }
 
-/// `field old → new` for one row.
 /// A field a write moved, as the model's change line spells it and as the facts it is made of.
 pub(crate) struct FieldMove {
     pub field: String,
@@ -4344,6 +4343,7 @@ pub(crate) struct FieldMove {
     pub text: String,
 }
 
+/// `field old → new` for one row.
 fn row_changes(old: &Row, new: &Row, today: jiff::civil::Date) -> Vec<FieldMove> {
     let mut out = Vec::new();
     if old.name != new.name {
