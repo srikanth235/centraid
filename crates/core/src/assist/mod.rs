@@ -788,8 +788,14 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
     };
     let response = match outcome {
         Ok(answered) => {
+            // A native turn that ended in a write waiting for the member's tap is saved as a
+            // proposal; the tap settles it (`assist_confirm`, `assist_dismiss`).
+            let parked = native
+                && locked(&slot.native)
+                    .as_ref()
+                    .is_some_and(|chat| chat.pending().is_some());
             let said = store::Said {
-                outcome: "answered",
+                outcome: store::answered_word(parked),
                 text: answered.text.clone(),
                 refusal: None,
                 notice: store::notice_word(&answered.notices),
@@ -877,8 +883,9 @@ impl Handle {
     /// every step that ran, so every screen that reads those tables refreshes. A card tapped twice
     /// writes once.
     ///
-    /// The turn's saved message is not changed by this: the stored schema has no state for a
-    /// proposal that was applied or dismissed (migration 012, wave 2c).
+    /// The turn's saved message says how the card ended (migration 012): `applied`, `stale` or
+    /// `failed`, with the line the member was told in place of the proposal's words, so a thread
+    /// reopened later reads the settled card. A tap on a card that was not waiting records nothing.
     ///
     /// # Errors
     /// [`CoreError::InvalidRequest`] for a chat this handle does not hold, or one whose turn is
@@ -891,12 +898,14 @@ impl Handle {
         if slot.running.load(Ordering::SeqCst) {
             return Err(invalid("a turn is still running in that chat"));
         }
-        let mut held = locked(&slot.native);
-        let outcome = match held.as_mut() {
+        let outcome = match locked(&slot.native).as_mut() {
             Some(chat) => chat.confirm(pending_id),
             None => Confirmed::Unknown,
         };
         let line = confirmed_line(&outcome);
+        if let Some(word) = store::settled_word(&outcome) {
+            store::settle_slot(self, &slot, pending_id, word, &line);
+        }
         Ok(Confirmation { outcome, line })
     }
 
@@ -913,8 +922,19 @@ impl Handle {
         if slot.running.load(Ordering::SeqCst) {
             return Err(invalid("a turn is still running in that chat"));
         }
-        let mut held = locked(&slot.native);
-        Ok(held.as_mut().is_some_and(|chat| chat.dismiss(pending_id)))
+        let dismissed = locked(&slot.native)
+            .as_mut()
+            .is_some_and(|chat| chat.dismiss(pending_id));
+        if dismissed {
+            store::settle_slot(
+                self,
+                &slot,
+                pending_id,
+                "dismissed",
+                &store::dismissed_text(),
+            );
+        }
+        Ok(dismissed)
     }
 }
 

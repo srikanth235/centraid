@@ -130,6 +130,30 @@ impl Vault {
         })
     }
 
+    /// Whether a thread's last answer is a proposal nobody has settled (rung twelve): a write that
+    /// parked behind a card and has not been applied, dismissed, found stale or refused. `false`
+    /// for a thread with no answer, and for one that is not there.
+    ///
+    /// The core asks before it settles, so a card tapped twice writes the vault once and tells
+    /// no screen the second time.
+    ///
+    /// # Errors
+    /// [`crate::error::VaultError`] when the vault itself is unreadable.
+    pub fn chat_proposal_waiting(&self, thread_id: &str) -> Result<bool> {
+        self.read(|connection| {
+            let last: Option<String> = connection
+                .query_row(
+                    "SELECT outcome FROM chat_message
+                      WHERE thread_id = ?1 AND role = 'assistant'
+                      ORDER BY ordinal DESC LIMIT 1",
+                    [thread_id],
+                    |row| row.get(0),
+                )
+                .ok();
+            Ok(last.as_deref() == Some("proposed"))
+        })
+    }
+
     /// One thread and its messages, or `None` when there is no such thread.
     ///
     /// # Errors

@@ -186,6 +186,30 @@ fn a_proposal_is_saved_proposed_and_settles_into_each_of_its_four_ends() {
 }
 
 #[test]
+fn a_chat_says_whether_a_proposal_is_waiting_in_it() {
+    let chats = Chats::open("proposal-waiting");
+    assert!(
+        !chats.vault().chat_proposal_waiting("no-such-chat").unwrap(),
+        "a chat that is not there has nothing waiting"
+    );
+    let answered = chats.answer_in_new_thread("what is due?");
+    assert!(!chats.vault().chat_proposal_waiting(&answered).unwrap());
+    let thread = chats.propose(None, "complete it")["thread_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(chats.vault().chat_proposal_waiting(&thread).unwrap());
+    chats.run(
+        "chat.settle_proposal",
+        json!({ "thread_id": thread, "outcome": "applied", "text": "Done." }),
+    );
+    assert!(
+        !chats.vault().chat_proposal_waiting(&thread).unwrap(),
+        "a settled proposal is no longer waiting"
+    );
+}
+
+#[test]
 fn a_settle_with_no_line_moves_the_outcome_and_keeps_the_words() {
     let chats = Chats::open("proposal-no-line");
     let thread = chats.propose(None, "complete it")["thread_id"]

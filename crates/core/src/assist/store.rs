@@ -19,6 +19,16 @@
 //! never saw finish, and a restart that shows a question with an empty answer is
 //! worse than one that shows the chat as it last stood.
 //!
+//! # A PROPOSAL KEEPS ITS LIFE (#1088)
+//!
+//! A native turn that ends in a write parked behind a confirm card is saved with the outcome
+//! `proposed` ([`answered_word`]) and the proposal's own words. The pending write is memory
+//! (R-1088-10); the vault keeps only how the card ended. [`settle`] records it through
+//! `chat.settle_proposal` when the member taps (`applied`, `stale` or `failed`, with the line they
+//! were told) or dismisses (`dismissed`), so a thread reopened later reads the settled line and
+//! not a question the member had already answered. A card nobody answered is dismissed by the next
+//! turn saved into its thread, inside `chat.save_turn` itself.
+//!
 //! # NOTHING HERE LETS A PICTURE INTO THE VAULT
 //!
 //! A vault photograph or document is saved as the reference it is. A camera-roll
@@ -30,6 +40,8 @@ use std::io::Cursor;
 use base64::Engine as _;
 use centraid_api_proto::core_v1 as wire;
 use centraid_assist::attach::ImageData;
+use centraid_assist::native::park::Confirmed;
+use centraid_assist::native_turn::words::{Say, say_with};
 use centraid_assist::prompt::Turn;
 use centraid_assist::{App, Attachments, Card, Notice, Refusal, Session};
 
@@ -97,6 +109,34 @@ pub fn notice_word(notices: &[Notice]) -> Option<&'static str> {
     notices.first().map(|notice| match notice {
         Notice::DocTruncated => "doc_truncated",
     })
+}
+
+/// The outcome word a turn's answer is saved as: `proposed` when the turn ended in a write that
+/// waits for the member's tap, else `answered`.
+#[must_use]
+pub const fn answered_word(parked: bool) -> &'static str {
+    if parked { "proposed" } else { "answered" }
+}
+
+/// How a tap ended, as the schema stores it (rung twelve): `None` for a tap on a card that was not
+/// waiting, which changes nothing and so records nothing.
+#[must_use]
+pub const fn settled_word(outcome: &Confirmed) -> Option<&'static str> {
+    match outcome {
+        Confirmed::Done { .. } => Some("applied"),
+        Confirmed::Stale { .. } => Some("stale"),
+        Confirmed::Refused { .. } => Some("failed"),
+        Confirmed::Unknown => None,
+    }
+}
+
+/// The line a dismissed proposal keeps: the sentence a dismissal answers with, `Not done.`
+/// (`SAID_NOT_DONE` with no reason to give).
+#[must_use]
+pub fn dismissed_text() -> String {
+    say_with(Say::NotDone, &[("reason", "")])
+        .trim_end()
+        .to_owned()
 }
 
 /// A thumbnail of the pixels the model read, as a `data:` URI.
@@ -313,6 +353,75 @@ pub fn save(handle: &Handle, turned: &Turned<'_>) -> Option<Saved> {
     })
 }
 
+/// Record how a chat's waiting proposal ended, and the line the member was told for it. `false`
+/// when it could not be recorded, which loses the history of the tap and nothing else: the member
+/// has the answer on screen, and the card is settled in memory whatever the vault said.
+fn settle(handle: &Handle, thread: &str, key: &str, outcome: &str, text: &str) -> bool {
+    // A CARD TAPPED TWICE SETTLES ONCE, and the second tap writes nothing and tells no screen
+    // anything: only a thread whose last answer is a proposal nobody has settled is written to.
+    if !handle
+        .with_vault(|vault| Ok(vault.chat_proposal_waiting(thread)?))
+        .unwrap_or(false)
+    {
+        return false;
+    }
+    let input = serde_json::json!({ "thread_id": thread, "outcome": outcome, "text": text });
+    let Ok(input) = serde_json::to_vec(&input) else {
+        return false;
+    };
+    let command = wire::Command {
+        name: "chat.settle_proposal".to_owned(),
+        input,
+        invoke_key: key.to_owned(),
+        ..wire::Command::default()
+    };
+    let changes = crate::events::ChangeFeed::new(handle.events());
+    let ran = handle
+        .with_vault(|vault| {
+            crate::api::invoke(
+                vault,
+                handle.registry(),
+                &handle.owner(),
+                &command,
+                &changes,
+            )
+        })
+        .map_err(|error| tracing::warn!("a proposal could not be settled: {error}"))
+        .ok();
+    match ran {
+        Some(outcome) if outcome.status == wire::CommandStatus::Executed as i32 => true,
+        Some(outcome) => {
+            tracing::warn!("a proposal was not settled: {}", outcome.reason);
+            false
+        }
+        None => false,
+    }
+}
+
+/// Settle the proposal a chat's last saved turn parked: nothing when that turn never reached the
+/// vault (a failed save leaves the thread's last turn some earlier one, which is not a proposal).
+pub(super) fn settle_slot(
+    handle: &Handle,
+    slot: &super::Slot,
+    pending_id: &str,
+    outcome: &str,
+    text: &str,
+) -> bool {
+    if !slot.last_saved.load(std::sync::atomic::Ordering::SeqCst) {
+        return false;
+    }
+    let Some(thread) = super::locked(&slot.thread).clone() else {
+        return false;
+    };
+    settle(
+        handle,
+        &thread,
+        &format!("chat.settle_proposal:{pending_id}:{outcome}"),
+        outcome,
+        text,
+    )
+}
+
 /// A stored thread, as a session and its scope.
 pub struct Reopened {
     pub session: Session,
@@ -392,6 +501,40 @@ mod tests {
         let mut broken = rgb(10, 10);
         broken.rgb.truncate(5);
         assert_eq!(thumbnail_uri(&broken), None);
+    }
+
+    #[test]
+    fn every_way_a_tap_ends_has_its_stored_word_but_a_card_that_was_not_waiting() {
+        let done = Confirmed::Done {
+            text: String::new(),
+            diff: serde_json::json!({}),
+            steps: 1,
+        };
+        let refused = Confirmed::Refused {
+            step: 0,
+            command: "schedule.set_task_status".to_owned(),
+            predicate: "task_exists".to_owned(),
+            reason: "That task is gone.".to_owned(),
+            landed: 0,
+        };
+        assert_eq!(settled_word(&done), Some("applied"));
+        assert_eq!(
+            settled_word(&Confirmed::Stale { rows: Vec::new() }),
+            Some("stale")
+        );
+        assert_eq!(settled_word(&refused), Some("failed"));
+        assert_eq!(settled_word(&Confirmed::Unknown), None);
+    }
+
+    #[test]
+    fn a_parked_turn_is_proposed_and_every_other_answer_is_answered() {
+        assert_eq!(answered_word(true), "proposed");
+        assert_eq!(answered_word(false), "answered");
+    }
+
+    #[test]
+    fn a_dismissal_keeps_the_sentence_it_answered_with() {
+        assert_eq!(dismissed_text(), "Not done.");
     }
 
     #[test]
