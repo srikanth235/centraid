@@ -1,17 +1,16 @@
-//! THE MODEL, AS THE PLANE SEES IT: text in, constrained text out.
+//! THE MODEL, AS THE PLANE SEES IT: text in, text out.
 //!
 //! An engine (llama.cpp over a GGUF file) implements [`Model`] and nothing else
 //! in this crate knows an engine exists. The plane hands it a finished prompt,
-//! an optional GBNF grammar, a token ceiling and stop strings, and takes text
-//! back — streaming each piece to a callback as it is produced.
+//! a token ceiling and stop strings (and an optional GBNF grammar, which no turn
+//! sends today: the native plane's model writes text the runtime reads), and takes
+//! text back — streaming each piece to a callback as it is produced.
 //!
 //! # WHAT AN ENGINE MUST DO
 //!
-//! * **Obey the grammar.** The route grammar is what turns a 0.8B model's
-//!   guess into a call the registry can run; an engine that treats it as a hint
-//!   turns every miss into a typed refusal.
+//! * **Obey a grammar when one is sent.** It is a constraint, not a hint.
 //! * **Decode greedily** (`temperature == 0.0`). The same prompt must give the
-//!   same call, or an eval run measures noise.
+//!   same call, or a run measures noise.
 //! * **Poll [`Cancel`] inside prefill as well as between tokens.** Reading a
 //!   1.5K-token prompt on a phone takes seconds, and "Stop" must not wait for
 //!   the first token to be heard.
@@ -107,7 +106,7 @@ pub struct GenerateRequest<'a> {
     /// Checked during prefill and between tokens.
     pub cancel: &'a Cancel,
     /// The images [`MEDIA_MARKER`]s in the prompt stand for, in order. Empty
-    /// for every route and phrase generation.
+    /// for every generation but an attachment's.
     pub images: &'a [ImageInput<'a>],
 }
 

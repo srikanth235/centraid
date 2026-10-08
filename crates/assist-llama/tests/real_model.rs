@@ -10,18 +10,21 @@
 //! ```
 //!
 //! What they assert is the engine's half of [`centraid_assist::Model`]'s
-//! contract — the grammar is obeyed, decoding is greedy and so repeatable, a
-//! Cancel and a Stop end a generation as `Ok` — and not how often a 0.8B model
-//! picks the right tool, which is `assist-eval-llama`'s number.
+//! contract — a grammar is obeyed when one is sent, decoding is greedy and so
+//! repeatable, a Cancel and a Stop end a generation as `Ok`, a prompt past the
+//! window is a typed error, the token estimate never under-counts — and that the
+//! native plane's step (a think, then one call) runs over it. How often a 0.8B
+//! model picks the right call is the fine-tune's measurement, not this file's.
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use centraid_assist::eval::{EvalFile, judge};
-use centraid_assist::grammar::route_gbnf;
 use centraid_assist::host::ModelLoader;
 use centraid_assist::model::{Cancel, Control, Finish, GenerateRequest, Model};
+use centraid_assist::native::step::{StepOptions, decode_step};
+use centraid_assist::native::think::TraceMode;
+use centraid_assist::native::transcript::{Message, render_prompt_for_generation};
 use centraid_assist::prompt::{Budget, END_OF_TURN};
 use centraid_assist_llama::{Config, LlamaLoader};
 
@@ -39,14 +42,6 @@ fn model() -> Option<Arc<dyn Model>> {
             )
         })
         .clone()
-}
-
-fn eval_file() -> EvalFile {
-    let path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../contracts/assist/eval-cases.json"
-    );
-    EvalFile::parse(&std::fs::read_to_string(path).expect("the fixture")).expect("a valid fixture")
 }
 
 fn request<'a>(
@@ -67,38 +62,61 @@ fn request<'a>(
     }
 }
 
+/// The prompt of a native turn's first step: the system turn (today, the kind card, the eight
+/// tools) and one question, ending where the model begins.
+fn native_prompt(question: &str) -> String {
+    use centraid_assist::native::prompt::{kind_card, tools_sig};
+    let system = format!(
+        "today: Thursday 2026-10-08\nme: Me\n\nkinds:\n{}",
+        kind_card("USD").join("\n")
+    );
+    render_prompt_for_generation(&[
+        Message::system(&system, tools_sig()),
+        Message::user(question),
+    ])
+    .expect("the prompt renders")
+}
+
 #[test]
 #[ignore = "needs a model file: set CENTRAID_ASSIST_MODEL"]
-fn every_route_is_one_the_grammar_allows_and_a_run_is_repeatable() {
+fn a_native_step_is_one_whole_message_ending_in_one_call_and_is_repeatable() {
     let Some(model) = model() else { return };
-    let file = eval_file();
     let cancel = Cancel::new();
-    for case in file.cases.iter().step_by(4) {
-        let prompt = case.prompt(Budget::DEFAULT).expect("a prompt");
-        let grammar = route_gbnf(&prompt.tools);
-        let ask = || {
-            model
-                .generate(
-                    &request(&prompt.text, Some(&grammar), 96, &[END_OF_TURN], &cancel),
-                    &mut |_| Control::Continue,
-                )
-                .expect("a generation")
+    for question in ["what tasks do I have?", "who owes me money?", "hi"] {
+        let prompt = native_prompt(question);
+        let step = || {
+            decode_step(
+                &*model,
+                &prompt,
+                None,
+                TraceMode::V4,
+                StepOptions::default(),
+                &cancel,
+            )
+            .expect("a step")
         };
-        let first = ask();
-        assert_eq!(first.finish, Finish::Stop, "{}: {}", case.id, first.text);
-        // Whatever the model chose, it is a route: `judge` parses it against the
-        // tools the prompt offered, and a grammar escape would be a parse error
-        // and so `kind_ok == false` on a case that expects any call at all.
-        let judged = judge(case, &first.text, &prompt.tools).expect("a judgement");
+        let first = step();
         assert!(
-            centraid_assist::call::parse_route(&first.text, &prompt.tools).is_ok(),
-            "{}: {} (kind_ok={})",
-            case.id,
-            first.text,
-            judged.kind_ok
+            first.info.stopped && !first.info.cancelled,
+            "{question}: {first:?}"
         );
-        assert_eq!(ask().text, first.text, "{}: greedy is repeatable", case.id);
-        assert!(first.prompt_tokens > 100 && first.prompt_tokens < 2048);
+        assert!(
+            first.text.starts_with("<think>\n"),
+            "{question}: {}",
+            first.text
+        );
+        assert!(
+            first.text.trim_end().ends_with("</tool_call>"),
+            "{question}: the message ends with its one call: {}",
+            first.text
+        );
+        assert_eq!(
+            first.text.matches("<tool_call>").count(),
+            1,
+            "{}",
+            first.text
+        );
+        assert_eq!(step().text, first.text, "{question}: greedy is repeatable");
     }
 }
 
@@ -207,17 +225,21 @@ fn cancel_and_stop_end_a_generation_as_ok_and_stop_strings_are_not_in_the_text()
 fn a_prompt_longer_than_the_window_is_a_typed_error() {
     let Some(model) = model() else { return };
     let cancel = Cancel::new();
-    let long = format!("<|im_start|>user\n{}<|im_end|>\n", "word ".repeat(2500));
+    let window = Config::default().context;
+    let long = format!(
+        "<|im_start|>user\n{}<|im_end|>\n",
+        "word ".repeat(window as usize + 500)
+    );
     let error = model
         .generate(
             &request(&long, None, 8, &[END_OF_TURN], &cancel),
             &mut |_| Control::Continue,
         )
-        .expect_err("the window is 2048 tokens");
+        .expect_err("the prompt is longer than the window");
     assert!(
         matches!(
             error,
-            centraid_assist::model::ModelError::ContextExceeded { held: 2048, .. }
+            centraid_assist::model::ModelError::ContextExceeded { held, .. } if held == window
         ),
         "{error}"
     );
@@ -237,14 +259,15 @@ fn real_tokens(model: &Arc<dyn Model>, text: &str) -> u32 {
 /// THE TOKEN ESTIMATE AGAINST THE REAL TOKENIZER: it must never under-count,
 /// on the plane's own prompts or on text a member could put in them.
 ///
-/// `estimate_tokens` is what the budget trusts when it decides whether to drop a
-/// turn, a tool or a digest row; an under-count is a prompt the engine then
-/// refuses (`ContextExceeded`) after the member waited for it. The table it
-/// prints is the one `estimate_tokens`'s documentation quotes.
+/// `estimate_tokens` is what the budget trusts when it decides whether a prompt
+/// fits; an under-count is a prompt the engine then refuses (`ContextExceeded`)
+/// after the member waited for it. The table it prints is the one
+/// `estimate_tokens`'s documentation quotes.
 #[test]
 #[ignore = "needs a model file: set CENTRAID_ASSIST_MODEL"]
 fn the_token_estimate_never_undercounts_the_real_tokenizer() {
-    use centraid_assist::prompt::{PromptStyle, estimate_tokens, phrase_prompt, route_prompt};
+    use centraid_assist::attach::{Attachments, TextDoc, attach_prompt};
+    use centraid_assist::prompt::{Recorded, Turn, chat_prompt, estimate_tokens};
 
     let Some(model) = model() else { return };
     let kinds: Vec<(&str, String)> = vec![
@@ -302,297 +325,71 @@ fn the_token_estimate_never_undercounts_the_real_tokenizer() {
         );
     }
 
-    // The plane's own prompts, both styles: every eval route prompt, and a
-    // phrase prompt over every canned read.
-    for style in [PromptStyle::Stock, PromptStyle::FineTuned] {
-        let budget = Budget::DEFAULT.styled(style);
-        let mut worst_under = f64::MAX;
-        let (mut sum, mut count, mut real_max) = (0.0, 0, 0);
-        let mut check = |label: &str, text: &str| {
-            let real = real_tokens(&model, text);
-            let estimate = estimate_tokens(text);
-            assert!(
-                estimate >= real,
-                "{label}: estimated {estimate}, really {real}"
-            );
-            let ratio = f64::from(estimate) / f64::from(real);
-            worst_under = worst_under.min(ratio);
-            sum += ratio;
-            count += 1;
-            real_max = real_max.max(real);
-            assert!(
-                real + budget.reserve <= budget.window,
-                "{label}: {real} real tokens leave no room for the answer"
-            );
-        };
-        for case in &eval_file().cases {
-            check(&case.id, &case.prompt(budget).expect("a prompt").text);
-        }
-        for (asked, route, output) in ten_reads() {
-            let route_prompt = route_prompt(None, &[], asked, budget);
-            let call = parse_call(route);
-            check(
-                asked,
-                &phrase_prompt(&route_prompt, &call, &output, budget).text,
-            );
-        }
-        println!(
-            "{:<10} {count} prompts: estimate/real min {worst_under:.2}x, mean {:.2}x; longest real prompt {real_max} tokens",
-            style.name(),
-            sum / f64::from(count)
-        );
-    }
-}
-
-/// The call a canned route spells.
-fn parse_call(route: &str) -> centraid_assist::call::ToolCall {
-    match centraid_assist::call::parse_route(route, &centraid_assist::ToolSet::for_scope(None))
-        .expect("a route")
-    {
-        centraid_assist::call::Route::Tool(call) => call,
-        other => panic!("{other:?}"),
-    }
-}
-
-// ----------------------------------------------------------------------------
-// THE PHRASE STEP, AND SESSIONS, THROUGH THE PRODUCTION `Plane`.
-// ----------------------------------------------------------------------------
-
-use centraid_assist::model::{Generation, ModelError};
-use centraid_assist::prompt::PromptStyle;
-use centraid_assist::result::{Card, ToolOutput};
-use centraid_assist::testing::StaticReader;
-use centraid_assist::tool::App;
-use centraid_assist::turn::{Event, Plane, ReadContext, Session};
-
-/// A model that routes by script and phrases with the real one, so the phrase
-/// step is measured through `Plane` — its prompt, its grammar, its fallback —
-/// and not through a copy of it.
-struct RoutedByScript {
-    real: Arc<dyn Model>,
-    route: std::sync::Mutex<String>,
-}
-
-impl Model for RoutedByScript {
-    fn generate(
-        &self,
-        request: &GenerateRequest<'_>,
-        on_token: &mut dyn FnMut(&str) -> Control,
-    ) -> Result<Generation, ModelError> {
-        if request
-            .grammar
-            .is_some_and(|grammar| grammar.starts_with("root ::= call"))
-        {
-            let text = self.route.lock().unwrap().clone();
-            return Ok(Generation {
-                text,
-                finish: Finish::Stop,
-                prompt_tokens: 0,
-                generated_tokens: 0,
-            });
-        }
-        self.real.generate(request, on_token)
-    }
-}
-
-/// Ten reads shaped like the core's own (headline, facts, rows), over the
-/// sample vault's weekend.
-fn ten_reads() -> Vec<(&'static str, &'static str, ToolOutput)> {
-    let task = |id: &str, title: &str, due: &str, meta: &str| {
-        Card::new(App::Tasks, "task", id, title)
-            .subtitle(due)
-            .meta(meta)
-    };
-    let event = |id: &str, title: &str, when: &str, place: &str| {
-        Card::new(App::Agenda, "event", id, title)
-            .subtitle(when)
-            .meta(place)
-    };
-    let mut balances = ToolOutput::of_rows(
-        "2 friends with a balance",
-        vec![
-            Card::new(App::Tally, "friend", "p1", "Marco").subtitle("owes you 92.50 USD"),
-            Card::new(App::Tally, "friend", "p2", "Ana").subtitle("owes you 47.50 USD"),
-        ],
+    println!(
+        "{:<14} {:>6} {:>6} {:>10} {:>9}",
+        "text", "chars", "real", "chars/tok", "estimate"
     );
-    balances.facts = vec!["Owed to you in total: 140.00 USD".to_owned()];
-    let mut spending = ToolOutput {
-        headline: "Spending in 2026-09: 1240.50 USD".to_owned(),
-        ..ToolOutput::default()
-    };
-    spending.facts = vec![
-        "Lodging: 640.00 USD".to_owned(),
-        "Groceries: 312.40 USD".to_owned(),
-        "Gas: 143.10 USD".to_owned(),
-        "Activities: 145.00 USD".to_owned(),
-    ];
-    vec![
-        (
-            "What's due today?",
-            r#"{"tool":"tasks.list","args":{"view":"today"}}"#,
-            ToolOutput::of_rows(
-                "3 tasks due today, 1 overdue",
-                vec![
-                    task("t1", "Pick up the dry cleaning", "2026-10-01", ""),
-                    task("t2", "Book the cabin", "2026-09-29", "overdue"),
-                    task("t3", "Rotate the tires", "2026-10-01", ""),
-                ],
-            ),
-        ),
-        (
-            "What tasks are overdue?",
-            r#"{"tool":"tasks.list","args":{"view":"overdue"}}"#,
-            ToolOutput::of_rows(
-                "1 task overdue",
-                vec![task("t2", "Book the cabin", "2026-09-29", "overdue")],
-            ),
-        ),
-        (
-            "What does my week look like?",
-            r#"{"tool":"agenda.upcoming","args":{"range":"week"}}"#,
-            ToolOutput::of_rows(
-                "4 events in the next 7 days",
-                vec![
-                    event("e1", "Dentist", "2026-10-02 09:30", "Main St"),
-                    event("e2", "Dinner with Maya", "2026-10-03 19:00", "Osteria"),
-                    event("e3", "Tahoe weekend", "2026-10-04", "Lake Tahoe"),
-                    event("e4", "Team sync", "2026-10-06 10:00", ""),
-                ],
-            ),
-        ),
-        (
-            "Who owes me money?",
-            r#"{"tool":"tally.balances","args":{}}"#,
-            balances,
-        ),
-        (
-            "Show me photos of Ana",
-            r#"{"tool":"photos.search","args":{"term":"Ana"}}"#,
-            ToolOutput::of_rows(
-                "5 photographs matching \"Ana\"",
-                vec![
-                    Card::new(App::Photos, "photo", "a1", "Ana at the trailhead")
-                        .subtitle("2026-09-28")
-                        .meta("Tahoe scouting"),
-                    Card::new(App::Photos, "photo", "a2", "Ana on the porch")
-                        .subtitle("2026-09-27")
-                        .meta("Tahoe scouting"),
-                ],
-            ),
-        ),
-        (
-            "Who should I get in touch with?",
-            r#"{"tool":"people.reconnect","args":{}}"#,
-            ToolOutput::of_rows(
-                "2 people due for a catch-up, 1 date coming up",
-                vec![
-                    Card::new(App::People, "person", "p1", "Jake").meta("college friend, 90 days"),
-                    Card::new(App::People, "person", "p2", "Grandpa Ray").meta("family"),
-                    Card::new(App::People, "person", "p3", "Maya")
-                        .subtitle("Birthday in 6 days")
-                        .meta("friend"),
-                ],
-            ),
-        ),
-        (
-            "What did we spend last month?",
-            r#"{"tool":"tally.spending","args":{"month":"last"}}"#,
-            spending,
-        ),
-        (
-            "Find my note on chili",
-            r#"{"tool":"notes.search","args":{"term":"chili"}}"#,
-            ToolOutput::of_rows(
-                "1 note matching \"chili\"",
-                vec![
-                    Card::new(App::Notes, "note", "n1", "Grandma's chili")
-                        .subtitle("2026-08-14")
-                        .meta("Recipes"),
-                ],
-            ),
-        ),
-        (
-            "What's on my calendar tomorrow?",
-            r#"{"tool":"agenda.upcoming","args":{"range":"tomorrow"}}"#,
-            ToolOutput::of_rows("No events tomorrow", Vec::new()),
-        ),
-        (
-            "Where's my insurance policy?",
-            r#"{"tool":"docs.search","args":{"term":"insurance policy"}}"#,
-            ToolOutput::of_rows(
-                "2 documents matching \"insurance policy\"",
-                vec![
-                    Card::new(
-                        App::Docs,
-                        "document",
-                        "d1",
-                        "Auto insurance policy 2026.pdf",
-                    )
-                    .subtitle("PDF, 2 MB"),
-                    Card::new(App::Docs, "document", "d2", "Renters insurance renewal.pdf")
-                        .subtitle("PDF, 310 KB"),
-                ],
-            ),
-        ),
-    ]
-}
-
-#[test]
-#[ignore = "needs a model file: set CENTRAID_ASSIST_MODEL"]
-fn ten_phrase_samples_through_the_plane() {
-    let Some(real) = model() else { return };
-    let style = std::env::var("CENTRAID_ASSIST_STYLE")
-        .ok()
-        .and_then(|name| PromptStyle::from_name(&name))
-        .unwrap_or(PromptStyle::DEFAULT);
-    let budget = Budget::DEFAULT.styled(style);
-    println!("style: {}", style.name());
-    let (mut meta, mut json, mut empty) = (0, 0, 0);
-    for (asked, route, output) in ten_reads() {
-        let name = route.split('"').nth(3).unwrap();
-        let name: &'static str = centraid_assist::tool::tool(name).unwrap().name;
-        let scripted = RoutedByScript {
-            real: Arc::clone(&real),
-            route: std::sync::Mutex::new(route.to_owned()),
-        };
-        let reader = StaticReader::new().with(name, output.clone());
-        let plane = Plane {
-            model: &scripted,
-            reader: &reader,
-            budget,
-        };
-        let mut raw = String::new();
-        let answered = plane
-            .run_turn(
-                &mut Session::new(None),
-                asked,
-                &ReadContext { tz: "UTC" },
-                &Cancel::new(),
-                &mut |event| {
-                    if let Event::Token(piece) = event {
-                        raw.push_str(&piece);
-                    }
-                },
-            )
-            .expect("the turn answers");
-        let lower = raw.to_lowercase();
-        let is_meta = [
-            "the user",
-            "the data",
-            "tool_response",
-            "result shows",
-            "the tool",
-        ]
-        .iter()
-        .any(|needle| lower.contains(needle));
-        meta += usize::from(is_meta);
-        json += usize::from(raw.trim_start().starts_with('{'));
-        empty += usize::from(raw.trim().is_empty());
+    for (name, text) in &kinds {
+        let real = real_tokens(&model, text);
+        let estimate = estimate_tokens(text);
         println!(
-            "Q: {asked}\n   model : {raw:?}{}\n   shown : {:?}",
-            if is_meta { "  <-- meta" } else { "" },
-            answered.text
+            "{name:<14} {:>6} {real:>6} {:>10.2} {estimate:>9}  ({:.2}x)",
+            text.chars().count(),
+            text.chars().count() as f64 / f64::from(real),
+            f64::from(estimate) / f64::from(real)
+        );
+        assert!(
+            estimate >= real,
+            "{name}: estimated {estimate}, really {real}"
         );
     }
-    println!("summary: json-first {json}/10, meta-commentary {meta}/10, empty {empty}/10");
+
+    // The plane's own prompts: a native step's, the free reply's after two turns, and an
+    // attachment's over a document.
+    let history = [
+        Turn {
+            user: "what tasks do I have?".to_owned(),
+            record: Recorded::Answer("Found 12 tasks. Showing 6.".to_owned()),
+        },
+        Turn {
+            user: "[Document: Tahoe packing list] what should I bring?".to_owned(),
+            record: Recorded::Attachment("The tent, the stove and a headlamp.".to_owned()),
+        },
+    ];
+    let document = Attachments {
+        image: None,
+        doc: Some(TextDoc {
+            name: "Tahoe packing list".to_owned(),
+            text: "Item 1: a tent\nItem 2: a stove, 2.5 kg\nItem 3: a headlamp, 3 batteries\n"
+                .repeat(40),
+        }),
+    };
+    let budget = Budget::DEFAULT;
+    let mut worst = f64::MAX;
+    for (label, text) in [
+        ("native step", native_prompt("what tasks do I have?")),
+        (
+            "free reply",
+            chat_prompt(&history, "text Sam that I am late"),
+        ),
+        (
+            "attachment",
+            attach_prompt(&history, &document, "what should I bring?", budget).text,
+        ),
+    ] {
+        let real = real_tokens(&model, &text);
+        let estimate = estimate_tokens(&text);
+        assert!(
+            estimate >= real,
+            "{label}: estimated {estimate}, really {real}"
+        );
+        assert!(
+            real + 512 <= budget.context,
+            "{label}: {real} real tokens leave a step's 512 no room in {}",
+            budget.context
+        );
+        worst = worst.min(f64::from(estimate) / f64::from(real));
+        println!("{label:<12} real {real:>5} estimate {estimate:>5}");
+    }
+    println!("estimate/real over the plane's prompts: min {worst:.2}x");
 }

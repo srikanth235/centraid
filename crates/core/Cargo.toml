@@ -52,15 +52,11 @@ centraid-apps-notes = { path = "../apps/notes" }
 centraid-apps-tally = { path = "../apps/tally" }
 # The door an app crate reads through (`PageDoor`), and the rows it answers.
 centraid-apps-kit = { path = "../apps/kit" }
-# THE PHOTO LIBRARY, FOR THE CHAT'S TWO PHOTO READS (`assist::reads::photos`):
-# Photos has no app query, so the chat reads its crate's `load_library` over
-# the same `VaultDoor` the other apps read through.
-centraid-apps-photos = { path = "../apps/photos" }
-# THE ON-DEVICE CHAT PLANE: the tool registry, prompt, grammar, turn loop and
-# the `Model` trait an engine implements. It holds no vault; this crate gives
-# it one through `assist::VaultReader`.
+# THE ON-DEVICE CHAT PLANE: the native tool runtime, its turn loop, the attached
+# and free replies and the `Model` trait an engine implements. It holds no
+# vault; this crate gives it one through `assist::door::CoreDoor`.
 centraid-assist = { path = "../assist" }
-# THE FTS DOOR, for `agenda.search`. It owns every `MATCH` in the workspace and
+# THE FTS DOOR, for the app queries' search. It owns every `MATCH` in the workspace and
 # takes a connection; the core hands it `Vault::read`'s, and writes no SQL.
 centraid-search = { path = "../search" }
 # THE ONE CONTENT STORE (#1025 S3, D-1025-S3-1). A core opens the vault, so a

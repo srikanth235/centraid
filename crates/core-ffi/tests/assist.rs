@@ -157,6 +157,18 @@ fn assist(opened: &Opened, kind: wire::assist_request::Kind) -> wire::AssistResp
     }
 }
 
+/// One model message, as the free decoder reads it: a think, then the one call it writes.
+fn message(think: &str, tool: &str, args: &[(&str, &str)]) -> [String; 2] {
+    let params: String = args
+        .iter()
+        .map(|(key, value)| format!("<parameter={key}>\n{value}\n</parameter>\n"))
+        .collect();
+    [
+        think.to_owned(),
+        format!("\n\n<tool_call>\n<function={tool}>\n{params}</function>\n"),
+    ]
+}
+
 #[test]
 fn a_turn_crosses_the_abi_and_its_events_come_back_encoded_and_in_order() {
     let opened = Opened::sample();
@@ -164,10 +176,14 @@ fn a_turn_crosses_the_abi_and_its_events_come_back_encoded_and_in_order() {
         .core()
         .assist()
         .host()
-        .install(Arc::new(ScriptedModel::new([
-            r#"{"tool":"tasks.list","args":{"view":"today"}}"#,
-            "One thing is due today.",
-        ])));
+        .install(Arc::new(ScriptedModel::new(
+            [
+                message("plan: look", "find", &[("kind", "task")]),
+                message("plan: answer", "answer", &[("rows", "@1")]),
+            ]
+            .into_iter()
+            .flatten(),
+        )));
     opened.events();
 
     let Some(wire::assist_response::Kind::Started(started)) = assist(
@@ -199,7 +215,8 @@ fn a_turn_crosses_the_abi_and_its_events_come_back_encoded_and_in_order() {
     let Some(wire::assist_sent::Outcome::Answered(answer)) = sent.outcome else {
         panic!("the turn answers")
     };
-    assert_eq!(answer.text, "One thing is due today.");
+    assert_eq!(answer.text, "Found 12 tasks. Showing 6.");
+    assert_eq!(answer.cards.len(), 6);
     assert!(
         answer
             .cards
@@ -223,34 +240,59 @@ fn a_turn_crosses_the_abi_and_its_events_come_back_encoded_and_in_order() {
             _ => None,
         })
         .collect();
-    assert_eq!(kinds.first(), Some(&"activity"), "{kinds:?}");
-    assert_eq!(kinds.get(1), Some(&"cards"), "{kinds:?}");
-    assert_eq!(kinds.last(), Some(&"answer"), "{kinds:?}");
-    assert!(
-        kinds.iter().filter(|kind| **kind == "token").count() >= 2,
+    // one Activity a looking step, the cards, then the answer: the runtime composes the line,
+    // so no words stream
+    assert_eq!(
+        kinds,
+        ["activity", "activity", "cards", "answer"],
         "{kinds:?}"
     );
 }
 
 #[test]
-fn a_parked_write_crosses_the_abi_as_a_card_and_a_tap_on_it_comes_back_settled() {
-    // A write turn on the native plane: two model messages (look, then act), each a think and
-    // the one call it writes.
-    fn message(think: &str, tool: &str, args: &[(&str, &str)]) -> [String; 2] {
-        let params: String = args
-            .iter()
-            .map(|(key, value)| format!("<parameter={key}>\n{value}\n</parameter>\n"))
-            .collect();
-        [
-            think.to_owned(),
-            format!("\n\n<tool_call>\n<function={tool}>\n{params}</function>\n"),
-        ]
-    }
+fn a_free_reply_crosses_the_abi_as_streamed_tokens_and_then_the_answer() {
     let opened = Opened::sample();
     opened
         .core()
         .assist()
-        .use_plane(centraid_core::assist::PlaneKind::Native);
+        .host()
+        .install(Arc::new(ScriptedModel::new(
+            std::iter::once(message(
+                "plan: no",
+                "decline",
+                &[("reason", "out_of_scope")],
+            ))
+            .flatten()
+            .chain(["Hello. I can look things up for you.".to_owned()]),
+        )));
+    opened.events();
+    let session = start(&opened);
+    let sent = send_with(&opened, session, 1, "hi", Vec::new());
+    let Some(wire::assist_sent::Outcome::Answered(answer)) = sent.outcome else {
+        panic!("the turn answers")
+    };
+    assert_eq!(answer.text, "Hello. I can look things up for you.");
+    let kinds: Vec<&'static str> = opened
+        .events()
+        .into_iter()
+        .filter_map(|event| match event.kind? {
+            wire::event::Kind::Assist(event) => Some(match event.kind? {
+                wire::assist_event::Kind::Token(_) => "token",
+                wire::assist_event::Kind::Answer(_) => "answer",
+                _ => "other",
+            }),
+            _ => None,
+        })
+        .collect();
+    assert!(kinds.iter().filter(|kind| **kind == "token").count() >= 2);
+    assert_eq!(kinds.last(), Some(&"answer"));
+    assert!(!kinds.contains(&"other"), "{kinds:?}");
+}
+
+#[test]
+fn a_parked_write_crosses_the_abi_as_a_card_and_a_tap_on_it_comes_back_settled() {
+    // A write turn: two model messages (look, then act), each a think and the one call it writes.
+    let opened = Opened::sample();
     let script: Vec<String> = [
         message(
             "plan: look",
@@ -493,10 +535,10 @@ fn a_core_as_opened_without_the_engine_reads_a_model_file_as_no_engine_and_will_
 ///   cargo test --release -p centraid-core-ffi --test assist -- --ignored --nocapture
 /// ```
 ///
-/// It loads the file, asks the sample vault a few of the eval set's questions
-/// and prints what the model said. What it asserts is the plane's contract and
-/// not the model's accuracy: every turn ends in an answer or a typed refusal,
-/// a route is always one the grammar allows, and a cancel stops a turn.
+/// It loads the file, asks the sample vault a few questions and prints what
+/// the model said. What it asserts is the plane's contract and not the model's
+/// accuracy: every turn ends in an answer or a typed refusal, and a cancel
+/// stops a turn.
 #[cfg(feature = "llama")]
 #[test]
 #[ignore = "needs a model file: set CENTRAID_ASSIST_MODEL"]
@@ -549,17 +591,15 @@ fn the_real_model_answers_questions_over_the_sample_vault() {
             panic!("a send answers")
         };
         eprintln!("[{:.2} s] {text}", started.elapsed().as_secs_f64());
-        // What the model streamed for the phrase step, before the plane's
-        // fallback to the read's own headline had a say.
+        // What the model streamed (the free reply), and the looking it did first.
         let events = opened.events();
-        // The read the model chose, before anything else of the turn.
         for event in &events {
             if let Some(wire::event::Kind::Assist(wire::AssistEvent {
                 kind: Some(wire::assist_event::Kind::Activity(activity)),
                 ..
             })) = &event.kind
             {
-                eprintln!("    route: {}", activity.tool);
+                eprintln!("    step: {} in {}", activity.tool, activity.app);
             }
         }
         let streamed: String = events
@@ -573,7 +613,7 @@ fn the_real_model_answers_questions_over_the_sample_vault() {
             })
             .collect();
         if !streamed.is_empty() {
-            eprintln!("    model phrase: {streamed:?}");
+            eprintln!("    free reply: {streamed:?}");
         }
         match sent.outcome {
             Some(wire::assist_sent::Outcome::Answered(answered)) => {
@@ -601,7 +641,7 @@ fn the_real_model_answers_questions_over_the_sample_vault() {
         }
     };
     // Each question in a chat of its own: a 0.8B model copies its own earlier
-    // routes, so one `none` early would be most of the run's answers.
+    // steps, so one wrong call early would be most of the run's answers.
     for question in [
         "What is due today?",
         "What can you do?",
@@ -810,7 +850,7 @@ fn refusal_of(sent: &wire::AssistSent) -> i32 {
 }
 
 #[test]
-fn a_document_attachment_is_read_through_the_core_and_answered_without_routing() {
+fn a_document_attachment_is_read_through_the_core_and_answered_without_tools() {
     let opened = Opened::sample();
     let model = Arc::new(ScriptedModel::new([
         "Bring the rain shell, boots and a headlamp.",
@@ -834,7 +874,7 @@ fn a_document_attachment_is_read_through_the_core_and_answered_without_routing()
 
     // ONE generation, over the document's CURRENT revision (the edit's lines).
     let requests = model.requests();
-    assert_eq!(requests.len(), 1, "no route step");
+    assert_eq!(requests.len(), 1, "no tool loop");
     assert!(requests[0].grammar.is_none());
     assert!(requests[0].prompt.contains("- Hiking boots"));
     assert!(

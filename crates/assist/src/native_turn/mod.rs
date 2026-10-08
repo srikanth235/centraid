@@ -1,9 +1,10 @@
 //! THE NATIVE TURN LOOP (#1088): the phone runs the runtime the fine-tuning loop trains.
 //!
-//! [`Plane`](crate::turn::Plane) routes a question to one of eighteen reads and phrases one sentence.
-//! This is the other plane: the model drives [`native::Session`](crate::native::Session), eight flat
-//! tools over a vault, one call per message, up to [`STEP_CAP`] messages per question. The order is
-//! the driver loop's (`experiments/toolchat/native/eval/run.py`, `train/hf_backend.py`), in Rust:
+//! The model drives [`native::Session`](crate::native::Session), eight flat tools over a vault, one
+//! call per message, up to [`STEP_CAP`] messages per question. Every question about the vault
+//! takes this loop; only a turn with an attachment takes [`Plane::run_attached_turn`] instead
+//! (R-1088-9). The order is the driver loop's (`experiments/toolchat/native/eval/run.py`,
+//! `train/hf_backend.py`), in Rust:
 //!
 //! ```text
 //! user(text) ──► block + compacted observations ──► log
@@ -11,7 +12,8 @@
 //! │        Activity("Looking in Tasks")                                                  │
 //! │        call_text(message) ──► {text, ends_turn, effect, obs}  ──► log (message + observation)
 //! └──────── until ends_turn, STEP_CAP, a cancel between steps, or the engine failing
-//! effect ──► cards (the kind table) + a line composed from the copy (never a second generation)
+//! effect ──► cards (the kind table) + a line composed from the copy
+//!            (a decline `out_of_scope` is the one turn whose words are generated: the free reply)
 //! ```
 //!
 //! # WHAT THE MEMBER READS IS THE RUNTIME'S (R-1088-10)
@@ -20,6 +22,17 @@
 //! effect by [`conclude`]: a count, a value, a decline reason, the question. The sentences are the
 //! chat's copy ([`words`]). The rows are [`cards`]: the chat's existing `Card`, mapped from the
 //! thirteen kinds into the seven apps.
+//!
+//! # THE FREE REPLY (#1088)
+//!
+//! One decline reads differently. A turn that ends in `decline out_of_scope` (a greeting, a question
+//! about the world, a request the chat cannot do) is answered with a few words from ONE free
+//! generation ([`Plane::chat`]: no tools, no grammar, 256 tokens), because "Outside what chat can do
+//! here." is a poor reply to "hi". The generation is told it has read nothing and can send, call and
+//! change nothing, so "text Sam" is never answered as if it were done. Every other decline keeps
+//! its canned sentence, and so does this one when the generation fails, is stopped or says nothing.
+//! The words are the turn's `Answered` text, saved like any answer, so a reopened thread shows what
+//! was said.
 //!
 //! # WRITES PARK (R-1088-2)
 //!
@@ -47,6 +60,7 @@ pub mod words;
 
 use serde_json::{Value, json};
 
+use crate::app::App;
 use crate::attach::Notice;
 use crate::model::{Cancel, Model, ModelError};
 use crate::native::door::Door;
@@ -57,9 +71,9 @@ use crate::native::step::{StepOptions, decode_step};
 use crate::native::think::TraceMode;
 use crate::native::world::Key;
 use crate::native::{Flags, Session};
+use crate::prompt::{Budget, HISTORY_TURNS, Recorded, Turn, question};
 use crate::result::{CARD_CAP, Card};
-use crate::tool::App;
-use crate::turn::{Answered, Event, Refusal};
+use crate::turn::{Answered, Event, Plane, Refusal};
 use log::Log;
 pub use pending::CardStep;
 use words::{Say, say, say_with};
@@ -72,10 +86,13 @@ pub const MESSAGE_MAX: usize = 800;
 pub struct NativeChat {
     session: Session,
     log: Log,
+    /// The last turns' question and the words that ended them: what the free reply reads, which
+    /// is never the runtime's conversation (that is [`Self::log`], tool calls and all).
+    said: Vec<Turn>,
 }
 
 /// The civil date and time of an instant in an IANA zone; UTC when the zone is empty or unknown.
-fn civil_at(now_ms: i64, tz: &str) -> jiff::civil::DateTime {
+pub(crate) fn civil_at(now_ms: i64, tz: &str) -> jiff::civil::DateTime {
     let zone = jiff::tz::TimeZone::get(tz.trim()).unwrap_or(jiff::tz::TimeZone::UTC);
     jiff::Timestamp::from_millisecond(now_ms)
         .unwrap_or_default()
@@ -106,6 +123,7 @@ impl NativeChat {
         Ok(Self {
             session,
             log: Log::new(system),
+            said: Vec::new(),
         })
     }
 
@@ -316,7 +334,13 @@ impl<'a> NativePlane<'a> {
                 notices: Vec::new(),
             });
         };
-        let concluded = conclude(&chat.session, &reply)?;
+        let mut concluded = conclude(&chat.session, &reply)?;
+        if declined_out_of_scope(&reply)
+            && let Some(words) = self.free_words(chat, &message, cancel, sink)
+        {
+            concluded.text = words;
+        }
+        chat.remember(&message, &concluded.text);
         if !concluded.cards.is_empty() {
             sink(Event::Cards(concluded.cards.clone()));
         }
@@ -327,6 +351,42 @@ impl<'a> NativePlane<'a> {
         }
         Ok(concluded)
     }
+}
+
+impl NativePlane<'_> {
+    /// The words of a decline `out_of_scope`: one free generation over what this chat said last,
+    /// streamed as it is written. `None` when it fails, is stopped or says nothing, and the turn
+    /// then says the canned sentence.
+    fn free_words(
+        &self,
+        chat: &NativeChat,
+        message: &str,
+        cancel: &Cancel,
+        sink: &mut dyn FnMut(Event),
+    ) -> Option<String> {
+        let plane = Plane {
+            model: self.model,
+            budget: Budget::DEFAULT,
+        };
+        plane.chat(&chat.said, message, cancel, sink).ok()
+    }
+}
+
+impl NativeChat {
+    /// Keep what a turn that ended was asked and answered, for the free reply's next prompt.
+    fn remember(&mut self, message: &str, said: &str) {
+        self.said.push(Turn {
+            user: question(message),
+            record: Recorded::Answer(said.to_owned()),
+        });
+        let surplus = self.said.len().saturating_sub(HISTORY_TURNS);
+        self.said.drain(..surplus);
+    }
+}
+
+/// Whether the turn ended in a decline whose reason is `out_of_scope`.
+fn declined_out_of_scope(reply: &Value) -> bool {
+    reply["effect"]["decline"]["reason"].as_str() == Some("out_of_scope")
 }
 
 fn failed(error: ModelError) -> Refusal {

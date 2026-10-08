@@ -1,12 +1,13 @@
 //! A sample vault behind a real handle, and the chat's calls over the wire.
 //!
-//! Shared by the chat's two integration files. The sample is founded through
+//! Shared by the chat's integration files. The sample is founded through
 //! the door a phone uses (`FoundRequest` with `FOUND_CONTENT_SAMPLE`), so what
 //! these tests read is the Tahoe scenario as a member's phone holds it.
 
 use std::sync::Arc;
 
 use centraid_assist::model::Model;
+use centraid_assist::testing::ScriptedModel;
 use centraid_core::api_proto as wire;
 use centraid_core::{Core, CoreConfig, Handle};
 
@@ -26,6 +27,41 @@ impl Drop for Sample {
 /// the scenario's days (which are UTC days) are the member's days whatever hour
 /// a test runs at.
 pub const TZ: &str = "UTC";
+
+/// One model step, as the free decoder reads it: a think that states no whole call, so the call is
+/// the model's own (a second generation, which stops at `</tool_call>`).
+pub fn step(think: &str, tool: &str, args: &[(&str, &str)]) -> [String; 2] {
+    let params: String = args
+        .iter()
+        .map(|(key, value)| format!("<parameter={key}>\n{value}\n</parameter>\n"))
+        .collect();
+    [
+        think.to_owned(),
+        format!("\n\n<tool_call>\n<function={tool}>\n{params}</function>\n"),
+    ]
+}
+
+/// A model that says each step in order, and records what it was asked.
+pub fn script(steps: &[[String; 2]]) -> Arc<ScriptedModel> {
+    Arc::new(ScriptedModel::new(steps.iter().flatten().cloned()))
+}
+
+/// The two steps of a read: look at the tasks, then answer with them. On the sample vault that is
+/// twelve tasks, six of them drawn.
+pub fn read_tasks() -> [[String; 2]; 2] {
+    [
+        step("plan: look", "find", &[("kind", "task")]),
+        step("plan: answer", "answer", &[("rows", "@1")]),
+    ]
+}
+
+/// What a read of the tasks says on the sample vault.
+pub const FOUND_TASKS: &str = "Found 12 tasks. Showing 6.";
+
+/// The one step of a turn the model declines.
+pub fn decline(reason: &str) -> [String; 2] {
+    step("plan: no", "decline", &[("reason", reason)])
+}
 
 /// A founded sample vault, with its byte store, and no model loaded.
 pub fn sample() -> Sample {

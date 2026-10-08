@@ -1394,9 +1394,8 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::ForgetDestination(_)
             | K::Releasable(_)
             | K::Released(_)
-            // A CHAT TURN IS BOUNDED BY ITS CEILINGS: on the routed plane 96
-            // tokens to route, 64 to phrase and one read; on the native plane
-            // `STEP_CAP` (6) steps of at most 512 tokens, each read from memory.
+            // A CHAT TURN IS BOUNDED BY ITS CEILINGS: `STEP_CAP` (6) steps of at most
+            // 512 tokens, each read from memory, and a free reply of at most 256.
             // It stops through `AssistCancel`, not through this registry, so it
             // is not classed cancellable here.
             | K::Assist(_),
