@@ -88,6 +88,8 @@ Standing checks over `.github/**`, `tests/path-filter-ledger.json`, the working 
 
 **Inherited red is named, never hidden** (D-1020-B1). `osv` fails on tree state that predates #1020: `astro@7.1.5` in `bun.lock` carries a CRITICAL scored 9.8. It is not fixed from here and nothing was added to `osv-scanner.toml` — a gate whose first act is to widen its own allowlist has gated nothing. The `astro` bump is an **owner hand-off**, a dependency change outside #1020's scope. The step is here and red rather than absent, because a pull-request gate that stops reporting because its target is red today is a weakening.
 
+`engine` is its own job in `gate.yml` for the opposite reason: it is a command over the tree, but a cold llama.cpp build (about five minutes) does not fit inside the `pr` profile's budget, so `centraid-core-ffi`'s `llama` feature is off in every step above and the job checks the engine with it on: `cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings` and `cargo test` over the same ([R-CHAT-10](../../docs/decisions.md#the-on-device-chat-keeps-its-history-in-the-vault)). The `mobile-jvm` step builds the cdylib without the feature too.
+
 `dependency-review` is its own job in `gate.yml`: it is a GitHub Action reading the PR's dependency diff through the API rather than a command over the tree, so it cannot be a step of `cargo xtask gate`.
 
 ### The `ts-static` step
@@ -100,7 +102,7 @@ When any `.ts`/`.tsx`/`.mts`/`.cts` file exists under `crates/`, `contracts/` or
 
 ## Required checks
 
-Branch protection's required checks are **`gate`** and **`dependency-review`**, the two jobs in [`gate.yml`](../../.github/workflows/gate.yml). Branch protection is configured outside the repository, the same way the code-owner review requirement is ([docs/dev-environment.md](../../docs/dev-environment.md#the-local-gate-loop)); a required check that never reports blocks every pull request, which is the failure #557 was written about, so renaming either job is an owner change to branch protection in the same breath.
+Branch protection's required checks are **`gate`**, **`engine`** and **`dependency-review`**, the three jobs in [`gate.yml`](../../.github/workflows/gate.yml). Branch protection is configured outside the repository, the same way the code-owner review requirement is ([docs/dev-environment.md](../../docs/dev-environment.md#the-local-gate-loop)); a required check that never reports blocks every pull request, which is the failure #557 was written about, so renaming any of them is an owner change to branch protection in the same breath.
 
 ## The steps re-homed from `scripts/ci/**` (#1020, D-1020-G3)
 
