@@ -1005,6 +1005,18 @@ class PublishModel(Case):
         self.assertEqual(self.hub.commits[0][:3], ("model", "o/s2", ["README.md", "config.json", "model.safetensors"]))
         self.assertEqual(self.hub.tagged[0][:3], ("model", "o/s2", "S2"))
 
+    def test_a_card_written_beside_the_checkpoint_is_sent_as_its_readme(self):
+        (self.model / "README.md").unlink()
+        card = write(self.base / "card" / "README.md", b"# S2\n\n- Data version: `data-v7` of the private dataset repository `o/n`.\n")
+        code, out = self.publish("--card", str(card))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.hub.commits[0][2], ["README.md", "config.json", "model.safetensors"])
+        self.assertEqual(self.hub.repos[("model", "o/s2")]["files"]["README.md"], card.read_bytes())
+        self.assertFalse((self.model / "README.md").exists())  # the checkpoint directory is not written to
+        code, out = self.publish("--card", str(self.base / "nowhere.md"))
+        self.assertEqual(code, 1)
+        self.assertIn("is not a file", out)
+
     def test_a_dry_run_sends_nothing(self):
         code, out = self.publish("--dry-run", token=None)
         self.assertEqual(code, 0, out)

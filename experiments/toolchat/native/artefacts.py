@@ -11,7 +11,7 @@
     python3 artefacts.py publish DIR --tag data-vN [--repo OWNER/NAME] [--dry-run]       # the tree to the dataset repo, tagged
     python3 artefacts.py pin REVISION                      # record the commit of the published version in the manifest
     python3 artefacts.py model-card --model DIR --data-version TAG --name NAME [--score LINE]... --out FILE
-    python3 artefacts.py publish-model DIR --repo OWNER/NAME --tag NAME [--dry-run]      # a promoted model, tagged
+    python3 artefacts.py publish-model DIR --repo OWNER/NAME --tag NAME [--card FILE] [--dry-run]   # a promoted model, tagged
     python3 artefacts.py rehash [--only NAME_OR_PATH_PREFIX ...]   # rewrite sha256 and size of the files in place
     python3 artefacts.py paths [--class rebuild|version|heldout|public]
     python3 artefacts.py gitignore                         # the .gitignore block for the manifest paths
@@ -965,9 +965,15 @@ def cmd_model_card(args: argparse.Namespace) -> int:
 
 def cmd_publish_model(args: argparse.Namespace) -> int:
     files = tree_files(args.dir)
-    bad = [f"{args.dir / needed} is missing" for needed in ("config.json", "README.md") if needed not in files]
+    if args.card:  # the card written beside the checkpoint, not in it: sent as its README.md
+        if not args.card.is_file():
+            print(f"FAIL --card {args.card} is not a file")
+            return 1
+        files["README.md"] = args.card
+    bad = [f"{args.dir / needed} is missing" for needed in ("config.json",) if needed not in files]
+    bad += [] if "README.md" in files else [f"{args.dir / 'README.md'} is missing: give the card with --card or write it into the directory"]
     bad += [] if any(rel.endswith(".safetensors") for rel in files) else [f"{args.dir} has no *.safetensors weights"]
-    card = (args.dir / "README.md").read_text(encoding="utf-8") if "README.md" in files else ""
+    card = files["README.md"].read_text(encoding="utf-8") if "README.md" in files else ""
     if "Data version: `data-v" not in card:
         bad.append("README.md is not a card that names its data version: write it with `artefacts.py model-card`")
     if bad:
@@ -1200,6 +1206,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("dir", type=Path)
     p.add_argument("--repo", required=True, metavar="OWNER/NAME")
     p.add_argument("--tag", required=True, metavar="NAME")
+    p.add_argument("--card", type=Path, metavar="FILE", help="the model card (artefacts.py model-card), sent as README.md: the "
+                   "checkpoint directory is not written to")
     p.add_argument("--dry-run", action="store_true")
     p = sub.add_parser("rehash")
     p.add_argument("--only", nargs="+", metavar="NAME_OR_PATH_PREFIX")

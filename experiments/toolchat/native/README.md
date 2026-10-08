@@ -102,7 +102,7 @@ python3 artefacts.py verify-heldout              # build_sets.py check, split.py
 3. **Publish**: `HF_TOKEN=... python3 artefacts.py publish DIR --tag data-vN` sends the tree to the dataset repository's main branch in one commit (deleting the paths that are not in DIR, never the LFS rules), creates the repository private when it is missing, refuses one that is public and never moves a tag. Then `python3 artefacts.py pin COMMIT` records the commit the tag points at in `artefacts.json`; commit that.
 4. **Train** with `train/bundle.py build ... --data-version data-vN`.
 5. **Card**: `python3 artefacts.py model-card --model CKPT_DIR --data-version data-vN --name NAME --score "LINE" ... --out CKPT_DIR/README.md` writes the Hub card from the checkpoint's `train_meta.json` and `config.json`.
-6. **Promote**: `HF_TOKEN=... python3 artefacts.py publish-model CKPT_DIR --repo OWNER/NAME --tag NAME` does for a model what `publish` does for a version.
+6. **Promote**: `HF_TOKEN=... python3 artefacts.py publish-model CKPT_DIR --repo OWNER/NAME --tag NAME [--card FILE]` does for a model what `publish` does for a version (`--card` sends a card written beside the checkpoint as its `README.md`).
 
 **The lifecycle rule.** A data version is kept while a kept model trained on it is, or while its val and test are the ruler in use; a version neither of those names can be deleted from the Hub. A new version is a new tag: nothing already published is rewritten.
 
