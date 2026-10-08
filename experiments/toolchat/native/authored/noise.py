@@ -96,17 +96,17 @@ def _w(text: str) -> frozenset[str]:
 RUNTIME = _w("""
 a abort about absolutely actually add added adding affirmative after afternoon afternoons again ago agreed ahead all
 alone already alright also altogether am an and another any anyway anyways apr april archive archived are as at aug
-august balance balances be because been before between book both bother breakfast bump but by can cancel canceled
-canceling cancelled cancelling cancels cant cards certainly change changed closed complete completed completes
+august available balance balances be because been before between book both bother breakfast bump busy but by can cancel
+canceled canceling cancelled cancelling cancels cant cards certainly change changed closed complete completed completes
 completing confirm confirmed copies correct could couple create created creating daily dated day days debt debts dec
 december defer definitely degrees delay delete deleted deletes deleting did dinner do doc docs documents does done dont
 dozen drinks drop during each earlier early edited editing eight eighteenth eighth eleven eleventh entire evening
 evenings event events every everything except feb february few fifteenth fifth file find fine finish finished first
-five for forget fortnight four fourteenth fourth fri friday from get give go good got group groups guests had haha hand
-has have he her here hers hey hi him his hmm hold hour hours how hr hrs i if ill im in instead into invite is ish it
-item items its ja jan january jk jul july jun june just k keep kidding kids last late later latest leave left let lets
-list lists locations log logged logging logs lol look looks lunchtime made make many march mark marked mate may me mid
-midday min mind mine mins minute minutes mon monday month monthly months more morning mornings most move moved movie
+five for forget fortnight four fourteenth fourth free fri friday from get give go good got group groups guests had haha
+hand has have he her here hers hey hi him his hmm hold hour hours how hr hrs i if ill im in instead into invite is ish
+it item items its ja jan january jk jul july jun june just k keep kidding kids last late later latest leave left let
+lets list lists locations log logged logging logs lol look looks lunchtime made make many march mark marked mate may me
+mid midday min mind mine mins minute minutes mon monday month monthly months more morning mornings most move moved movie
 much my myself nah net never nevermind new newest next night nights nine nineteenth ninth no none noon nope not note
 notes nothing nov november now nvm oct october of off oh ok okay old oldest on one ones only onwards oops open opened or
 other oui our out overdue owe owed owes paid park party past pay people percent person persons photo photos pin pinned
@@ -116,11 +116,11 @@ restore restored restores restoring reveal revealed revealing right rows s said 
 scheduled scratch seats second sep sept september set settle settled settling seven seventeenth seventh share sharp
 she shift should show si side sim since six sixteenth sixth skip so some sorry stage stand standing star starred
 starring stars still stop sun sunday supper sure tab take task tasks tell ten tenth than thank thanks that the their
-theirs them then there these they third thirteenth this those though three through thru thu thur thurs thursday thx
-tick tickets til till time times to today tomorrow tonight too trash trashed tue tues tuesday twelfth twelve two ty uh
-um undo undone unless unpin unstar unstarred until up update updated us very vs wait waits was way we wed wednesday
-week weekend weekends weekly weeks well were what whats when where which who whole will with without wont would y ya
-yah yea yeah year years yep yes yesterday yet you your yup
+theirs them then there these they third thirteenth this those though three through throughout thru thu thur thurs
+thursday thx tick tickets til till time times to today tomorrow tonight too trash trashed tue tues tuesday twelfth
+twelve two ty uh um undo undone unless unpin unstar unstarred until up update updated us very vs wait waits was way we
+wed wednesday week weekend weekends weekly weeks well were what whats when where which who whole will with without wont
+work works would y ya yah yea yeah year years yep yes yesterday yet you your yup
 """)
 
 # the SPEC section 14 conventions and the closed words the brief names, with the words the Python-side convention
@@ -130,7 +130,7 @@ next last this weekend weekends week weeks today tomorrow tonight yesterday all 
 except due open done finished overdue still left remaining trash trashed delete undo never mind nevermind
 others other history empty expired duplicate duplicates already everything just only old completed cancelled canceled
 wifi wi fi password passwords pw passcode diary journal entry entries
-biggest smallest largest longest shortest long big vault
+biggest smallest largest longest shortest long big vault least amount effort work
 """)
 
 # dates and times: the words `dates:` and the phrase table read, and the trace quotes as the date of a call
