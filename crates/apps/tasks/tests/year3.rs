@@ -29,8 +29,14 @@ use centraid_apps_kit::fixtures::{YEAR3_TASKS, Year3TasksShape, year3_tasks};
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_tasks::board::{BOARD_MAX, LOGBOOK_ROWS, is_open_status};
 use centraid_apps_tasks::queries::load_board;
+use centraid_vault::time::zone::FireZone;
 
 const NOW: &str = "2099-06-01T09:00:00.000Z";
+
+/// The member's zone. Every fixture due here is an instant, which no zone moves.
+fn utc() -> FireZone {
+    FireZone::named("Etc/UTC").expect("a real zone")
+}
 const SEED: u64 = 679_003;
 
 fn root() -> PathBuf {
@@ -78,7 +84,7 @@ fn the_shrunken_axis_seeds_and_the_board_reads_it() {
     assert_eq!(counts.sections, SHRUNKEN.sections);
 
     let door = TestDoor::new(&connection);
-    let (board, denial) = load_board(&door, Some(50), NOW).expect("the board reads");
+    let (board, denial) = load_board(&door, Some(50), NOW, &utc()).expect("the board reads");
     assert!(denial.is_none());
     assert_eq!(board.window, 50);
     // THE PAGE'S OWN CURSOR: 900 tasks against a 50-row window.
@@ -142,8 +148,13 @@ fn a_released_family_promotes_every_unfinished_child() {
     year3_tasks(&connection, SHRUNKEN, SEED).expect("the axis seeds");
     let door = TestDoor::new(&connection);
     // The whole board, so the promotion is not a window artifact.
-    let (board, _) = load_board(&door, Some(i64::try_from(BOARD_MAX).unwrap_or(500)), NOW)
-        .expect("the board reads");
+    let (board, _) = load_board(
+        &door,
+        Some(i64::try_from(BOARD_MAX).unwrap_or(500)),
+        NOW,
+        &utc(),
+    )
+    .expect("the board reads");
     let promoted = board
         .open
         .iter()
@@ -166,8 +177,13 @@ fn the_year3_tasks_axis_measures_the_boards_own_window() {
     let connection = empty_vault();
     let counts = year3_tasks(&connection, YEAR3_TASKS, SEED).expect("the axis seeds");
     let door = TestDoor::new(&connection);
-    let (board, _) = load_board(&door, Some(i64::try_from(BOARD_MAX).unwrap_or(500)), NOW)
-        .expect("the board reads");
+    let (board, _) = load_board(
+        &door,
+        Some(i64::try_from(BOARD_MAX).unwrap_or(500)),
+        NOW,
+        &utc(),
+    )
+    .expect("the board reads");
     println!(
         "year3 tasks: {} rows ({} open, {} closed, {} cancelled), board window {} → \
          {} open roots, {} logbook, truncated {}",

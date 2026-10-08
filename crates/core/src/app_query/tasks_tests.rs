@@ -15,6 +15,8 @@ type A = wire::app_query_response::Answer;
 struct Scratch {
     dir: std::path::PathBuf,
     handle: Handle,
+    /// The vault clock, held so a test can move it (#1090).
+    clock: std::sync::Arc<centraid_vault::clock::FixedClock>,
     writes: std::cell::Cell<u32>,
 }
 
@@ -26,13 +28,20 @@ impl Drop for Scratch {
 
 impl Scratch {
     fn founded() -> Self {
+        Self::founded_at(NOW)
+    }
+
+    /// Founded with the vault clock stopped at `now` — the way to stand inside
+    /// the hours a run happened to miss (#1090).
+    fn founded_at(now: &str) -> Self {
         let dir = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&dir).expect("the directory is made");
-        let now = centraid_vault::time::recurrence::parse_instant_ms(NOW).expect("an instant");
+        let now = centraid_vault::time::recurrence::parse_instant_ms(now).expect("an instant");
+        let clock = std::sync::Arc::new(centraid_vault::clock::FixedClock::at(now));
         let handle = Core::open(CoreConfig::new(dir.join("vault.db")).with_clock(
-            std::sync::Arc::new(centraid_vault::clock::FixedClock::at(now)),
+            clock.clone(),
             std::sync::Arc::new(centraid_vault::clock::ClockIds::new(Box::new(
-                centraid_vault::clock::FixedClock::at(now),
+                clock.clone(),
             ))),
         ))
         .expect("it opens");
@@ -42,8 +51,19 @@ impl Scratch {
         Self {
             dir,
             handle,
+            clock,
             writes: std::cell::Cell::new(0),
         }
+    }
+
+    fn advance_minutes(&self, minutes: i64) {
+        self.clock.advance_ms(minutes * 60_000);
+    }
+
+    /// The vault clock, as the vault writes it.
+    fn now_text(&self) -> String {
+        use centraid_vault::clock::Clock;
+        centraid_vault::clock::format_iso_ms(self.clock.now_ms())
     }
 
     fn ask(&self, query: Q) -> Result<A> {
@@ -142,6 +162,13 @@ impl Scratch {
             other => panic!("catch up answered as {other:?}"),
         }
     }
+}
+
+/// Whole civil days from one `YYYY-MM-DD` to another, counted on the calendar.
+fn civil_days(from: &str, to: &str) -> i64 {
+    use centraid_vault::time::zone::{parse_wall_iso, wall_epoch};
+    let day = |text: &str| wall_epoch(parse_wall_iso(text).expect("a date"));
+    (day(to) - day(from)) / 86_400_000
 }
 
 fn titles(group: &wire::TasksGroup) -> Vec<&str> {
@@ -305,6 +332,131 @@ fn a_repeating_task_carries_its_summary_and_next_period() {
         !task.overdue,
         "the next period stands in for the stored due"
     );
+}
+
+/// A DATE-ONLY REPEATING TASK IS DUE ON THE DEVICE'S DAY, ALL OF IT (#1090).
+///
+/// A due of `2026-10-03` is a whole civil day, the same in every zone. Its
+/// periods were expanded as UTC midnights, so each one "passed" at 00:00Z and
+/// the next read as the previous evening in New York: the daily task left
+/// Today at 20:00 local every night (and on a vault in UTC it was never on
+/// Today at all). The clock here walks two New York days in half hours.
+#[test]
+fn a_repeating_task_due_by_date_is_on_today_at_every_hour_of_the_devices_day() {
+    // 04:00Z is midnight in New York (EDT) on 7 October.
+    let scratch = Scratch::founded_at("2026-10-07T04:00:00.000Z");
+    let daily = scratch.add(serde_json::json!({
+        "title": "Water the plants", "due_at": "2026-10-03", "rrule": "FREQ=DAILY",
+    }));
+    let mut problems: Vec<String> = Vec::new();
+    for _ in 0..96 {
+        let board = scratch.board(wire::TasksView::Today);
+        let at = format!("{} ({} in New York)", scratch.now_text(), board.now_local);
+        let found = board.groups.iter().find_map(|group| {
+            group
+                .tasks
+                .iter()
+                .find(|task| task.task_id == daily)
+                .map(|task| (group, task))
+        });
+        match found {
+            None => problems.push(format!("{at}: the daily task is not on Today")),
+            Some((group, row)) => {
+                let behind = civil_days("2026-10-03", &board.today);
+                let wrong = group.kind != wire::TasksGroupKind::Today as i32
+                    || row.due_day != board.today
+                    || !row.due_time.is_empty()
+                    || row.days_from_today != Some(0)
+                    || !row.lands_today
+                    || row.overdue
+                    || row.next_due.as_deref() != Some(board.today.as_str())
+                    || i64::from(row.missed) != behind;
+                if wrong {
+                    problems.push(format!(
+                        "{at}: due {} {:?}, next {:?}, missed {} (want {behind}), in group {}",
+                        row.due_day, row.due_time, row.next_due, row.missed, group.kind
+                    ));
+                }
+            }
+        }
+        scratch.advance_minutes(30);
+    }
+    assert!(
+        problems.is_empty(),
+        "{} of 96 half hours went wrong, the first few:\n{}",
+        problems.len(),
+        problems
+            .iter()
+            .take(6)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+/// THE ROUND-TRIP SPEC'S OWN HOURS. `TasksQueryRoundTripSpec` adds a daily
+/// task due four days before the device's today and expects it on Today; it
+/// failed at 03:25Z and 03:38Z, which are 23:25 and 23:38 in New York.
+#[test]
+fn the_round_trip_specs_daily_task_is_on_today_at_the_hours_it_failed() {
+    for now in ["2026-10-08T03:25:00.000Z", "2026-10-08T03:38:00.000Z"] {
+        let scratch = Scratch::founded_at(now);
+        let before = scratch.board(wire::TasksView::Today);
+        let due = {
+            use centraid_vault::time::zone::{add_wall_days, parse_wall_iso, wall_iso};
+            let today = parse_wall_iso(&before.today).expect("a date");
+            wall_iso(add_wall_days(today, -4), false)
+        };
+        let daily = scratch.add(serde_json::json!({
+            "title": "Tasks spec daily", "due_at": due, "rrule": "FREQ=DAILY",
+        }));
+        let board = scratch.board(wire::TasksView::Today);
+        let row = board
+            .groups
+            .iter()
+            .flat_map(|group| &group.tasks)
+            .find(|task| task.task_id == daily)
+            .unwrap_or_else(|| {
+                panic!(
+                    "at {now} ({}) the daily task is not on Today",
+                    board.now_local
+                )
+            });
+        assert!(!row.overdue && row.repeats, "{now}");
+        assert_eq!(row.recurrence_summary.as_deref(), Some("Daily"));
+        assert!(row.next_due.is_some());
+    }
+}
+
+/// COMPLETING A DATE-ONLY OCCURRENCE KEEPS THE SERIES A DATE (#1090). The
+/// successor's due was an instant — `2026-10-04T00:00:00.000Z` — which New
+/// York reads as the evening of the 3rd, so the series left the calendar the
+/// moment it was first ticked. It is asked at 23:25 on the 7th, an hour the
+/// UTC reading gets wrong.
+#[test]
+fn completing_a_date_only_occurrence_leaves_the_successor_on_the_calendar() {
+    let scratch = Scratch::founded_at("2026-10-08T03:25:00.000Z");
+    let daily = scratch.add(serde_json::json!({
+        "title": "Water the plants", "due_at": "2026-10-03", "rrule": "FREQ=DAILY",
+    }));
+    let done = scratch.run(
+        "schedule.set_task_status",
+        serde_json::json!({ "task_id": daily, "status": "completed" }),
+    );
+    assert_eq!(done["next_due_at"], serde_json::json!("2026-10-04"));
+    let successor = done["next_task_id"].as_str().expect("a successor");
+
+    let board = scratch.board(wire::TasksView::Today);
+    assert_eq!(board.today, "2026-10-07", "23:25 on the 7th in New York");
+    let row = board
+        .groups
+        .iter()
+        .flat_map(|group| &group.tasks)
+        .find(|task| task.task_id == successor)
+        .expect("the successor is on Today");
+    assert_eq!(row.due_day, "2026-10-07");
+    assert!(row.lands_today && !row.overdue);
+    assert_eq!(row.next_due.as_deref(), Some("2026-10-07"));
 }
 
 /// ONE TASK, WHEREVER IT IS: its family, its parent, its project and section.

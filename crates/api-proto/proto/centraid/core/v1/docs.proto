@@ -242,10 +242,14 @@ message DocsDocumentRow {
   string trashed_at = 17;
   string trashed_local = 18;
   string purge_at = 19;
-  // `YYYY-MM-DD` in `tz`.
+  // `YYYY-MM-DD`: the day `purge_at` falls on in `tz`.
   string purge_local_day = 20;
-  // Whole local days from `today` to `purge_local_day`. Zero or negative once
-  // the window has run out — a restore is then refused by the vault.
+  // Whole days left in the grace window, rounded up: ceil((`purge_at` - now) /
+  // 24 hours). ELAPSED days, as the vault counts the window — 30 for the first
+  // 24 hours after trashing, whatever a daylight-saving change did to the
+  // calendar since, so it can differ from the civil days to `purge_local_day`
+  // by one. Positive exactly while the vault will restore; zero or negative
+  // from `purge_at` on, when a restore is refused (#1090).
   int32 purge_in_days = 21;
   // `search` only: the index's highlight, `⟦`/`⟧` around the matched words.
   // EMPTY on a hit with none.

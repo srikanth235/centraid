@@ -110,7 +110,7 @@ pub(super) fn drive(
             documents: shelf
                 .documents
                 .into_iter()
-                .map(|row| row_to_wire(row, &zone, &clock.today))
+                .map(|row| row_to_wire(row, &zone, clock.now_ms))
                 .collect(),
             folders: data
                 .folders
@@ -180,7 +180,7 @@ pub(super) fn search(
             documents: data
                 .documents
                 .into_iter()
-                .map(|row| row_to_wire(row, &zone, &clock.today))
+                .map(|row| row_to_wire(row, &zone, clock.now_ms))
                 .collect(),
             today: clock.today,
         })
@@ -223,7 +223,7 @@ pub(super) fn document(
     settle(door, loaded, |(data, history)| {
         let count = history.versions.len();
         Answer::DocsDocument(wire::DocsDocument {
-            document: data.row.map(|row| row_to_wire(row, &zone, &clock.today)),
+            document: data.row.map(|row| row_to_wire(row, &zone, clock.now_ms)),
             path: data
                 .path
                 .into_iter()
@@ -328,7 +328,7 @@ fn surface_to_wire(surface: Surface) -> wire::DocsSurface {
     }
 }
 
-fn row_to_wire(row: DocumentRow, zone: &FireZone, today: &str) -> wire::DocsDocumentRow {
+fn row_to_wire(row: DocumentRow, zone: &FireZone, now_ms: i64) -> wire::DocsDocumentRow {
     let kind = kind::kind_of(row.media_type.as_deref(), row.title.as_deref());
     let surface = kind::surface_of(row.media_type.as_deref(), row.title.as_deref());
     let created_at = row.created_at.unwrap_or_default();
@@ -352,7 +352,9 @@ fn row_to_wire(row: DocumentRow, zone: &FireZone, today: &str) -> wire::DocsDocu
         created_local: phone::local_minute(zone, &created_at),
         updated_local: phone::local_minute(zone, &updated_at),
         trashed_local: phone::local_minute(zone, &trashed_at),
-        purge_in_days: phone::days_between(today, &purge_local_day)
+        // ELAPSED days to the instant the vault will refuse a restore at, not
+        // civil days between two local dates (#1090).
+        purge_in_days: phone::purge_in_days(&purge_at, now_ms)
             .and_then(|days| i32::try_from(days).ok())
             .unwrap_or_default(),
         purge_local_day,

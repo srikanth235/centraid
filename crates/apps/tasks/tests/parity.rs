@@ -39,10 +39,16 @@ use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_tasks::queries::{
     Attachment, Reference, TaskRow, TaskTag, load_board, load_search,
 };
+use centraid_vault::time::zone::FireZone;
 use serde_json::{Map, Value, json};
 
 /// The instant the generator stamped the whole run at.
 const NOW: &str = "2099-06-01T09:00:00.000Z";
+
+/// The member's zone. Every fixture due here is an instant, which no zone moves.
+fn utc() -> FireZone {
+    FireZone::named("Etc/UTC").expect("a real zone")
+}
 
 /// The keys v0's `search` rows carry that the ported fold does not produce.
 ///
@@ -248,8 +254,8 @@ fn every_board_case_agrees_with_v0() {
     for case in &cases {
         let label = format!("board {}", case["input"]);
         let limit = case["input"].get("limit").and_then(Value::as_i64);
-        let (data, denial) =
-            load_board(&door, limit, NOW).unwrap_or_else(|error| panic!("{label}: {error}"));
+        let (data, denial) = load_board(&door, limit, NOW, &utc())
+            .unwrap_or_else(|error| panic!("{label}: {error}"));
         assert!(denial.is_none(), "{label}: an unexpected denial");
         let want = &case["output"];
         assert_eq!(
@@ -337,7 +343,7 @@ fn every_board_case_agrees_with_v0() {
 fn the_board_promotes_releases_and_orders_the_way_the_doctrine_says() {
     let connection = fixture_vault();
     let door = TestDoor::new(&connection);
-    let (data, _) = load_board(&door, None, NOW).expect("the board reads");
+    let (data, _) = load_board(&door, None, NOW, &utc()).expect("the board reads");
     let open: Vec<&str> = data.open.iter().map(|task| task.title.as_str()).collect();
     let logbook: Vec<&str> = data
         .logbook
@@ -463,8 +469,8 @@ fn every_search_case_agrees_with_v0_on_the_fields_the_fold_produces() {
     for case in &cases {
         let label = format!("search {}", case["input"]);
         let hits = hits_of(case);
-        let (data, denial) =
-            load_search(&door, &hits, NOW).unwrap_or_else(|error| panic!("{label}: {error}"));
+        let (data, denial) = load_search(&door, &hits, NOW, &utc())
+            .unwrap_or_else(|error| panic!("{label}: {error}"));
         assert!(denial.is_none(), "{label}: an unexpected denial");
         let want = case["output"]["tasks"].as_array().expect("tasks");
         assert_eq!(data.tasks.len(), want.len(), "{label}: hit count");

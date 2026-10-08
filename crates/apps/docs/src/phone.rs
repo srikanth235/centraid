@@ -12,15 +12,15 @@
 //! so when the drive says `truncated` every count here is of that window too.
 //! That is v0's own limitation, carried and stated rather than hidden.
 //!
-//! Civil time is the request's zone: [`local_minute`], [`local_day`] and
-//! [`days_between`] are the only date arithmetic, and they read through the
-//! vault's one zone database.
+//! Civil time is the request's zone: [`local_minute`] and [`local_day`] read
+//! through the vault's one zone database. A grace window is not civil time —
+//! it is an instant, and [`purge_in_days`] counts elapsed days to it.
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_vault::time::recurrence::parse_instant_ms;
-use centraid_vault::time::zone::{FireZone, WallTime, parse_wall_iso, wall_epoch, wall_iso};
+use centraid_vault::time::zone::{FireZone, WallTime, wall_iso};
 
 use crate::kind::{TypeFilter, kind_of};
 use crate::queries::{DocumentRow, DriveData};
@@ -303,14 +303,26 @@ pub fn local_day(zone: &FireZone, instant: &str) -> String {
     wall_of(zone, instant).map_or_else(String::new, |wall| wall_iso(wall, false))
 }
 
-/// Whole civil days from `from` to `to`, both `YYYY-MM-DD`: positive when `to`
-/// is later. `None` when either does not parse. Day arithmetic, never instant
-/// arithmetic, so a DST day is still one day.
+/// One day of elapsed time, in milliseconds.
+const DAY_MS: i64 = 86_400_000;
+
+/// Whole days left in a trashed document's grace window, ROUNDED UP:
+/// `ceil((purge_at - now) / 24 h)`. `None` when `purge_at` does not parse.
+///
+/// **Elapsed time, not calendar days** (#1090). The window is an instant —
+/// `core.trash_document` stamps `purge_at` thirty 24-hour days out and
+/// `core.restore_document` refuses once `purge_at <= now` — so the count is
+/// the same arithmetic: 30 for the first 24 hours after trashing, 29 for the
+/// next, and so on, whatever the wall calendar did in between. Counting the
+/// civil days between two local dates made a document trashed in the hour
+/// after midnight read 29 when daylight saving ended inside its window (31
+/// when it began), and read 0 for the whole last local day while the vault
+/// still restored. It is positive exactly while the vault will restore, and
+/// zero or negative from `purge_at` on.
 #[must_use]
-pub fn days_between(from: &str, to: &str) -> Option<i64> {
-    let from = parse_wall_iso(from)?;
-    let to = parse_wall_iso(to)?;
-    Some((wall_epoch(to) - wall_epoch(from)).div_euclid(86_400_000))
+pub fn purge_in_days(purge_at: &str, now_ms: i64) -> Option<i64> {
+    let left = parse_instant_ms(purge_at)? - now_ms;
+    Some(-(-left).div_euclid(DAY_MS))
 }
 
 #[cfg(test)]
@@ -337,10 +349,24 @@ mod tests {
     }
 
     #[test]
-    fn days_between_is_civil() {
-        assert_eq!(days_between("2099-06-01", "2099-07-01"), Some(30));
-        assert_eq!(days_between("2099-06-10", "2099-06-01"), Some(-9));
-        assert_eq!(days_between("2026-03-07", "2026-03-09"), Some(2));
-        assert_eq!(days_between("nope", "2099-06-01"), None);
+    fn the_countdown_is_whole_days_left_rounded_up() {
+        let purge = "2026-11-07T04:10:00.000Z";
+        let at = |text: &str| parse_instant_ms(text).expect("an instant");
+        let days = |now: &str| purge_in_days(purge, at(now));
+        // Trashed 30 x 24 h earlier, across the end of daylight saving.
+        assert_eq!(days("2026-10-08T04:10:00.000Z"), Some(30));
+        assert_eq!(days("2026-10-09T04:09:59.999Z"), Some(30));
+        assert_eq!(days("2026-10-09T04:10:00.000Z"), Some(29));
+        assert_eq!(days("2026-11-06T04:10:00.000Z"), Some(1));
+        assert_eq!(days("2026-11-07T04:09:59.999Z"), Some(1));
+        assert_eq!(
+            days("2026-11-07T04:10:00.000Z"),
+            Some(0),
+            "lapsed at purge_at"
+        );
+        assert_eq!(days("2026-11-08T04:09:59.999Z"), Some(0));
+        assert_eq!(days("2026-11-08T04:10:00.000Z"), Some(-1));
+        assert_eq!(purge_in_days("nope", 0), None);
+        assert_eq!(purge_in_days("", 0), None);
     }
 }

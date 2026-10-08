@@ -33,7 +33,9 @@ use centraid_apps_kit::reads::{FanOutBound, PageDoor, in_list, read_pages, read_
 use centraid_apps_kit::representations::{RepresentationIndex, read_representations};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
-use centraid_vault::time::recurrence::{CollapseInput, RecurrenceAnchor, collapse_missed};
+use centraid_vault::time::recurrence::{
+    CollapseInput, RecurrenceAnchor, collapse_missed, is_all_day_anchor,
+};
 use centraid_vault::time::rrule;
 use centraid_vault::time::zone::FireZone;
 use serde_json::Value;
@@ -517,6 +519,13 @@ fn task_of(row: &Row) -> Option<TaskRow> {
 /// resolves it, and a task with none falls back to the engine's neutral zone
 /// exactly as v0's `timeZone ?? "Etc/UTC"` does.
 ///
+/// **A task whose due is a bare date has no zone of its own** (#1090): it is
+/// a whole civil day, so its periods are dates and `zone` — the MEMBER'S, the
+/// calendar `now` is read on — says which day is today. Expanded in the task's
+/// `tz` (or UTC) every period was "missed" at that zone's midnight, and the
+/// next one read as the evening before anywhere west of it: a daily task left
+/// Today at 20:00 in New York.
+///
 /// **v0 read `task.recurrence_tz` here and the column is `tz`** (`board.ts:483`
 /// and `search.ts:139`): the property was always `undefined`, so the collapse
 /// and the next due date were computed in UTC for every member outside it —
@@ -524,15 +533,21 @@ fn task_of(row: &Row) -> Option<TaskRow> {
 /// source under R-1020-35 by lane Schedule; the WRITER half — `anchorWrite`
 /// sending a key `schedule.organize_task` refuses outright, so an anchor change
 /// silently did nothing — went with the close pass.
-fn recurrence_of(task: &TaskRow, now: &str) -> RecurrenceFacts {
+fn recurrence_of(task: &TaskRow, now: &str, member: &FireZone) -> RecurrenceFacts {
     let (Some(rule), Some(start)) = (task.rrule.as_deref(), task.due_at.as_deref()) else {
         return RecurrenceFacts::default();
     };
-    let zone = FireZone::named(task.tz.as_deref().unwrap_or("Etc/UTC")).ok();
+    let own;
+    let zone = if is_all_day_anchor(start) {
+        Some(member)
+    } else {
+        own = FireZone::named(task.tz.as_deref().unwrap_or("Etc/UTC")).ok();
+        own.as_ref()
+    };
     let collapsed = collapse_missed(&CollapseInput {
         rrule: rule,
         scheduled_start: start,
-        zone: zone.as_ref(),
+        zone,
         anchor: RecurrenceAnchor::from_stored(task.recurrence_anchor.as_deref()),
         now,
         last_completed_at: task.completed_at.as_deref(),
@@ -554,7 +569,7 @@ struct Decorations {
     chips: Vec<TagChip>,
 }
 
-fn decorate(task: &TaskRow, decorations: &Decorations, now: &str) -> TaskRow {
+fn decorate(task: &TaskRow, decorations: &Decorations, now: &str, zone: &FireZone) -> TaskRow {
     TaskRow {
         attachments: decorations
             .attachments
@@ -571,7 +586,7 @@ fn decorate(task: &TaskRow, decorations: &Decorations, now: &str) -> TaskRow {
             .get(&task.task_id)
             .cloned()
             .unwrap_or_default(),
-        recurrence: recurrence_of(task, now),
+        recurrence: recurrence_of(task, now, zone),
         ..task.clone()
     }
 }
@@ -762,6 +777,7 @@ pub fn load_board(
     door: &dyn PageDoor,
     limit: Option<i64>,
     now: &str,
+    zone: &FireZone,
 ) -> KitResult<(BoardData, Option<Denial>)> {
     let window = board_window(limit);
     let open_page = match read_window(door, &open_statement()?, window) {
@@ -833,7 +849,7 @@ pub fn load_board(
     let families = nest_task_families(&rows, |task, children| {
         let mut nested: Vec<TaskRow> = children
             .iter()
-            .map(|child| decorate(child, &decorations, now))
+            .map(|child| decorate(child, &decorations, now, zone))
             .collect();
         nested.sort_by(|left, right| by_urgency(sort_key(left), sort_key(right)));
         let done = nested
@@ -843,7 +859,7 @@ pub fn load_board(
         TaskRow {
             children: nested,
             done_children: Some(done),
-            ..decorate(task, &decorations, now)
+            ..decorate(task, &decorations, now, zone)
         }
     });
     let mut open = families.open;
@@ -890,6 +906,7 @@ pub fn load_search(
     door: &dyn PageDoor,
     hits: &[Row],
     now: &str,
+    zone: &FireZone,
 ) -> KitResult<(SearchData, Option<Denial>)> {
     if hits.is_empty() {
         return Ok((SearchData::default(), None));
@@ -912,7 +929,7 @@ pub fn load_search(
         .iter()
         .filter_map(|row| {
             let task = task_of(row)?;
-            let mut decorated = decorate(&task, &decorations, now);
+            let mut decorated = decorate(&task, &decorations, now, zone);
             decorated.snippet = Some(cell_text(row, "_snippet").unwrap_or_default());
             Some(decorated)
         })
@@ -960,6 +977,7 @@ pub fn load_task(
     door: &dyn PageDoor,
     task_id: &str,
     now: &str,
+    zone: &FireZone,
 ) -> KitResult<(TaskDetailData, Option<Denial>)> {
     let task_id = task_id.trim();
     if task_id.is_empty() {
@@ -999,7 +1017,7 @@ pub fn load_task(
     let decorations = read_decorations(door, "board", &family_ids)?;
     let mut nested: Vec<TaskRow> = children
         .iter()
-        .map(|child| decorate(child, &decorations, now))
+        .map(|child| decorate(child, &decorations, now, zone))
         .collect();
     nested.sort_by(|left, right| by_urgency(sort_key(left), sort_key(right)));
     let done = nested
@@ -1009,12 +1027,12 @@ pub fn load_task(
     let task = TaskRow {
         children: nested,
         done_children: Some(done),
-        ..decorate(&task, &decorations, now)
+        ..decorate(&task, &decorations, now, zone)
     };
     Ok((
         TaskDetailData {
             task: Some(task),
-            parent: parent.map(|parent| decorate(&parent, &decorations, now)),
+            parent: parent.map(|parent| decorate(&parent, &decorations, now, zone)),
         },
         None,
     ))
@@ -1042,6 +1060,7 @@ pub fn load_search_term(
     term: &str,
     limit: usize,
     now: &str,
+    zone: &FireZone,
 ) -> KitResult<(SearchData, Option<Denial>)> {
     let term = term.trim();
     if term.is_empty() || limit == 0 {
@@ -1095,5 +1114,5 @@ pub fn load_search_term(
             Some(row)
         })
         .collect();
-    load_search(door, &hits, now)
+    load_search(door, &hits, now, zone)
 }
