@@ -15,6 +15,17 @@ pub fn when(stamp: Stamp, today: Date) -> String {
     }
 }
 
+/// A date for the member's confirm card: `tomorrow 09:00`, `next Friday`, or the day itself when
+/// it is farther off (`Fri 2026-10-02 09:00`). [`when`] is the model's spelling of the same date.
+#[must_use]
+pub fn card_when(stamp: Stamp, today: Date) -> String {
+    match (relative_label(stamp.date, today), stamp.time) {
+        (Some(label), Some(time)) => format!("{label} {}", crate::native::dates::clock(time)),
+        (Some(label), None) => label,
+        (None, _) => stamp.show(),
+    }
+}
+
 /// The longest note body, task description or event description a row line shows WHOLE
 /// (nt15 R2a); a longer text is cut as every other text field is (`CUT`).
 pub const WHOLE: usize = 200;

@@ -57,11 +57,51 @@ pub enum Say {
     NotDone,
     /// A tap on a card that is no longer waiting.
     NothingWaiting,
+    /// `Add {kind} "{title}" to {container}`: a row put in a list, album, folder, notebook or group.
+    StepAddTo,
+    /// `Cancel {kind} "{title}"`
+    StepCancel,
+    /// `Complete {kind} "{title}"`
+    StepComplete,
+    /// `Add {kind} "{title}"`: a new row.
+    StepCreate,
+    /// `Delete {kind} "{title}"`
+    StepDelete,
+    /// `{step}: {changes}`: a step with what moves on its row.
+    StepDetail,
+    /// `Change {kind} "{title}"`
+    StepEdit,
+    /// `{field} {from} → {to}`: a field that moved.
+    StepField,
+    /// `{field} cleared`: a field that went away.
+    StepFieldCleared,
+    /// `{field} {to}`: a field of a row that is new.
+    StepFieldNew,
+    /// `Log a contact with "{title}"`
+    StepLog,
+    /// `Remove {kind} "{title}" from {container}`
+    StepRemoveFrom,
+    /// `Reopen {kind} "{title}"`
+    StepReopen,
+    /// `Reschedule {kind} "{title}"`
+    StepReschedule,
+    /// `Restore {kind} "{title}"`
+    StepRestore,
+    /// `Settle {kind} "{title}"`
+    StepSettleDebt,
+    /// `Settle up with "{title}"`
+    StepSettleUp,
+    /// `Star {kind} "{title}"`
+    StepStar,
+    /// `Undo {kind} "{title}"`
+    StepUndo,
+    /// `Unstar {kind} "{title}"`
+    StepUnstar,
 }
 
 impl Say {
     /// Every sentence, for the test that holds them against the copy file.
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 42] = [
         Self::Balance,
         Self::BalanceEven,
         Self::BalanceOwed,
@@ -84,6 +124,26 @@ impl Say {
         Self::Stale,
         Self::NotDone,
         Self::NothingWaiting,
+        Self::StepAddTo,
+        Self::StepCancel,
+        Self::StepComplete,
+        Self::StepCreate,
+        Self::StepDelete,
+        Self::StepDetail,
+        Self::StepEdit,
+        Self::StepField,
+        Self::StepFieldCleared,
+        Self::StepFieldNew,
+        Self::StepLog,
+        Self::StepRemoveFrom,
+        Self::StepReopen,
+        Self::StepReschedule,
+        Self::StepRestore,
+        Self::StepSettleDebt,
+        Self::StepSettleUp,
+        Self::StepStar,
+        Self::StepUndo,
+        Self::StepUnstar,
     ];
 
     /// The key in `copy/chat.json`.
@@ -112,6 +172,26 @@ impl Say {
             Self::Stale => "SAID_STALE",
             Self::NotDone => "SAID_NOT_DONE",
             Self::NothingWaiting => "SAID_NOTHING_WAITING",
+            Self::StepAddTo => "SAID_STEP_ADD_TO",
+            Self::StepCancel => "SAID_STEP_CANCEL",
+            Self::StepComplete => "SAID_STEP_COMPLETE",
+            Self::StepCreate => "SAID_STEP_CREATE",
+            Self::StepDelete => "SAID_STEP_DELETE",
+            Self::StepDetail => "SAID_STEP_DETAIL",
+            Self::StepEdit => "SAID_STEP_EDIT",
+            Self::StepField => "SAID_STEP_FIELD",
+            Self::StepFieldCleared => "SAID_STEP_FIELD_CLEARED",
+            Self::StepFieldNew => "SAID_STEP_FIELD_NEW",
+            Self::StepLog => "SAID_STEP_LOG",
+            Self::StepRemoveFrom => "SAID_STEP_REMOVE_FROM",
+            Self::StepReopen => "SAID_STEP_REOPEN",
+            Self::StepReschedule => "SAID_STEP_RESCHEDULE",
+            Self::StepRestore => "SAID_STEP_RESTORE",
+            Self::StepSettleDebt => "SAID_STEP_SETTLE_DEBT",
+            Self::StepSettleUp => "SAID_STEP_SETTLE_UP",
+            Self::StepStar => "SAID_STEP_STAR",
+            Self::StepUndo => "SAID_STEP_UNDO",
+            Self::StepUnstar => "SAID_STEP_UNSTAR",
         }
     }
 
@@ -204,28 +284,35 @@ mod tests {
             (Say::Total, vec!["field", "value"]),
             (Say::Proposed, vec!["what"]),
             (Say::NotDone, vec!["reason"]),
+            (Say::StepAddTo, vec!["kind", "title", "container"]),
+            (Say::StepCancel, vec!["kind", "title"]),
+            (Say::StepComplete, vec!["kind", "title"]),
+            (Say::StepCreate, vec!["kind", "title"]),
+            (Say::StepDelete, vec!["kind", "title"]),
+            (Say::StepDetail, vec!["step", "changes"]),
+            (Say::StepEdit, vec!["kind", "title"]),
+            (Say::StepField, vec!["field", "from", "to"]),
+            (Say::StepFieldCleared, vec!["field"]),
+            (Say::StepFieldNew, vec!["field", "to"]),
+            (Say::StepLog, vec!["title"]),
+            (Say::StepRemoveFrom, vec!["kind", "title", "container"]),
+            (Say::StepReopen, vec!["kind", "title"]),
+            (Say::StepReschedule, vec!["kind", "title"]),
+            (Say::StepRestore, vec!["kind", "title"]),
+            (Say::StepSettleDebt, vec!["kind", "title"]),
+            (Say::StepSettleUp, vec!["title"]),
+            (Say::StepStar, vec!["kind", "title"]),
+            (Say::StepUndo, vec!["kind", "title"]),
+            (Say::StepUnstar, vec!["kind", "title"]),
         ];
-        for (which, names) in fills {
+        for (which, names) in &fills {
             let filled: Vec<(&str, &str)> = names.iter().map(|name| (*name, "x")).collect();
-            let text = say_with(which, &filled);
+            let text = say_with(*which, &filled);
             assert!(!text.contains('{'), "{}: {text}", which.key());
         }
+        // a sentence with no entry above has nothing to fill
         for which in Say::ALL {
-            if !matches!(
-                which,
-                Say::Balance
-                    | Say::BalanceEven
-                    | Say::BalanceOwed
-                    | Say::BalanceOwing
-                    | Say::Count
-                    | Say::Found
-                    | Say::FoundSome
-                    | Say::Highest
-                    | Say::Lowest
-                    | Say::Total
-                    | Say::Proposed
-                    | Say::NotDone
-            ) {
+            if !fills.iter().any(|(filled, _)| *filled == which) {
                 assert!(!say(which).contains('{'), "{}", which.key());
             }
         }

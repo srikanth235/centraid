@@ -185,6 +185,7 @@ fn every_case_runs_through_the_core_and_draws_what_it_expects() {
                         wire::assist_event::Kind::Answer(_) => "answer",
                         wire::assist_event::Kind::Failed(_) => "failed",
                         wire::assist_event::Kind::Reading(_) => "reading",
+                        wire::assist_event::Kind::Pending(_) => "pending",
                     })
                     .collect();
                 assert_eq!(kinds.first(), Some(&"activity"), "{id}: {kinds:?}");

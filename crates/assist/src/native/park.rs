@@ -120,7 +120,53 @@ pub(crate) struct ParkedCall {
     pub verb: Verb,
     /// `(row, its #n, the change line shown)`.
     pub lines: Vec<(Key, usize, String)>,
+    /// The same rows as facts, for the card (`native_turn` says them in words).
+    pub changes: Vec<RowChange>,
+    /// Rows the call changes beyond the ones listed.
+    pub more: usize,
     pub text: String,
+}
+
+/// A field a parked write moves, spelled for display: `due`, `"Call plumber"`, `tomorrow`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldChange {
+    pub field: String,
+    /// `None` when the row had no value before (or does not exist yet).
+    pub from: Option<String>,
+    /// `None` when the value goes away.
+    pub to: Option<String>,
+}
+
+/// A link a parked write makes or breaks: the row is now in, or no longer in, this container.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkChange {
+    pub added: bool,
+    pub kind: &'static str,
+    pub title: String,
+}
+
+/// ONE ROW A PARKED CALL CHANGES, as facts: the kind and title of the row, what moves on it and
+/// the links it gains or loses. The card says it in words (`native_turn`); the model's change
+/// line is the same change spelled for the model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RowChange {
+    /// The verb's name: `complete`, `delete`, `add_to`…
+    pub verb: &'static str,
+    pub kind: &'static str,
+    pub title: String,
+    /// The row did not exist before the call; `fields` are its starting values.
+    pub created: bool,
+    pub fields: Vec<FieldChange>,
+    pub links: Vec<LinkChange>,
+}
+
+/// Whether a verb deletes, removes, cancels or settles money: the writes a card asks twice for.
+#[must_use]
+pub fn destructive_verb(verb: &str) -> bool {
+    matches!(
+        verb,
+        "delete" | "remove_from" | "cancel" | "settle_up" | "settle_debt"
+    )
 }
 
 /// What the session remembers of a conversation that a write changes, as it was when the turn
@@ -148,6 +194,10 @@ pub struct PendingWrite {
     pub steps: Vec<ParkedStep>,
     /// What the card says will change: the change lines the calls showed the model.
     pub preview: Vec<String>,
+    /// The same rows as facts, in order: what the member's card is made of.
+    pub changes: Vec<RowChange>,
+    /// Rows the calls change beyond the ones listed (a bulk write lists its first twelve).
+    pub more: usize,
     /// What `undo` would run to take it back, and what it cannot take back.
     pub inverses: Vec<(String, Value)>,
     pub not_undoable: Vec<String>,
@@ -159,17 +209,11 @@ pub struct PendingWrite {
 }
 
 impl PendingWrite {
-    /// Whether the card should ask twice: a delete, a cancel, a money write, or anything the vault
-    /// cannot take back.
+    /// Whether the card should ask twice: a delete or a removal, a cancel, a money write, or
+    /// anything the vault cannot take back.
     #[must_use]
     pub fn destructive(&self) -> bool {
-        self.not_undoable.len()
-            + self
-                .verbs
-                .iter()
-                .filter(|verb| matches!(**verb, "delete" | "cancel" | "settle_up" | "settle_debt"))
-                .count()
-            > 0
+        !self.not_undoable.is_empty() || self.verbs.iter().any(|verb| destructive_verb(verb))
     }
 
     /// The pending write as the core hands it to the shell.
@@ -2260,11 +2304,19 @@ impl Session {
     }
 
     /// A write call parked: its verb and the lines it showed (`Session::execute`, `Session::undo`).
-    pub(crate) fn park_call(&mut self, verb: Verb, lines: Vec<(Key, usize, String)>) {
+    pub(crate) fn park_call(
+        &mut self,
+        verb: Verb,
+        lines: Vec<(Key, usize, String)>,
+        changes: Vec<RowChange>,
+        more: usize,
+    ) {
         if self.flags.writes == Writes::Park {
             self.park.call = Some(ParkedCall {
                 verb,
                 lines,
+                changes,
+                more,
                 text: String::new(),
             });
         }
@@ -2330,6 +2382,11 @@ impl Session {
                 .iter()
                 .flat_map(|call| call.lines.iter().map(|(_, _, line)| line.clone()))
                 .collect(),
+            changes: calls
+                .iter()
+                .flat_map(|call| call.changes.iter().cloned())
+                .collect(),
+            more: calls.iter().map(|call| call.more).sum(),
             steps,
             inverses,
             not_undoable,

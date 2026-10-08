@@ -23,8 +23,10 @@
 //! lives in its [`Slot`], in memory (R-1088-10): a new chat, a reopened thread, a retry and a turn
 //! that did not end each start a fresh one. A write the model makes parks behind a card
 //! (R-1088-2): [`Handle::assist_pending`] says what waits, [`Handle::assist_confirm`] makes it, once,
-//! and [`Handle::assist_dismiss`] drops it. They carry no proto yet; wave 2c adds the fields and the
-//! card, and the stored thread's state for a proposal that was applied or dismissed (migration 012).
+//! and [`Handle::assist_dismiss`] drops it. On the wire the card is `AssistPending` (an event, and
+//! the answer's own copy), the tap is `AssistConfirmRequest` or `AssistDismissRequest`, and both
+//! answer `AssistSettled`; wave 2c adds the stored thread's state for a proposal that was applied or
+//! dismissed (migration 012).
 //!
 //! # A TURN RUNS ON THE CALLING THREAD, AND NOTHING HOLDS THE VAULT WHILE THE
 //! # MODEL THINKS
@@ -60,7 +62,9 @@ use std::time::{Duration, Instant};
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_assist::native::park::Confirmed;
-use centraid_assist::native_turn::{NativeChat, NativePlane, PendingCard, confirmed_line};
+use centraid_assist::native_turn::{
+    NativeChat, NativePlane, PendingCard, confirmed_line, dismissed_line,
+};
 use centraid_assist::prompt::Budget;
 use centraid_assist::suggest::suggest;
 use centraid_assist::turn::Event as TurnEvent;
@@ -298,12 +302,59 @@ fn notices_to_wire(notices: &[Notice]) -> Vec<i32> {
         .collect()
 }
 
-fn answer_to_wire(answered: &Answered) -> wire::AssistAnswer {
+fn answer_to_wire(answered: &Answered, pending: Option<&PendingCard>) -> wire::AssistAnswer {
     wire::AssistAnswer {
         text: answered.text.clone(),
         cards: answered.cards.iter().map(card_to_wire).collect(),
         notices: notices_to_wire(&answered.notices),
+        pending: pending.map(pending_to_wire),
     }
+}
+
+/// The confirm card on the wire: what the runtime composed, line for line. The model's own preview
+/// text (`PendingCard::preview`) does not cross.
+fn pending_to_wire(card: &PendingCard) -> wire::AssistPending {
+    wire::AssistPending {
+        pending_id: card.id.clone(),
+        verbs: card.verbs.clone(),
+        steps: card
+            .steps
+            .iter()
+            .map(|step| wire::AssistPendingStep {
+                verb: step.verb.clone(),
+                kind: step.kind.clone(),
+                title: step.title.clone(),
+                summary: step.summary.clone(),
+                destructive: step.destructive,
+            })
+            .collect(),
+        destructive: card.destructive,
+        more: u32::try_from(card.more).unwrap_or(u32::MAX),
+    }
+}
+
+/// How a confirm ended, on the wire.
+fn settle_outcome_of(outcome: &Confirmed) -> wire::AssistSettleOutcome {
+    match outcome {
+        Confirmed::Done { .. } => wire::AssistSettleOutcome::Applied,
+        Confirmed::Stale { .. } => wire::AssistSettleOutcome::Stale,
+        Confirmed::Refused { .. } => wire::AssistSettleOutcome::Refused,
+        Confirmed::Unknown => wire::AssistSettleOutcome::NothingWaiting,
+    }
+}
+
+fn settled(
+    session_id: u64,
+    pending_id: &str,
+    outcome: wire::AssistSettleOutcome,
+    line: String,
+) -> wire::AssistResponse {
+    response(wire::assist_response::Kind::Settled(wire::AssistSettled {
+        session_id,
+        pending_id: pending_id.to_owned(),
+        outcome: outcome as i32,
+        line,
+    }))
 }
 
 fn refusal_to_wire(refusal: &Refusal) -> wire::AssistRefusal {
@@ -327,12 +378,11 @@ fn refusal_to_wire(refusal: &Refusal) -> wire::AssistRefusal {
     }
 }
 
-/// The wire's event for a turn's, or `None` for one that has no wire form yet: the pending write's
-/// card (#1088), which the core surfaces through [`Handle::assist_pending`] until wave 2c adds its
-/// proto fields and maps it here.
-fn event_to_wire(event: &TurnEvent) -> Option<wire::assist_event::Kind> {
+/// The wire's event for a turn's. A pending write's card is `AssistEvent.pending` (#1088); the
+/// terminal `answer` gets the same card from the caller, which has seen it go by.
+fn event_to_wire(event: &TurnEvent) -> wire::assist_event::Kind {
     use wire::assist_event::Kind as K;
-    Some(match event {
+    match event {
         TurnEvent::Activity { app, tool } => K::Activity(wire::AssistActivity {
             app: app.id().to_owned(),
             tool: (*tool).to_owned(),
@@ -355,10 +405,11 @@ fn event_to_wire(event: &TurnEvent) -> Option<wire::assist_event::Kind> {
             text: text.clone(),
             cards: cards.iter().map(card_to_wire).collect(),
             notices: notices_to_wire(notices),
+            pending: None,
         }),
         TurnEvent::Failed(refusal) => K::Failed(refusal_to_wire(refusal)),
-        TurnEvent::Pending(_) => return None,
-    })
+        TurnEvent::Pending(card) => K::Pending(pending_to_wire(card)),
+    }
 }
 
 fn state_to_wire(state: ModelState) -> wire::AssistModelState {
@@ -501,6 +552,31 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
             )))
         }
         K::Send(asked) => send(handle, asked),
+        K::Confirm(asked) => {
+            // THE MEMBER'S TAP (R-1088-2): the parked steps run once, and the answer is how it ended
+            // and the one line to say. A card that is gone is an outcome, not an error.
+            let tapped = handle.assist_confirm(asked.session_id, &asked.pending_id)?;
+            Ok(settled(
+                asked.session_id,
+                &asked.pending_id,
+                settle_outcome_of(&tapped.outcome),
+                tapped.line,
+            ))
+        }
+        K::Dismiss(asked) => {
+            let dismissed = handle.assist_dismiss(asked.session_id, &asked.pending_id)?;
+            let outcome = if dismissed {
+                wire::AssistSettleOutcome::Dismissed
+            } else {
+                wire::AssistSettleOutcome::NothingWaiting
+            };
+            Ok(settled(
+                asked.session_id,
+                &asked.pending_id,
+                outcome,
+                dismissed_line(dismissed),
+            ))
+        }
         K::Documents(asked) => {
             let limit = if asked.limit == 0 {
                 50
@@ -734,15 +810,21 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
     // streamed and the cards that arrived, which a stop keeps on screen.
     let mut streamed = String::new();
     let mut cards_seen: Vec<Card> = Vec::new();
+    let mut pending_seen: Option<PendingCard> = None;
     let mut sink = |event: TurnEvent| {
         match &event {
             TurnEvent::Token(piece) => streamed.push_str(piece),
             TurnEvent::Cards(cards) => cards_seen.clone_from(cards),
+            TurnEvent::Pending(card) => pending_seen = Some(card.clone()),
             _ => {}
         }
-        if let Some(kind) = event_to_wire(&event) {
-            emit(handle, session_id, turn_id, kind);
+        let mut kind = event_to_wire(&event);
+        // THE ANSWER CARRIES THE CARD TOO: the terminal event is the one a shell settles a turn
+        // on, so a dropped `pending` event costs nothing.
+        if let wire::assist_event::Kind::Answer(answer) = &mut kind {
+            answer.pending = pending_seen.as_ref().map(pending_to_wire);
         }
+        emit(handle, session_id, turn_id, kind);
     };
     // A TOOL TURN GOES TO THE PLANE THE HUB IS SET TO; AN ATTACHMENT NEVER DOES
     // (R-1088-9): a photograph or a document is read over the question by the
@@ -799,7 +881,10 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
             sent(
                 session_id,
                 turn_id,
-                wire::assist_sent::Outcome::Answered(answer_to_wire(&answered)),
+                wire::assist_sent::Outcome::Answered(answer_to_wire(
+                    &answered,
+                    pending_seen.as_ref(),
+                )),
                 saved.as_ref(),
             )
         }
@@ -943,6 +1028,72 @@ mod tests {
             assert_eq!(refusal_to_wire(&refusal).reason, reason as i32);
             assert!(seen.insert(reason as i32));
         }
+    }
+
+    #[test]
+    fn a_pending_card_crosses_as_its_composed_lines_and_never_as_the_models_text() {
+        use centraid_assist::native_turn::CardStep;
+        let card = PendingCard {
+            id: "p1".to_owned(),
+            verbs: vec!["delete".to_owned()],
+            commands: vec!["schedule.delete_task".to_owned()],
+            preview: vec!["deleted: #3 task \"Old\" (gone)".to_owned()],
+            steps: vec![CardStep {
+                verb: "delete".to_owned(),
+                kind: "task".to_owned(),
+                title: "Old".to_owned(),
+                summary: "Delete task \"Old\"".to_owned(),
+                destructive: true,
+            }],
+            more: 3,
+            destructive: true,
+            not_undoable: Vec::new(),
+        };
+        let wired = pending_to_wire(&card);
+        assert_eq!(wired.pending_id, "p1");
+        assert_eq!(wired.verbs, ["delete"]);
+        assert!(wired.destructive);
+        assert_eq!(wired.more, 3);
+        assert_eq!(wired.steps.len(), 1);
+        assert_eq!(wired.steps[0].summary, "Delete task \"Old\"");
+        assert!(wired.steps[0].destructive);
+        assert!(
+            !format!("{wired:?}").contains('#'),
+            "the preview text the model was shown does not cross"
+        );
+    }
+
+    #[test]
+    fn every_confirm_outcome_has_its_own_settle_outcome() {
+        use wire::AssistSettleOutcome as S;
+        let refused = Confirmed::Refused {
+            step: 0,
+            command: String::new(),
+            predicate: String::new(),
+            reason: String::new(),
+            landed: 0,
+        };
+        let done = Confirmed::Done {
+            text: String::new(),
+            diff: serde_json::Value::Null,
+            steps: 1,
+        };
+        let stale = Confirmed::Stale { rows: Vec::new() };
+        let cases = [
+            (done, S::Applied),
+            (stale, S::Stale),
+            (refused, S::Refused),
+            (Confirmed::Unknown, S::NothingWaiting),
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for (outcome, expected) in cases {
+            assert_eq!(settle_outcome_of(&outcome), expected);
+            assert!(seen.insert(expected as i32));
+        }
+        assert!(
+            !seen.contains(&(S::Dismissed as i32)),
+            "a dismissal is its own"
+        );
     }
 
     #[test]

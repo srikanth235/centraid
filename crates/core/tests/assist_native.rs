@@ -71,8 +71,8 @@ fn refusal_of(sent: &wire::AssistSent) -> i32 {
     }
 }
 
-/// The turn's events in order, in a word each: `activity:tasks/find`, `cards:6`, `answer`,
-/// `failed:<reason>`.
+/// The turn's events in order, in a word each: `activity:tasks/find`, `cards:6`, `pending:<steps>`,
+/// `answer`, `failed:<reason>`.
 fn story(events: &[wire::AssistEvent]) -> Vec<String> {
     events
         .iter()
@@ -84,6 +84,7 @@ fn story(events: &[wire::AssistEvent]) -> Vec<String> {
                 Event::Failed(f) => format!("failed:{}", f.reason),
                 Event::Token(_) => "token".to_owned(),
                 Event::Reading(_) => "reading".to_owned(),
+                Event::Pending(p) => format!("pending:{}", p.steps.len()),
             })
         })
         .collect()
@@ -411,12 +412,20 @@ fn a_write_parks_behind_a_card_and_nothing_is_written_until_the_member_taps() {
 
     // THE TURN ENDS IN A PROPOSAL, in words; the card rides beside it for the core to surface
     let answer = answered(&sent);
-    assert!(answer.text.starts_with("Proposed: "), "{}", answer.text);
-    assert!(answer.text.contains(DRY_CLEANING), "{}", answer.text);
+    assert_eq!(
+        answer.text,
+        format!("Proposed: Complete task \"{DRY_CLEANING}\"."),
+        "said in the card's words, not the model's `#3 task` lines"
+    );
     assert_eq!(
         story(&sample.drain_assist_events()),
-        ["activity:tasks/find", "activity:tasks/act", "answer"],
-        "the pending card has no wire form yet"
+        [
+            "activity:tasks/find",
+            "activity:tasks/act",
+            "pending:1",
+            "answer"
+        ],
+        "the card rides the stream just before the answer"
     );
     let card = pending_of(&sample, session);
     assert_eq!(card.verbs, ["complete"]);
@@ -661,6 +670,327 @@ fn a_busy_chat_cannot_be_tapped() {
             .handle
             .assist_confirm(session + 99, &card.id)
             .is_err()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 1b. The card on the wire (#1088, wave 2c)
+// ---------------------------------------------------------------------------
+
+fn tap(sample: &common::chat::Sample, session: u64, pending_id: &str) -> wire::AssistSettled {
+    match sample
+        .assist(Ask::Confirm(wire::AssistConfirmRequest {
+            session_id: session,
+            pending_id: pending_id.to_owned(),
+        }))
+        .expect("a confirm answers")
+        .kind
+    {
+        Some(wire::assist_response::Kind::Settled(settled)) => settled,
+        other => panic!("a confirm answered {other:?}"),
+    }
+}
+
+fn cancel_tap(
+    sample: &common::chat::Sample,
+    session: u64,
+    pending_id: &str,
+) -> wire::AssistSettled {
+    match sample
+        .assist(Ask::Dismiss(wire::AssistDismissRequest {
+            session_id: session,
+            pending_id: pending_id.to_owned(),
+        }))
+        .expect("a dismiss answers")
+        .kind
+    {
+        Some(wire::assist_response::Kind::Settled(settled)) => settled,
+        other => panic!("a dismiss answered {other:?}"),
+    }
+}
+
+/// The `pending` event of a turn's events, if it sent one.
+fn pending_event(events: &[wire::AssistEvent]) -> Option<&wire::AssistPending> {
+    events.iter().find_map(|event| match event.kind.as_ref()? {
+        Event::Pending(card) => Some(card),
+        _ => None,
+    })
+}
+
+#[test]
+fn a_parked_write_is_a_pending_event_before_the_answer_and_the_answer_carries_the_same_card() {
+    let sample = native_sample(script(&complete_dry_cleaning()));
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "complete the dry cleaning task");
+    let events = sample.drain_assist_events();
+    let streamed = pending_event(&events).expect("the card is on the stream");
+
+    // THE CARD IS THE RUNTIME'S FACTS IN THE CHAT'S WORDS, not the model's text
+    let waiting = pending_of(&sample, session);
+    assert_eq!(streamed.pending_id, waiting.id);
+    assert_eq!(streamed.verbs, ["complete"]);
+    assert!(!streamed.destructive);
+    assert_eq!(streamed.more, 0);
+    assert_eq!(streamed.steps.len(), 1);
+    let step = &streamed.steps[0];
+    assert_eq!(
+        (step.verb.as_str(), step.kind.as_str(), step.title.as_str()),
+        ("complete", "task", DRY_CLEANING)
+    );
+    assert_eq!(step.summary, format!("Complete task \"{DRY_CLEANING}\""));
+    assert!(!step.destructive);
+    for text in std::iter::once(&step.summary).chain(&streamed.verbs) {
+        assert!(
+            !text.contains('#'),
+            "the model's `#n` handles stay home: {text}"
+        );
+    }
+
+    // THE ANSWER IS THE RELIABLE CARRIER: the response and its terminal event hold the same card
+    let from_response = answered(&sent)
+        .pending
+        .as_ref()
+        .expect("the response has it");
+    assert_eq!(from_response, streamed);
+    let from_event = events
+        .iter()
+        .find_map(|event| match event.kind.as_ref()? {
+            Event::Answer(answer) => answer.pending.as_ref(),
+            _ => None,
+        })
+        .expect("the answer event has it");
+    assert_eq!(from_event, streamed);
+}
+
+#[test]
+fn a_turn_that_wrote_nothing_has_no_card_on_the_stream_or_in_the_answer() {
+    let sample = native_sample(script(&read_tasks()));
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "what tasks do I have");
+    let events = sample.drain_assist_events();
+    assert!(pending_event(&events).is_none());
+    assert!(answered(&sent).pending.is_none());
+}
+
+#[test]
+fn a_confirm_request_writes_once_and_answers_how_it_ended_and_the_line() {
+    let sample = native_sample(script(&complete_dry_cleaning()));
+    let session = sample.start("");
+    sample.send(session, 1, "complete the dry cleaning task");
+    let card = pending_of(&sample, session);
+    let _ = changes_on_the_queue(&sample);
+
+    let tapped = tap(&sample, session, &card.id);
+    assert_eq!(tapped.session_id, session);
+    assert_eq!(tapped.pending_id, card.id);
+    assert_eq!(tapped.outcome, wire::AssistSettleOutcome::Applied as i32);
+    assert_eq!(tapped.line, "Done.");
+    assert_eq!(status_of(&sample, DRY_CLEANING), "completed");
+    assert!(
+        changes_on_the_queue(&sample)
+            .iter()
+            .any(|table| table == "schedule_task"),
+        "the change feed names the table a screen reads"
+    );
+
+    // THE SAME TAP AGAIN WRITES NOTHING and answers what it answered
+    assert_eq!(tap(&sample, session, &card.id), tapped);
+    assert!(changes_on_the_queue(&sample).is_empty());
+    assert_eq!(
+        tasks(&sample)
+            .iter()
+            .filter(|(_, status)| status == "completed")
+            .count(),
+        1 + tasks(&sample)
+            .iter()
+            .filter(|(title, status)| status == "completed" && title != DRY_CLEANING)
+            .count()
+    );
+}
+
+#[test]
+fn a_dismiss_request_writes_nothing_and_what_it_dismissed_cannot_be_tapped_after() {
+    let sample = native_sample(script(&complete_dry_cleaning()));
+    let session = sample.start("");
+    sample.send(session, 1, "complete the dry cleaning task");
+    let card = pending_of(&sample, session);
+    let before = tasks(&sample);
+    let _ = changes_on_the_queue(&sample);
+
+    let dismissed = cancel_tap(&sample, session, &card.id);
+    assert_eq!(
+        dismissed.outcome,
+        wire::AssistSettleOutcome::Dismissed as i32
+    );
+    assert_eq!(dismissed.pending_id, card.id);
+    assert_eq!(dismissed.line, "Not done.");
+    assert_eq!(tasks(&sample), before);
+    assert!(
+        changes_on_the_queue(&sample)
+            .iter()
+            .all(|table| !table.starts_with("schedule_")),
+        "a dismissal tells no screen anything"
+    );
+
+    // a tap after it, and a second dismissal, find nothing waiting
+    let late = tap(&sample, session, &card.id);
+    assert_eq!(
+        late.outcome,
+        wire::AssistSettleOutcome::NothingWaiting as i32
+    );
+    assert_eq!(late.line, "Nothing is waiting on that.");
+    let again = cancel_tap(&sample, session, &card.id);
+    assert_eq!(
+        again.outcome,
+        wire::AssistSettleOutcome::NothingWaiting as i32
+    );
+    assert_eq!(again.line, "Nothing is waiting on that.");
+    assert_eq!(tasks(&sample), before);
+}
+
+#[test]
+fn a_card_that_never_was_is_nothing_waiting_and_an_unknown_chat_is_the_requests_fault() {
+    let sample = native_sample(script(&complete_dry_cleaning()));
+    let session = sample.start("");
+    let before = tasks(&sample);
+
+    // a chat that has not run a native turn yet has no card to tap
+    let none = tap(&sample, session, "no-such-card");
+    assert_eq!(
+        none.outcome,
+        wire::AssistSettleOutcome::NothingWaiting as i32
+    );
+    assert_eq!(none.line, "Nothing is waiting on that.");
+
+    // and a card waiting is not the one a stale id names
+    sample.send(session, 1, "complete the dry cleaning task");
+    let card = pending_of(&sample, session);
+    let wrong = tap(&sample, session, "no-such-card");
+    assert_eq!(
+        wrong.outcome,
+        wire::AssistSettleOutcome::NothingWaiting as i32
+    );
+    assert_eq!(
+        cancel_tap(&sample, session, "no-such-card").outcome,
+        wire::AssistSettleOutcome::NothingWaiting as i32
+    );
+    assert_eq!(tasks(&sample), before, "nothing was written");
+    assert_eq!(
+        sample.handle.assist_pending(session).unwrap().map(|c| c.id),
+        Some(card.id),
+        "a tap on the wrong id leaves the card waiting"
+    );
+
+    // a chat this handle does not hold is the request's fault, as for every other kind
+    for request in [
+        Ask::Confirm(wire::AssistConfirmRequest {
+            session_id: session + 99,
+            pending_id: "x".to_owned(),
+        }),
+        Ask::Dismiss(wire::AssistDismissRequest {
+            session_id: session + 99,
+            pending_id: "x".to_owned(),
+        }),
+    ] {
+        assert!(matches!(
+            sample.assist(request),
+            Err(centraid_core::CoreError::InvalidRequest { .. })
+        ));
+    }
+}
+
+#[test]
+fn a_card_whose_row_moved_answers_stale_over_the_wire_and_writes_nothing() {
+    let sample = native_sample(script(&complete_dry_cleaning()));
+    let session = sample.start("");
+    sample.send(session, 1, "complete the dry cleaning task");
+    let card = pending_of(&sample, session);
+    let id = {
+        use centraid_assist::native::Door as _;
+        use centraid_assist::native::door::text;
+        sample
+            .handle
+            .assist_door()
+            .table("schedule_task", "task_id, title", "task_id", "task_id")
+            .unwrap()
+            .iter()
+            .find(|row| text(row, "title").as_deref() == Some(DRY_CLEANING))
+            .and_then(|row| text(row, "task_id"))
+            .unwrap()
+    };
+    sample
+        .handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::Command(wire::Command {
+                name: "schedule.edit_task".to_owned(),
+                input: serde_json::to_vec(&serde_json::json!({"task_id": id, "priority": 1}))
+                    .unwrap(),
+                invoke_key: "test:edit-task-wire".to_owned(),
+                ..wire::Command::default()
+            })),
+        })
+        .expect("the edit runs");
+    let _ = changes_on_the_queue(&sample);
+
+    let tapped = tap(&sample, session, &card.id);
+    assert_eq!(tapped.outcome, wire::AssistSettleOutcome::Stale as i32);
+    assert_eq!(tapped.line, "That changed since. Ask again.");
+    assert_eq!(status_of(&sample, DRY_CLEANING), "needs-action");
+    assert!(
+        changes_on_the_queue(&sample)
+            .iter()
+            .all(|table| !table.starts_with("schedule_")),
+        "a stale card wrote nothing"
+    );
+}
+
+#[test]
+fn a_chain_is_one_card_with_a_line_for_each_row_and_a_delete_asks_twice() {
+    let sample = native_sample(script(&[
+        step(
+            "plan: first",
+            "act",
+            &[
+                ("verb", "complete"),
+                ("kind", "task"),
+                ("name", "dry cleaning"),
+                ("more", "true"),
+            ],
+        ),
+        step(
+            "plan: second",
+            "act",
+            &[
+                ("verb", "delete"),
+                ("kind", "task"),
+                ("name", "Rotate the tires"),
+            ],
+        ),
+    ]));
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "complete the dry cleaning and delete the tires");
+    assert_eq!(
+        answered(&sent).text,
+        "Proposed: Complete task \"Pick up the dry cleaning\"; \
+         Delete task \"Rotate the tires before the drive\"."
+    );
+    let card = answered(&sent).pending.as_ref().expect("a card");
+    assert_eq!(card.verbs, ["complete", "delete"]);
+    assert!(
+        card.destructive,
+        "a delete in the chain makes the card ask twice"
+    );
+    let lines: Vec<(&str, bool)> = card
+        .steps
+        .iter()
+        .map(|step| (step.summary.as_str(), step.destructive))
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            ("Complete task \"Pick up the dry cleaning\"", false),
+            ("Delete task \"Rotate the tires before the drive\"", true),
+        ]
     );
 }
 

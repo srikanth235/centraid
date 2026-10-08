@@ -25,8 +25,9 @@
 //!
 //! A chat's session runs `Writes::Park`: a turn's writes are planned against a patched copy of the
 //! world, shown to the model as it was trained to see a write, and the turn ends in one pending
-//! write that has touched nothing. The loop says it in words ([`Say::Proposed`](words::Say)) and
-//! sinks an [`Event::Pending`] with the card, for the core to surface. The member's tap is
+//! write that has touched nothing. The loop says it in words ([`Say::Proposed`](words::Say), from
+//! the card's own lines) and sinks an [`Event::Pending`] with the card, which the core puts on the
+//! wire. The card is composed from the runtime's structured facts ([`pending`]). The member's tap is
 //! [`NativeChat::confirm`] (the session runs the steps through the door, one key per step) or
 //! [`NativeChat::dismiss`]; a new message dismisses it too. A Locker call never parks: the session
 //! declines it `sealed_egress` before it plans anything.
@@ -41,6 +42,7 @@
 
 pub mod cards;
 pub mod log;
+pub mod pending;
 pub mod words;
 
 use serde_json::{Value, json};
@@ -59,6 +61,7 @@ use crate::result::{CARD_CAP, Card};
 use crate::tool::App;
 use crate::turn::{Answered, Event, Refusal};
 use log::Log;
+pub use pending::CardStep;
 use words::{Say, say, say_with};
 
 /// The longest user message the loop hands the runtime, in characters. A guard on the prompt's
@@ -132,7 +135,11 @@ impl NativeChat {
 }
 
 /// A write waiting for the member's tap, as the core hands it on: what a confirm card shows.
-/// Wave 2c maps it to the proto; until then the core's API hands it out as it is.
+///
+/// The card the member reads is [`steps`](Self::steps), composed from the runtime's structured
+/// facts and the chat's copy ([`pending`]). [`preview`](Self::preview) is the text the MODEL was
+/// shown after the write (`#3 task "…" · status open → done`, with its `#n` handles): it is kept
+/// for logs and tests and is not what a shell draws.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingCard {
     /// The id to confirm or dismiss it by.
@@ -141,10 +148,14 @@ pub struct PendingCard {
     pub verbs: Vec<String>,
     /// The commands a confirm would run, in order.
     pub commands: Vec<String>,
-    /// What will change, a line for each row, in the runtime's words.
+    /// What will change, a line for each row, in the model's words.
     pub preview: Vec<String>,
-    /// Whether the card should ask twice: a delete, a cancel, a money write, or anything the
-    /// vault cannot take back.
+    /// One line for each row the write changes, in the member's words.
+    pub steps: Vec<CardStep>,
+    /// Rows the write changes beyond the `steps` listed (a bulk write lists its first twelve).
+    pub more: usize,
+    /// Whether the card should ask twice: a delete or a removal, a cancel, a money write, or
+    /// anything the vault cannot take back.
     pub destructive: bool,
     /// What the vault cannot take back, if anything.
     pub not_undoable: Vec<String>,
@@ -165,6 +176,8 @@ impl PendingCard {
                 .map(|step| step.command.clone())
                 .collect(),
             preview: pending.preview.clone(),
+            steps: pending.changes.iter().map(pending::step_of).collect(),
+            more: pending.more,
             destructive: pending.destructive(),
             not_undoable: pending.not_undoable.clone(),
         }
@@ -180,6 +193,20 @@ pub fn confirmed_line(outcome: &Confirmed) -> String {
         Confirmed::Stale { .. } => say(Say::Stale),
         Confirmed::Refused { reason, .. } => say_with(Say::NotDone, &[("reason", reason)]),
         Confirmed::Unknown => say(Say::NothingWaiting),
+    }
+}
+
+/// What the member reads after dismissing a card: the card was waiting and nothing was written, or
+/// there was none to dismiss.
+#[must_use]
+pub fn dismissed_line(was_waiting: bool) -> String {
+    if was_waiting {
+        // `Not done. {reason}` with no reason: a dismissal has none to give
+        say_with(Say::NotDone, &[("reason", "")])
+            .trim_end()
+            .to_owned()
+    } else {
+        say(Say::NothingWaiting)
     }
 }
 
@@ -576,9 +603,32 @@ fn conclude(session: &Session, reply: &Value) -> Result<Answered, Refusal> {
         cards: Vec::new(),
         notices: Vec::new(),
     };
-    if let Some(pending) = effect["pending"]["preview"].as_array() {
-        let what: Vec<&str> = pending.iter().filter_map(Value::as_str).collect();
-        return Ok(said(say_with(Say::Proposed, &[("what", &what.join("; "))])));
+    if effect["pending"].is_object() {
+        // THE PROPOSAL IS SAID IN THE CARD'S WORDS (the lines the member will tap on), not in the
+        // text the model was shown after the write; that text is the fallback of a write whose
+        // rows the card could not name.
+        let lines: Vec<String> = session
+            .pending()
+            .map(|write| {
+                write
+                    .changes
+                    .iter()
+                    .map(|c| pending::step_of(c).summary)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let what = if lines.is_empty() {
+            let shown = effect["pending"]["preview"].as_array();
+            shown
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join("; ")
+        } else {
+            lines.join("; ")
+        };
+        return Ok(said(say_with(Say::Proposed, &[("what", &what)])));
     }
     if let Some(reason) = effect["decline"]["reason"].as_str() {
         return Ok(said(say(Say::of_decline(reason))));
@@ -611,4 +661,41 @@ fn conclude(session: &Session, reply: &Value) -> Result<Answered, Refusal> {
         "a turn ended without an answer: {}",
         reply["text"].as_str().unwrap_or_default()
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn what_a_tap_says_comes_from_the_copy_and_a_dismissal_has_no_reason_to_give() {
+        assert_eq!(dismissed_line(true), "Not done.");
+        assert_eq!(dismissed_line(false), "Nothing is waiting on that.");
+        assert_eq!(
+            confirmed_line(&Confirmed::Done {
+                text: String::new(),
+                diff: Value::Null,
+                steps: 1
+            }),
+            "Done."
+        );
+        assert_eq!(
+            confirmed_line(&Confirmed::Stale { rows: Vec::new() }),
+            "That changed since. Ask again."
+        );
+        assert_eq!(
+            confirmed_line(&Confirmed::Unknown),
+            "Nothing is waiting on that."
+        );
+        assert_eq!(
+            confirmed_line(&Confirmed::Refused {
+                step: 0,
+                command: String::new(),
+                predicate: String::new(),
+                reason: "That date is past.".to_owned(),
+                landed: 0,
+            }),
+            "Not done. That date is past."
+        );
+    }
 }
