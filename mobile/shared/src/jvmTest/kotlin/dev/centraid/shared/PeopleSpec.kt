@@ -663,6 +663,28 @@ class PeopleSpec : StringSpec({
         edit.inputJson shouldBe """{"party_id":"new-1","met":"School"}"""
     }
 
+    "words typed while the add is in flight are an edit of the person it made, never a second add_person (#1089)" {
+        // The core keeps no replay ledger (R-1088-12): a second `add_person` under
+        // the same minted id is the vault's refusal at best, a second row at worst.
+        val opened = PeopleEditorMachine.reduce(
+            PeopleEditorMachine.initial(),
+            PeopleEditorEvent(opened = PeopleEditorEvent.Opened(minted_party_id = "new-1")),
+        )
+        val named = PeopleEditorMachine.reduce(opened.state, PeopleEditorEvent(name = PeopleEditorEvent.NameChanged(text = "Ana")))
+        val add = PeopleEditorMachine.reduce(named.state, PeopleEditorMachine.left())
+        val write = add.effects.single() as ScreenEffect.SubmitWrite
+        write.command shouldBe "people.add_person"
+        // THE MEMBER KEEPS TYPING while the create is in flight; it waits for the answer.
+        val typing = PeopleEditorMachine.reduce(add.state, PeopleEditorEvent(nickname = PeopleEditorEvent.NicknameChanged(text = "Annie")))
+        typing.effects.filterIsInstance<ScreenEffect.SubmitWrite>().shouldBeEmpty()
+        val created = PeopleEditorMachine.reduce(typing.state, PeopleEditorEvent(write_settled = settled(write.invokeKey, true)))
+        created.state.created shouldBe true
+        // What the commit sends next is an edit of the person that now exists.
+        val next = created.effects.filterIsInstance<ScreenEffect.SubmitWrite>().single()
+        next.command shouldBe "people.edit_person"
+        next.inputJson shouldBe """{"party_id":"new-1","nickname":"Annie"}"""
+    }
+
     // --- Trash -------------------------------------------------------------
 
     "one person is a person, and one day is a day (#1047 walk: '1 people')" {

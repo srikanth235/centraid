@@ -487,6 +487,41 @@ class PhotosCollectionsSpec : StringSpec({
         step.state.sheet shouldBe PhotosCollectionsState.Sheet.SHEET_NEW_ALBUM
     }
 
+    "a Create after the commit files no second album: the sheet is the sitting (#1089)" {
+        // The core keeps no replay ledger (R-1088-12): the same create sent again
+        // is a second album.
+        val sheet = machine.reduce(
+            machine.initial(),
+            PhotosCollectionsEvent(sheet = PhotosCollectionsEvent.SheetChanged(PhotosCollectionsState.Sheet.SHEET_NEW_ALBUM)),
+        ).state
+        val created = machine.reduce(
+            sheet,
+            PhotosCollectionsEvent(album_created = PhotosCollectionsEvent.AlbumCreated(name = "Portugal")),
+        )
+        val write = created.effects.single() as ScreenEffect.SubmitWrite
+        val committed = machine.reduce(
+            created.state,
+            PhotosCollectionsReads.settled(CommandStatus.COMMAND_STATUS_EXECUTED, "", write.invokeKey),
+        ).state
+        committed.sheet shouldBe PhotosCollectionsState.Sheet.SHEET_NONE
+        // The sheet is gone; a Create that still reaches the machine is nothing.
+        machine.reduce(
+            committed,
+            PhotosCollectionsEvent(album_created = PhotosCollectionsEvent.AlbumCreated(name = "Portugal")),
+        ).effects.shouldBeEmpty()
+
+        // A REFUSED create keeps the sheet and the name: Create tries again.
+        val refused = machine.reduce(
+            created.state,
+            PhotosCollectionsReads.settled(CommandStatus.COMMAND_STATUS_FAILED, "Not now.", write.invokeKey),
+        ).state
+        refused.sheet shouldBe PhotosCollectionsState.Sheet.SHEET_NEW_ALBUM
+        machine.reduce(
+            refused,
+            PhotosCollectionsEvent(album_created = PhotosCollectionsEvent.AlbumCreated(name = "Portugal")),
+        ).effects.size shouldBe 1
+    }
+
     "a refusal with no words is still a sentence, and a new attempt clears it" {
         // A REFUSAL WITH NO WORDS WAS SILENCE until `write_failure` existed,
         // and a member who pressed Create and saw nothing happen could not
