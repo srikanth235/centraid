@@ -245,7 +245,7 @@ pub fn run(
         _ => {
             let loader = engine.ok_or_else(|| {
                 "this binary links no engine; the same command line with llama.cpp is \
-                 `cargo run --release -p centraid-assist-llama --bin assist-eval-llama -- --model FILE`"
+                 `cargo run --release -p centraid-assist-llama --features engine --bin assist-eval-llama -- --model FILE`"
                     .to_owned()
             })?;
             let path = target.ok_or(USAGE)?;

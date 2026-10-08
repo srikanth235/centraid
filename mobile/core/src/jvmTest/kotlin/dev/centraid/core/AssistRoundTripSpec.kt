@@ -14,6 +14,7 @@ import centraid.core.v1.ErrorCode
 import centraid.core.v1.Request
 import dev.centraid.core.AbiRoundTripSpec.Companion.openRealCore
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldBeIn
 import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.comparables.shouldBeLessThanOrEqualTo
 import io.kotest.matchers.shouldBe
@@ -37,9 +38,9 @@ import kotlinx.coroutines.withTimeout
  * request — and that a turn's events arrive through the same `events` flow the
  * change stream does.
  *
- * No model is loaded: this build links no engine, and a refusal for want of a
- * model is a state the chat has to draw, so it is the one worth proving across
- * the boundary.
+ * No model is loaded: the cdylib under test is built without the engine (see
+ * the status assertion below), and a refusal for want of a model is a state the chat has to
+ * draw, so it is the one worth proving across the boundary.
  */
 class AssistRoundTripSpec : StringSpec({
 
@@ -70,10 +71,18 @@ class AssistRoundTripSpec : StringSpec({
             val present = core.assist(
                 AssistRequest(status = AssistStatusRequest(model_path = file.path)),
             ).answer().status!!
-            // The core links llama.cpp: the file is there and an engine could
-            // read it (these 16 bytes are not a model, and a load would refuse
-            // them), so it is PRESENT and not NO_ENGINE.
-            present.state shouldBe AssistModelState.ASSIST_MODEL_STATE_PRESENT
+            // The file is there, and what the core says of it depends on the
+            // library: NO_ENGINE from the cdylib this module's own build makes
+            // (`cargo build -p centraid-core-ffi`, no `--features llama`:
+            // llama.cpp is a ~5 minute cmake build and no Kotlin spec loads a
+            // model, R-CHAT-10), PRESENT from a core that carries the engine
+            // (`-Pcentraid.coreLibDir` at a phone's build). Never ABSENT, and
+            // the byte count below is the same either way. The engine-wired
+            // answer is asserted in Rust: `crates/core-ffi/tests/assist.rs`.
+            present.state shouldBeIn listOf(
+                AssistModelState.ASSIST_MODEL_STATE_PRESENT,
+                AssistModelState.ASSIST_MODEL_STATE_NO_ENGINE,
+            )
             present.model_bytes shouldBe 16L
 
             // --- a session, scoped to an app the assistant reads --------------

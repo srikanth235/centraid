@@ -6,7 +6,7 @@
 //!
 //! ```text
 //! CENTRAID_ASSIST_MODEL=~/.cache/centraid/models/Qwen3.5-0.8B-Q4_0.gguf \
-//!   cargo test --release -p centraid-assist-llama --test real_model -- --ignored --nocapture
+//!   cargo test --release -p centraid-assist-llama --features engine --test real_model -- --ignored --nocapture
 //! ```
 //!
 //! What they assert is the engine's half of [`centraid_assist::Model`]'s

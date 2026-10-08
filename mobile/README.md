@@ -44,6 +44,8 @@ cargo build -p centraid-core-ffi                                   # the cdylib
 cargo run -p centraid-core-ffi --bin spike-fixture -- <build dir>  # a founded vault
 ```
 
+**Both are built without `--features llama`**, so the cdylib the JVM tests load carries no engine: no Kotlin spec loads a model, `AssistRoundTripSpec` accepts the `NO_ENGINE` a present file reads as there, and the cold llama.cpp build stays out of `mobile-jvm`'s 420 s budget ([R-CHAT-10](../docs/decisions.md#the-on-device-chat-keeps-its-history-in-the-vault)). The two commands must stay in step: a different feature set on the second is a rebuild of the first.
+
 The Gradle build resolves the library from `-Pcentraid.coreLibDir`, then `$CARGO_TARGET_DIR/debug`, then `<repo>/target/debug` — and **never** from the ambient loader path, because a test that silently loaded some other build of the core would be a test of whatever was installed on the machine.
 
 ### Coverage
@@ -108,14 +110,16 @@ Everything on iOS needs a macOS host. In order:
 #    stale one with no error at all — see docs/traps/stale-core-slice.md, which
 #    was written after a byte door that compiled on every layer and ran as the
 #    version from five hours earlier.
-#    The core carries llama.cpp (the on-device chat's engine), which CMake builds
-#    from source: `cmake` must be on PATH, and the deployment floor must be
-#    exported or the C++ is built for the SDK's own version (27.0) and the device
-#    link fails on `___chkstk_darwin`. Cargo does not rerun the llama build when
-#    the variable changes: `cargo clean -p llama-cpp-sys-2 --target <triple>`
-#    after changing it.
+#    The core carries llama.cpp (the on-device chat's engine) when it is built
+#    `--features llama` — every phone build says so, because the feature is off
+#    by default (R-CHAT-10) and a core without it reports every model file as
+#    NO_ENGINE. CMake builds llama.cpp from source: `cmake` must be on PATH, and
+#    the deployment floor must be exported or the C++ is built for the SDK's own
+#    version (27.0) and the device link fails on `___chkstk_darwin`. Cargo does
+#    not rerun the llama build when the variable changes:
+#    `cargo clean -p llama-cpp-sys-2 --target <triple>` after changing it.
 IPHONEOS_DEPLOYMENT_TARGET=$(cat mobile/ios-deployment-target) \
-  cargo build -p centraid-core-ffi --target aarch64-apple-ios-sim
+  cargo build -p centraid-core-ffi --features llama --target aarch64-apple-ios-sim
 
 # 1. The Kotlin side, AND IT IS THE XCFRAMEWORK TASK, NOT THE LINK TASK.
 #    `iosApp/project.yml` names

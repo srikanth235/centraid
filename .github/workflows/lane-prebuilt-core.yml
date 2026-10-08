@@ -301,10 +301,15 @@ jobs:
           toolchain: ${{ steps.channel.outputs.channel }}
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
       - run: cargo install cargo-ndk --locked
+      # `--features llama` is in the key AND on the build below, and in both on
+      # purpose: the on-device chat's engine (llama.cpp) is off by default so the
+      # PR gate's workspace build compiles none of it, and a phone's library
+      # without it reports every model file as NO_ENGINE (R-CHAT-10). The key
+      # names what was built.
       - id: key
         run: |
           set -euo pipefail
-          key="$(cargo xtask artifact-key --triple android-all-abis --profile dist)"
+          key="$(cargo xtask artifact-key --triple android-all-abis --features llama --profile dist)"
           echo "key=${key}" >> "$GITHUB_OUTPUT"
       - name: Build the four ABIs
         env:
@@ -315,7 +320,7 @@ jobs:
           cargo ndk \
             -t arm64-v8a -t armeabi-v7a -t x86 -t x86_64 \
             -o dist/android/jni \
-            build --profile dist -p centraid-core-ffi
+            build --profile dist -p centraid-core-ffi --features llama
           find dist/android -name '*.so' -print
       # THE JNI INITIALIZER STUB is lane E's: the AAR needs a class whose static
       # initializer calls `System.loadLibrary`, and where that class lives is a
@@ -382,10 +387,11 @@ jobs:
           toolchain: ${{ steps.channel.outputs.channel }}
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
       - run: cargo install cbindgen --locked
+      # `--features llama` in the key and on the build: see the Android leg.
       - id: key
         run: |
           set -euo pipefail
-          key="$(cargo xtask artifact-key --triple apple-ios-xcframework --profile dist)"
+          key="$(cargo xtask artifact-key --triple apple-ios-xcframework --features llama --profile dist)"
           echo "key=${key}" >> "$GITHUB_OUTPUT"
       - name: Build the three slices and the header
         env:
@@ -394,7 +400,7 @@ jobs:
         run: |
           set -euo pipefail
           for target in aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios; do
-            cargo build --profile dist -p centraid-core-ffi --target "$target"
+            cargo build --profile dist -p centraid-core-ffi --features llama --target "$target"
           done
           mkdir -p dist/ios/Headers
           cbindgen --crate centraid-core-ffi --output dist/ios/Headers/centraid_core.h

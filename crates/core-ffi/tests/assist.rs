@@ -33,8 +33,8 @@ impl Opened {
     }
 
     /// A sample vault exactly as `centraid_open` leaves it: the process-wide
-    /// model slot, with the real engine's loader in it.
-    #[cfg(feature = "llama")]
+    /// model slot, with the real engine's loader in it under `llama` and with
+    /// no loader at all without it.
     fn as_opened() -> Self {
         Self::open(false)
     }
@@ -277,7 +277,6 @@ fn a_status_and_a_refusal_cross_as_typed_messages() {
     );
 }
 
-#[cfg(feature = "llama")]
 fn status_of(opened: &Opened, path: &std::path::Path) -> wire::AssistStatus {
     let answer = assist(
         opened,
@@ -292,7 +291,6 @@ fn status_of(opened: &Opened, path: &std::path::Path) -> wire::AssistStatus {
     }
 }
 
-#[cfg(feature = "llama")]
 fn load(opened: &Opened, path: &std::path::Path) -> (i32, Option<wire::AssistStatus>) {
     let (code, envelope) = opened.call_raw(wire::request::Kind::Assist(wire::AssistRequest {
         kind: Some(wire::assist_request::Kind::Load(wire::AssistLoadRequest {
@@ -342,6 +340,37 @@ fn a_core_as_opened_reads_a_model_file_as_present_and_refuses_a_file_that_is_not
     assert_eq!(
         status_of(&opened, &garbage).state,
         wire::AssistModelState::Present as i32
+    );
+}
+
+#[cfg(not(feature = "llama"))]
+#[test]
+fn a_core_as_opened_without_the_engine_reads_a_model_file_as_no_engine_and_will_not_load() {
+    // THE PR GATE'S BUILD: `llama` is off, so `centraid_open` registers no
+    // engine and a file that is there is NO_ENGINE — the state the shell draws
+    // as "this build cannot run the assistant" — and never PRESENT, which
+    // would promise a load nothing could do. The engine-on twin above is run
+    // by the `engine` job (`.github/workflows/gate.yml`).
+    let opened = Opened::as_opened();
+    let dir = opened.dir.join("models");
+    std::fs::create_dir_all(&dir).expect("a directory");
+    assert_eq!(
+        status_of(&opened, &dir.join("nowhere.gguf")).state,
+        wire::AssistModelState::Absent as i32
+    );
+
+    let file = dir.join("a-model-or-not.gguf");
+    std::fs::write(&file, b"this is not a GGUF file, however long it is").expect("a file");
+    let status = status_of(&opened, &file);
+    assert_eq!(status.state, wire::AssistModelState::NoEngine as i32);
+    assert_eq!(status.model_bytes, 43);
+
+    let (code, loaded) = load(&opened, &file);
+    assert_ne!(code, CENTRAID_OK);
+    assert!(loaded.is_none());
+    assert_eq!(
+        status_of(&opened, &file).state,
+        wire::AssistModelState::NoEngine as i32
     );
 }
 

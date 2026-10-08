@@ -5,15 +5,30 @@
 //! [`centraid_assist::Model`] and [`centraid_assist::ModelLoader`] over
 //! llama.cpp, and nothing else in the workspace depends on llama.cpp.
 //!
-//! | Module | What it owns |
-//! |---|---|
-//! | [`generate`] | The generation loop — cancel polling, chunked prefill, images as prefill, stop strings, UTF-8 — over a [`generate::Backend`] a test can fake. |
-//! | [`engine`] | llama.cpp as that backend: weights, an optional vision projector (`mtmd`), a fresh context per generation, the grammar + greedy sampler chain. |
+//! | Module | What it owns | Built |
+//! |---|---|---|
+//! | [`generate`] | The generation loop — cancel polling, chunked prefill, images as prefill, stop strings, UTF-8 — over a [`generate::Backend`] a test can fake. | always |
+//! | `engine` | llama.cpp as that backend: weights, an optional vision projector (`mtmd`), a fresh context per generation, the grammar + greedy sampler chain. | `engine` feature |
+//!
+//! # THE `engine` FEATURE: LLAMA.CPP BUILDS WHERE THE PHONE'S CORE IS BUILT
+//!
+//! `llama-cpp-2` is an optional dependency and `engine` turns it on; so does
+//! `centraid-core-ffi`'s `llama`, which is how the phone's library carries it
+//! (R-CHAT-10 in `docs/decisions.md`). The llama.cpp build is a `cmake`
+//! compile that costs ~5 minutes cold, and a workspace build that did it for
+//! every pull request overran the PR gate's cold budget. So a plain
+//! `cargo build --workspace` compiles this crate **without** llama.cpp:
+//! [`generate`] and [`Config`] — the generation loop and everything it is
+//! tested with — are built, linted and tested by the gate, and what `engine`
+//! adds (`engine`, [`LlamaLoader`], [`LlamaModel`], `process_host`, the
+//! `assist-eval-llama` binary and the two real-model suites) is built, linted
+//! and tested by the `engine` job in `.github/workflows/gate.yml`, with
+//! `--features engine` (or `centraid-core-ffi/llama`, which implies it).
 //!
 //! # ONE HOST PER PROCESS
 //!
 //! A phone holds several vault handles and one model, so the slot is
-//! [`process_host`]: one [`ModelHost`] with this engine's loader registered,
+//! `process_host`: one [`ModelHost`] with this engine's loader registered,
 //! which `centraid_open` hands to every handle it opens. A shell never sees the
 //! engine — it asks the core's `AssistRequest` for the model's status, loads it
 //! and sends.
@@ -31,16 +46,20 @@
 //!
 //! # BUILD REQUIREMENT
 //!
-//! `cmake` on `PATH` and a C++17 toolchain (Xcode's, or the Android NDK's):
-//! see `docs/toolchain.md`.
+//! With `engine`: `cmake` on `PATH` and a C++17 toolchain (Xcode's, or the
+//! Android NDK's): see `docs/toolchain.md`. Without it, nothing beyond Rust.
 
+#[cfg(feature = "engine")]
 pub mod engine;
 pub mod generate;
 
+#[cfg(feature = "engine")]
 use std::sync::{Arc, OnceLock};
 
+#[cfg(feature = "engine")]
 use centraid_assist::ModelHost;
 
+#[cfg(feature = "engine")]
 pub use engine::{LlamaLoader, LlamaModel};
 
 /// Built for the iOS Simulator (`aarch64-apple-ios-sim`, or the Intel
@@ -93,7 +112,11 @@ impl Default for Config {
 }
 
 impl Config {
-    pub(crate) fn threads(&self) -> i32 {
+    /// The CPU threads a generation uses: [`Config::threads`] when set, else up
+    /// to four of the cores there are. Public so it is built, linted and
+    /// tested without `engine`, which is its only caller.
+    #[must_use]
+    pub fn threads(&self) -> i32 {
         self.threads.unwrap_or_else(|| {
             let cores = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
             i32::try_from(cores.min(4)).unwrap_or(4)
@@ -105,6 +128,7 @@ impl Config {
 ///
 /// Registered exactly once, however many handles ask: the first call builds the
 /// host and every later call returns the same one.
+#[cfg(feature = "engine")]
 #[must_use]
 pub fn process_host() -> Arc<ModelHost> {
     static HOST: OnceLock<Arc<ModelHost>> = OnceLock::new();
@@ -117,12 +141,13 @@ pub fn process_host() -> Arc<ModelHost> {
 
 #[cfg(test)]
 mod tests {
-    use centraid_assist::ModelState;
-
     use super::*;
 
+    #[cfg(feature = "engine")]
     #[test]
     fn the_process_host_is_one_host_and_it_has_an_engine() {
+        use centraid_assist::ModelState;
+
         assert!(Arc::ptr_eq(&process_host(), &process_host()));
         let dir =
             std::env::temp_dir().join(format!("centraid-assist-llama-{}", std::process::id()));

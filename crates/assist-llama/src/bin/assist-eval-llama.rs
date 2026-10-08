@@ -2,7 +2,7 @@
 //! a GGUF file.
 //!
 //! ```text
-//! cargo run --release -p centraid-assist-llama --bin assist-eval-llama -- \
+//! cargo run --release -p centraid-assist-llama --features engine --bin assist-eval-llama -- \
 //!     --model ~/.cache/centraid/models/Qwen3.5-0.8B-Q4_0.gguf [--verbose]
 //! ```
 //!

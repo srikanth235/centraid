@@ -23,23 +23,29 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "rlib", "staticlib"]
 
 [features]
-# `llama` is the on-device chat's engine and is ON: a shell's library carries
-# it, or a model file is reported NO_ENGINE with nothing to read it. Building it
-# needs `cmake` and a C++ toolchain (docs/toolchain.md); `--no-default-features`
-# is the build without them, whose chat answers NO_ENGINE for every model file.
-default = ["llama"]
-llama = ["dep:centraid-assist-llama"]
+# `llama` is the on-device chat's engine, and a PHONE'S library needs it: without
+# it a model file is reported NO_ENGINE with nothing to read it. It is OFF by
+# default so that `cargo build|clippy|test --workspace` — the PR gate — compiles
+# no llama.cpp, a cmake build of ~5 minutes cold (R-CHAT-10, docs/decisions.md).
+# Every build of the library a phone ships therefore says `--features llama`:
+# the prebuilt-core lane's Android and iOS legs, `mobile/scripts/android-core.sh`
+# and the iOS hand-off in `mobile/README.md`. The JVM tests build the library
+# without it (no Kotlin spec loads a model), and the `engine` job in
+# `.github/workflows/gate.yml` checks this crate with it on. Building it needs
+# `cmake` and a C++ toolchain (docs/toolchain.md).
+default = []
+llama = ["dep:centraid-assist-llama", "centraid-assist-llama/engine"]
 # Forwarded to `centraid-core`, where the panic is. See its `debug-fault`.
 debug-fault = ["centraid-core/debug-fault"]
 
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
 centraid-core = { path = "../core" }
-# THE ON-DEVICE CHAT'S ENGINE (llama.cpp), and the only crate that links it.
-# `centraid_open` hands every handle its process-wide model slot, so the engine
-# is compiled into the one library a shell loads and `AssistRequest` can report
-# a model file as PRESENT rather than NO_ENGINE. Building it needs `cmake` on
-# `PATH` (docs/toolchain.md).
+# THE ON-DEVICE CHAT'S ENGINE (llama.cpp), and the only crate that links it,
+# behind this crate's `llama` feature. `centraid_open` hands every handle its
+# process-wide model slot, so with `llama` the engine is compiled into the one
+# library a shell loads and `AssistRequest` can report a model file as PRESENT
+# rather than NO_ENGINE. Building it needs `cmake` on `PATH` (docs/toolchain.md).
 centraid-assist-llama = { path = "../assist-llama", optional = true }
 # THE NETWORK, ATTACHED HERE AND NOWHERE ELSE (#1020, D-1020-B7). `centraid-core`
 # declares the `SeatNetwork` seam and cannot depend on the implementation — the
