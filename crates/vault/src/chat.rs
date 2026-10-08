@@ -78,7 +78,9 @@ pub struct StoredMessage {
     /// `user` or `assistant`.
     pub role: String,
     pub text: String,
-    /// `sent` (a question), `answered`, `stopped` or `refused`.
+    /// `sent` (a question), `answered`, `stopped` or `refused`; or a proposal's life: `proposed`
+    /// (a write that waited for a tap), then `applied`, `dismissed`, `stale` or `failed`
+    /// (rung twelve). A `proposed` message in a thread just opened has no card waiting on it.
     pub outcome: String,
     pub refusal: Option<String>,
     pub notice: Option<String>,

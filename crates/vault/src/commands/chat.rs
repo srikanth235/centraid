@@ -1,4 +1,4 @@
-//! THE `chat` SCHEMA — four commands, and the only writers of a conversation.
+//! THE `chat` SCHEMA — five commands, and the only writers of a conversation.
 //!
 //! A member's conversations with the on-device assistant are vault data
 //! (R-CHAT-1): `chat_thread` is an entity, `chat_message` is a projection of
@@ -6,6 +6,18 @@
 //! (rung eleven, `contracts/migrations/011_chat.sql`). Nothing writes them but
 //! these commands, so a chat is backed up, receipted and captured exactly as a
 //! note is.
+//!
+//! ## A proposal has a life, and the vault keeps its end (#1088)
+//!
+//! A write the assistant makes parks behind a confirm card (R-1088-2). The turn
+//! that parked is saved by [`save_turn`] with the outcome `proposed`, and
+//! [`settle_proposal`] records how the card ended: `applied`, `dismissed`,
+//! `stale` or `failed` (rung twelve, `contracts/migrations/012_chat_proposals.sql`,
+//! which states the five words). The pending write itself is memory and is inert
+//! when its thread is reopened (R-1088-10); the vault stores only the outcome and
+//! the line the member was told. A `proposed` message nobody settled is
+//! dismissed by the next turn saved into its thread, as a new message dismisses
+//! the card in a live session, so a thread holds at most one and it is its last.
 //!
 //! ## One turn is one commit
 //!
@@ -44,7 +56,13 @@ pub const THREAD_TARGET_TYPE: &str = "chat.thread";
 /// Every `chat.*` command.
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
-    vec![save_turn(), rename_thread(), delete_thread(), clear()]
+    vec![
+        save_turn(),
+        settle_proposal(),
+        rename_thread(),
+        delete_thread(),
+        clear(),
+    ]
 }
 
 const SAVE_TURN_SCHEMA: &str = r#"{
@@ -91,7 +109,7 @@ const SAVE_TURN_SCHEMA: &str = r#"{
           "required": ["outcome"],
           "additionalProperties": false,
           "properties": {
-            "outcome": { "enum": ["answered", "stopped", "refused"] },
+            "outcome": { "enum": ["answered", "stopped", "refused", "proposed"] },
             "text": { "type": "string", "maxLength": 20000 },
             "refusal": {
               "enum": [
@@ -124,6 +142,17 @@ const SAVE_TURN_SCHEMA: &str = r#"{
         }
       }
     }
+  }
+}"#;
+
+const SETTLE_PROPOSAL_SCHEMA: &str = r#"{
+  "type": "object",
+  "required": ["thread_id", "outcome"],
+  "additionalProperties": false,
+  "properties": {
+    "thread_id": { "type": "string", "minLength": 1 },
+    "outcome": { "enum": ["applied", "dismissed", "stale", "failed"] },
+    "text": { "type": "string", "minLength": 1, "maxLength": 20000 }
   }
 }"#;
 
@@ -360,6 +389,15 @@ fn save_turn() -> CommandDefinition {
                 )?;
             }
 
+            // A NEW MESSAGE DISMISSES THE CARD THAT WAS WAITING (R-1088-10): a proposal nobody
+            // answered is over, so the thread never holds a second one and the one it holds is
+            // its last. Its words stay as the member last saw them.
+            ctx.connection().execute(
+                "UPDATE chat_message SET outcome = 'dismissed'
+                  WHERE thread_id = ?1 AND outcome = 'proposed'",
+                [&thread_id],
+            )?;
+
             let next: i64 = ctx.connection().query_row(
                 "SELECT COALESCE(MAX(ordinal) + 1, 0) FROM chat_message WHERE thread_id = ?1",
                 [&thread_id],
@@ -494,6 +532,102 @@ fn save_turn() -> CommandDefinition {
         // THE WHOLE TURN IS SEALED: what was said, the cards' titles and the
         // thumbnail leave the audit journal as a token (R-CHAT-6).
         sealed_input: &["turn"],
+    }
+}
+
+// ---------------------------------------------------------------------------
+// chat.settle_proposal
+// ---------------------------------------------------------------------------
+
+/// The outcome of a thread's last assistant message, and its ordinal.
+fn last_answer(ctx: &CommandCtx<'_, '_>, thread_id: &str) -> Result<Option<(i64, String)>> {
+    Ok(ctx
+        .connection()
+        .query_row(
+            "SELECT ordinal, outcome FROM chat_message
+              WHERE thread_id = ?1 AND role = 'assistant'
+              ORDER BY ordinal DESC LIMIT 1",
+            [thread_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok())
+}
+
+fn settle_proposal() -> CommandDefinition {
+    CommandDefinition {
+        name: "chat.settle_proposal",
+        owner_schema: "chat",
+        input_schema: SETTLE_PROPOSAL_SCHEMA,
+        // A tap delivered twice settles once: the second finds the proposal already
+        // settled the way it asks and changes nothing.
+        idempotency: Idempotency::Idempotent,
+        risk: Risk::Low,
+        confirm: false,
+        preconditions: &[
+            CommandCondition {
+                predicate: "thread_exists",
+                check: |ctx| {
+                    let thread_id = ctx.required_str("thread_id")?;
+                    Ok((!thread_exists(ctx, thread_id)?).then(|| "This chat is gone.".to_owned()))
+                },
+            },
+            CommandCondition {
+                // ONLY THE LAST ANSWER CAN BE WAITING: `save_turn` dismisses the one before it.
+                predicate: "a_proposal_is_waiting",
+                check: |ctx| {
+                    let thread_id = ctx.required_str("thread_id")?;
+                    let asked = ctx.required_str("outcome")?;
+                    let waiting = last_answer(ctx, thread_id)?
+                        .is_some_and(|(_, outcome)| outcome == "proposed" || outcome == asked);
+                    Ok((!waiting).then(|| "Nothing is waiting on that.".to_owned()))
+                },
+            },
+        ],
+        postconditions: &[CommandCondition {
+            predicate: "the_proposal_is_settled",
+            check: |ctx| {
+                let thread_id = ctx.required_str("thread_id")?;
+                let asked = ctx.required_str("outcome")?;
+                let settled =
+                    last_answer(ctx, thread_id)?.is_some_and(|(_, outcome)| outcome == asked);
+                Ok((!settled).then(|| "the proposal was not settled".to_owned()))
+            },
+        }],
+        handler: |ctx| {
+            let thread_id = ctx.required_str("thread_id")?.to_owned();
+            let outcome = ctx.required_str("outcome")?.to_owned();
+            let Some((ordinal, current)) = last_answer(ctx, &thread_id)? else {
+                return Ok(serde_json::json!({ "thread_id": thread_id, "settled": false }));
+            };
+            if current == outcome {
+                return Ok(serde_json::json!({
+                    "thread_id": thread_id,
+                    "assistant_ordinal": ordinal,
+                    "settled": false,
+                }));
+            }
+            // The settled line replaces the proposal's, in the statement that moves the outcome
+            // (the trigger lets the outcome move only from `proposed`).
+            ctx.connection().execute(
+                "UPDATE chat_message SET outcome = ?1, text = COALESCE(?2, text)
+                  WHERE thread_id = ?3 AND ordinal = ?4",
+                rusqlite::params![outcome, ctx.optional_str("text"), thread_id, ordinal],
+            )?;
+            // Settling is activity in the chat, and states its own instant for the reason
+            // `save_turn` does.
+            ctx.connection().execute(
+                "UPDATE chat_thread SET updated_at = ?1 WHERE thread_id = ?2",
+                rusqlite::params![ctx.now, thread_id],
+            )?;
+            Ok(serde_json::json!({
+                "thread_id": thread_id,
+                "assistant_ordinal": ordinal,
+                "settled": true,
+            }))
+        },
+        // THE SETTLED LINE IS WHAT WAS SAID, so it leaves the audit journal as a token like the
+        // turn it replaces (R-CHAT-6).
+        sealed_input: &["text"],
     }
 }
 

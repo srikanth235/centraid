@@ -1028,7 +1028,9 @@ CREATE TABLE chat_message (
   ordinal     INTEGER NOT NULL CHECK (ordinal >= 0),
   role        TEXT NOT NULL CHECK (role IN ('user','assistant')),
   text        TEXT NOT NULL,
-  outcome     TEXT NOT NULL CHECK (outcome IN ('sent','answered','stopped','refused')),
+  outcome     TEXT NOT NULL CHECK (outcome IN (
+                'sent','answered','stopped','refused',
+                'proposed','applied','dismissed','stale','failed')),
   refusal     TEXT CHECK (refusal IS NULL OR refusal IN (
                 'no_tool_fits','query_failed','unparsable','model_absent','model_failed',
                 'vision_absent','attachment_unsupported','attachment_unreadable',
@@ -3147,6 +3149,25 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE session_id = NEW.session_id;
+END;
+
+-- trigger chat_message_is_not_born_settled on chat_message
+CREATE TRIGGER chat_message_is_not_born_settled
+BEFORE INSERT ON chat_message
+WHEN NEW.outcome IN ('applied','dismissed','stale','failed')
+BEGIN
+  SELECT RAISE(ABORT, 'a message is proposed before it is settled: it is not born applied, dismissed, stale or failed');
+END;
+
+-- trigger chat_message_outcome_settles_once on chat_message
+CREATE TRIGGER chat_message_outcome_settles_once
+BEFORE UPDATE OF outcome ON chat_message
+WHEN NEW.outcome IS NOT OLD.outcome
+BEGIN
+  SELECT RAISE(ABORT, 'a told answer does not change: only a proposal settles, and once')
+   WHERE OLD.outcome <> 'proposed';
+  SELECT RAISE(ABORT, 'a proposal settles as applied, dismissed, stale or failed')
+   WHERE NEW.outcome NOT IN ('applied','dismissed','stale','failed');
 END;
 
 -- trigger chat_thread_entity_delete on chat_thread

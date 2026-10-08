@@ -143,6 +143,16 @@ pub const BACKUP_V2_SQL: &str = include_str!("../../../contracts/migrations/010_
 /// reference. The file states each choice.
 pub const CHAT_SQL: &str = include_str!("../../../contracts/migrations/011_chat.sql");
 
+/// Rung twelve: a proposal keeps its life in the vault (#1088, R-1088-2, R-1088-10).
+///
+/// `chat_message.outcome` gains the five words of a proposal's life (`proposed`, `applied`,
+/// `dismissed`, `stale`, `failed`) and `chat_message_outcome_settles_once` states that only a
+/// `proposed` message changes its outcome, and only into one of the four ends. A rebuild of
+/// `chat_message` that carries its two child tables too, because dropping the parent runs the
+/// children's `ON DELETE CASCADE`.
+pub const CHAT_PROPOSALS_SQL: &str =
+    include_str!("../../../contracts/migrations/012_chat_proposals.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -203,6 +213,11 @@ pub const LADDER: &[Migration] = &[
         version: 11,
         name: "chat",
         sql: CHAT_SQL,
+    },
+    Migration {
+        version: 12,
+        name: "chat-proposals",
+        sql: CHAT_PROPOSALS_SQL,
     },
 ];
 

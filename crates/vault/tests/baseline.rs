@@ -48,8 +48,9 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 /// What the ladder adds above the baseline: rung two's four revision guards
 /// (#1020, D-1020-N2), rung six's guard that a collection's kind never
 /// changes, rung seven's index that makes a second Locker generation
-/// unrepresentable (R-1047-D2), and rung eleven's chat: four tables, their
-/// three entity triggers and the indexes (R-CHAT-1). Rungs three and four
+/// unrepresentable (R-1047-D2), rung eleven's chat: four tables, their
+/// three entity triggers and the indexes (R-CHAT-1), and rung twelve's two
+/// guards on a proposal's life (#1088). Rungs three and four
 /// added the old backup plane's index and blob custody (#1029 §2, §4); rung
 /// ten drops all eight objects again (#1080), so they are founded and gone.
 ///
@@ -58,10 +59,12 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 /// Named here rather than filtered by prefix: a guard that stopped being
 /// created, or an object arriving from somewhere, both have to show up as a
 /// failure.
-const LADDER_OBJECTS: [&str; 17] = [
+const LADDER_OBJECTS: [&str; 19] = [
     "chat_message",
     "chat_message_attachment",
     "chat_message_card",
+    "chat_message_is_not_born_settled",
+    "chat_message_outcome_settles_once",
     "chat_thread",
     "chat_thread_entity_delete",
     "chat_thread_entity_insert",
@@ -479,10 +482,11 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     // the Locker's one generation (R-1047-D2); rung eight drops the Locker's
     // match policy (Q-1047-15); rung nine drops the notices no plane writes;
     // rung ten drops rungs three and four's backup index (#1080); rung eleven
-    // founds the chat (R-CHAT-1).
+    // founds the chat (R-CHAT-1); rung twelve gives a proposal its life
+    // (#1088).
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above.
-    assert_eq!(user_version, 11);
+    assert_eq!(user_version, 12);
     assert_eq!(journal, "wal");
 }
 

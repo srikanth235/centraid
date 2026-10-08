@@ -78,9 +78,10 @@ fn the_registry_carries_every_command_this_build_has() {
         // projects, sections and tasks (wave 4 lane Schedule) — plus
         // `schedule.purge_task`, the Tasks trash's destroy (#1015 D1).
         ("schedule.", 17),
-        // The on-device chat's four writers (#1078, R-CHAT-1): `save_turn`,
-        // `rename_thread`, `delete_thread` and `clear`.
-        ("chat.", 4),
+        // The on-device chat's five writers (#1078, R-CHAT-1): `save_turn`,
+        // `rename_thread`, `delete_thread` and `clear`, and `settle_proposal`,
+        // which records how a parked write's card ended (#1088, rung twelve).
+        ("chat.", 5),
     ];
     let total: usize = by_schema.iter().map(|(_, expected)| *expected).sum();
     assert_eq!(

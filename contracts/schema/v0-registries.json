@@ -469,7 +469,7 @@
       "logical": "chat.message",
       "table": "chat_message",
       "label": "Chat messages",
-      "lifecycle": "append-only",
+      "lifecycle": "mutable",
       "projectionOf": "chat.thread",
       "deletionRoles": []
     },
