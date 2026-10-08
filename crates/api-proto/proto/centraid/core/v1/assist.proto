@@ -1,14 +1,15 @@
 // THE ON-DEVICE CHAT: a session, a question, and a stream of what happens next.
 //
 // The model is a small language model running ON THIS PHONE (llama.cpp over a
-// GGUF file the shell downloaded), and v1 is READ-ONLY: it may call a read an
-// app already answers, and it may say one sentence about what came back.
-// `crates/assist` is the plane; this file is its door.
+// GGUF file the shell downloaded). It may call a read an app already answers
+// and say one sentence about what came back; on the native plane (#1088) it may
+// also PROPOSE a write, which only the member's tap makes (see "A write is a
+// card" below). `crates/assist` is the plane; this file is its door.
 //
 // ## Why a request kind and not a registered command
 //
-// A turn writes nothing — no row, no receipt — and runs a model, so it is
-// neither a command (`command.proto`) nor a page read. It rides the envelope
+// A turn writes nothing — no row, no receipt, not even one it proposes — and
+// runs a model, so it is neither a command (`command.proto`) nor a page read. It rides the envelope
 // the way `phone.proto`'s verbs do, and for the same reason: the reasons it
 // cannot be a command are stated where a shell author reads them.
 //
@@ -47,6 +48,29 @@
 // that was running when the app died is lost whole, never half-kept: the save
 // is one commit at the turn's end. Locker is not an app a session can be
 // scoped to and no tool reads it.
+//
+// ## A write is a card, and a tap makes it (#1088, R-1088-2)
+//
+// On the native plane a turn that WRITES makes nothing: the runtime plans the
+// write against a copy of the vault's rows and parks it. The turn ends in an
+// ordinary `AssistAnswer` ("Proposed: …") carrying an `AssistPending`: the
+// card, one line per row the write changes, built from the runtime's
+// structured facts (the kind, the title, what moves) and not from the text the
+// model was shown. The same card rides the stream as `AssistEvent.pending`
+// just before the answer; the answer's copy is the reliable one, like every
+// other terminal fact of a turn.
+//
+// The member's tap is its own bounded call. `AssistConfirmRequest` runs the
+// parked steps once, through the commands a screen uses (so every screen that
+// reads those tables refreshes), and answers `AssistSettled`: how it ended and
+// the one line to say. A card tapped twice writes once and answers what it
+// answered the first time. `AssistDismissRequest` drops the card and writes
+// nothing. A card is in memory, one per session: a new message dismisses it, a
+// reopened thread never had it, and a tap on one that is gone is
+// `ASSIST_SETTLE_OUTCOME_NOTHING_WAITING`, not an error. A card carries no
+// "stale" flag: staleness is judged when it is tapped, against the rows as they
+// are then, and a tap on a card whose rows moved answers
+// `ASSIST_SETTLE_OUTCOME_STALE` and writes nothing.
 //
 // ## The model file
 //
@@ -94,6 +118,10 @@ message AssistRequest {
     AssistClearRequest clear = 7;
     AssistSuggestRequest suggest = 8;
     AssistDocumentsRequest documents = 9;
+    // The member's tap on a pending write's card, and its dismissal (#1088).
+    // Both answer `settled`.
+    AssistConfirmRequest confirm = 10;
+    AssistDismissRequest dismiss = 11;
   }
 }
 
@@ -106,6 +134,8 @@ message AssistResponse {
     AssistAck ack = 6;
     AssistSuggestions suggestions = 8;
     AssistDocuments documents = 9;
+    // Answers `confirm` and `dismiss`.
+    AssistSettled settled = 10;
   }
 }
 
@@ -326,6 +356,9 @@ message AssistAnswer {
   repeated AssistCard cards = 2;
   // What the member is told beside the answer.
   repeated AssistNotice notices = 3;
+  // The write this turn parked, waiting for the member's tap. Absent on a turn
+  // that wrote nothing.
+  AssistPending pending = 4;
 }
 
 enum AssistNotice {
@@ -391,7 +424,8 @@ message AssistRefusal {
 
 // What a running turn tells the shell, in this order: `activity` (or, over an
 // attachment, `reading`), then `cards` once the read returns (when it found
-// any), then `token`s, then exactly one of `answer` and `failed`.
+// any), then `token`s, then `pending` (when the turn parked a write), then
+// exactly one of `answer` and `failed`.
 message AssistEvent {
   uint64 session_id = 1;
   uint64 turn_id = 2;
@@ -402,6 +436,8 @@ message AssistEvent {
     AssistAnswer answer = 6;
     AssistRefusal failed = 7;
     AssistReading reading = 8;
+    // A write was parked: the card to draw. After `cards`, before `answer`.
+    AssistPending pending = 9;
   }
 }
 
@@ -431,4 +467,81 @@ message AssistCards {
 // and replaces them with the answer.
 message AssistToken {
   string text = 1;
+}
+
+// ---------------------------------------------------------------------------
+// The pending write: a card, and the tap that makes it (#1088).
+// ---------------------------------------------------------------------------
+
+// A write waiting for the member's tap. Nothing has been written.
+message AssistPending {
+  // What a `confirm` or a `dismiss` names. Minted by the core; one is waiting
+  // per session.
+  string pending_id = 1;
+  // The runtime's verb of each write call, in order: `complete`, `delete`…
+  repeated string verbs = 2;
+  // One line for each row the write changes, in order.
+  repeated AssistPendingStep steps = 3;
+  // The card asks twice: it deletes or removes, cancels, settles money, or
+  // changes something the vault cannot take back. The shell draws the confirm
+  // as the documented destructive control.
+  bool destructive = 4;
+  // Rows the write changes beyond the `steps` listed (a bulk write shows its
+  // first twelve): "and N more" is the shell's to say.
+  uint32 more = 5;
+}
+
+// ONE ROW A WRITE CHANGES, as one line the member reads before tapping.
+message AssistPendingStep {
+  // The runtime's verb for this row: `complete`, `edit`, `delete`…
+  string verb = 1;
+  // What the row is: `task`, `person`, `event`…
+  string kind = 2;
+  // The row's name.
+  string title = 3;
+  // The whole line, composed by the runtime from the chat's copy: `Complete
+  // task "Pick up the dry cleaning"`, `Reschedule task "Call plumber": due
+  // tomorrow → Fri 9 Oct`. The shell draws it as it is.
+  string summary = 4;
+  // This step deletes or removes (or cancels, or settles money).
+  bool destructive = 5;
+}
+
+// The member tapped Confirm.
+message AssistConfirmRequest {
+  uint64 session_id = 1;
+  string pending_id = 2;
+}
+
+// The member tapped Cancel. Nothing is written.
+message AssistDismissRequest {
+  uint64 session_id = 1;
+  string pending_id = 2;
+}
+
+// How a tap on the card ended.
+enum AssistSettleOutcome {
+  ASSIST_SETTLE_OUTCOME_UNSPECIFIED = 0;
+  // Every step ran. Every screen that reads those tables has been told.
+  ASSIST_SETTLE_OUTCOME_APPLIED = 1;
+  // A row the write addresses reads differently than when it was planned:
+  // nothing ran. The member asks again.
+  ASSIST_SETTLE_OUTCOME_STALE = 2;
+  // The vault refused a step. Steps before it ran; `line` carries the vault's
+  // own sentence.
+  ASSIST_SETTLE_OUTCOME_REFUSED = 3;
+  // The card was dismissed. Nothing was written.
+  ASSIST_SETTLE_OUTCOME_DISMISSED = 4;
+  // No such card is waiting: it was answered, dismissed, replaced by a new
+  // message, or never made.
+  ASSIST_SETTLE_OUTCOME_NOTHING_WAITING = 5;
+}
+
+message AssistSettled {
+  uint64 session_id = 1;
+  string pending_id = 2;
+  AssistSettleOutcome outcome = 3;
+  // The one line to say, composed by the runtime from the chat's copy
+  // ("Done.", "That changed since. Ask again.").
+  string line = 4;
 }

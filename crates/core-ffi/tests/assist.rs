@@ -218,6 +218,7 @@ fn a_turn_crosses_the_abi_and_its_events_come_back_encoded_and_in_order() {
                 wire::assist_event::Kind::Answer(_) => "answer",
                 wire::assist_event::Kind::Failed(_) => "failed",
                 wire::assist_event::Kind::Reading(_) => "reading",
+                wire::assist_event::Kind::Pending(_) => "pending",
             }),
             _ => None,
         })
@@ -228,6 +229,116 @@ fn a_turn_crosses_the_abi_and_its_events_come_back_encoded_and_in_order() {
     assert!(
         kinds.iter().filter(|kind| **kind == "token").count() >= 2,
         "{kinds:?}"
+    );
+}
+
+#[test]
+fn a_parked_write_crosses_the_abi_as_a_card_and_a_tap_on_it_comes_back_settled() {
+    // A write turn on the native plane: two model messages (look, then act), each a think and
+    // the one call it writes.
+    fn message(think: &str, tool: &str, args: &[(&str, &str)]) -> [String; 2] {
+        let params: String = args
+            .iter()
+            .map(|(key, value)| format!("<parameter={key}>\n{value}\n</parameter>\n"))
+            .collect();
+        [
+            think.to_owned(),
+            format!("\n\n<tool_call>\n<function={tool}>\n{params}</function>\n"),
+        ]
+    }
+    let opened = Opened::sample();
+    opened
+        .core()
+        .assist()
+        .use_plane(centraid_core::assist::PlaneKind::Native);
+    let script: Vec<String> = [
+        message(
+            "plan: look",
+            "find",
+            &[("kind", "task"), ("name", "dry cleaning")],
+        ),
+        message(
+            "plan: write",
+            "act",
+            &[("verb", "complete"), ("rows", "@1")],
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    opened
+        .core()
+        .assist()
+        .host()
+        .install(Arc::new(ScriptedModel::new(script)));
+    opened.events();
+
+    let session = start(&opened);
+    let sent = send_with(
+        &opened,
+        session,
+        1,
+        "complete the dry cleaning task",
+        Vec::new(),
+    );
+    let Some(wire::assist_sent::Outcome::Answered(answer)) = sent.outcome else {
+        panic!("the turn answers")
+    };
+    let card = answer.pending.expect("the answer carries the card");
+    assert_eq!(card.steps.len(), 1);
+    assert_eq!(
+        card.steps[0].summary,
+        "Complete task \"Pick up the dry cleaning\""
+    );
+
+    // the same card came back on the stream, encoded, just before the answer
+    let streamed: Vec<wire::AssistEvent> = opened
+        .events()
+        .into_iter()
+        .filter_map(|event| match event.kind? {
+            wire::event::Kind::Assist(event) => Some(event),
+            _ => None,
+        })
+        .collect();
+    let on_stream = streamed
+        .iter()
+        .find_map(|event| match event.kind.as_ref()? {
+            wire::assist_event::Kind::Pending(card) => Some(card),
+            _ => None,
+        });
+    assert_eq!(on_stream, Some(&card));
+
+    // THE TAP crosses as its own request and comes back as `settled`
+    let Some(wire::assist_response::Kind::Settled(settled)) = assist(
+        &opened,
+        wire::assist_request::Kind::Confirm(wire::AssistConfirmRequest {
+            session_id: session,
+            pending_id: card.pending_id.clone(),
+        }),
+    )
+    .kind
+    else {
+        panic!("a confirm answers settled")
+    };
+    assert_eq!(settled.outcome, wire::AssistSettleOutcome::Applied as i32);
+    assert_eq!(settled.line, "Done.");
+    assert_eq!(settled.pending_id, card.pending_id);
+
+    // and the same tap again is nothing writing twice
+    let Some(wire::assist_response::Kind::Settled(again)) = assist(
+        &opened,
+        wire::assist_request::Kind::Dismiss(wire::AssistDismissRequest {
+            session_id: session,
+            pending_id: card.pending_id,
+        }),
+    )
+    .kind
+    else {
+        panic!("a dismiss answers settled")
+    };
+    assert_eq!(
+        again.outcome,
+        wire::AssistSettleOutcome::NothingWaiting as i32
     );
 }
 

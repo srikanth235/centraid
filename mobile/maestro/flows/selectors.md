@@ -51,6 +51,10 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `chat-empty` | Chat | the empty thread's one line |
 | `chat-suggestion-<n>` | Chat | the n-th suggested question, from 0 |
 | `chat-card-<n>` | Chat | the n-th row-card under an answer, from 0 |
+| `chat-pending` | Chat | the lines of the confirm card under an answer that proposes a write, read as one element |
+| `chat-pending-confirm` | Chat | its Confirm (outlined in `net` when the card asks twice) |
+| `chat-pending-cancel` | Chat | its Cancel |
+| `chat-pending-settled` | Chat | the one clause that says how the card ended ("Done.", "Not done.") |
 | `chat-new` | Chat | the header's New chat |
 
 Home, its Settings and vault sheets, the Backup screen, the first-launch deck and Chat set tags; the Backup screen's ids are written in both shells and selected by no flow yet. The iOS shell runs on a simulator against the real `HomeMachine` through `HomeBridge`, so the iOS half of each id renders; the Android half is compiled and unobserved, because no machine here has an Android emulator.

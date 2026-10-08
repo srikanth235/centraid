@@ -173,7 +173,9 @@ struct ChatView: View {
                             goneCard: goneCard,
                             onCopy: { copy(message.id) },
                             onRetry: { chat.regenerate() },
-                            onOpenCard: { card, index in open(card, at: index, of: message) }
+                            onOpenCard: { card, index in open(card, at: index, of: message) },
+                            onConfirmPending: { chat.confirmPending($0) },
+                            onCancelPending: { chat.cancelPending($0) }
                         )
                     }
                     if !state.error.isEmpty, !state.streaming {
@@ -223,7 +225,10 @@ struct ChatView: View {
     /// Everything that makes the thread grow without adding a message.
     private func follow(_ state: Centraid_Screen_V1_ChatState) -> [Int] {
         let last = state.messages.last
-        return [last?.text.count ?? 0, last?.cards.count ?? 0, state.activity.count, state.error.count]
+        return [
+            last?.text.count ?? 0, last?.cards.count ?? 0, last?.pending.state.rawValue ?? 0,
+            state.activity.count, state.error.count,
+        ]
     }
 
     private func scrollToFoot(_ proxy: ScrollViewProxy, animated: Bool = true) {
@@ -616,6 +621,9 @@ private struct ChatMessageRow: View {
     let onCopy: () -> Void
     let onRetry: () -> Void
     let onOpenCard: (Centraid_Screen_V1_ChatCard, Int) -> Void
+    /// Confirm and Cancel on the proposed write's card, by its id.
+    let onConfirmPending: (String) -> Void
+    let onCancelPending: (String) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
@@ -670,6 +678,14 @@ private struct ChatMessageRow: View {
                                 .accessibilityIdentifier("chat-card-gone")
                         }
                     }
+                }
+                // THE WRITE THE MODEL PROPOSED, once the answer has stopped streaming.
+                if message.hasPending, !message.streaming {
+                    ChatPendingCard(
+                        pending: message.pending,
+                        onConfirm: { onConfirmPending(message.pending.pendingID) },
+                        onCancel: { onCancelPending(message.pending.pendingID) }
+                    )
                 }
                 if !message.note.isEmpty {
                     Text(verbatim: message.note)
@@ -827,6 +843,76 @@ private struct ChatCardPress: ButtonStyle {
                 RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
                     .fill(configuration.isPressed ? Theme.color("bgPress", scheme) : Color.clear)
             )
+    }
+}
+
+// MARK: - A proposed write
+
+/// A WRITE THE MODEL PROPOSED, as the confirm card under its answer: one line
+/// for each row it changes, in the core's words, then Confirm and Cancel; once
+/// answered, the one clause that says how it ended. Nothing the model wrote
+/// reaches the vault before Confirm. Both buttons are outlined (Send is the
+/// screen's one filled element), and a card that asks twice outlines Confirm in
+/// `net`. There is no toast and no Undo: an applied card says "Done." and stays.
+private struct ChatPendingCard: View {
+    let pending: Centraid_Screen_V1_ChatPending
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    /// Confirm and Cancel are drawn while the card waits or the core works.
+    private var asking: Bool { pending.state == .waiting || pending.state == .working }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(pending.steps.enumerated()), id: \.offset) { _, step in
+                    Text(verbatim: step.summary)
+                        .chatType("smallStrong")
+                        .foregroundStyle(Theme.color(step.destructive ? "net" : "text", scheme))
+                        .multilineTextAlignment(.leading)
+                }
+                if !pending.moreLine.isEmpty {
+                    Text(verbatim: pending.moreLine)
+                        .chatType("mono")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // ONE ELEMENT FOR THE LINES, read as the core's label. NO IDENTIFIER ON THE CARD
+            // ITSELF: one on a container replaces its children's (#1047), the buttons' included.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(pending.accessibilityLabel)
+            .accessibilityIdentifier("chat-pending")
+            if asking {
+                HStack(spacing: 8) {
+                    KitOutlineButton(label: pending.cancelLabel, action: onCancel)
+                        .accessibilityIdentifier("chat-pending-cancel")
+                    KitOutlineButton(
+                        label: pending.confirmLabel,
+                        tone: pending.destructive ? "net" : "text",
+                        action: onConfirm
+                    )
+                    .accessibilityIdentifier("chat-pending-confirm")
+                }
+                .disabled(pending.state == .working)
+            } else if !pending.settledLine.isEmpty {
+                Text(verbatim: pending.settledLine)
+                    .chatType("mono")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .accessibilityIdentifier("chat-pending-settled")
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
+                .fill(Theme.color("bgElev", scheme))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
+                .strokeBorder(Theme.color(pending.destructive ? "net" : "line", scheme), lineWidth: CentraidGeometry.hairline)
+        )
     }
 }
 

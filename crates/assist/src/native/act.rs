@@ -32,6 +32,7 @@ use serde_json::{Map, Value, json};
 use crate::native::dates::{self, Stamp};
 use crate::native::door::Ran;
 use crate::native::meta::{self, FieldType, Kind, ROW_CAP, Verb, Via};
+use crate::native::park::{FieldChange, LinkChange, RowChange};
 use crate::native::render;
 use crate::native::session::{
     Inverse, Outcome, ResultSet, Selector, Session, arg_bool, arg_str, canonical_json,
@@ -1720,6 +1721,7 @@ impl Session {
         }
         let mut lines = Vec::new();
         let mut shown_lines: Vec<(Key, usize, String)> = Vec::new();
+        let mut shown_changes: Vec<RowChange> = Vec::new();
         self.mark_acted(&touched);
         self.mark_acted(&already_keys);
         for (shown, key) in touched.iter().enumerate() {
@@ -1728,6 +1730,7 @@ impl Session {
             if verb != Verb::Reveal && shown < ROW_CAP {
                 let line = self.change_line(verb, &before, key, n);
                 shown_lines.push((key.clone(), n, line.clone()));
+                shown_changes.extend(self.row_change(verb, &before, key));
                 lines.push(line);
             }
         }
@@ -1768,7 +1771,12 @@ impl Session {
                 .effect
                 .insert("revealed".to_owned(), json!(revealed));
         }
-        self.park_call(verb, shown_lines);
+        let more = if verb == Verb::Reveal {
+            0
+        } else {
+            touched.len().saturating_sub(ROW_CAP)
+        };
+        self.park_call(verb, shown_lines, shown_changes, more);
         Ok(outcome)
     }
 
@@ -1799,7 +1807,7 @@ impl Session {
             (Some(old), Some(new)) => {
                 let mut parts = row_changes(old, new, today)
                     .into_iter()
-                    .map(|(_, text)| text)
+                    .map(|moved| moved.text)
                     .collect::<Vec<_>>();
                 for edge in edge_changes(before, &self.world, key) {
                     let (added, other) = edge;
@@ -1828,6 +1836,82 @@ impl Session {
             }
             (None, None) => format!("#{n}"),
         }
+    }
+
+    /// The facts behind [`Self::change_line`]: the row's kind and title, the fields that moved
+    /// (or its starting values, when the call created it) and the links it gained or lost. What a
+    /// confirm card says in words; `None` for a row the world does not hold.
+    pub(crate) fn row_change(&self, verb: Verb, before: &World, key: &Key) -> Option<RowChange> {
+        let today = self.today();
+        let new = self.world.row(key);
+        let old = before.row(key);
+        // THE ROW AS THE MEMBER KNEW IT: a rename is "Change person \"Ray\": name \"Ray\" → …"
+        let (row, created) = match (old, new) {
+            (None, Some(row)) => (row, true),
+            (Some(row), _) => (row, false),
+            (None, None) => return None,
+        };
+        let date_label = row.kind.spec().date.map_or("date", |date| date.label);
+        let fields = match (old, new) {
+            (Some(old), Some(new)) => row_changes(old, new, today)
+                .into_iter()
+                .filter(|moved| moved.from.is_some() || moved.to.is_some())
+                .map(|moved| FieldChange {
+                    field: if moved.field == "date" {
+                        date_label.to_owned()
+                    } else {
+                        moved.field
+                    },
+                    from: moved.from,
+                    to: moved.to,
+                })
+                .collect(),
+            (None, Some(new)) => {
+                let mut starting: Vec<FieldChange> = new
+                    .date
+                    .map(|stamp| FieldChange {
+                        field: date_label.to_owned(),
+                        from: None,
+                        to: Some(render::card_when(stamp, today)),
+                    })
+                    .into_iter()
+                    .collect();
+                // a flag that starts off (`starred no`) says nothing the row's being new does not
+                starting.extend(new.kind.spec().fields.iter().filter_map(|field| {
+                    new.field(field.name)
+                        .filter(|value| **value != Val::Bool(false))
+                        .map(|value| FieldChange {
+                            field: field.name.to_owned(),
+                            from: None,
+                            to: Some(value.show(Some(field))),
+                        })
+                }));
+                starting
+            }
+            _ => Vec::new(),
+        };
+        let links = match (old, new) {
+            (Some(_), Some(_)) => edge_changes(before, &self.world, key)
+                .into_iter()
+                .filter_map(|(added, other)| {
+                    let other = self.world.row(&other).or_else(|| before.row(&other))?;
+                    Some(LinkChange {
+                        added,
+                        kind: other.kind.name(),
+                        title: other.name.clone(),
+                    })
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        Some(RowChange {
+            verb: verb.spec().name,
+            kind: row.kind.name(),
+            title: row.name.clone(),
+            created,
+            fields,
+            links,
+        })
     }
 
     pub(crate) fn diff_json(&mut self, diff: &Diff) -> Value {
@@ -3601,12 +3685,14 @@ impl Session {
         self.mark_acted(&touched);
         let mut out = Vec::new();
         let mut shown_lines: Vec<(Key, usize, String)> = Vec::new();
+        let mut shown_changes: Vec<RowChange> = Vec::new();
         for (shown, key) in touched.iter().enumerate() {
             let n = self.number(key);
             self.acted.insert(n);
             if shown < ROW_CAP {
                 let line = self.change_line(Verb::Undo, &before, key, n);
                 shown_lines.push((key.clone(), n, line.clone()));
+                shown_changes.extend(self.row_change(Verb::Undo, &before, key));
                 out.push(line);
             }
         }
@@ -3626,7 +3712,8 @@ impl Session {
         let mut outcome = Outcome::text(out.join("\n"));
         let diff_json = self.diff_json(&diff);
         outcome.effect.insert("diff".to_owned(), diff_json);
-        self.park_call(Verb::Undo, shown_lines);
+        let more = touched.len().saturating_sub(ROW_CAP);
+        self.park_call(Verb::Undo, shown_lines, shown_changes, more);
         Ok(outcome)
     }
 }
@@ -4248,23 +4335,39 @@ pub(crate) fn diff(before: &World, after: &World) -> Diff {
     Diff { rows, links }
 }
 
+/// A field a write moved, as the model's change line spells it and as the facts it is made of.
+pub(crate) struct FieldMove {
+    pub field: String,
+    /// The value before and after, spelled for display (`"text"` quoted, a date in the person's
+    /// words); `None` when the row had none. Both `None` for a change that is not a value (a
+    /// sealed cell, the trash).
+    pub from: Option<String>,
+    pub to: Option<String>,
+    /// The model's change line for it: `name "a" → "b"`, `status open → done`.
+    pub text: String,
+}
+
 /// `field old → new` for one row.
-fn row_changes(old: &Row, new: &Row, today: jiff::civil::Date) -> Vec<(String, String)> {
+fn row_changes(old: &Row, new: &Row, today: jiff::civil::Date) -> Vec<FieldMove> {
     let mut out = Vec::new();
     if old.name != new.name {
-        out.push((
-            "name".to_owned(),
-            format!("name \"{}\" → \"{}\"", old.name, new.name),
-        ));
+        out.push(FieldMove {
+            field: "name".to_owned(),
+            from: Some(format!("\"{}\"", old.name)),
+            to: Some(format!("\"{}\"", new.name)),
+            text: format!("name \"{}\" → \"{}\"", old.name, new.name),
+        });
     }
     if old.date != new.date {
         let show = |stamp: Option<Stamp>| {
             stamp.map_or_else(|| "none".to_owned(), |stamp| render::when(stamp, today))
         };
-        out.push((
-            "date".to_owned(),
-            format!("{} → {}", show(old.date), show(new.date)),
-        ));
+        out.push(FieldMove {
+            field: "date".to_owned(),
+            from: old.date.map(|stamp| render::card_when(stamp, today)),
+            to: new.date.map(|stamp| render::card_when(stamp, today)),
+            text: format!("{} → {}", show(old.date), show(new.date)),
+        });
     }
     let spec = new.kind.spec();
     for field in spec.fields {
@@ -4275,31 +4378,37 @@ fn row_changes(old: &Row, new: &Row, today: jiff::civil::Date) -> Vec<(String, S
         let show = |value: Option<&Val>| {
             value.map_or_else(|| "none".to_owned(), |value| value.show(Some(field)))
         };
-        out.push((
-            field.name.to_owned(),
-            format!("{} {} → {}", field.name, show(a), show(b)),
-        ));
+        out.push(FieldMove {
+            field: field.name.to_owned(),
+            from: a.map(|value| value.show(Some(field))),
+            to: b.map(|value| value.show(Some(field))),
+            text: format!("{} {} → {}", field.name, show(a), show(b)),
+        });
     }
     let (was, now) = (sealed_cells(old), sealed_cells(new));
     for (name, sealed) in &now {
         if was.get(name) != Some(sealed) {
-            out.retain(|(field, _)| field != name);
-            out.push((
-                (*name).to_owned(),
-                format!("{name} changed (sealed; reveal to show)"),
-            ));
+            out.retain(|moved| moved.field != *name);
+            out.push(FieldMove {
+                field: (*name).to_owned(),
+                from: None,
+                to: None,
+                text: format!("{name} changed (sealed; reveal to show)"),
+            });
         }
     }
     if old.trashed != new.trashed {
-        out.push((
-            "trashed".to_owned(),
-            if new.trashed {
+        out.push(FieldMove {
+            field: "trashed".to_owned(),
+            from: None,
+            to: None,
+            text: if new.trashed {
                 "moved to the trash"
             } else {
                 "back from the trash"
             }
             .to_owned(),
-        ));
+        });
     }
     out
 }
