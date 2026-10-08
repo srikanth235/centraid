@@ -49,15 +49,27 @@ pub(crate) fn refusal_of(word: &str) -> wire::AssistRefusalReason {
     }
 }
 
-fn message_to_wire(message: StoredMessage) -> wire::ChatStoredMessage {
+/// A stored outcome word as the wire's. The words are the schema's CHECK list (rung twelve widened
+/// it with a proposal's five), so a word this does not know is a build that is older than its
+/// file, and it reads as unspecified rather than as one of the others.
+pub(crate) fn outcome_of(word: &str) -> wire::ChatStoredOutcome {
     use wire::ChatStoredOutcome as O;
-    let outcome = match message.outcome.as_str() {
+    match word {
         "sent" => O::Sent,
         "answered" => O::Answered,
         "stopped" => O::Stopped,
         "refused" => O::Refused,
+        "proposed" => O::Proposed,
+        "applied" => O::Applied,
+        "dismissed" => O::Dismissed,
+        "stale" => O::Stale,
+        "failed" => O::Failed,
         _ => O::Unspecified,
-    };
+    }
+}
+
+fn message_to_wire(message: StoredMessage) -> wire::ChatStoredMessage {
+    let outcome = outcome_of(&message.outcome);
     wire::ChatStoredMessage {
         ordinal: u64::try_from(message.ordinal).unwrap_or_default(),
         from_member: message.role == "user",
@@ -148,6 +160,41 @@ pub(super) fn card(vault: &Vault, asked: &wire::ChatCardRequest) -> Result<Answe
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The words inside the first `IN (...)` list after `anchor` in the rung-twelve DDL: the
+    /// schema's own list, so a word the CHECK gains and this mapping misses fails here.
+    fn check_words(anchor: &str) -> Vec<String> {
+        let ddl = centraid_vault::migrations::CHAT_PROPOSALS_SQL;
+        let from = ddl
+            .find(anchor)
+            .and_then(|at| ddl[at..].find("IN (").map(|list| at + list))
+            .expect("the DDL lists the anchor's words");
+        let list = &ddl[from..][..ddl[from..].find(')').expect("the list closes")];
+        list.split('\'')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_owned)
+            .collect()
+    }
+
+    #[test]
+    fn every_outcome_word_the_schema_allows_has_a_value() {
+        // contracts/migrations/012_chat_proposals.sql: `chat_message.outcome CHECK (outcome IN …)`
+        let words = check_words("CHECK (outcome IN (");
+        // a mis-read of the DDL must not pass for "no word is missing"
+        assert!(words.contains(&"sent".to_owned()) && words.contains(&"failed".to_owned()));
+        for word in &words {
+            assert_ne!(
+                outcome_of(word),
+                wire::ChatStoredOutcome::Unspecified,
+                "{word}"
+            );
+        }
+        assert_eq!(
+            outcome_of("from_the_future"),
+            wire::ChatStoredOutcome::Unspecified
+        );
+    }
 
     #[test]
     fn every_refusal_word_the_schema_allows_has_a_reason() {
