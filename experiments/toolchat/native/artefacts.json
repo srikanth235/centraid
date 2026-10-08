@@ -1,10 +1,16 @@
 {
-  "about": "Built and frozen artefacts of the native tool task (#1088, R-1088-14). Tool: artefacts.py. A file rebuilds (rebuild: a command run from this directory) or lives on the private Hugging Face Hub repository (hub: repo, revision, path); the sha256 is of the bytes in place. Sources stay in the tree.",
-  "schema": 1,
+  "about": "Data-version manifest of the native tool task (#1088, R-1088-14, R-1088-16). Tool: artefacts.py. `data` pins the version in use: one tag of the private Hugging Face dataset repository, and the commit the tag points at. A file rebuilds (rebuild: a command run from this directory, public sources only) or comes from the version (version_path); heldout files are not needed by the public CI; the sha256 is of the bytes in place. Sources stay in the tree.",
+  "schema": 2,
+  "data": {
+    "repo": "srikanth235/centraid-native-data",
+    "version": "data-v7",
+    "revision": null
+  },
   "files": [
     {
       "name": "world/T01",
       "path": "authored/worlds/T01.json",
+      "version_path": "worlds/T01.json",
       "sha256": "d3a8f6562ac1a0f51c3f0d9a9a257d756b46041aa96088ace8b6bc3ed0b5b278",
       "size": 51697,
       "from": "authored/worlds/T01_build.py, then the repository JSON layout",
@@ -13,22 +19,16 @@
     {
       "name": "world/T02",
       "path": "authored/worlds/T02.json",
+      "version_path": "worlds/T02.json",
       "sha256": "ae2dce3dec0e20fd9956f8be306d1882346b6d565100d542674e21d9310d8b2f",
       "size": 49893,
       "from": "authored/worlds/T02_build.py, then the repository JSON layout",
       "rebuild": "python3 authored/worlds/T02_build.py && python3 artefacts.py format authored/worlds/T02.json"
     },
     {
-      "name": "world/T03",
-      "path": "authored/worlds/T03.json",
-      "sha256": "c34f42636beceb01a960966649e3fcf6f3180273ca55add46cd465996ba14dc8",
-      "size": 57066,
-      "from": "authored/worlds/T03_build.py, then the repository JSON layout",
-      "rebuild": "python3 authored/worlds/T03_build.py && python3 artefacts.py format authored/worlds/T03.json"
-    },
-    {
       "name": "world/T04",
       "path": "authored/worlds/T04.json",
+      "version_path": "worlds/T04.json",
       "sha256": "2a15059d8fe708ca305a377e274fbfdef5fff46d0cae5cd833601b89a57a7628",
       "size": 55092,
       "from": "authored/worlds/T04_build.py, then the repository JSON layout",
@@ -37,6 +37,7 @@
     {
       "name": "world/T05",
       "path": "authored/worlds/T05.json",
+      "version_path": "worlds/T05.json",
       "sha256": "a403d9ce1ea59a572044225ad6f35819c8db0f1ed1aa8de43c09e68585e67ff1",
       "size": 50842,
       "from": "authored/worlds/T05_build.py, then the repository JSON layout",
@@ -45,6 +46,7 @@
     {
       "name": "world/T06",
       "path": "authored/worlds/T06.json",
+      "version_path": "worlds/T06.json",
       "sha256": "4ceb1b2fa962973c1355dd9f390d74dc3ac5d0816bfbe78aec8efbec163807f3",
       "size": 51010,
       "from": "authored/worlds/T06_build.py, then the repository JSON layout",
@@ -53,6 +55,7 @@
     {
       "name": "world/T07",
       "path": "authored/worlds/T07.json",
+      "version_path": "worlds/T07.json",
       "sha256": "e97567a6fb113e885b060a879bcad5fd214168179a354e2159bdbcfd8a27c0b1",
       "size": 52999,
       "from": "authored/worlds/T07_build.py, then the repository JSON layout",
@@ -61,6 +64,7 @@
     {
       "name": "world/T08",
       "path": "authored/worlds/T08.json",
+      "version_path": "worlds/T08.json",
       "sha256": "758ae11d145bcb1ecb1fa08d109f07371b9b878c6c5410e80d82544825997e20",
       "size": 52166,
       "from": "authored/worlds/T08_build.py, then the repository JSON layout",
@@ -69,6 +73,7 @@
     {
       "name": "world/T09",
       "path": "authored/worlds/T09.json",
+      "version_path": "worlds/T09.json",
       "sha256": "28dacf921cb7ec3773806192e5fb0368633f9df390870b4e7a8a9ab3cac8b815",
       "size": 53343,
       "from": "authored/worlds/T09_build.py, then the repository JSON layout",
@@ -77,6 +82,7 @@
     {
       "name": "world/T10",
       "path": "authored/worlds/T10.json",
+      "version_path": "worlds/T10.json",
       "sha256": "d0a8699f0b9b3f5e536931f25ed1041f77f6eb0bf5e18f1abc577cb98389078a",
       "size": 50157,
       "from": "authored/worlds/T10_build.py, then the repository JSON layout",
@@ -85,22 +91,16 @@
     {
       "name": "world/T11",
       "path": "authored/worlds/T11.json",
+      "version_path": "worlds/T11.json",
       "sha256": "a3fb23145343b513953636aa55b81a07e9727162084378c40ca2709a648b1bca",
       "size": 50910,
       "from": "authored/worlds/T11_build.py, then the repository JSON layout",
       "rebuild": "python3 authored/worlds/T11_build.py && python3 artefacts.py format authored/worlds/T11.json"
     },
     {
-      "name": "world/T12",
-      "path": "authored/worlds/T12.json",
-      "sha256": "7b4e180af5a04d309e9391374d14652871929519b36f5dfd241338301aac6699",
-      "size": 49942,
-      "from": "authored/worlds/T12_build.py, then the repository JSON layout",
-      "rebuild": "python3 authored/worlds/T12_build.py && python3 artefacts.py format authored/worlds/T12.json"
-    },
-    {
       "name": "world/T13",
       "path": "authored/worlds/T13.json",
+      "version_path": "worlds/T13.json",
       "sha256": "ef23af266c4318956d02d5ea20ee429efd0ec1c54980d2be3c00fff23feb0a71",
       "size": 54434,
       "from": "authored/worlds/T13_build.py, then the repository JSON layout",
@@ -109,6 +109,7 @@
     {
       "name": "world/T14",
       "path": "authored/worlds/T14.json",
+      "version_path": "worlds/T14.json",
       "sha256": "1a4bc340da4d5447b95ab293291c45648847a9a02827e8cc2b4339016a3dff0b",
       "size": 54224,
       "from": "authored/worlds/T14_build.py, then the repository JSON layout",
@@ -117,6 +118,7 @@
     {
       "name": "world/T15",
       "path": "authored/worlds/T15.json",
+      "version_path": "worlds/T15.json",
       "sha256": "d6fdfedd504fd30590e0780e89907f89fd21ba417b931f53d810b48f6f143d4e",
       "size": 55118,
       "from": "authored/worlds/T15_build.py, then the repository JSON layout",
@@ -125,6 +127,7 @@
     {
       "name": "world/T16",
       "path": "authored/worlds/T16.json",
+      "version_path": "worlds/T16.json",
       "sha256": "beaec834e766a12f5837152574f40a5b9274ab08ab25b4060247e89f77938bbf",
       "size": 54416,
       "from": "authored/worlds/T16_build.py, then the repository JSON layout",
@@ -133,6 +136,7 @@
     {
       "name": "world/T17",
       "path": "authored/worlds/T17.json",
+      "version_path": "worlds/T17.json",
       "sha256": "b5be2461b033dfceb49950e3234c879b06bc24f1fda74ed30ec2100ba8221a95",
       "size": 53770,
       "from": "authored/worlds/T17_build.py, then the repository JSON layout",
@@ -141,6 +145,7 @@
     {
       "name": "world/T18",
       "path": "authored/worlds/T18.json",
+      "version_path": "worlds/T18.json",
       "sha256": "f35efb2b4f520d6c3c5200c50366b2ae042e8ecf0ebf8653367d28e39ca482b4",
       "size": 49580,
       "from": "authored/worlds/T18_build.py, then the repository JSON layout",
@@ -149,6 +154,7 @@
     {
       "name": "world/T19",
       "path": "authored/worlds/T19.json",
+      "version_path": "worlds/T19.json",
       "sha256": "314a97078e9f2171648eefe3482f7d18c8650f19ddd3402ce0803d0ad9a442fe",
       "size": 52365,
       "from": "authored/worlds/T19_build.py, then the repository JSON layout",
@@ -157,6 +163,7 @@
     {
       "name": "world/T20",
       "path": "authored/worlds/T20.json",
+      "version_path": "worlds/T20.json",
       "sha256": "d107d8842dc9f1d628b9b1bb7366271b455bf7ea8f20e9af06344a0c2d38424d",
       "size": 54294,
       "from": "authored/worlds/T20_build.py, then the repository JSON layout",
@@ -165,6 +172,7 @@
     {
       "name": "world/T21",
       "path": "authored/worlds/T21.json",
+      "version_path": "worlds/T21.json",
       "sha256": "3e959a2f5c7ddfc0552940559b4c406b977e6e495628fcdde0cc3476c1e438bc",
       "size": 50075,
       "from": "authored/worlds/T21_build.py, then the repository JSON layout",
@@ -173,22 +181,16 @@
     {
       "name": "world/T22",
       "path": "authored/worlds/T22.json",
+      "version_path": "worlds/T22.json",
       "sha256": "eb60ab5b7caaa041d03537e10ff0184e88c7873a7d78710e37153d5b3661788c",
       "size": 52600,
       "from": "authored/worlds/T22_build.py, then the repository JSON layout",
       "rebuild": "python3 authored/worlds/T22_build.py && python3 artefacts.py format authored/worlds/T22.json"
     },
     {
-      "name": "world/T23",
-      "path": "authored/worlds/T23.json",
-      "sha256": "18a1cf55835b634b964ccdd39f41fb969540d8ac1e5ddcde34998d1889deaf45",
-      "size": 52662,
-      "from": "authored/worlds/T23_build.py, then the repository JSON layout",
-      "rebuild": "python3 authored/worlds/T23_build.py && python3 artefacts.py format authored/worlds/T23.json"
-    },
-    {
       "name": "world/T24",
       "path": "authored/worlds/T24.json",
+      "version_path": "worlds/T24.json",
       "sha256": "c9d843ac82160f7118856030eb92639cb86b8849e8836af9a7e33c5f6bdbacc0",
       "size": 53873,
       "from": "authored/worlds/T24_build.py, then the repository JSON layout",
@@ -197,6 +199,7 @@
     {
       "name": "world/T25",
       "path": "authored/worlds/T25.json",
+      "version_path": "worlds/T25.json",
       "sha256": "10a7b4dff7051d7b9ea7acb71a599d5ed6bfee857b1568cecd3bd2170a488a45",
       "size": 54365,
       "from": "authored/worlds/T25_build.py, then the repository JSON layout",
@@ -205,6 +208,7 @@
     {
       "name": "world/T26",
       "path": "authored/worlds/T26.json",
+      "version_path": "worlds/T26.json",
       "sha256": "ba68430975a5ca6d5e22e25bde7d15c790ac8d22009e412f3090bcf19eb5f6f0",
       "size": 53396,
       "from": "authored/worlds/T26_build.py, then the repository JSON layout",
@@ -213,6 +217,7 @@
     {
       "name": "world/T27",
       "path": "authored/worlds/T27.json",
+      "version_path": "worlds/T27.json",
       "sha256": "4bc4aca0837abd3a77ea81fcc4e42905d0d305ff7e6cd354d1a2eaee2cca0f6f",
       "size": 51840,
       "from": "authored/worlds/T27_build.py, then the repository JSON layout",
@@ -221,6 +226,7 @@
     {
       "name": "world/T28",
       "path": "authored/worlds/T28.json",
+      "version_path": "worlds/T28.json",
       "sha256": "408cab8f5fdc298f346336b8b63d8e7c25861d6121c9615f63793fa60038c384",
       "size": 54490,
       "from": "authored/worlds/T28_build.py, then the repository JSON layout",
@@ -229,6 +235,7 @@
     {
       "name": "world/T29",
       "path": "authored/worlds/T29.json",
+      "version_path": "worlds/T29.json",
       "sha256": "0ff1d16e4b6a2cf9643aad78a90fafa80423439566849ed82a4644ae5f5d7ecc",
       "size": 54779,
       "from": "authored/worlds/T29_build.py, then the repository JSON layout",
@@ -237,6 +244,7 @@
     {
       "name": "world/T30",
       "path": "authored/worlds/T30.json",
+      "version_path": "worlds/T30.json",
       "sha256": "28d3faeee7eb812a2ca25297775b56088abe08f8ec0ecc7c4a8960644257d3e1",
       "size": 459308,
       "from": "authored/worlds/T30_build.py, then the repository JSON layout",
@@ -245,6 +253,7 @@
     {
       "name": "world/T31",
       "path": "authored/worlds/T31.json",
+      "version_path": "worlds/T31.json",
       "sha256": "fea9fded2cde8e98efbdacd50501f27835b11913a5418e773afd355a4697d974",
       "size": 57081,
       "from": "authored/worlds/T31_build.py, then the repository JSON layout",
@@ -253,6 +262,7 @@
     {
       "name": "world/T32",
       "path": "authored/worlds/T32.json",
+      "version_path": "worlds/T32.json",
       "sha256": "3361e839ee7246d048446c2df7ac2bcbc4402a6a4734ce80ccc4e89a6785ac40",
       "size": 56806,
       "from": "authored/worlds/T32_build.py, then the repository JSON layout",
@@ -261,6 +271,7 @@
     {
       "name": "world/T33",
       "path": "authored/worlds/T33.json",
+      "version_path": "worlds/T33.json",
       "sha256": "d867379d74aae882b7c854e4ca58db0aefca7c6c1e6ef4e403259d0e3adab2d2",
       "size": 56889,
       "from": "authored/worlds/T33_build.py, then the repository JSON layout",
@@ -269,6 +280,7 @@
     {
       "name": "world/T34",
       "path": "authored/worlds/T34.json",
+      "version_path": "worlds/T34.json",
       "sha256": "f80a85c2866cf75ace38e8bc731d992c987bb3a1f82125a11648a4f5633ab1a1",
       "size": 490563,
       "from": "authored/worlds/T34_build.py, then the repository JSON layout",
@@ -277,6 +289,7 @@
     {
       "name": "world/T35",
       "path": "authored/worlds/T35.json",
+      "version_path": "worlds/T35.json",
       "sha256": "29e52059394cbc65f7dd2936e61e9c984fbec5dc636577ae82c647e7036cc161",
       "size": 54377,
       "from": "authored/worlds/T35_build.py, then the repository JSON layout",
@@ -285,6 +298,7 @@
     {
       "name": "world/T36",
       "path": "authored/worlds/T36.json",
+      "version_path": "worlds/T36.json",
       "sha256": "c082dcd05280cb533df6cd43585300d1dcd8c66d847d2efc2b18b5c119d18adf",
       "size": 54867,
       "from": "authored/worlds/T36_build.py, then the repository JSON layout",
@@ -293,6 +307,7 @@
     {
       "name": "world/T37",
       "path": "authored/worlds/T37.json",
+      "version_path": "worlds/T37.json",
       "sha256": "c35e3003506c9364fbdfb789c574df5a902e6dcfb40cc647ee728ea53c226e8e",
       "size": 54723,
       "from": "authored/worlds/T37_build.py, then the repository JSON layout",
@@ -301,6 +316,7 @@
     {
       "name": "world/T38",
       "path": "authored/worlds/T38.json",
+      "version_path": "worlds/T38.json",
       "sha256": "ea2cd51ed7df4634556b099dbc3fba7201cfc50c817683ffc943ffe617d47def",
       "size": 501900,
       "from": "authored/worlds/T38_build.py, then the repository JSON layout",
@@ -309,654 +325,277 @@
     {
       "name": "world/A",
       "path": "eval/worlds/A.json",
+      "version_path": "worlds/A.json",
       "sha256": "7d206ff98859f271cc65d22d7ab2173265d7833ac30125ec9cc81886218b549b",
       "size": 49900,
-      "from": "eval/worlds/build_worlds.py, then the repository JSON layout",
-      "rebuild": "python3 eval/worlds/build_worlds.py && python3 artefacts.py format eval/worlds/A.json eval/worlds/B.json eval/worlds/C.json eval/worlds/D.json"
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
     },
     {
       "name": "world/B",
       "path": "eval/worlds/B.json",
+      "version_path": "worlds/B.json",
       "sha256": "f20c54693f0e2b79fa57b89e65d5eb6aa38faa6811975404e22f8beee0bbc0e3",
       "size": 43705,
-      "from": "eval/worlds/build_worlds.py, then the repository JSON layout",
-      "rebuild": "python3 eval/worlds/build_worlds.py && python3 artefacts.py format eval/worlds/A.json eval/worlds/B.json eval/worlds/C.json eval/worlds/D.json"
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
     },
     {
       "name": "world/C",
       "path": "eval/worlds/C.json",
+      "version_path": "worlds/C.json",
       "sha256": "3321e72d5dfc4dc11c25df8cf9007219721056dead861730be7a18e35f626f7b",
       "size": 36936,
-      "from": "eval/worlds/build_worlds.py, then the repository JSON layout",
-      "rebuild": "python3 eval/worlds/build_worlds.py && python3 artefacts.py format eval/worlds/A.json eval/worlds/B.json eval/worlds/C.json eval/worlds/D.json"
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
     },
     {
       "name": "world/D",
       "path": "eval/worlds/D.json",
+      "version_path": "worlds/D.json",
       "sha256": "f4ce3d090c1a1d32afabec2687243340f5bec1b3bc4b0f848b56efb5cb9776a1",
       "size": 535167,
-      "from": "eval/worlds/build_worlds.py, then the repository JSON layout",
-      "rebuild": "python3 eval/worlds/build_worlds.py && python3 artefacts.py format eval/worlds/A.json eval/worlds/B.json eval/worlds/C.json eval/worlds/D.json"
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
     },
     {
       "name": "world/E",
       "path": "eval/worlds/E.json",
+      "version_path": "worlds/E.json",
       "sha256": "594a111301b7535ab7add003455c98edf55e7801e5affeb36a39902c79672ef6",
       "size": 67282,
-      "from": "eval/worlds/E_build.py, then the repository JSON layout",
-      "rebuild": "python3 eval/worlds/E_build.py && python3 artefacts.py format eval/worlds/E.json"
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
     },
     {
       "name": "world/F",
       "path": "eval/worlds/F.json",
+      "version_path": "worlds/F.json",
       "sha256": "2ad25aebc99d99790e474453f7df5e4b1013456a58406ba8650c0c3ca36c8896",
       "size": 66335,
-      "from": "eval/worlds/F_build.py, then the repository JSON layout",
-      "rebuild": "python3 eval/worlds/F_build.py && python3 artefacts.py format eval/worlds/F.json"
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
     },
     {
       "name": "world/G",
       "path": "eval/worlds/G.json",
+      "version_path": "worlds/G.json",
       "sha256": "9dc5b5bac5dfb5f8f9dd7fd34d9ef54e91db9e8fd8b8aa2cfb2de1695c744139",
       "size": 595810,
-      "from": "eval/worlds/G_build.py, then the repository JSON layout",
-      "rebuild": "python3 eval/worlds/G_build.py && python3 artefacts.py format eval/worlds/G.json"
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
     },
     {
-      "name": "keys/T03",
-      "path": "authored/worlds/T03.keys.json",
-      "sha256": "fe0310055c9503bc7d84daf09530204cf0bc79e7c3675d8702ea8f4082317130",
-      "size": 27958,
-      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
-      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" T03"
+      "name": "world/T03",
+      "path": "authored/worlds/T03.json",
+      "version_path": "worlds/T03.json",
+      "sha256": "c34f42636beceb01a960966649e3fcf6f3180273ca55add46cd465996ba14dc8",
+      "size": 57066,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
     },
     {
-      "name": "keys/T12",
-      "path": "authored/worlds/T12.keys.json",
-      "sha256": "1751df701ae1e73595b33c4aeaf0aef9f4835e6c08b1905bdf109b2b90587884",
-      "size": 25860,
-      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
-      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" T12"
+      "name": "world/T12",
+      "path": "authored/worlds/T12.json",
+      "version_path": "worlds/T12.json",
+      "sha256": "7b4e180af5a04d309e9391374d14652871929519b36f5dfd241338301aac6699",
+      "size": 49942,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
     },
     {
-      "name": "keys/T23",
-      "path": "authored/worlds/T23.keys.json",
-      "sha256": "03bc6b371e086fb108cd665f2ff58a7be7724f9305998814b35327062200ae47",
-      "size": 26637,
-      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
-      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" T23"
+      "name": "world/T23",
+      "path": "authored/worlds/T23.json",
+      "version_path": "worlds/T23.json",
+      "sha256": "18a1cf55835b634b964ccdd39f41fb969540d8ac1e5ddcde34998d1889deaf45",
+      "size": 52662,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
+    },
+    {
+      "name": "builder/build_worlds",
+      "path": "eval/worlds/build_worlds.py",
+      "version_path": "sources/eval/worlds/build_worlds.py",
+      "sha256": "79e426b3451a7ff06f9c6dbf1e4bcfa434e285221a4ed35d0c7c7588d633594c",
+      "size": 93349,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/E",
+      "path": "eval/worlds/E_build.py",
+      "version_path": "sources/eval/worlds/E_build.py",
+      "sha256": "93dc3346e45fd83c26071e712c8f636e120274db69f227e2a63cfe605fba8327",
+      "size": 58166,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/F",
+      "path": "eval/worlds/F_build.py",
+      "version_path": "sources/eval/worlds/F_build.py",
+      "sha256": "7e12298bba4908e0496f550da2edfc1d21935cfd8c72f2001a8740fcf4ab228f",
+      "size": 57606,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/G",
+      "path": "eval/worlds/G_build.py",
+      "version_path": "sources/eval/worlds/G_build.py",
+      "sha256": "ae8139f073f2a45714e6334d78e0147f9fc2d4a47cbdf71994229b161ec8f68e",
+      "size": 102387,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/T03",
+      "path": "authored/worlds/T03_build.py",
+      "version_path": "sources/authored/worlds/T03_build.py",
+      "sha256": "e65c0f92be07ca32e3d84946263173c5034c61c9dc2196157e1f9cff25f6781f",
+      "size": 42430,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/T12",
+      "path": "authored/worlds/T12_build.py",
+      "version_path": "sources/authored/worlds/T12_build.py",
+      "sha256": "474736e9e34580bc3c5ddfeee16e6ad54457f3a1d5fd615cc417d9c8d57b592e",
+      "size": 40252,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/T23",
+      "path": "authored/worlds/T23_build.py",
+      "version_path": "sources/authored/worlds/T23_build.py",
+      "sha256": "9353468d936d40988ada1f7c7b24a39774465855811b0ecba1508c3a69596457",
+      "size": 41782,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
     },
     {
       "name": "keys/A",
       "path": "eval/worlds/A.keys.json",
+      "version_path": null,
       "sha256": "9c84ba9e1ae43603b4422e648c6a41316c8430a0253038ef82fef3044023e1de",
       "size": 26316,
       "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
-      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" A"
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" A",
+      "heldout": true
     },
     {
       "name": "keys/B",
       "path": "eval/worlds/B.keys.json",
+      "version_path": null,
       "sha256": "aa760689c2034a6b1492a4f4c0c0fe7969b049b9898740b71106571989580dcc",
       "size": 23767,
       "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
-      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" B"
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" B",
+      "heldout": true
     },
     {
       "name": "keys/C",
       "path": "eval/worlds/C.keys.json",
+      "version_path": null,
       "sha256": "d7ae80de9611aa852ff357c6a8e8855df9a8b2547646f3451b60ee3d0162b572",
       "size": 19717,
       "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
-      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" C"
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" C",
+      "heldout": true
     },
     {
       "name": "keys/D",
       "path": "eval/worlds/D.keys.json",
+      "version_path": null,
       "sha256": "85697dfc0df4ba8291e7fc2a1d7a651309bb15cb64908feaaf26084bb721dd24",
       "size": 314424,
       "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
-      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" D"
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" D",
+      "heldout": true
+    },
+    {
+      "name": "keys/T03",
+      "path": "authored/worlds/T03.keys.json",
+      "version_path": null,
+      "sha256": "fe0310055c9503bc7d84daf09530204cf0bc79e7c3675d8702ea8f4082317130",
+      "size": 27958,
+      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" T03",
+      "heldout": true
+    },
+    {
+      "name": "keys/T12",
+      "path": "authored/worlds/T12.keys.json",
+      "version_path": null,
+      "sha256": "1751df701ae1e73595b33c4aeaf0aef9f4835e6c08b1905bdf109b2b90587884",
+      "size": 25860,
+      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" T12",
+      "heldout": true
+    },
+    {
+      "name": "keys/T23",
+      "path": "authored/worlds/T23.keys.json",
+      "version_path": null,
+      "sha256": "03bc6b371e086fb108cd665f2ff58a7be7724f9305998814b35327062200ae47",
+      "size": 26637,
+      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" T23",
+      "heldout": true
     },
     {
       "name": "set/val",
       "path": "eval/sets/val.jsonl",
+      "version_path": "eval/val.jsonl",
       "sha256": "5d3d9035737ad0de19d4cf0406316e3b4b27f55a4cb2e64320126cda89308502",
       "size": 733110,
-      "from": "frozen held-out set, v7.4 (eval/FROZEN.md); the gold corrections were applied to the jsonl and are in no source (eval/sessions/README.md)",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "eval/sets/val.jsonl"
-      }
+      "from": "frozen held-out set, val v7.4 (eval/FROZEN.md); the gold corrections were applied to the jsonl and are in no source",
+      "heldout": true
     },
     {
       "name": "set/test",
       "path": "eval/sets/test.jsonl",
+      "version_path": "eval/test.jsonl",
       "sha256": "fedc45825fc3505d8147ee50560775b6b5e615b94d391dbe06d4d9ad04a8ed20",
       "size": 738445,
-      "from": "frozen held-out set, v7.4 (eval/FROZEN.md); the gold corrections were applied to the jsonl and are in no source (eval/sessions/README.md)",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "eval/sets/test.jsonl"
-      }
-    },
-    {
-      "name": "set/trainfit",
-      "path": "eval/sets/trainfit.jsonl",
-      "sha256": "c461ca08297e2d26e727eb9fac262d70b40a02461f7d5f4db7a65d475d675a31",
-      "size": 487533,
-      "from": "frozen train-fit sample drawn from data/train.jsonl.gz by eval/build_sets.py trainfit (eval/FROZEN.md)",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "eval/sets/trainfit.jsonl"
-      }
-    },
-    {
-      "name": "set/roll-screen",
-      "path": "eval/sets/roll-screen.jsonl",
-      "sha256": "c736dbcfe7e8c99f45fc637752f5506b7321feefa86afed4a2c1718fee28d6c0",
-      "size": 2830186,
-      "from": "rollout screen set (eval/rollout.py screen) over a train build that is not in the repository",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "eval/sets/roll-screen.jsonl"
-      }
+      "from": "frozen held-out set, test v6 (eval/FROZEN.md)",
+      "heldout": true
     },
     {
       "name": "set/split",
       "path": "eval/sets/split.json",
+      "version_path": "eval/split.json",
       "sha256": "e0685c65c7ce377e1559488760e6ed55a9e3f7b445c2a3daee7be62ba13d5d0d",
       "size": 65936,
-      "from": "frozen record of the half each session was in (eval/FROZEN.md)",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "eval/sets/split.json"
-      }
+      "from": "the split and the origin of every session of val and test (eval/FROZEN.md)",
+      "heldout": true
+    },
+    {
+      "name": "set/roll-screen",
+      "path": "eval/sets/roll-screen.jsonl",
+      "version_path": "screen/roll-screen.jsonl",
+      "sha256": "c736dbcfe7e8c99f45fc637752f5506b7321feefa86afed4a2c1718fee28d6c0",
+      "size": 2830186,
+      "from": "the RFT screen set (eval/rollout.py sets); the worlds it ran in are screen/worlds/ of the version"
     },
     {
       "name": "data/train",
       "path": "data/train.jsonl.gz",
+      "version_path": "train/r1/train.jsonl.gz",
       "sha256": "51dfbe27e7fcb82af5fe054598ef073b17ed414f742ad084ee50d121e4b4f7bf",
       "size": 10279885,
-      "from": "r1 build, 2026-10-03 (data/README.md): authored/build.py per world and authored/gen/drills.py, assembled by authored/assemble.py",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "data/train.jsonl.gz"
-      }
+      "from": "the r1 training build as trained (data/README.md)"
     },
     {
       "name": "data/train-val",
       "path": "data/train-val.jsonl.gz",
+      "version_path": "train/r1/train-val.jsonl.gz",
       "sha256": "8e03a8b4a8b90fe81b1221de57baed8321616ca026b4fd53fc021dbba5574eb1",
       "size": 207228,
-      "from": "r1 build, 2026-10-03 (data/README.md): authored/build.py on the val worlds, assembled by authored/assemble.py",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "data/train-val.jsonl.gz"
-      }
-    },
-    {
-      "name": "keys/T01",
-      "path": "authored/worlds/T01.keys.json",
-      "sha256": "2efb9e2636335472e6f220fc0c6d613634ae21a08e35d5b86b0ec050ec263ce3",
-      "size": 27185,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T01.keys.json"
-      }
-    },
-    {
-      "name": "keys/T02",
-      "path": "authored/worlds/T02.keys.json",
-      "sha256": "54207f0c3da7589b7710228bfc6eebbf7ee74da3c24e96657b8606731758eaf5",
-      "size": 25784,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T02.keys.json"
-      }
-    },
-    {
-      "name": "keys/T04",
-      "path": "authored/worlds/T04.keys.json",
-      "sha256": "65572b7dd608af35b3b45094d783ab580604d351f4ba1f3bffe6e72d7beab3ba",
-      "size": 28353,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T04.keys.json"
-      }
-    },
-    {
-      "name": "keys/T05",
-      "path": "authored/worlds/T05.keys.json",
-      "sha256": "e1d32f34ee76b30405dc2ce7cc3d0bb9315ac0153eda0d7a044d3eda9e7d71ff",
-      "size": 25411,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T05.keys.json"
-      }
-    },
-    {
-      "name": "keys/T06",
-      "path": "authored/worlds/T06.keys.json",
-      "sha256": "5c32b0f630999c6c186d09d79ffd7d501f1e8200ae34ae87f9bc4caaf536100a",
-      "size": 25652,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T06.keys.json"
-      }
-    },
-    {
-      "name": "keys/T07",
-      "path": "authored/worlds/T07.keys.json",
-      "sha256": "19874d6cf7a6070db4f8484fd6546eeeb3bda1e2319d246b1264301e66083b65",
-      "size": 26084,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T07.keys.json"
-      }
-    },
-    {
-      "name": "keys/T08",
-      "path": "authored/worlds/T08.keys.json",
-      "sha256": "3a664f1c94d5099268c639784599ad0e65719c063c826d74a4deb14096ef81f5",
-      "size": 26736,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T08.keys.json"
-      }
-    },
-    {
-      "name": "keys/T09",
-      "path": "authored/worlds/T09.keys.json",
-      "sha256": "fe104b2075126fea09bfa5b90b61b845c454e065e7f62e71efbf8d064fba50af",
-      "size": 26610,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T09.keys.json"
-      }
-    },
-    {
-      "name": "keys/T10",
-      "path": "authored/worlds/T10.keys.json",
-      "sha256": "58f277463627016096dc882dc1a441c2a14cb2ccc2535d1f3872537e3bfb1ac4",
-      "size": 26390,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T10.keys.json"
-      }
-    },
-    {
-      "name": "keys/T11",
-      "path": "authored/worlds/T11.keys.json",
-      "sha256": "4329529bb1284ba6f89fdeb689354ece45759ca3ff59e667e95d63c93bb68e3e",
-      "size": 26283,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T11.keys.json"
-      }
-    },
-    {
-      "name": "keys/T13",
-      "path": "authored/worlds/T13.keys.json",
-      "sha256": "3b9b575d780e04d0b06ee2f219b9a2213f6a5188171c6b774388883118b9dece",
-      "size": 27605,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T13.keys.json"
-      }
-    },
-    {
-      "name": "keys/T14",
-      "path": "authored/worlds/T14.keys.json",
-      "sha256": "78703a850dc672fbbdb43dfe01a5ec7cc8c0b79be4737fa7d915abcf306ea2fd",
-      "size": 26976,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T14.keys.json"
-      }
-    },
-    {
-      "name": "keys/T15",
-      "path": "authored/worlds/T15.keys.json",
-      "sha256": "b8690783221250f5b03dd50916846184f4d4c55acfab5ab706729f2f57a7e8e0",
-      "size": 26997,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T15.keys.json"
-      }
-    },
-    {
-      "name": "keys/T16",
-      "path": "authored/worlds/T16.keys.json",
-      "sha256": "7a1c0a6a1406848d2ea70a1995bf4e27f7e31e3a954efb35569db1cd6fbe755e",
-      "size": 27543,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T16.keys.json"
-      }
-    },
-    {
-      "name": "keys/T17",
-      "path": "authored/worlds/T17.keys.json",
-      "sha256": "48223bf72e729ae0c8a946aab4ea7f598c93f68c0a667ee470d8be00fdbae8a3",
-      "size": 27007,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T17.keys.json"
-      }
-    },
-    {
-      "name": "keys/T18",
-      "path": "authored/worlds/T18.keys.json",
-      "sha256": "6c8b918cfe62482f78f7b54f93c4d343951a3cb10eba5dacf296c8e640d9caa0",
-      "size": 25179,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T18.keys.json"
-      }
-    },
-    {
-      "name": "keys/T19",
-      "path": "authored/worlds/T19.keys.json",
-      "sha256": "dcfbfd971ea9ec00464f24cce582b4ec9792692b87ab1be13a89afb35366e1f8",
-      "size": 26173,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T19.keys.json"
-      }
-    },
-    {
-      "name": "keys/T20",
-      "path": "authored/worlds/T20.keys.json",
-      "sha256": "17a80539010456ea211bb30e4619459396beddef99a635d6550b4409d5364926",
-      "size": 27345,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T20.keys.json"
-      }
-    },
-    {
-      "name": "keys/T21",
-      "path": "authored/worlds/T21.keys.json",
-      "sha256": "3b525dd8905c4f6ebbbe217d76e2db85f1f71d8b58354c94a8417bb8e6674d5c",
-      "size": 26234,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T21.keys.json"
-      }
-    },
-    {
-      "name": "keys/T22",
-      "path": "authored/worlds/T22.keys.json",
-      "sha256": "d679f89370b0c5d8a2c0de00596035c3571cf9ced03335724281b46c7a0a461d",
-      "size": 26656,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T22.keys.json"
-      }
-    },
-    {
-      "name": "keys/T24",
-      "path": "authored/worlds/T24.keys.json",
-      "sha256": "a318ecbe87c0f37a77ed061f56b1e6c43ed694b3367cefabc75a2e9c867cfbf0",
-      "size": 26999,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T24.keys.json"
-      }
-    },
-    {
-      "name": "keys/T25",
-      "path": "authored/worlds/T25.keys.json",
-      "sha256": "64426614364f012607c13f40acc5e70682f54cf1904e386fceea5b241a690ee9",
-      "size": 27930,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T25.keys.json"
-      }
-    },
-    {
-      "name": "keys/T26",
-      "path": "authored/worlds/T26.keys.json",
-      "sha256": "06497ae952dcbe9fde4d43a0b7ac2bc3433c425220a6a2edbb8d05c144e5b4d0",
-      "size": 27021,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T26.keys.json"
-      }
-    },
-    {
-      "name": "keys/T27",
-      "path": "authored/worlds/T27.keys.json",
-      "sha256": "a508083ce0d557e4a6f057f436746d464f26ec1e23d1ba45065bf0543b4a4cff",
-      "size": 26006,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T27.keys.json"
-      }
-    },
-    {
-      "name": "keys/T28",
-      "path": "authored/worlds/T28.keys.json",
-      "sha256": "72641fc8d5ca7caef54d1cfc4ca81d7b73a713a3f0224e9112ebe0fad82fc26e",
-      "size": 27526,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T28.keys.json"
-      }
-    },
-    {
-      "name": "keys/T29",
-      "path": "authored/worlds/T29.keys.json",
-      "sha256": "62e145ae267362811ae041fae1b720005ca3ae417a1a48dcb91ce50707a55f26",
-      "size": 27585,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T29.keys.json"
-      }
-    },
-    {
-      "name": "keys/T30",
-      "path": "authored/worlds/T30.keys.json",
-      "sha256": "04d223ae73f3490bb42204fba24a91babed7698e1304df9509852d5ccf20a935",
-      "size": 207288,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T30.keys.json"
-      }
-    },
-    {
-      "name": "keys/T31",
-      "path": "authored/worlds/T31.keys.json",
-      "sha256": "b3d763d7b4c3b568ce59ff31e2c6842c704d998425900ce557cd0a70dfe42112",
-      "size": 27884,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T31.keys.json"
-      }
-    },
-    {
-      "name": "keys/T32",
-      "path": "authored/worlds/T32.keys.json",
-      "sha256": "45c30cbe4256fe22320d9e57043cb41dfa959025c19c0396b378ec80c8d2651f",
-      "size": 27135,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T32.keys.json"
-      }
-    },
-    {
-      "name": "keys/T33",
-      "path": "authored/worlds/T33.keys.json",
-      "sha256": "332dcdaee3f00adb909529fa80f37fffcfac16e2a6ba53d1c70ec0f900eee595",
-      "size": 27575,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T33.keys.json"
-      }
-    },
-    {
-      "name": "keys/T34",
-      "path": "authored/worlds/T34.keys.json",
-      "sha256": "ff43397c5fdae5a1f325d87a5a84a60f92f47db11185d64fd7f705405f1a1b29",
-      "size": 215238,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T34.keys.json"
-      }
-    },
-    {
-      "name": "keys/T35",
-      "path": "authored/worlds/T35.keys.json",
-      "sha256": "df20fbf842c64971c0c4cb08c73b6b2a1de49589a62c2059fb6a1e2dfd7ab93c",
-      "size": 28077,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T35.keys.json"
-      }
-    },
-    {
-      "name": "keys/T36",
-      "path": "authored/worlds/T36.keys.json",
-      "sha256": "79a52d14184febce1874f373346faaae04f39ca2d4eec2b8d8f73cc662cdad2b",
-      "size": 27843,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T36.keys.json"
-      }
-    },
-    {
-      "name": "keys/T37",
-      "path": "authored/worlds/T37.keys.json",
-      "sha256": "a05f25bbc515633163f58237db2a7f8441d35f9036f46a8ce10d50104fb8f7ff",
-      "size": 27928,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T37.keys.json"
-      }
-    },
-    {
-      "name": "keys/T38",
-      "path": "authored/worlds/T38.keys.json",
-      "sha256": "188bb0cfe31cd1463ee67884493f9a29827131db69f3337776043fc8d5e2ccf7",
-      "size": 222096,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "authored/worlds/T38.keys.json"
-      }
-    },
-    {
-      "name": "keys/E",
-      "path": "eval/worlds/E.keys.json",
-      "sha256": "c95ccbb2046d73464e698f0ecbc6902fb5eb7755920a9edbe505ff2e1c1f84fa",
-      "size": 29796,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "eval/worlds/E.keys.json"
-      }
-    },
-    {
-      "name": "keys/F",
-      "path": "eval/worlds/F.keys.json",
-      "sha256": "66670a966f33d81996956902a47efc59b21f965af46c97742886470e81deaafb",
-      "size": 29016,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "eval/worlds/F.keys.json"
-      }
-    },
-    {
-      "name": "keys/G",
-      "path": "eval/worlds/G.keys.json",
-      "sha256": "957143db5e6f67d2affe26b51bb777b772b09e6f376e457e6eaf195fc8f6013e",
-      "size": 252461,
-      "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
-      "hub": {
-        "repo": "srikanth235/centraid-native-data",
-        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
-        "path": "eval/worlds/G.keys.json"
-      }
+      "from": "the trainer's validation slice of r1: sessions of val (data/README.md)",
+      "heldout": true
     }
   ]
 }

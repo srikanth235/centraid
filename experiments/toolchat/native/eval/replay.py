@@ -129,7 +129,7 @@ def divergence(rec: dict | None, new: dict, overrun: list[int]) -> dict[int, dic
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", required=True, help="recorded run file (run.py / run_batched.py, model hf)")
-    ap.add_argument("--gold", required=True, help="gold set the run was made on (val/test/trainfit jsonl)")
+    ap.add_argument("--gold", required=True, help="gold set the run was made on (a val or test jsonl, or a set of rollouts)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--runtime", help="nativetools binary to replay on (default: lib.NT)")
     ap.add_argument("--jobs", type=int, default=4)
