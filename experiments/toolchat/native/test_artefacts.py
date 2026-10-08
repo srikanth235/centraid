@@ -236,6 +236,31 @@ class TheShippedManifest(unittest.TestCase):
         self.assertLessEqual({n for n in held if n.startswith("keys/")}, {"keys/" + w for w in worlds})
         self.assertFalse(held & {"set/roll-screen", "data/train"})  # the screen set and the train build are not held out
 
+    def test_the_authored_sessions_of_the_val_worlds_are_held_out_and_nothing_else_of_sessions_is(self):
+        """split.json sends T03, T12 and T23 whole to val: their session sources are val's sources (R-1088-16)."""
+        val_worlds = json.loads((art.HERE / "authored" / "split.json").read_text())["val"]
+        entries = {e["name"]: e for e in art.entries(art.load())}
+        sessions = {n: e for n, e in entries.items() if e["path"].startswith("authored/sessions/")}
+        self.assertTrue(sessions)
+        for name, e in sessions.items():
+            world = Path(e["path"]).stem.split("_")[0]
+            self.assertIn(world, val_worlds, name)
+            self.assertEqual(name, "session/" + Path(e["path"]).stem)
+            self.assertTrue(art.is_heldout(e), name)
+            self.assertNotIn("rebuild", e, name)  # from the version only: no public path writes them
+            self.assertEqual(e["version_path"], "sources/" + e["path"], name)
+        on_disk = {p.stem for p in (art.HERE / "authored" / "sessions").glob("*.py") if p.stem.split("_")[0] in val_worlds}
+        if on_disk:  # a public checkout has none; the full tree has all of them, and each is in the manifest
+            self.assertEqual(on_disk, {n[len("session/"):] for n in sessions})
+        self.assertEqual({Path(e["path"]).stem.split("_")[0] for e in sessions.values()}, set(val_worlds))
+
+    def test_the_val_worlds_json_builder_and_sessions_are_all_held_out(self):
+        by_path = {e["path"]: e for e in art.entries(art.load())}
+        for w in json.loads((art.HERE / "authored" / "split.json").read_text())["val"]:
+            for path in (f"authored/worlds/{w}.json", f"authored/worlds/{w}_build.py", f"authored/worlds/{w}.keys.json",
+                         f"authored/sessions/{w}.py"):
+                self.assertTrue(art.is_heldout(by_path[path]), path)
+
     def test_nothing_retired_is_in_it(self):
         """trainfit, the stale keys files and eval/sessions are not kept (R-1088-16)."""
         for e in art.entries(art.load()):

@@ -27,7 +27,7 @@ val and test are the two halves of one pool of 1,311 sessions on the same seven 
 | `test-v3.1` | the hand-written sessions of A to D       | 450  | 224 | 226  |
 | `e1`        | recipe-authored sessions on A to D        | 470  | 236 | 234  |
 
-The hand-written and recipe-authored sources of the `test-v3.1` and `e1` origins are not kept (R-1088-16): the sets carry the gold corrections of v3 and v3.1 and the regenerated gold of v5 and v6, which those sources do not, and `sets/split.json` is the record of which ids each origin holds. The authored sessions of the val worlds stay in `authored/sessions/`.
+The hand-written and recipe-authored sources of the `test-v3.1` and `e1` origins are not kept (R-1088-16): the sets carry the gold corrections of v3 and v3.1 and the regenerated gold of v5 and v6, which those sources do not, and `sets/split.json` is the record of which ids each origin holds. The authored sessions of the val worlds (`authored/sessions/{T03,T12,T23}*.py`) are the sources of the `val-v3.1` origin; they are held out with the val worlds and come from the data version (`artefacts.json`, the `session/` entries), and `build_sets.py check` reads them.
 
 ## Hashes
 

@@ -22,15 +22,16 @@ from-scratch run trained and was judged on: the training build exactly as traine
 and test as refrozen against that version's vault and runtime, the worlds the sessions ran in, the RFT screen set and the worlds
 it ran in, and `version.json`. A promoted model is a revision of a private Hub model repository whose card names its data tag,
 its git commit and its config. The tree keeps sources and `artefacts.json`, which pins the version in use; the held-out files
-(val, test, their worlds and the builders of those worlds) are not source, and the public CI reads none of them and needs no
-Hub token. The layout of a version:
+(val, test, their worlds, the builders of those worlds and the authored sessions of the val worlds) are not source, and the
+public CI reads none of them and needs no Hub token. The layout of a version:
 
     version.json
     train/<name>/train.jsonl.gz, train/<name>/train-val.jsonl.gz     each training build, as trained
     eval/val.jsonl, eval/test.jsonl, eval/split.json
     screen/roll-screen.jsonl, screen/worlds/*                        the RFT screen set and the worlds it ran in
     worlds/<id>.json                                                 every world as built now, train and held-out (no keys)
-    sources/<tree path>                                              the held-out world builders
+    sources/<tree path>                                              the held-out sources: the builders of the held-out worlds
+                                                                     and the authored sessions of the val worlds (T03, T12, T23)
 
 `artefacts.json` is the manifest: the pin (`data`: repository, version, and the commit the tag points at) and one entry per file
 the tree materialises: its logical name, its path in the tree, its path in the version (null for a keys file: a keys file is

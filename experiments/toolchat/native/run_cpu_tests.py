@@ -16,7 +16,8 @@ is captured and printed in one piece when it ends, never interleaved with anothe
                      a tracked file (a keys file is a by-product of seeding and none is kept in the tree)
 
 The suite reads no held-out file and needs no Hub token (R-1088-16): `python3 artefacts.py fetch --public-only` rebuilds the 35 public
-train worlds (authored/worlds/T*.json) it reads, and every test that needs a seeded household seeds a public world itself
+train worlds (authored/worlds/T*.json) it reads (their authored sessions are in the tree; those of the val worlds T03, T12 and T23, with
+their world JSON and builders, are held out), and every test that needs a seeded household seeds a public world itself
 (eval/pubworld.py), or runs on a made-up one (eval/fixture_world.py). What needs the held-out files is `artefacts.py verify-heldout`.
 
 Two rules keep a green run meaning what it says:

@@ -476,6 +476,168 @@
       "heldout": true
     },
     {
+      "name": "session/T03",
+      "path": "authored/sessions/T03.py",
+      "version_path": "sources/authored/sessions/T03.py",
+      "sha256": "6bd784958cafa5e121ca155bca54037e9ff65c56d34472a619700a40fd0b017b",
+      "size": 17820,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T03_02",
+      "path": "authored/sessions/T03_02.py",
+      "version_path": "sources/authored/sessions/T03_02.py",
+      "sha256": "d91b7203fcf6cf359fee260e16a033c8560f3314989069c38580823ad46aa75a",
+      "size": 13636,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T03_03",
+      "path": "authored/sessions/T03_03.py",
+      "version_path": "sources/authored/sessions/T03_03.py",
+      "sha256": "053f8f6c89ccaa11d96ca4cdaab85261bbb043c2ef42d9bdca3c271a2a2f7694",
+      "size": 19494,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T03_04",
+      "path": "authored/sessions/T03_04.py",
+      "version_path": "sources/authored/sessions/T03_04.py",
+      "sha256": "560427ef05095c9419013141258e54d76f742287511ad838ae9dd90c0a583b3c",
+      "size": 14344,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T03_g1",
+      "path": "authored/sessions/T03_g1.py",
+      "version_path": "sources/authored/sessions/T03_g1.py",
+      "sha256": "9296735420bcb7cb4e74daff1dd98d5a6c5cb92286d16664ecb140f3eb85a213",
+      "size": 7694,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T03_g2",
+      "path": "authored/sessions/T03_g2.py",
+      "version_path": "sources/authored/sessions/T03_g2.py",
+      "sha256": "6bf3f6873ec1f2dd794f0561f69dd3cfdbd21d0c884bae89355eb3486b6bf5ac",
+      "size": 10560,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12",
+      "path": "authored/sessions/T12.py",
+      "version_path": "sources/authored/sessions/T12.py",
+      "sha256": "1b63b2ac4e0a463c551509d333b3df5dd25da914a18d275d8b7df2c4e9ee93dc",
+      "size": 10147,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12_02",
+      "path": "authored/sessions/T12_02.py",
+      "version_path": "sources/authored/sessions/T12_02.py",
+      "sha256": "1fba405875064b484ba104f5522426efcdf2488233c4d5be7de342b92a88496b",
+      "size": 10348,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12_03",
+      "path": "authored/sessions/T12_03.py",
+      "version_path": "sources/authored/sessions/T12_03.py",
+      "sha256": "073ae0b34f20be6afe9759ef70a51049a1b817fb117bfb5e7ba0cbd6c963c875",
+      "size": 14443,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12_04",
+      "path": "authored/sessions/T12_04.py",
+      "version_path": "sources/authored/sessions/T12_04.py",
+      "sha256": "e30d7f33ed3e72c1b4cd64616e514257abf2b259bf87b8ebc70710f318e5b5d1",
+      "size": 31345,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12_g1",
+      "path": "authored/sessions/T12_g1.py",
+      "version_path": "sources/authored/sessions/T12_g1.py",
+      "sha256": "3b1becedc56e15464c0b076f86c63adbc8ca21ac8588b9f3df19ed2edb5a6c5b",
+      "size": 9057,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12_g2",
+      "path": "authored/sessions/T12_g2.py",
+      "version_path": "sources/authored/sessions/T12_g2.py",
+      "sha256": "42901445fddc584b2aa5d7a29ad8a3c460ebec55666f46fe1ba8622ab422b4e8",
+      "size": 9106,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23",
+      "path": "authored/sessions/T23.py",
+      "version_path": "sources/authored/sessions/T23.py",
+      "sha256": "56139e79ea7b8f590d697fc5608e1c067d44159c982326d88445f95fd69ea376",
+      "size": 11545,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23_02",
+      "path": "authored/sessions/T23_02.py",
+      "version_path": "sources/authored/sessions/T23_02.py",
+      "sha256": "eac60c0ced1fb3f9f0804d765caee10e40cb4cd8f5345dbbe92d6dbd63f8c554",
+      "size": 15263,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23_03",
+      "path": "authored/sessions/T23_03.py",
+      "version_path": "sources/authored/sessions/T23_03.py",
+      "sha256": "b50bdd76daf3c228e5b59b9c6f3156373090dcac3512b7d8f4fd9fb1f9b4db08",
+      "size": 16353,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23_04",
+      "path": "authored/sessions/T23_04.py",
+      "version_path": "sources/authored/sessions/T23_04.py",
+      "sha256": "b49c8e8815609142d21f673d5fe165af2b94f64423627f468c71c870a53f7eb3",
+      "size": 17648,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23_g1",
+      "path": "authored/sessions/T23_g1.py",
+      "version_path": "sources/authored/sessions/T23_g1.py",
+      "sha256": "028cd658b28b5c5016594bb6a705d55982679e890282b99a84be736c1086c416",
+      "size": 8837,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23_g2",
+      "path": "authored/sessions/T23_g2.py",
+      "version_path": "sources/authored/sessions/T23_g2.py",
+      "sha256": "d8e991221a5733da7983cf2f1f2e7b471a3ef4ce537520b18ce647345e0bdd4a",
+      "size": 9327,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
       "name": "keys/A",
       "path": "eval/worlds/A.keys.json",
       "version_path": null,
