@@ -581,6 +581,8 @@ dependencies = [
  "centraid-assist",
  "image",
  "llama-cpp-2",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
