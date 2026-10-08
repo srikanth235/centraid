@@ -42,7 +42,7 @@ kotlin {
     // merely COMPILES Kotlin. The link is the one step that genuinely needs
     // it, so the path is named here and nowhere else.
     //
-    // `cargo build -p centraid-core-ffi --target <triple>` produces it.
+    // `cargo build -p centraid-core-ffi --features llama --target <triple>` produces it.
     // `-Pcentraid.coreFfiLibDir` overrides the directory for CI, which takes
     // the slice from `lane-prebuilt-core.yml` rather than rebuilding it.
     val coreFfiProfile = (findProperty("centraid.coreFfiProfile") as String?) ?: "debug"
