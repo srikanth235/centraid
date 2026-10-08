@@ -1,30 +1,28 @@
 --- a/.github/workflows/gate.yml
 +++ b/.github/workflows/gate.yml
-@@ -431,6 +431,27 @@
+@@ -432,12 +432,19 @@
            49e2b6e395f959f077f1e992b338919c0d4a9732fc6e613995e06557f843500c  tokenizer_config.json
            ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003  vocab.json
            SUMS
-+      # The built and frozen data of the native task is not in the tree (R-1088-14,
-+      # `artefacts.json`). What a builder or the seeder reproduces byte for byte is
-+      # rebuilt here: the worlds, and the keys of the val worlds. The rest (the frozen
-+      # sets, the r1 build, the keys of the other worlds) comes from the private Hub
-+      # repository at the revision the manifest records, and needs the secret. A run
-+      # without it (a pull request from a fork) rebuilds only, and the tests that read
-+      # a frozen keys file fail by name.
-+      - name: Materialise the built and frozen artefacts
+-      # `test_loop` and `test_retry` drive the eval harness over a seeded vault of
+-      # world A. Seeding is deterministic and leaves the tracked keys file as it is.
+-      - name: Seed world A
+-        env:
+-          NATIVETOOLS: ${{ github.workspace }}/target/debug/nativetools
+-        run: python experiments/toolchat/native/eval/seed_worlds.py --vaults "${RUNNER_TEMP}/vaults" A
++      # The built data of the native task is not in the tree (R-1088-16,
++      # `experiments/toolchat/native/artefacts.json`). What the suite reads is the
++      # 35 public train worlds, which a builder in the tree rebuilds byte for byte
++      # and the manifest verifies. It reads no held-out file (val, test, their
++      # worlds), so there is no secret here and no download, and a pull request
++      # from a fork runs the same steps. The tests that need a seeded household
++      # seed a public world into a temporary directory themselves.
++      - name: Materialise the public worlds
 +        working-directory: experiments/toolchat/native
-+        env:
-+          NATIVETOOLS: ${{ github.workspace }}/target/debug/nativetools
-+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
 +        run: |
 +          set -euo pipefail
-+          if [ -n "${HF_TOKEN}" ]; then
-+            python artefacts.py fetch
-+            python artefacts.py check
-+          else
-+            echo "::warning::HF_TOKEN is not available: rebuilding only; the tests that read the frozen keys files will fail"
-+            python artefacts.py fetch --rebuild-only
-+          fi
-       # `test_loop` and `test_retry` drive the eval harness over a seeded vault of
-       # world A. Seeding is deterministic and leaves the tracked keys file as it is.
-       - name: Seed world A
++          python artefacts.py fetch --public-only
++          python artefacts.py check --public-only
+       - name: Run the CPU suite
+         env:
+           NATIVETOOLS: ${{ github.workspace }}/target/debug/nativetools
