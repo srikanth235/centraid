@@ -54,14 +54,26 @@ def world_size(world: str) -> int:
     return sum(len(v) for v in spec.values() if isinstance(v, list))
 
 
+def session_files(world: str, sessions_dir: Path | None = None) -> list[Path]:
+    """The source files of the world's sessions, in the order authored/build.py loads them: sessions/<W>.py, then
+    sessions/<W>_*.py in name order. The val worlds' sources are held out of the public tree (artefacts.json: the
+    `session/` entries, with the world JSON and the builders of those worlds), so when one is missing this stops and says
+    where it comes from; it never returns the files of a world that has none."""
+    directory = sessions_dir or HERE / "sessions"
+    first = directory / f"{world}.py"
+    if world in VAL and not first.exists():
+        raise SystemExit(f"split: {first} is not in the tree: the sessions of the val worlds {list(VAL)} are held out "
+                         "(artefacts.json); `python3 artefacts.py fetch` brings them back from the data version")
+    return [first] + sorted(directory.glob(f"{world}_*.py"))
+
+
 def load_sessions(world: str) -> list[dict]:
-    """The world's authored sessions, exactly as authored/build.py loads them:
-    sessions/<W>.py first, then sessions/<W>_*.py in name order."""
+    """The world's authored sessions, exactly as authored/build.py loads them (`session_files`)."""
     sys.path.insert(0, str(NATIVE / "eval"))
     import gold
 
     gold._SESSIONS.clear()
-    files = [HERE / "sessions" / f"{world}.py"] + sorted((HERE / "sessions").glob(f"{world}_*.py"))
+    files = session_files(world)
     for f in files:
         if not f.exists():  # a world with no sessions yet (a new world)
             continue

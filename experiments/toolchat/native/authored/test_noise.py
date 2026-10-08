@@ -4,7 +4,8 @@
     NOISE_INTEGRATION=1 NATIVETOOLS=... EVAL_VAULTS=... python3 -m unittest authored.test_noise.Integration
         # builds a few T01 sessions with --augment through the runtime (the interpreter that runs build.py: torch)
 
-The messages here are our own. Nothing reads eval/sets, eval/sessions, eval/worlds or data/.
+The messages here are our own. Nothing reads eval/sets, eval/worlds or data/. The integration test writes the keys of the
+world it builds to a temporary directory (EVAL_KEYS), never to a tracked file.
 """
 from __future__ import annotations
 
@@ -828,7 +829,7 @@ class Integration(unittest.TestCase):
     def test_build_augment_tags_counts_and_keeps_the_clean_sessions(self):
         only = "T01-001,T01-007,T01-012"
         with tempfile.TemporaryDirectory() as t:
-            env = {**os.environ, "EVAL_VAULTS": os.environ.get("EVAL_VAULTS", str(Path(t) / "vaults"))}
+            env = {**os.environ, "EVAL_VAULTS": os.environ.get("EVAL_VAULTS", str(Path(t) / "vaults")), "EVAL_KEYS": str(Path(t) / "keys")}
 
             def build(out, *extra):
                 r = subprocess.run([sys.executable, str(HERE / "build.py"), "T01", "--out", str(Path(t) / out), "--only", only, "--gold-from-ref", *extra],

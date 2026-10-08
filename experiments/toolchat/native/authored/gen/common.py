@@ -37,6 +37,7 @@ NATIVE = AUTHORED.parent
 sys.path[:0] = [str(NATIVE / "eval"), str(NATIVE / "train"), str(NATIVE), str(AUTHORED)]
 
 import gold  # noqa: E402
+import split  # noqa: E402
 
 TRAIN_WORLDS = json.loads((AUTHORED / "split.json").read_text())["train"]
 
@@ -56,7 +57,7 @@ def rank(seed: int | str, *key: str) -> str:
 
 
 def session_files(w: str, sessions_dir: Path) -> list[Path]:
-    return [sessions_dir / f"{w}.py"] + sorted(sessions_dir.glob(f"{w}_*.py"))
+    return split.session_files(w, sessions_dir)  # a val world's sources are held out: this says so when they are not in the tree
 
 
 def load_sessions(w: str, sessions_dir: Path = AUTHORED / "sessions") -> list[dict]:

@@ -1,20 +1,24 @@
 """Unit tests of the phase-5 generators (authored/gen).
 
-    python3 -m unittest authored/gen/test_gen.py          # from experiments/toolchat/native, no runtime needed
+    NATIVETOOLS=... python3 -m unittest authored/gen/test_gen.py          # from experiments/toolchat/native
     GEN_INTEGRATION=1 NATIVETOOLS=... EVAL_VAULTS=... python3 -m unittest authored.gen.test_gen.Integration
 
-The unit tests read only authored/worlds and authored/sessions (never write there) and run in a few seconds. The
-integration test builds two sessions of T01 with a recovery insertion through authored/build.py and the runtime.
+The unit tests read only authored/worlds and authored/sessions (never write there). The keys of T01 and T02 are a by-product
+of seeding and none is kept in the tree (R-1088-16), so the module seeds both into a temporary directory first and points
+EVAL_KEYS there: no test reads or writes a tracked keys file. The integration test builds two sessions of T01 with a
+recovery insertion through authored/build.py and the runtime.
 """
 from __future__ import annotations
 
 import datetime
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import collide  # noqa: E402
@@ -22,6 +26,21 @@ import common  # noqa: E402
 import deadend  # noqa: E402
 import recover  # noqa: E402
 import rewrite  # noqa: E402
+
+NATIVE = Path(__file__).resolve().parents[2]
+
+
+def setUpModule():
+    """Seed T01 and T02 with the runtime (eval/seed_worlds.py) into a temporary directory and read their keys from there."""
+    tmp = tempfile.TemporaryDirectory(prefix="test_gen-")
+    unittest.addModuleCleanup(tmp.cleanup)
+    seeded = subprocess.run([sys.executable, str(NATIVE / "eval" / "seed_worlds.py"), "--vaults", str(Path(tmp.name) / "vaults"),
+                             "--keys-dir", str(Path(tmp.name) / "keys"), "T01", "T02"], capture_output=True, text=True)
+    if seeded.returncode:
+        raise RuntimeError(f"could not seed T01 and T02 (set NATIVETOOLS to the nativetools binary):\n{seeded.stderr[-1500:]}")
+    patch = mock.patch.dict(os.environ, {"EVAL_KEYS": str(Path(tmp.name) / "keys")})
+    patch.start()
+    unittest.addModuleCleanup(patch.stop)
 
 SRC = '''from gold import *
 
@@ -118,6 +137,35 @@ class Common(unittest.TestCase):
             write_src(d)
             s = common.load_sessions("TX", d)
             self.assertTrue(common.usable_sites("TX", s, d))
+
+
+class HeldOutSources(unittest.TestCase):
+    """The authored sessions of the val worlds (T03, T12, T23) are held out of the public tree (artefacts.json, the `session/`
+    entries): a tool asked for one of those worlds when the sources are not there stops and says where they come from, and a
+    train world is loaded as before."""
+
+    def test_a_val_world_without_its_sources_stops_and_names_the_data_version(self):
+        with tempfile.TemporaryDirectory() as t:
+            for world in common.split.VAL:
+                with self.assertRaises(SystemExit) as stop:
+                    common.load_sessions(world, Path(t))
+                self.assertIn("held out", str(stop.exception))
+                self.assertIn("artefacts.py fetch", str(stop.exception))
+                with self.assertRaises(SystemExit):
+                    common.session_files(world, Path(t))
+
+    def test_a_train_world_is_not_held_out_and_a_world_without_sources_is_left_to_the_loader(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            write_src(d)
+            (d / "TX_02.py").write_text("# part two\n")
+            self.assertEqual([f.name for f in common.session_files("TX", d)], ["TX.py", "TX_02.py"])
+            self.assertEqual([f.name for f in common.session_files("TY", d)], ["TY.py"])  # absent: the loader's own error
+
+    def test_a_train_world_resolves_to_its_own_files_and_the_tools_default_to_train_worlds(self):
+        first = common.split.session_files("T01")[0]
+        self.assertEqual((first.name, first.is_file()), ("T01.py", True))
+        self.assertFalse(set(common.TRAIN_WORLDS) & set(common.split.VAL))  # every `--worlds train` is no val world
 
 
 class Recover(unittest.TestCase):
@@ -323,10 +371,38 @@ class Collide(unittest.TestCase):
                                    (9, 9, 9), max_frac=0.2)
         self.assertLessEqual(len(log), int(0.2 * len(collide.rows_of(self.WORLD))))
 
+    def test_the_targets_are_kept_numbers_not_a_read_of_the_held_out_worlds(self):
+        with mock.patch.object(collide, "NATIVE", Path("/nonexistent")):  # the eval worlds A to D are not in a public checkout
+            for profile, want in collide.TARGETS.items():
+                self.assertEqual(collide.targets(profile), want)
+                self.assertEqual(set(want), {"first_name", "container", "same_name", "shared_word"})
+                self.assertTrue(all(0 <= v <= 1 for v in want.values()))
+            with self.assertRaises(FileNotFoundError):
+                collide.measured_targets("abc")  # measuring them does need the worlds: eval/heldout_checks.py holds the numbers to them
+        got = collide.targets("abc")
+        got["first_name"] = 9
+        self.assertNotEqual(collide.TARGETS["abc"]["first_name"], 9)
+
+    def test_the_command_rebuilds_collision_worlds_and_their_keys_from_public_sources(self):
+        """`collide.py --out DIR --keys`: same sources, same bytes; each world has the keys of its own seeding."""
+        with tempfile.TemporaryDirectory() as t:
+            runs = []
+            for name in ("one", "two"):
+                out = Path(t) / name
+                done = subprocess.run([sys.executable, str(common.HERE / "collide.py"), "--out", str(out), "--worlds", "T02", "--keys"],
+                                      capture_output=True, text=True, env={**os.environ, "EVAL_KEYS": ""})  # keys beside the world
+                self.assertEqual(done.returncode, 0, done.stderr[-1500:])
+                runs.append(out)
+            self.assertEqual((runs[0] / "T02.json").read_bytes(), (runs[1] / "T02.json").read_bytes())
+            keys = json.loads((runs[0] / "T02.keys.json").read_text())
+            added = [r["key"] for r in json.loads((runs[0] / "T02.json").read_text())["people"] if r["key"].startswith("col_")]
+            self.assertTrue(added and all(k in keys for k in added))  # the rows the transformation added are in the vault
+
     def test_real_worlds_measure(self):
-        for n in "ABCD":
-            m = collide.measure(json.loads((common.NATIVE / "eval" / "worlds" / f"{n}.json").read_text()))
+        for n in ("T01", "T02", "T04", "T05"):  # public train worlds: the held-out eval worlds are not in a public checkout
+            m = collide.measure(json.loads((common.AUTHORED / "worlds" / f"{n}.json").read_text()))
             self.assertTrue(all(0 <= v <= 1 for v in m.values()))
+            self.assertEqual(set(m), {"first_name", "container", "same_name", "shared_word"})
 
 
 class Rewrite(unittest.TestCase):

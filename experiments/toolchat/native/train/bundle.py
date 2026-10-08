@@ -7,7 +7,7 @@
     python bundle.py build <job> --ckpt-dir CKPT --set eval/sets/val.jsonl [--sample N]
                                       # eval only on a local checkpoint, shipped inside the job's data dir
 
-`train/vm/bundles.sh` builds the three scoring bundles (trainfit, val, test) that `train/vm/score_ckpt.sh` runs.
+`train/vm/bundles.sh` builds the scoring bundles (val, test) that `train/vm/score_ckpt.sh` runs.
 
 Staging: $BUNDLE_STAGE (default ${TMPDIR:-/tmp}/centraid-bundles)/<job>/{data,kernel}. data/ is flat: `bundle.dat` (a gzip
 tar of train/, eval/, authored/, export/, bin/nativetools.bin, lib/ loader + libs, data/, render.py and runtime_think.py) and `job.json`, plus
@@ -17,6 +17,7 @@ $BUNDLE_NATIVETOOLS names the exact runtime build to ship (default: the repo's t
 Trainer flags: job.json `train_args` carries --bs, --lr, --max-len, --embed, --val-n and, only when given, the loss, order and mark
 flags (`train_args`): --decision-weight, --decision-*/--hard-* (the decision and hard tiers), --copy-weight and --copy-labels (the
 copy tier), --pair-batches / --no-pair-batches (minimal pairs in one step), --checkpoints, --train-eval-n, --save-every, --resume.
+--data-version TAG names the data version (artefacts.py) the run trains on: metadata only, it reaches train_meta.json and the card.
 Their defaults live in train.py (decision weight 2, copy weight 0, pair batching on, marks at 25 / 50 / 75 / 100 %); a flag
 given here pins that choice in the job, e.g. `--decision-weight 1 --copy-weight 1 --no-pair-batches` is the legacy loss and order.
 
@@ -113,13 +114,18 @@ CKPT_PREFIX = "ckpt."  # data/ is uploaded flat: the checkpoint's files sit at i
 
 def stage_ckpt(src: Path, ds: Path) -> list[str]:
     """The weights + tokenizer files of a local checkpoint folder, hard-linked (else copied) into the
-    flat data dir as ckpt.<name>. Optimizer states and the like are left out."""
+    flat data dir as ckpt.<name>. Optimizer states and the like are left out. A file that is a symlink (every file of a Hub
+    cache snapshot is one, into the cache's shared blobs) is always copied: a hard link to it would give the blob a second
+    name, and a write through that name writes into the cache."""
     import fnmatch
     if not (src / "config.json").exists() or not list(src.glob("*.safetensors")):
         sys.exit("--ckpt-dir %s: needs config.json and *.safetensors (a save_pretrained folder)" % src)
     names = sorted(f.name for f in src.iterdir() if f.is_file() and any(fnmatch.fnmatch(f.name, g) for g in CKPT_KEEP))
     for n in names:
         dst = ds / (CKPT_PREFIX + n)
+        if (src / n).is_symlink():
+            shutil.copyfile(src / n, dst)  # the bytes, into a new regular file
+            continue
         try:
             os.link(src / n, dst)
         except OSError:
@@ -246,7 +252,16 @@ def train_args(a):
             + (["--lora", str(a.lora)] if a.lora else []) + (["--max-steps", str(a.max_steps)] if a.max_steps else [])
             + (["--warmup", str(a.warmup)] if a.warmup is not None else []) + (["--min-lr", str(a.min_lr)] if a.min_lr is not None else [])
             + decision_args(a) + (["--ema", str(a.ema)] if a.ema else []) + (["--no-grad-ckpt"] if a.no_grad_ckpt else [])
-            + (["--epochs", str(a.epochs)] if a.epochs is not None else []) + dpo_args(a) + resume_args(a))
+            + (["--epochs", str(a.epochs)] if a.epochs is not None else []) + dpo_args(a) + resume_args(a)
+            + (["--data-version", a.data_version] if a.data_version else []))
+
+
+def data_version(text: str) -> str:
+    """--data-version: a data tag of the private dataset repository (`data-v7`; artefacts.py), nothing else."""
+    import re
+    if not re.fullmatch(r"data-v[0-9]+", text):
+        raise argparse.ArgumentTypeError("%r is not a data version (data-vN)" % text)
+    return text
 
 
 def check_set(a) -> None:
@@ -337,7 +352,7 @@ def build(a):
     print("kernel %s" % kd)
     print(json.dumps(job, indent=1))
     if a.base or a.ckpt_dir:
-        print("\nan eval-only job is a scoring bundle: train/vm/bundles.sh stages trainfit, val and test; "
+        print("\nan eval-only job is a scoring bundle: train/vm/bundles.sh stages val and test; "
               "train/vm/score_ckpt.sh runs them")
     else:
         print("\nnext: JOB=%s BUCKET=<bucket> STAGE_DIR=%s train/vm/probe.sh (measure first), then train/vm/launch.sh"
@@ -387,6 +402,8 @@ def parser() -> argparse.ArgumentParser:
                     "default 0 = none)")
     ap.add_argument("--resume", action="store_true", help="train.py --resume (continue from the newest resume "
                     "checkpoint in the run's out folder, else start fresh)")
+    ap.add_argument("--data-version", type=data_version, metavar="TAG", help="the data version (data-vN) --train and --val belong to "
+                    "(artefacts.py version): passed to train.py as metadata only, so train_meta.json and the model card name it")
     ap.add_argument("--model", default=render.TOKENIZER)
     ap.add_argument("--init-ckpt", help="gs:// checkpoint directory the training starts from instead of --model (job.json `init`; "
                     "run_job.sh pulls it): a continuation run")

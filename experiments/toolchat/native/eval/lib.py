@@ -40,8 +40,19 @@ def load_world(name: str) -> dict:
     return json.loads((world_dir(name) / f"{name}.json").read_text())
 
 
+def keys_file(name: str, worlds_dir: Path | None = None) -> Path:
+    """Where <name>.keys.json is read and written. A keys file is a by-product of seeding the world (world key -> vault id
+    and kind) and no keys file is kept in the tree (R-1088-16), so it lives where the seeding was told to put it:
+    $EVAL_KEYS when that is set (the tests point it at a temporary directory, and no test writes a tracked file), else
+    beside the world file (`worlds_dir`, else `world_dir`)."""
+    override = os.environ.get("EVAL_KEYS")
+    if override:
+        return Path(override) / f"{name}.keys.json"
+    return (worlds_dir or world_dir(name)) / f"{name}.keys.json"
+
+
 def load_keys(name: str) -> dict[str, dict]:
-    return json.loads((world_dir(name) / f"{name}.keys.json").read_text())
+    return json.loads(keys_file(name).read_text())
 
 
 def read_jsonl(path: str | Path) -> list[dict]:

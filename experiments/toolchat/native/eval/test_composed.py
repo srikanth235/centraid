@@ -6,7 +6,7 @@ the rows it chose: explained, no gold change, when the old gold accepts that dif
 
     python3 -m unittest test_composed -v      # from experiments/toolchat/native/eval
 
-Runs are built as the runtime reports them (crates/assist/src/native/compose.rs) against world A.
+Runs are built as the runtime reports them (crates/assist/src/native/compose.rs) against the fixture world (`fixture_world.py`).
 """
 
 from __future__ import annotations
@@ -14,12 +14,14 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
+import fixture_world
 import gold
 import regen
 from lib import load_keys
 from score import Ids
 
-KEYS = load_keys("A")
+WORLD = fixture_world.install()  # a made-up household with the rows these tests name (the held-out worlds are not public)
+KEYS = load_keys(WORLD)
 
 
 def vid(key: str) -> str:
@@ -70,7 +72,7 @@ def ref(*tools: str) -> list[dict]:
 
 
 def session(*refs: list[dict]) -> dict:
-    return {"id": "s1", "set": "val", "world": "A", "today": "2026-10-14", "me": "me", "tags": [],
+    return {"id": "s1", "set": "val", "world": WORLD, "today": "2026-10-14", "me": "me", "tags": [],
             "turns": [{"user": f"message {i}", "gold": [gold.decline("not_found")], "ref": r, "tags": []}
                       for i, r in enumerate(refs)]}
 
@@ -188,7 +190,7 @@ class ComposedAnswer(unittest.TestCase):
 
     def one(self, old: dict, steps: list[dict], reference: list[str]) -> dict:
         gt = {"user": "who is zzyzx", "gold": [old], "ref": ref(*reference), "tags": []}
-        return regen.regen_turn(gt, steps, regen.Sess({"world": "A"}, Ids("A")), 0)
+        return regen.regen_turn(gt, steps, regen.Sess({"world": WORLD}, Ids(WORLD)), 0)
 
     def test_a_decline_not_found_is_widened_with_the_empty_answer(self):
         res = self.one(gold.decline("not_found"), [composed_answer([], "answer_empty")], ["answer", "decline"])
@@ -253,7 +255,7 @@ class ComposedAnswer(unittest.TestCase):
 
     def widened(self, old: dict, steps: list[dict]) -> list[dict]:
         """`widen_gold` alone: the gold with the alternatives added before any run is judged."""
-        sess = regen.Sess({"world": "A"}, Ids("A"))
+        sess = regen.Sess({"world": WORLD}, Ids(WORLD))
         return regen.widen_gold([old], "who is zzyzx", [], sess, 0, steps)[0]
 
     def test_only_a_gold_of_nothing_found_is_widened_before_the_run(self):
@@ -287,7 +289,7 @@ class ComposedAnswer(unittest.TestCase):
         steps = [composed_answer([], "answer_empty")]
         res = self.one(gold.decline("not_found"), steps, ["answer"])
         again = regen.regen_turn({"user": "who is zzyzx", "gold": res["gold"], "ref": ref("answer"), "tags": []},
-                                 steps, regen.Sess({"world": "A"}, Ids("A")), 0)
+                                 steps, regen.Sess({"world": WORLD}, Ids(WORLD)), 0)
         self.assertFalse(again["changed"], again)
         self.assertEqual(again["gold"], res["gold"])
 
@@ -353,7 +355,7 @@ class AppliedWrites(unittest.TestCase):
 
     def turn(self, old: dict, steps: list[dict], reference: list[str]) -> dict:
         gt = {"user": "tick it off", "gold": [old], "ref": ref(*reference), "tags": []}
-        return regen.regen_turn(gt, steps, regen.Sess({"world": "A"}, Ids("A")), 0)
+        return regen.regen_turn(gt, steps, regen.Sess({"world": WORLD}, Ids(WORLD)), 0)
 
     def test_every_applied_write_is_a_composed_end_named_composed_apply(self):
         self.assertEqual(set(regen.APPLY_ACTIONS), {"apply_all", "apply_near_spelling", "apply_other_kind"})

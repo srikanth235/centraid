@@ -3,18 +3,20 @@ clean turn metric on small synthetic runs.
 
     python3 -m unittest test_score -v      # from experiments/toolchat/native/eval
 
-Turns are built as the runtime would report them (the `effect` records), against world A's keys.
+Turns are built as the runtime would report them (the `effect` records), against the keys of the fixture world (`fixture_world.py`).
 """
 
 from __future__ import annotations
 
 import unittest
 
+import fixture_world
 import slices
 from lib import load_keys
 from score import Ids, clean_turns, judge_turn, report, score, wilson
 
-KEYS = load_keys("A")
+WORLD = fixture_world.install()  # a made-up household with the rows these tests name (the held-out worlds are not public)
+KEYS = load_keys(WORLD)
 
 
 def vid(key: str) -> str:
@@ -52,7 +54,7 @@ def gold(*accepts) -> dict:
 
 class OutcomeTypes(unittest.TestCase):
     def setUp(self):
-        self.ids = Ids("A")
+        self.ids = Ids(WORLD)
 
     # rows ------------------------------------------------------------------------------------
     def test_rows_pass(self):
@@ -216,7 +218,7 @@ class Report(unittest.TestCase):
         self.assertAlmostEqual(hi, 0.930, places=2)
 
     def test_guardrail_denominators(self):
-        gold_sets = [{"id": "s1", "world": "A", "tags": [], "turns": [
+        gold_sets = [{"id": "s1", "world": WORLD, "tags": [], "turns": [
             {"user": "q", "tags": [], "gold": [{"type": "ask", "candidates": []}]},
             {"user": "q", "tags": [], "gold": [{"type": "rows", "rows": ["dentist"]}]}]}]
         run = [{"id": "s1", "turns": [
@@ -230,7 +232,7 @@ class Report(unittest.TestCase):
 
 
     def test_without_convention(self):
-        gold_sets = [{"id": "s1", "world": "A", "tags": [], "turns": [
+        gold_sets = [{"id": "s1", "world": WORLD, "tags": [], "turns": [
             {"user": "q", "tags": ["convention", "convention:bare_weekday"], "gold": [{"type": "rows", "rows": ["vet"]}]},
             {"user": "q", "tags": [], "gold": [{"type": "rows", "rows": ["dentist"]}]}]}]
         run = [{"id": "s1", "turns": [{"steps": answer_rows("dentist")}, {"steps": answer_rows("dentist")}]}]
@@ -247,8 +249,8 @@ class CleanTurns(unittest.TestCase):
 
     @staticmethod
     def session(sid: str, outcomes: tuple[bool, ...]) -> tuple[dict, dict]:
-        """(gold, run) of a world-A session whose turn i is answered right (True) or wrong (False)."""
-        gold_session = {"id": sid, "world": "A", "tags": [], "turns": [
+        """(gold, run) of a session of the fixture world whose turn i is answered right (True) or wrong (False)."""
+        gold_session = {"id": sid, "world": WORLD, "tags": [], "turns": [
             {"user": "q", "tags": [], "gold": [{"type": "rows", "rows": ["dentist"]}]} for _ in outcomes]}
         run = {"id": sid, "turns": [{"steps": answer_rows("dentist" if ok else "vet")} for ok in outcomes]}
         return gold_session, run

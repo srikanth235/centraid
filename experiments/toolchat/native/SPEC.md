@@ -379,8 +379,8 @@ The new scorer judges each turn by **effect**, never by the call or echo text:
 3. **Loss** only on assistant tokens (trace and call); tool results and user turns are masked, with the decision tokens weighted (`--decision-weight`, default 2). The think values that are verbatim copies of the user's message (the quoted phrase of `intent`, the values of `set`, `text` and `question`) carry no loss (`--copy-weight`, default 0): the model can read them, so their gradient would teach the instance, not the rule. The trainer asserts the mask on a sample.
 4. **SFT on one Spot GPU VM** (`train/bundle.py` stages the job, `train/vm/` runs it; `train/vm/README.md`). Checkpoints at 25, 50, 75 and 100 percent; the last is the candidate unless the owner asks for `best` at launch: the trainer evaluates val at every mark and `out/best.json` names the mark with the lowest val decision loss (`out/marks.json` keeps every mark's numbers). The two records of a minimal pair (`pair` on the record) share one optimizer step (`--pair-batches`, default).
 5. **Training unit is one session.** One sequence = system prompt + every turn as the harness renders it at inference; a session that does not fit the sequence length after compaction is split at a turn boundary and the split is logged.
-6. **Gates on the corpus** before a run: `authored/gate.py` (no near-duplicate of a val or test message in train), `authored/dist.py` (train, val and test one distribution: shape, support, probes), `eval/build_sets.py check` (the frozen sets, the train file, the train-fit sample).
-7. **The built artefacts** of the current version are `data/train.jsonl.gz` and `data/train-val.jsonl.gz` (`data/README.md`: counts, hashes, recipes).
+6. **Gates on the corpus** before a run: `authored/gate.py` (no near-duplicate of a val or test message in train), `authored/dist.py` (train, val and test one distribution: shape, support, probes), `eval/build_sets.py check` (the frozen sets and the train file; it runs where the held-out files are, `artefacts.py verify-heldout`).
+7. **The built artefacts** of the current version are `data/train.jsonl.gz` and `data/train-val.jsonl.gz` (`data/README.md`: counts, hashes, recipes); a training run is tied to a data version (`README.md`, Data versions).
 
 ## 12. Build plan
 
@@ -388,11 +388,10 @@ The state of the work and its evidence: `README.md` in this directory, the #1044
 
 ## 13. Metric strategy
 
-**Three sets**, frozen in `eval/sets/` (`eval/FROZEN.md`), scored by one script with greedy decoding:
+**Two sets**, frozen in `eval/sets/` (`eval/FROZEN.md`), scored by one script with greedy decoding:
 
 | set | size | use |
 | --- | --- | --- |
-| **trainfit** | 300 sessions, a fixed sample of train | whether the model learned its own data; gross underfitting and label conflicts show here first |
 | **val** | 655 sessions on seven held-out worlds | every fix and every decision is derived here |
 | **test** | 656 sessions, the other half of the same pool | the headline; scored only at milestones the owner names; never tuned on |
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# score_ckpt.sh: score ONE checkpoint on the three sets (trainfit 300, val 655, test 656 sessions) with the optimized scoring settings.
+# score_ckpt.sh: score ONE checkpoint on the two sets (val 655, test 656 sessions) with the optimized scoring settings.
 #
-#   JOB=final-v2 BUCKET=centraid-train-clawgnition ./score_ckpt.sh <checkpoint> [--mark MARK] [--name NAME] [--sets trainfit,val,test]
+#   JOB=final-v2 BUCKET=centraid-train-clawgnition ./score_ckpt.sh <checkpoint> [--mark MARK] [--name NAME] [--sets val,test]
 #                                                                 [--bundles-prefix PREFIX] [--fast-kernels] [--dtype bfloat16|float16|float32]
 #                                                                 [--new-vm | --vm NAME] [--watch] [--dry-run]
 #
@@ -14,7 +14,7 @@
 #                 names (train.py writes it at every mark: the lowest val decision loss, ties to the later mark; none for a run without
 #                 --val). Without --mark the checkpoint is scored as given, and ckpt-100 stays the default; `best` is asked for, never assumed.
 #   --name        result name (default: <training job>-<checkpoint dir>, e.g. final-v2-ckpt-050); the same name resumes a run
-#   --sets        comma list, default trainfit,val,test (bundles: gs://$BUCKET/bundles/<set>/, from $BUNDLES_DIR/<set>/ as built by bundles.sh;
+#   --sets        comma list, default val,test (bundles: gs://$BUCKET/bundles/<set>/, from $BUNDLES_DIR/<set>/ as built by bundles.sh;
 #                 BUNDLES_DIR defaults to ${BUNDLE_STAGE:-${TMPDIR:-/tmp}/centraid-bundles}/bundles; a missing bundle stops the run)
 #   --bundles-prefix  bucket folder the bundles are uploaded to and read from (default bundles, i.e. gs://$BUCKET/bundles/<set>/);
 #                 use a different one (e.g. bundles-v2) so scoring with other bundles never overwrites the existing ones
@@ -38,7 +38,7 @@
 SCORE_DISK_GB=${SCORE_DISK_GB:-100}
 JOB=${JOB:-score}
 BPREFIX=${BUNDLES_PREFIX:-bundles}
-CKPT="" MARK="" NAME="" SETS=trainfit,val,test MODE_VM=job VMARG="" WATCH=0 DRY=0
+CKPT="" MARK="" NAME="" SETS=val,test MODE_VM=job VMARG="" WATCH=0 DRY=0
 FAST=${SCORE_FAST_KERNELS:-0} DTYPE=${SCORE_DTYPE:-}
 while [ $# -gt 0 ]; do
   case $1 in

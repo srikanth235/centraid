@@ -4,7 +4,7 @@ UNEXPLAINED case.
 
     python3 -m unittest test_regen -v      # from experiments/toolchat/native/eval
 
-Runs are built as the runtime reports them (the `call` and the `effect` of every step) against world A.
+Runs are built as the runtime reports them (the `call` and the `effect` of every step) against the fixture world (`fixture_world.py`: a made-up household with the rows these tests name).
 """
 
 from __future__ import annotations
@@ -12,13 +12,15 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
+import fixture_world
 import gold
 import regen
 from lib import load_keys, turn_effect
 from score import Ids, judge_accept, judge_turn
 
-KEYS = load_keys("A")
-OPEN = ["dogfood", "amazon", "vetbill", "drycleaning"]  # open tasks of world A
+WORLD = fixture_world.install()  # a made-up household with the rows these tests name (the held-out worlds are not public)
+KEYS = load_keys(WORLD)
+OPEN = ["dogfood", "amazon", "vetbill", "drycleaning"]  # open tasks of the fixture world
 STARTED = {"roadmap": 240, "fridge": 40, "readbook": None}  # the tasks in progress, with their effort in minutes
 
 
@@ -87,7 +89,7 @@ def filled(gt: dict, steps: list[dict]) -> dict:
 
 
 def session(*turns: dict) -> dict:
-    return {"id": "s1", "set": "val", "world": "A", "today": "2026-10-14", "me": "me", "tags": [],
+    return {"id": "s1", "set": "val", "world": WORLD, "today": "2026-10-14", "me": "me", "tags": [],
             "turns": list(turns)}
 
 
@@ -96,7 +98,7 @@ def run_of(*turn_steps: list[dict]) -> dict:
 
 
 def one(gt: dict, steps: list[dict], sess: regen.Sess | None = None, ti: int = 0) -> dict:
-    sess = sess or regen.Sess({"world": "A"}, Ids("A"))
+    sess = sess or regen.Sess({"world": WORLD}, Ids(WORLD))
     return regen.regen_turn(filled(gt, steps), steps, sess, ti)
 
 
@@ -173,7 +175,7 @@ class Derive(unittest.TestCase):
     """The accept derived from each kind of terminal effect passes its own run."""
 
     def derive(self, steps: list[dict], old: list[dict] | None = None, ids: Ids | None = None) -> tuple[dict, dict]:
-        ids = ids or Ids("A")
+        ids = ids or Ids(WORLD)
         eff = turn_effect(steps)
         accept, notes = regen.derive_accept(eff, ids, old or [], steps)
         ok, problems, _ = judge_accept(accept, eff, ids)
@@ -201,7 +203,7 @@ class Derive(unittest.TestCase):
         self.assertEqual((accept["rows"], accept.get("order")), (["vet", "dentist"], True))
 
     def test_rows_created_in_an_earlier_turn_are_named_plus_n(self):
-        ids = Ids("A")
+        ids = Ids(WORLD)
         made = "00000000-0000-0000-0000-0000000000aa"
         ids.created = [made]
         steps = [step("answer", {"kind": "task"}, {"answer": {"rows": [row("dentist"), {"id": made, "kind": "task",
@@ -212,7 +214,7 @@ class Derive(unittest.TestCase):
     def test_rows_without_a_world_key_cannot_be_named(self):
         steps = [step("answer", {}, {"answer": {"rows": [{"id": "ffffffff-0000", "kind": "task", "n": 5}]}})]
         with self.assertRaises(regen.Underivable):
-            regen.derive_accept(turn_effect(steps), Ids("A"), [], steps)
+            regen.derive_accept(turn_effect(steps), Ids(WORLD), [], steps)
 
     def test_value_counts_have_no_unit_and_no_float(self):
         accept, _ = self.derive([value_step("count", 36.0, {"op": "count"})])
@@ -345,13 +347,13 @@ class Derive(unittest.TestCase):
                       [step("answer", {}, {"error": "error: bad"}, ends=False)],
                       [step("find", {}, {"loop": True, "error": "repeated"}, ends=True)]):
             with self.assertRaises(regen.Underivable):
-                regen.derive_accept(turn_effect(steps), Ids("A"), [], steps)
+                regen.derive_accept(turn_effect(steps), Ids(WORLD), [], steps)
 
     def test_a_secret_revealed_under_a_gold_that_asks_for_none_has_no_accept(self):
         steps = [act_step("reveal", [], {"kind": "locker item"}, ends=False, revealed="revealed: x · password: y"),
                  rows_step(["wifi"])]
         with self.assertRaises(regen.Underivable):
-            regen.derive_accept(turn_effect(steps), Ids("A"), [], steps)
+            regen.derive_accept(turn_effect(steps), Ids(WORLD), [], steps)
 
 
 class Stale(unittest.TestCase):
@@ -376,7 +378,7 @@ class Stale(unittest.TestCase):
         res = one(gt, steps)
         self.assertTrue(res["changed"] and res["was_failing"])
         self.assertEqual(len(res["gold"]), 1)
-        self.assertTrue(judge_accept(res["gold"][0], res["effect"], Ids("A"))[0])
+        self.assertTrue(judge_accept(res["gold"][0], res["effect"], Ids(WORLD))[0])
 
 
 class Status(unittest.TestCase):
@@ -791,7 +793,7 @@ class NameMatch(unittest.TestCase):
 
     def test_a_row_the_old_matcher_took_is_no_dead_end(self):
         gt, steps = self.chain("Tomas")
-        sess = regen.Sess({"world": "A"}, Ids("A"))
+        sess = regen.Sess({"world": WORLD}, Ids(WORLD))
         sess.names["person"].append(("Tomas Test", []))  # the old matcher found this row at its first call
         res = one(gt, steps, sess)
         self.assertEqual((res["convention"], res["held"]), (regen.UNEXPLAINED, False))
@@ -921,7 +923,7 @@ class Unexplained(unittest.TestCase):
 
     def test_a_change_no_convention_fits_keeps_the_gold_and_says_what_was_derived(self):
         gt = turn("what's on this week", rows("dentist", "vet"))
-        sess = regen.Sess({"world": "A"}, Ids("A"))
+        sess = regen.Sess({"world": WORLD}, Ids(WORLD))
         res = one(gt, [rows_step(["dentist", "haircut"])], sess)
         self.assertEqual(res["convention"], regen.UNEXPLAINED)
         self.assertFalse(res["changed"])
@@ -1002,7 +1004,7 @@ class Sessions(unittest.TestCase):
         again, nothing = regen.regen_session(new, run)
         self.assertEqual(nothing, [])
         self.assertIs(again, new)
-        ids = Ids("A")
+        ids = Ids(WORLD)
         for gt, record in zip(new["turns"], run["turns"]):
             self.assertTrue(judge_turn(gt, record["steps"], ids)["pass"])
 
@@ -1151,17 +1153,17 @@ class RulingsWidening(unittest.TestCase):
         call = {"kind": "debt", "where": "status = open"}
         gt = turn("who owes me or who do i owe", rows("jordan_gas", "acltix"), ref=[{"tool": "answer", "args": call}])
         got, labels, _ = regen.widen_gold(gt["gold"], gt["user"], [{"tool": "answer", "args": call}],
-                                          regen.Sess({"world": "A"}, Ids("A")), 0)
+                                          regen.Sess({"world": WORLD}, Ids(WORLD)), 0)
         self.assertEqual((got, labels), ([rows("jordan_gas", "acltix"), rows("jordan_b")], ["debt-or-person"]))
 
     def test_a_check_the_accept_carries_stays_with_the_people(self):
         diff = gold.diff(gold.upd("uber", status="settled"))["diff"]
         gt = turn("paid chloe, who do i owe now", {**rows("magazine"), "diff": diff}, ref=[{"tool": "answer", "args": {"kind": "debt"}}])
-        got, _, _ = regen.widen_gold(gt["gold"], gt["user"], gt["ref"], regen.Sess({"world": "A"}, Ids("A")), 0)
+        got, _, _ = regen.widen_gold(gt["gold"], gt["user"], gt["ref"], regen.Sess({"world": WORLD}, Ids(WORLD)), 0)
         self.assertEqual(got[1], {**rows("meera_i"), "diff": diff})
 
     def test_the_people_of_the_debts_need_the_words_and_debt_rows(self):
-        sess = regen.Sess({"world": "A"}, Ids("A"))
+        sess = regen.Sess({"world": WORLD}, Ids(WORLD))
         for user, accept in (("which debts are open", rows("uber")), ("who is on the ballet list", rows("uber")),
                              ("who owes me", rows("dogfood")), ("who owes me", rows("uber", "dogfood")),
                              ("who owes me", rows()), ("who owes me", gold.val(3))):
@@ -1194,7 +1196,7 @@ class RulingsWidening(unittest.TestCase):
         # the three of D-1044-13 derive from the gold, the calls and the world: the run changes nothing for them
         call = {"kind": "task", "order": "effort desc", "limit": 1}
         gt = turn("the longest job", rows("roadmap", order=True), ref=[{"tool": "answer", "args": call}])
-        sess = regen.Sess({"world": "A"}, Ids("A"))
+        sess = regen.Sess({"world": WORLD}, Ids(WORLD))
         with_run = regen.widen_gold(gt["gold"], gt["user"], [{"tool": "answer", "args": call}], sess, 0,
                                     [rows_step(["roadmap"], call, ordered=True)])
         without = regen.widen_gold(gt["gold"], gt["user"], [{"tool": "answer", "args": call}], sess, 0)
@@ -1253,7 +1255,7 @@ class AfterSeriesAsk(unittest.TestCase):
     """G2 (owner ruling 2026-10-06): the turn after a runtime `series-ask` accepts the write the gold has or the same
     `Which one?` again, when the gold on file was written for another dialog."""
 
-    YOGA = ["yoga0", "yoga1", "yoga2", "yoga3"]  # four events of one name in world A
+    YOGA = ["yoga0", "yoga1", "yoga2", "yoga3"]  # four events of one name in the fixture world
     MADE = "00000000-0000-0000-0000-0000000000cc"
 
     def series_ask(self, keys=None) -> dict:
@@ -1296,7 +1298,7 @@ class AfterSeriesAsk(unittest.TestCase):
 
     def test_the_widened_gold_passes_the_create_and_the_ask_over_the_series_and_not_a_decline(self):
         new, _ = self.go(None)
-        ids = Ids("A")
+        ids = Ids(WORLD)
         accepts = new["turns"][1]["gold"]
         for steps, want in (([self.create_step()], True), ([self.series_ask()], True),
                             ([self.series_ask(["yoga0", "yoga1"])], False),  # an ask over rows of another set
@@ -1370,7 +1372,7 @@ class DeclineAnyReason(unittest.TestCase):
         return [step("decline", {"reason": reason}, {"decline": {"reason": reason}})]
 
     def widen(self, *accepts: dict) -> tuple[list[dict], list[str]]:
-        got, labels, _ = regen.widen_gold(list(accepts), "forget it", [], regen.Sess({"world": "A"}, Ids("A")), 0)
+        got, labels, _ = regen.widen_gold(list(accepts), "forget it", [], regen.Sess({"world": WORLD}, Ids(WORLD)), 0)
         return got, labels
 
     def test_the_reasons_are_the_ones_the_scorer_knows(self):
@@ -1399,7 +1401,7 @@ class DeclineAnyReason(unittest.TestCase):
 
     def test_it_is_idempotent(self):
         once, _ = self.widen(gold.decline("not_found"))
-        twice, labels = regen.widen_gold(once, "forget it", [], regen.Sess({"world": "A"}, Ids("A")), 0)[:2]
+        twice, labels = regen.widen_gold(once, "forget it", [], regen.Sess({"world": WORLD}, Ids(WORLD)), 0)[:2]
         self.assertEqual((twice, labels), (once, []))
         gt = turn("forget it", gold.decline("never_mind"), ref=[{"tool": "decline", "args": {}}])
         res = one(gt, self.decline_run("never_mind"))
@@ -1415,7 +1417,7 @@ class DeclineAnyReason(unittest.TestCase):
             res = one(gt, self.decline_run(reason))
             self.assertFalse(res["was_failing"], reason)
             self.assertEqual((res["convention"], res["changed"]), ("decline-any-reason", True), reason)
-            self.assertTrue(judge_turn({"gold": res["gold"]}, self.decline_run(reason), Ids("A"))["pass"], reason)
+            self.assertTrue(judge_turn({"gold": res["gold"]}, self.decline_run(reason), Ids(WORLD))["pass"], reason)
         self.assertIn("alternative accept decline", res["evidence"])
 
     def test_a_run_that_does_not_decline_still_fails_the_decline_gold(self):
@@ -1424,8 +1426,8 @@ class DeclineAnyReason(unittest.TestCase):
         res = one(gt, run)
         self.assertEqual(res["convention"], regen.UNEXPLAINED)
         self.assertFalse(res["changed"])
-        self.assertFalse(judge_turn({"gold": regen.widen_gold(gt["gold"], "x", [], regen.Sess({"world": "A"}, Ids("A")), 0)[0]},
-                                    run, Ids("A"))["pass"])
+        self.assertFalse(judge_turn({"gold": regen.widen_gold(gt["gold"], "x", [], regen.Sess({"world": WORLD}, Ids(WORLD)), 0)[0]},
+                                    run, Ids(WORLD))["pass"])
 
     def test_a_session_of_val_or_test_is_widened_by_regen_session(self):
         t1 = turn("forget it", gold.decline("never_mind"), ref=[{"tool": "decline", "args": {}}])
@@ -1503,7 +1505,7 @@ class RulingsBulkAndDue(unittest.TestCase):
         return one(gt, [rows_step(kept, call)])
 
     def test_what_is_due_leaves_out_the_tasks_done(self):
-        res = self.due("what's due this week", ["faucet", "dogfood"])  # plants is completed in world A
+        res = self.due("what's due this week", ["faucet", "dogfood"])  # plants is completed in the fixture world
         self.assertEqual((res["convention"], res["gold"]), ("due-active", [rows("faucet", "dogfood")]))
         self.assertIn("plants", res["evidence"])
 

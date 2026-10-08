@@ -7,7 +7,11 @@ loss, the order and the marks live in train.py: a flag not given is not in the j
 """
 from __future__ import annotations
 
+import contextlib
+import io
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -34,6 +38,17 @@ class TrainArgs(unittest.TestCase):
         self.assertEqual(a[a.index("--checkpoints") + 1], "0.5,1.0")
         self.assertEqual(a[a.index("--decision-weight") + 1], "3.0")
         self.assertNotIn("--no-pair-batches", a)
+
+    def test_the_data_version_is_carried_when_given_and_is_metadata_only(self):
+        self.assertNotIn("--data-version", args())
+        a = args("--data-version", "data-v7")
+        self.assertEqual(a[a.index("--data-version") + 1], "data-v7")
+        self.assertEqual([x for x in a if x != "--data-version" and x != "data-v7"], args())  # nothing else in the job moves
+
+    def test_the_data_version_is_a_data_tag(self):
+        for bad in ("v7", "data-7", "data-v", "data-v7x", ""):
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                args("--data-version", bad)
 
     def test_ema_is_carried_only_when_given(self):
         self.assertNotIn("--ema", args())
@@ -160,10 +175,70 @@ class TrainArgs(unittest.TestCase):
         got = train.parser().parse_args(["--train", "t", "--out", "o", *a])  # the same list run_job.sh hands the trainer
         self.assertEqual((got.decision_weight, got.copy_weight, got.copy_labels, got.pair_batches, got.checkpoints),
                          (1.0, 0.0, "intent", False, "0.25,0.5,0.75,1.0"))
+        a = args("--data-version", "data-v7")
+        got = train.parser().parse_args(["--train", "t", "--out", "o", *a])
+        self.assertEqual(got.data_version, "data-v7")  # reaches vars(a), so the `args` of train_meta.json
+        self.assertIsNone(train.parser().parse_args(["--train", "t", "--out", "o"]).data_version)
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            train.parser().parse_args(["--train", "t", "--out", "o", "--data-version", "v7"])
+        self.assertNotIn("data_version", train.FP_ARGS)  # a resume may name it freely: it changes no number
         a = args("--continue-from", "gs://b/soup/ckpt", "--dpo", "p.jsonl.gz", "--dpo-beta", "0.2", "--dpo-sft", "0.1")
         got = train.parser().parse_args(["--out", "o", *a])  # --train is optional with --dpo
         self.assertEqual((got.epochs, got.lr, got.min_lr, got.warmup, got.ema, got.dpo, got.dpo_beta, got.dpo_sft),
                          (1, 4e-6, 0.05, 0.02, 0.999, "data/dpo.jsonl.gz", 0.2, 0.1))
+
+
+class StageCkpt(unittest.TestCase):
+    """`--ckpt-dir` stages a checkpoint's files into the job's data dir. A Hub cache snapshot is a folder of symlinks into the
+    cache's shared blobs: staging it must copy, never link, so no later write to a staged file reaches the cache."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.ds = self.root / "data"
+        self.ds.mkdir()
+
+    def snapshot(self) -> Path:
+        blobs, snap = self.root / "blobs", self.root / "snapshots" / "rev"
+        blobs.mkdir()
+        snap.mkdir(parents=True)
+        for name, body in (("config.json", b"{}"), ("model.safetensors", b"weights"), ("tokenizer.json", b"tok")):
+            (blobs / ("sha-" + name)).write_bytes(body)
+            (snap / name).symlink_to(os.path.relpath(blobs / ("sha-" + name), snap))
+        return snap
+
+    def test_a_snapshot_of_symlinks_is_copied_and_a_write_to_the_copy_leaves_the_blob(self):
+        snap = self.snapshot()
+        names = bundle.stage_ckpt(snap, self.ds)
+        self.assertEqual(names, ["config.json", "model.safetensors", "tokenizer.json"])
+        for n in names:
+            staged = self.ds / (bundle.CKPT_PREFIX + n)
+            blob = (snap / n).resolve()
+            self.assertFalse(staged.is_symlink(), n)
+            self.assertEqual(staged.read_bytes(), blob.read_bytes(), n)
+            self.assertNotEqual(staged.stat().st_ino, blob.stat().st_ino, n)  # a copy: not a second name for the blob
+            self.assertEqual(blob.stat().st_nlink, 1, n)
+        before = (snap / "config.json").read_bytes()
+        with open(self.ds / "ckpt.config.json", "ab") as fh:
+            fh.write(b" changed")
+        self.assertEqual((snap / "config.json").read_bytes(), before)
+
+    def test_a_local_checkpoint_of_regular_files_is_still_linked(self):
+        src = self.root / "ckpt"
+        src.mkdir()
+        for name in ("config.json", "model.safetensors"):
+            (src / name).write_bytes(b"x")
+        bundle.stage_ckpt(src, self.ds)
+        self.assertEqual((self.ds / "ckpt.model.safetensors").read_bytes(), b"x")
+        self.assertEqual((src / "model.safetensors").stat().st_nlink, 2)  # one name in the checkpoint, one in the job
+
+    def test_a_folder_without_weights_is_refused(self):
+        src = self.root / "empty"
+        src.mkdir()
+        (src / "config.json").write_text("{}")
+        with self.assertRaises(SystemExit):
+            bundle.stage_ckpt(src, self.ds)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""The authoring vocabulary for sessions (eval/sessions/*.py, authored/sessions/*.py); the frozen
+"""The authoring vocabulary for sessions (authored/sessions/*.py, and the eval sources their authors keep); the frozen
 sets under sets/ carry the compiled gold.
 
 Gold is an EFFECT (SPEC §10), written in world keys:

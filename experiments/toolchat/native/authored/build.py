@@ -9,7 +9,7 @@ A world is authored/worlds/<W>.json (a household, seeded only through `nativetoo
 reuses the vault already seeded); its sessions are authored/sessions/<W>.py in the eval gold vocabulary
 (eval/gold.py); a ref call the runtime rejects is wrapped `bad(call)` (a repair trajectory; no loss on it).
 `--sessions-dir` and `--worlds-dir` read the sessions and the worlds from other directories (the recipe-authored
-sessions of A to D: eval/sessions/e1 and eval/worlds).
+sessions of A to D, which their author keeps, and the eval worlds of the data version; the collision worlds).
 The `<think>` before each call is the slot trace of CONTRACT_V3.md (section 7, v3.1), written mechanically from the
 call and the prompt in front of it (authored/trace.py), never authored: a row is its `#n`, a date the dates line reads
 as exactly is `dates[i]`, a `where` is typed segments. The call is a deterministic rendering of its think
@@ -54,7 +54,7 @@ explains keeps the failing gold, so the session is dropped as it is without the 
 reported (the first call of the reference resolves a name and ends the turn on that row, where the authored chain
 dead-ends on purpose, so the derived effect may be the wrong answer): the turn keeps its gold and the session is
 dropped, listed under "name-match, dropped"; the reference calls are repaired at the source.
-OUT/<W>.gold.jsonl carries the regenerated gold (`build_sets.py trainfit --train-gold` and authored/dist.py read it);
+OUT/<W>.gold.jsonl carries the regenerated gold (authored/dist.py and eval/rollout.py read it);
 each report entry gets a `changes` list (turn, convention, old and new gold, evidence); per world the counts of
 sessions kept, dropped (and why) and turns changed by convention are printed. Without the flag the gold stays as
 authored.
@@ -94,6 +94,7 @@ sys.path[:0] = [str(NATIVE / "eval"), str(NATIVE / "train"), str(NATIVE)]
 
 import fmt  # noqa: E402  (train/fmt.py: the function the decoder renders a call with, and the loader of authored/trace.py)
 import noise  # noqa: E402  (authored/noise.py: message noise, for --augment)
+import split  # noqa: E402  (authored/split.py: where a world's session sources are, and which are held out)
 import gold  # noqa: E402
 import lib  # noqa: E402
 import regen  # noqa: E402
@@ -115,7 +116,8 @@ def seed(w: str, worlds_dir: Path = HERE / "worlds") -> None:
     if proc.returncode:
         raise SystemExit(f"seed {w} failed: {proc.stderr[-2000:]}")
     rep = json.loads(proc.stdout)
-    keys_path = worlds_dir / f"{w}.keys.json"  # the committed formatting; written only when the content differs
+    keys_path = lib.keys_file(w, worlds_dir)  # beside the world, or in $EVAL_KEYS; written only when the content differs
+    keys_path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(rep["keys"], indent=2, sort_keys=True) + "\n"
     if not keys_path.exists() or json.loads(keys_path.read_text()) != rep["keys"]:
         tmp = keys_path.with_name(f".{keys_path.name}.{os.getpid()}")  # replaced whole: a test module reading it beside this build never sees half
@@ -128,7 +130,7 @@ def seed(w: str, worlds_dir: Path = HERE / "worlds") -> None:
 def load_sessions(w: str, sessions_dir: Path = HERE / "sessions") -> list[dict]:
     """sessions/<W>.py (it calls `world(...)`), then sessions/<W>_*.py in name order."""
     gold._SESSIONS.clear()
-    files = [sessions_dir / f"{w}.py"] + sorted(sessions_dir.glob(f"{w}_*.py"))
+    files = split.session_files(w, sessions_dir)  # a val world's sources are held out: this says so when they are not in the tree
     for f in files:
         spec = importlib.util.spec_from_file_location(f"authored_{f.stem}", f)
         mod = importlib.util.module_from_spec(spec)

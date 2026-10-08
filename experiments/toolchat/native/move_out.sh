@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
-# Take the built and frozen artefacts out of the tree, after the upload has recorded a Hub revision (#1088, R-1088-14).
+# Take the built and held-out data out of the tree, after a data version is published and its commit is pinned (#1088, R-1088-16).
 #
 #   HF_TOKEN=... NATIVETOOLS=target/debug/nativetools experiments/toolchat/native/move_out.sh
+#   ARTEFACTS_SOURCE=/path/to/data-v7 NATIVETOOLS=target/debug/nativetools experiments/toolchat/native/move_out.sh
 #
-# Run it from a clean checkout of the branch that holds the upload's artefacts.json (git status shows nothing). It stops at
-# the first thing that is not as it must be, before it changes the index:
+# Run it from a clean checkout of the branch that holds the artefacts.json `artefacts.py pin` wrote (git status shows nothing).
+# The round trip reads the version from ARTEFACTS_SOURCE (a local directory laid out as a version: no token) when that is set,
+# and from the private Hub repository at the pinned commit otherwise (HF_TOKEN). It stops at the first thing that is not as it
+# must be, before it changes the index:
 #
-#   1. artefacts.json records a Hub revision for every frozen file, and every file in the manifest is in place and matches;
+#   1. artefacts.json pins a commit of the data version, and every file in the manifest is in place and matches;
 #   2. the gate workflow patch applies;
-#   3. a round trip: every manifest file is moved aside, `artefacts.py fetch` brings it back (rebuilds from the builders and
-#      the seeder, downloads from the Hub at the recorded revision), `artefacts.py check` passes. A failure puts the files back.
+#   3. a round trip: every manifest file is moved aside, `artefacts.py fetch` brings it back (the public worlds rebuild from
+#      their builders, the rest is read from the version, the keys files are seeded), `artefacts.py check` passes and so does
+#      `artefacts.py verify-heldout`. A failure puts the files back.
 #
 # Then it takes the files out of the index (`git rm --cached`: the working tree keeps them), writes the .gitignore block,
-# applies the workflow patch (the `native-python` job materialises the artefacts before it seeds world A) and removes itself
-# and the patch. It commits nothing: review `git status`, then commit with a message such as
+# applies the workflow patch (the `native-python` job materialises the public worlds with `fetch --public-only`: no secret, and
+# the suite reads no held-out file) and removes itself and the patch. It commits nothing: review `git status`, then commit with
+# a message such as
 #
-#   build(native): move the built and frozen data to the private Hub (#1088)
+#   build(native): move the built and held-out data to the private data version (#1088)
 #
 # The history is not rewritten; the bytes stay in the commits already pushed.
 set -euo pipefail
@@ -29,12 +34,22 @@ fail() {
   exit 1
 }
 
-[ -z "$(git status --porcelain --untracked-files=no)" ] || fail "the working tree is not clean; commit the manifest the upload wrote first"
-python3 artefacts.py verify-hub --dry-run >/dev/null || fail "artefacts.json records no Hub revision yet: run the upload first (see README.md, Artefacts)"
+[ -z "$(git status --porcelain --untracked-files=no)" ] || fail "the working tree is not clean; commit the manifest that records the pinned commit first"
+python3 - <<'PY' || fail "artefacts.json pins no commit of the data version yet: publish it and pin it first (README.md, Data versions)"
+import json, re, sys
+pin = json.load(open("artefacts.json"))["data"]
+sys.exit(0 if pin.get("revision") and re.fullmatch(r"[0-9a-f]{40}", pin["revision"]) else 1)
+PY
 python3 artefacts.py check || fail "a manifest file is missing or differs; fix that before anything leaves the tree"
-git -C "$root" apply --check "$here/move_out.gate.patch" || fail "move_out.gate.patch no longer applies to .github/workflows/gate.yml; add its step by hand (README.md, Artefacts)"
+git -C "$root" apply --check "$here/move_out.gate.patch" || fail "move_out.gate.patch no longer applies to .github/workflows/gate.yml; add its step by hand (README.md, Data versions)"
 [ -x "${NATIVETOOLS:-$root/target/debug/nativetools}" ] || fail "no nativetools binary: build it (cargo build -p centraid-nativetools --bin nativetools) or set NATIVETOOLS; the keys files rebuild by seeding"
-[ -n "${HF_TOKEN:-}" ] || fail "HF_TOKEN is not set; the round trip downloads the frozen files from the Hub"
+if [ -n "${ARTEFACTS_SOURCE:-}" ]; then
+  [ -f "$ARTEFACTS_SOURCE/version.json" ] || fail "ARTEFACTS_SOURCE=$ARTEFACTS_SOURCE is not a data version (no version.json)"
+  echo "== the round trip reads the version from $ARTEFACTS_SOURCE"
+else
+  [ -n "${HF_TOKEN:-}" ] || fail "neither ARTEFACTS_SOURCE nor HF_TOKEN is set; the round trip reads the version from the private Hub repository"
+  echo "== the round trip reads the version from the private Hub repository at the pinned commit"
+fi
 
 backup="$(mktemp -d)"
 done_ok=0
@@ -54,6 +69,7 @@ python3 artefacts.py paths | while IFS= read -r path; do
 done
 python3 artefacts.py fetch
 python3 artefacts.py check
+python3 artefacts.py verify-heldout
 done_ok=1
 
 echo "== take the files out of the index"
@@ -65,7 +81,7 @@ sed -i '/^# artefacts.json: begin/,/^# artefacts.json: end/d' .gitignore
 python3 artefacts.py gitignore >>.gitignore
 git add .gitignore
 
-echo "== the native-python job materialises the artefacts"
+echo "== the native-python job materialises the public worlds"
 git -C "$root" apply --index "$here/move_out.gate.patch"
 
 n="$(python3 artefacts.py paths | wc -l)"

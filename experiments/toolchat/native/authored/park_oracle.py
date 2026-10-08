@@ -35,9 +35,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 NATIVE = HERE.parent
 os.environ.setdefault("EVAL_WORLDS", str(HERE / "worlds"))
-sys.path[:0] = [str(NATIVE / "eval"), str(NATIVE)]
+sys.path[:0] = [str(HERE), str(NATIVE / "eval"), str(NATIVE)]
 
 import gold  # noqa: E402
+import split  # noqa: E402
 import lib  # noqa: E402
 import run  # noqa: E402
 
@@ -63,8 +64,7 @@ def seed(world: str, vaults: Path, binary: str) -> None:
 
 def load_sessions(world: str) -> list[dict]:
     gold._SESSIONS.clear()
-    sessions_dir = HERE / "sessions"
-    for f in [sessions_dir / f"{world}.py"] + sorted(sessions_dir.glob(f"{world}_*.py")):
+    for f in split.session_files(world):
         spec = importlib.util.spec_from_file_location(f"authored_{f.stem}", f)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

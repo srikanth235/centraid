@@ -445,7 +445,10 @@ def world_names(w: str) -> dict:
 
 
 def load_keys(w: str) -> dict:
-    return json.loads((AUTHORED / "worlds" / f"{w}.keys.json").read_text())
+    """The keys of a train world's seeding: $EVAL_KEYS/<W>.keys.json, else authored/worlds/ (lib.keys_file)."""
+    import lib
+
+    return json.loads(lib.keys_file(w, AUTHORED / "worlds").read_text())
 
 
 # Families the current runtime no longer raises as an error: a verb that does not apply to a kind ends the turn in the

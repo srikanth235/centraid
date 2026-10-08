@@ -1,13 +1,14 @@
 """Seed the eval worlds through `nativetools seed` into a vault directory outside the repo.
 
-    python3 seed_worlds.py [--vaults DIR] [WORLD ...]
+    python3 seed_worlds.py [--vaults DIR] [--keys-dir DIR] [WORLD ...]
 
 Default: the union of the worlds in sets/val.jsonl and sets/test.jsonl: A B C D (eval/worlds) and T03 T12 T23
-(authored/worlds). Name train worlds to seed them too (the worlds of sets/trainfit.jsonl). Writes <DIR>/<W>/vault
-(checkpointed, so a copy per session is small) and <W>.keys.json next to the world file (world key -> vault id and
-kind; seeding is deterministic). The keys file is written only when its content changed, in the formatting it is
-committed in (indent 2, sorted keys), so a seeding leaves the tracked files alone. A world is eval/worlds/<W>.json or
-authored/worlds/<W>.json (lib.world_dir), all seeded into the same DIR, so `run.py --set sets/val.jsonl` finds them.
+(authored/worlds). Name train worlds to seed them too. Writes <DIR>/<W>/vault
+(checkpointed, so a copy per session is small) and <W>.keys.json (world key -> vault id and kind; seeding is
+deterministic) next to the world file, or in --keys-dir (else $EVAL_KEYS): a keys file is a by-product of seeding and none
+is kept in the tree, so a test seeds into a temporary directory and writes no tracked file. The keys file is written
+only when its content changed (indent 2, sorted keys). A world is eval/worlds/<W>.json or authored/worlds/<W>.json
+(lib.world_dir), all seeded into the same DIR, so `run.py --set sets/val.jsonl` finds them.
 """
 
 from __future__ import annotations
@@ -55,7 +56,7 @@ def set_worlds() -> list[str]:
 
 
 def seed(name: str, vaults: Path) -> None:
-    from lib import world_dir
+    from lib import keys_file, world_dir
 
     wdir = world_dir(name)
     world = wdir / f"{name}.json"
@@ -72,7 +73,9 @@ def seed(name: str, vaults: Path) -> None:
     for drop in report.get("dropped", []):  # world values the vault cannot hold: gold must not rely on them
         print(f"{name}: dropped {json.dumps(drop, ensure_ascii=False)}")
     checkpoint(vault)
-    changed = write_keys(wdir / f"{name}.keys.json", keys)
+    target = keys_file(name, wdir)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    changed = write_keys(target, keys)
     size = sum(p.stat().st_size for p in out.rglob("*") if p.is_file())
     print(f"{name}: {len(keys)} keys ({'CHANGED, re-run build_sets.py check' if changed else 'unchanged'}), "
           f"vault {size / 1e6:.1f} MB at {vault}")
@@ -81,8 +84,11 @@ def seed(name: str, vaults: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--vaults", default=DEFAULT_VAULTS)
+    parser.add_argument("--keys-dir", help="write the <W>.keys.json files here, not beside the world files (default $EVAL_KEYS)")
     parser.add_argument("worlds", nargs="*")
     args = parser.parse_args()
+    if args.keys_dir:
+        os.environ["EVAL_KEYS"] = str(Path(args.keys_dir).resolve())
     for name in args.worlds or set_worlds():
         seed(name, Path(args.vaults))
 

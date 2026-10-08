@@ -967,6 +967,13 @@ def write_marks(out, marks):
     return best
 
 
+def data_version(text: str) -> str:
+    """--data-version: a data tag of the private dataset repository (`data-v7`; artefacts.py), nothing else."""
+    if not re.fullmatch(r"data-v[0-9]+", text):
+        raise argparse.ArgumentTypeError("%r is not a data version (data-vN)" % text)
+    return text
+
+
 def parser() -> argparse.ArgumentParser:
     """The command line (a function of its own so that the defaults can be read, and tested, without running a training)."""
     ap = argparse.ArgumentParser()
@@ -1028,6 +1035,9 @@ def parser() -> argparse.ArgumentParser:
                     "(ckpt-NNN, marks.json, best.json); the end of the run is always one (default %s)" % CHECKPOINTS)
     ap.add_argument("--log-every", type=int, default=5)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--data-version", type=data_version, metavar="TAG", help="the data version (data-vN) of the private dataset "
+                    "repository that --train and --val belong to (artefacts.py version). Metadata only: it lands in the `args` of "
+                    "train_meta.json, where the model card reads it, and changes nothing about the run")
     ap.add_argument("--grad-ckpt", dest="grad_ckpt", action="store_true", help="gradient checkpointing (off by "
                     "default: ~25%% faster, more memory; the memory probe switches it on by itself on an OOM)")
     ap.add_argument("--no-grad-ckpt", dest="grad_ckpt", action="store_false", help="the default; kept so old "
