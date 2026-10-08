@@ -425,8 +425,8 @@
       "size": 733110,
       "from": "frozen held-out set, v7.4 (eval/FROZEN.md); the gold corrections were applied to the jsonl and are in no source (eval/sessions/README.md)",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "eval/sets/val.jsonl"
       }
     },
@@ -437,8 +437,8 @@
       "size": 738445,
       "from": "frozen held-out set, v7.4 (eval/FROZEN.md); the gold corrections were applied to the jsonl and are in no source (eval/sessions/README.md)",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "eval/sets/test.jsonl"
       }
     },
@@ -449,8 +449,8 @@
       "size": 487533,
       "from": "frozen train-fit sample drawn from data/train.jsonl.gz by eval/build_sets.py trainfit (eval/FROZEN.md)",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "eval/sets/trainfit.jsonl"
       }
     },
@@ -461,8 +461,8 @@
       "size": 2830186,
       "from": "rollout screen set (eval/rollout.py screen) over a train build that is not in the repository",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "eval/sets/roll-screen.jsonl"
       }
     },
@@ -473,8 +473,8 @@
       "size": 65936,
       "from": "frozen record of the half each session was in (eval/FROZEN.md)",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "eval/sets/split.json"
       }
     },
@@ -485,8 +485,8 @@
       "size": 10279885,
       "from": "r1 build, 2026-10-03 (data/README.md): authored/build.py per world and authored/gen/drills.py, assembled by authored/assemble.py",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "data/train.jsonl.gz"
       }
     },
@@ -497,8 +497,8 @@
       "size": 207228,
       "from": "r1 build, 2026-10-03 (data/README.md): authored/build.py on the val worlds, assembled by authored/assemble.py",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "data/train-val.jsonl.gz"
       }
     },
@@ -509,8 +509,8 @@
       "size": 27185,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T01.keys.json"
       }
     },
@@ -521,8 +521,8 @@
       "size": 25784,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T02.keys.json"
       }
     },
@@ -533,8 +533,8 @@
       "size": 28353,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T04.keys.json"
       }
     },
@@ -545,8 +545,8 @@
       "size": 25411,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T05.keys.json"
       }
     },
@@ -557,8 +557,8 @@
       "size": 25652,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T06.keys.json"
       }
     },
@@ -569,8 +569,8 @@
       "size": 26084,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T07.keys.json"
       }
     },
@@ -581,8 +581,8 @@
       "size": 26736,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T08.keys.json"
       }
     },
@@ -593,8 +593,8 @@
       "size": 26610,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T09.keys.json"
       }
     },
@@ -605,8 +605,8 @@
       "size": 26390,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T10.keys.json"
       }
     },
@@ -617,8 +617,8 @@
       "size": 26283,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T11.keys.json"
       }
     },
@@ -629,8 +629,8 @@
       "size": 27605,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T13.keys.json"
       }
     },
@@ -641,8 +641,8 @@
       "size": 26976,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T14.keys.json"
       }
     },
@@ -653,8 +653,8 @@
       "size": 26997,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T15.keys.json"
       }
     },
@@ -665,8 +665,8 @@
       "size": 27543,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T16.keys.json"
       }
     },
@@ -677,8 +677,8 @@
       "size": 27007,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T17.keys.json"
       }
     },
@@ -689,8 +689,8 @@
       "size": 25179,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T18.keys.json"
       }
     },
@@ -701,8 +701,8 @@
       "size": 26173,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T19.keys.json"
       }
     },
@@ -713,8 +713,8 @@
       "size": 27345,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T20.keys.json"
       }
     },
@@ -725,8 +725,8 @@
       "size": 26234,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T21.keys.json"
       }
     },
@@ -737,8 +737,8 @@
       "size": 26656,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T22.keys.json"
       }
     },
@@ -749,8 +749,8 @@
       "size": 26999,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T24.keys.json"
       }
     },
@@ -761,8 +761,8 @@
       "size": 27930,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T25.keys.json"
       }
     },
@@ -773,8 +773,8 @@
       "size": 27021,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T26.keys.json"
       }
     },
@@ -785,8 +785,8 @@
       "size": 26006,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T27.keys.json"
       }
     },
@@ -797,8 +797,8 @@
       "size": 27526,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T28.keys.json"
       }
     },
@@ -809,8 +809,8 @@
       "size": 27585,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T29.keys.json"
       }
     },
@@ -821,8 +821,8 @@
       "size": 207288,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T30.keys.json"
       }
     },
@@ -833,8 +833,8 @@
       "size": 27884,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T31.keys.json"
       }
     },
@@ -845,8 +845,8 @@
       "size": 27135,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T32.keys.json"
       }
     },
@@ -857,8 +857,8 @@
       "size": 27575,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T33.keys.json"
       }
     },
@@ -869,8 +869,8 @@
       "size": 215238,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T34.keys.json"
       }
     },
@@ -881,8 +881,8 @@
       "size": 28077,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T35.keys.json"
       }
     },
@@ -893,8 +893,8 @@
       "size": 27843,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T36.keys.json"
       }
     },
@@ -905,8 +905,8 @@
       "size": 27928,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T37.keys.json"
       }
     },
@@ -917,8 +917,8 @@
       "size": 222096,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "authored/worlds/T38.keys.json"
       }
     },
@@ -929,8 +929,8 @@
       "size": 29796,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "eval/worlds/E.keys.json"
       }
     },
@@ -941,8 +941,8 @@
       "size": 29016,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "eval/worlds/F.keys.json"
       }
     },
@@ -953,8 +953,8 @@
       "size": 252461,
       "from": "ids of an earlier seeding of the world; a fresh seeding with the current nativetools gives other ids",
       "hub": {
-        "repo": "<set at upload>",
-        "revision": "<set at upload>",
+        "repo": "srikanth235/centraid-native-data",
+        "revision": "9c094e77f7fcd9d3d2991f4c8476e79d5591d0bf",
         "path": "eval/worlds/G.keys.json"
       }
     }
