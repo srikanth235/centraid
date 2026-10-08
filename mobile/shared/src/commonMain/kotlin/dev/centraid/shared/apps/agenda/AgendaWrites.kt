@@ -16,9 +16,11 @@ import dev.centraid.shared.sync.rfc3339FromEpochMillis
  * schema does not name refuses the whole write (v0's `edit-occurrence` did,
  * a defect not carried).
  *
- * Invoke keys are `command:event_id:…` ([InvokeKeys]): content-derived, so a
- * double tap is one write, and the event id is the SUBJECT, which is how
- * [AgendaMarks] knows which event a write is about.
+ * Invoke keys are `command:event_id:…` ([InvokeKeys]): the event id is the
+ * SUBJECT, which is how [AgendaMarks] knows which event a write is about. The
+ * key only correlates the answer: a double tap while a write is in flight is
+ * one write ([dev.centraid.shared.kit.WriteLaw]), and the editor ends its
+ * sitting on the commit, because the core remembers no key (R-1088-12).
  */
 public object AgendaWrites {
     public const val PROPOSE: String = "schedule.propose_event"

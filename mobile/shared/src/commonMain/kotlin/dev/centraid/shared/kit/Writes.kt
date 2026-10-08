@@ -37,6 +37,12 @@ public interface WriteLens<S> {
  * ONE WRITE IN FLIGHT, and a refused one keeps the content (the read law and
  * the write law are different laws: a failed write never replaces what the
  * member was looking at).
+ *
+ * NOTHING MORE: once a write has settled it is forgotten, here as in the core
+ * (R-1088-12), so a screen that stays up after a COMMITTED create or save must
+ * end that sitting itself — Save not armed, the form gone — or its next tap
+ * files the same thing again (#1089). The keys differ per attempt in some
+ * editors (`try=N`, a token), so no key comparison in this law could do it.
  */
 public object WriteLaw {
     /** Submit. The same key already in flight is the same write, and nothing. */

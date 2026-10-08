@@ -254,7 +254,9 @@ public object AlbumChoice {
      *
      * An empty name is not a write: `title` is `minLength: 1` and the vault
      * would refuse it. The key is `PhotosCollectionsMachine`'s, so a name typed
-     * on Collections and the same name typed here are the same intent.
+     * on Collections and the same name typed here are the same intent for the
+     * answer's sake; it makes no second create one (R-1088-12), and the sheet's
+     * field, which clears on Create, is what stops a repeat.
      */
     public fun createEffects(title: String): List<ScreenEffect> {
         val name = title.trim()

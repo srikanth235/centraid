@@ -111,9 +111,11 @@ public class TallyExpenseBridge : TallyScreenBridge<TallyExpenseState, TallyExpe
 }
 
 /**
- * The editor. Each open mints the SITTING'S TOKEN, which keys the save: a
- * double tap is one expense, and the same expense added again later is not
- * deduplicated into the first.
+ * The editor. Each open mints the SITTING'S TOKEN, which keys the save so
+ * that one sitting's answer is told from another's. A double tap while the
+ * save is in flight is one write ([dev.centraid.shared.kit.WriteLaw]), a
+ * commit ends the sitting, and the same expense added in a later sitting is a
+ * new one: the core remembers no key (R-1088-12).
  */
 public class TallyEditorBridge : TallyScreenBridge<TallyEditorState, TallyEditorEvent>(
     TallyEditorMachine,

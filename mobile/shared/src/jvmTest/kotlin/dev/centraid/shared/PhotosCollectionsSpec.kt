@@ -522,6 +522,24 @@ class PhotosCollectionsSpec : StringSpec({
         ).effects.size shouldBe 1
     }
 
+    "a second Create while the first is in flight files no second album (#1089)" {
+        val sheet = machine.reduce(
+            machine.initial(),
+            PhotosCollectionsEvent(sheet = PhotosCollectionsEvent.SheetChanged(PhotosCollectionsState.Sheet.SHEET_NEW_ALBUM)),
+        ).state
+        val tap = PhotosCollectionsEvent(album_created = PhotosCollectionsEvent.AlbumCreated(name = "Portugal"))
+        val first = machine.reduce(sheet, tap)
+        val write = first.effects.single() as ScreenEffect.SubmitWrite
+        // The sheet stays open until the commit, so a double tap reaches the reducer twice.
+        machine.reduce(first.state, tap).effects.shouldBeEmpty()
+        // THE ANSWER FREES THE SHEET: refused, the same name tries again.
+        val refused = machine.reduce(
+            first.state,
+            PhotosCollectionsReads.settled(CommandStatus.COMMAND_STATUS_FAILED, "Not now.", write.invokeKey),
+        ).state
+        machine.reduce(refused, tap).effects.size shouldBe 1
+    }
+
     "a refusal with no words is still a sentence, and a new attempt clears it" {
         // A REFUSAL WITH NO WORDS WAS SILENCE until `write_failure` existed,
         // and a member who pressed Create and saw nothing happen could not
@@ -536,7 +554,7 @@ class PhotosCollectionsSpec : StringSpec({
             "Centraid could not make that change."
 
         machine.reduce(
-            refused,
+            refused.copy(sheet = PhotosCollectionsState.Sheet.SHEET_NEW_ALBUM),
             PhotosCollectionsEvent(
                 album_created = PhotosCollectionsEvent.AlbumCreated(name = "Rooftops"),
             ),

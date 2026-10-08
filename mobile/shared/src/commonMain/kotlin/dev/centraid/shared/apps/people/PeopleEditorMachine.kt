@@ -180,7 +180,18 @@ public object PeopleEditorMachine : ScreenMachine<PeopleEditorState, PeopleEdito
         val autosave = state.autosave ?: Autosave()
         if (settled.invoke_key.isNotEmpty() && settled.invoke_key == autosave.invoke_key) {
             val adding = state.is_new && !state.created
-            val step = AutosaveLaw.settled(lens(state), state, settled)
+            // THE CREATE'S COMMIT HANDS THE EDITOR TO ITS EDIT LENS (#1089), the one
+            // `lens(state)` names only once `created` is set below. Words typed while
+            // the add was in flight are saved by this very settle, and under the add
+            // lens they would go out as `add_person` again: the whole draft, under an
+            // id the vault now holds, and nothing remembers the first (R-1088-12).
+            // `add_person` takes no how-you-met, so what the add sent excludes it and
+            // the edit lens owes it.
+            val step = if (adding && settled.committed) {
+                AutosaveLaw.settled(EditLens, state.copy(sending = state.sending?.copy(met = "")), settled)
+            } else {
+                AutosaveLaw.settled(lens(state), state, settled)
+            }
             if (!adding || !settled.committed) return step
             // THE PERSON EXISTS NOW. `add_person` takes no how-you-met, so a
             // `met` already typed is still owed: the baseline forgets it and an

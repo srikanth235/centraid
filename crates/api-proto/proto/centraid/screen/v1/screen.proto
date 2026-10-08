@@ -2496,6 +2496,11 @@ message PhotosCollectionsState {
   // Without it a refusal is SILENT: every screen here has a `WriteSettled`
   // event carrying a sentence and, for one draft, nowhere to put it.
   optional ReadFailure write_failure = 6;
+  // THE KEY OF THE `media.create_album` IN FLIGHT, empty when none (#1089).
+  // The sheet stays open until the commit, so a double tap on Create reaches
+  // the reducer twice, and the core remembers no key (R-1088-12): the second
+  // would make a second album. Cleared by the settle that carries this key.
+  string create_key = 7;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -2563,6 +2568,8 @@ message PhotosCollectionsEvent {
   message WriteSettled {
     bool committed = 1;
     string sentence = 2;
+    // The key of the write answered (#1089): which of the screen's writes this was.
+    string invoke_key = 3;
   }
 }
 
@@ -3017,6 +3024,12 @@ message FaceReviewState {
   // Without it a refusal is SILENT: every screen here has a `WriteSettled`
   // event carrying a sentence and, for one draft, nowhere to put it.
   optional ReadFailure write_failure = 8;
+  // THE REGION WHOSE `people.add_person` IS IN FLIGHT, empty when none (#1089).
+  // The picker stays open over the question while the create runs, so a double
+  // tap reaches the reducer twice, and the core remembers no key (R-1088-12):
+  // the second would make a second person. One create at a time; cleared by the
+  // settle or the `PersonCreated` for this region.
+  string creating_region = 9;
 }
 
 message FaceReviewData {
