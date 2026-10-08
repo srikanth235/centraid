@@ -154,11 +154,6 @@ def compile_sessions(files: list[Path]) -> list[dict]:
         gold._SESSIONS.clear()
 
 
-def compile_ids(files: list[Path]) -> list[str]:
-    """The session ids the eval-vocabulary source files define."""
-    return [s["id"] for s in compile_sessions(files)]
-
-
 def val_world_ids() -> list[str]:
     return [s["id"] for w in split.val_worlds() for s in split.load_sessions(w)]
 
