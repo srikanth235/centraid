@@ -114,13 +114,18 @@ CKPT_PREFIX = "ckpt."  # data/ is uploaded flat: the checkpoint's files sit at i
 
 def stage_ckpt(src: Path, ds: Path) -> list[str]:
     """The weights + tokenizer files of a local checkpoint folder, hard-linked (else copied) into the
-    flat data dir as ckpt.<name>. Optimizer states and the like are left out."""
+    flat data dir as ckpt.<name>. Optimizer states and the like are left out. A file that is a symlink (every file of a Hub
+    cache snapshot is one, into the cache's shared blobs) is always copied: a hard link to it would give the blob a second
+    name, and a write through that name writes into the cache."""
     import fnmatch
     if not (src / "config.json").exists() or not list(src.glob("*.safetensors")):
         sys.exit("--ckpt-dir %s: needs config.json and *.safetensors (a save_pretrained folder)" % src)
     names = sorted(f.name for f in src.iterdir() if f.is_file() and any(fnmatch.fnmatch(f.name, g) for g in CKPT_KEEP))
     for n in names:
         dst = ds / (CKPT_PREFIX + n)
+        if (src / n).is_symlink():
+            shutil.copyfile(src / n, dst)  # the bytes, into a new regular file
+            continue
         try:
             os.link(src / n, dst)
         except OSError:

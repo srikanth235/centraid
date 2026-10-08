@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -184,6 +186,59 @@ class TrainArgs(unittest.TestCase):
         got = train.parser().parse_args(["--out", "o", *a])  # --train is optional with --dpo
         self.assertEqual((got.epochs, got.lr, got.min_lr, got.warmup, got.ema, got.dpo, got.dpo_beta, got.dpo_sft),
                          (1, 4e-6, 0.05, 0.02, 0.999, "data/dpo.jsonl.gz", 0.2, 0.1))
+
+
+class StageCkpt(unittest.TestCase):
+    """`--ckpt-dir` stages a checkpoint's files into the job's data dir. A Hub cache snapshot is a folder of symlinks into the
+    cache's shared blobs: staging it must copy, never link, so no later write to a staged file reaches the cache."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.ds = self.root / "data"
+        self.ds.mkdir()
+
+    def snapshot(self) -> Path:
+        blobs, snap = self.root / "blobs", self.root / "snapshots" / "rev"
+        blobs.mkdir()
+        snap.mkdir(parents=True)
+        for name, body in (("config.json", b"{}"), ("model.safetensors", b"weights"), ("tokenizer.json", b"tok")):
+            (blobs / ("sha-" + name)).write_bytes(body)
+            (snap / name).symlink_to(os.path.relpath(blobs / ("sha-" + name), snap))
+        return snap
+
+    def test_a_snapshot_of_symlinks_is_copied_and_a_write_to_the_copy_leaves_the_blob(self):
+        snap = self.snapshot()
+        names = bundle.stage_ckpt(snap, self.ds)
+        self.assertEqual(names, ["config.json", "model.safetensors", "tokenizer.json"])
+        for n in names:
+            staged = self.ds / (bundle.CKPT_PREFIX + n)
+            blob = (snap / n).resolve()
+            self.assertFalse(staged.is_symlink(), n)
+            self.assertEqual(staged.read_bytes(), blob.read_bytes(), n)
+            self.assertNotEqual(staged.stat().st_ino, blob.stat().st_ino, n)  # a copy: not a second name for the blob
+            self.assertEqual(blob.stat().st_nlink, 1, n)
+        before = (snap / "config.json").read_bytes()
+        with open(self.ds / "ckpt.config.json", "ab") as fh:
+            fh.write(b" changed")
+        self.assertEqual((snap / "config.json").read_bytes(), before)
+
+    def test_a_local_checkpoint_of_regular_files_is_still_linked(self):
+        src = self.root / "ckpt"
+        src.mkdir()
+        for name in ("config.json", "model.safetensors"):
+            (src / name).write_bytes(b"x")
+        bundle.stage_ckpt(src, self.ds)
+        self.assertEqual((self.ds / "ckpt.model.safetensors").read_bytes(), b"x")
+        self.assertEqual((src / "model.safetensors").stat().st_nlink, 2)  # one name in the checkpoint, one in the job
+
+    def test_a_folder_without_weights_is_refused(self):
+        src = self.root / "empty"
+        src.mkdir()
+        (src / "config.json").write_text("{}")
+        with self.assertRaises(SystemExit):
+            bundle.stage_ckpt(src, self.ds)
 
 
 if __name__ == "__main__":
