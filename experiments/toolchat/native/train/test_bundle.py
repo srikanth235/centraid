@@ -7,6 +7,8 @@ loss, the order and the marks live in train.py: a flag not given is not in the j
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import sys
 import unittest
 from pathlib import Path
@@ -34,6 +36,17 @@ class TrainArgs(unittest.TestCase):
         self.assertEqual(a[a.index("--checkpoints") + 1], "0.5,1.0")
         self.assertEqual(a[a.index("--decision-weight") + 1], "3.0")
         self.assertNotIn("--no-pair-batches", a)
+
+    def test_the_data_version_is_carried_when_given_and_is_metadata_only(self):
+        self.assertNotIn("--data-version", args())
+        a = args("--data-version", "data-v7")
+        self.assertEqual(a[a.index("--data-version") + 1], "data-v7")
+        self.assertEqual([x for x in a if x != "--data-version" and x != "data-v7"], args())  # nothing else in the job moves
+
+    def test_the_data_version_is_a_data_tag(self):
+        for bad in ("v7", "data-7", "data-v", "data-v7x", ""):
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                args("--data-version", bad)
 
     def test_ema_is_carried_only_when_given(self):
         self.assertNotIn("--ema", args())
@@ -160,6 +173,13 @@ class TrainArgs(unittest.TestCase):
         got = train.parser().parse_args(["--train", "t", "--out", "o", *a])  # the same list run_job.sh hands the trainer
         self.assertEqual((got.decision_weight, got.copy_weight, got.copy_labels, got.pair_batches, got.checkpoints),
                          (1.0, 0.0, "intent", False, "0.25,0.5,0.75,1.0"))
+        a = args("--data-version", "data-v7")
+        got = train.parser().parse_args(["--train", "t", "--out", "o", *a])
+        self.assertEqual(got.data_version, "data-v7")  # reaches vars(a), so the `args` of train_meta.json
+        self.assertIsNone(train.parser().parse_args(["--train", "t", "--out", "o"]).data_version)
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            train.parser().parse_args(["--train", "t", "--out", "o", "--data-version", "v7"])
+        self.assertNotIn("data_version", train.FP_ARGS)  # a resume may name it freely: it changes no number
         a = args("--continue-from", "gs://b/soup/ckpt", "--dpo", "p.jsonl.gz", "--dpo-beta", "0.2", "--dpo-sft", "0.1")
         got = train.parser().parse_args(["--out", "o", *a])  # --train is optional with --dpo
         self.assertEqual((got.epochs, got.lr, got.min_lr, got.warmup, got.ema, got.dpo, got.dpo_beta, got.dpo_sft),

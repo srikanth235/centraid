@@ -17,6 +17,7 @@ $BUNDLE_NATIVETOOLS names the exact runtime build to ship (default: the repo's t
 Trainer flags: job.json `train_args` carries --bs, --lr, --max-len, --embed, --val-n and, only when given, the loss, order and mark
 flags (`train_args`): --decision-weight, --decision-*/--hard-* (the decision and hard tiers), --copy-weight and --copy-labels (the
 copy tier), --pair-batches / --no-pair-batches (minimal pairs in one step), --checkpoints, --train-eval-n, --save-every, --resume.
+--data-version TAG names the data version (artefacts.py) the run trains on: metadata only, it reaches train_meta.json and the card.
 Their defaults live in train.py (decision weight 2, copy weight 0, pair batching on, marks at 25 / 50 / 75 / 100 %); a flag
 given here pins that choice in the job, e.g. `--decision-weight 1 --copy-weight 1 --no-pair-batches` is the legacy loss and order.
 
@@ -246,7 +247,16 @@ def train_args(a):
             + (["--lora", str(a.lora)] if a.lora else []) + (["--max-steps", str(a.max_steps)] if a.max_steps else [])
             + (["--warmup", str(a.warmup)] if a.warmup is not None else []) + (["--min-lr", str(a.min_lr)] if a.min_lr is not None else [])
             + decision_args(a) + (["--ema", str(a.ema)] if a.ema else []) + (["--no-grad-ckpt"] if a.no_grad_ckpt else [])
-            + (["--epochs", str(a.epochs)] if a.epochs is not None else []) + dpo_args(a) + resume_args(a))
+            + (["--epochs", str(a.epochs)] if a.epochs is not None else []) + dpo_args(a) + resume_args(a)
+            + (["--data-version", a.data_version] if a.data_version else []))
+
+
+def data_version(text: str) -> str:
+    """--data-version: a data tag of the private dataset repository (`data-v7`; artefacts.py), nothing else."""
+    import re
+    if not re.fullmatch(r"data-v[0-9]+", text):
+        raise argparse.ArgumentTypeError("%r is not a data version (data-vN)" % text)
+    return text
 
 
 def check_set(a) -> None:
@@ -387,6 +397,8 @@ def parser() -> argparse.ArgumentParser:
                     "default 0 = none)")
     ap.add_argument("--resume", action="store_true", help="train.py --resume (continue from the newest resume "
                     "checkpoint in the run's out folder, else start fresh)")
+    ap.add_argument("--data-version", type=data_version, metavar="TAG", help="the data version (data-vN) --train and --val belong to "
+                    "(artefacts.py version): passed to train.py as metadata only, so train_meta.json and the model card name it")
     ap.add_argument("--model", default=render.TOKENIZER)
     ap.add_argument("--init-ckpt", help="gs:// checkpoint directory the training starts from instead of --model (job.json `init`; "
                     "run_job.sh pulls it): a continuation run")
