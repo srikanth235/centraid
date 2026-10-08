@@ -1,6 +1,6 @@
 # Issue #1088 — one assistant plane: the phone and the fine-tuning loop run the same harness
 
-Umbrella receipt. One receipt for the whole umbrella; each wave appends its own section below and never edits a section above it. Rulings: the #1088 section of [docs/decisions.md](../docs/decisions.md#one-assistant-plane-1088) (R-1088-1 to R-1088-10).
+Umbrella receipt. One receipt for the whole umbrella; each wave appends its own section below and never edits a section above it. Rulings: the #1088 section of [docs/decisions.md](../docs/decisions.md#one-assistant-plane-1088) (R-1088-1 to R-1088-16).
 
 ## Checklist
 
@@ -9,8 +9,10 @@ Umbrella receipt. One receipt for the whole umbrella; each wave appends its own 
 - [x] **Wave 1, census A**: both assistant stacks mapped for the fusion; fourteen open decisions put to the owner or settled by recommendation (R-1088-6 to R-1088-10).
 - [x] **Wave 2a — the runtime folds into `crates/assist`** behind a `Door` over the core's vault, Locker off on the phone surface; the transcript renderer and the free decode step in Rust.
 - [x] **Wave 2b — park and the turn loop**: writes plan against a patched `World` and park as one card (R-1088-6); events read in local days (R-1088-8); the assist/core turn loop with cards (R-1088-7) and runtime-composed words.
-- [ ] **Wave 2c — the confirm card and the deletions**: additive proto, the KMP machine and the iOS card; the 18-tool registry, its grammar, router prompt and eval cases deleted.
-- [ ] **Wave 3 — close**: docs pass; phase E (promotion out of `experiments/`, and the data move, on the owner's go); phase B after #1044's training steps (R-1088-1).
+- [x] **Wave 2c — the confirm card and its stored life**: additive proto, the KMP machine and the iOS card (uncompiled here); rung twelve for a proposal's outcome and `people.add_debt`'s `debt_id`; the replay ruling (R-1088-12); the outcome words on the wire (R-1088-13).
+- [ ] **Wave 2d — the deletions**: the phone's plane flips to native; the 18-tool registry, its grammar, router prompt and eval cases deleted; the free reply on the native plane (R-1088-9); the 8,192-token context (R-1088-11).
+- [x] **Data versions** (R-1088-14 to R-1088-16): data-v7 and S2 on the private Hub, the built and frozen data and the held-out sources out of the public tree, the public CI on public data only.
+- [ ] **Wave 3 — close**: docs pass; phase E (promotion out of `experiments/`, provider-neutral compute); phase B after #1044's training steps (R-1088-1).
 
 ## Evidence: wave 1 (2026-10-07)
 
@@ -71,3 +73,124 @@ Two lanes, merged at `45bc0fc00` (L3b) and `a4ebcfc4b` (L4b), plus `b625593f4` (
 - **Found.** The vault keeps no ledger of `invoke_key`s (`api::invoke` checks only that one is given), so the core door remembers the keys that landed; a replayed confirm writes once. The prompt of a three-turn chat on the sample vault is 1,342 to 2,960 real Qwen3.5 tokens (the system turn alone 1,326) against the engine's 4,096 context; the 2,048-token plan window is exceeded from the second turn.
 - **Open for wave 2c.** The proto fields and the KMP and iOS card (built from `PendingCard`, not from the runtime's preview text); migration 012 for a proposal's stored outcome; an additive `debt_id` on `people.add_debt`; the free-reply path (R-1088-9) on the native plane; card subtitles in the apps' own time words; the context decision.
 - **Falsification.** L3b: dropping the completion date from the `task_status` patch fails the shadow test naming `complete task`; a constant row fingerprint fails only the stale-card test; an overlay that drops durations flags 8 reads and 1 write in the run-mode oracle. L4b: dropping one `schedule_task` row from the core door fails the whole-world comparison; without the door's key memory a replayed confirm writes twice; with the session in `Run` the parked-write test fails (no proposal).
+
+## Evidence: wave 2c, the confirm card and its stored life (2026-10-08)
+
+Five lanes, each in its own worktree; the root merged them in order. L5's final runs (`l5-final.sh`, 03:29 to 05:08) used the shared cargo target before it was purged at 05:13 (the trap below), so the verdicts this receipt relies on are the root's, on the merged head after the purge (Verification).
+
+| lane | commits | what it did |
+| --- | --- | --- |
+| L6a | `bf6d2e5bb` `75b0d6023` `677c6e23b` `a3f49c7f6` | `people.add_debt` takes the caller's `debt_id`, so a parked debt keeps the id its card showed (T30 park oracle 230 → 232 of 232 write steps; Run mode 0 of 616 steps differ). Rung twelve (`012_chat_proposals.sql`) widens `chat_message.outcome` to `proposed`, `applied`, `dismissed`, `stale` and `failed` behind two triggers, and carries the card and attachment tables through the rebuild. |
+| L5 | `a7e97326b` `7ee64f2da` `e34aab780` `618090d26` | `AssistRequest.confirm`/`dismiss`, `AssistResponse.settled`, `AssistEvent.pending` and `AssistAnswer.pending` (additive; `buf breaking` clean); `ChatPending` in `screen.proto`; the KMP `ChatMachine` draws and settles the card (13 + 4 new specs); the SwiftUI card. |
+| replay | `3af6b3d78` `639894398` `ce2b6db2e` | R-1088-12: no replay ledger exists, and the docs and comments that promised one now state the behaviour; three pins; Tally's `vault-door` adapter compiles again. |
+| outcome | `84eedebd0` `63194b0c3` `7a5b39c9a` | `ChatStoredOutcome` 5–9 for the five words (R-1088-13); a reopened thread draws a `proposed` message inert and each end as its line; one dismissed line; `parked` read from the turn's pending sink. |
+| CI fixes for the PR | `847cb64ae`, `e218c9e2c`, the engine lane (#1078) and the estate lane (#1044) | `847cb64ae` adds `"tinypool": "2.1.2"` to `package.json`'s `overrides` (and `bun.lock` follows), past GHSA-5gmw-xhrv-c9v3 and GHSA-85c8-ppgw-ccpr (both 9.5) against the 2.1.0 that `oxfmt` pulls in; the OSV gate of [#671](https://github.com/srikanth235/centraid/issues/671) and its threshold are unchanged, and #671's receipt is frozen, so it is recorded here. The rest are recorded in the #1078 and #1044 receipts. |
+
+- **Found, and recorded as a trap.** Two worktrees on one `CARGO_TARGET_DIR` hand each other build output, and a sibling's later build makes an older edit look built (the third mechanism in [docs/traps/shared-cargo-target.md](../docs/traps/shared-cargo-target.md)). The briefs for waves 1 to 2b had named one shared directory. Every gate verdict those waves quoted was taken there, so they are superseded by the verdicts below, which were taken after every workspace crate was purged from that directory and while no other worktree was building in it.
+- **Found, filed separately.** A second Save after a committed create filed the row again ([#1089](https://github.com/srikanth235/centraid/issues/1089)). Two mobile round-trip specs failed by the hour ([#1090](https://github.com/srikanth235/centraid/issues/1090)).
+- **Open.** The iOS card is uncompiled (no Xcode on Linux); Android has no chat view. A refused confirm that landed earlier steps says "Not done." with no count of what landed. The required-checks list must gain the new `engine` and `native-python` jobs (owner).
+
+## Evidence: data versions, and the data out of the public tree (2026-10-08)
+
+The owner ruled where the data lives and how it is versioned ([R-1088-14 to R-1088-16](../docs/decisions.md#one-assistant-plane-1088)). One lane, `lane/1088-v7` (15 commits, merged in `7d1ea68c0`); then the root published, pinned and moved.
+
+| step | commits or record | result |
+| --- | --- | --- |
+| the tool | `3d2087e66` to `cbff0be6b`, `365f22192` | `artefacts.py` assembles a version (`version`), checks it (`verify-version`, `verify-heldout`), publishes and pins it (`publish`, `pin`), and writes and publishes a model card (`model-card`, `publish-model`). `fetch` reads the pinned commit from the Hub, or from a local `ARTEFACTS_SOURCE`. `train.py` and `bundle.py` take `--data-version`. A card names the commit that wrote it, not one the weights were trained at |
+| removals | `507e7b260`, `f58d7135a`, `410fb4aa0` | `trainfit`, `eval/sessions` and the 38 stale keys files; the tests seed keys into a temporary directory |
+| held out | `a569a551d`, `c3a6b960d` | val's three worlds' builders and their 18 authored sessions join the eval worlds' builders as held-out entries; a loader asked for a val world without its sources stops and says where they come from |
+| data-v7 | `srikanth235/centraid-native-data` (private dataset), tag `data-v7`, commit `868bb7f852ee`; pinned in `99411a72e` | 149 files, 36.66 MB: the r1 and i2 builds as trained, val v7.4 (refrozen on nt15, equal to the frozen file), test v6 as frozen, the screen set and the 35 worlds it ran in, every world, the held-out sources, and `version.json` (runtime nt15 at `18319d402` with its binary and export hashes, the vault DDL and registry hashes, the seeds, the refreeze report) |
+| S2 | `srikanth235/centraid-native-models` (private model), tag `s2`, commit `430867aaf294` | the seven files of `gs://…/soups/soup2/` and a card naming `data-v7`. Downloaded back from the Hub, all seven equal GCS's md5, and the two LFS files equal the Hub's own sha256 (`v7/verify-s2.log`) |
+| the move | `648b37360` | 83 files leave the index. Before they left, the round trip moved all 83 aside, fetched 41 from the Hub at the pinned commit and rebuilt 42, and all 83 matched; `verify-heldout` passed 3 of 3. The `native-python` job rebuilds the 35 public worlds and needs no secret |
+
+- **Found.** `authored/gen/collide.py` does not reproduce the worlds the screen set ran in (`i3-backup/phase7/regen/worlds`) byte for byte. They were built from an earlier, uncommitted state of the sessions and by an older seeder; from today's sources 1 of the 35 matches (the audit's re-run). data-v7 stores the originals.
+- **Found.** On nt15 the test refreeze differs from the frozen test v6 (143 turns in 125 sessions, 2 unexplained), before the #1090 fix and after it. data-v7 keeps test v6 as frozen, and its refreeze report says so.
+- **Found, and fixed.** `train/bundle.py`'s `stage_ckpt` hard-linked a checkpoint's files, and for a Hub snapshot that is a second name on a cache blob, so a write to the staged copy changed the cache (`f4ccc459f`). A manual copy in the lane did overwrite three blobs of the root's tokenizer cache; they were restored from the pinned revision, and all six sums equal `gate.yml`'s.
+- **Found, a brief error.** The brief placed val's three worlds under `eval/worlds/`. Their builders and sessions are under `authored/`, so the lane could read them; it authored no training data.
+- **Open.** The GCS objects the versions replace (S2's members, the other soups, the old scoring runs, `i3-backup/`) wait on the owner; nothing was deleted. No source records the i2 build's seeds. The token used for the uploads should be revoked; CI needs none.
+
+## What changed
+
+The fine-tuned runtime is folded into `crates/assist` (`native`, `native_turn`) behind a `Door` over the core's vault, and the phone runs it when its plane is native; the default (`PlaneKind`, still `Routed`) flips in wave 2d. One source holds each fact the trainer used to restate: the model identity (`identity::MODEL`), the committed tool export (`contracts/assist/export/`, drift-checked), the think compiler, the transcript renderer and the decode step. On the phone every write parks behind a confirm card that the runtime composes from the rows it changes; a tap settles it once, and the stored thread keeps how it ended. The vault keeps no replay ledger, and the docs say so. The native task's data is versioned: data-v7, a tag of a private Hugging Face dataset repository, holds what S2 was trained and judged on, S2's card in a private model repository names it, and the public tree and its CI carry no built, frozen or held-out data (R-1088-16). Still to come: the flip of the phone's default plane, the deletion of the 18-tool plane, the free reply and the 8,192-token context (wave 2d), then the rest of phase E (one container and a launcher per provider, R-1088-14) and phase B.
+
+## Verification
+
+On the merged head `30c414b24`. Every workspace crate was purged from `/home/user/centraid/target` at 05:13 (`cargo clean -p` each); the merges' builds since relinked 23 of them, so the gate's header reads "3 of 26 workspace member(s) have no linked artifact".
+
+```
+cargo xtask gate --profile local          # PASS — fmt, clippy -D warnings, cargo test --workspace (1401 s), restore-drill, rules, ledgers; 1528 s cold
+PATH=$S/tools:$PATH cargo xtask gate --profile mobile-jvm   # PASS — 250.9 s of 420 s; no fixture drift
+buf lint                                  # exit 0
+bun run lint:path-filters                 # exit 0
+node scripts/ci/osv-lockfile-scan.mjs     # critical=0 (7 high, non-blocking, unchanged); before the pin, CI on a3f49c7f6: "exited 1 — tinypool@2.1.0 (score 9.5)" (ci/gate79.txt)
+osv-scanner scan source --lockfile=<a3f49c7f6's bun.lock>   # tinypool 2.1.0: GHSA-5gmw-xhrv-c9v3 and GHSA-85c8-ppgw-ccpr, both 9.5 (osv-old/tinypool.log)
+gitleaks detect --no-git on `git archive HEAD`   # exit 0
+python3 regen.py refreeze (nativetools release, worlds reseeded)   # val v7.4 byte-identical (sha256 5d3d9035…), 655/655 sessions, UNEXPLAINED 0
+```
+
+CI's gate on the previously pushed head `a3f49c7f6`, taken cold in its own runner: fmt, clippy, test, restore-drill, rules, ledgers, deny, release-build, ts-static, emitters, lockfile, call-budget and fault-door all ok. It failed only buf, ci-policy, secrets, osv and the budget, which this head fixes (see the CI-fixes row above, and #1078 and #1044).
+
+On the final head `648b37360`, after the data left the tree. Logs in the root's scratchpad.
+
+```
+run_cpu_tests.py --jobs 4 in a fresh clone of 648b37360, after `artefacts.py fetch --public-only`, with CI's environment and CI's pinned venv (torch 2.13.0+cpu)   # "27 module(s), 4 at a time: 18.0 min wall"; 1096 ran, 0 skipped, 0 red; exit 0 (final-native-suite.log)
+artefacts.py verify-version against the Hub (HF_TOKEN), v7/verify-version.log   # "76 of 76 file(s) of srikanth235/centraid-native-data@868bb7f852ee match the manifest"
+S2 downloaded back from srikanth235/centraid-native-models@s2 (430867aaf294), v7/verify-s2.log   # "7 of 7 files of soups/soup2 equal byte for byte on the Hub" (md5 against GCS; sha256 against the Hub's LFS record)
+move_out.sh against the Hub, before 648b37360                 # "artefacts: 83 of 83 files match the manifest" after the round trip; "verify-heldout: 3 of 3 check(s) pass" (v7/move-out.log)
+test_artefacts.py (CI's venv)                                 # Ran 112 tests, OK
+gitleaks detect --no-git, run inside `git archive HEAD`       # no leaks found
+actionlint .github/workflows/gate.yml                         # exit 0
+bun run lint:path-filters                                     # exit 0
+cargo xtask rules; cargo xtask gate --profile local --lane ledgers   # rules exit 0; "5 ledger(s) hold", gate local: PASS
+```
+
+## Audit
+
+**REFUTED**
+
+Audited 2026-10-08 by a reviewer who did not write the receipt, at HEAD `648b37360`, for what the uncommitted diff adds: the wave 2c and data-versions evidence, the checklist edits, `## What changed` and both Verification blocks. Sources: `a3f49c7f6..HEAD` and the commits the tables cite; `v7/publish-data-v7.log`, `v7/publish-s2.log`, `v7/move-out.log`, `v7/stage/version.json` and `v7/s2-card/README.md`; the committed `experiments/toolchat/native/artefacts.json`; `final-native-suite.log`, `gl-final.log`, `final-rules.log`, `final-ledgers.log`, `final-gate-local.log`, `final-gate-mjvm.log`, `final-verify.log`, `ci/gate79.txt`; my own re-runs; `.governance/law/rules/receipt-per-issue.mjs`. I have no Hub token: Hub claims are checked through those logs and the manifest only. I did not open `stage/eval/`, `stage/sources/`, any held-out file or `refreeze-*.log`; where a claim rests on them it says so. The fixes are named in the bullets: a dangling reference, a pointer, a lane-verdict sentence, one overstated sentence and one unsupported phrase; the claims I could not confirm are named as such.
+
+- **Checklist edits.** REFUTED on one reference; the boxes hold.
+  - Wave 2c `[x]`: the proto fields, the KMP machine and the iOS card (`e34aab780` says "Not compiled: there is no Xcode here", matching "uncompiled here"), rung twelve (`75b0d6023`), R-1088-12 (`3af6b3d78`, `639894398`, `ce2b6db2e`) and the five outcome words (`84eedebd0`) are all in the diff. Data versions `[x]`: 83 manifest files left the index (`648b37360` deletes 85, the other two being `move_out.sh` and `move_out.gate.patch`), `git ls-files` finds no `.jsonl`, `.gz` or `eval/worlds` file under `experiments/toolchat/native`, and the public suite passes in a fresh clone (below).
+  - The header and Wave 2d cite R-1088-11 ("the 8,192-token context (R-1088-11)"; "R-1088-1 to R-1088-16"). `docs/decisions.md` goes R-1088-10, then R-1088-12; R-1088-11 is defined nowhere in the repository (`git grep` finds it only in this receipt), and nothing rules on an 8,192-token context. Record the ruling or say the decision is open.
+- **Wave 2c evidence against the diff.** REFUTED on one sentence and one pointer; the numbers hold.
+  - L6a: `bf6d2e5bb` says "T30 230/232 -> 232/232 identical" and "0 of 616 T30 steps differ"; `75b0d6023` widens `chat_message.outcome` to the five words behind two triggers and carries `chat_message_card` and `chat_message_attachment` through the rebuild. L5: `a7e97326b` adds `AssistRequest.confirm = 10`, `dismiss = 11`, `AssistResponse.settled = 10`, `AssistEvent.pending = 9`, `AssistAnswer.pending = 4`; `7ee64f2da` adds 13 specs to `ChatMachineSpec` and 4 to `ChatFlowSpec` (I counted them). `buf breaking --against '.git#ref=f54876780,…'` exits 0 at HEAD, so "additive" holds. The trap row exists: `docs/traps/shared-cargo-target.md` lists a third mechanism.
+  - "Every lane's own verdicts were taken in a private cargo target, or after the shared one was purged" is false for L5. `l5-final.sh` does `cd /home/user/wt-1088-card` with `CARGO_TARGET_DIR=/home/user/centraid/target`, a second worktree on the shared directory, and its logs (`l5c-*.log` 04:04 to 04:09, `l5c-gate2.log` and `l5c-shared-rerun.log` 05:06 and 05:08, `l5-final-*.log` 03:29 to 03:34) all predate the 05:13 purge. `l5c-gate2.log` itself reads "2 of 26 workspace member(s) have no linked artifact in /home/user/centraid/target/debug/deps". Say that L5's own verdicts are superseded by the merged-head ones; I did not check the other lanes' targets.
+  - Row "CI fixes for the PR": `847cb64ae` is the `tinypool` pin for #671 that cleared the OSV failure. It is not "recorded in those receipts": the #1078 and #1044 receipts do not mention OSV or `tinypool`. The Verification sentence "which this head fixes (see #1078 and #1044)" has the same gap for `osv`. Name it here, in the #671 receipt, or cite the CHANGELOG.
+  - The CI line holds: `ci/gate79.txt` ran the merge of `a3f49c7f6` into main (`HEAD is now at d8e2c74eb Merge a3f49c7f6…`), with `ok` on fmt, clippy, test, restore-drill, rules, ledgers, deny, release-build, ts-static, emitters, lockfile, call-budget and fault-door, and "gate pr: FAIL — buf, ci-policy, secrets, osv" plus the 1625.7 s budget line.
+- **Data-versions evidence: the Hub side.** Holds, with three claims I cannot confirm.
+  - data-v7: `publish-data-v7.log` "published 149 file(s) to srikanth235/centraid-native-data: tag data-v7 is commit 868bb7f852eecb7b286884cf6680ec24da344b71" and "149 file(s), 36.66 MB"; `artefacts.json` pins that revision, repo and tag. The 149 split as the table says (3 eval, 1 screen set, 70 screen world and key files, 45 worlds, 25 sources, 4 train, `version.json`). `version.json` carries the runtime `nt15` at `18319d402` with binary and export hashes, both registry hashes, the seeds and the refreeze report. It states the facts the receipt quotes: val `byte_identical_to_frozen: true`, test `turns_changed: 143`, `sessions_changed: 125`, two unexplained, "same_before_and_after_the_1090_merge", and `"i2": {"recorded": false}`. I could not check the refreeze behind them (`refreeze-*.log`).
+  - The move: `move-out.log` "0 present and matching, 42 to rebuild, 41 to fetch from the version", then "artefacts: 83 of 83 files match the manifest", "held-out files: 46 of 46 match the manifest" and "verify-heldout: 3 of 3 check(s) pass". The manifest has 83 files, 42 with a `rebuild`, 41 without. This also shows the Hub holds those 41 at the pin.
+  - S2: `publish-s2.log` "published 8 file(s) … tag s2 is commit 430867aaf2949475709fdf931784bbd9343b7fb9", 1524.84 MB; the card names `data-v7` and says it was "written at commit `365f22192be7…`". Unconfirmed: "their md5 equal to GCS's before the upload" and "the two LFS files' sha256 equal on the Hub". No log holds either. I compared `s2-gcs-hashes.txt` with the local copies: six of the seven md5 are equal; `model.safetensors` is no longer on disk. Keep the compare's output, or soften the sentence.
+  - `## Verification` line "`artefacts.py verify-version` against the Hub (HF_TOKEN): 76 of 76 file(s)…" has no retained log. The count equals the 76 manifest entries with a `version_path`, and the message matches `cmd_verify_version`; I cannot run it. Keep the output.
+- **Data-versions evidence: the rest.**
+  - Holds. 15 lane commits (`git rev-list --count 734433cbb..7d1ea68c0^2` is 15). 38 keys files deleted in `507e7b260`; 26 `eval/sessions` files and `trainfit` in `f58d7135a`. 18 val sessions and the builders are held-out entries (`a569a551d`, `c3a6b960d`). `f4ccc459f` copies symlinked files. The six tokenizer sums in `scratchpad/hf` equal `gate.yml`'s. The brief error is real: T03, T12 and T23 are `authored/worlds/…` entries in the manifest.
+  - Not reproduced: "without the later session files, 11 of the 35 match". I regenerated the 35 collision worlds from a public export (`collide.py --out DIR`, seed 1044, public sources only) and compared with `stage/screen/worlds`: 1 of 35 byte-equal. That supports "does not reproduce them byte for byte", not the 11; no log holds the 11.
+  - "Nothing was deleted" on GCS and the Hub token's revocation are outside what I can see.
+- **`## What changed`.** One overstatement. "The fine-tuned runtime is the phone's assistant plane" sits against `PlaneKind` in `crates/core/src/assist/mod.rs`, whose `#[default]` is `Routed`, and against the receipt's own "Still to come: the flip of the phone's default plane" and unchecked wave 2d. Say "can be". The rest (one source for each fact, the card, no replay ledger, data-v7 on a private dataset repository, S2's card naming it, no built, frozen or held-out file in the tree) holds.
+- **`## Verification`, first block (on `30c414b24`).** Holds. `final-gate-local.log` "gate local: PASS", test 1401.2 s, "TOTAL 1528.1"; `final-gate-mjvm.log` "250.9s … gate mobile-jvm: PASS"; `final-verify.log` "buf lint 0", "osv-lockfile-scan: packages_with_vulns≈9 critical=0 high=7" and "gitleaks exit 0"; the purge at 05:13 shows in the target as in the #1078 audit. Nothing under `crates`, `contracts` or `design` differs between `30c414b24` and `648b37360`; the one `mobile/` change is the `build.gradle.kts` comment. The refreeze line rests on `refreeze-*.log`; `val.jsonl` hashes to `5d3d9035737a…`, the value quoted.
+- **`## Verification`, final-head block.** One unsupported phrase.
+  - The suite line matches `final-native-suite.log` (head `648b37360`; 27 modules; 1096 ran, 0 skipped, 0 red; "18.0 min wall"; "suite exit 0"), except "the clone's tree unchanged": no `git status` is in the log and the clone is gone.
+  - `test_artefacts.py` "Ran 112 tests … OK" is in that log. `gl-final.log` "no leaks found", and my re-run on a `git archive HEAD` export agrees. My `actionlint .github/workflows/gate.yml` exits 0 and `bun run lint:path-filters` exits 0. `final-rules.log` has the four rules `ok`; `final-ledgers.log` "5 ledger(s) hold against f5487678 … gate local: PASS".
+  - The two `move_out.sh` and `verify-version` lines are covered above.
+- **Governance form.** PASS. `## What changed` and `## Verification` are present, the receipt is not a stub, `## Verification` holds fences and outcome words ("PASS", "exit 0", "no leaks found"), and this section carries a verdict.
+
+### Re-audit (2026-10-08)
+
+**PASS.** The first audit above is unchanged. One leftover wording point, below, does not hold the verdict.
+
+- **R-1088-11.** Fixed. `docs/decisions.md` now has the row between R-1088-10 and R-1088-12 (uncommitted; commit it with the receipt). Its premises hold: `train/train.py` defaults `--max-len` to 8192 and S2's own `train_meta.json` reads `args.max_len 8192`; `assist-llama`'s `Config.context` exists (default 4096 today, so "built in wave 2d" is right); Qwen3.5-0.8B's `config.json` has 24 layers of which 6 are `full_attention`, so the "hybrid" argument stands. The owner's ruling ("census decision 14") is not something I can see.
+- **`847cb64ae`.** Fixed. The row reads "`847cb64ae` (#671) … Recorded in the #671, #1078 and #1044 receipts", and `receipts/issue-671-hygiene-gates.md` now carries the section. Left over: line 130, "which this head fixes (see #1078 and #1044)", still omits #671 for the `osv` step. Add it.
+- **The L5 sentence.** Fixed. "L5's final runs (`l5-final.sh`, 03:29 to 05:08) used the shared cargo target before it was purged at 05:13 … so the verdicts this receipt relies on are the root's, on the merged head after the purge" matches `l5-final.sh` (`cd /home/user/wt-1088-card`, `CARGO_TARGET_DIR=/home/user/centraid/target`) and the log times.
+- **`## What changed`.** Fixed. "the phone runs it when its plane is native; the default (`PlaneKind`, still `Routed`) flips in wave 2d" matches `#[default] Routed` in `crates/core/src/assist/mod.rs` and the unchecked wave 2d.
+- **The clone phrase and the collide count.** Fixed. The suite line ends "exit 0 (final-native-suite.log)", and the Found bullet says "from today's sources 1 of the 35 matches (the audit's re-run)", which is my re-run.
+- **`verify-version.log`.** Fixed. It opens "2026-10-08T13:25:44Z head 648b37360" and ends "verify-version: 76 of 76 file(s) of srikanth235/centraid-native-data@868bb7f852ee match the manifest".
+- **`verify-s2.log`.** Fixed. It opens "srikanth235/centraid-native-models@s2 = 430867aaf2949475709fdf931784bbd9343b7fb9 private = True" and ends "7 of 7 files of soups/soup2 equal byte for byte on the Hub". Its seven md5 values equal the independent `s2-gcs-hashes.txt` line for line (I compared them), and the two LFS files read "sha256 == Hub LFS sha256". The Hub's own record I cannot see.
+- **Governance form.** PASS, as before.
+
+#### Second re-audit (2026-10-08)
+
+**PASS.** The re-audit above stands except for one sentence: its "recorded in the #671 … receipts" is superseded, because `receipts/issue-671-hygiene-gates.md` is frozen and reverted (`git status` shows only this receipt modified; the file has no `tinypool`), and the tinypool evidence is recorded here. The moved text holds against `847cb64ae` and the logs:
+- **The "CI fixes for the PR" row.** `847cb64ae` changes `bun.lock` and `package.json` only (+4 −2): `overrides` gains `"tinypool": "2.1.2"`, and `oxfmt@0.61.0` still declares 2.1.0. `scripts/ci/osv-lockfile-scan.mjs`, `osv-scanner.toml` and `ci.yml` are unchanged over `a3f49c7f6..HEAD`, so "the OSV gate … and its threshold are unchanged" holds. "The rest are recorded in the #1078 and #1044 receipts" matches `e218c9e2c` and the estate lane.
+- **The two Verification lines.** `ci/gate79.txt` line 1414: "FAIL  osv  2.8s  `node scripts/ci/osv-lockfile-scan.mjs` exited 1 —   - tinypool@2.1.0 (score 9.5)". `osv-old/tinypool.log`: "2.1.0 ['GHSA-5gmw-xhrv-c9v3', 'GHSA-85c8-ppgw-ccpr'] ['9.5', '9.5']", from a lockfile byte-identical to `a3f49c7f6`'s (checked in the earlier audit). `final-verify.log`: "osv-lockfile-scan: packages_with_vulns≈9 critical=0 high=7".
+- **The sentence under the first Verification block.** Fixed. It now reads "which this head fixes (see the CI-fixes row above, and #1078 and #1044)", so the `osv` step has a pointer; the leftover from the re-audit is closed.
