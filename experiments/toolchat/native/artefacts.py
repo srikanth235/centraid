@@ -1073,7 +1073,7 @@ def render_gguf_card(sidecar: dict, gguf: str, sidecar_file: str) -> str:
              f"- Fine-tuned model: the private repository `{source['repo']}`, tag `{source['tag']}`, revision `{source['revision']}`.",
              f"- Data version: `{source['data_version']}` of the native tool task's private dataset repository (authored, synthetic households; "
              "no personal data).",
-             f"- Converted with llama.cpp `{cpp['commit']}` (<{cpp['repo']}>), the commit `{cpp['engine']}`, the engine the app links, vendors: "
+             f"- Converted with llama.cpp `{cpp['commit']}` (<{cpp['repo']}>), the commit that `{cpp['engine']}` (the engine the app links) vendors: "
              f"`convert_hf_to_gguf.py` to F16, then `llama-quantize` to `{entry['quant']}`. `{sidecar_file}` records the checkpoint's file hashes, "
              "the converter and quantizer hashes and the tool versions; `train/to_gguf.py` in the repository rebuilds this file byte for byte.", "",
              "## Vision", "",
