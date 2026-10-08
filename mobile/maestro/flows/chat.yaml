@@ -54,6 +54,21 @@ name: chat
       - assertVisible:
           id: "chat-send"
 
+# A PROPOSED WRITE, when the build has one on screen (the native plane parks every
+# write behind a card; `SIMCTL_CHILD_CENTRAID_CHAT_PREVIEW=pending` draws one):
+# both buttons are there, and nothing was applied before a tap.
+- runFlow:
+    when:
+      visible:
+        id: "chat-pending"
+    commands:
+      - assertVisible:
+          id: "chat-pending-confirm"
+      - assertVisible:
+          id: "chat-pending-cancel"
+      - assertNotVisible:
+          id: "chat-pending-settled"
+
 # BACK TO HOME: the band's Home place returns the springboard.
 - tapOn:
     id: "home-band-home"

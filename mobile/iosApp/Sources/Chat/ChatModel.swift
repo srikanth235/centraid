@@ -257,6 +257,22 @@ final class ChatModel: ObservableObject {
         #endif
     }
 
+    // MARK: A proposed write
+
+    /// CONFIRM on the card that names `id`: the core runs the parked write, once.
+    func confirmPending(_ id: String) {
+        #if canImport(CentraidShared)
+        bridge.confirmPending(pendingId: id)
+        #endif
+    }
+
+    /// CANCEL on the card that names `id`: nothing is written.
+    func cancelPending(_ id: String) {
+        #if canImport(CentraidShared)
+        bridge.cancelPending(pendingId: id)
+        #endif
+    }
+
     // MARK: Attachments
 
     /// The photo reader's download step was tapped.

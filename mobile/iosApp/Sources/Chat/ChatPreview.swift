@@ -3,8 +3,8 @@ import Foundation
 
 /// A DEBUG-ONLY FIXTURE FOR THE READY STATES, for a machine whose core has no
 /// engine to bring the chat to `READY`. Launch with
-/// `SIMCTL_CHILD_CENTRAID_CHAT_PREVIEW=empty|thread|streaming|error|markdown|drawer`; the model
-/// then holds that state instead of the bridge's. It exists so the thread, the
+/// `SIMCTL_CHILD_CENTRAID_CHAT_PREVIEW=empty|thread|streaming|error|markdown|drawer|pending|pending-destructive`;
+/// the model then holds that state instead of the bridge's. It exists so the thread, the
 /// cards and the composer can be looked at; it proves nothing about the core,
 /// and a release build compiles it out.
 enum ChatPreview {
@@ -86,6 +86,24 @@ enum ChatPreview {
                 row("t3", "Who should I call this week?", "3 days ago"),
             ]
             state.messages = [message(1, .user, "What did we spend at Tahoe?"), message(2, .assistant, "You spent $380.50 across three expenses.", cards: spend)]
+        case "pending", "pending-destructive":
+            // A PROPOSED WRITE, waiting for the tap (a delete asks twice).
+            let deleting = mode == "pending-destructive"
+            var step = Centraid_Screen_V1_ChatPendingStep()
+            step.summary = deleting ? "Delete task \"Pick up the dry cleaning\"" : "Complete task \"Pick up the dry cleaning\""
+            step.destructive = deleting
+            var pending = Centraid_Screen_V1_ChatPending()
+            pending.pendingID = "p1"
+            pending.state = .waiting
+            pending.steps = [step]
+            pending.confirmLabel = "Confirm"
+            pending.cancelLabel = "Cancel"
+            pending.destructive = deleting
+            pending.accessibilityLabel = "Proposed change. " + step.summary
+            var proposal = message(2, .assistant, "Proposed: " + step.summary + ".")
+            proposal.pending = pending
+            state.messages = [message(1, .user, "Complete the dry cleaning task"), proposal]
+            state.canNewChat = true
         case "empty":
             state.emptyLine = "Ask about anything in your vault."
             state.suggestions = ["What did we spend at Tahoe?", "What is on my packing list?", "What is on my calendar this week?"]
