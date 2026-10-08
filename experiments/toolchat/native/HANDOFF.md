@@ -23,6 +23,8 @@ This is the state on 2026-10-06, written for the next coding agent.
 - **Val v7.4** (`eval/sets/val.jsonl`, sha256 `5d3d9035…`) is the nt15 refreeze. 128 accepts were added and none removed; lineage and hashes are in `eval/FROZEN.md`.
   - `build_sets.py check` accepts the hashes. It still lists 9 structural failures that belong to the deferred test redesign (test is held out of val's worlds whole, e2 origins). Those were in the tree before this phase.
   - **Test is not refrozen or scored on the phase-7 runtime** (owner deferred).
+- **Noise protects every word the runtime reads in a message** (`authored/noise.py`, 2026-10-08). That includes the nt14 and nt15 words `work`, `works`, `free`, `busy`, `available` and `throughout`, and the cue words `least`, `amount`, `effort` and `work` of `eval/regen.py`'s `SUPERLATIVE`. The two `Lexicon` tests of `authored/test_noise.py` pass, and `run_cpu_tests.py` tolerates no red test.
+  - The next train build's noise pass leaves those words alone, so its augmented sessions can differ from the ones S2 trained on. Val and test gold and the current model are unchanged.
 - 82 % is a val number: every fix, ruling and soup choice was derived on val. Expect test lower until it is scored.
 - **The branch is on main** (`f5487678`, #1080) **plus #1078's on-device chat** (the `ios-app-simulator-aaef2f` branch), merged 2026-10-07. Main wins every overlap; the record is in the receipt's merge section.
   - `crates/nativetools` is ported to main's APIs. Harness worlds seal Locker cells under a fixed `HARNESS_LOCKER_KEY` (`crates/nativetools/src/vaultio.rs`) and name the generation through `Vault::locker_generation`, because the phone derives `K` from the 24 words.
@@ -111,7 +113,6 @@ Expected from steps 5–7: about 86–88 % on val (RFT +2–4 points, DPO +1–3
 
 ## Known failing checks (not this phase's; fix or rule)
 
-- `authored/test_noise.py` `Lexicon`: 2 tests. The runtime reads six message words that `authored/noise.py` does not protect from noise injection (`work`, `works`, `free`, `busy`, `available`, `throughout`; from the nt14 and nt15 rules). Adding them changes what the noise pass may alter in the next train build, so it is the owner's call with that build.
 - `eval/test_loop.py` and `eval/test_retry.py` need seeded vaults: run them with `EVAL_VAULTS` pointing at `seed_worlds.py --vaults` output.
 - `eval/build_sets.py check`: the 9 structural test-redesign failures above.
 - `data/README.md` says AMB drills are never kept. That predates the composed ask and should be re-checked against a train build.

@@ -18,9 +18,7 @@ Two rules keep a green run meaning what it says:
 
   * No test may skip. A suite that cannot find its tokenizer or the binary raises SkipTest, and a run that skips whatever it
     cannot find is green while it tests nothing.
-  * The red tests are EXACTLY `KNOWN_RED`, no more and no fewer. A test that fails on this tree for a reason the owner has yet to
-    rule on is listed with that reason and still runs every time; the moment it passes the run fails until its line is
-    deleted, so the list cannot outlive the fault.
+  * No test may be red, and every module must run at least one test. There is no list of tolerated failures.
 """
 from __future__ import annotations
 
@@ -33,18 +31,6 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 DIRS = ("authored", "authored/gen", "eval", "train")
 
-# directory/module -> {test id: why it is red on this tree}
-KNOWN_RED: dict[str, dict[str, str]] = {
-    "authored/test_noise": {
-        "test_noise.Lexicon.test_every_word_of_the_runtime_arrays_is_protected":
-            "the runtime reads six message words that authored/noise.py does not protect from noise injection (work, works, free, "
-            "busy, available, throughout); protecting them changes what the next training build may alter, so it is the owner's "
-            "call with that build (HANDOFF.md, 'Known failing checks')",
-        "test_noise.Lexicon.test_every_cue_word_of_the_convention_readers_is_protected":
-            "the same ruling: the cue patterns of eval/regen.py use words noise.py leaves unprotected (least, amount, effort, work)",
-    },
-}
-
 
 def run_module(rel: str, name: str) -> int:
     """Run one module in this interpreter; 0 when the run is green by the two rules above."""
@@ -53,15 +39,13 @@ def run_module(rel: str, name: str) -> int:
     sys.path.insert(0, str(root))
     result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromName(name))
     red = {test.id() for test, _ in result.failures + result.errors}
-    known = KNOWN_RED.get(f"{rel}/{name}", {})
     problems = []
     if result.testsRun == 0:
         problems.append("no test ran")
     problems += [f"skipped: {test.id()}: {why}" for test, why in result.skipped]
-    problems += [f"red, and not in KNOWN_RED: {test}" for test in sorted(red - known.keys())]
-    problems += [f"in KNOWN_RED and passing now, delete its line: {test}" for test in sorted(known.keys() - red)]
+    problems += [f"red: {test}" for test in sorted(red)]
     problems += [f"unexpected success: {test.id()}" for test in result.unexpectedSuccesses]
-    print(f"\n== {rel}/{name}: {result.testsRun} ran, {len(result.skipped)} skipped, {len(red & known.keys())} red as known, "
+    print(f"\n== {rel}/{name}: {result.testsRun} ran, {len(result.skipped)} skipped, {len(red)} red, "
           f"{len(problems)} problem(s)")
     for line in problems:
         print(f"   {line}")
