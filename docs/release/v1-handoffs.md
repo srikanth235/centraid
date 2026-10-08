@@ -56,6 +56,7 @@ Five model sessions and one fetcher. Each is behind `handler::Model`, a one-meth
 | 4.4 | CLIP | 606 MB | Image/caption cosine beating v0's | Same |
 | 4.5 | Whisper | 41 MB | A transcript matching v0's | Same |
 | 4.6 | **The fetcher** | — | Two runs: one against the real upstreams reporting `ready` for `faces`, and one against a **deliberately corrupted** local file reporting the sha mismatch with **no `.partial` left behind** | `centraid_media::models`; `handler::NoNetwork` already proves the "reported, never thrown" property through every line of `ensure` except the socket |
+| 4.7 | **The chat's fine-tuned model (S2) as the phone's GGUF** ([R-1088-18](../decisions.md#one-assistant-plane-1088)) | 563 MB (`Q4_0`) | With `HF_TOKEN` in the environment (read on `srikanth235/centraid-native-models`, write on the public repository): `train/to_gguf.py` on S2, val scored through `assist-step` (`eval/run.py --model gguf`), then `artefacts.py publish-gguf`. Two owner answers first: the public repository's name, and the licence the card states (Apache-2.0, the base model's) | `ChatModelAsset`'s URL (a commit), sha256 and size, in the release that ships it |
 
 ## 5. The ACP adapters
 
