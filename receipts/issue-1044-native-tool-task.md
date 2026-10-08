@@ -271,3 +271,79 @@ Two owner rulings, recorded as D-1044-17 and D-1044-18. The native task (`experi
   - Refused: `free` is the only arm `bundle.py` and `kernel.py` accept, and the four removed environment variables are refused rather than ignored.
   - Kept: the think guard, the call rendered from the think, the one-call stop, sampling for rollouts and the compile path.
 - **Found on the way, not fixed.** `authored/test_noise.py` has 2 failures from before either cut: six words the nt14 and nt15 rules read in a message are not protected by `authored/noise.py`. It is listed in HANDOFF as the owner's call with the next train build.
+
+## Evidence: CI for the native estate (2026-10-08)
+
+The PR gate failed on `experiments/` in three ways. The owner ruled on each (D-1044-19 to D-1044-21; lane `eb1254e3f`, `521bfa9ab` and `3349ede3c`).
+
+| check | before | after |
+| --- | --- | --- |
+| gitleaks over a clean export of HEAD | 596 `generic-api-key` hits, all fake Locker data in the synthetic worlds and sets | 0, from five narrow path entries in `.gitleaks.toml`. A planted AWS-style key in a non-world file under `experiments/` is still found |
+| `bun run lint:path-filters` | exit 1: `experiments` claimed by no filter or ledger entry | exit 0. The ledger names `gate` and the new always-on `native-python` job |
+| SonarCloud, new code | 824 findings, every one under `experiments/` (Security E, Reliability D) | `experiments/**` in `SOURCE_EXCLUSIONS`; it takes effect when the configurator runs with the owner's `SONAR_TOKEN` |
+
+- **The `native-python` job.** It builds `nativetools`, installs `requirements-ci.txt` with `--require-hashes` (torch 2.13.0+cpu), and fetches the Qwen3.5-0.8B tokenizer and config pinned by revision and SHA-256 (no weights). It then seeds world A and runs `run_cpu_tests.py`, each module in its own interpreter, and any red or skipped test fails the job. Its result on the merged head is under Verification. Not run by any CI job: `train/smoke.py` (a full-model CPU fine-tune, about 16 GB RAM) and `train/vm/` (GPU scoring).
+- **Noise and the suite four at a time** (`1fb93c1ae`, `02bfe2e45`, merged in `734433cbb`). `authored/noise.py` protects the ten words the runtime reads (`work works free busy available throughout` and `least amount effort work`), so a noise pass never rewrites them; `run_cpu_tests.py` loses its known-red list, because `test_noise` now passes. This changes the noise pass of the next training build, not of the builds S2 trained on. `run_cpu_tests.py --jobs 4` runs four modules at a time, slowest first, with the BLAS threads split between them, and `authored/build.py` writes a keys file through a temp file and a rename, so a module never reads one half written.
+- **Found.** `authored/worlds/T01.keys.json` is stale against a fresh seed, and two integration suites rewrite it in the checkout. Since fixed under #1088: no keys file is tracked, and the tests seed keys into a temporary directory (`507e7b260`).
+
+## What changed
+
+The native tool task's harness (`experiments/toolchat/native`) and runtime (`crates/nativetools`, folded into `crates/assist` by #1088) fine-tune Qwen3.5-0.8B to drive a vault through eight tools. The current model, soup S2, passes 537 of 655 val sessions live and 542 by replay on the current runtime. Decoding is free, the grammar path and everything S2 does not depend on are deleted, and the estate's CPU suite runs on every PR.
+
+## Verification
+
+```
+cargo xtask gate --profile local          # PASS on 30c414b24: fmt, clippy -D warnings, cargo test --workspace, restore-drill, rules, ledgers. The target was purged of all 26 workspace crates at 05:13 (`cargo clean -p` each); the merges' builds since relinked 23, so the gate's header reads "3 of 26 workspace member(s) have no linked artifact"
+PATH=$S/tools:$PATH cargo xtask gate --profile mobile-jvm   # PASS — 250.9 s of 420 s; no fixture drift
+```
+```
+python3 regen.py refreeze --out /dev/shm/nt-1088/out --jobs 4   # on 18319d402: val v7.4 byte-identical (sha256 5d3d9035…), 655/655 sessions, 2055/2055 turns, UNEXPLAINED 0
+gitleaks detect --no-git --config .gitleaks.toml (on `git archive HEAD`)   # exit 0
+bun run lint:path-filters                                           # exit 0
+python3 experiments/toolchat/native/run_cpu_tests.py                # 26 modules, 984 tests, 0 skipped, exit 0 (on the estate lane's head 3349ede3c, before test_artefacts.py merged; fresh venv)
+```
+
+On the final head `648b37360`, after the data left the tree. Logs in the root's scratchpad.
+
+```
+run_cpu_tests.py --jobs 4 in a fresh clone of 648b37360, after `artefacts.py fetch --public-only`, with CI's environment and CI's pinned venv (torch 2.13.0+cpu)   # "27 module(s), 4 at a time: 18.0 min wall"; 1096 ran, 0 skipped, 0 red; exit 0 (final-native-suite.log)
+```
+
+## Audit
+
+**REFUTED**
+
+Audited 2026-10-08 by a reviewer who did not write the receipt, for the section "Evidence: CI for the native estate (2026-10-08)" and its `## What changed` and `## Verification` only, against `eb1254e3f`, `521bfa9ab`, `3349ede3c`, `1fb93c1ae`, `02bfe2e45` and the merges `30c414b24` and `734433cbb`, the logs in the root agent's scratchpad (`final-gate-local.log`, `final-gate-mjvm.log`, `final-verify.log`, `estate-proof.out`, `estate-proof2.out`, `ci/gl-head.json`, `ci/sonar-*.json`), my own re-runs and `.governance/law/rules/receipt-per-issue.mjs`. I did not open `val.jsonl`, `test.jsonl`, `eval/worlds/*`, `eval/sessions/*` or `refreeze-*.log`. The sections above were not re-audited. The table and the job description are right; the suite size is stale and two commits are unnamed.
+
+- **The section and `## What changed` against the diff.** REFUTED on two unnamed commits.
+  - Held. `.gitleaks.toml` gains exactly five path entries (`authored/worlds/*.json`, `authored/worlds/T*_build.py`, `eval/worlds/*.json`, `eval/worlds/[A-Z]_build.py`, `eval/sets/*.jsonl`). `tests/path-filter-ledger.json` gains an `experiments` entry that names `gate` and `native-python`. `scripts/ci/configure-sonarcloud.mjs` gains `experiments/**` in `SOURCE_EXCLUSIONS`. The `native-python` job builds `nativetools`, installs `requirements-ci.txt` with `--require-hashes` (`torch==2.13.0+cpu`), checks six SHA-256 sums on the tokenizer and config at a pinned revision, seeds world A and runs `run_cpu_tests.py`, which fails on any red or skipped test. D-1044-19, -20 and -21 are in `docs/decisions.md`, one per commit named. `train/smoke.py` says "about 16 GB of RAM on CPU", and README line 31 says `train/smoke.py` and `train/vm/` run in no CI job.
+  - Not named, `1fb93c1ae`. `authored/noise.py` now protects the words the nt14 and nt15 runtime reads (`work`, `works`, `free`, `busy`, `available`, `throughout`) and `regen.py`'s superlative cues. The commit says this "changes what the NEXT training build's noise pass may alter: its augmented sessions can differ from the ones S2 trained on". It also removes `KNOWN_RED` from `run_cpu_tests.py` and edits `HANDOFF.md`, the README and the ledger. The earlier paragraph in this receipt, "Found on the way, not fixed. `authored/test_noise.py` has 2 failures", is now fixed, and this section does not say so.
+  - Not named, `02bfe2e45`. `run_cpu_tests.py` runs modules in parallel (`--jobs N`, 4 in CI), caps threads per interpreter, runs `test_noise` then `test_gen` on one worker, and `authored/build.py` now replaces `T01.keys.json` whole. The "Found" bullet about that file does not say it is handled.
+  - Not named, mechanical: the README and `HANDOFF.md` wording.
+- **`- [x]` boxes.** PASS. The section adds none and edits none.
+- **`## Verification` against a log or a re-run.** REFUTED on the suite size and on the purged-target words.
+  - gitleaks. `ci/gl-head.json` holds 596 findings, all `generic-api-key`. My re-run on a clean `git archive HEAD` export, `gitleaks detect --no-git --config .gitleaks.toml` from inside it: exit 0, "no leaks found". A planted AWS-style key in a non-world file under `experiments/` is found (`aws-access-token`, exit 1). `final-verify.log`: "gitleaks exit 0". PASS.
+  - Path filters. My re-run on an export of `521bfa9ab^`: "path-filters: `experiments` is claimed by no `changes` filter and has no ledger entry", exit 1; on HEAD, `bun run lint:path-filters`: "path-filters: 0 filter(s) across 12 workflow(s) and 15 always-on ledger entr(ies) cover every workspace and top-level path", exit 0. PASS.
+  - Sonar. The 12 files `ci/sonar-*.json` hold 531 security and 293 reliability issues, 824 in all, every one under `experiments/`; severities are 5 BLOCKER and 14 CRITICAL (security) and 2 CRITICAL (reliability), consistent with the stated E and D. PASS.
+  - Local gate. `final-gate-local.log`: "gate local: PASS", six steps ok. "From a purged target" is contradicted by its header, "tree cold — 3 of 26 workspace member(s) have no linked artifact in /home/user/centraid/target/debug/deps (first: centraid)"; a purged target reads 26 of 26. Say what was purged, or drop the words. The mobile-jvm line holds: `final-gate-mjvm.log` "ok    mobile-jvm        250.9s" and "gate mobile-jvm: PASS".
+  - Refreeze. `sha256sum` of `eval/sets/val.jsonl` is `5d3d9035737a…`, equal to `eval/FROZEN.md:38`, and the sets are unchanged over `a3f49c7f6..HEAD`. The "655/655 sessions, 2055/2055 turns, UNEXPLAINED 0" counts are in `refreeze-*.log`, which I did not open; the same figures are in this receipt at the sections above.
+  - Suite size. REFUTED. "26 modules and 984 tests" is the estate lane's number: my static count of `test_*` methods in its 26 modules is 984, and `estate-proof2.out` ends "suite: 1894s rc=0" with 26 `ok` lines (it prints no test count; "984" is in the message of `02bfe2e45`). It is not the merged tree's. `734433cbb` merged that lane onto `d48b4431e`, which carries `experiments/toolchat/native/test_artefacts.py` (`aa001fa2e`, #1088, 51 test methods). `run_cpu_tests.py` globs `test_*.py` in `.`, `authored`, `authored/gen`, `eval` and `train`, so the job now runs 27 modules, about 1,035 tests, and HEAD's own README line 31 says "27 modules". No log shows the suite on the merged tree, so nobody has seen `test_artefacts` pass under the runner. Fix: run `python3 experiments/toolchat/native/run_cpu_tests.py --jobs 4` on HEAD, record its module count, test count and exit status, and state 27 in the section and in `## What changed`.
+- **Governance form.** PASS. `## What changed` and `## Verification` are present, `## Verification` holds fences and outcome words ("PASS", "exit 0"), and this section carries a verdict. The rule demands shape only of a receipt a change adds; this one pre-exists.
+
+### Re-audit (2026-10-08)
+
+**REFUTED**
+
+Audited by the reviewer of the first audit, at HEAD `648b37360`, against the receipt's text as it now stands (the first audit above is unchanged), `final-native-suite.log`, `estate-proof2.out`, `final-verify.log`, `gl-final.log`, `venv-install.log` and my own re-runs. One claim in the new final-head line has no evidence behind it.
+
+- **The commits `1fb93c1ae` and `02bfe2e45`.** Fixed. The bullet "Noise and the suite four at a time (`1fb93c1ae`, `02bfe2e45`, merged in `734433cbb`)" matches both diffs: `noise.py` gains `available busy free throughout work works` in the runtime set and `least amount effort work` in the convention set; `KNOWN_RED` is gone from `run_cpu_tests.py`; `--jobs 4` runs slowest first with the threads split; `build.py` writes through a temp file and a rename. "The ten words" counts `work` twice (nine distinct). The first-audit paragraph "Found on the way, not fixed" stays above, as an append-only receipt must, and this bullet says `test_noise` now passes.
+- **"From a purged target."** Fixed. The line says the target was purged of all 26 workspace crates at 05:13 and the merges' builds relinked 23. The target agrees: the oldest `*centraid*` entries in `target/debug/deps` are 05:14:10 and in `build/` 05:14:18, and the only older fingerprints belong to crates no longer in the workspace.
+- **The suite line, scoped to `3349ede3c`.** Fixed. "26 modules, 984 tests" is now the estate lane's, before `test_artefacts.py` merged. My static count of `test_*` methods at `3349ede3c` is 26 modules and 984; `estate-proof2.out` ends "suite: 1894s rc=0" with 26 `ok` lines, and its `git status` shows only `T01.keys.json` modified, so the tree was that head.
+- **The final-head line against `final-native-suite.log`.** Held, except one claim. The log opens "head 648b37360". Summing its 27 lines "== <module>: N ran, S skipped, R red, P problem(s)" gives 1096 ran, 0 skipped, 0 red, 0 problems; it ends "27 module(s), 4 at a time: 18.0 min wall, 50.9 min of module time" and "suite exit 0". `./test_artefacts` is "Ran 112 tests", and 984 + 112 is 1096. "artefacts: 35 of 35 files match the manifest" follows the rebuild lines, which is what `fetch --public-only` then `check --public-only` print, and `gate.yml` at `648b37360` runs exactly those two. `venv-install.log` has "+ torch==2.13.0+cpu". Not in the log: "the clone's tree unchanged". There is no `git status` in it and the clone is gone. Show it, or drop the words.
+- **gitleaks.** My re-run on a clean `git archive HEAD` export, from inside it: exit 0, "no leaks found"; `gl-final.log` says the same. PASS.
+- **A stale paragraph, not holding the verdict.** The "Found" bullet still says `authored/worlds/T01.keys.json` is stale and rewritten by two suites. At the final head no keys file is tracked (`git ls-files … | grep -c keys.json` is 0; `507e7b260` removed 38; the runner's docstring says none is kept). Add "removed since, #1088".
+- **Governance form.** PASS, as before.
+
+### Second re-audit (2026-10-08)
+
+**PASS.** "The clone's tree unchanged" is gone; the final-head line (line 309) now says only what `final-native-suite.log` shows: "27 module(s), 4 at a time: 18.0 min wall", 1096 ran, 0 skipped, 0 red, "suite exit 0". The "Found" bullet now reads "Since fixed under #1088: no keys file is tracked, and the tests seed keys into a temporary directory (`507e7b260`)", which matches the tree (`git ls-files … | grep -c keys.json` is 0) and that commit's title. Nothing else is open.
