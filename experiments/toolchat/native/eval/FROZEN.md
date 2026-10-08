@@ -174,4 +174,3 @@ Any change to a file in `sets/` is a new version: new sessions, a gold correctio
 3. `python3 build_sets.py ref` must report 100% of sessions and turns on val and test. A failing item is a gold error or a runtime bug: fix that, never the check.
 4. Record here the counts, the origin table, the hashes, the reference result and, in the lineage, why. `python3 build_sets.py check` passes only when the hashes here are the files' hashes.
 5. Assemble and publish a new data version (`README.md`, Data versions): the files in `sets/` are held out, and a model is judged against the version it was trained on.
-

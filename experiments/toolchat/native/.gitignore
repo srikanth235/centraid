@@ -1,0 +1,3 @@
+# A keys file is a by-product of seeding a world (eval/seed_worlds.py, authored/build.py) and none is kept in the tree
+# (R-1088-16): the tests write theirs to a temporary directory (EVAL_KEYS), and a local seeding must not be committed.
+*.keys.json
