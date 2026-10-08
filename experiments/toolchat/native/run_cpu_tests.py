@@ -10,10 +10,14 @@ is captured and printed in one piece when it ends, never interleaved with anothe
   NATIVETOOLS        the runtime binary: `cargo build -p centraid-nativetools --bin nativetools`, then target/debug/nativetools
   HF_HOME            a cache holding the tokenizer and config of Qwen/Qwen3.5-0.8B (no weights), with HF_HUB_OFFLINE=1:
                      the trainer's tiny-model tests build a random model from that config
-  EVAL_VAULTS        world A seeded: `python3 eval/seed_worlds.py --vaults DIR A`
+  EVAL_VAULTS        a scratch directory the integration suites seed T01 into (authored/build.py creates it)
   GEN_INTEGRATION=1  and NOISE_INTEGRATION=1, which switch on the two opt-in integration suites. They run authored/build.py,
-                     which rewrites the tracked authored/worlds/T01.keys.json while its committed ids differ from a fresh
-                     seeding (they do today): `git checkout` that file after a local run
+                     which seeds T01 and writes its keys; the tests point EVAL_KEYS at a temporary directory, so no test writes
+                     a tracked file (a keys file is a by-product of seeding and none is kept in the tree)
+
+The suite reads no held-out file and needs no Hub token (R-1088-16): `python3 artefacts.py fetch --public-only` rebuilds the 35 public
+train worlds (authored/worlds/T*.json) it reads, and every test that needs a seeded household seeds a public world itself
+(eval/pubworld.py), or runs on a made-up one (eval/fixture_world.py). What needs the held-out files is `artefacts.py verify-heldout`.
 
 Two rules keep a green run meaning what it says:
 
@@ -42,7 +46,7 @@ JOBS = 4
 SLOWEST_FIRST = ("train/test_dpo", "train/test_precision", "train/test_resume", "train/test_pairs", "train/test_ema", "train/test_marks")
 
 # Modules that must not overlap, each tuple run in this order by one worker. Both run authored/build.py, which `rm -rf`s and reseeds
-# $EVAL_VAULTS/T01 and rewrites the tracked authored/worlds/T01.keys.json while its ids differ from a fresh seeding.
+# $EVAL_VAULTS/T01.
 SERIAL = (("authored/test_noise", "authored/gen/test_gen"),)
 
 # Every interpreter gets its share of the cores for torch, BLAS and OpenMP (cores // jobs, at least 1: four interpreters that each

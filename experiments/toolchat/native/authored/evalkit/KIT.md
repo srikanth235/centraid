@@ -1,10 +1,10 @@
 # Eval authoring kit: world <W>
 
-This is how the recipe-authored eval sessions in `eval/sessions/e1/` (worlds A to D, ids `<W>-E001` upward) were made and checked. An author writes held-out evaluation sessions for one eval world by exactly the recipe the training data is made by (`authored/BRIEF.md`), on a world the model never trains on, so that train, val and test come from one distribution and differ only in which household they are about. `check.sh` is the one gate (replay through the runtime, trace, shape, mix, hygiene); `hyg.py` and `mix.py` are its hygiene and mix checks against the train corpus and the held-out pool.
+This is how the recipe-authored eval sessions of origin `e1` (worlds A to D, ids `<W>-E001` upward; their sources are not kept in the tree, R-1088-16) were made and checked. An author writes held-out evaluation sessions for one eval world by exactly the recipe the training data is made by (`authored/BRIEF.md`), on a world the model never trains on, so that train, val and test come from one distribution and differ only in which household they are about. `check.sh` is the one gate (replay through the runtime, trace, shape, mix, hygiene); `hyg.py` and `mix.py` are its hygiene and mix checks against the train corpus and the held-out pool.
 
 ## Setup: the blindness rule
 
-An author stays blind to the held-out text. The author works in a private copy `P` of `experiments/toolchat/native` that lacks everything held out: no `eval/sets/`, no `eval/sessions/`, no eval world JSON under `eval/worlds/`, no `data/`, no `runs/` or `out/`, and no other world's sessions. `P` holds the author's world (`authored/worlds/<W>.json` and `<W>.keys.json`, copied from `eval/worlds/`), the session header below as `authored/sessions/<W>.py`, and one train session file (`authored/sessions/T01.py`) as a format example. The gate runs from the full repo, where the held-out sets live: `check.sh` takes `P` from the environment, reads the held-out sets itself, and prints verdicts and the author's own messages, never a held-out message.
+An author stays blind to the held-out text. The author works in a private copy `P` of `experiments/toolchat/native` that lacks everything held out: no `eval/sets/`, no eval world JSON under `eval/worlds/`, no `data/`, no `runs/` or `out/`, and no other world's sessions. `P` holds the author's world (`authored/worlds/<W>.json` and `<W>.keys.json`, copied from `eval/worlds/`), the session header below as `authored/sessions/<W>.py`, and one train session file (`authored/sessions/T01.py`) as a format example. The gate runs from the full repo, where the held-out sets live: `check.sh` takes `P` from the environment, reads the held-out sets itself, and prints verdicts and the author's own messages, never a held-out message.
 
 Session header (`today` and `me` are the world's own, in `<W>.json`):
 
@@ -40,7 +40,7 @@ Environment of `check.sh`:
 
 ## Never open
 
-The full repo (its `eval/sets`, `eval/sessions`, `eval/worlds`, `data`, `runs`; you run its `authored/evalkit/check.sh`, you do not open its files), any other author's copy, or anything else outside `P` and your own `OUT`. They hold the held-out sessions you must stay blind to. Do not run `pkill`/`kill`. Write only `$P/authored/sessions/<W>*.py` and scratch files under `OUT`.
+The full repo (its `eval/sets`, `eval/worlds`, `data`, `runs`; you run its `authored/evalkit/check.sh`, you do not open its files), any other author's copy, or anything else outside `P` and your own `OUT`. They hold the held-out sessions you must stay blind to. Do not run `pkill`/`kill`. Write only `$P/authored/sessions/<W>*.py` and scratch files under `OUT`.
 
 ## What to write
 
@@ -70,7 +70,7 @@ Run it from the full repo, with `P`, `NATIVETOOLS` and `TRAIN_GOLD` set:
 
 A session that does not verify: read its FAIL line, inspect it with `cd $P && NATIVETOOLS=... EVAL_VAULTS=$OUT/vaults HF_HUB_OFFLINE=1 $PY authored/show.py <W> <W>-E014`, and fix the gold or the reference (the gold follows SPEC §8 and the rulings, never the runtime's mistakes). A session the runtime cannot serve correctly is deleted and listed in your report, never forced. HELD-DUP / TRAIN-DUP / SELF-DUP lines: reword that message. Hygiene compares with every message in `eval/sets`, so sessions already frozen there show up as HELD-DUP. Done = the full run prints ALL PASS and every shape figure is inside its tolerance.
 
-To re-run the checks on the shipped sources, copy `eval/sessions/e1/<W>*.py` to `$P/authored/sessions/` and `eval/worlds/<W>.json` with `<W>.keys.json` to `$P/authored/worlds/`; every message of six words or more then reports HELD-DUP, because those sessions are in `eval/sets`. `hyg.py` and `mix.py` also run alone (see their docstrings).
+To re-run the checks on the sources of an eval world (the author keeps them), copy `<W>*.py` to `$P/authored/sessions/` and `eval/worlds/<W>.json` (from the data version) with `<W>.keys.json` (seeded by `eval/seed_worlds.py`) to `$P/authored/worlds/`; every message of six words or more then reports HELD-DUP, because those sessions are in `eval/sets`. `hyg.py` and `mix.py` also run alone (see their docstrings).
 
 ## Report (at most 12 lines)
 
