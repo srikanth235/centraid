@@ -11861,7 +11861,8 @@ message ChatMessage {
 // NOT_DONE with `settled_line` saying how it ended. There is no toast and no
 // Undo: an applied card says "Done." and stays where it was.
 message ChatPending {
-  // What a confirm or a cancel names; empty never.
+  // What a confirm or a cancel names; empty only on an INERT card drawn from a
+  // stored `proposed` answer, which no session holds and nothing can name.
   string pending_id = 1;
   State state = 2;
   // One line for each row the write changes, in order.
@@ -11892,7 +11893,8 @@ message ChatPending {
     STATE_NOT_DONE = 4;
     // A row the write addresses changed while the card waited: nothing ran.
     STATE_STALE = 5;
-    // A newer message superseded the card before it was answered: no buttons.
+    // A newer message superseded the card before it was answered, or the thread
+    // was reopened and no session holds the write (R-1088-10): no buttons.
     STATE_INERT = 6;
   }
 }
