@@ -342,10 +342,38 @@ class Collide(unittest.TestCase):
                                    (9, 9, 9), max_frac=0.2)
         self.assertLessEqual(len(log), int(0.2 * len(collide.rows_of(self.WORLD))))
 
+    def test_the_targets_are_kept_numbers_not_a_read_of_the_held_out_worlds(self):
+        with mock.patch.object(collide, "NATIVE", Path("/nonexistent")):  # the eval worlds A to D are not in a public checkout
+            for profile, want in collide.TARGETS.items():
+                self.assertEqual(collide.targets(profile), want)
+                self.assertEqual(set(want), {"first_name", "container", "same_name", "shared_word"})
+                self.assertTrue(all(0 <= v <= 1 for v in want.values()))
+            with self.assertRaises(FileNotFoundError):
+                collide.measured_targets("abc")  # measuring them does need the worlds: eval/heldout_checks.py holds the numbers to them
+        got = collide.targets("abc")
+        got["first_name"] = 9
+        self.assertNotEqual(collide.TARGETS["abc"]["first_name"], 9)
+
+    def test_the_command_rebuilds_collision_worlds_and_their_keys_from_public_sources(self):
+        """`collide.py --out DIR --keys`: same sources, same bytes; each world has the keys of its own seeding."""
+        with tempfile.TemporaryDirectory() as t:
+            runs = []
+            for name in ("one", "two"):
+                out = Path(t) / name
+                done = subprocess.run([sys.executable, str(common.HERE / "collide.py"), "--out", str(out), "--worlds", "T02", "--keys"],
+                                      capture_output=True, text=True, env={**os.environ, "EVAL_KEYS": ""})  # keys beside the world
+                self.assertEqual(done.returncode, 0, done.stderr[-1500:])
+                runs.append(out)
+            self.assertEqual((runs[0] / "T02.json").read_bytes(), (runs[1] / "T02.json").read_bytes())
+            keys = json.loads((runs[0] / "T02.keys.json").read_text())
+            added = [r["key"] for r in json.loads((runs[0] / "T02.json").read_text())["people"] if r["key"].startswith("col_")]
+            self.assertTrue(added and all(k in keys for k in added))  # the rows the transformation added are in the vault
+
     def test_real_worlds_measure(self):
-        for n in "ABCD":
-            m = collide.measure(json.loads((common.NATIVE / "eval" / "worlds" / f"{n}.json").read_text()))
+        for n in ("T01", "T02", "T04", "T05"):  # public train worlds: the held-out eval worlds are not in a public checkout
+            m = collide.measure(json.loads((common.AUTHORED / "worlds" / f"{n}.json").read_text()))
             self.assertTrue(all(0 <= v <= 1 for v in m.values()))
+            self.assertEqual(set(m), {"first_name", "container", "same_name", "shared_word"})
 
 
 class Rewrite(unittest.TestCase):

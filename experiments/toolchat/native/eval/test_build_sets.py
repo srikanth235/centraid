@@ -355,17 +355,47 @@ class Check(Base):
         return write_sets(root or self.sets, self.val if val is None else val, self.test if test is None else test,
                           self.assign if assign is None else assign, **{"version": 8, **meta})
 
-    def run_check(self, root: Path | None = None, recorded: bool = True) -> tuple[int, str]:
+    def run_check(self, root: Path | None = None, recorded: bool = True, v7: bool = False) -> tuple[int, str]:
         root = root or self.sets
         hashes = {f: hashlib.sha256((root / f).read_bytes()).hexdigest() for f in build_sets.FILES
                   if (root / f).exists()} if recorded else {}
         with mock.patch.object(build_sets, "recorded_hashes", lambda: hashes):
-            rc, _, err = quiet(build_sets.check, root)
+            rc, _, err = quiet(build_sets.check, root, v7)
         return rc, err
 
     def test_val_and_test_on_disjoint_worlds_pass(self):
         self.write()
         self.assertEqual(self.run_check(), (0, ""))
+
+    def test_the_pair_of_v7_passes_with_v7_and_fails_the_rules_of_v8_without_it(self):
+        """The sets in the tree are the pair of v7 until v8 is frozen: val and test share every world, test has no e2 origin and
+        no session records a v7 half. `verify-heldout` checks them with --v7."""
+        write_sets(self.sets, self.v7_val, self.v7_test, self.v7_assign)
+        sources = {"e1": ("e1 sources", lambda: ["A-E001", "B-E001", "A-E002"]), "test-v3.1": ("hand-written", lambda: ["B-E002"]),
+                   "e2": ("not kept", None)}
+        with mock.patch.object(build_sets, "ORIGINS", sources):
+            self.assertEqual(self.run_check(v7=True), (0, ""))
+            rc, err = self.run_check()
+        self.assertEqual(rc, 1)
+        self.assertIn("val and test both have sessions of the world A", err)
+        self.assertIn("do not record the v7 half they were in", err)
+        self.assertIn("test sessions whose origin is not a test origin", err)
+
+    def test_v7_still_holds_every_other_check(self):
+        sources = {"e1": ("e1 sources", lambda: ["A-E001", "B-E001", "A-E002"]), "test-v3.1": ("hand-written", lambda: ["B-E002"]),
+                   "e2": ("not kept", None)}
+        bad = dict(self.v7_test[0], turns=[dict(turn("A"), gold=[{"type": "rows", "rows": ["no_such_row"]}])])
+        with mock.patch.object(build_sets, "ORIGINS", sources):
+            write_sets(self.sets, self.v7_val, [bad, self.v7_test[1]], self.v7_assign)
+            self.assertIn("gold names the unknown key 'no_such_row'", self.run_check(v7=True)[1])
+            write_sets(self.sets, self.v7_val, [dict(self.v7_test[0], id="A-E001"), self.v7_test[1]], self.v7_assign)
+            self.assertIn("id A-E001 occurs 2 times", self.run_check(v7=True)[1])
+            write_sets(self.sets, self.v7_val, self.v7_test, {**self.v7_assign, "A-E001": {"set": "test", "origin": "e1"}})
+            self.assertIn("sessions that split.json puts in the other set", self.run_check(v7=True)[1])
+            write_sets(self.sets, self.v7_val, self.v7_test, self.v7_assign)
+            with mock.patch.object(build_sets.split, "train_worlds", lambda: ["T01", "A"]):
+                self.assertIn("val has sessions of the train world A", self.run_check(v7=True)[1])
+            self.assertIn("is not the file FROZEN.md records", self.run_check(recorded=False, v7=True)[1])
 
     def test_a_world_in_both_val_and_test_fails(self):
         shared = [*self.test, session("A-E900", "A", "test")]
@@ -660,9 +690,11 @@ class Cli(Base):
 
     def test_check_takes_a_candidate_directory(self):
         code, seen = self.main("check", "--sets-dir", "/x/sets")
-        self.assertEqual(seen["check"][0], (Path("/x/sets"),))
+        self.assertEqual(seen["check"][0], (Path("/x/sets"), False))
         code, seen = self.main()
-        self.assertEqual(seen["check"][0], (build_sets.SETS,))
+        self.assertEqual(seen["check"][0], (build_sets.SETS, False))
+        code, seen = self.main("check", "--v7")
+        self.assertEqual(seen["check"][0], (build_sets.SETS, True))
 
     def test_ref_takes_the_sets_to_check(self):
         _, seen = self.main("ref", "--sets-dir", "/x/sets", "--sets", "test")

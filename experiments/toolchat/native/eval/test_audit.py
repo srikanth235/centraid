@@ -870,8 +870,7 @@ class Registry(unittest.TestCase):
         self.assertEqual(fix["expect"], regen.digest("who's that to"))
         self.assertEqual(fix["add"], [gold.rows("d_glasses")])  # the biggest debt i owe (150 EUR, Marta's): the person stays
         self.assertNotIn("gold", fix)
-        self.assertEqual(regen.world_kinds("T03")["d_glasses"], "debt")
-        self.assertTrue(regen.pinned("T03-052", 3))
+        self.assertTrue(regen.pinned("T03-052", 3))  # that d_glasses is a debt of T03 is held to the world by heldout_checks.py
 
     def test_the_number_fix_adds_the_ask_and_the_out_of_scope_decline_beside_the_balance(self):
         fix = regen.FIXES[("D-E132", 2)]

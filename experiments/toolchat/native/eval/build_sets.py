@@ -1,6 +1,6 @@
 """The scored sets in sets/ (frozen, see FROZEN.md): verify them, and make a new freeze.
 
-    python3 build_sets.py [check] [--sets-dir DIR]                     # the integrity check; prints every sha256
+    python3 build_sets.py [check] [--sets-dir DIR] [--v7]              # the integrity check; prints every sha256
     python3 build_sets.py ref [--out DIR] [--jobs 8] [--sets-dir DIR] [--sets val,test]
                                                                        # reference check: the sets must score 100%
     python3 build_sets.py refreeze --out DIR [--ref-out DIR] [--sets val,test] [--jobs 8] [--sets-dir DIR]
@@ -21,7 +21,9 @@ files are held out: they live in the private data version (artefacts.py), and `c
 check     ids unique within and across the two sets; every `set` field right; val and test worlds DISJOINT, no val
           or test world a train world; split.json matches val and test (every val session records the v7 half it was
           in, every test session has the origin e2) and names only origins it knows, and the authored sessions of the
-          val worlds are the sessions of the origin val-v3.1; every key a gold names exists in its world's keys file
+          val worlds are the sessions of the origin val-v3.1; with --v7 (the sets are still the pair of v7, val v7.4
+          and test v6 on the same seven worlds, until v8 is frozen) the rules that make val and test world-disjoint
+          and give test the origin e2 do not apply, and every other check does; every key a gold names exists in its world's keys file
           (seeded by seed_worlds.py); no session of ../data/train.jsonl.gz is in val or test and no record of it is on a
           val or test world; each file's sha256 equals the one recorded in FROZEN.md. Exit 1 on any problem. With
           --sets-dir DIR (a candidate, e.g. the sets/ of a freeze-v8 output) the hashes are printed to record, not
@@ -209,12 +211,12 @@ def count_line(name: str, sessions: list[dict]) -> str:
     return f"{name:<9} {len(sessions):>4} sessions {turns:>5} turns  {shown}"
 
 
-def world_problems(sets: dict[str, list[dict]], train: set[str]) -> list[str]:
+def world_problems(sets: dict[str, list[dict]], train: set[str], disjoint: bool = True) -> list[str]:
     """What is wrong with the worlds of the sets (D-1044-14): val and test share a world (test is held out of val's
     households whole), a set has no session, val or test has sessions of a train world."""
     problems: list[str] = []
     worlds = {name: collections.Counter(s["world"] for s in sessions) for name, sessions in sets.items()}
-    for w in sorted(set(worlds["val"]) & set(worlds["test"])):
+    for w in sorted(set(worlds["val"]) & set(worlds["test"])) if disjoint else []:
         problems.append(f"val and test both have sessions of the world {w}: test is held out of val's worlds whole")
     for name in ("val", "test"):
         if not sets[name]:
@@ -224,7 +226,7 @@ def world_problems(sets: dict[str, list[dict]], train: set[str]) -> list[str]:
     return problems
 
 
-def assign_problems(assign: dict[str, dict], member: dict[str, str]) -> list[str]:
+def assign_problems(assign: dict[str, dict], member: dict[str, str], v8: bool = True) -> list[str]:
     """What is wrong with the per-session records of split.json against the sets they describe, one line per kind with
     the count and the first ids: the ids differ, a session is in the other set, a test session has an origin that is
     not a test origin (or a v7 half: it was not in v7), a val session has a test origin or does not record the v7 half
@@ -240,6 +242,8 @@ def assign_problems(assign: dict[str, dict], member: dict[str, str]) -> list[str
         if a["set"] != member[sid]:
             wrong[f"sessions that split.json puts in the other set (it says {a['set']}, the file is "
                   f"{member[sid]})"].append(sid)
+        elif not v8:
+            continue  # the pair of v7 has no v7 half and no test origin: those are the rules of v8
         elif a["set"] == "test":
             if a["origin"] not in TEST_ORIGINS:
                 wrong[f"test sessions whose origin is not a test origin ({'/'.join(TEST_ORIGINS)})"].append(sid)
@@ -254,7 +258,7 @@ def assign_problems(assign: dict[str, dict], member: dict[str, str]) -> list[str
     return problems
 
 
-def check(sets_dir: Path = SETS) -> int:
+def check(sets_dir: Path = SETS, v7: bool = False) -> int:
     """The integrity check of the files in `sets_dir`. For sets/ itself it also compares every file's sha256 with the
     one FROZEN.md records; for a candidate directory (a freeze-v8 output) it prints the hashes to record. The files are
     held out (R-1088-16): a checkout without them has nothing to check, and the check says so by failing."""
@@ -276,7 +280,7 @@ def check(sets_dir: Path = SETS) -> int:
         if len(names) > 1:
             problems.append(f"id {sid} occurs {len(names)} times ({', '.join(names)})")
 
-    problems += world_problems(sets, set(split.train_worlds()))
+    problems += world_problems(sets, set(split.train_worlds()), disjoint=not v7)
 
     if not TRAIN.exists():
         problems.append(f"{TRAIN} is missing")
@@ -291,7 +295,7 @@ def check(sets_dir: Path = SETS) -> int:
     meta = json.loads((sets_dir / "split.json").read_text(encoding="utf-8"))
     assign = meta["assign"]
     member = {s["id"]: name for name in ("val", "test") for s in sets[name]}
-    problems += assign_problems(assign, member)
+    problems += assign_problems(assign, member, v8=not v7)
     by_origin: dict[str, set[str]] = collections.defaultdict(set)
     for sid, a in assign.items():
         by_origin[a["origin"]].add(sid)
@@ -803,6 +807,8 @@ def main() -> None:
     p = sub.add_parser("check", help="the integrity check (default)")
     p.add_argument("--sets-dir", type=Path, default=SETS,
                    help="a candidate directory (a freeze-v8 output): hashes printed, not compared (default sets/)")
+    p.add_argument("--v7", action="store_true", help="the sets are the pair of v7 (val v7.4, test v6, the same seven worlds): "
+                   "the world-disjoint and test-origin rules of v8 do not apply")
     p = sub.add_parser("ref", help="the reference check over val, then test")
     p.add_argument("--out", type=Path, help="keep the run files and reports here (default: a temporary directory)")
     p.add_argument("--jobs", type=int, default=8)
@@ -831,7 +837,7 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     if args.cmd in (None, "check"):
-        sys.exit(check(getattr(args, "sets_dir", SETS)))
+        sys.exit(check(getattr(args, "sets_dir", SETS), getattr(args, "v7", False)))
     if args.cmd == "ref":
         names = tuple(args.sets.split(","))
         if not set(names) <= {"val", "test"}:

@@ -91,8 +91,10 @@ REGISTRY_FILES = ("contracts/assist/export/metadata.json",)
 RUNTIME_EXPORT = "contracts/assist/export"
 # What the checks of `verify-heldout` run, from this directory: each needs the held-out files.
 HELDOUT_CHECKS = (
-    ("the frozen sets (build_sets.py check)", [sys.executable, "eval/build_sets.py", "check"]),
+    # the sets in the tree are the pair of v7 (FROZEN.md): drop --v7 when v8 is frozen
+    ("the frozen sets (build_sets.py check --v7)", [sys.executable, "eval/build_sets.py", "check", "--v7"]),
     ("the val worlds of the split (split.py --check)", [sys.executable, "authored/split.py", "--check"]),
+    ("the fixes of val against the val set and its worlds (heldout_checks.py)", [sys.executable, "eval/heldout_checks.py"]),
 )
 # A repository's own bookkeeping file, never deleted by a publish: it decides which files the Hub stores as LFS.
 KEEP_ON_PUBLISH = (".gitattributes",)

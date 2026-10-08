@@ -124,8 +124,8 @@ class Case(unittest.TestCase):
         env = mock.patch.dict(os.environ, {}, clear=False)
         env.start()
         self.addCleanup(env.stop)
-        os.environ.pop(art.HF_ENV, None)
-        os.environ.pop(art.SOURCE_ENV, None)
+        for name in (art.HF_ENV, art.SOURCE_ENV, "NATIVETOOLS"):
+            os.environ.pop(name, None)
         self.files = {"out/a.txt": b"alpha\n", "out/b.txt": b"beta\n", "sets/val.jsonl": b'{"id": 1}\n',
                       "data/train.gz": gzip.compress(b'{"id": "train-T01-0"}\n', mtime=0), "keys/k.json": b"{}\n"}
         self.vpath = {"out/a.txt": "worlds/a.txt", "out/b.txt": "worlds/b.txt", "sets/val.jsonl": "eval/val.jsonl",
@@ -921,10 +921,11 @@ class VerifyHeldout(Case):
         self.assertIn("FAIL the bad one", out)
         self.assertIn("gold names an unknown key", out)
 
-    def test_the_shipped_checks_are_the_frozen_sets_and_the_split(self):
+    def test_the_shipped_checks_are_the_frozen_sets_the_split_and_the_fixes(self):
         names = [label for label, _ in art.HELDOUT_CHECKS]
         self.assertTrue(any("build_sets.py check" in n for n in names))
         self.assertTrue(any("split.py --check" in n for n in names))
+        self.assertTrue(any("heldout_checks.py" in n for n in names))
         for _, cmd in art.HELDOUT_CHECKS:
             self.assertTrue((art.HERE / cmd[1]).is_file(), cmd)
 

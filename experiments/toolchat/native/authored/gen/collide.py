@@ -2,7 +2,7 @@
 
     python3 authored/gen/collide.py --out DIR [--dry] [--worlds train | T01,T02] [--profile abc|mean|d]
                                     [--min-adds 2,2,4] [--max-add-frac 0.12] [--word-frac 0.04] [--seed 1044] [--random]
-                                    [--verify [T01,T10]] [--sessions-dir DIR] [--jobs 4]
+                                    [--keys] [--verify [T01,T10]] [--sessions-dir DIR] [--jobs 4]
 
 Measures four densities on a world (see `measure`):
 
@@ -12,7 +12,8 @@ Measures four densities on a world (see `measure`):
   shared_word    share of rows with a word (first significant word counts) that a row of another kind also has
 
 then adds rows, never removes or renames one, so every existing `$key` still resolves, until each density reaches the
-profile's target (`abc`: the highest of eval/worlds A, B, C; `mean`: the mean of A to D; `d`: the scale world D) and at
+profile's target (`abc`: the highest of the eval worlds A, B, C; `mean`: the mean of A to D; `d`: the scale world D; the
+numbers are `TARGETS`, because those worlds are held out) and at
 least `--min-adds` rows of the first three rules (people twins, container twins, shared-word rows; default 2,2,4), at
 most `--max-add-frac` of the world's rows in all (the shared-word rows at most `--word-frac` of them). The added rows are inert for aggregate reads (people without cadence or
 links, tasks cancelled and events cancelled before the world's epoch, notes, documents, photos and locker items from the
@@ -20,6 +21,10 @@ epoch), so what breaks in a session is a name that now fits two rows. Seeded: sa
 
   --dry     print the measures before and after per world, nothing written.
   --out DIR write DIR/<W>.json (the transformed worlds; build.py reads them with --worlds-dir DIR).
+  --keys    also seed every written world with the runtime (NATIVETOOLS) and write DIR/<W>.keys.json beside it, which is what
+            a rollout set built on these worlds needs (`BUNDLE_WORLDS=DIR`, `rollout.py export --worlds DIR`). The command that
+            rebuilds the collision worlds from public sources is `python3 authored/gen/collide.py --out DIR --keys`: the
+            density targets are `TARGETS`, the twins are those of the names the authored sessions reference, the seed is 1044.
   --verify  run authored/build.py --gold-from-ref on every session of the given worlds (default T01,T10) on the
             original and on the transformed world, and print what breaks: sessions that verified before and no longer
             do, split into the ones the runtime now answers `ambiguous:` (the point: rewrite to pick, or drop) and
@@ -107,13 +112,30 @@ def referenced(w: str, sessions_dir: Path) -> dict[str, collections.Counter]:
     return out
 
 
-def targets(profile: str) -> dict[str, float]:
+# The density each profile aims for, measured on the eval worlds A to D (`measured_targets`). Those worlds are held out
+# (R-1088-16), so a public checkout cannot measure them: the numbers are kept here, and `eval/heldout_checks.py` (run by
+# `artefacts.py verify-heldout`) holds them to the worlds. `--profile` picks one.
+TARGETS = {
+    "abc": {"first_name": 0.1875, "container": 0.2, "same_name": 0.020477815699658702, "shared_word": 0.7854406130268199},
+    "mean": {"first_name": 0.3197850529100529, "container": 0.18758472886762362, "same_name": 0.015655475282360182,
+             "shared_word": 0.6710243230480681},
+    "d": {"first_name": 0.8783068783068783, "container": 0.3541666666666667, "same_name": 0.00846979107848673,
+          "shared_word": 0.549124788255223},
+}
+
+
+def measured_targets(profile: str) -> dict[str, float]:
+    """The targets of a profile as measured on the eval worlds A to D (held out: only where they are)."""
     ms = {n: measure(json.loads((NATIVE / "eval" / "worlds" / f"{n}.json").read_text())) for n in "ABCD"}
     if profile == "d":
         return ms["D"]
     if profile == "mean":
         return {k: statistics.mean(m[k] for m in ms.values()) for k in ms["A"]}
     return {k: max(ms[n][k] for n in "ABC") for k in ms["A"]}
+
+
+def targets(profile: str) -> dict[str, float]:
+    return dict(TARGETS[profile])
 
 
 def add_row(world: dict, section: str, row: dict, log: list, rule: str) -> None:
@@ -256,6 +278,22 @@ def verify(worlds: list[str], tdir: Path, sessions_dir: Path, jobs: int, out: Pa
     return result
 
 
+def seed_keys(worlds: list[str], out: Path) -> None:
+    """Seed each world written to `out` with the runtime and write its keys file beside it (eval/seed_worlds.py)."""
+    import contextlib
+    import io
+    import tempfile
+
+    import lib
+    import seed_worlds
+
+    lib.WORLDS = out  # world_dir(W) is `out`, so the keys file is written beside the world file
+    with tempfile.TemporaryDirectory(prefix="collide-vaults-") as vaults, contextlib.redirect_stdout(io.StringIO()):
+        for w in worlds:
+            seed_worlds.seed(w, Path(vaults))
+    print(f"keys: {len(worlds)} keys files written to {out}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path)
@@ -267,6 +305,7 @@ def main() -> None:
     ap.add_argument("--word-frac", type=float, default=0.04, help="shared-word rows: at most this share of the world's rows")
     ap.add_argument("--seed", default="1044")
     ap.add_argument("--random", action="store_true", help="twin random rows instead of the names the sessions reference")
+    ap.add_argument("--keys", action="store_true", help="also seed each written world and write DIR/<W>.keys.json (needs NATIVETOOLS)")
     ap.add_argument("--verify", nargs="?", const="T01,T10")
     ap.add_argument("--sessions-dir", type=Path, default=AUTHORED / "sessions")
     ap.add_argument("--jobs", type=int, default=4)
@@ -288,6 +327,8 @@ def main() -> None:
             a.out.mkdir(parents=True, exist_ok=True)
             (a.out / f"{w}.json").write_text(json.dumps(new, indent=1, ensure_ascii=False))
     print("added", dict(tot), "rows:", sum(tot.values()))
+    if a.keys and a.out and not a.dry:
+        seed_keys(worlds, a.out)
     if a.verify and a.out and not a.dry:
         res = verify(a.verify.split(","), a.out, a.sessions_dir, a.jobs, a.out)
         (a.out / "collide.verify.json").write_text(json.dumps(res, indent=1))
