@@ -361,10 +361,11 @@ jobs:
   # fetched at a commit and checked against SHA-256 sums, and the actions are SHAs.
   native-python:
     runs-on: ubuntu-latest
-    # A cold run is a ~3 minute Rust build, a ~1 minute install and the suite, ~30
-    # minutes on four cores (31.5 measured), most of it the trainer's tiny-model tests
-    # (train/test_dpo.py alone is ~9). The bound is a backstop at twice that, not a
-    # second budget.
+    # A cold run is a ~3 minute Rust build, a ~1 minute install and the suite. The
+    # suite took 31.5 minutes with its modules run one at a time on four cores and
+    # takes ~16 with them four at a time (`--jobs 4`): train/test_dpo.py, on two
+    # threads, is the tail, and every other module is done in ~10. The bound is a
+    # backstop well above that, not a second budget.
     timeout-minutes: 60
     steps:
       - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
@@ -446,4 +447,4 @@ jobs:
           GEN_INTEGRATION: "1"
           NOISE_INTEGRATION: "1"
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python experiments/toolchat/native/run_cpu_tests.py
+        run: python experiments/toolchat/native/run_cpu_tests.py --jobs 4

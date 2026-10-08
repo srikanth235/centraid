@@ -118,7 +118,9 @@ def seed(w: str, worlds_dir: Path = HERE / "worlds") -> None:
     keys_path = worlds_dir / f"{w}.keys.json"  # the committed formatting; written only when the content differs
     text = json.dumps(rep["keys"], indent=2, sort_keys=True) + "\n"
     if not keys_path.exists() or json.loads(keys_path.read_text()) != rep["keys"]:
-        keys_path.write_text(text)
+        tmp = keys_path.with_name(f".{keys_path.name}.{os.getpid()}")  # replaced whole: a test module reading it beside this build never sees half
+        tmp.write_text(text)
+        os.replace(tmp, keys_path)
     for drop in rep.get("dropped", []):
         print(f"{w}: dropped {json.dumps(drop, ensure_ascii=False)}", file=sys.stderr)
 
