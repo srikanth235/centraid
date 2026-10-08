@@ -1288,6 +1288,97 @@ fn the_same_bytes_twice_adopt_one_asset() {
     assert_eq!(assets, 1);
 }
 
+/// THE CAMERA ROLL'S RE-WALK IS SAFE BECAUSE OF THIS, AND OF NOTHING ELSE
+/// (#1029 §1, R-1088-12).
+///
+/// A reinstall sends the same photographs through the shell again: it stages
+/// each original, which the vault answers as already held, and commits
+/// `media.add_asset` over the staged hash. `media.add_asset` is
+/// `Idempotency::Once`, and no ledger answers the second call — the vault keeps
+/// no memory of an `invoke_key` and this command is not given one. What keeps
+/// the library from doubling is that the command ADOPTS the asset that already
+/// wraps the same bytes. This is the test that fails if that stops being true,
+/// and the one a doc that says "the re-walk commits once" has to be able to
+/// point at.
+#[test]
+fn a_staged_original_offered_again_adopts_the_asset_it_made() {
+    use base64::Engine as _;
+    use centraid_vault::content::NeededBytes;
+
+    let scratch = common::Scratch::founded_with_blobs("add-asset-rewalk").expect("a vault");
+    let registry = registry();
+    registry
+        .install(&scratch.vault)
+        .expect("the record installs");
+    let png = base64::engine::general_purpose::STANDARD
+        .decode(ONE_PIXEL_PNG)
+        .expect("base64");
+    let hash = scratch
+        .vault
+        .blobs()
+        .expect("a content store")
+        .put(&png)
+        .expect("the store takes the bytes");
+    // WHAT A WALK DOES FOR EACH PHOTOGRAPH, in order: stage, then commit.
+    let offer = || {
+        scratch
+            .vault
+            .stage_bytes(&[NeededBytes {
+                hash: hash.clone(),
+                byte_size: i64::try_from(png.len()).expect("a small blob"),
+                media_type: "image/png".to_owned(),
+            }])
+            .expect("the staging row lands, or is already there");
+        let outcome = scratch
+            .vault
+            .execute(
+                &registry,
+                &Principal::owner("phone"),
+                &Command::new(
+                    "media.add_asset",
+                    serde_json::json!({ "staged_sha": hash, "kind": "photo" }),
+                ),
+            )
+            .expect("the command runs");
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Executed,
+            "{:?}",
+            outcome.reason
+        );
+        outcome
+    };
+
+    let first = offer();
+    let second = offer();
+    let third = offer();
+
+    assert_eq!(first.output["deduped"], serde_json::json!(0));
+    assert_eq!(
+        second.output["deduped"],
+        serde_json::json!(1),
+        "the second offer says it adopted rather than minted"
+    );
+    assert_eq!(third.output["deduped"], serde_json::json!(1));
+    assert_eq!(
+        second.output["asset_id"], first.output["asset_id"],
+        "and it answers the asset the first offer made"
+    );
+    assert_eq!(third.output["asset_id"], first.output["asset_id"]);
+    assert_ne!(
+        second.invocation_id, first.invocation_id,
+        "each offer RAN: the handler was entered every time, and nothing was replayed"
+    );
+    let count = |sql: &str| -> i64 {
+        scratch
+            .vault
+            .read(|connection| Ok(connection.query_row(sql, [], |row| row.get(0))?))
+            .expect("the count reads")
+    };
+    assert_eq!(count("SELECT COUNT(*) FROM media_asset"), 1);
+    assert_eq!(count("SELECT COUNT(*) FROM core_content_item"), 1);
+}
+
 /// A COORDINATE IS A PAIR. Half of one is no location at all, and accepting it
 /// would let a caller believe it had placed a photograph it had not.
 #[test]
