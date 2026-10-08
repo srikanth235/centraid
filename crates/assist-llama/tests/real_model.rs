@@ -24,7 +24,7 @@ use centraid_assist::host::ModelLoader;
 use centraid_assist::model::{Cancel, Control, Finish, GenerateRequest, Model};
 use centraid_assist::native::step::{StepOptions, decode_step};
 use centraid_assist::native::think::TraceMode;
-use centraid_assist::native::transcript::{Message, render_prompt_for_generation};
+use centraid_assist::native::transcript::render_prompt_for_generation;
 use centraid_assist::prompt::{Budget, END_OF_TURN};
 use centraid_assist_llama::{Config, LlamaLoader};
 
@@ -65,16 +65,21 @@ fn request<'a>(
 /// The prompt of a native turn's first step: the system turn (today, the kind card, the eight
 /// tools) and one question, ending where the model begins.
 fn native_prompt(question: &str) -> String {
-    use centraid_assist::native::prompt::{kind_card, tools_sig};
+    use centraid_assist::native::prompt::{kind_card, py_json, tools_sig};
+    use centraid_assist::native::transcript::{Json, parse_messages};
     let system = format!(
         "today: Thursday 2026-10-08\nme: Me\n\nkinds:\n{}",
         kind_card("USD").join("\n")
     );
-    render_prompt_for_generation(&[
-        Message::system(&system, tools_sig()),
-        Message::user(question),
-    ])
-    .expect("the prompt renders")
+    let tools: Vec<String> = tools_sig().iter().map(py_json).collect();
+    let records = format!(
+        r#"[{{"role":"system","content":{},"tools":[{}]}},{{"role":"user","content":{}}}]"#,
+        Json::str(&system).dumps(),
+        tools.join(","),
+        Json::str(question).dumps()
+    );
+    let messages = parse_messages(&records).expect("the records parse");
+    render_prompt_for_generation(&messages).expect("the prompt renders")
 }
 
 #[test]
