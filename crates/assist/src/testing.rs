@@ -1,19 +1,16 @@
-//! DETERMINISTIC STAND-INS for the engine and for the vault.
+//! DETERMINISTIC STAND-INS for the engine.
 //!
 //! Public because three crates test through them: this one, `crates/core` (the
-//! proto surface and the eval fixture over a real vault) and the eval harness.
-//! None of them is a model: [`OracleModel`] answers what a fixture says it
-//! should, which is exactly what makes a run through the plane a test of the
-//! *plane* — routing, execution, cards — and not of any weights.
+//! proto surface over a real vault) and `crates/core-ffi`. None of them is a
+//! model: [`ScriptedModel`] says what it was scripted to say, which is exactly
+//! what makes a run through the plane a test of the *plane* — the steps, the
+//! cards, the words — and not of any weights.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::mpsc::Sender;
 
-use crate::call::ToolCall;
 use crate::model::{Cancel, Control, Finish, GenerateRequest, Generation, Model, ModelError};
-use crate::result::ToolOutput;
-use crate::turn::{ReadContext, ReadError, Reader};
 
 /// What a fake saw of one `generate`.
 #[derive(Debug, Clone, PartialEq)]
@@ -176,60 +173,6 @@ impl Model for ScriptedModel {
     }
 }
 
-/// A model that answers each question as a fixture says, and phrases a read as
-/// its own headline. Deterministic in the question alone.
-///
-/// It finds the question by reading its own prompt the way the template wrote
-/// it, so it is also a check that [`crate::prompt`] ends where it should.
-pub struct OracleModel {
-    routes: BTreeMap<String, String>,
-}
-
-impl OracleModel {
-    /// `routes` maps a question, as the prompt holds it, to the route JSON the
-    /// model should emit.
-    #[must_use]
-    pub fn new(routes: impl IntoIterator<Item = (String, String)>) -> Self {
-        Self {
-            routes: routes.into_iter().collect(),
-        }
-    }
-
-    /// The content of the last user message in a ChatML prompt.
-    fn last_user(prompt: &str) -> &str {
-        let tail = prompt.rsplit("<|im_start|>user\n").next().unwrap_or(prompt);
-        tail.split("<|im_end|>").next().unwrap_or(tail)
-    }
-}
-
-impl Model for OracleModel {
-    fn generate(
-        &self,
-        request: &GenerateRequest<'_>,
-        on_token: &mut dyn FnMut(&str) -> Control,
-    ) -> Result<Generation, ModelError> {
-        let last = Self::last_user(request.prompt);
-        // The phrase step, in either style: a `<tool_response>` continuing the
-        // route conversation, or the stock prompt's own `Question:`/`Result:`
-        // message (a question is one line, so it never holds a `Result:` line).
-        // It says the read's headline, which is the first line of the digest.
-        let digest = last.strip_prefix("<tool_response>\n").or_else(|| {
-            last.strip_prefix("Question: ")
-                .and_then(|rest| rest.split_once("\nResult:\n"))
-                .map(|(_, digest)| digest)
-        });
-        let output = if let Some(digest) = digest {
-            digest.lines().next().unwrap_or_default().to_owned()
-        } else {
-            self.routes
-                .get(last)
-                .cloned()
-                .unwrap_or_else(|| r#"{"tool":"none"}"#.to_owned())
-        };
-        Ok(stream(&output, request, on_token, None))
-    }
-}
-
 /// A model that streams one piece, tells the test it has started, then waits —
 /// until it is cancelled. For proving that Stop reaches a running generation.
 pub struct StallingModel {
@@ -258,50 +201,6 @@ impl Model for StallingModel {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
         Ok(finished("{".to_owned(), Finish::Cancelled, 1))
-    }
-}
-
-/// A [`Reader`] over canned outputs, recording what it was asked to read.
-#[derive(Default)]
-pub struct StaticReader {
-    outputs: BTreeMap<&'static str, Result<ToolOutput, ReadError>>,
-    reads: Mutex<Vec<String>>,
-}
-
-impl StaticReader {
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Answer `tool` with `output`.
-    #[must_use]
-    pub fn with(mut self, tool: &'static str, output: ToolOutput) -> Self {
-        self.outputs.insert(tool, Ok(output));
-        self
-    }
-
-    /// Refuse `tool` with `detail`.
-    #[must_use]
-    pub fn failing(mut self, tool: &'static str, detail: &str) -> Self {
-        self.outputs.insert(tool, Err(ReadError(detail.to_owned())));
-        self
-    }
-
-    /// The tools read, in order.
-    #[must_use]
-    pub fn reads(&self) -> Vec<String> {
-        lock(&self.reads).clone()
-    }
-}
-
-impl Reader for StaticReader {
-    fn read(&self, call: &ToolCall, _: &ReadContext<'_>) -> Result<ToolOutput, ReadError> {
-        lock(&self.reads).push(call.name().to_owned());
-        self.outputs
-            .get(call.name())
-            .cloned()
-            .unwrap_or_else(|| Err(ReadError(format!("no canned answer for {}", call.name()))))
     }
 }
 
@@ -357,38 +256,5 @@ mod tests {
             (by_token.text.as_str(), by_token.finish),
             ("", Finish::Cancelled)
         );
-    }
-
-    #[test]
-    fn the_oracle_routes_by_question_and_phrases_by_headline() {
-        let oracle = OracleModel::new([(
-            "q?".to_owned(),
-            r#"{"tool":"people.reconnect","args":{}}"#.to_owned(),
-        )]);
-        let cancel = Cancel::new();
-        let route = oracle
-            .generate(
-                &request("<|im_start|>system\ns<|im_end|>\n<|im_start|>user\nq?<|im_end|>\n<|im_start|>assistant\n", &cancel),
-                &mut |_| Control::Continue,
-            )
-            .unwrap();
-        assert_eq!(route.text, r#"{"tool":"people.reconnect","args":{}}"#);
-        let phrase = oracle
-            .generate(
-                &request("<|im_start|>user\nq?<|im_end|>\n<|im_start|>user\n<tool_response>\n2 people due\n1. A\n</tool_response><|im_end|>\n<|im_start|>assistant\n", &cancel),
-                &mut |_| Control::Continue,
-            )
-            .unwrap();
-        assert_eq!(phrase.text, "2 people due");
-        let unknown = oracle
-            .generate(
-                &request(
-                    "<|im_start|>user\nsomething else<|im_end|>\n<|im_start|>assistant\n",
-                    &cancel,
-                ),
-                &mut |_| Control::Continue,
-            )
-            .unwrap();
-        assert_eq!(unknown.text, r#"{"tool":"none"}"#);
     }
 }

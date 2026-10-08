@@ -607,7 +607,6 @@ dependencies = [
  "centraid-apps-locker",
  "centraid-apps-notes",
  "centraid-apps-people",
- "centraid-apps-photos",
  "centraid-apps-tally",
  "centraid-apps-tasks",
  "centraid-assist",

@@ -1,10 +1,10 @@
 //! ATTACHMENTS: a photograph or a text document riding on one question.
 //!
-//! A turn that carries an attachment **never routes**. Routing picks one
-//! read-only tool from the member's vault; an attachment is the material the
-//! question is about, so the turn goes straight to a streamed, unconstrained
-//! answer over it ([`attach_prompt`]). Two kinds in v1, at most one of each on a
-//! turn:
+//! A turn that carries an attachment **never runs the tool loop** (R-1088-9).
+//! The native plane drives tools over the member's vault; an attachment is the
+//! material the question is about, so the turn goes straight to a streamed,
+//! unconstrained answer over it ([`attach_prompt`]). Two kinds in v1, at most one
+//! of each on a turn:
 //!
 //! * **An image** — decoded RGB, already scaled to [`IMAGE_MAX_EDGE`] by whoever
 //!   resolved it (the core, from a vault photo's derivative or from bytes a
@@ -22,9 +22,10 @@
 //! # WHAT A FOLLOW-UP SEES
 //!
 //! A turn is recorded with a marker line (`[Photo: Truckee river bend] What is
-//! in this photo?`) and the model's own answer, never the bytes or the text. A
-//! later question that does not attach again is asked of the vault or of free
-//! chat, and sees only that marker and that answer. **Retry is the exception**:
+//! in this photo?`) and the model's own answer, never the bytes or the text. The
+//! next attachment turn's prompt shows the last two such lines; a question that
+//! does not attach runs the native plane, which keeps a conversation of its own
+//! and does not see them. **Retry is the exception**:
 //! it asks the same question of the same attachment, so the session keeps the
 //! last turn's attachments in memory until the next turn, a new chat, or the end
 //! of the app ([`crate::turn::Session::last_attachments`]).
@@ -590,11 +591,7 @@ mod tests {
     #[test]
     fn the_budget_arithmetic_leaves_the_answer_its_room() {
         let budget = Budget::DEFAULT;
-        assert_eq!(budget.context, 4096);
         assert_eq!(budget.attach_limit() + ATTACH_MAX_TOKENS, budget.context);
-        // The route and phrase prompts stay where they were.
-        assert_eq!(budget.window, 2048);
-        assert!(budget.route_limit() < budget.attach_limit());
         assert_eq!(
             IMAGE_MAX_EDGE.div_ceil(32).pow(2) + 8,
             image_tokens_estimate(448, 448)

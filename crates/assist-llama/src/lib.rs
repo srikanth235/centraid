@@ -1,7 +1,7 @@
 //! THE ON-DEVICE CHAT ENGINE: llama.cpp behind `centraid-assist`'s traits.
 //!
-//! [`centraid_assist`] is the plane — registry, prompt, grammar, turn loop — and
-//! knows no engine. This crate is the one engine: it implements
+//! [`centraid_assist`] is the plane — the native runtime, its turn loop, the
+//! attached and free replies — and knows no engine. This crate is the one engine: it implements
 //! [`centraid_assist::Model`] and [`centraid_assist::ModelLoader`] over
 //! llama.cpp, and nothing else in the workspace depends on llama.cpp.
 //!
@@ -20,8 +20,8 @@
 //! `cargo build --workspace` compiles this crate **without** llama.cpp:
 //! [`generate`] and [`Config`] — the generation loop and everything it is
 //! tested with — are built, linted and tested by the gate, and what `engine`
-//! adds (`engine`, [`LlamaLoader`], [`LlamaModel`], `process_host`, the
-//! `assist-eval-llama` binary and the two real-model suites) is built, linted
+//! adds (`engine`, [`LlamaLoader`], [`LlamaModel`], `process_host` and the
+//! two real-model suites) is built, linted
 //! and tested by the `engine` job in `.github/workflows/gate.yml`, with
 //! `--features engine` (or `centraid-core-ffi/llama`, which implies it).
 //!
@@ -73,9 +73,12 @@ pub const ON_SIMULATOR: bool = cfg!(all(
 #[derive(Debug, Clone)]
 pub struct Config {
     /// The context window, in tokens: prompt and answer together. The plane's
-    /// budget is 4096 (`centraid_assist::prompt::Budget::DEFAULT.context`): the
-    /// first half is what routing and phrasing plan inside, the rest is room
-    /// for a turn with an attachment.
+    /// budget is 8192 (`centraid_assist::prompt::Budget::DEFAULT.context`), the
+    /// length the native plane's model was trained on (R-1088-11): a native turn's
+    /// system turn is ~1.3K tokens and a three-turn conversation reaches ~3K, and
+    /// an attachment's prompt takes what is left. The cache that grows with it is
+    /// Qwen3.5-0.8B's six full-attention layers only: 12 KiB a token in F16, 96 MiB
+    /// at 8192, beside ~19 MiB of fixed linear-attention state.
     pub context: u32,
     /// How many prompt tokens one prefill call evaluates. Cancel is polled
     /// between chunks, so this is the longest a Stop waits.
@@ -83,22 +86,22 @@ pub struct Config {
     /// Layers to offload to the GPU: all of them on an Apple device or Mac
     /// (Metal), none elsewhere — **and none on the iOS Simulator**, whose GPU
     /// is a software stand-in that llama.cpp accepts and then computes wrongly
-    /// (measured: every route the same tool, 9 minutes for the 65-case eval the
-    /// Mac's Metal does in 20 seconds). At zero the context also keeps its
+    /// (measured: every call the same tool, and minutes for what the Mac's Metal
+    /// does in seconds). At zero the context also keeps its
     /// KV cache and its prefill operators on the CPU: ggml otherwise hands any
     /// large matrix product to the GPU backend whatever the layer count.
     pub gpu_layers: u32,
     /// CPU threads, or `None` for up to four of the cores there are.
     pub threads: Option<i32>,
     /// Let llama.cpp write its own log to stderr. Off in a shell; on for
-    /// `assist-eval-llama`, where a grammar it refuses is the finding.
+    /// an engine run by hand, where a grammar it refuses is the finding.
     pub logs: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            context: 4096,
+            context: 8192,
             chunk: 128,
             gpu_layers: if cfg!(target_vendor = "apple") && !ON_SIMULATOR {
                 999
@@ -162,6 +165,31 @@ mod tests {
             ModelState::Absent
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// R-1088-11: the cache that grows with the context, over Qwen3.5-0.8B's full-attention layers
+    /// only (`config.json`: `layer_types` has 6 of 24, `num_key_value_heads` 2, `head_dim` 256),
+    /// in F16, plus the fixed state of its 18 linear-attention layers (a 16x128x128 recurrent
+    /// matrix and a 3x6144 convolution window, both F32). The oldest phone the app supports is an
+    /// iPhone XR (3 GB, iOS 17): the whole is a rounding error beside the weights.
+    #[test]
+    fn the_default_context_costs_a_hundred_and_twenty_mebibytes_of_cache() {
+        const FULL_ATTENTION_LAYERS: u64 = 6;
+        const KV_HEADS: u64 = 2;
+        const HEAD_DIM: u64 = 256;
+        const F16: u64 = 2;
+        const LINEAR_LAYERS: u64 = 18;
+        const RECURRENT: u64 = 16 * 128 * 128 * 4;
+        const CONVOLUTION: u64 = 3 * 6144 * 4;
+        const MIB: u64 = 1 << 20;
+
+        let per_token = FULL_ATTENTION_LAYERS * 2 * KV_HEADS * HEAD_DIM * F16;
+        assert_eq!(per_token, 12 * 1024, "12 KiB a token");
+        let grown = per_token * u64::from(Config::default().context);
+        let fixed = LINEAR_LAYERS * (RECURRENT + CONVOLUTION);
+        assert_eq!(grown, 96 * MIB, "at 8192 tokens");
+        assert!(fixed < 20 * MIB, "{} bytes", fixed);
+        assert!((grown + fixed) / MIB < 120, "{} MiB", (grown + fixed) / MIB);
     }
 
     #[test]

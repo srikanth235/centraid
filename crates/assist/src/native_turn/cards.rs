@@ -27,10 +27,10 @@
 
 use jiff::civil::Date;
 
+use crate::app::App;
 use crate::native::meta::Kind;
 use crate::native::world::{Row, Val};
 use crate::result::Card;
-use crate::tool::App;
 
 /// Where a tap on a card lands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

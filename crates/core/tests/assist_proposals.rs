@@ -17,30 +17,13 @@
 
 mod common;
 
-use std::sync::Arc;
-
 use centraid_assist::native::park::Confirmed;
-use centraid_assist::testing::ScriptedModel;
 use centraid_core::api_proto as wire;
-use centraid_core::assist::PlaneKind;
 use wire::assist_request::Kind as Ask;
 
+use common::chat::{script, step};
+
 const DRY_CLEANING: &str = "Pick up the dry cleaning";
-
-fn step(think: &str, tool: &str, args: &[(&str, &str)]) -> [String; 2] {
-    let params: String = args
-        .iter()
-        .map(|(key, value)| format!("<parameter={key}>\n{value}\n</parameter>\n"))
-        .collect();
-    [
-        think.to_owned(),
-        format!("\n\n<tool_call>\n<function={tool}>\n{params}</function>\n"),
-    ]
-}
-
-fn script(steps: &[[String; 2]]) -> Arc<ScriptedModel> {
-    Arc::new(ScriptedModel::new(steps.iter().flatten().cloned()))
-}
 
 /// Look for the dry cleaning, then complete it: a write in two steps, the first a read.
 fn complete_dry_cleaning() -> Vec<[String; 2]> {
@@ -60,7 +43,6 @@ fn complete_dry_cleaning() -> Vec<[String; 2]> {
 
 fn native_sample(steps: &[[String; 2]]) -> common::chat::Sample {
     let sample = common::chat::sample();
-    sample.handle.assist().use_plane(PlaneKind::Native);
     sample.install(script(steps));
     sample
 }

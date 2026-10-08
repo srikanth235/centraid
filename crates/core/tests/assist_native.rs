@@ -16,43 +16,16 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use centraid_assist::model::{Control, GenerateRequest, Generation, Model, ModelError};
 use centraid_assist::native::park::Confirmed;
-use centraid_assist::prompt::estimate_tokens;
+use centraid_assist::prompt::{Budget, estimate_tokens};
 use centraid_assist::testing::ScriptedModel;
 use centraid_core::api_proto as wire;
-use centraid_core::assist::PlaneKind;
 use wire::assist_event::Kind as Event;
 use wire::assist_request::Kind as Ask;
 
-const FOUND_TASKS: &str = "Found 12 tasks. Showing 6.";
-
-/// One model step, as the free decoder reads it: a think that states no whole call, so the call is
-/// the model's own (a second generation, which stops at `</tool_call>`).
-fn step(think: &str, tool: &str, args: &[(&str, &str)]) -> [String; 2] {
-    let params: String = args
-        .iter()
-        .map(|(key, value)| format!("<parameter={key}>\n{value}\n</parameter>\n"))
-        .collect();
-    [
-        think.to_owned(),
-        format!("\n\n<tool_call>\n<function={tool}>\n{params}</function>\n"),
-    ]
-}
-
-fn script(steps: &[[String; 2]]) -> Arc<ScriptedModel> {
-    Arc::new(ScriptedModel::new(steps.iter().flatten().cloned()))
-}
-
-/// The two steps of a read: look at the tasks, then answer with them.
-fn read_tasks() -> [[String; 2]; 2] {
-    [
-        step("plan: look", "find", &[("kind", "task")]),
-        step("plan: answer", "answer", &[("rows", "@1")]),
-    ]
-}
+use common::chat::{FOUND_TASKS, read_tasks, script, step};
 
 fn native_sample(model: Arc<dyn Model>) -> common::chat::Sample {
     let sample = common::chat::sample();
-    sample.handle.assist().use_plane(PlaneKind::Native);
     sample.install(model);
     sample
 }
@@ -201,7 +174,7 @@ fn a_read_turn_finds_then_answers_with_its_events_in_order_its_cards_mapped_and_
     assert!(answer.cards.iter().all(|card| card.app == "tasks"));
 
     // THE EVENTS, in order: one Activity per looking step, the cards, then the answer. The same
-    // queue and the same wire the routed plane uses.
+    // queue and the same wire every turn uses.
     let events = sample.drain_assist_events();
     assert_eq!(
         story(&events),
@@ -315,15 +288,29 @@ fn every_kind_is_drawn_as_a_card_of_one_of_the_seven_apps_and_the_homeless_ones_
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_decline_is_a_composed_line_with_no_cards_and_no_activity() {
-    let model = script(&[step("plan: no", "decline", &[("reason", "out_of_scope")])]);
-    let sample = native_sample(model);
-    let session = sample.start("");
-    let sent = sample.send(session, 1, "what is the capital of France?");
-    let answer = answered(&sent);
-    assert_eq!(answer.text, "Outside what chat can do here.");
-    assert!(answer.cards.is_empty());
-    assert_eq!(story(&sample.drain_assist_events()), ["answer"]);
+fn a_decline_other_than_out_of_scope_is_a_composed_line_with_no_cards_no_activity_and_no_second_generation()
+ {
+    use centraid_assist::native_turn::words::{Say, say};
+    for (reason, which) in [
+        ("unbounded_destruction", Say::DeclineUnboundedDestruction),
+        ("sealed_egress", Say::DeclineSealedEgress),
+        ("fabricated_secret", Say::DeclineFabricatedSecret),
+        ("not_found", Say::Nothing),
+    ] {
+        let model = script(&[step("plan: no", "decline", &[("reason", reason)])]);
+        let sample = native_sample(model.clone());
+        let session = sample.start("");
+        let sent = sample.send(session, 1, "do the thing");
+        let answer = answered(&sent);
+        assert_eq!(answer.text, say(which), "{reason}");
+        assert!(answer.cards.is_empty(), "{reason}");
+        assert_eq!(story(&sample.drain_assist_events()), ["answer"], "{reason}");
+        assert_eq!(
+            model.prompts().len(),
+            2,
+            "{reason}: a think and a call, no free words"
+        );
+    }
 }
 
 #[test]
@@ -1335,24 +1322,17 @@ fn an_attachment_never_leaves_the_attached_path_whichever_plane_answers_the_rest
 }
 
 // ---------------------------------------------------------------------------
-// 4. The routed plane stays the default, and the context the prompt takes
+// 4. The context the prompt takes
 // ---------------------------------------------------------------------------
 
-#[test]
-fn the_routed_plane_is_the_default_and_the_native_one_is_a_choice_the_core_makes() {
-    let sample = common::chat::sample();
-    assert_eq!(sample.handle.assist().plane(), PlaneKind::Routed);
-    sample.handle.assist().use_plane(PlaneKind::Native);
-    assert_eq!(sample.handle.assist().plane(), PlaneKind::Native);
-}
-
-/// THE MEASUREMENT (D14): how much of the engine's 4096 tokens a three-turn conversation takes.
-/// The estimate is the plane's own pessimistic count (`prompt::estimate_tokens`), so the real
+/// THE MEASUREMENT (D14): how much of the engine's context a three-turn conversation takes. The
+/// estimate is the plane's own pessimistic count (`prompt::estimate_tokens`), so the real
 /// tokenizer reads fewer. With `ASSIST_NATIVE_DUMP=<dir>` the test writes every prompt it sent to
 /// `<dir>/prompt-N.txt`, to count with the model's own `tokenizer.json`: on the sample vault the
 /// twelve prompts read 1342 to 2960 Qwen3.5 tokens (the estimate: 1803 to 4095), the system turn
-/// alone 1326 (estimate 1774). The test asserts none of it, because the context is measured before
-/// it is changed (R-1088-10), not pinned.
+/// alone 1326 (estimate 1774). The 8,192-token context is the length the model was trained on
+/// (R-1088-11); the test pins that three turns, by the pessimistic count, stay inside three
+/// quarters of it.
 #[test]
 fn the_prompt_of_a_three_turn_conversation_against_the_engines_context() {
     let model = script(&[
@@ -1387,13 +1367,228 @@ fn the_prompt_of_a_three_turn_conversation_against_the_engines_context() {
     let longest = prompts.iter().map(|p| estimate_tokens(p)).max().unwrap();
     println!("CONTEXT system turn (kind card, tools, directory): {system} tokens");
     println!("CONTEXT prompt at each of the six steps: {tokens:?}");
-    println!(
-        "CONTEXT longest prompt of 3 turns: {longest} tokens (engine context 4096, plan window 2048)"
-    );
+    let context = Budget::DEFAULT.context;
+    println!("CONTEXT longest prompt of 3 turns: {longest} tokens (engine context {context})");
     assert!(system > 500, "the system turn is the bulk of it");
+    assert!(
+        longest < context / 4 * 3,
+        "three turns leave a quarter of the window free: {longest} of {context}"
+    );
     if let Ok(dir) = std::env::var("ASSIST_NATIVE_DUMP") {
         for (at, prompt) in prompts.iter().enumerate() {
             std::fs::write(format!("{dir}/prompt-{at}.txt"), prompt).unwrap();
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// 5. The free reply (#1088): the words of a decline `out_of_scope`
+// ---------------------------------------------------------------------------
+
+const FREE_WORDS: &str =
+    "I can look things up in your vault, but I can't send messages. Try asking about your tasks.";
+
+/// A decline `out_of_scope`, then the words the free generation says.
+fn out_of_scope_then(words: &str) -> Vec<String> {
+    let [think, call] = step("plan: no", "decline", &[("reason", "out_of_scope")]);
+    vec![think, call, words.to_owned()]
+}
+
+fn model_of(outputs: Vec<String>) -> Arc<ScriptedModel> {
+    Arc::new(ScriptedModel::new(outputs))
+}
+
+#[test]
+fn a_decline_out_of_scope_is_answered_in_free_words_streamed_and_told_it_can_do_nothing() {
+    let model = model_of(out_of_scope_then(FREE_WORDS));
+    let sample = native_sample(model.clone());
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "text Sam that I am running late");
+
+    let answer = answered(&sent);
+    assert_eq!(answer.text, FREE_WORDS);
+    assert!(answer.cards.is_empty() && answer.pending.is_none());
+
+    // the words streamed as they were written, then the answer closes the turn
+    let story = story(&sample.drain_assist_events());
+    assert!(
+        story.iter().filter(|word| *word == "token").count() >= 2,
+        "{story:?}"
+    );
+    assert_eq!(story.last().map(String::as_str), Some("answer"));
+    assert!(!story.iter().any(|word| word.starts_with("activity")));
+
+    // ONE free generation after the step's two: no tools, no grammar, the 256-token ceiling, and
+    // a system turn that says it cannot send, call or change anything
+    let requests = model.requests();
+    assert_eq!(requests.len(), 3);
+    let free = &requests[2];
+    assert_eq!(free.grammar, None);
+    assert_eq!(free.max_tokens, 256);
+    assert!(!free.prompt.contains("<tools>"));
+    assert!(
+        free.prompt
+            .contains("You cannot send messages, make calls or change anything")
+    );
+    assert!(free.prompt.contains("text Sam that I am running late"));
+    assert!(
+        free.prompt
+            .ends_with(centraid_assist::prompt::ASSISTANT_TURN)
+    );
+}
+
+#[test]
+fn every_other_decline_keeps_its_canned_sentence_and_asks_for_no_free_words() {
+    // `a_decline_other_than_out_of_scope…` holds the sentences; this holds the count: the free
+    // generation is out_of_scope's alone.
+    for reason in [
+        "unbounded_destruction",
+        "sealed_egress",
+        "fabricated_secret",
+    ] {
+        let [think, call] = step("plan: no", "decline", &[("reason", reason)]);
+        let model = model_of(vec![think, call, FREE_WORDS.to_owned()]);
+        let sample = native_sample(model.clone());
+        let session = sample.start("");
+        let sent = sample.send(session, 1, "do the thing");
+        assert_ne!(answered(&sent).text, FREE_WORDS, "{reason}");
+        assert_eq!(model.prompts().len(), 2, "{reason}");
+    }
+}
+
+#[test]
+fn a_free_reply_that_fails_or_says_nothing_falls_back_to_the_canned_sentence() {
+    let canned = "Outside what chat can do here.";
+    let [think, call] = step("plan: no", "decline", &[("reason", "out_of_scope")]);
+
+    // the engine fails: the script is spent after the step
+    let sample = native_sample(model_of(vec![think.clone(), call.clone()]));
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "text Sam");
+    assert_eq!(answered(&sent).text, canned);
+    assert_eq!(story(&sample.drain_assist_events()), ["answer"]);
+
+    // the model says nothing
+    let sample = native_sample(model_of(vec![think, call, "  \n".to_owned()]));
+    let session = sample.start("");
+    assert_eq!(answered(&sample.send(session, 1, "text Sam")).text, canned);
+}
+
+#[test]
+fn a_stop_during_the_free_reply_ends_the_turn_cancelled_like_every_other_stop() {
+    let [think, call] = step("plan: no", "decline", &[("reason", "out_of_scope")]);
+    let stopped = ScriptedModel::new([think, call, FREE_WORDS.to_owned()]).cancelling_during(2, 2);
+    let sample = native_sample(Arc::new(stopped));
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "text Sam");
+    assert_eq!(
+        refusal_of(&sent),
+        wire::AssistRefusalReason::Cancelled as i32
+    );
+    // what streamed before the stop is what is kept, marked stopped
+    let stored = thread(&sample, &sent.thread_id);
+    assert_eq!(
+        stored.messages[1].outcome,
+        wire::ChatStoredOutcome::Stopped as i32
+    );
+    assert!(FREE_WORDS.starts_with(&stored.messages[1].text));
+    assert!(!stored.messages[1].text.is_empty());
+}
+
+#[test]
+fn a_decline_the_runtime_composes_keeps_its_sentence_even_when_its_reason_is_out_of_scope() {
+    // A verb that does not apply to the kind: the model asks to complete a note, and the runtime
+    // refuses the write and ends the turn `out_of_scope`. Free words after a refused write could
+    // say it was made, so no second generation is asked for.
+    let model = model_of(
+        [
+            step("plan: look", "find", &[("kind", "note")]),
+            step(
+                "plan: write",
+                "act",
+                &[("verb", "complete"), ("rows", "@1")],
+            ),
+        ]
+        .into_iter()
+        .flatten()
+        .chain([FREE_WORDS.to_owned()])
+        .collect(),
+    );
+    let sample = native_sample(model.clone());
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "complete my notes");
+    assert_eq!(answered(&sent).text, "Outside what chat can do here.");
+    assert_eq!(
+        model.prompts().len(),
+        4,
+        "two steps, and no free generation"
+    );
+    assert!(
+        !story(&sample.drain_assist_events())
+            .iter()
+            .any(|word| word == "token")
+    );
+}
+
+#[test]
+fn the_free_words_are_what_a_reopened_thread_shows() {
+    let sample = native_sample(model_of(out_of_scope_then(FREE_WORDS)));
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "text Sam that I am running late");
+
+    // saved as an answer, in the member's words and the model's, with no cards
+    let stored = thread(&sample, &sent.thread_id);
+    assert_eq!(stored.messages.len(), 2);
+    assert_eq!(stored.messages[0].text, "text Sam that I am running late");
+    assert_eq!(stored.messages[1].text, FREE_WORDS);
+    assert_eq!(
+        stored.messages[1].outcome,
+        wire::ChatStoredOutcome::Answered as i32
+    );
+    assert!(stored.messages[1].cards.is_empty());
+
+    // the app closes and the thread opens again: it reads what was said
+    let reopened = match sample
+        .assist(Ask::Start(wire::AssistStartRequest {
+            thread_id: sent.thread_id.clone(),
+            ..wire::AssistStartRequest::default()
+        }))
+        .unwrap()
+        .kind
+    {
+        Some(wire::assist_response::Kind::Started(started)) => started,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(reopened.thread_id, sent.thread_id);
+    assert_eq!(
+        thread(&sample, &reopened.thread_id).messages[1].text,
+        FREE_WORDS
+    );
+}
+
+#[test]
+fn a_free_reply_reads_what_the_chat_said_last() {
+    let mut outputs: Vec<String> = read_tasks().into_iter().flatten().collect();
+    outputs.extend(out_of_scope_then(
+        "You asked about your tasks a moment ago.",
+    ));
+    let model = model_of(outputs);
+    let sample = native_sample(model.clone());
+    let session = sample.start("");
+    assert_eq!(
+        answered(&sample.send(session, 1, "what tasks do I have?")).text,
+        FOUND_TASKS
+    );
+    let sent = sample.send(session, 2, "thanks, what did I just ask?");
+    assert_eq!(
+        answered(&sent).text,
+        "You asked about your tasks a moment ago."
+    );
+
+    // the free reply's prompt holds the turn before it as the words said, never as the runtime's
+    // conversation (no tool calls, no observations)
+    let free = model.prompts().pop().unwrap();
+    assert!(free.contains("<|im_start|>user\nwhat tasks do I have?<|im_end|>"));
+    assert!(free.contains(&format!("<|im_start|>assistant\n{FOUND_TASKS}<|im_end|>")));
+    assert!(!free.contains("<tool_response>") && !free.contains("<tool_call>"));
 }

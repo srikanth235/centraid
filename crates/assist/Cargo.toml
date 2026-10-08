@@ -1,6 +1,6 @@
 [package]
 name = "centraid-assist"
-description = "The on-device chat plane: the read-only tool registry, the Qwen prompt, the GBNF grammar, the turn loop and the Model trait an engine implements."
+description = "The on-device chat plane: the native tool runtime, its turn loop, the attached and free replies and the Model trait an engine implements."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,6 @@ repository.workspace = true
 [lib]
 name = "centraid_assist"
 path = "src/lib.rs"
-
-[[bin]]
-name = "assist-eval"
-path = "src/bin/assist-eval.rs"
 
 [dependencies]
 centraid-apps-agenda = { path = "../apps/agenda" }

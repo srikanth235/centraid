@@ -17,7 +17,7 @@
 //! # THE DOOR OUTLIVES A CALL, THE LOCK DOES NOT
 //!
 //! A native session lives as long as its chat, so its door cannot borrow the
-//! [`Handle`](crate::Handle) the way [`VaultReader`](super::VaultReader) does.
+//! [`Handle`](crate::Handle) for the length of a call.
 //! It holds clones of the handle's own `Arc<Mutex<Option<Vault>>>`, registry and
 //! event queue instead, and takes the vault lock for exactly one query or one
 //! command, as every other path in the core does. A turn that waits on the model

@@ -49,14 +49,9 @@ llama-cpp-2 = { version = "=0.1.158", default-features = false, features = [
   "mtmd",
 ], optional = true }
 
-# The binary and the two real-model suites link llama.cpp, so they exist only
-# with `engine`: a build without it skips them (`cargo clippy --all-targets`
-# included) instead of failing, and a build that names one asks for the feature.
-[[bin]]
-name = "assist-eval-llama"
-path = "src/bin/assist-eval-llama.rs"
-required-features = ["engine"]
-
+# The two real-model suites link llama.cpp, so they exist only with `engine`: a
+# build without it skips them (`cargo clippy --all-targets` included) instead of
+# failing, and a build that names one asks for the feature.
 [[test]]
 name = "real_model"
 path = "tests/real_model.rs"

@@ -194,17 +194,18 @@ fn an_unknown_chat_and_an_empty_message_are_the_requests_fault() {
 #[test]
 fn regenerate_asks_the_last_question_again_without_the_turn_it_replaces() {
     let sample = common::chat::sample();
-    let model = Arc::new(ScriptedModel::new([
-        r#"{"tool":"tasks.list","args":{"view":"today"}}"#,
-        "First wording.",
-        r#"{"tool":"tasks.list","args":{"view":"today"}}"#,
-        "Second wording.",
-    ]));
+    let steps = common::chat::read_tasks();
+    let model = common::chat::script(&[
+        steps[0].clone(),
+        steps[1].clone(),
+        steps[0].clone(),
+        steps[1].clone(),
+    ]);
     sample.install(Arc::clone(&model) as Arc<dyn Model>);
     let session = sample.start("");
     assert_eq!(
         answered(&sample.send(session, 1, "What is due today?")).text,
-        "First wording."
+        common::chat::FOUND_TASKS
     );
     let again = sample
         .assist(Ask::Send(wire::AssistSendRequest {
@@ -218,25 +219,29 @@ fn regenerate_asks_the_last_question_again_without_the_turn_it_replaces() {
     let Some(wire::assist_response::Kind::Sent(sent)) = again.kind else {
         panic!()
     };
-    assert_eq!(answered(&sent).text, "Second wording.");
+    assert_eq!(answered(&sent).text, common::chat::FOUND_TASKS);
+    // Two generations a step: the retry's first is the fifth prompt, and it is a conversation of
+    // one question, asked afresh.
     let prompts = model.prompts();
-    assert!(prompts[2].ends_with(&format!(
+    assert_eq!(prompts.len(), 8);
+    assert!(prompts[4].ends_with(&format!(
         "What is due today?<|im_end|>\n{}",
-        centraid_assist::prompt::ASSISTANT_TURN
+        "<|im_start|>assistant\n<think>\n"
     )));
     assert!(
-        !prompts[2].contains("First wording."),
+        !prompts[4].contains("plan: look") && !prompts[4].contains("<tool_response>"),
         "the replaced turn is not in the retry's context"
     );
+    assert_eq!(prompts[4].matches("What is due today?").count(), 1);
 }
 
 #[test]
 fn a_new_chat_forgets_the_transcript_and_keeps_the_scope() {
     let sample = common::chat::sample();
-    let model = Arc::new(ScriptedModel::new([
-        r#"{"answer":"Hello."}"#,
-        r#"{"answer":"Hello again."}"#,
-    ]));
+    let model = common::chat::script(&[
+        common::chat::decline("sealed_egress"),
+        common::chat::decline("sealed_egress"),
+    ]);
     sample.install(Arc::clone(&model) as Arc<dyn Model>);
     let session = sample.start("tally");
     sample.send(session, 1, "Hi there");
@@ -245,22 +250,48 @@ fn a_new_chat_forgets_the_transcript_and_keeps_the_scope() {
             session_id: session,
         }))
         .unwrap();
-    sample.send(session, 2, "Hi again");
+    let second = sample.send(session, 2, "Hi again");
     let prompts = model.prompts();
-    assert!(!prompts[1].contains("Hi there"));
+    assert!(prompts[0].contains("Hi there"));
     assert!(
-        prompts[1].find("- tally.balances").unwrap()
-            < prompts[1].find("- agenda.upcoming").unwrap()
+        prompts[2..]
+            .iter()
+            .all(|prompt| !prompt.contains("Hi there")),
+        "the new chat is a fresh conversation"
     );
+    // The scope is the chat's own and outlives a new chat: the new thread is Tally's too.
+    let listed = match sample
+        .handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::AppQuery(wire::AppQueryRequest {
+                query: Some(wire::app_query_request::Query::ChatThreads(
+                    wire::ChatThreadsRequest::default(),
+                )),
+            })),
+        })
+        .unwrap()
+        .kind
+    {
+        Some(wire::response::Kind::AppQuery(answer)) => match answer.answer {
+            Some(wire::app_query_response::Answer::ChatThreads(listed)) => listed.threads,
+            other => panic!("{other:?}"),
+        },
+        other => panic!("{other:?}"),
+    };
+    let row = listed
+        .iter()
+        .find(|row| row.thread_id == second.thread_id)
+        .expect("the new chat is listed");
+    assert_eq!(row.scope_app, "tally");
 }
 
 #[test]
 fn locker_is_in_no_prompt_a_session_ever_builds() {
     let sample = common::chat::sample();
-    let model = Arc::new(ScriptedModel::new([
-        r#"{"answer":"No."}"#,
-        r#"{"answer":"No."}"#,
-    ]));
+    let model = common::chat::script(&[
+        common::chat::decline("sealed_egress"),
+        common::chat::decline("sealed_egress"),
+    ]);
     sample.install(Arc::clone(&model) as Arc<dyn Model>);
     // Every scope a chat can have, asked a question a vault's secrets answer.
     for app in ["", "tasks"] {
@@ -268,27 +299,29 @@ fn locker_is_in_no_prompt_a_session_ever_builds() {
         sample.send(session, 1, "What is my wifi password?");
     }
     let prompts = model.prompts();
-    assert_eq!(prompts.len(), 2);
+    assert_eq!(prompts.len(), 4);
+    // The kind card still names the kind the model was trained with (R-1088-10), but the world
+    // the phone loads holds no Locker row (R-1088-3): no item is listed in any prompt.
     assert!(
         prompts
             .iter()
-            .all(|prompt| !prompt.to_lowercase().contains("locker")),
+            .all(|prompt| !prompt.contains("locker items:")),
         "a secret that was never in a prompt cannot be in an answer"
     );
 }
 
 #[test]
-fn a_failed_read_is_query_failed_and_leaves_the_chat_usable() {
+fn a_zone_the_database_does_not_know_does_not_fail_the_turn() {
     let sample = common::chat::sample();
-    let model = Arc::new(ScriptedModel::new([
-        r#"{"tool":"agenda.upcoming","args":{"range":"today"}}"#,
-        r#"{"answer":"Still here."}"#,
-    ]));
+    let model = common::chat::script(&[
+        common::chat::decline("sealed_egress"),
+        common::chat::decline("sealed_egress"),
+    ]);
     sample.install(Arc::clone(&model) as Arc<dyn Model>);
     let session = sample.start("");
     sample.drain_assist_events();
-    // A zone the bundled database does not know: the request's fault, which the
-    // read reports and the turn turns into a refusal.
+    // The member's days are read in UTC when their zone is not one the bundled database knows,
+    // and the events are read as stored: the question is still answered.
     let asked = sample
         .assist(Ask::Send(wire::AssistSendRequest {
             session_id: session,
@@ -302,19 +335,9 @@ fn a_failed_read_is_query_failed_and_leaves_the_chat_usable() {
     let Some(wire::assist_response::Kind::Sent(sent)) = asked.kind else {
         panic!()
     };
-    assert_eq!(
-        refusal_of(&sent),
-        wire::AssistRefusalReason::QueryFailed as i32
-    );
-    let events = sample.drain_assist_events();
-    assert!(matches!(
-        events.last().unwrap().kind,
-        Some(wire::assist_event::Kind::Failed(_))
-    ));
-    assert_eq!(
-        answered(&sample.send(session, 2, "hello")).text,
-        "Still here."
-    );
+    answered(&sent);
+    // and the chat takes the next question
+    answered(&sample.send(session, 2, "hello"));
 }
 
 #[test]
@@ -402,43 +425,29 @@ fn a_new_chat_stops_a_running_turn_first() {
 
 #[test]
 fn suggestions_are_three_questions_this_vault_can_answer() {
+    use centraid_assist::App;
+    use centraid_assist::suggest::{SUGGESTIONS, suggest};
     let sample = common::chat::sample();
-    let reader = centraid_core::assist::VaultReader {
-        handle: &sample.handle,
-    };
-    let context = centraid_assist::ReadContext {
-        tz: common::chat::TZ,
-    };
-    for app in std::iter::once(None).chain(centraid_assist::App::ALL.into_iter().map(Some)) {
-        let suggestions = centraid_assist::suggest::suggest(&reader, app, &context);
-        assert!(!suggestions.is_empty(), "{app:?}");
-        for suggestion in &suggestions {
-            // Every suggestion names a call the vault answers with something to show.
-            let output = centraid_assist::Reader::read(&reader, &suggestion.call, &context)
-                .unwrap_or_else(|error| panic!("{}: {error}", suggestion.text));
-            assert!(
-                !output.rows.is_empty() || !output.facts.is_empty(),
-                "{app:?}: {} finds nothing in the sample vault",
-                suggestion.text
-            );
+    let door = sample.handle.assist_door();
+    for scope in std::iter::once(None).chain(App::ALL.into_iter().map(Some)) {
+        let got = suggest(&door, common::chat::TZ, scope);
+        assert_eq!(got.len(), SUGGESTIONS, "{scope:?}");
+        // Deterministic: the same vault, the same three, in the same order.
+        assert_eq!(got, suggest(&door, common::chat::TZ, scope), "{scope:?}");
+        // Opened from an app, all three are about it.
+        if let Some(app) = scope {
+            assert!(got.iter().all(|s| s.app == app), "{app:?}: {got:?}");
         }
+        let texts: std::collections::BTreeSet<_> = got.iter().map(|s| &s.text).collect();
+        assert_eq!(texts.len(), SUGGESTIONS, "{scope:?}: no repeats");
     }
-    let unscoped = centraid_assist::suggest::suggest(&reader, None, &context);
-    assert_eq!(unscoped.len(), 3);
-    let apps: std::collections::BTreeSet<_> = unscoped.iter().map(|s| s.call.spec().app).collect();
+    let unscoped = suggest(&door, common::chat::TZ, None);
+    let apps: std::collections::BTreeSet<_> = unscoped.iter().map(|s| s.app).collect();
     assert_eq!(
         apps.len(),
         3,
         "an unscoped chat opens on three different apps"
     );
-    let tally =
-        centraid_assist::suggest::suggest(&reader, Some(centraid_assist::App::Tally), &context);
-    assert!(
-        tally
-            .iter()
-            .all(|s| s.call.spec().app == centraid_assist::App::Tally)
-    );
-    assert_eq!(tally.len(), 3);
 }
 
 #[test]

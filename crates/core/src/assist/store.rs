@@ -5,8 +5,9 @@
 //! end of every turn [`save`] writes it through the `chat.save_turn` command —
 //! the one writer, so a conversation is receipted, captured and backed up like
 //! any other row — and [`reopen`] reads a stored thread back into a
-//! [`Session`], so a follow-up is routed as it would have been had the app
-//! never closed.
+//! [`Session`]. The records a thread may hold from before the native plane (`tool`, `no_tool`)
+//! still read, so no thread stops opening; the native plane keeps no record and starts fresh
+//! (R-1088-10).
 //!
 //! # WHAT IS SAVED, AND WHAT IS LOST ON A CRASH
 //!
