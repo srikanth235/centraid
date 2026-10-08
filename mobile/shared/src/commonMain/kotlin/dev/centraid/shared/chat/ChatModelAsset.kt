@@ -14,11 +14,16 @@ package dev.centraid.shared.chat
  * [BYTES] is the size the download step quotes before a byte has moved
  * (`ChatEvent.Opened.model_bytes`); the transfer's own `Content-Length` takes
  * over once it reports progress.
+ *
+ * Each URL names a commit of its repository, never a branch: a release pins
+ * the model it was built and checked against, so a file replaced upstream is
+ * still the file this build downloads, and a newer model ships with the
+ * release whose runtime it was trained for.
  */
 public object ChatModelAsset {
     /** Qwen3.5 0.8B, 4-bit (`Q4_0`), as a GGUF file. */
     public const val URL: String =
-        "https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_0.gguf"
+        "https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/8fea620810c4afa23dd6443f999a48574c1611a3/Qwen3.5-0.8B-Q4_0.gguf"
 
     /** What the file is called on the phone, and so what `modelPath` ends in. */
     public const val FILE_NAME: String = "Qwen3.5-0.8B-Q4_0.gguf"
@@ -40,7 +45,7 @@ public object ChatModelAsset {
      * model: hashed on arrival, kept only when the digest is [VISION_SHA256].
      */
     public const val VISION_URL: String =
-        "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/mmproj-F16.gguf"
+        "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/mmproj-F16.gguf"
 
     /** What the projector is called on the phone. */
     public const val VISION_FILE_NAME: String = "Qwen3.5-0.8B-mmproj-F16.gguf"
