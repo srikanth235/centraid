@@ -21,7 +21,7 @@ use centraid_assist::model::Model;
 use centraid_assist::testing::ScriptedModel;
 use centraid_core::CoreError;
 use centraid_core::api_proto as wire;
-use common::chat::{FOUND_TASKS, decline, read_tasks, script, step};
+use common::chat::{FOUND_TASKS, read_tasks, script, step};
 use wire::assist_request::Kind as Ask;
 
 /// The steps of `turns` reads of the tasks, one after another.

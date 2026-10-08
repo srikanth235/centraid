@@ -17,8 +17,6 @@
 
 mod common;
 
-use std::sync::Arc;
-
 use centraid_assist::native::park::Confirmed;
 use centraid_core::api_proto as wire;
 use wire::assist_request::Kind as Ask;
