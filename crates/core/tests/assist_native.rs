@@ -1330,7 +1330,9 @@ fn an_attachment_never_leaves_the_attached_path_whichever_plane_answers_the_rest
 /// tokenizer reads fewer. With `ASSIST_NATIVE_DUMP=<dir>` the test writes every prompt it sent to
 /// `<dir>/prompt-N.txt`, to count with the model's own `tokenizer.json`: on the sample vault the
 /// twelve prompts read 1342 to 2960 Qwen3.5 tokens (the estimate: 1803 to 4095), the system turn
-/// alone 1326 (estimate 1774).
+/// alone 1326 (estimate 1774). The 8,192-token context is the length the model was trained on
+/// (R-1088-11); the test pins that three turns, by the pessimistic count, stay inside three
+/// quarters of it.
 #[test]
 fn the_prompt_of_a_three_turn_conversation_against_the_engines_context() {
     let model = script(&[
@@ -1368,6 +1370,10 @@ fn the_prompt_of_a_three_turn_conversation_against_the_engines_context() {
     let context = Budget::DEFAULT.context;
     println!("CONTEXT longest prompt of 3 turns: {longest} tokens (engine context {context})");
     assert!(system > 500, "the system turn is the bulk of it");
+    assert!(
+        longest < context / 4 * 3,
+        "three turns leave a quarter of the window free: {longest} of {context}"
+    );
     if let Ok(dir) = std::env::var("ASSIST_NATIVE_DUMP") {
         for (at, prompt) in prompts.iter().enumerate() {
             std::fs::write(format!("{dir}/prompt-{at}.txt"), prompt).unwrap();

@@ -37,9 +37,9 @@ pub struct Budget {
 }
 
 impl Budget {
-    /// The engine's context, 4096 tokens. Kept equal to `centraid_assist_llama::Config`'s by that
-    /// crate's tests.
-    pub const DEFAULT: Self = Self { context: 4096 };
+    /// The engine's context, 8192 tokens: the length the native plane's model was trained on
+    /// (R-1088-11). Kept equal to `centraid_assist_llama::Config`'s by that crate's tests.
+    pub const DEFAULT: Self = Self { context: 8192 };
 
     /// What the prompt of a turn with an attachment may use: the context less
     /// the room its answer is allowed ([`crate::attach::ATTACH_MAX_TOKENS`]).
