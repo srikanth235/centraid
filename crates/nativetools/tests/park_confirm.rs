@@ -359,9 +359,12 @@ fn undo_parks_too_and_takes_back_a_confirmed_batch() {
 }
 
 #[test]
-fn an_id_only_the_vault_can_name_is_replaced_in_the_later_steps() {
-    // `people.add_debt` takes no id: the patch makes one up for the card, and a later step of the
-    // same turn names it. The vault's own id takes its place when the first step has run.
+fn a_parked_debt_keeps_the_id_the_card_showed_and_a_later_step_names_it() {
+    // `people.add_debt` honours a caller-minted `debt_id`, and a parked create pre-mints it (#1088),
+    // so the id on the card is the id the vault writes and a later step of the same turn names the
+    // row the member will have. Before the vault took an id, the patch made one up and the confirm
+    // replaced it in the later steps; that replacement is still the safety net for an id only the
+    // vault can name (`Session::run_pending`), and nothing a create writes needs it.
     let world = seeded();
     let mut session = park(&world);
     let neha = number(&mut session, "person", "Neha Rao");
@@ -381,16 +384,28 @@ fn an_id_only_the_vault_can_name_is_replaced_in_the_later_steps() {
         json!({"verb": "settle_debt", "rows": debt}),
     );
     let id = pending_id(&settled);
+    let steps = &settled["effect"]["pending"]["steps"];
+    assert_eq!(steps[0]["command"], json!("people.add_debt"));
+    assert_eq!(
+        steps[0]["input"]["debt_id"],
+        json!(parked_id),
+        "the create step carries the id the card showed"
+    );
+    assert_eq!(
+        steps[1]["input"]["debt_id"],
+        json!(parked_id),
+        "and the settle step names the same one"
+    );
     let Confirmed::Done { text: real, .. } = session.confirm(&id) else {
         panic!("the chain did not confirm");
     };
     assert_eq!(real, format!("{}\n{}", text(&made), text(&settled)));
-    // the vault holds one debt called taxi, settled, under an id of its own
+    // the vault holds one debt called taxi, settled, under the id the card showed
     let mut fresh = world.session();
     fresh.user("");
     let found = call(&mut fresh, "find", json!({"kind": "debt", "name": "taxi"}));
     let rows = found["effect"]["rows"].as_array().expect("rows");
     assert_eq!(rows.len(), 1, "{}", found["text"]);
-    assert_ne!(rows[0]["id"].as_str(), Some(parked_id.as_str()));
+    assert_eq!(rows[0]["id"].as_str(), Some(parked_id.as_str()));
     assert!(text(&found).contains("status settled"), "{}", text(&found));
 }

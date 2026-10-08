@@ -82,8 +82,10 @@ pub struct ParkedStep {
     pub call: usize,
     pub command: String,
     pub input: Value,
-    /// The patched world's answer: the ids it minted (`debt_id`, `revision_id`) are placeholders
-    /// the real run replaces.
+    /// The patched world's answer: an id the vault mints inside a command (a `revision_id`, the
+    /// successor of a repeating task) is a placeholder the real run replaces. A created row's id is
+    /// not one: the call names it before the command runs (`Writes::Park` pre-mints it) and the
+    /// vault honours it.
     pub output: Value,
 }
 
@@ -924,7 +926,7 @@ fn debt_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
             "a debt needs two people; this is you",
         ));
     }
-    let id = cx.id("debt_id");
+    let id = text(input, "debt_id").map_or_else(|| cx.id("debt_id"), str::to_owned);
     let owes = text(input, "direction") == Some("owe");
     let mut row = new_row(Kind::Debt, &id, text(input, "reason").unwrap_or("debt"), cx);
     row.date = cx.stamp().map(|stamp| Stamp {

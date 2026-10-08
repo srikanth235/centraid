@@ -3399,16 +3399,20 @@ impl Session {
                     .field("direction")
                     .and_then(|field| field.vault_value(direction))
                     .unwrap_or("owed");
-                (
-                    "people.add_debt",
-                    json!({
-                        "party_id": person.1,
-                        "direction": vault_direction,
-                        "amount_minor": minor_of(amount, &self.world.currency).max(1),
-                        "reason": name,
-                    }),
-                    "debt_id",
-                )
+                let mut input = json!({
+                    "party_id": person.1,
+                    "direction": vault_direction,
+                    "amount_minor": minor_of(amount, &self.world.currency).max(1),
+                    "reason": name,
+                });
+                // A PARKED DEBT KEEPS THE ID IT WAS SHOWN WITH: `people.add_debt` honours a
+                // caller-minted `debt_id` (#922 G2), so the confirm writes the row the card named and
+                // a later step of the chain that names it needs no replacement. A run lets the vault
+                // mint it, as every harness run always has.
+                if self.flags.writes != crate::native::park::Writes::Run {
+                    input["debt_id"] = json!(mint());
+                }
+                ("people.add_debt", input, "debt_id")
             }
             Kind::LockerItem => {
                 let kind_value = match text("type") {

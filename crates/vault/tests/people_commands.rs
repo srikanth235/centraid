@@ -629,6 +629,149 @@ fn a_debt_makes_a_tally_friend_and_settling_closes_rather_than_deletes() {
     assert_eq!(self_debt.status, CommandStatus::Failed);
 }
 
+/// A CALLER-MINTED DEBT ID IS HONOURED (#1088, after #922 G2). The chat's confirm card names the
+/// debt before the member taps, so the id on the card must be the id the row gets.
+#[test]
+fn a_debt_takes_the_id_its_caller_minted() {
+    let circle = Circle::open("people-debt-minted");
+    let jake = circle.person("Jake Bennett", 45);
+    let minted = "debt-pre-minted-1";
+    let output = circle.run(
+        "people.add_debt",
+        json!({
+            "debt_id": minted,
+            "party_id": jake,
+            "direction": "owed",
+            "amount_minor": 4_250,
+            "reason": "Print framing"
+        }),
+    );
+    assert_eq!(
+        output["debt_id"], minted,
+        "the output names the caller's id"
+    );
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT COUNT(*) FROM tally_obligation WHERE obligation_id = '{minted}'
+                AND amount_minor = 4250"
+        )),
+        1,
+        "the row is the caller's id and nothing else"
+    );
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT COUNT(*) FROM core_entity WHERE entity_id = '{minted}'
+                AND entity_type = 'tally.obligation'"
+        )),
+        1,
+        "and it is an entity under that id (#916)"
+    );
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT COUNT(*) FROM tally_friend WHERE party_id = '{jake}'"
+        )),
+        1,
+        "a debt still makes them a Tally friend, once, under an id the vault minted"
+    );
+    // THE DEBT IS A DEBT LIKE ANY OTHER: settling it by the same id closes it.
+    circle.run("people.settle_debt", json!({ "debt_id": minted }));
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT COUNT(*) FROM tally_obligation
+              WHERE obligation_id = '{minted}' AND settled_at IS NOT NULL"
+        )),
+        1
+    );
+}
+
+#[test]
+fn a_debt_with_no_id_of_its_own_is_minted_by_the_vault_as_before() {
+    let circle = Circle::open("people-debt-unminted");
+    let jake = circle.person("Jake Bennett", 45);
+    let debt = circle.run(
+        "people.add_debt",
+        json!({ "party_id": jake, "direction": "owe", "amount_minor": 900 }),
+    )["debt_id"]
+        .as_str()
+        .expect("a debt id")
+        .to_owned();
+    assert!(!debt.is_empty());
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT COUNT(*) FROM tally_obligation WHERE obligation_id = '{debt}'"
+        )),
+        1,
+        "an absent id is the vault's own, and the debt lands under it"
+    );
+}
+
+#[test]
+fn a_debt_id_a_row_already_holds_is_refused_and_writes_nothing() {
+    let circle = Circle::open("people-debt-taken");
+    let jake = circle.person("Jake Bennett", 45);
+    let taken = circle.run(
+        "people.add_debt",
+        json!({ "debt_id": "debt-dup", "party_id": jake, "direction": "owe", "amount_minor": 100 }),
+    )["debt_id"]
+        .as_str()
+        .expect("a debt id")
+        .to_owned();
+    let before = circle.count("SELECT COUNT(*) FROM tally_obligation");
+    let refuse = |debt_id: &str| {
+        circle
+            .vault()
+            .execute(
+                &circle.registry,
+                &circle.principal,
+                &Command::new(
+                    "people.add_debt",
+                    json!({ "debt_id": debt_id, "party_id": jake, "direction": "owed", "amount_minor": 700 }),
+                ),
+            )
+            .expect_err("a taken id is refused")
+            .to_string()
+    };
+    // A DUPLICATE debt id.
+    let duplicate = refuse(&taken);
+    assert!(duplicate.contains("already holds the id"), "{duplicate}");
+    // AN ID ANOTHER KIND HOLDS is no more free: an id names one thing (#916).
+    let held_by_a_person = refuse(&jake);
+    assert!(
+        held_by_a_person.contains("already holds the id"),
+        "{held_by_a_person}"
+    );
+    assert_eq!(
+        circle.count("SELECT COUNT(*) FROM tally_obligation"),
+        before,
+        "neither refusal wrote a row"
+    );
+    assert_eq!(
+        circle.count(&format!(
+            "SELECT COUNT(*) FROM tally_obligation WHERE obligation_id = '{taken}'
+                AND amount_minor = 100"
+        )),
+        1,
+        "and the first debt is as it was"
+    );
+}
+
+/// THE IDS A VAULT MINTS DO NOT MOVE for a debt with no id of its own (#1088). The gate writes a
+/// check row per condition and each takes an id, so a condition added to `people.add_debt` would
+/// shift every id after it; the assistant's harness orders rows by id.
+#[test]
+fn adding_a_debt_leaves_the_id_sequence_exactly_where_it_was() {
+    let circle = Circle::open("people-debt-sequence");
+    let jake = circle.person("Jake Bennett", 45);
+    let checks = |circle: &Circle| circle.count("SELECT COUNT(*) FROM agent_invocation_check");
+    let before = checks(&circle);
+    circle.run(
+        "people.add_debt",
+        json!({ "party_id": jake, "direction": "owe", "amount_minor": 900 }),
+    );
+    // person_exists and not_the_owner_themselves before, debt_added after: three checks, no more
+    assert_eq!(checks(&circle) - before, 3);
+}
+
 #[test]
 fn a_journal_entry_is_a_marked_note_with_its_own_day() {
     let circle = Circle::open("people-journal");
