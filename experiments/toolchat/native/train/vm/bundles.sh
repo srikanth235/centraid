@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# bundles.sh: build the three scoring bundles (trainfit 300, val 655, test 656 sessions) that score_ckpt.sh uploads and run_job.sh runs.
+# bundles.sh: build the scoring bundles (val 655, test 656 sessions) that score_ckpt.sh uploads and run_job.sh runs.
 #
-#   BUNDLE_NATIVETOOLS=<nativetools> ./bundles.sh [--sets trainfit,val,test]
+#   BUNDLE_NATIVETOOLS=<nativetools> ./bundles.sh [--sets val,test]
 #
 #   BUNDLE_NATIVETOOLS  the runtime binary every bundle ships (required: the runtime that scores is an explicit choice, e.g. the build
 #                 the gold was verified with, never whatever target/ holds)
-#   --sets        comma list, default trainfit,val,test: eval/sets/<set>.jsonl
+#   --sets        comma list, default val,test: eval/sets/<set>.jsonl
 #   BUNDLES_DIR   output, <BUNDLES_DIR>/<set>/{bundle.dat,job.json,kernel.py} (default ${BUNDLE_STAGE:-${TMPDIR:-/tmp}/centraid-bundles}/bundles)
 #   BUNDLE_STAGE  bundle.py's staging root; each set is staged there as score-<set> first
 #   PYTHON        interpreter for bundle.py (default python3)
@@ -21,7 +21,7 @@ set -euo pipefail
 
 NATIVE=$(cd "$VM_DIR/../.." && pwd)   # experiments/toolchat/native
 PYTHON=${PYTHON:-python3}
-SETS=trainfit,val,test
+SETS=val,test
 while [ $# -gt 0 ]; do
   case $1 in
     --sets) SETS=${2:?--sets needs a value}; shift ;;
@@ -33,7 +33,7 @@ done
 [ -n "${BUNDLE_NATIVETOOLS:-}" ] || die "set BUNDLE_NATIVETOOLS=<nativetools binary>: the runtime every bundle ships is an explicit choice"
 [ -f "$BUNDLE_NATIVETOOLS" ] || die "BUNDLE_NATIVETOOLS=$BUNDLE_NATIVETOOLS is not a file"
 SETS=${SETS//,/ }
-[ -n "${SETS// /}" ] || die "no sets (--sets trainfit,val,test)"
+[ -n "${SETS// /}" ] || die "no sets (--sets val,test)"
 for s in $SETS; do [ -f "$NATIVE/eval/sets/$s.jsonl" ] || die "eval/sets/$s.jsonl is missing in $NATIVE"; done
 
 export BUNDLE_STAGE BUNDLE_NATIVETOOLS BUNDLE_WORLDS

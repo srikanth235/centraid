@@ -5,29 +5,27 @@
                                                                        # reference check: the sets must score 100%
     python3 build_sets.py refreeze --out DIR [--ref-out DIR] [--sets val,test] [--jobs 8] [--sets-dir DIR]
                                                                        # gold from the reference run (SPEC 13)
-    python3 build_sets.py freeze-v8 --out DIR [--dry-run] [--sets-dir DIR] [--e2-dir DIR] [--ref-out DIR]
-                                    [--jobs 8] [--train-gold 'GLOB' [--per-world N]]
+    python3 build_sets.py freeze-v8 --out DIR --e2-dir DIR [--dry-run] [--sets-dir DIR] [--ref-out DIR] [--jobs 8]
                                                                        # the v8 freeze: fold val, build test from e2
-    python3 build_sets.py trainfit --train-gold 'GLOB' [--per-world N] [--keep-ids]   # draw sets/trainfit.jsonl
     python3 build_sets.py pool [LABEL=]FILE ... --out DIR [--seed 0]   # pool sessions, split them into val and test
 
 sets/val.jsonl and sets/test.jsonl are on DISJOINT worlds (v8, D-1044-14): val holds the households every fix is derived
 on (A to D, T03, T12, T23), test holds the households nothing was derived on (the e2 worlds E, F, G, blind-authored).
-sets/split.json says which source each session came from, and which half of v7 a val session was in. sets/trainfit.jsonl
-is a fixed sample of the training sessions (the same count from every train world, about 300 in all), rows as
-authored/build.py wrote them. Every fix is derived on val; test is scored only at milestones. The files are the
-artefact: they are not rebuilt from sessions/ or authored/sessions/ (the sets carry gold corrections the sources do not),
-so `check` compares only the sources' session ids.
+sets/split.json says which origin each session came from, and which half of v7 a val session was in. Every fix is
+derived on val; test is scored only at milestones. The files are the artefact: they are not rebuilt from sources (the
+sets carry gold corrections the sources do not), and the hand-written and recipe-authored sources are not kept (R-1088-16),
+so `check` compares the sets with split.json, and with the session ids of the authored sessions of the val worlds. The
+files are held out: they live in the private data version (artefacts.py), and `check` runs where they are
+(`artefacts.py verify-heldout`).
 
-check     ids unique within and across the three sets; trainfit ids disjoint from val and test; every `set` field
-          right; val and test worlds DISJOINT, no val or test world a train world, trainfit worlds equal to the train
-          worlds of authored/split.json with the same count each; split.json matches val and test and the sources
-          behind each origin (every val session records the v7 half it was in, every test session has the origin e2);
-          every key a gold names exists in its world's keys file; no session of ../data/train.jsonl.gz is in val or
-          test, no record of it is on a val or test world, and every trainfit session is in it; each file's sha256
-          equals the one recorded in FROZEN.md. Exit 1 on any problem. With --sets-dir DIR (a candidate, e.g. the
-          sets/ of a freeze-v8 output) the hashes are printed to record, not compared, and a missing trainfit.jsonl
-          is a note, not a problem.
+check     ids unique within and across the two sets; every `set` field right; val and test worlds DISJOINT, no val
+          or test world a train world; split.json matches val and test (every val session records the v7 half it was
+          in, every test session has the origin e2) and names only origins it knows, and the authored sessions of the
+          val worlds are the sessions of the origin val-v3.1; every key a gold names exists in its world's keys file
+          (seeded by seed_worlds.py); no session of ../data/train.jsonl.gz is in val or test and no record of it is on a
+          val or test world; each file's sha256 equals the one recorded in FROZEN.md. Exit 1 on any problem. With
+          --sets-dir DIR (a candidate, e.g. the sets/ of a freeze-v8 output) the hashes are printed to record, not
+          compared.
 ref       the `ref` backend (the gold's own reference calls) through the runtime over the sets named by --sets
           (default val,test), scored by score.py; exit 1 unless every one scores 100% of sessions and turns. Needs
           NATIVETOOLS and the seeded vaults (seed_worlds.py). --sets-dir reads the files from another directory (a
@@ -47,7 +45,7 @@ refreeze  the reference check, then new gold where the runtime no longer does wh
           calls). OUT/changes.md is the readable list (the test half has session, turn and convention only);
           OUT/summary.json and the printed summary count turns by convention. OUT is never sets/.
 freeze-v8 the v8 freeze (D-1044-14), from the v7 pair in --sets-dir (default sets/) and the e2 sources in --e2-dir
-          (default sessions/e2) to OUT/sets/{val,test}.jsonl and split.json:
+          (kept outside the tree) to OUT/sets/{val,test}.jsonl and split.json:
             val   = the v7 val sessions then the v7 test sessions, byte for byte but the `set` field; split.json records
                     for each the origin it had and the half it was in (`v7`). Refused on a pair that is not v7's (the
                     worlds of val and test differ, or split.json is v8's), so the fold is applied once.
@@ -56,15 +54,9 @@ freeze-v8 the v8 freeze (D-1044-14), from the v7 pair in --sets-dir (default set
                     with fixes off), the reference run, the gold derived with the conventions as refreeze does
                     (UNEXPLAINED exits 1 and nothing is written to OUT/sets), the output rescored against its own run.
           --dry-run reads, compiles, prepares and validates, prints the plan and writes nothing (no runtime needed).
-          --train-gold GLOB also draws OUT/sets/trainfit.jsonl from a train build (with --dry-run: checks the draw is
-          possible). OUT must be new or empty; the reference run of an earlier attempt is reused only with --ref-out.
+          OUT must be new or empty; the reference run of an earlier attempt is reused only with --ref-out.
           The sequence to run, in FROZEN.md under v8: seed E F G, freeze-v8, `ref --sets test`, check --sets-dir
-          OUT/sets, copy, trainfit, record the hashes, check.
-trainfit  seed 0, the same number of sessions from every train world (--per-world; default round(300 / worlds): 12
-          for 25 worlds, 9 for 35), spread over the world's session lengths (min(turns, 5)), from the per-world
-          .gold.jsonl files GLOB matches (an authored/build.py output; a .report.json beside a file limits the draw to
-          the sessions that verified). --keep-ids keeps the ids of the existing file and only refreshes their rows from
-          the new build: that is how a rebuilt train set keeps the same sample.
+          OUT/sets, copy, record the hashes, check.
 pool      all sessions of the FILEs, cut to the gold.py keys, split half and half at random inside every
           world x min(turns, 5) stratum into DIR/val.jsonl, DIR/test.jsonl and DIR/split.json. LABEL names where the
           sessions of a FILE came from; without one a session keeps the origin a split.json beside its file records,
@@ -77,7 +69,6 @@ from __future__ import annotations
 import argparse
 import collections
 import contextlib
-import glob
 import gzip
 import hashlib
 import io
@@ -94,7 +85,6 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SETS = HERE / "sets"
-E2 = HERE / "sessions" / "e2"  # the sources of the test set: blind-authored sessions on the held-out worlds E, F, G
 TRAIN = HERE.parent / "data" / "train.jsonl.gz"
 sys.path.insert(0, str(HERE))
 sys.path.append(str(HERE.parent / "authored"))  # last: authored/ has modules named like the standard library's
@@ -105,13 +95,12 @@ import score  # noqa: E402
 import split  # noqa: E402
 from lib import load_keys, read_jsonl  # noqa: E402
 
-SET_FIELD = {"val": "val", "test": "test", "trainfit": "train"}  # the `set` value of each file's sessions
-FILES = ["val.jsonl", "test.jsonl", "trainfit.jsonl", "split.json"]
+SET_FIELD = {"val": "val", "test": "test"}  # the `set` value of each file's sessions
+FILES = ["val.jsonl", "test.jsonl", "split.json"]
 SESSION_KEYS = ["id", "set", "world", "today", "me", "tags", "turns"]
 TURN_KEYS = ["user", "gold", "ref", "tags"]
 STRATA = "world x min(len,5)"
 SHOWN = 30  # problems printed before the rest is only counted
-TRAINFIT_TARGET = 300  # sessions in trainfit, about: the same count from every train world
 TEST_ORIGINS = ("e2",)  # the origins a session of the test set can have (v8): none of them is a val origin
 
 
@@ -172,28 +161,14 @@ def val_world_ids() -> list[str]:
     return [s["id"] for w in split.val_worlds() for s in split.load_sessions(w)]
 
 
-def hand_written_ids() -> list[str]:
-    return compile_ids([HERE / "sessions" / f"{name}.py" for name in ("A", "B", "C", "D_dev", "D_test")])
-
-
-def e1_ids() -> list[str]:
-    return compile_ids(sorted((HERE / "sessions" / "e1").glob("*.py")))
-
-
-def e2_files() -> list[Path]:
-    return sorted(E2.glob("*.py"))
-
-
-def e2_ids() -> list[str]:
-    return compile_ids(e2_files())
-
-
-# split.json origin -> (the sources behind it, the session ids they define). A new freeze adds its origins here.
+# split.json origin -> (where its sessions were authored, the session ids those sources define; None when the sources are
+# not kept: R-1088-16 keeps the hand-written, recipe-authored and e2 sources out of the tree, so split.json is the record of
+# their ids and `check` compares the sets with it). A new freeze adds its origins here.
 ORIGINS = {
     "val-v3.1": ("authored/sessions of the val worlds", val_world_ids),
-    "test-v3.1": ("eval/sessions/{A,B,C,D_dev,D_test}.py", hand_written_ids),
-    "e1": ("eval/sessions/e1/*.py", e1_ids),
-    "e2": ("eval/sessions/e2/*.py", e2_ids),
+    "test-v3.1": ("the hand-written sessions of A to D (sources not kept)", None),
+    "e1": ("the recipe-authored sessions of A to D (sources not kept)", None),
+    "e2": ("the e2 sources given to freeze-v8 (--e2-dir, not kept)", None),
 }
 
 
@@ -236,8 +211,7 @@ def count_line(name: str, sessions: list[dict]) -> str:
 
 def world_problems(sets: dict[str, list[dict]], train: set[str]) -> list[str]:
     """What is wrong with the worlds of the sets (D-1044-14): val and test share a world (test is held out of val's
-    households whole), a set has no session, val or test has sessions of a train world, trainfit does not hold exactly
-    the train worlds or holds an uneven count per world."""
+    households whole), a set has no session, val or test has sessions of a train world."""
     problems: list[str] = []
     worlds = {name: collections.Counter(s["world"] for s in sessions) for name, sessions in sets.items()}
     for w in sorted(set(worlds["val"]) & set(worlds["test"])):
@@ -247,13 +221,6 @@ def world_problems(sets: dict[str, list[dict]], train: set[str]) -> list[str]:
             problems.append(f"{name} has no session")
         for w in sorted(train & set(worlds[name])):
             problems.append(f"{name} has sessions of the train world {w}")
-    if "trainfit" in sets:
-        if set(worlds["trainfit"]) != train:
-            problems.append(f"trainfit worlds differ from the train worlds of authored/split.json "
-                            f"(missing {sorted(train - set(worlds['trainfit']))}, "
-                            f"extra {sorted(set(worlds['trainfit']) - train)})")
-        if len(set(worlds["trainfit"].values())) > 1:
-            problems.append(f"trainfit has an uneven count per world: {dict(sorted(worlds['trainfit'].items()))}")
     return problems
 
 
@@ -289,18 +256,15 @@ def assign_problems(assign: dict[str, dict], member: dict[str, str]) -> list[str
 
 def check(sets_dir: Path = SETS) -> int:
     """The integrity check of the files in `sets_dir`. For sets/ itself it also compares every file's sha256 with the
-    one FROZEN.md records and wants all four files; for a candidate directory (a freeze-v8 output) it prints the hashes
-    to record, and a missing trainfit.jsonl is a note."""
+    one FROZEN.md records; for a candidate directory (a freeze-v8 output) it prints the hashes to record. The files are
+    held out (R-1088-16): a checkout without them has nothing to check, and the check says so by failing."""
     final = sets_dir.resolve() == SETS.resolve()
     problems: list[str] = []
-    for fname in FILES if final else [f for f in FILES if f != "trainfit.jsonl"]:
+    for fname in FILES:
         if not (sets_dir / fname).exists():
-            raise SystemExit(f"missing {sets_dir / fname}")
-    sets = {name: read_jsonl(sets_dir / f"{name}.jsonl") for name in SET_FIELD
-            if (sets_dir / f"{name}.jsonl").exists()}
-    if "trainfit" not in sets:
-        print("trainfit.jsonl is not in the directory: it is drawn after the train regeneration "
-              "(build_sets.py trainfit)")
+            raise SystemExit(f"missing {sets_dir / fname}: the held-out sets come from the data version "
+                             f"(python3 artefacts.py fetch)")
+    sets = {name: read_jsonl(sets_dir / f"{name}.jsonl") for name in SET_FIELD}
 
     where: dict[str, list[str]] = collections.defaultdict(list)
     for name, sessions in sets.items():
@@ -323,8 +287,6 @@ def check(sets_dir: Path = SETS) -> int:
         for name in ("val", "test"):  # the worlds are held out of the training data, not only the sessions
             problems += [f"data/train.jsonl.gz has records of the world {w}, a {name} world"
                          for w in sorted(trained_worlds & {s["world"] for s in sets[name]})]
-        problems += [f"trainfit: {s['id']} is not in data/train.jsonl.gz" for s in sets.get("trainfit", [])
-                     if s["id"] not in trained]
 
     meta = json.loads((sets_dir / "split.json").read_text(encoding="utf-8"))
     assign = meta["assign"]
@@ -335,10 +297,13 @@ def check(sets_dir: Path = SETS) -> int:
         by_origin[a["origin"]].add(sid)
     for origin in sorted(set(by_origin) | set(ORIGINS)):
         if origin not in ORIGINS:
-            problems.append(f"split.json has the origin {origin!r}: add its sources to ORIGINS in build_sets.py")
+            problems.append(f"split.json has the origin {origin!r}: add it to ORIGINS in build_sets.py")
             continue
-        have, want = by_origin.get(origin, set()), ORIGINS[origin][1]()
-        if sorted(have) != sorted(want):  # an origin with no session and no source (e2 before v8) is nothing
+        sources = ORIGINS[origin][1]
+        if sources is None:  # sources not kept: split.json is the record
+            continue
+        have, want = by_origin.get(origin, set()), sources()
+        if sorted(have) != sorted(want):
             problems.append(f"origin {origin}: split.json has {len(have)} sessions, its sources "
                             f"{ORIGINS[origin][0]} define {len(want)} "
                             f"({len(set(want) - have)} missing, {len(have - set(want))} extra)")
@@ -534,107 +499,6 @@ def refreeze(out: Path, ref_out: Path | None, names: list[str], jobs: int, sets_
     (out / "summary.json").write_text(json.dumps(summary, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {out}/{{{','.join(names)}}}.jsonl, changes.md, changes.json, summary.json")
     return 0 if ok else 1
-
-
-# ---------------------------------------------------------------------------------------------
-# trainfit
-# ---------------------------------------------------------------------------------------------
-
-
-def verified(gold_path: Path) -> set[str] | None:
-    """Ids that verified in the build, from the .report.json beside the gold file (None: no report)."""
-    report = gold_path.with_name(gold_path.name.replace(".gold.jsonl", ".report.json"))
-    if not report.exists():
-        return None
-    return {r["id"] for r in json.loads(report.read_text(encoding="utf-8")) if r["pass"]}
-
-
-def draw(pool: list[dict], n: int, rng: random.Random) -> list[str]:
-    """n ids spread evenly over the pool's strata (min(turns, 5)): the strata in order, each shuffled, then every
-    (len/n)-th session of that list."""
-    if len(pool) < n:
-        raise SystemExit(f"{pool[0]['world'] if pool else '?'}: {len(pool)} sessions, fewer than {n}")
-    strata: dict[int, list[str]] = collections.defaultdict(list)
-    for s in sorted(pool, key=lambda s: s["id"]):
-        strata[min(len(s["turns"]), 5)].append(s["id"])
-    ordered: list[str] = []
-    for k in sorted(strata):
-        rng.shuffle(strata[k])
-        ordered += strata[k]
-    return [ordered[int((j + 0.5) * len(ordered) / n)] for j in range(n)]
-
-
-def default_per_world(worlds: int) -> int:
-    """The sessions drawn from each train world: the count that keeps the sample nearest TRAINFIT_TARGET (12 for the 25
-    train worlds of v6, 9 for the 35 of v8: 315 sessions, where 8 would be 280)."""
-    return max(1, round(TRAINFIT_TARGET / worlds))
-
-
-def train_pools(train_gold: str) -> tuple[dict[str, list[dict]], dict[str, str]]:
-    """The sessions of every train world that verified in the build (the per-world <W>.gold.jsonl files GLOB matches, a
-    .report.json beside a file limiting them to the ones that passed), and the gold row of each, by id."""
-    files = {Path(f).name.split(".")[0]: Path(f) for f in sorted(glob.glob(train_gold)) if f.endswith(".gold.jsonl")}
-    worlds = split.train_worlds()
-    missing = [w for w in worlds if w not in files]
-    if missing:
-        raise SystemExit(f"{train_gold}: no <W>.gold.jsonl for {', '.join(missing)}")
-    pools: dict[str, list[dict]] = {}
-    line_of: dict[str, str] = {}
-    for w in worlds:
-        ok = verified(files[w])
-        pools[w] = []
-        for line in files[w].read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                s = json.loads(line)
-                if ok is None or s["id"] in ok:
-                    line_of[s["id"]] = line
-                    pools[w].append(s)
-    return pools, line_of
-
-
-def trainfit(train_gold: str, out: Path, per_world: int | None, seed: int, keep_ids: bool) -> int:
-    worlds = split.train_worlds()
-    per_world = per_world or default_per_world(len(worlds))
-    pools, line_of = train_pools(train_gold)
-    if keep_ids and not out.exists():
-        raise SystemExit(f"--keep-ids needs the existing sample {out}")
-    wanted = [s["id"] for s in read_jsonl(out)] if keep_ids else None
-    rng = random.Random(seed)
-    chosen: list[str] = []
-    if wanted is None:
-        for w in worlds:
-            position = {s["id"]: i for i, s in enumerate(pools[w])}
-            chosen += sorted(draw(pools[w], per_world, rng), key=position.__getitem__)  # gold file order
-    else:
-        gone = [i for i in wanted if i not in line_of]
-        if gone:
-            raise SystemExit(f"{len(gone)} sampled sessions are not among the verified sessions of the new build, "
-                             f"e.g. {gone[:3]}; draw a new sample")
-        chosen = wanted
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("".join(line_of[i] + "\n" for i in chosen), encoding="utf-8")
-    print(count_line("trainfit", [json.loads(line_of[i]) for i in chosen]), f"-> {out}")
-    if wanted is None:
-        print(f"{len(worlds)} train worlds x {per_world} = {len(chosen)} sessions (target about {TRAINFIT_TARGET})")
-    shown = f"sets/{out.name}" if out.parent.resolve() == SETS.resolve() else str(out)
-    print(f"{sha256(out)}  {shown}   (record it in FROZEN.md)")
-    return 0
-
-
-def trainfit_plan(train_gold: str, per_world: int | None) -> tuple[str, list[str]]:
-    """What a trainfit draw from the build would be, without drawing: (one line, problems): the train worlds, the count
-    drawn from each, the total, and every world whose build has fewer verified sessions than that."""
-    worlds = split.train_worlds()
-    per_world = per_world or default_per_world(len(worlds))
-    try:
-        pools, _ = train_pools(train_gold)
-    except SystemExit as error:
-        return f"trainfit: {len(worlds)} train worlds x {per_world}", [str(error)]
-    short = [f"{w}: {len(pools[w])} verified sessions, fewer than {per_world}" for w in worlds
-             if len(pools[w]) < per_world]
-    return (f"trainfit: {len(worlds)} train worlds x {per_world} = {len(worlds) * per_world} sessions "
-            f"(target about {TRAINFIT_TARGET}), {min(map(len, pools.values()))} to {max(map(len, pools.values()))} "
-            f"verified sessions per world", short)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -872,22 +736,10 @@ def v8_meta(plan: V8Plan) -> dict:
             "assign": assign}
 
 
-def freeze_v8(out: Path | None, sets_dir: Path, e2_dir: Path, ref_out: Path | None, jobs: int, dry_run: bool,
-              train_gold: str | None = None, per_world: int | None = None) -> int:
+def freeze_v8(out: Path | None, sets_dir: Path, e2_dir: Path, ref_out: Path | None, jobs: int, dry_run: bool) -> int:
     """The v8 freeze (D-1044-14): OUT/sets/val.jsonl (the pair of v7 folded), test.jsonl (the e2 sources through the
-    reference run, the gold derived with the conventions) and split.json, and with `train_gold` trainfit.jsonl. A dry
-    run needs no runtime and writes nothing. Exit 1 on any problem, any UNEXPLAINED turn, or a candidate `check`
-    rejects."""
-    global E2
-    previous, E2 = E2, e2_dir  # `check` reads the sources of the origin e2 from the place the sessions came from
-    try:
-        return _freeze_v8(out, sets_dir, e2_dir, ref_out, jobs, dry_run, train_gold, per_world)
-    finally:
-        E2 = previous
-
-
-def _freeze_v8(out: Path | None, sets_dir: Path, e2_dir: Path, ref_out: Path | None, jobs: int, dry_run: bool,
-               train_gold: str | None, per_world: int | None) -> int:
+    reference run, the gold derived with the conventions) and split.json. A dry run needs no runtime and writes
+    nothing. Exit 1 on any problem, any UNEXPLAINED turn, or a candidate `check` rejects."""
     if not dry_run:  # fail before any work
         if out is None:
             raise SystemExit("freeze-v8 needs --out DIR (or --dry-run)")
@@ -900,10 +752,6 @@ def _freeze_v8(out: Path | None, sets_dir: Path, e2_dir: Path, ref_out: Path | N
     print(f"freeze-v8{' (dry run)' if dry_run else ''}: the pair of v7 in {sets_dir}, the e2 sources in {e2_dir}")
     for line in plan_text(plan):
         print(line)
-    if train_gold:
-        line, problems = trainfit_plan(train_gold, per_world)
-        print(line)
-        plan.problems += problems
     for problem in plan.problems[:SHOWN]:
         print(f"FAIL {problem}", file=sys.stderr)
     if len(plan.problems) > SHOWN:
@@ -932,21 +780,16 @@ def _freeze_v8(out: Path | None, sets_dir: Path, e2_dir: Path, ref_out: Path | N
     (final / "test.jsonl").write_text("".join(line + "\n" for line in read_lines(out / "refreeze" / "test.jsonl")),
                                       encoding="utf-8")
     (final / "split.json").write_text(json.dumps(v8_meta(plan), indent=0), encoding="utf-8")
-    if train_gold:
-        trainfit(train_gold, final / "trainfit.jsonl", per_world, 0, False)
-    print(f"wrote {final}/{{val,test}}.jsonl, split.json" + (", trainfit.jsonl" if train_gold else "")
-          + f"; prepared.md and refreeze/changes.md in {out}")
+    print(f"wrote {final}/{{val,test}}.jsonl, split.json; prepared.md and refreeze/changes.md in {out}")
     report = io.StringIO()  # the counts and the hashes to record in FROZEN.md, kept beside the files
     with contextlib.redirect_stdout(report):
         rc = check(final)
     print(report.getvalue(), end="")
     (out / "check.txt").write_text(report.getvalue(), encoding="utf-8")
-    files = ["val.jsonl", "test.jsonl", "split.json"] + (["trainfit.jsonl"] if train_gold else [])
+    files = ["val.jsonl", "test.jsonl", "split.json"]
     print("next (FROZEN.md, v8):")
     print(f"  python3 build_sets.py ref --sets-dir {final} --sets test --jobs {jobs}   # the test gate: 100%")
     print(f"  cp {' '.join(str(final / f) for f in files)} {SETS}/")
-    if not train_gold:
-        print("  python3 build_sets.py trainfit --train-gold 'GLOB'    # after the train regeneration, into sets/")
     print("  record the counts and sha256 in FROZEN.md, then python3 build_sets.py check")
     return rc
 
@@ -979,17 +822,9 @@ def main() -> None:
     p.add_argument("--out", type=Path, help="where sets/, prepared.md and the refreeze go (new or empty; not sets/)")
     p.add_argument("--dry-run", action="store_true", help="validate and print the plan; write nothing, no runtime")
     p.add_argument("--sets-dir", type=Path, default=SETS, help="the pair of v7 to fold (default sets/)")
-    p.add_argument("--e2-dir", type=Path, default=E2, help="the sources of the test sessions (default sessions/e2)")
+    p.add_argument("--e2-dir", type=Path, required=True, help="the sources of the test sessions (kept outside the tree)")
     p.add_argument("--ref-out", type=Path, help="a reference run of exactly these prepared sessions (test.run.jsonl)")
     p.add_argument("--jobs", type=int, default=8)
-    p.add_argument("--train-gold", metavar="GLOB", help="also draw trainfit from a train build (dry run: check it)")
-    p.add_argument("--per-world", type=int, help="sessions per train world (default round(300 / worlds))")
-    p = sub.add_parser("trainfit", help="draw sets/trainfit.jsonl from the gold files of a train build")
-    p.add_argument("--train-gold", required=True, metavar="GLOB", help="the per-world <W>.gold.jsonl files of a build")
-    p.add_argument("--out", type=Path, default=SETS / "trainfit.jsonl")
-    p.add_argument("--per-world", type=int, help="sessions per train world (default round(300 / worlds): 9 for 35)")
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--keep-ids", action="store_true", help="keep the ids of --out, refresh their rows")
     p = sub.add_parser("pool", help="pool sessions and split them into val and test")
     p.add_argument("inputs", nargs="+", metavar="[LABEL=]FILE")
     p.add_argument("--out", type=Path, required=True)
@@ -1003,15 +838,12 @@ def main() -> None:
             raise SystemExit(f"--sets names val and test only, got {args.sets!r}")
         sys.exit(ref(args.out, args.jobs, args.sets_dir, names))
     if args.cmd == "freeze-v8":
-        sys.exit(freeze_v8(args.out, args.sets_dir, args.e2_dir, args.ref_out, args.jobs, args.dry_run,
-                           args.train_gold, args.per_world))
+        sys.exit(freeze_v8(args.out, args.sets_dir, args.e2_dir, args.ref_out, args.jobs, args.dry_run))
     if args.cmd == "refreeze":
         names = args.sets.split(",")
         if not set(names) <= {"val", "test"}:
             raise SystemExit(f"--sets names val and test only, got {args.sets!r}")
         sys.exit(refreeze(args.out, args.ref_out, names, args.jobs, args.sets_dir))
-    if args.cmd == "trainfit":
-        sys.exit(trainfit(args.train_gold, args.out, args.per_world, args.seed, args.keep_ids))
     sys.exit(pool(args.inputs, args.out, args.seed))
 
 

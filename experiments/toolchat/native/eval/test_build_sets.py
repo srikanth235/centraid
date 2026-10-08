@@ -1,11 +1,12 @@
-"""build_sets.py on synthetic sessions: the v8 check (val and test on disjoint worlds, test worlds not train worlds,
-trainfit worlds equal to the train worlds), the fold of the v7 pair into val, the e2 sources as the test set, the whole
-`freeze-v8` run on a hand-made reference run (no runtime), its dry run, the trainfit redraw, the command line.
+"""build_sets.py on synthetic sessions: the v8 check (val and test on disjoint worlds, test worlds not train worlds), the
+fold of the v7 pair into val, the e2 sources as the test set, the whole `freeze-v8` run on a hand-made reference run (no
+runtime), its dry run, the command line.
 
     python3 -m unittest test_build_sets -v      # from experiments/toolchat/native/eval
 
-The sessions, worlds, ids and runs here are made up; the only real files read are the world files of A and B (copied
-under other names, so gold keys resolve) and, for one property, the number of train worlds of authored/split.json.
+The sessions, worlds, ids and runs here are made up. The worlds A and B are the public train worlds T05 and T06 under those
+names, seeded into a temporary directory (pubworld.py; copied again under the names Q and R, so gold keys resolve), and the
+held-out files are not read: they are not in a public checkout (R-1088-16).
 """
 
 from __future__ import annotations
@@ -24,9 +25,12 @@ from unittest import mock
 
 import build_sets
 import lib
+import pubworld
 import regen
 
-REAL_WORLDS = Path(__file__).resolve().parent / "worlds"
+pubworld.seed_public("T05", "A")
+pubworld.seed_public("T06", "B")
+REAL_WORLDS = pubworld.worlds_dir()
 KEYS = {w: lib.load_keys(w) for w in ("A", "B")}
 
 
@@ -62,15 +66,12 @@ def dumps(sessions: list[dict]) -> str:
     return "".join(json.dumps(s, ensure_ascii=False) + "\n" for s in sessions)
 
 
-def write_sets(root: Path, val: list[dict], test: list[dict], assign: dict, trainfit: list[dict] | None = None,
-               **meta) -> Path:
+def write_sets(root: Path, val: list[dict], test: list[dict], assign: dict, **meta) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     (root / "val.jsonl").write_text(dumps(val), encoding="utf-8")
     (root / "test.jsonl").write_text(dumps(test), encoding="utf-8")
     (root / "split.json").write_text(json.dumps({"seed": 0, "strata": "world x min(len,5)", **meta, "assign": assign},
                                                 indent=0), encoding="utf-8")
-    if trainfit is not None:
-        (root / "trainfit.jsonl").write_text(dumps(trainfit), encoding="utf-8")
     return root
 
 
@@ -129,7 +130,7 @@ class Base(unittest.TestCase):
     def origins(self, **extra) -> dict:
         return {"e1": ("e1 sources", lambda: ["A-E001", "B-E001", "A-E002"]),
                 "test-v3.1": ("hand-written sources", lambda: ["B-E002"]),
-                "e2": ("eval/sessions/e2/*.py", build_sets.e2_ids), **extra}
+                "e2": ("e2 sources", lambda: ["Q-E001", "Q-E002", "R-E001"]), **extra}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -327,7 +328,7 @@ def gold_sessions_left() -> int:
 
 
 class Check(Base):
-    """The check on a directory in the shape v8 gives sets/: val on A and B, test on Q and R, trainfit on T01, T02."""
+    """The check on a directory in the shape v8 gives sets/: val on A and B, test on Q and R."""
 
     def setUp(self):
         super().setUp()
@@ -335,7 +336,7 @@ class Check(Base):
                     session("B-E002", "B", "val")]
         self.test = [session("Q-E001", "Q", "test", key_world="A"), session("Q-E002", "Q", "test", key_world="A"),
                      session("R-E001", "R", "test", key_world="B")]
-        self.fit = [plain(f"{w}-00{i}", w, "train") for w in ("T01", "T02") for i in (1, 2)]
+        self.fit = [plain(f"{w}-00{i}", w, "train") for w in ("T01", "T02") for i in (1, 2)]  # the train data's records
         self.assign = {
             "A-E001": {"set": "val", "origin": "e1", "v7": "val"},
             "A-E002": {"set": "val", "origin": "e1", "v7": "test"},
@@ -343,22 +344,16 @@ class Check(Base):
             "B-E002": {"set": "val", "origin": "test-v3.1", "v7": "test"},
             "Q-E001": {"set": "test", "origin": "e2"}, "Q-E002": {"set": "test", "origin": "e2"},
             "R-E001": {"set": "test", "origin": "e2"}}
-        self.e2_source("Q", ["Q-E001", "Q-E002"], "A")
-        self.e2_source("R", ["R-E001"], "B")
         with gzip.open(self.tmp / "train.jsonl.gz", "wt", encoding="utf-8") as handle:
             for s in self.fit:
                 handle.write(json.dumps({"id": f"train-{s['id']}"}) + "\n")
         patch = mock.patch.object(build_sets, "ORIGINS", self.origins())
         patch.start()
         self.addCleanup(patch.stop)
-        patch = mock.patch.object(build_sets, "E2", self.e2)
-        patch.start()
-        self.addCleanup(patch.stop)
 
-    def write(self, root: Path | None = None, val=None, test=None, assign=None, fit="default", **meta) -> Path:
+    def write(self, root: Path | None = None, val=None, test=None, assign=None, **meta) -> Path:
         return write_sets(root or self.sets, self.val if val is None else val, self.test if test is None else test,
-                          self.assign if assign is None else assign, self.fit if fit == "default" else fit,
-                          **{"version": 8, **meta})
+                          self.assign if assign is None else assign, **{"version": 8, **meta})
 
     def run_check(self, root: Path | None = None, recorded: bool = True) -> tuple[int, str]:
         root = root or self.sets
@@ -393,20 +388,6 @@ class Check(Base):
         self.assertEqual(rc, 1)
         self.assertIn("val has sessions of the train world B", err)
 
-    def test_trainfit_worlds_must_be_the_train_worlds(self):
-        self.write(fit=[s for s in self.fit if s["world"] == "T01"])
-        rc, err = self.run_check()
-        self.assertEqual(rc, 1)
-        self.assertIn("missing ['T02']", err)
-        self.write(fit=[*self.fit, plain("T03-001", "T03", "train")])
-        self.assertIn("extra ['T03']", self.run_check()[1])
-
-    def test_trainfit_takes_the_same_count_from_every_train_world(self):
-        self.write(fit=self.fit[:3])
-        rc, err = self.run_check()
-        self.assertEqual(rc, 1)
-        self.assertIn("uneven count per world", err)
-
     def test_a_test_session_has_a_test_origin_and_no_v7_half(self):
         self.write(assign={**self.assign, "Q-E001": {"set": "test", "origin": "e1"}})
         self.assertIn("test sessions whose origin is not a test origin (e2), e.g. Q-E001", self.run_check()[1])
@@ -426,15 +407,23 @@ class Check(Base):
         self.assertIn("sessions that split.json puts in the other set (it says test, the file is val)",
                       self.run_check()[1])
 
-    def test_the_sources_of_each_origin_must_match_split_json(self):
+    def test_the_sources_of_an_origin_that_has_them_must_match_split_json(self):
         self.write()
         with mock.patch.object(build_sets, "ORIGINS", self.origins(e1=("e1 sources", lambda: ["A-E001", "B-E001"]))):
             rc, err = self.run_check()
         self.assertEqual(rc, 1)
         self.assertIn("origin e1: split.json has 3 sessions, its sources e1 sources define 2", err)
-        (self.e2 / "R.py").unlink()  # the e2 sources no longer define R-E001
-        self.assertIn("origin e2: split.json has 3 sessions, its sources eval/sessions/e2/*.py define 2",
-                      self.run_check()[1])
+
+    def test_an_origin_whose_sources_are_not_kept_is_held_to_split_json_alone(self):
+        """The hand-written, e1 and e2 sources are not in the tree (R-1088-16): split.json is the record of their ids."""
+        self.write()
+        kept = {"e1": ("not kept", None), "test-v3.1": ("not kept", None), "e2": ("not kept", None)}
+        with mock.patch.object(build_sets, "ORIGINS", kept):
+            self.assertEqual(self.run_check(), (0, ""))
+        self.write(assign={**self.assign, "A-E001": {"set": "val", "origin": "mystery", "v7": "val"}})
+        with mock.patch.object(build_sets, "ORIGINS", kept):
+            self.assertIn("split.json has the origin 'mystery'", self.run_check()[1])
+
 
     def test_an_origin_with_neither_session_nor_source_is_nothing(self):
         self.write()
@@ -474,29 +463,26 @@ class Check(Base):
         self.assertIn("data/train.jsonl.gz has records of the world Q, a test world", err)
         self.assertIn("data/train.jsonl.gz has records of the world A, a val world", err)
 
-    def test_a_trainfit_session_that_is_not_in_the_train_data_fails(self):
-        self.write(fit=[*self.fit[:-1], plain("T02-009", "T02", "train")])
-        self.assertIn("trainfit: T02-009 is not in data/train.jsonl.gz", self.run_check()[1])
-
     def test_sets_must_match_the_hashes_frozen_md_records(self):
         self.write()
         rc, err = self.run_check(recorded=False)
         self.assertEqual(rc, 1)
         self.assertIn("is not the file FROZEN.md records", err)
 
-    def test_a_candidate_directory_is_not_held_to_the_hashes_and_may_lack_trainfit(self):
-        candidate = self.write(self.tmp / "candidate", fit=None)
+    def test_a_candidate_directory_is_not_held_to_the_hashes(self):
+        candidate = self.write(self.tmp / "candidate")
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             rc = build_sets.check(candidate)
         self.assertEqual((rc, err.getvalue()), (0, ""))
-        self.assertIn("trainfit.jsonl is not in the directory", out.getvalue())
         self.assertIn("sets/val.jsonl", out.getvalue())  # hashes printed to record, under the names they will have
 
-    def test_the_real_sets_directory_wants_all_four_files(self):
-        self.write(fit=None)
-        with self.assertRaises(SystemExit):
+    def test_the_sets_directory_wants_all_three_files_and_says_where_they_come_from(self):
+        self.write()
+        (self.sets / "test.jsonl").unlink()
+        with self.assertRaises(SystemExit) as raised:
             quiet(build_sets.check, self.sets)
+        self.assertIn("artefacts.py fetch", str(raised.exception))
 
     def test_val_and_test_must_each_have_a_session(self):
         self.write(test=[], assign={k: v for k, v in self.assign.items() if v["set"] == "val"})
@@ -566,20 +552,6 @@ class Freeze(Base):
         self.assertEqual(rc, 1)
         self.assertIn("no e2 source", err)
 
-    def test_a_dry_run_checks_that_the_trainfit_draw_is_possible(self):
-        gold_dir = self.tmp / "train-gold"
-        gold_dir.mkdir()
-        for w, n in (("T01", 5), ("T02", 1)):
-            (gold_dir / f"{w}.gold.jsonl").write_text(dumps([plain(f"{w}-{i:03d}", w, "train") for i in range(n)]),
-                                                      encoding="utf-8")
-        with mock.patch.object(build_sets, "TRAINFIT_TARGET", 8):  # 2 train worlds: 4 each
-            rc, out, err = self.freeze(dry=True, train_gold=str(gold_dir / "*.gold.jsonl"))
-            self.assertEqual(rc, 1)
-            self.assertIn("trainfit: 2 train worlds x 4 = 8 sessions", out)
-            self.assertIn("T02: 1 verified sessions, fewer than 4", err)
-            rc, out, err = self.freeze(dry=True, train_gold=str(gold_dir / "*.gold.jsonl"), per_world=1)
-            self.assertEqual((rc, err), (0, ""))
-
     def test_the_whole_run_writes_val_test_and_split_json_and_passes_its_own_check(self):
         self.write_runs()
         out = self.tmp / "out"
@@ -608,20 +580,22 @@ class Freeze(Base):
 
     def test_the_test_gold_comes_from_the_reference_run_through_the_conventions(self):
         a = task_keys("A")
+        longest_task = max((t for t in json.loads((REAL_WORLDS / "A.json").read_text(encoding="utf-8"))["tasks"]
+                            if t.get("effort") and t["key"] in KEYS["A"]), key=lambda t: t["effort"])
         longest = {"kind": "task", "order": "effort desc", "limit": 1}
         text = (self.e2 / "Q.py").read_text(encoding="utf-8")
         text = text.replace('T("and again", rows("%s"), ref=[ans(kind="task")])' % a[1],
-                            'T("the longest job", rows("roadmap", order=True), '
-                            'ref=[ans(kind="task", order="effort desc", limit=1)])', 1)
+                            'T("the longest job", rows("%s", order=True), '
+                            'ref=[ans(kind="task", order="effort desc", limit=1)])' % longest_task["key"], 1)
         (self.e2 / "Q.py").write_text(text, encoding="utf-8")
-        self.runs[0]["turns"][1] = {"steps": [ref_step("Q", ["roadmap"], longest, ordered=True)]}
+        self.runs[0]["turns"][1] = {"steps": [ref_step("Q", [longest_task["key"]], longest, ordered=True)]}
         self.write_runs()
         out = self.tmp / "out"
         rc, text, err = self.freeze(out)
         self.assertEqual((rc, err), (0, ""), text)
         test = read(out / "sets" / "test.jsonl")
-        self.assertEqual(test[0]["turns"][1]["gold"], [{"type": "rows", "rows": ["roadmap"], "order": True},
-                                                       {"type": "value", "values": [{"amount": 240, "unit": None}]}])
+        self.assertEqual(test[0]["turns"][1]["gold"], [{"type": "rows", "rows": [longest_task["key"]], "order": True},
+                                                       {"type": "value", "values": [{"amount": longest_task["effort"], "unit": None}]}])
         self.assertIn("superlative 1", text)
 
     def test_an_unexplained_turn_exits_1_and_nothing_is_written_to_sets(self):
@@ -665,120 +639,6 @@ class Freeze(Base):
         with self.assertRaises(SystemExit):
             self.freeze(None)
 
-    def test_the_trainfit_of_the_run_is_drawn_when_a_train_build_is_given(self):
-        gold_dir = self.tmp / "train-gold"
-        gold_dir.mkdir()
-        with gzip.open(self.tmp / "train.jsonl.gz", "wt", encoding="utf-8") as handle:
-            for w in ("T01", "T02"):
-                for i in range(5):
-                    handle.write(json.dumps({"id": f"train-{w}-{i:03d}"}) + "\n")
-        for w in ("T01", "T02"):
-            (gold_dir / f"{w}.gold.jsonl").write_text(dumps([plain(f"{w}-{i:03d}", w, "train", turns=1 + i % 3)
-                                                             for i in range(5)]), encoding="utf-8")
-        self.write_runs()
-        out = self.tmp / "out"
-        with mock.patch.object(build_sets, "TRAINFIT_TARGET", 6):
-            rc, text, err = self.freeze(out, train_gold=str(gold_dir / "*.gold.jsonl"))
-        self.assertEqual((rc, err), (0, ""), text)
-        fit = read(out / "sets" / "trainfit.jsonl")
-        self.assertEqual(sorted({s["world"] for s in fit}), ["T01", "T02"])
-        self.assertEqual({w: sum(1 for s in fit if s["world"] == w) for w in ("T01", "T02")}, {"T01": 3, "T02": 3})
-        self.assertNotIn("python3 build_sets.py trainfit", text)  # drawn already: not in the list of what is left
-
-    def test_the_default_e2_directory_is_restored_after_the_run(self):
-        before = build_sets.E2
-        self.freeze(dry=True)
-        self.assertEqual(build_sets.E2, before)
-
-
-# ---------------------------------------------------------------------------------------------
-# The trainfit redraw
-# ---------------------------------------------------------------------------------------------
-
-
-class Trainfit(Base):
-    WORLDS = ["T01", "T02", "T03"]
-
-    def setUp(self):
-        super().setUp()
-        patch = mock.patch.object(build_sets.split, "train_worlds", lambda: self.WORLDS)
-        patch.start()
-        self.addCleanup(patch.stop)
-        self.gold = self.tmp / "gold"
-        self.gold.mkdir()
-        for w in self.WORLDS:
-            sessions = [plain(f"{w}-{i:03d}", w, "train", turns=1 + i % 6) for i in range(30)]
-            (self.gold / f"{w}.gold.jsonl").write_text(dumps(sessions), encoding="utf-8")
-
-    def draw(self, per_world: int | None = None, out: Path | None = None, keep: bool = False) -> list[dict]:
-        out = out or self.tmp / "trainfit.jsonl"
-        quiet(build_sets.trainfit, str(self.gold / "*.gold.jsonl"), out, per_world, 0, keep)
-        return [json.loads(line) for line in out.read_text(encoding="utf-8").split("\n") if line]
-
-    def test_the_default_count_keeps_the_sample_near_300(self):
-        self.assertEqual([build_sets.default_per_world(n) for n in (25, 35, 36, 300, 1000)], [12, 9, 8, 1, 1])
-        for n in range(10, 80):
-            self.assertLessEqual(abs(n * build_sets.default_per_world(n) - build_sets.TRAINFIT_TARGET), n / 2, n)
-
-    def test_the_train_worlds_of_authored_split_json_give_a_sample_near_300(self):
-        real = json.loads((Path(build_sets.split.__file__).resolve().parent / "split.json").read_text())["train"]
-        per = build_sets.default_per_world(len(real))
-        self.assertLessEqual(abs(per * len(real) - 300), len(real) / 2)
-
-    def test_every_train_world_gives_the_same_count_and_only_train_worlds_are_drawn(self):
-        with mock.patch.object(build_sets, "TRAINFIT_TARGET", 12):  # 3 worlds: 4 each
-            fit = self.draw()
-        self.assertEqual({w: sum(1 for s in fit if s["world"] == w) for w in self.WORLDS}, {w: 4 for w in self.WORLDS})
-        self.assertEqual({s["set"] for s in fit}, {"train"})
-        self.assertEqual(len({s["id"] for s in fit}), 12)
-
-    def test_the_draw_is_spread_over_the_session_lengths_and_the_same_every_time(self):
-        first = self.draw(per_world=6)
-        lengths = {min(len(s["turns"]), 5) for s in first if s["world"] == "T01"}
-        self.assertGreaterEqual(len(lengths), 4)
-        again = self.draw(per_world=6, out=self.tmp / "again.jsonl")
-        self.assertEqual(first, again)
-        self.assertEqual((self.tmp / "trainfit.jsonl").read_bytes(), (self.tmp / "again.jsonl").read_bytes())
-
-    def test_only_the_sessions_that_verified_are_drawn(self):
-        ok = [{"id": f"T02-{i:03d}", "pass": i < 6} for i in range(30)]
-        (self.gold / "T02.report.json").write_text(json.dumps(ok), encoding="utf-8")
-        fit = self.draw(per_world=5)
-        self.assertTrue(all(int(s["id"][-3:]) < 6 for s in fit if s["world"] == "T02"))
-        self.assertEqual(sum(1 for s in fit if s["world"] == "T02"), 5)
-
-    def test_a_world_without_a_gold_file_is_named(self):
-        (self.gold / "T03.gold.jsonl").unlink()
-        with self.assertRaises(SystemExit) as raised:
-            self.draw(per_world=2)
-        self.assertIn("T03", str(raised.exception))
-
-    def test_a_world_with_fewer_sessions_than_the_draw_is_refused(self):
-        with self.assertRaises(SystemExit):
-            self.draw(per_world=31)
-
-    def test_keep_ids_refreshes_the_rows_of_the_same_sample(self):
-        first = self.draw(per_world=3)
-        rows = read(self.gold / "T01.gold.jsonl")
-        for row in rows:
-            row["tags"] = ["rebuilt"]
-        (self.gold / "T01.gold.jsonl").write_text(dumps(rows), encoding="utf-8")
-        kept = self.draw(per_world=3, keep=True)
-        self.assertEqual([s["id"] for s in kept], [s["id"] for s in first])
-        self.assertTrue(all(s["tags"] == ["rebuilt"] for s in kept if s["world"] == "T01"))
-
-    def test_the_plan_reports_the_count_and_the_worlds_that_fall_short(self):
-        line, problems = build_sets.trainfit_plan(str(self.gold / "*.gold.jsonl"), 5)
-        self.assertEqual(problems, [])
-        self.assertIn("3 train worlds x 5 = 15 sessions", line)
-        self.assertIn("30 to 30 verified sessions per world", line)
-        line, problems = build_sets.trainfit_plan(str(self.gold / "*.gold.jsonl"), 31)
-        self.assertEqual(len(problems), 3)
-        (self.gold / "T01.gold.jsonl").unlink()
-        _, problems = build_sets.trainfit_plan(str(self.gold / "*.gold.jsonl"), 5)
-        self.assertIn("T01", problems[0])
-
-
 # ---------------------------------------------------------------------------------------------
 # ref --sets, the command line
 # ---------------------------------------------------------------------------------------------
@@ -789,8 +649,9 @@ class Cli(Base):
         """(exit code, the arguments the command was called with) of build_sets.main for each command it dispatches."""
         seen: dict = {}
         fakes = {name: mock.Mock(side_effect=lambda *a, _n=name, **k: seen.setdefault(_n, (a, k)) and 0)
-                 for name in ("check", "ref", "refreeze", "freeze_v8", "trainfit", "pool")}
-        with mock.patch.multiple(build_sets, **fakes), mock.patch.object(sys, "argv", ["build_sets.py", *argv]):
+                 for name in ("check", "ref", "refreeze", "freeze_v8", "pool")}
+        with mock.patch.multiple(build_sets, **fakes), mock.patch.object(sys, "argv", ["build_sets.py", *argv]), \
+                contextlib.redirect_stderr(io.StringIO()):  # argparse prints its usage there
             try:
                 build_sets.main()
             except SystemExit as exit_:
@@ -808,7 +669,7 @@ class Cli(Base):
         self.assertEqual(seen["ref"][0], (None, 8, Path("/x/sets"), ("test",)))
         _, seen = self.main("ref")
         self.assertEqual(seen["ref"][0][3], ("val", "test"))
-        code, _ = self.main("ref", "--sets", "trainfit")
+        code, _ = self.main("ref", "--sets", "other")
         self.assertIn("names val and test only", str(code))
 
     def test_ref_runs_only_the_named_sets(self):
@@ -825,28 +686,33 @@ class Cli(Base):
         self.assertIn("test: sessions 1/1, turns 2/2", out)
         self.assertNotIn("val:", out)
 
-    def test_freeze_v8_takes_the_dry_run_the_directories_and_the_trainfit_options(self):
+    def test_freeze_v8_takes_the_dry_run_and_the_directories(self):
         _, seen = self.main("freeze-v8", "--out", "/o", "--dry-run", "--sets-dir", "/s", "--e2-dir", "/e",
-                            "--ref-out", "/r", "--jobs", "3", "--train-gold", "g/*.gold.jsonl", "--per-world", "9")
-        self.assertEqual(seen["freeze_v8"][0], (Path("/o"), Path("/s"), Path("/e"), Path("/r"), 3, True,
-                                                "g/*.gold.jsonl", 9))
-        _, seen = self.main("freeze-v8", "--dry-run")
-        self.assertEqual(seen["freeze_v8"][0], (None, build_sets.SETS, build_sets.E2, None, 8, True, None, None))
+                            "--ref-out", "/r", "--jobs", "3")
+        self.assertEqual(seen["freeze_v8"][0], (Path("/o"), Path("/s"), Path("/e"), Path("/r"), 3, True))
+        _, seen = self.main("freeze-v8", "--dry-run", "--e2-dir", "/e")
+        self.assertEqual(seen["freeze_v8"][0], (None, build_sets.SETS, Path("/e"), None, 8, True))
 
-    def test_trainfit_counts_per_world_by_default_from_the_train_worlds(self):
-        _, seen = self.main("trainfit", "--train-gold", "g/*.gold.jsonl")
-        self.assertEqual(seen["trainfit"][0][2], None)
-        _, seen = self.main("trainfit", "--train-gold", "g/*.gold.jsonl", "--per-world", "9")
-        self.assertEqual(seen["trainfit"][0][2], 9)
+    def test_the_e2_sources_are_the_owners_input_and_have_no_default_place_in_the_tree(self):
+        code, seen = self.main("freeze-v8", "--dry-run")
+        self.assertEqual((code, seen), (2, {}))
+
+    def test_there_is_no_trainfit_command(self):
+        code, _ = self.main("trainfit", "--train-gold", "g/*.gold.jsonl")
+        self.assertEqual(code, 2)
 
 
 class Docs(unittest.TestCase):
-    def test_the_origins_registry_knows_e2_the_way_it_knows_e1(self):
+    def test_the_shipped_registry_keeps_only_the_val_world_sources(self):
+        self.assertEqual({o: src is None for o, (_, src) in build_sets.ORIGINS.items()},
+                         {"val-v3.1": False, "test-v3.1": True, "e1": True, "e2": True})
+
+    def test_the_origins_registry_knows_e2_by_name_and_keeps_no_sources_for_it(self):
         self.assertIn("e2", build_sets.ORIGINS)
-        self.assertEqual(build_sets.ORIGINS["e2"][0], "eval/sessions/e2/*.py")
+        self.assertIsNone(build_sets.ORIGINS["e2"][1])
         self.assertEqual(build_sets.TEST_ORIGINS, ("e2",))
         self.assertTrue(set(build_sets.TEST_ORIGINS) <= set(build_sets.ORIGINS))
-        self.assertEqual(build_sets.E2, Path(build_sets.__file__).resolve().parent / "sessions" / "e2")
+        self.assertFalse(hasattr(build_sets, "E2"))
 
     def test_the_check_wants_val_and_test_world_disjoint_in_its_own_words(self):
         text = build_sets.__doc__

@@ -2,13 +2,12 @@
 
 Issue [#1044](https://github.com/srikanth235/centraid/issues/1044). One model, Qwen3.5-0.8B, fine-tuned to drive the vault through eight tools (`SPEC.md`) with the slot trace (`CONTRACT_V3.md`), scored on held-out households. The target is 85% session pass on test; a session passes when every turn's effect matches its gold.
 
-## The three numbers
+## The two sets
 
-Every checkpoint is scored by one script on three frozen sets (`eval/FROZEN.md`):
+Every checkpoint is scored by one script on two frozen sets (`eval/FROZEN.md`):
 
 | set | sessions | what it tells |
 | --- | --- | --- |
-| trainfit | 300 (a fixed sample of train) | whether the model learned its own data |
 | val | 655, seven held-out worlds | the number every fix is derived on |
 | test | 656, the other half of the same pool | scored only at milestones |
 
@@ -34,7 +33,7 @@ The Python tests (`test_*.py` at the top level and in `authored/`, `authored/gen
 
 1. Author or regenerate sessions; `authored/build.py` per train world; `authored/gate.py` and `authored/dist.py` on the gold.
 2. `train/bundle.py build JOB --train data/train.jsonl.gz --val data/train-val.jsonl.gz`; `train/vm/launch.sh`; `train/vm/watch.sh`. The trainer's loss, order and marks defaults (decision weight 2, no loss on verbatim copies of the user's message, minimal pairs in one step, marks at 25 / 50 / 75 / 100 %) are in the `train/train.py` docstring; `--decision-weight 1 --copy-weight 1 --no-pair-batches` is the legacy loss and order.
-3. `train/vm/bundles.sh` once per runtime build; `train/vm/score_ckpt.sh gs://.../out/ckpt-100 --sets trainfit,val` (ckpt-100 is the default mark; `train/vm/score_ckpt.sh gs://.../out --mark best` scores the mark with the lowest val decision loss, which the trainer names in `out/best.json`).
+3. `train/vm/bundles.sh` once per runtime build; `train/vm/score_ckpt.sh gs://.../out/ckpt-100 --sets val` (ckpt-100 is the default mark; `train/vm/score_ckpt.sh gs://.../out --mark best` scores the mark with the lowest val decision loss, which the trainer names in `out/best.json`).
 4. Diagnose on val: `eval/slices.py`, `eval/replay.py` for runtime changes (no model needed).
 5. Test at a milestone only.
 

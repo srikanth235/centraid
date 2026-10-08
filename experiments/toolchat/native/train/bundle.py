@@ -7,7 +7,7 @@
     python bundle.py build <job> --ckpt-dir CKPT --set eval/sets/val.jsonl [--sample N]
                                       # eval only on a local checkpoint, shipped inside the job's data dir
 
-`train/vm/bundles.sh` builds the three scoring bundles (trainfit, val, test) that `train/vm/score_ckpt.sh` runs.
+`train/vm/bundles.sh` builds the scoring bundles (val, test) that `train/vm/score_ckpt.sh` runs.
 
 Staging: $BUNDLE_STAGE (default ${TMPDIR:-/tmp}/centraid-bundles)/<job>/{data,kernel}. data/ is flat: `bundle.dat` (a gzip
 tar of train/, eval/, authored/, export/, bin/nativetools.bin, lib/ loader + libs, data/, render.py and runtime_think.py) and `job.json`, plus
@@ -337,7 +337,7 @@ def build(a):
     print("kernel %s" % kd)
     print(json.dumps(job, indent=1))
     if a.base or a.ckpt_dir:
-        print("\nan eval-only job is a scoring bundle: train/vm/bundles.sh stages trainfit, val and test; "
+        print("\nan eval-only job is a scoring bundle: train/vm/bundles.sh stages val and test; "
               "train/vm/score_ckpt.sh runs them")
     else:
         print("\nnext: JOB=%s BUCKET=<bucket> STAGE_DIR=%s train/vm/probe.sh (measure first), then train/vm/launch.sh"

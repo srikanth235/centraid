@@ -1,24 +1,23 @@
 # Frozen eval sets
 
-Three sets are scored for every checkpoint: trainfit, val and test, all in `sets/`. They are frozen. The files are the artefact, and a change to any of them is a new version (see "A new version").
+Two sets are scored for every checkpoint: val and test, both in `sets/`. They are frozen. The files are the artefact, and a change to any of them is a new version (see "A new version"). They are held out: the tree materialises them from the private data version its manifest pins (`artefacts.py fetch`, R-1088-16), and `artefacts.py verify-heldout` runs the checks below where they are. The train-fit sample (`trainfit`) was retired under R-1088-16 and is no longer drawn or scored.
 
-Version 7.4 (val) and 6 (test). val: version 7.4 (gold regenerated from 7.3 on the nt15 runtime on 2026-10-06 under the owner's rulings of that day; see the lineage), which descends from version 7 (gold regenerated from version 6 with the phase-7 runtime (#1044) on 2026-10-03; 42 turns changed in 40 sessions, each by a named convention or a listed fix) plus 23 turns in 20 sessions corrected on 2026-10-04 by verified gold fixes (see the lineage); reference check 2026-10-04. test: version 6 (gold regenerated from version 5 with the stage-2 runtime on 2026-10-02; eleven turns changed, val 8, test 3). The test of version 7 or 8 is not built: the owner deferred the test set until after the phase-7 training run, so test is not scored against the phase-7 runtime until it is. trainfit: drawn anew on 2026-10-03 (seed 0, 9 from each of the 35 train worlds) from the phase-7 train regeneration (`data/README.md`).
+Version 7.4 (val) and 6 (test). val: version 7.4 (gold regenerated from 7.3 on the nt15 runtime on 2026-10-06 under the owner's rulings of that day; see the lineage), which descends from version 7 (gold regenerated from version 6 with the phase-7 runtime (#1044) on 2026-10-03; 42 turns changed in 40 sessions, each by a named convention or a listed fix) plus 23 turns in 20 sessions corrected on 2026-10-04 by verified gold fixes (see the lineage); reference check 2026-10-04. test: version 6 (gold regenerated from version 5 with the stage-2 runtime on 2026-10-02; eleven turns changed, val 8, test 3). The test of version 7 or 8 is not built: the owner deferred the test set until after the phase-7 training run, so test is not scored against the phase-7 runtime until it is.
 
 ## Rules
 
 - Test is scored only at milestones. Nothing is derived on it: no fix, no threshold, no training example.
-- Every fix and decision is derived on val, with trainfit beside it.
+- Every fix and decision is derived on val.
 - No val or test session is trained on. The val worlds are held out whole (`authored/split.py`), and `data/train.jsonl.gz` holds none of the sessions in `sets/`.
 
 ## The sets
 
-One session per line: `id`, `set`, `world`, `today`, `me`, `tags`, `turns` (each turn: `user`, `gold`, `ref`, `tags`). A trainfit row also carries `replay`.
+One session per line: `id`, `set`, `world`, `today`, `me`, `tags`, `turns` (each turn: `user`, `gold`, `ref`, `tags`).
 
 | set | file | sessions | turns | worlds |
 | --- | --- | --- | --- | --- |
 | val | `sets/val.jsonl` | 655 | 2,055 | A 109, B 105, C 105, D 141, T03 65, T12 65, T23 65 |
 | test | `sets/test.jsonl` | 656 | 2,075 | A 110, B 105, C 105, D 140, T03 66, T12 65, T23 65 |
-| trainfit | `sets/trainfit.jsonl` | 315 | 998 | the 35 train worlds, 9 each |
 
 val and test are the two halves of one pool of 1,311 sessions on the same seven worlds. A to D are in `worlds/`. T03, T12 and T23 are the val worlds of `authored/split.json`, held out of training whole. `sets/split.json` records the split (seed 0, stratified by world and min(turns, 5)) and the origin of every session:
 
@@ -28,20 +27,17 @@ val and test are the two halves of one pool of 1,311 sessions on the same seven 
 | `test-v3.1` | the hand-written sessions of A to D       | 450  | 224 | 226  |
 | `e1`        | recipe-authored sessions on A to D        | 470  | 236 | 234  |
 
-The sources are in `sessions/` (`sessions/README.md`). They are provenance only: the sets carry the gold corrections of v3 and v3.1 and the regenerated gold of v5 and v6, which the sources do not.
-
-trainfit is a fixed sample of the training sessions: 12 per train world, all in `data/train.jsonl.gz`, none in val or test. A row is the row of the train build's `<W>.gold.jsonl`. After a train rebuild, `build_sets.py trainfit --keep-ids` refreshes the same sessions. Drawing a new sample is a new version.
+The hand-written and recipe-authored sources of the `test-v3.1` and `e1` origins are not kept (R-1088-16): the sets carry the gold corrections of v3 and v3.1 and the regenerated gold of v5 and v6, which those sources do not, and `sets/split.json` is the record of which ids each origin holds. The authored sessions of the val worlds stay in `authored/sessions/`.
 
 ## Hashes
 
 ```
 5d3d9035737ad0de19d4cf0406316e3b4b27f55a4cb2e64320126cda89308502  sets/val.jsonl
 fedc45825fc3505d8147ee50560775b6b5e615b94d391dbe06d4d9ad04a8ed20  sets/test.jsonl
-c461ca08297e2d26e727eb9fac262d70b40a02461f7d5f4db7a65d475d675a31  sets/trainfit.jsonl
 e0685c65c7ce377e1559488760e6ed55a9e3f7b445c2a3daee7be62ba13d5d0d  sets/split.json
 ```
 
-`python3 build_sets.py check` fails when a file differs from these lines. It also fails on a duplicate id, a wrong `set` field, a session of a train world in val or test, a session of `data/train.jsonl.gz` that is in val or test, a trainfit session that is not in `data/train.jsonl.gz`, a split.json that disagrees with the files or with the sources of its origins, and a gold key that the world's keys file does not have.
+`python3 build_sets.py check` fails when a file differs from these lines. It also fails on a duplicate id, a wrong `set` field, a session of a train world in val or test, a session of `data/train.jsonl.gz` that is in val or test, a split.json that disagrees with the files (or names an origin `build_sets.py` does not know, or whose id list differs from the authored sessions of the val worlds), and a gold key that the world's keys file (seeded by `seed_worlds.py`) does not have.
 
 ## Reference check
 
@@ -144,40 +140,38 @@ python3 build_sets.py ref --sets-dir OUT/sets    # 100% of sessions and turns, o
 v8 (prepared, not yet run: the test counts, the hashes and the reference result are filled in when `freeze-v8` has run) makes test world-disjoint from val ([D-1044-14](../../../../docs/decisions.md)). Six phases of fixes were derived on val's seven households, and the test of v4 to v7 (a random half of one pool) sat on the same seven, so it could not tell a harness tuned to those households from one that generalises. Nothing already derived is redone: the gold of v7 is kept.
 
 - val is the v7 val and the v7 test folded into one set: 1,311 sessions and 4,130 turns on A 219, B 210, C 210, D 281, T03 131, T12 130, T23 130 (655 sessions of the v7 val, then 656 of the v7 test). Ids, origins and gold are v7's; the `set` field of the 656 sessions that were test is the only byte that changes. `sets/split.json` is version 8: every session records its origin and `v7`, the half it was in, and `folded` records the 656 that came from test.
-- test is the e2 sessions: the sources `sessions/e2/<W>*.py`, about 120 per world on E and F (ordinary households) and G (a large one, D-sized), written blind to val and to every fix with the e1 recipe and a hardness brief, ids `<W>-E001` upward, worlds in `worlds/`. They go through the reference run with the conventions of D-1044-13, the four of the blind audit (K1 to K4) and `series-ask` included, and never its fixes (`regen.prepare_session(fixes=False)`); a turn the run fails that no convention explains is UNEXPLAINED and stops the build. No e2 world is a val world or a train world, and no e2 id is a val id.
-- trainfit is drawn anew (seed 0): 9 from each of the 35 train worlds of `authored/split.json`, 315 sessions (8 would be 280), from the train regeneration of the same version.
-- `build_sets.py check` fails unless val and test are on disjoint worlds, no val or test world is a train world, trainfit holds exactly the train worlds with the same count from each, every val session records its v7 half, and every test session has the origin `e2` (`ORIGINS` knows the sources `sessions/e2/*.py` as it knows `sessions/e1/*.py`). Until the files of v8 and the redrawn trainfit are in `sets/`, `check` fails on the sets of v6 and v7: their halves share every world, and trainfit lacks the train worlds `authored/split.json` has added since.
+- test is the e2 sessions: the sources `<W>*.py` in the `--e2-dir` (the owner's input, not kept in the tree), about 120 per world on E and F (ordinary households) and G (a large one, D-sized), written blind to val and to every fix with the e1 recipe and a hardness brief, ids `<W>-E001` upward, worlds in `worlds/`. They go through the reference run with the conventions of D-1044-13, the four of the blind audit (K1 to K4) and `series-ask` included, and never its fixes (`regen.prepare_session(fixes=False)`); a turn the run fails that no convention explains is UNEXPLAINED and stops the build. No e2 world is a val world or a train world, and no e2 id is a val id.
+- `build_sets.py check` fails unless val and test are on disjoint worlds, no val or test world is a train world, every val session records its v7 half, and every test session has the origin `e2` (`ORIGINS` knows `e2` as a name; its sources are the owner's input to `freeze-v8 --e2-dir` and are not kept in the tree). Until the files of v8 are in `sets/`, `check` fails on the sets of v6 and v7: their halves share every world.
 
-The text of the sections above that v8 replaces, to take over when the files are in `sets/` (the counts of test and trainfit and the hashes are the run's):
+The text of the sections above that v8 replaces, to take over when the files are in `sets/` (the counts of test and the hashes are the run's):
 
-- Rules: test is scored only at milestones and nothing is derived on it; every fix and decision is derived on val, with trainfit beside it; no val or test session is trained on (val is held out whole, test is held out of val and of train, `data/train.jsonl.gz` holds none of the sessions in `sets/`); val and test are on disjoint worlds.
-- Sets: val 1,311 sessions, 4,130 turns, A 219, B 210, C 210, D 281, T03 131, T12 130, T23 130; test the e2 sessions, E n, F n, G n (counts at the run); trainfit 315 sessions, the 35 train worlds, 9 each.
+- Rules: test is scored only at milestones and nothing is derived on it; every fix and decision is derived on val; no val or test session is trained on (val is held out whole, test is held out of val and of train, `data/train.jsonl.gz` holds none of the sessions in `sets/`); val and test are on disjoint worlds.
+- Sets: val 1,311 sessions, 4,130 turns, A 219, B 210, C 210, D 281, T03 131, T12 130, T23 130; test the e2 sessions, E n, F n, G n (counts at the run).
 - Origins: `val-v3.1` 391, `test-v3.1` 450 and `e1` 470 sessions, all in val (v7: 195 + 196, 224 + 226, 236 + 234 by half); `e2` the test.
 - Reference check: val and test each 100% of sessions and turns with the runtime of the run.
-- Hashes: `sets/val.jsonl`, `sets/test.jsonl`, `sets/trainfit.jsonl`, `sets/split.json` as `check --sets-dir OUT/sets` prints them (it also writes `OUT/check.txt`).
+- Hashes: `sets/val.jsonl`, `sets/test.jsonl`, `sets/split.json` as `check --sets-dir OUT/sets` prints them (it also writes `OUT/check.txt`).
 
 Run it with the phase-7 runtime (`NATIVETOOLS` the binary, `EVAL_VAULTS` the vault directory; `sets/` holds the pair of v7, or `--sets-dir DIR` does with its val.jsonl and test.jsonl, and `sets/split.json` stands in for a refreeze output that has none), in this order:
 
 ```
 python3 seed_worlds.py E F G                                  # vaults and keys files of the new worlds (worlds/E.keys.json ...)
-python3 build_sets.py freeze-v8 --dry-run [--train-gold 'GLOB']   # reads, compiles, prepares, validates; writes nothing, no runtime
-python3 build_sets.py freeze-v8 --out OUT --jobs 8            # the fold, the e2 build; exit 1 on any UNEXPLAINED turn (a new OUT each time)
+python3 build_sets.py freeze-v8 --dry-run --e2-dir E2   # reads, compiles, prepares, validates; writes nothing, no runtime
+python3 build_sets.py freeze-v8 --out OUT --e2-dir E2 --jobs 8   # the fold, the e2 build; exit 1 on any UNEXPLAINED turn (a new OUT each time)
 python3 build_sets.py ref --sets-dir OUT/sets --sets test --jobs 8   # the gate, from scratch: 100% of sessions and turns
-python3 build_sets.py check --sets-dir OUT/sets               # hashes to record; trainfit is not there yet
+python3 build_sets.py check --sets-dir OUT/sets               # hashes to record
 cp OUT/sets/val.jsonl OUT/sets/test.jsonl OUT/sets/split.json sets/
-python3 build_sets.py trainfit --train-gold 'TRAIN_OUT/*.gold.jsonl'   # after the train regeneration: sets/trainfit.jsonl, 9 per world
 python3 build_sets.py check                                   # after the hashes and counts are recorded above
 ```
 
-`OUT/prepared.md` lists the turns the conventions rewrote in the test sessions, `OUT/refreeze/changes.md` what they changed in its gold. `--train-gold` on `freeze-v8` draws trainfit into `OUT/sets` in the same run (the dry run then checks that the draw is possible). `--ref-out` reuses a reference run of exactly these prepared sessions; the `ref` gate runs the reference again from scratch whatever was reused.
+`OUT/prepared.md` lists the turns the conventions rewrote in the test sessions, `OUT/refreeze/changes.md` what they changed in its gold. `--ref-out` reuses a reference run of exactly these prepared sessions; the `ref` gate runs the reference again from scratch whatever was reused.
 
 ## A new version
 
 Any change to a file in `sets/` is a new version: new sessions, a gold correction, a different split.
 
-1. Make the change. New sessions: put their source in `sessions/`, then `python3 build_sets.py pool [LABEL=]FILE ... --seed 0 --out DIR` pools the sessions of the FILEs and splits the whole pool into `DIR/val.jsonl`, `DIR/test.jsonl` and `DIR/split.json`. The current val and test keep their origins (from `sets/split.json`); give each new FILE a LABEL. A gold correction: edit the jsonl. A runtime change: `python3 build_sets.py refreeze --out DIR` runs the reference check with the current runtime and writes `DIR/val.jsonl` and `DIR/test.jsonl` with the gold of every stale turn derived from the run, and a change list that names the convention behind each change (an UNEXPLAINED change keeps the old gold and exits 1; a name-match is only reported, with the old gold kept, and exits 1). Check DIR with `python3 build_sets.py ref --sets-dir DIR`, then copy it. Since v8 `check` rejects a val and a test on the same worlds: `pool` is for adding sessions to val's worlds, and the test set is its own worlds (`freeze-v8`).
+1. Make the change. New sessions: keep their source outside the tree, then `python3 build_sets.py pool [LABEL=]FILE ... --seed 0 --out DIR` pools the sessions of the FILEs and splits the whole pool into `DIR/val.jsonl`, `DIR/test.jsonl` and `DIR/split.json`. The current val and test keep their origins (from `sets/split.json`); give each new FILE a LABEL. A gold correction: edit the jsonl. A runtime change: `python3 build_sets.py refreeze --out DIR` runs the reference check with the current runtime and writes `DIR/val.jsonl` and `DIR/test.jsonl` with the gold of every stale turn derived from the run, and a change list that names the convention behind each change (an UNEXPLAINED change keeps the old gold and exits 1; a name-match is only reported, with the old gold kept, and exits 1). Check DIR with `python3 build_sets.py ref --sets-dir DIR`, then copy it. Since v8 `check` rejects a val and a test on the same worlds: `pool` is for adding sessions to val's worlds, and the test set is its own worlds (`freeze-v8`).
 2. Copy the files into `sets/`. A pool with a new origin needs its sources added to `ORIGINS` in `build_sets.py`.
 3. `python3 build_sets.py ref` must report 100% of sessions and turns on val and test. A failing item is a gold error or a runtime bug: fix that, never the check.
 4. Record here the counts, the origin table, the hashes, the reference result and, in the lineage, why. `python3 build_sets.py check` passes only when the hashes here are the files' hashes.
+5. Assemble and publish a new data version (`README.md`, Data versions): the files in `sets/` are held out, and a model is judged against the version it was trained on.
 
-trainfit follows the same order with `python3 build_sets.py trainfit --train-gold 'GLOB'` (a new draw, seed 0, 12 per train world) in step 1.
