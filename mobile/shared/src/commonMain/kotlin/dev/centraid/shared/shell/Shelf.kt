@@ -583,7 +583,7 @@ public class Shelf(
         }
         val (core, keyed) = openCore(path, create = true, index = index)
             ?: return@withLock refuse(null, FoundRefusal.NO_CORE)
-        val content = if (starters) FoundContent.FOUND_CONTENT_STARTERS else FoundContent.FOUND_CONTENT_EMPTY
+        val content = if (starters) FoundContent.FOUND_CONTENT_STARTERS else FoundContent.FOUND_CONTENT_UNSPECIFIED
         if (!VaultRoster.found(core, displayName = name, ownerName = ownerName, content = content)) {
             return@withLock refuse(core, FoundRefusal.NOT_FOUNDED)
         }

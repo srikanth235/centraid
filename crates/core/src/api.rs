@@ -448,9 +448,10 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
 /// is wrong".
 ///
 /// **WHAT THE NEW VAULT HOLDS is the request's `content`** (`vault.proto`'s
-/// `FoundContent`). `EMPTY` is the found and nothing else. `STARTERS` adds a
-/// note and a task to the member's own vault through the command plane, and a
-/// refused starter leaves the vault founded and empty rather than failing it.
+/// `FoundContent`). `UNSPECIFIED` — a found that names no content — is the
+/// found and nothing else. `STARTERS` adds a note and a task to the member's
+/// own vault through the command plane, and a refused starter leaves the vault
+/// founded and empty rather than failing it.
 /// `SAMPLE` founds the SAMPLE vault — the mark, the Tahoe scenario across seven
 /// apps, its Locker when the core holds keys, the mark finished last
 /// ([`crate::sample::found`]) — and any refusal fails the whole found, so the
@@ -486,7 +487,7 @@ pub fn found(
             crate::sample::now_ms(),
             sealing,
         )?,
-        wire::FoundContent::Empty | wire::FoundContent::Starters => {
+        wire::FoundContent::Unspecified | wire::FoundContent::Starters => {
             let founded = vault.found(&request.display_name, &request.owner_name)?;
             if content == wire::FoundContent::Starters {
                 let report = crate::sample::starters(vault, registry, principal);

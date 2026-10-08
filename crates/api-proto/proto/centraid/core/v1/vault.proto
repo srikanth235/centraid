@@ -62,9 +62,11 @@ message FoundRequest {
 // never rows mixed into the member's — so removing it is forgetting one
 // directory, and nothing of the member's goes with it.
 enum FoundContent {
-  // Nothing but what founding always writes: the vault row, the owner, the
-  // relation vocabulary and the default calendar.
-  FOUND_CONTENT_EMPTY = 0;
+  // A found that names no content: it gets what founding always writes and
+  // nothing else — the vault row, the owner, the relation vocabulary and the
+  // default calendar. Proto3's zero, so a request that leaves `content` unset
+  // lands here, and the core writes no row beyond those.
+  FOUND_CONTENT_UNSPECIFIED = 0;
   // A note and a task in the member's own vault. Best-effort: a refused
   // starter row leaves the vault founded and empty rather than refusing it.
   FOUND_CONTENT_STARTERS = 1;

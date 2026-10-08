@@ -432,7 +432,7 @@ fn a_members_first_vault_is_not_a_sample_and_gets_its_starters() {
 #[test]
 fn an_empty_found_writes_no_rows_and_no_mark() {
     let scratch = fresh();
-    found(&scratch.handle, "Plain", wire::FoundContent::Empty).expect("founded");
+    found(&scratch.handle, "Plain", wire::FoundContent::Unspecified).expect("founded");
     assert_eq!(mark(&scratch.handle), None);
     assert_eq!(count(&scratch.handle, "knowledge_note", "note_id"), 0);
     assert_eq!(count(&scratch.handle, "schedule_task", "task_id"), 0);
@@ -443,7 +443,7 @@ fn an_empty_found_writes_no_rows_and_no_mark() {
 #[test]
 fn only_a_seeding_sample_can_be_finished() {
     let scratch = fresh();
-    found(&scratch.handle, "My vault", wire::FoundContent::Empty).expect("founded");
+    found(&scratch.handle, "My vault", wire::FoundContent::Unspecified).expect("founded");
     let refused = scratch
         .handle
         .with_vault(|vault| Ok(vault.finish_sample()?))

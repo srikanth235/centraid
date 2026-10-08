@@ -156,10 +156,12 @@ public object VaultRoster {
         ownerName: String,
         /**
          * What the core fills the new vault with (`vault.proto`'s
-         * `FoundContent`): nothing, two starter rows in a member's first vault,
-         * or the sample scenario — which makes this file THE SAMPLE VAULT.
+         * `FoundContent`): nothing beyond what founding always writes (the
+         * default, `FOUND_CONTENT_UNSPECIFIED`), two starter rows in a member's
+         * first vault, or the sample scenario — which makes this file THE
+         * SAMPLE VAULT.
          */
-        content: FoundContent = FoundContent.FOUND_CONTENT_EMPTY,
+        content: FoundContent = FoundContent.FOUND_CONTENT_UNSPECIFIED,
     ): Boolean {
         val envelope = Envelope(
             request_id = 0,
