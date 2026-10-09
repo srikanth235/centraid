@@ -1,8 +1,11 @@
 package dev.centraid.shared.chat
 
 /**
- * THE TWO FILES CENTRAID EVER FETCHES: the on-device chat's model, and — only
- * when a member first attaches a photo — its vision projector.
+ * THE TWO FILES CENTRAID CAN FETCH: the on-device chat's model, and — only
+ * when a member first attaches a photo — its vision projector. The projector is
+ * never fetched in the shipped build: the chat offers no attachment while
+ * [ChatMachine.ATTACHMENTS_OFFERED] is off, because the model cannot describe a
+ * file (R-1088-19).
  *
  * Both shells own the transfer and neither may carry a second copy of these
  * facts, so they live here, once. A shell downloads [URL] into its own
@@ -46,6 +49,8 @@ public object ChatModelAsset {
     /**
      * THE VISION PROJECTOR (`mmproj`), fetched ONLY on a member's first photo
      * attach and never with the model: the 563 MB text download is unchanged.
+     * Nothing triggers it while [ChatMachine.ATTACHMENTS_OFFERED] is off
+     * (R-1088-19); the constants stay for the model that reads attachments.
      * Unsloth's F16 projector for Qwen3.5 0.8B. Fine-tuning left the vision
      * tower as it was, so the base model's projector is S2's; it pairs with the
      * base text weights converted at the engine's llama.cpp commit (checked by

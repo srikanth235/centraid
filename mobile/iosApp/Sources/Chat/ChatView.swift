@@ -37,7 +37,9 @@ import CentraidShared
 /// **THE COMPOSER IS ONE CARD** (`ChatComposerCard`): the waiting attachments
 /// and any notice about them on top, the field, and one row of controls — attach,
 /// the chat's scope, send. The status line ("Looking in Tally…") sits just above
-/// it while a turn runs.
+/// it while a turn runs. The attach control is drawn only when the machine offers
+/// attachments (`attachOffered`), which the shipped build does not: its model
+/// cannot describe a file (R-1088-19).
 struct ChatView: View {
     @ObservedObject var chat: ChatModel
     /// Whether the composer has focus. Home hides the band (and the lockup)
@@ -986,7 +988,9 @@ private struct ChatComposerCard: View {
             .accessibilityIdentifier("chat-field")
 
             HStack(spacing: 8) {
-                attachMenu
+                if state.attachOffered {
+                    attachMenu
+                }
                 ChatScopePill(app: state.scopeApp, label: state.scopeApp, onSetScope: onSetScope)
                 Spacer(minLength: 0)
                 if state.streaming {

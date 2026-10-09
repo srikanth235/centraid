@@ -337,7 +337,9 @@ internal fun wired(pending: Pending): AssistAttachment = when (val source = pend
  * [startDownload] is the shell's: it owns the transfer (the only thing Centraid
  * ever fetches) and reports back with the progress and finished events.
  * [startVisionDownload] is the same for the vision projector, which the shell
- * fetches only when a member first attaches a photo.
+ * fetches only when a member first attaches a photo — so never while
+ * [ChatMachine.ATTACHMENTS_OFFERED] is off (R-1088-19). [attachmentsOffered] is
+ * that switch's value for this flow; only a spec passes anything else.
  * [copyToClipboard] is the shell's platform act.
  */
 public class ChatFlow(
@@ -346,8 +348,9 @@ public class ChatFlow(
     private val copyToClipboard: (String) -> Unit,
     private val scope: CoroutineScope,
     private val startVisionDownload: () -> Unit = {},
+    attachmentsOffered: Boolean = ChatMachine.ATTACHMENTS_OFFERED,
 ) {
-    private val model = MutableStateFlow(ChatMachine.initial())
+    private val model = MutableStateFlow(ChatMachine.initial(attachmentsOffered))
     private val lock = Mutex()
     private val published = MutableStateFlow(model.value.state)
 

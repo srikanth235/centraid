@@ -14,6 +14,10 @@ import CentraidShared
 // `commonMain`, so the two shells carry one copy of them; everything else —
 // where the file lands, the session, the hash, the iCloud
 // exclusion — is iOS's and is here, and is one code path for both files.
+//
+// The projector's transfer never starts in the shipped build: the chat draws no
+// attach control while `ChatMachine.ATTACHMENTS_OFFERED` is off, because the
+// model cannot describe a file (R-1088-19), so no photo ever waits for it.
 
 /// WHICH FILE A TRANSFER IS. It rides on the task (`taskDescription`), so the
 /// delegate knows what landed without a table of its own.

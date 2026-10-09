@@ -40,9 +40,9 @@ class ChatHistorySpec : StringSpec({
 
     fun view(event: ChatEvent) = ChatInput.View(event)
 
-    fun ready(scope: String = "", vault: String = ""): Chat {
+    fun ready(scope: String = "", vault: String = "", attachments: Boolean = false): Chat {
         var chat = reduce(
-            ChatMachine.initial(),
+            ChatMachine.initial(attachments),
             view(ChatEvent(opened = ChatEvent.Opened(app = scope, vault_name = vault))),
         ).chat
         chat = reduce(chat, ChatInput.Status(centraid.core.v1.AssistModelState.ASSIST_MODEL_STATE_READY)).chat
@@ -388,7 +388,7 @@ class ChatHistorySpec : StringSpec({
     }
 
     "a stored camera-roll image keeps its chip and cannot be asked again, so Retry is not offered" {
-        val loading = reduce(ready(), view(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = "t-new")))).chat
+        val loading = reduce(ready(attachments = true), view(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = "t-new")))).chat
         val image = ChatStoredAttachment(
             kind = ChatStoredAttachmentKind.CHAT_STORED_ATTACHMENT_KIND_IMAGE,
             label = "Camera roll",
@@ -414,6 +414,28 @@ class ChatHistorySpec : StringSpec({
         ).chat
         withPhoto.state.can_retry shouldBe true
         (withPhoto.messages.first().attachments.single().source as AttachSource.VaultPhoto).assetId shouldBe "asset-1"
+    }
+
+    "with attachments off, a stored question that carried one keeps its chip and is not offered a Retry" {
+        val loading = reduce(ready(), view(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = "t-new")))).chat
+        val photo = ChatStoredAttachment(
+            kind = ChatStoredAttachmentKind.CHAT_STORED_ATTACHMENT_KIND_PHOTO,
+            label = "River",
+            asset_id = "asset-1",
+        )
+        val chat = reduce(
+            loading,
+            ChatInput.ThreadOpened("t-new", stored("", question("what is this?", listOf(photo)), answer("A river.")), started(scope = "")),
+        ).chat
+        chat.state.messages.first().attachments.single().label shouldBe "River"
+        // R-1088-19: the core would refuse the attachment, so the question is not asked again.
+        chat.state.can_retry shouldBe false
+        // A question that carried none is asked again as ever.
+        val plain = reduce(
+            loading,
+            ChatInput.ThreadOpened("t-new", stored("", question("what is due?"), answer("Nothing.")), started(scope = "")),
+        ).chat
+        plain.state.can_retry shouldBe true
     }
 
     "a photo the member has deleted since is a chip with no way to send it again" {

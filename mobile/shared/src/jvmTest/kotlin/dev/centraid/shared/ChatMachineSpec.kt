@@ -67,12 +67,16 @@ class ChatMachineSpec : StringSpec({
     val modelReady = AssistModelState.ASSIST_MODEL_STATE_READY
 
     /** A chat that has been opened and told the model is absent. */
-    fun waiting(bytes: Long = 0): Chat =
-        reduce(reduce(ChatMachine.initial(), opened(bytes = bytes)).chat, status(absent)).chat
+    fun waiting(bytes: Long = 0, attachments: Boolean = false): Chat =
+        reduce(reduce(ChatMachine.initial(attachments), opened(bytes = bytes)).chat, status(absent)).chat
 
-    /** A chat with a ready model and a session, the way the core leaves it. */
-    fun ready(scope: String = ""): Chat {
-        var chat = reduce(ChatMachine.initial(), opened(scope)).chat
+    /**
+     * A chat with a ready model and a session, the way the core leaves it. Attachments are off, as
+     * shipped (R-1088-19); the attachment specs below pass `attachments = true` to run the path
+     * that comes back with a model that reads them.
+     */
+    fun ready(scope: String = "", attachments: Boolean = false): Chat {
+        var chat = reduce(ChatMachine.initial(attachments), opened(scope)).chat
         chat = reduce(chat, status(modelReady)).chat
         return reduce(chat, ChatInput.Started(7L)).chat
     }
@@ -87,7 +91,8 @@ class ChatMachineSpec : StringSpec({
 
     fun card(id: String, title: String) = AssistCard(app = "tasks", entity = "task", id = id, title = title)
 
-    fun asked(text: String = "What is due today?"): Chat = reduce(ready(), sent(text)).chat
+    fun asked(text: String = "What is due today?", attachments: Boolean = false): Chat =
+        reduce(ready(attachments = attachments), sent(text)).chat
 
     // --- the opening phases ----------------------------------------------------
 
@@ -544,18 +549,39 @@ class ChatMachineSpec : StringSpec({
 
     /** A ready chat with a photo waiting and the reader known to be on the model. */
     fun seeing(): Chat {
-        val attached = reduce(ready(), photo()).chat
+        val attached = reduce(ready(attachments = true), photo()).chat
         return reduce(attached, visionStatus(visionReady)).chat
     }
 
+    "attachments are off as shipped: no attach control, an attach event changes nothing, and the reader is never asked about" {
+        ChatMachine.ATTACHMENTS_OFFERED shouldBe false
+        ChatMachine.initial().state.attach_offered shouldBe false
+        val chat = ready()
+        chat.state.attach_offered shouldBe false
+        chat.state.can_attach shouldBe false
+        for (event in listOf(photo(), document())) {
+            val step = reduce(chat, event)
+            step.effects.shouldBeEmpty()
+            step.chat.state.pending.shouldBeEmpty()
+            step.chat.state.vision_step shouldBe null
+            step.chat.state.vision_blocked shouldBe false
+        }
+        // The switch survives opening another chat.
+        reduce(chat, opened("tally")).chat.state.attach_offered shouldBe false
+        // And a question still goes to the core with nothing attached.
+        val step = reduce(chat, sent("What is due today?"))
+        (step.effects.single() as ChatEffect.Send).attachments.shouldBeEmpty()
+    }
+
     "a photo waits in the composer as a chip and asks where the reader stands" {
-        val step = reduce(ready(), photo())
+        val step = reduce(ready(attachments = true), photo())
         step.effects shouldBe listOf(ChatEffect.ReadVision)
         val chip = step.chat.state.pending.single()
         chip.kind shouldBe ChatAttachment.Kind.KIND_PHOTO
         chip.label shouldBe "Truckee river bend"
         chip.thumbnail_path shouldBe "/t/a1.jpg"
         step.chat.state.vision_blocked shouldBe true
+        step.chat.state.attach_offered shouldBe true
         step.chat.state.can_attach shouldBe true
         step.chat.state.attach_label shouldBe "Attach"
         step.chat.state.attach_vault_photo_label shouldBe "Photo from vault"
@@ -564,7 +590,7 @@ class ChatMachineSpec : StringSpec({
     }
 
     "no reader on the phone is the offer, with the size and one action, and a send waits" {
-        val offered = reduce(reduce(ready(), photo()).chat, visionStatus(visionAbsent)).chat
+        val offered = reduce(reduce(ready(attachments = true), photo()).chat, visionStatus(visionAbsent)).chat
         val step = offered.state.vision_step!!
         step.size_line shouldBe "Reading photos needs a 205 MB download"
         step.action_label shouldBe "Download"
@@ -573,7 +599,7 @@ class ChatMachineSpec : StringSpec({
     }
 
     "the reader's download runs, loads, and unblocks the send" {
-        val offered = reduce(reduce(ready(), photo()).chat, visionStatus(visionAbsent)).chat
+        val offered = reduce(reduce(ready(attachments = true), photo()).chat, visionStatus(visionAbsent)).chat
         val tapped = reduce(offered, view(ChatEvent(download = ChatEvent.DownloadTapped(vision = true))))
         tapped.effects shouldBe listOf(ChatEffect.StartVisionDownload)
         tapped.chat.state.vision_step!!.status_line shouldBe "Downloading"
@@ -597,7 +623,7 @@ class ChatMachineSpec : StringSpec({
     }
 
     "a reader download that stops, or will not load, is offered again with one line" {
-        val offered = reduce(reduce(ready(), photo()).chat, visionStatus(visionAbsent)).chat
+        val offered = reduce(reduce(ready(attachments = true), photo()).chat, visionStatus(visionAbsent)).chat
         val tapped = reduce(offered, view(ChatEvent(download = ChatEvent.DownloadTapped(vision = true)))).chat
         val stopped = reduce(tapped, view(ChatEvent(download_finished = ChatEvent.DownloadFinished(ok = false, vision = true)))).chat
         stopped.state.vision_step!!.action_label shouldBe "Download"
@@ -611,20 +637,20 @@ class ChatMachineSpec : StringSpec({
     }
 
     "a reader on the phone and not on the model loads without a download" {
-        val step = reduce(reduce(ready(), photo()).chat, visionStatus(visionPresent))
+        val step = reduce(reduce(ready(attachments = true), photo()).chat, visionStatus(visionPresent))
         step.effects shouldBe listOf(ChatEffect.LoadVision)
         step.chat.state.vision_step!!.status_line shouldBe ChatCopy.VISION_LOADING
     }
 
     "removing the photo takes its offer away, and a document needs no reader at all" {
-        val offered = reduce(reduce(ready(), photo()).chat, visionStatus(visionAbsent)).chat
+        val offered = reduce(reduce(ready(attachments = true), photo()).chat, visionStatus(visionAbsent)).chat
         val id = offered.state.pending.single().id
         val removed = reduce(offered, view(ChatEvent(attachment_removed = ChatEvent.AttachmentRemoved(id = id)))).chat
         removed.state.pending.shouldBeEmpty()
         removed.state.vision_step shouldBe null
         removed.state.vision_blocked shouldBe false
 
-        val doc = reduce(ready(), document())
+        val doc = reduce(ready(attachments = true), document())
         doc.effects.shouldBeEmpty()
         doc.chat.state.pending.single().kind shouldBe ChatAttachment.Kind.KIND_DOCUMENT
         doc.chat.state.vision_blocked shouldBe false
@@ -667,9 +693,9 @@ class ChatMachineSpec : StringSpec({
     }
 
     "attaching waits for a thread, and not while a turn runs" {
-        reduce(ChatMachine.initial(), photo()).effects.shouldBeEmpty()
-        reduce(waiting(), document()).chat.state.pending.shouldBeEmpty()
-        val running = asked()
+        reduce(ChatMachine.initial(attachmentsOffered = true), photo()).effects.shouldBeEmpty()
+        reduce(waiting(attachments = true), document()).chat.state.pending.shouldBeEmpty()
+        val running = asked(attachments = true)
         reduce(running, document()).chat.state.pending.shouldBeEmpty()
     }
 
@@ -685,7 +711,7 @@ class ChatMachineSpec : StringSpec({
     }
 
     "a cut document is said on the answer" {
-        val chat = reduce(reduce(ready(), document()).chat, sent("Summarise it")).chat
+        val chat = reduce(reduce(ready(attachments = true), document()).chat, sent("Summarise it")).chat
         val settled = reduce(
             chat,
             ChatInput.Settled(

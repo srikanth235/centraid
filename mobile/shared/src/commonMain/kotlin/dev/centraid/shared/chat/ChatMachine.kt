@@ -115,10 +115,27 @@ import okio.ByteString
  * the last turn's attachments again ([Chat.lastSent]), because the core
  * forgets nothing the shell can still hand it and a refused turn never
  * reached the plane.
+ *
+ * **All of this is off in the shipped build ([ATTACHMENTS_OFFERED], R-1088-19):**
+ * the model the phone ships cannot describe a photograph or a document, so the
+ * composer draws no attach control ([ChatState.attach_offered]), the machine
+ * ignores an attach event, no photo ever waits, and so the vision projector's
+ * download is never offered, started or loaded. The code stays, and the specs
+ * run it with the switch on, for the model that can.
  */
 public object ChatMachine {
+    /**
+     * WHETHER THE CHAT OFFERS ATTACHMENTS AT ALL: `false`, because the shipped
+     * model (S2) was fine-tuned on the tool format and cannot describe a file
+     * (R-1088-19). Every [Chat] starts from it. Flip it together with the core's
+     * `centraid_core::assist::attach::OFFERED` when a model that reads
+     * attachments ships.
+     */
+    public const val ATTACHMENTS_OFFERED: Boolean = false
+
     /** A chat that has not asked the core anything yet. */
-    public fun initial(): Chat = render(Chat())
+    public fun initial(attachmentsOffered: Boolean = ATTACHMENTS_OFFERED): Chat =
+        render(Chat(attachmentsOffered = attachmentsOffered))
 
     /** The most suggestions the thread's empty state offers. */
     public const val SUGGESTIONS: Int = 3
@@ -202,6 +219,7 @@ public object ChatMachine {
             vaultName = named,
             threads = chat.threads,
             now = chat.now,
+            attachmentsOffered = chat.attachmentsOffered,
         )
         return ChatStep(render(fresh), stopping + ChatEffect.ReadStatus + ChatEffect.ReadThreads)
     }
@@ -817,7 +835,7 @@ public object ChatMachine {
 
     /** The member chose something. Only while there is a thread to attach it to. */
     private fun attached(chat: Chat, event: ChatEvent.Attached): ChatStep {
-        if (!ready(chat) || chat.running) return ChatStep(chat)
+        if (!chat.attachmentsOffered || !ready(chat) || chat.running) return ChatStep(chat)
         val vaultPhoto = event.vault_photo
         val libraryPhoto = event.library_photo
         val vaultDocument = event.vault_document
@@ -1084,7 +1102,8 @@ public object ChatMachine {
                 can_retry = ready && !chat.running && chat.asked != null && !empty && !retryLosesAnAttachment(chat),
                 can_new_chat = ready && (!empty || chat.threadId.isNotEmpty()),
                 pending = if (ready) chat.pending.map(::attachment) else emptyList(),
-                can_attach = ready && !chat.running,
+                attach_offered = chat.attachmentsOffered,
+                can_attach = chat.attachmentsOffered && ready && !chat.running,
                 attach_label = ChatCopy.ATTACH,
                 attach_vault_photo_label = ChatCopy.ATTACH_VAULT_PHOTO,
                 attach_library_photo_label = ChatCopy.ATTACH_LIBRARY_PHOTO,
@@ -1120,9 +1139,15 @@ public object ChatMachine {
      * cannot be sent (a camera-roll image kept only as a thumbnail, a photo
      * since deleted) would be dropped from the answer without a word. So the
      * question can be asked again only when everything it carried still can.
+     *
+     * While attachments are not offered (R-1088-19) nothing can be sent again,
+     * so a question that carried one (a chat stored before they went off) is
+     * not offered a Retry either.
      */
     private fun retryLosesAnAttachment(chat: Chat): Boolean =
-        chat.messages.lastOrNull { it.user }?.attachments?.any { it.source is AttachSource.Unavailable } == true
+        chat.messages.lastOrNull { it.user }?.attachments?.any {
+            !chat.attachmentsOffered || it.source is AttachSource.Unavailable
+        } == true
 
     private fun threadItem(row: ThreadRow, chat: Chat): ChatThreadItem {
         val current = row.id == chat.threadId
@@ -1310,6 +1335,8 @@ public data class Chat(
     /** The last turn's attachments, asked again by Retry. */
     public val lastSent: List<Pending> = emptyList(),
     public val vision: Vision = Vision(),
+    /** Whether this chat offers attachments: [ChatMachine.ATTACHMENTS_OFFERED], unless a spec says otherwise. */
+    public val attachmentsOffered: Boolean = ChatMachine.ATTACHMENTS_OFFERED,
     /** The foreground vault's name, for the header. */
     public val vaultName: String = "",
     /** The stored thread this chat is saved in, or empty until a turn has been saved. */

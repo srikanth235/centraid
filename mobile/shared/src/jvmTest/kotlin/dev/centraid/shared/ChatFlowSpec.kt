@@ -182,7 +182,10 @@ internal class ScriptedChatDoor : ChatDoor {
     override suspend fun cardLive(app: String, entity: String, id: String): Boolean = true
 }
 
-internal class Rig(val door: ScriptedChatDoor = ScriptedChatDoor()) {
+internal class Rig(
+    val door: ScriptedChatDoor = ScriptedChatDoor(),
+    attachmentsOffered: Boolean = false,
+) {
     var downloads = 0
     var visionDownloads = 0
     val clipboard = mutableListOf<String>()
@@ -192,6 +195,7 @@ internal class Rig(val door: ScriptedChatDoor = ScriptedChatDoor()) {
         copyToClipboard = { clipboard += it },
         scope = CoroutineScope(Dispatchers.Unconfined),
         startVisionDownload = { visionDownloads += 1 },
+        attachmentsOffered = attachmentsOffered,
     ).also { it.attach() }
 
     val state: ChatState get() = flow.state.value
@@ -402,9 +406,33 @@ class ChatFlowSpec : StringSpec({
             ),
         )
 
-    "a photo with no reader on the phone offers the download, runs it, loads it, and then sends" {
+    "as shipped, an attach event reaches nothing: no reader is asked about, none is downloaded, nothing is carried" {
         runTest {
             val rig = Rig()
+            rig.door.visionAnswer = AssistVisionState.ASSIST_VISION_STATE_ABSENT
+            rig.open()
+            attachPhoto(rig)
+            rig.flow.send(
+                ChatEvent(
+                    attached = ChatEvent.Attached(
+                        vault_document = ChatEvent.VaultDocument(doc_id = "doc-1"),
+                        label = "Tahoe packing list",
+                    ),
+                ),
+            )
+            rig.door.calls.none { it == "vision-status" || it == "load-vision" } shouldBe true
+            rig.visionDownloads shouldBe 0
+            rig.state.attach_offered shouldBe false
+            rig.state.pending.shouldBeEmpty()
+            rig.state.vision_step shouldBe null
+            rig.say("What is due today?")
+            rig.door.sends.single().attachments.shouldBeEmpty()
+        }
+    }
+
+    "a photo with no reader on the phone offers the download, runs it, loads it, and then sends" {
+        runTest {
+            val rig = Rig(attachmentsOffered = true)
             rig.door.visionAnswer = AssistVisionState.ASSIST_VISION_STATE_ABSENT
             rig.open()
             attachPhoto(rig)
@@ -438,7 +466,7 @@ class ChatFlowSpec : StringSpec({
     }
 
     "a reader that is on the phone and not on the model is loaded without a download" {
-        val rig = Rig()
+        val rig = Rig(attachmentsOffered = true)
         rig.door.visionAnswer = AssistVisionState.ASSIST_VISION_STATE_PRESENT
         rig.open()
         attachPhoto(rig)
@@ -448,7 +476,7 @@ class ChatFlowSpec : StringSpec({
     }
 
     "a document needs no reader and is carried by the send" {
-        val rig = Rig()
+        val rig = Rig(attachmentsOffered = true)
         rig.open()
         rig.flow.send(
             ChatEvent(
@@ -465,7 +493,7 @@ class ChatFlowSpec : StringSpec({
     }
 
     "retry asks the last turn's attachments again" {
-        val rig = Rig()
+        val rig = Rig(attachmentsOffered = true)
         rig.open()
         attachPhoto(rig)
         rig.say("What is in this photo?")

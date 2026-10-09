@@ -11735,7 +11735,7 @@ message ChatState {
   // What waits in the composer, oldest first. Empty once the turn is sent.
   repeated ChatAttachment pending = 20;
   // The attach control is drawn: a turn is not running and there is room for
-  // another attachment.
+  // another attachment. Not drawn at all while `attach_offered` is false.
   bool can_attach = 21;
   // The labels of the attach control and its three sources, so the view owns no
   // word: "Attach", "Photo from vault", "Photo library", "Document", "Remove".
@@ -11783,6 +11783,12 @@ message ChatState {
   string card_gone_line = 46;
   // The marker the drawer puts on the open chat, for a screen reader.
   string current_label = 47;
+
+  // ATTACHMENTS ARE OFFERED AT ALL. False in the shipped build (R-1088-19): the
+  // model cannot describe a photograph or a document, so the composer draws no
+  // attach control, no photo ever waits and the vision projector is never
+  // fetched. Additive (48); every older field keeps its number and meaning.
+  bool attach_offered = 48;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
