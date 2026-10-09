@@ -21,26 +21,35 @@ package dev.centraid.shared.chat
  * release whose runtime it was trained for.
  */
 public object ChatModelAsset {
-    /** Qwen3.5 0.8B, 4-bit (`Q4_0`), as a GGUF file. */
+    /**
+     * S2, the native tool task's fine-tune of Qwen3.5 0.8B, 4-bit (`Q4_0`), as
+     * a GGUF file: the model the native plane's prompt, think compiler and
+     * decode step were trained for (R-1088-18). Published Apache-2.0 at a
+     * commit of `srikanth235/centraid-native-gguf` (tag `s2-q4_0`), converted
+     * by `experiments/toolchat/native/train/to_gguf.py` at the llama.cpp commit
+     * the engine vendors, which rebuilds it byte for byte.
+     */
     public const val URL: String =
-        "https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/8fea620810c4afa23dd6443f999a48574c1611a3/Qwen3.5-0.8B-Q4_0.gguf"
+        "https://huggingface.co/srikanth235/centraid-native-gguf/resolve/657a377d0204cc6cc14563fc9d0fe78ccc8fafd9/centraid-native-s2-Q4_0.gguf"
 
     /** What the file is called on the phone, and so what `modelPath` ends in. */
-    public const val FILE_NAME: String = "Qwen3.5-0.8B-Q4_0.gguf"
+    public const val FILE_NAME: String = "centraid-native-s2-Q4_0.gguf"
 
     /** The file's SHA-256, lowercase hex. */
-    public const val SHA256: String = "57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf"
+    public const val SHA256: String = "b1be1e45024c8e98f670d456edfdf261c786878dd8260117806e285af8e9f668"
 
     /** The file's size in bytes. */
-    public const val BYTES: Long = 563_036_064L
+    public const val BYTES: Long = 563_036_224L
 
     // ------------------------------------------------------------- vision --
 
     /**
      * THE VISION PROJECTOR (`mmproj`), fetched ONLY on a member's first photo
      * attach and never with the model: the 563 MB text download is unchanged.
-     * Unsloth's F16 projector for Qwen3.5 0.8B; it pairs with the ggml-org text
-     * weights above (checked by loading both and describing a photograph —
+     * Unsloth's F16 projector for Qwen3.5 0.8B. Fine-tuning left the vision
+     * tower as it was, so the base model's projector is S2's; it pairs with the
+     * base text weights converted at the engine's llama.cpp commit (checked by
+     * loading both and describing a photograph —
      * `crates/assist-llama/tests/real_vision.rs`). Verified the same way as the
      * model: hashed on arrival, kept only when the digest is [VISION_SHA256].
      */
