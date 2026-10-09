@@ -364,7 +364,9 @@ pub(crate) fn release_content_if_unreferenced(
         return Ok(false);
     }
     ctx.connection().execute(
-        "UPDATE core_content_item SET deleted_at = ?1, purge_at = ?2 WHERE content_id = ?3",
+        "UPDATE core_content_item SET deleted_at = ?1, purge_at = ?2, updated_at = ?1,
+                row_version = row_version + 1
+          WHERE content_id = ?3",
         rusqlite::params![ctx.now, purge_at(&ctx.now)?, content_id],
     )?;
     Ok(true)
@@ -383,7 +385,8 @@ pub(crate) fn release_content_now(ctx: &CommandCtx<'_, '_>, content_id: &str) ->
     }
     ctx.connection().execute(
         "UPDATE core_content_item
-            SET deleted_at = COALESCE(deleted_at, ?1), purge_at = ?1
+            SET deleted_at = COALESCE(deleted_at, ?1), purge_at = ?1, updated_at = ?1,
+                row_version = row_version + 1
           WHERE content_id = ?2",
         rusqlite::params![ctx.now, content_id],
     )?;
@@ -1457,7 +1460,9 @@ fn delete_asset() -> CommandDefinition {
                 rusqlite::params![ASSET_TARGET_TYPE, asset_id],
             )?;
             ctx.connection().execute(
-                "UPDATE media_asset SET deleted_at = ?1, purge_at = ?2 WHERE asset_id = ?3",
+                "UPDATE media_asset SET deleted_at = ?1, purge_at = ?2, updated_at = ?1,
+                        row_version = row_version + 1
+                  WHERE asset_id = ?3",
                 rusqlite::params![ctx.now, purge_at(&ctx.now)?, asset_id],
             )?;
             let released = release_content_if_unreferenced(ctx, &content_id)?;
@@ -1518,16 +1523,19 @@ fn restore_asset() -> CommandDefinition {
             let asset_id = ctx.required_str("asset_id")?.to_owned();
             let content_id = content_id_of(ctx, &asset_id)?;
             ctx.connection().execute(
-                "UPDATE media_asset SET deleted_at = NULL, purge_at = NULL WHERE asset_id = ?1",
-                [&asset_id],
+                "UPDATE media_asset SET deleted_at = NULL, purge_at = NULL, updated_at = ?2,
+                        row_version = row_version + 1
+                  WHERE asset_id = ?1",
+                rusqlite::params![asset_id, ctx.now],
             )?;
             // The bytes come back too. **Album membership does NOT** — it was
             // deleted, not soft-deleted, and re-inventing it would put a
             // photograph back into an album the member may since have curated.
             ctx.connection().execute(
-                "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL
+                "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL, updated_at = ?2,
+                        row_version = row_version + 1
                   WHERE content_id = ?1 AND deleted_at IS NOT NULL",
-                [&content_id],
+                rusqlite::params![content_id, ctx.now],
             )?;
             Ok(serde_json::json!({ "asset_id": asset_id }))
         },

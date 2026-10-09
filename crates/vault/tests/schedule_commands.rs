@@ -950,6 +950,43 @@ fn the_rollover_reads_the_tasks_own_zone_not_the_hosts() {
     );
 }
 
+/// A DATE IS NOT A MIDNIGHT (#1090). A due of `2026-03-01` is a whole civil
+/// day, and its successor is a whole civil day: the rollover expanded it as a
+/// UTC midnight and wrote `2026-03-02T00:00:00.000Z`, which New York reads as
+/// the evening of the 1st. The series changed spelling the first time it was
+/// ticked and a member west of Greenwich saw it a day early.
+#[test]
+fn a_repeating_task_due_by_date_rolls_over_to_a_date() {
+    let bench = Bench::new("rollover-date");
+    for (rule, due, next) in [
+        ("FREQ=DAILY", "2026-03-01", "2026-03-02"),
+        ("FREQ=WEEKLY", "2026-03-01", "2026-03-08"),
+        ("FREQ=MONTHLY", "2026-01-15", "2026-02-15"),
+    ] {
+        let task_id = bench.run(
+            "schedule.add_task",
+            json!({ "title": "Water the plants", "due_at": due, "rrule": rule }),
+        )["task_id"]
+            .as_str()
+            .expect("a task")
+            .to_owned();
+        let output = bench.run(
+            "schedule.set_task_status",
+            json!({ "task_id": task_id, "status": "completed" }),
+        );
+        assert_eq!(output["next_due_at"], json!(next), "{rule} from {due}");
+        let successor = output["next_task_id"].as_str().expect("a successor");
+        assert_eq!(
+            bench.text(
+                "SELECT due_at FROM schedule_task WHERE task_id = ?1",
+                &[&successor]
+            ),
+            Some(next.to_owned()),
+            "the successor row is a date too"
+        );
+    }
+}
+
 #[test]
 fn reopening_and_cancelling_are_named_operations_never_a_toggle() {
     let bench = Bench::new("lifecycle");

@@ -119,6 +119,9 @@ public object PairLaptopMachine {
                     Readiness.NEEDS_WORDS ->
                         model.copy(phase = PairLaptopState.Phase.PHASE_NEEDS_WORDS, notice = CustodyCopy.PAIR_NEEDS_WORDS, rekey = true)
                     Readiness.NO_VAULT -> model.copy(phase = PairLaptopState.Phase.PHASE_NEEDS_WORDS, notice = CustodyCopy.PAIR_NO_VAULT)
+                    // A SAMPLE VAULT NEVER PAIRS (the core refuses it), so the
+                    // screen closes on a sentence rather than taking a code.
+                    Readiness.SAMPLE -> model.copy(phase = PairLaptopState.Phase.PHASE_NEEDS_WORDS, notice = CustodyCopy.PAIR_SAMPLE)
                 },
             ),
         )
@@ -161,7 +164,11 @@ public object PairLaptopMachine {
         val title = when (phase) {
             PairLaptopState.Phase.PHASE_PAIRED -> CustodyCopy.PAIRED_TITLE
             PairLaptopState.Phase.PHASE_FAILED -> CustodyCopy.PAIR_FAILED_TITLE
-            PairLaptopState.Phase.PHASE_NEEDS_WORDS -> CustodyCopy.PAIR_NEEDS_WORDS_TITLE
+            // "Your words come first" only where words ARE the way out (the
+            // re-key door below); no vault, or the sample in front, keeps the
+            // screen's own title over its one sentence.
+            PairLaptopState.Phase.PHASE_NEEDS_WORDS ->
+                if (model.rekey) CustodyCopy.PAIR_NEEDS_WORDS_TITLE else CustodyCopy.PAIR_TITLE
             PairLaptopState.Phase.PHASE_CLOSED -> ""
             else -> CustodyCopy.PAIR_TITLE
         }
@@ -217,7 +224,14 @@ public object PairLaptopMachine {
 }
 
 /** Whether the foreground vault can pair. */
-public enum class Readiness { READY, NEEDS_WORDS, NO_VAULT }
+public enum class Readiness {
+    READY,
+    NEEDS_WORDS,
+    NO_VAULT,
+
+    /** The vault in front is the sample vault, which never pairs. */
+    SAMPLE,
+}
 
 /** The machine's model. The pairing code's secret is spent on first use, and the code is still never printed. */
 public data class Pairing(
@@ -329,6 +343,7 @@ public class PairLaptopBridge {
                 val holding = session?.shelf?.foregroundHolding()
                 when {
                     holding == null -> Readiness.NO_VAULT
+                    holding.sample -> Readiness.SAMPLE
                     holding.keyed -> Readiness.READY
                     else -> Readiness.NEEDS_WORDS
                 }

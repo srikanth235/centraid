@@ -4,10 +4,12 @@
 
 Two worktrees of this repository that share a `CARGO_TARGET_DIR` do not merely contend for cargo's build lock. They hand each other build output, and the errors land in files neither lane touched.
 
-Two mechanisms, both real and both observed under [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 4:
+Three mechanisms, all real; the first two observed under [#1020](https://github.com/srikanth235/centraid/issues/1020) wave 4, the third under [#1088](https://github.com/srikanth235/centraid/issues/1088):
 
 1. **A build script's `OUT_DIR` is keyed by package identity, not by source directory.** `crates/api-proto/build.rs` generates Rust from `.proto` files into `OUT_DIR`, and the package's identity — name, version, metadata hash — is identical in every worktree. A lane that edits a `.proto` therefore publishes its generated Rust to every other lane sharing the directory. The symptom is a compile error inside a crate the lane never opened: `missing field 'identity' in initializer of Hello`, `missing field 'sentence'`.
 2. **A compiled binary remembers where it was built.** `crates/xtask` resolved `repo_root()` from `env!("CARGO_MANIFEST_DIR")`, which is baked in at compile time. `cargo xtask gate` run from worktree A, with a binary the shared directory built from worktree B, walked **B's** tree — observed as `sql-confinement` reporting 98 scanned files against the 89 the worktree holds. Fixed in `crates/xtask` (`repo_root()` resolves at run time and the warm/cold reading comes off `CARGO_TARGET_DIR`), so this half is closed; the `OUT_DIR` half is not, and cannot be fixed from inside the workspace.
+
+3. **Freshness is judged by mtime against a fingerprint the other worktree refreshed.** A unit's dep-info names its sources relative to the package root, and the metadata hash is the same in both worktrees, so one directory holds one artifact per crate. A sibling that builds the crate after your last edit refreshes the fingerprint; your older file now looks built, and your next `cargo test` links the sibling's crate with no rebuild and no warning. Observed: a test binary whose founded vault was at `user_version` 11 and whose `head_version()` was 11, on a tree that held rung twelve (`baseline.rs` failed on `left: 11, right: 12`). Touching a source file hides it until the sibling builds again.
 
 The consequence worth stating plainly: **no gate verdict taken from a shared target directory is worth anything**, whichever lane produced it.
 
@@ -34,6 +36,18 @@ cargo xtask gate --profile local
 rm -rf "$CARGO_TARGET_DIR/release"   # after any release build — it is the large half
 ```
 
+Where disk really does force one directory, give each lane's workspace crates a metadata hash of their own and keep the third-party crates shared. The profile is part of a unit's hash, so a per-package override that changes nothing a crate does is enough:
+
+```sh
+# one config file per lane, outside the repo; 26 workspace members today
+cargo metadata --no-deps --format-version 1 | jq -r '.packages[].name' | while read -r crate; do
+  printf '[profile.dev.package.%s]\ncodegen-units = 255\n[profile.test.package.%s]\ncodegen-units = 255\n' "$crate" "$crate"
+done > "$HOME/lane.toml"
+cargo --config "$HOME/lane.toml" test -p centraid-vault     # every cargo command, `cargo check` and clippy included
+```
+
+Measured under #1088 with two lanes on one directory: the lane's rlibs, test binaries and `api-proto` build-script outputs get names of their own (`ls -t target/debug/deps/libcentraid_vault-*`, `ls -t target/debug/build/centraid-api-proto-*`), and `strings` on a test binary names only the lane's worktree. It narrows the trap and does not retire it: the other lane must do the same or it still links yours, `cargo xtask` runs whichever binary the directory holds, and every lane's test binaries are a copy on disk (a full `-p centraid-vault` run left 836 MiB). A private directory stays the answer when there is room.
+
 Disk is the reason anybody shares one, so budget for it: a warm debug tree of this workspace is several GB, and `cargo build --release` adds its own. `df -h` before a release build, and clear `release/` after.
 
 ## How agents get it wrong
@@ -45,7 +59,7 @@ Disk is the reason anybody shares one, so budget for it: a warm debug tree of th
 
 ## Checklist
 
-- [ ] `CARGO_TARGET_DIR` set, unique to this worktree
+- [ ] `CARGO_TARGET_DIR` set, unique to this worktree (or, when it cannot be, a lane `--config` on every cargo command, and the sibling's too)
 - [ ] `touch crates/api-proto/build.rs` before the first build in a fresh directory
 - [ ] `$CARGO_TARGET_DIR/release` removed after a release build
 - [ ] Any gate verdict quoted in a receipt was taken in this worktree's own directory

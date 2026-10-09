@@ -58,9 +58,12 @@ import okio.ByteString.Companion.encodeUtf8
  *    a pass the OS kills half way resumes at the photograph it was on rather
  *    than at the one it started from.
  * 2. **The invoke key is the CONTENT HASH** and not the asset's local id. The
- *    same bytes always produce the same key, the core's own replay ledger
- *    short-circuits the duplicate, and `media.add_asset` DEDUPES on the
- *    content row besides. It never leaves this device (#1029 §4).
+ *    same bytes always produce the same key, but the key is only the shell's
+ *    correlation key and the core remembers none (there is no replay ledger,
+ *    #1029 §1, R-1088-12). What makes a re-offer commit once is
+ *    `media.add_asset`, which ADOPTS the asset already wrapping the same
+ *    content row and answers `deduped: 1`. It never leaves this device
+ *    (#1029 §4).
  *
  * Keying on the local id instead would break in exactly the case that matters —
  * a restored phone, where every `PHAsset` identifier is new and the bytes are
@@ -360,8 +363,11 @@ public class CameraRoll(
                         name = ACTION,
                         // THE HASH IS THE INVOKE KEY. See the class comment on
                         // why it is not the local identifier: the same
-                        // photograph re-offered is the same key, so the re-walk
-                        // that follows a reinstall commits once.
+                        // photograph re-offered is the same key. The key does
+                        // not make the re-walk that follows a reinstall commit
+                        // once, because the core remembers no key;
+                        // `media.add_asset` does, by adopting the asset that
+                        // already wraps the same bytes.
                         invoke_key = "$ACTION:$hash",
                         input = input.encodeUtf8(),
                     ),

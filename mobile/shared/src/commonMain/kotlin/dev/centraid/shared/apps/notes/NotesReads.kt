@@ -117,11 +117,11 @@ public object NotesReads :
                     // the value oneof and reading it as text would come back
                     // empty and unpin every note in the vault.
                     pinned = row.integer(3) != 0L,
-                    // THE BASE REVISION IS WHAT MAKES A SAVE A CONCURRENCY
-                    // CHECK rather than a last-write-wins, and the machine puts
-                    // it in the save's `invoke_key`. A draft read without one
-                    // would let a replayed intent re-execute a committed
-                    // command.
+                    // THE BASE REVISION IS A MARKER AND NOT A CHECK. The kit's
+                    // autosave keeps it (`AutosaveLaw.loaded`), but it is not an
+                    // input to the save and not part of the save's `invoke_key`:
+                    // there is no vault-side revision check, and the last save
+                    // on this phone wins (R-1047-K3).
                     base_revision_id = row.text(4),
                 ),
             ),

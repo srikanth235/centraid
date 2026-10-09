@@ -103,18 +103,11 @@ public fun HomeScreen(
      */
     onDownloadSettings: () -> Unit = {},
     /**
-     * Open the vault sheet (#1025 live-shell, R-SHELL-3; #1029 §1).
-     *
-     * It was "open the Gateway / pair sheet", and the empty-device switcher is
-     * still an onboarding surface — what it offers now is MAKING a vault
-     * rather than pairing with one, because there is nothing to pair with.
+     * Open the vault sheet (#1025 live-shell; #1029 §1): the Settings gear's
+     * door, which makes another vault. A device holding none never draws this
+     * screen (`FirstLaunchScreen`).
      */
     onMakeVault: () -> Unit = {},
-    /**
-     * Open words.enter for a restore (#1047 E3): the empty switcher's way back
-     * for a fresh install's vaults. Defaulted for previews.
-     */
-    onRestore: () -> Unit = {},
     /**
      * The More sheet's custody rows (#1047 E6): show the 24 words again
      * (words.show) and pair with the laptop (pair.laptop). Each is an intent;
@@ -187,8 +180,6 @@ public fun HomeScreen(
                 onEvent(HomeEvent(vault_picked = HomeEvent.VaultPicked(vault_id = id)))
             },
             onForget = onForget,
-            onMakeVault = onMakeVault,
-            onRestore = onRestore,
         )
     }
     // THE ALL-APPS LISTING. The band's `more` has set this flag since wave A
@@ -319,8 +310,6 @@ private fun VaultSheet(
     active: VaultLockup?,
     onPick: (String) -> Unit,
     onForget: (String) -> Unit,
-    onMakeVault: () -> Unit = {},
-    onRestore: () -> Unit = {},
 ) {
     // WHICH VAULT THE MEMBER IS BEING ASKED ABOUT, held by the sheet and not by
     // the row: a dialog owned by a row would be unmounted the instant the
@@ -340,49 +329,11 @@ private fun VaultSheet(
                 color = centraidColor("text"),
                 modifier = Modifier.padding(horizontal = PAGE_MARGIN, vertical = 8.dp),
             )
-            // ZERO IS NOT ONE (R-SHELL-3). Empty device → honest copy and a
-            // way out of it; one vault keeps the old sentence.
+            // ZERO VAULTS NEVER REACHES THIS SHEET: a device that holds none
+            // opens onto `FirstLaunchScreen` instead of Home (`MainActivity`),
+            // which is where "make" and "restore" live now. One vault keeps
+            // the old sentence.
             when {
-                vaults.isEmpty() -> {
-                    Text(
-                        text = HomeWords.VAULTS_NONE,
-                        style = centraidType("small"),
-                        color = centraidColor("textSoft"),
-                        modifier = Modifier.padding(horizontal = PAGE_MARGIN),
-                    )
-                    Text(
-                        text = HomeWords.VAULTS_MAKE,
-                        style = centraidType("smallStrong"),
-                        color = centraidColor("link"),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onPick("")
-                                onMakeVault()
-                            }
-                            .padding(horizontal = PAGE_MARGIN, vertical = 12.dp)
-                            .heightIn(min = 44.dp)
-                            .testTag("vault-sheet-make")
-                            .semantics { contentDescription = HomeWords.VAULTS_MAKE_SPOKEN },
-                    )
-                    // AND THE WAY BACK: a fresh install's vaults come home
-                    // from the 24 words (#1047 E3), the switcher shut first.
-                    Text(
-                        text = WordsCopy.RESTORE_FIRST_ACTION,
-                        style = centraidType("smallStrong"),
-                        color = centraidColor("link"),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onPick("")
-                                onRestore()
-                            }
-                            .padding(horizontal = PAGE_MARGIN, vertical = 12.dp)
-                            .heightIn(min = 44.dp)
-                            .testTag("vault-sheet-restore")
-                            .semantics { role = Role.Button },
-                    )
-                }
                 vaults.size == 1 -> {
                     Text(
                         text = HomeWords.VAULTS_ONE,
@@ -1095,13 +1046,22 @@ private fun ColumnScope.FilledBody(body: TileBody) {
         }
 
         tally != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // NO FIGURE IS A REAL STATE: Home does not project a balance yet,
+            // so the body is the count's own sentence alone.
+            val figure = tally.figure
+            if (figure != null) {
+                Text(
+                    formatMoney(figure),
+                    style = centraidType("display"),
+                    color = centraidColor("text"),
+                    maxLines = 1,
+                )
+            }
             Text(
-                tally.figure?.let { formatMoney(it) } ?: "",
-                style = centraidType("display"),
-                color = centraidColor("text"),
-                maxLines = 1,
+                tally.caption,
+                style = centraidType(if (figure != null) "small" else "smallStrong"),
+                color = centraidColor(if (figure != null) "textSoft" else "text"),
             )
-            Text(tally.caption, style = centraidType("small"), color = centraidColor("textSoft"))
             // Rendered only when the caller has something true to say — the
             // rolling comparison is an optional field, and absent is silence.
             val after = tally.after

@@ -5,6 +5,7 @@
   "userVersion": 7,
   "ladderUserVersion": 11,
   "ontologyPacks": [
+    "chat",
     "core",
     "knowledge",
     "locker",
@@ -463,6 +464,44 @@
           "role": "derived"
         }
       ]
+    },
+    {
+      "logical": "chat.message",
+      "table": "chat_message",
+      "label": "Chat messages",
+      "lifecycle": "mutable",
+      "projectionOf": "chat.thread",
+      "deletionRoles": []
+    },
+    {
+      "logical": "chat.message_attachment",
+      "table": "chat_message_attachment",
+      "label": "Chat attachments",
+      "lifecycle": "append-only",
+      "projectionOf": "chat.message",
+      "deletionRoles": [
+        {
+          "column": "thumb_content_id",
+          "parent": "core_content_item",
+          "role": "participation"
+        }
+      ]
+    },
+    {
+      "logical": "chat.message_card",
+      "table": "chat_message_card",
+      "label": "Chat cards",
+      "lifecycle": "append-only",
+      "projectionOf": "chat.message",
+      "deletionRoles": []
+    },
+    {
+      "logical": "chat.thread",
+      "table": "chat_thread",
+      "label": "Chats",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
     },
     {
       "logical": "core.account",
@@ -1472,6 +1511,12 @@
     }
   ],
   "contentReferences": [
+    {
+      "table": "chat_message_attachment",
+      "column": "thumb_content_id",
+      "onlyLive": null,
+      "documentHead": false
+    },
     {
       "table": "core_attachment",
       "column": "content_id",

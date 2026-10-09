@@ -24,6 +24,9 @@ CREATE INDEX access_provenance_occurred_page_idx
 CREATE INDEX access_receipt_occurred_page_idx
   ON access_receipt(occurred_at, receipt_id);
 
+-- index chat_thread_recent_idx on chat_thread
+CREATE INDEX chat_thread_recent_idx ON chat_thread(updated_at DESC, thread_id DESC);
+
 -- index core_attachment_target_role_page_idx on core_attachment
 CREATE INDEX core_attachment_target_role_page_idx
   ON core_attachment(target_type, role, attachment_id);
@@ -193,6 +196,18 @@ CREATE INDEX idx_calendar_owner_party ON schedule_calendar(owner_party_id);
 
 -- index idx_capability_command on agent_capability
 CREATE INDEX idx_capability_command ON agent_capability(command_id);
+
+-- index idx_chat_attachment_asset on chat_message_attachment
+CREATE INDEX idx_chat_attachment_asset
+  ON chat_message_attachment(asset_id) WHERE asset_id IS NOT NULL;
+
+-- index idx_chat_attachment_document on chat_message_attachment
+CREATE INDEX idx_chat_attachment_document
+  ON chat_message_attachment(document_id) WHERE document_id IS NOT NULL;
+
+-- index idx_chat_attachment_thumb on chat_message_attachment
+CREATE INDEX idx_chat_attachment_thumb
+  ON chat_message_attachment(thumb_content_id) WHERE thumb_content_id IS NOT NULL;
 
 -- index idx_circle_member_party on social_circle_member
 CREATE INDEX idx_circle_member_party ON social_circle_member(party_id);
@@ -1005,6 +1020,76 @@ CREATE TABLE blob_staging (
   CHECK (variant IS NULL OR
     (variant IN ('thumb','preview','poster') AND inline_content IS NULL) OR
     (variant IN ('text','transcript','embedding','phash','thumbhash') AND inline_content IS NOT NULL))
+) STRICT;
+
+-- table chat_message on chat_message
+CREATE TABLE chat_message (
+  thread_id   TEXT NOT NULL REFERENCES chat_thread(thread_id) ON DELETE CASCADE,
+  ordinal     INTEGER NOT NULL CHECK (ordinal >= 0),
+  role        TEXT NOT NULL CHECK (role IN ('user','assistant')),
+  text        TEXT NOT NULL,
+  outcome     TEXT NOT NULL CHECK (outcome IN (
+                'sent','answered','stopped','refused',
+                'proposed','applied','dismissed','stale','failed')),
+  refusal     TEXT CHECK (refusal IS NULL OR refusal IN (
+                'no_tool_fits','query_failed','unparsable','model_absent','model_failed',
+                'vision_absent','attachment_unsupported','attachment_unreadable',
+                'attachment_too_large')),
+  notice      TEXT CHECK (notice IS NULL OR notice IN ('doc_truncated')),
+  record_json TEXT CHECK (record_json IS NULL OR json_valid(record_json)),
+  created_at  TEXT NOT NULL,
+  PRIMARY KEY (thread_id, ordinal),
+  CHECK ((role = 'user') = (outcome = 'sent')),
+  CHECK ((outcome = 'refused') = (refusal IS NOT NULL)),
+  CHECK (role = 'assistant' OR (notice IS NULL AND record_json IS NULL))
+) STRICT;
+
+-- table chat_message_attachment on chat_message_attachment
+CREATE TABLE chat_message_attachment (
+  thread_id        TEXT NOT NULL,
+  message_ordinal  INTEGER NOT NULL,
+  position         INTEGER NOT NULL CHECK (position >= 0),
+  kind             TEXT NOT NULL CHECK (kind IN ('photo','document','image')),
+  label            TEXT NOT NULL,
+  asset_id         TEXT REFERENCES media_asset(asset_id) ON DELETE SET NULL,
+  document_id      TEXT REFERENCES core_document(document_id) ON DELETE SET NULL,
+  thumb_content_id TEXT REFERENCES core_content_item(content_id) ON DELETE SET NULL,
+  PRIMARY KEY (thread_id, message_ordinal, position),
+  FOREIGN KEY (thread_id, message_ordinal)
+    REFERENCES chat_message(thread_id, ordinal) ON DELETE CASCADE,
+  CHECK ((kind = 'photo' OR asset_id IS NULL)
+     AND (kind = 'document' OR document_id IS NULL)
+     AND (kind = 'image' OR thumb_content_id IS NULL))
+) STRICT;
+
+-- table chat_message_card on chat_message_card
+CREATE TABLE chat_message_card (
+  thread_id       TEXT NOT NULL,
+  message_ordinal INTEGER NOT NULL,
+  position        INTEGER NOT NULL CHECK (position >= 0),
+  app             TEXT NOT NULL
+                  CHECK (app IN ('agenda','docs','notes','people','photos','tally','tasks')),
+  entity          TEXT NOT NULL CHECK (length(entity) > 0),
+  row_id          TEXT NOT NULL CHECK (length(row_id) > 0),
+  qualifier       TEXT NOT NULL DEFAULT '',
+  title           TEXT NOT NULL,
+  subtitle        TEXT NOT NULL DEFAULT '',
+  meta            TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (thread_id, message_ordinal, position),
+  FOREIGN KEY (thread_id, message_ordinal)
+    REFERENCES chat_message(thread_id, ordinal) ON DELETE CASCADE
+) STRICT;
+
+-- table chat_thread on chat_thread
+CREATE TABLE chat_thread (
+  thread_id   TEXT PRIMARY KEY,
+  title       TEXT NOT NULL CHECK (length(trim(title)) > 0),
+  scope_app   TEXT CHECK (scope_app IS NULL
+                          OR scope_app IN ('agenda','docs','notes','people','photos','tally','tasks')),
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  FOREIGN KEY (thread_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
 -- table core_account on core_account
@@ -3064,6 +3149,57 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE session_id = NEW.session_id;
+END;
+
+-- trigger chat_message_is_not_born_settled on chat_message
+CREATE TRIGGER chat_message_is_not_born_settled
+BEFORE INSERT ON chat_message
+WHEN NEW.outcome IN ('applied','dismissed','stale','failed')
+BEGIN
+  SELECT RAISE(ABORT, 'a message is proposed before it is settled: it is not born applied, dismissed, stale or failed');
+END;
+
+-- trigger chat_message_outcome_settles_once on chat_message
+CREATE TRIGGER chat_message_outcome_settles_once
+BEFORE UPDATE OF outcome ON chat_message
+WHEN NEW.outcome IS NOT OLD.outcome
+BEGIN
+  SELECT RAISE(ABORT, 'a told answer does not change: only a proposal settles, and once')
+   WHERE OLD.outcome <> 'proposed';
+  SELECT RAISE(ABORT, 'a proposal settles as applied, dismissed, stale or failed')
+   WHERE NEW.outcome NOT IN ('applied','dismissed','stale','failed');
+END;
+
+-- trigger chat_thread_entity_delete on chat_thread
+CREATE TRIGGER chat_thread_entity_delete
+AFTER DELETE ON chat_thread
+BEGIN
+  DELETE FROM core_entity WHERE entity_id = OLD.thread_id;
+END;
+
+-- trigger chat_thread_entity_insert on chat_thread
+CREATE TRIGGER chat_thread_entity_insert
+BEFORE INSERT ON chat_thread
+BEGIN
+  SELECT RAISE(ABORT, 'entity id is already held by another kind: chat_thread (#916)')
+   WHERE EXISTS (
+     SELECT 1 FROM core_entity
+      WHERE entity_id = NEW.thread_id AND entity_type <> 'chat.thread');
+  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
+  VALUES (NEW.thread_id, 'chat.thread', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger chat_thread_touch_updated_at on chat_thread
+CREATE TRIGGER chat_thread_touch_updated_at
+AFTER UPDATE ON chat_thread
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE chat_thread
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE thread_id = NEW.thread_id;
 END;
 
 -- trigger core_account_entity_delete on core_account

@@ -65,6 +65,8 @@ use centraid_vault::value::Value;
 
 use crate::error::{CoreError, Result};
 
+// The chat's arm (R-CHAT-1): the thread list, a thread, and a card's row.
+mod chat;
 // People's arm (#1046): its conversions and tests, beside this one.
 // Docs' arm (#1046): its conversions and tests, beside this one.
 mod docs;
@@ -210,6 +212,9 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,
         Q::LockerReview(asked) => locker::review(vault, &door, &now, asked)?,
         Q::LockerAccess(asked) => locker::access(vault, &door, asked)?,
+        Q::ChatThreads(asked) => chat::threads(vault, asked)?,
+        Q::ChatThread(asked) => chat::thread(vault, asked)?,
+        Q::ChatCard(asked) => chat::card(vault, asked)?,
     };
     Ok(wire::AppQueryResponse {
         answer: Some(answer),
@@ -371,6 +376,14 @@ impl<'v> VaultDoor<'v> {
             vault,
             failure: RefCell::new(None),
         }
+    }
+
+    /// The first failure the vault reported to this door, taken. For a caller
+    /// that reads through an app crate's loader directly (the chat's photo
+    /// reads) and so does not pass through [`settle`], which is where an
+    /// app-query arm answers it.
+    pub(crate) fn take_failure(&self) -> Option<CoreError> {
+        self.failure.borrow_mut().take()
     }
 
     /// Keep a failure, unless an earlier one is already kept: the first is the

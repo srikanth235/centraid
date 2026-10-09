@@ -106,6 +106,8 @@ The routes, the bodies, the refusal codes and every number the protocol states a
 
 **The intent plane is gone.** `seat_outbox`, `base_versions`, `depends_on`, `WaitingOn` and the outcome ledger were the offline-write machinery of a device that was not the authority. The phone **is** the authority: a write is a local transaction, not a queued claim, and there is nothing to settle, conflict or park. What survives is canonical JSON for the audit hash, and `NeededBytes`.
 
+**There is no replay ledger, and `invoke_key` is the shell's correlation key** ([#1029](https://github.com/srikanth235/centraid/issues/1029) §1, [R-1088-12](decisions.md#one-assistant-plane-1088)). `Command.invoke_key` is required by the core and pairs an answer with the write that caused it in the shell (`ScreenWrites.settled`); it never reaches the vault, which is handed a name and an input. The same key sent twice runs the command twice (`crates/core/tests/replay.rs`). A write the shell may re-offer is therefore idempotent by its own content or by an id the phone minted first: the camera roll's re-walk by `media.add_asset` adopting the asset that already wraps the same bytes, Docs' "Try again" by a pre-minted document id, and the chat's confirm by the core door's own memory of keys. `Idempotency::Once` means "must not be run twice for one intent", not "the vault stops a second run".
+
 **What is queued instead is the backup**: sealed parts in the spool, each named by a keyed hash of its file's plaintext. Storage is write-once and a name is a function of the plaintext, so a part sent twice is acknowledged twice and stored once, and a re-run of an interrupted pass costs nothing. See [gateway.md](gateway.md).
 
 ## The member sentence and its detail (#1015 R-NY-10)

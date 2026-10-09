@@ -1,0 +1,73 @@
+[package]
+name = "centraid-assist-llama"
+description = "The on-device chat engine: llama.cpp behind centraid-assist's Model and ModelLoader traits."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_assist_llama"
+path = "src/lib.rs"
+
+[features]
+# `engine` is llama.cpp. Off, this crate is the part of the engine that is not
+# llama.cpp (`generate`: the generation loop over a `Backend` a test fakes, and
+# `Config`), which the PR gate builds, lints and tests; on, it is the loader
+# and the process-wide host the phone's core registers. `centraid-core-ffi`'s
+# `llama` feature turns it on, so llama.cpp (a cmake build of ~5 minutes cold)
+# compiles where the phone's core is built and nowhere else (R-CHAT-10).
+default = []
+engine = ["dep:llama-cpp-2"]
+
+[dependencies]
+centraid-assist = { path = "../assist" }
+serde.workspace = true
+serde_json.workspace = true
+# `default-features = false` drops `openmp` (iOS has no libomp; ggml's own
+# thread pool is what runs), `common` (llama.cpp's examples library: this crate
+# needs the core grammar sampler only) and the Android shared-libc++ default.
+# `mtmd` is llama.cpp's multimodal library: the projector loader and the image
+# encoder behind a photo attachment.
+llama-cpp-2 = { version = "=0.1.158", default-features = false, features = [
+  "mtmd",
+], optional = true }
+
+# Metal on every Apple target. The crate adds it by itself for macOS on arm64
+# only; an iPhone is the target this engine is for.
+[target.'cfg(target_vendor = "apple")'.dependencies]
+llama-cpp-2 = { version = "=0.1.158", default-features = false, features = [
+  "metal",
+  "mtmd",
+], optional = true }
+
+# Android links libc++ statically so the one `libcentraid_core_ffi.so` is the
+# only native library the APK carries.
+[target.'cfg(target_os = "android")'.dependencies]
+llama-cpp-2 = { version = "=0.1.158", default-features = false, features = [
+  "android-static-stdcxx",
+  "mtmd",
+], optional = true }
+
+# The binary and the two real-model suites link llama.cpp, so they exist only
+# with `engine`: a build without it skips them (`cargo clippy --all-targets`
+# included) instead of failing, and a build that names one asks for the feature.
+[[bin]]
+name = "assist-step"
+path = "src/bin/assist-step.rs"
+required-features = ["engine"]
+
+[[test]]
+name = "real_model"
+path = "tests/real_model.rs"
+required-features = ["engine"]
+
+[[test]]
+name = "real_vision"
+path = "tests/real_vision.rs"
+required-features = ["engine"]
+
+[dev-dependencies]
+image.workspace = true

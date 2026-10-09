@@ -1,0 +1,26 @@
+# The Python dependencies of the native harness's CPU test suite (#1044), the INPUT of requirements-ci.txt.
+# The `native-python` job of .github/workflows/gate.yml installs the compiled file, which pins every package by content
+# (`pip install --require-hashes`). Only what the suite imports: the trainer's tiny CPU model and its tokenizer (torch,
+# transformers), the checkpoint soup (safetensors) and the batcher (numpy). The VM's trainer needs more (flash-linear-attention,
+# peft for --lora, CUDA); none of it is exercised on a CPU.
+#
+# Regenerate after changing this file, from experiments/toolchat/native (uv; every package and file it lists is then
+# re-hashed, so review the diff of the .txt):
+#
+#   uv pip compile requirements-ci.in --generate-hashes --emit-index-url --python-version 3.11 \
+#     --python-platform x86_64-unknown-linux-gnu --extra-index-url https://download.pytorch.org/whl/cpu \
+#     --index-strategy unsafe-best-match --exclude-newer <two weeks ago> -o requirements-ci.txt
+#
+# Check the result before committing: `osv-scanner scan source -L requirements-ci.txt` reports no advisory today.
+
+# CPU wheel (download.pytorch.org/whl/cpu): PyPI's Linux wheel is the CUDA build, a gigabyte with the nvidia-* libraries.
+# 2.13.0, not the 2.8.0 train/vm/run_job.sh installs on the VM: OSV lists eight advisories on 2.8.0, four of them rated high
+# (among them CVE-2026-24747, memory corruption in the weights_only unpickler, fixed in 2.10.0), and none on 2.13.0. These
+# tests build a tiny random model and never load a checkpoint of the VM's, so the version carries no result across.
+torch==2.13.0
+
+# The version train/bundle.py stages for a job (`--transformers`), which is the one the tiny-model tests build against.
+transformers==5.17.0
+
+numpy
+safetensors

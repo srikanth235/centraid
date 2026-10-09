@@ -135,9 +135,123 @@ pub struct Founded {
     pub owner_party_id: String,
 }
 
+/// THE SAMPLE MARK: `core_vault.settings_json`'s `sample` key.
+///
+/// A SAMPLE VAULT is one a phone founds beside the member's first vault and
+/// fills with a scenario to look around in. Whether a vault is one is a fact
+/// about the VAULT, so it lives inside it — the shelf on a phone has no
+/// manifest, and a second place the fact lived would be a second place to be
+/// wrong. `settings_json` is the vault's own settings bag and no command writes
+/// it, so the mark needs no column, no migration and no new door.
+///
+/// **Two states, and the order is the crash story.** [`Vault::found_sample`]
+/// writes [`SampleMark::Seeding`] in the SAME commit as `core_vault`, so there
+/// is no moment at which the file is a vault without the mark; the scenario is
+/// seeded through the command plane; [`Vault::finish_sample`] writes
+/// [`SampleMark::Ready`] LAST. A process killed anywhere in between leaves a
+/// vault that says `seeding`, and a shell that finds one deletes it rather than
+/// holding half a scenario as if it were whole.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SampleMark {
+    /// Founded as a sample; the scenario has not finished.
+    Seeding,
+    /// Founded as a sample, and every row of the scenario landed.
+    Ready,
+}
+
+impl SampleMark {
+    /// The word the mark is stored as. A page read selects it as text
+    /// (`json_extract(settings_json, '$.sample')`), so these two spellings are
+    /// the contract a shell reads.
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Seeding => "seeding",
+            Self::Ready => "ready",
+        }
+    }
+
+    fn of(word: &str) -> Option<Self> {
+        match word {
+            "seeding" => Some(Self::Seeding),
+            "ready" => Some(Self::Ready),
+            _ => None,
+        }
+    }
+}
+
 impl Vault {
-    /// Write the vault row and its owner party.
+    /// Write the vault row and its owner party, in US dollars.
     pub fn found(&self, display_name: &str, owner_name: &str) -> Result<Founded> {
+        self.found_in(display_name, owner_name, "USD")
+    }
+
+    /// Write the vault row and its owner party with `base_currency` (an ISO
+    /// 4217 code; the column's CHECK holds it to three characters). The base
+    /// currency is set once, at founding: no command changes it.
+    pub fn found_in(
+        &self,
+        display_name: &str,
+        owner_name: &str,
+        base_currency: &str,
+    ) -> Result<Founded> {
+        self.found_with_settings(display_name, owner_name, base_currency, "{}")
+    }
+
+    /// FOUND A SAMPLE VAULT: the vault row, its owner, and the mark at
+    /// [`SampleMark::Seeding`], in one commit. See [`SampleMark`].
+    pub fn found_sample(&self, display_name: &str, owner_name: &str) -> Result<Founded> {
+        let settings = format!("{{\"sample\":\"{}\"}}", SampleMark::Seeding.word());
+        self.found_with_settings(display_name, owner_name, "USD", &settings)
+    }
+
+    /// THE SCENARIO LANDED: the mark moves to [`SampleMark::Ready`]. Written
+    /// LAST, so a vault that says `ready` is a whole one. A vault that is not a
+    /// sample is refused rather than turned into one.
+    pub fn finish_sample(&self) -> Result<()> {
+        if self.sample_mark()? != Some(SampleMark::Seeding) {
+            return Err(crate::error::VaultError::Invariant {
+                context: "only a sample vault that is still seeding can be finished".to_owned(),
+            });
+        }
+        let now = self.clock().now_text();
+        self.commit(|tx| {
+            tx.set_producer("vault.finish_sample");
+            tx.connection().execute(
+                "UPDATE core_vault
+                    SET settings_json = json_set(settings_json, '$.sample', ?1),
+                        updated_at = ?2",
+                rusqlite::params![SampleMark::Ready.word(), now],
+            )?;
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    /// WHETHER THIS VAULT IS A SAMPLE, and how far its scenario got. `None` is
+    /// a vault that is not one — every vault a member makes or restores.
+    pub fn sample_mark(&self) -> Result<Option<SampleMark>> {
+        self.read(|connection| {
+            let word: Option<String> = connection
+                .query_row(
+                    "SELECT json_extract(settings_json, '$.sample')
+                       FROM core_vault ORDER BY vault_id LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .ok()
+                .flatten();
+            Ok(word.as_deref().and_then(SampleMark::of))
+        })
+    }
+
+    fn found_with_settings(
+        &self,
+        display_name: &str,
+        owner_name: &str,
+        base_currency: &str,
+        settings_json: &str,
+    ) -> Result<Founded> {
         let now = self.clock().now_text();
         let vault_id = self.ids().next();
         let owner_party_id = self.ids().next();
@@ -156,8 +270,15 @@ impl Vault {
                 "INSERT INTO core_vault
                    (vault_id, self_party_id, display_name, status, base_currency,
                     settings_json, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, 'active', 'USD', '{}', ?4, ?4)",
-                rusqlite::params![vault_id, owner_party_id, display_name, now],
+                 VALUES (?1, ?2, ?3, 'active', ?5, ?6, ?4, ?4)",
+                rusqlite::params![
+                    vault_id,
+                    owner_party_id,
+                    display_name,
+                    now,
+                    base_currency,
+                    settings_json
+                ],
             )?;
             seed_relation_vocabulary(tx.connection(), self.ids(), &now)?;
             seed_default_calendar(tx.connection(), self.ids(), &owner_party_id, &now)?;

@@ -453,7 +453,7 @@ fn edit_note() -> CommandDefinition {
         handler: |ctx| {
             let note_id = ctx.required_str("note_id")?.to_owned();
             let (current_content_id, current_format) = note_body(ctx, &note_id)?;
-            let mut sets: Vec<&str> = vec!["updated_at = ?"];
+            let mut sets: Vec<&str> = vec!["updated_at = ?", "row_version = row_version + 1"];
             let mut binds: Vec<rusqlite::types::Value> =
                 vec![rusqlite::types::Value::Text(ctx.now.clone())];
             let mut minted: Option<String> = None;
@@ -834,9 +834,17 @@ fn delete_note() -> CommandDefinition {
             let note_id = ctx.required_str("note_id")?.to_owned();
             let (content_id, _) = note_body(ctx, &note_id)?;
             let until = purge_at(&ctx.now)?;
+            // THE VERSION MOVES HERE, NOT IN THE TRIGGER. A note binned at the
+            // instant it was written (or edited) sets `updated_at` to the value
+            // it already holds, which is exactly when
+            // `knowledge_note_touch_updated_at` stamps the HOST's wall clock
+            // over the injected one (the R-1020-35 shape `create_note` fixed).
+            // Bumping `row_version` in this statement is what the trigger would
+            // have done, and its `WHEN` guard then stands aside.
             ctx.connection().execute(
                 "UPDATE knowledge_note
-                    SET deleted_at = ?1, purge_at = ?2, updated_at = ?1
+                    SET deleted_at = ?1, purge_at = ?2, updated_at = ?1,
+                        row_version = row_version + 1
                   WHERE note_id = ?3",
                 rusqlite::params![ctx.now, until, note_id],
             )?;
@@ -900,15 +908,17 @@ fn restore_note() -> CommandDefinition {
             let (content_id, _) = note_body(ctx, &note_id)?;
             ctx.connection().execute(
                 "UPDATE knowledge_note
-                    SET deleted_at = NULL, purge_at = NULL, updated_at = ?1
+                    SET deleted_at = NULL, purge_at = NULL, updated_at = ?1,
+                        row_version = row_version + 1
                   WHERE note_id = ?2",
                 rusqlite::params![ctx.now, note_id],
             )?;
             // If trashing released the body bytes, restoring rents them again.
             ctx.connection().execute(
-                "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL
+                "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL, updated_at = ?2,
+                        row_version = row_version + 1
                   WHERE content_id = ?1 AND deleted_at IS NOT NULL",
-                [&content_id],
+                rusqlite::params![content_id, ctx.now],
             )?;
             Ok(serde_json::json!({ "note_id": note_id }))
         },
@@ -970,7 +980,8 @@ fn restore_note_version() -> CommandDefinition {
             )?;
             ctx.connection().execute(
                 "UPDATE knowledge_note
-                    SET body_content_id = ?1, current_revision_id = ?2, updated_at = ?3
+                    SET body_content_id = ?1, current_revision_id = ?2, updated_at = ?3,
+                        row_version = row_version + 1
                   WHERE note_id = ?4",
                 rusqlite::params![content_id, revision_id, ctx.now, note_id],
             )?;

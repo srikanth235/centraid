@@ -1,0 +1,763 @@
+{
+  "about": "Data-version manifest of the native tool task (#1088, R-1088-14, R-1088-16). Tool: artefacts.py. `data` pins the version in use: one tag of the private Hugging Face dataset repository, and the commit the tag points at. A file rebuilds (rebuild: a command run from this directory, public sources only) or comes from the version (version_path); heldout files are not needed by the public CI; the sha256 is of the bytes in place. Sources stay in the tree.",
+  "schema": 2,
+  "data": {
+    "repo": "srikanth235/centraid-native-data",
+    "version": "data-v7",
+    "revision": "868bb7f852eecb7b286884cf6680ec24da344b71"
+  },
+  "files": [
+    {
+      "name": "world/T01",
+      "path": "authored/worlds/T01.json",
+      "version_path": "worlds/T01.json",
+      "sha256": "d3a8f6562ac1a0f51c3f0d9a9a257d756b46041aa96088ace8b6bc3ed0b5b278",
+      "size": 51697,
+      "from": "authored/worlds/T01_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T01_build.py && python3 artefacts.py format authored/worlds/T01.json"
+    },
+    {
+      "name": "world/T02",
+      "path": "authored/worlds/T02.json",
+      "version_path": "worlds/T02.json",
+      "sha256": "ae2dce3dec0e20fd9956f8be306d1882346b6d565100d542674e21d9310d8b2f",
+      "size": 49893,
+      "from": "authored/worlds/T02_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T02_build.py && python3 artefacts.py format authored/worlds/T02.json"
+    },
+    {
+      "name": "world/T04",
+      "path": "authored/worlds/T04.json",
+      "version_path": "worlds/T04.json",
+      "sha256": "2a15059d8fe708ca305a377e274fbfdef5fff46d0cae5cd833601b89a57a7628",
+      "size": 55092,
+      "from": "authored/worlds/T04_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T04_build.py && python3 artefacts.py format authored/worlds/T04.json"
+    },
+    {
+      "name": "world/T05",
+      "path": "authored/worlds/T05.json",
+      "version_path": "worlds/T05.json",
+      "sha256": "a403d9ce1ea59a572044225ad6f35819c8db0f1ed1aa8de43c09e68585e67ff1",
+      "size": 50842,
+      "from": "authored/worlds/T05_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T05_build.py && python3 artefacts.py format authored/worlds/T05.json"
+    },
+    {
+      "name": "world/T06",
+      "path": "authored/worlds/T06.json",
+      "version_path": "worlds/T06.json",
+      "sha256": "4ceb1b2fa962973c1355dd9f390d74dc3ac5d0816bfbe78aec8efbec163807f3",
+      "size": 51010,
+      "from": "authored/worlds/T06_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T06_build.py && python3 artefacts.py format authored/worlds/T06.json"
+    },
+    {
+      "name": "world/T07",
+      "path": "authored/worlds/T07.json",
+      "version_path": "worlds/T07.json",
+      "sha256": "e97567a6fb113e885b060a879bcad5fd214168179a354e2159bdbcfd8a27c0b1",
+      "size": 52999,
+      "from": "authored/worlds/T07_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T07_build.py && python3 artefacts.py format authored/worlds/T07.json"
+    },
+    {
+      "name": "world/T08",
+      "path": "authored/worlds/T08.json",
+      "version_path": "worlds/T08.json",
+      "sha256": "758ae11d145bcb1ecb1fa08d109f07371b9b878c6c5410e80d82544825997e20",
+      "size": 52166,
+      "from": "authored/worlds/T08_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T08_build.py && python3 artefacts.py format authored/worlds/T08.json"
+    },
+    {
+      "name": "world/T09",
+      "path": "authored/worlds/T09.json",
+      "version_path": "worlds/T09.json",
+      "sha256": "28dacf921cb7ec3773806192e5fb0368633f9df390870b4e7a8a9ab3cac8b815",
+      "size": 53343,
+      "from": "authored/worlds/T09_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T09_build.py && python3 artefacts.py format authored/worlds/T09.json"
+    },
+    {
+      "name": "world/T10",
+      "path": "authored/worlds/T10.json",
+      "version_path": "worlds/T10.json",
+      "sha256": "d0a8699f0b9b3f5e536931f25ed1041f77f6eb0bf5e18f1abc577cb98389078a",
+      "size": 50157,
+      "from": "authored/worlds/T10_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T10_build.py && python3 artefacts.py format authored/worlds/T10.json"
+    },
+    {
+      "name": "world/T11",
+      "path": "authored/worlds/T11.json",
+      "version_path": "worlds/T11.json",
+      "sha256": "a3fb23145343b513953636aa55b81a07e9727162084378c40ca2709a648b1bca",
+      "size": 50910,
+      "from": "authored/worlds/T11_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T11_build.py && python3 artefacts.py format authored/worlds/T11.json"
+    },
+    {
+      "name": "world/T13",
+      "path": "authored/worlds/T13.json",
+      "version_path": "worlds/T13.json",
+      "sha256": "ef23af266c4318956d02d5ea20ee429efd0ec1c54980d2be3c00fff23feb0a71",
+      "size": 54434,
+      "from": "authored/worlds/T13_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T13_build.py && python3 artefacts.py format authored/worlds/T13.json"
+    },
+    {
+      "name": "world/T14",
+      "path": "authored/worlds/T14.json",
+      "version_path": "worlds/T14.json",
+      "sha256": "1a4bc340da4d5447b95ab293291c45648847a9a02827e8cc2b4339016a3dff0b",
+      "size": 54224,
+      "from": "authored/worlds/T14_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T14_build.py && python3 artefacts.py format authored/worlds/T14.json"
+    },
+    {
+      "name": "world/T15",
+      "path": "authored/worlds/T15.json",
+      "version_path": "worlds/T15.json",
+      "sha256": "d6fdfedd504fd30590e0780e89907f89fd21ba417b931f53d810b48f6f143d4e",
+      "size": 55118,
+      "from": "authored/worlds/T15_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T15_build.py && python3 artefacts.py format authored/worlds/T15.json"
+    },
+    {
+      "name": "world/T16",
+      "path": "authored/worlds/T16.json",
+      "version_path": "worlds/T16.json",
+      "sha256": "beaec834e766a12f5837152574f40a5b9274ab08ab25b4060247e89f77938bbf",
+      "size": 54416,
+      "from": "authored/worlds/T16_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T16_build.py && python3 artefacts.py format authored/worlds/T16.json"
+    },
+    {
+      "name": "world/T17",
+      "path": "authored/worlds/T17.json",
+      "version_path": "worlds/T17.json",
+      "sha256": "b5be2461b033dfceb49950e3234c879b06bc24f1fda74ed30ec2100ba8221a95",
+      "size": 53770,
+      "from": "authored/worlds/T17_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T17_build.py && python3 artefacts.py format authored/worlds/T17.json"
+    },
+    {
+      "name": "world/T18",
+      "path": "authored/worlds/T18.json",
+      "version_path": "worlds/T18.json",
+      "sha256": "f35efb2b4f520d6c3c5200c50366b2ae042e8ecf0ebf8653367d28e39ca482b4",
+      "size": 49580,
+      "from": "authored/worlds/T18_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T18_build.py && python3 artefacts.py format authored/worlds/T18.json"
+    },
+    {
+      "name": "world/T19",
+      "path": "authored/worlds/T19.json",
+      "version_path": "worlds/T19.json",
+      "sha256": "314a97078e9f2171648eefe3482f7d18c8650f19ddd3402ce0803d0ad9a442fe",
+      "size": 52365,
+      "from": "authored/worlds/T19_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T19_build.py && python3 artefacts.py format authored/worlds/T19.json"
+    },
+    {
+      "name": "world/T20",
+      "path": "authored/worlds/T20.json",
+      "version_path": "worlds/T20.json",
+      "sha256": "d107d8842dc9f1d628b9b1bb7366271b455bf7ea8f20e9af06344a0c2d38424d",
+      "size": 54294,
+      "from": "authored/worlds/T20_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T20_build.py && python3 artefacts.py format authored/worlds/T20.json"
+    },
+    {
+      "name": "world/T21",
+      "path": "authored/worlds/T21.json",
+      "version_path": "worlds/T21.json",
+      "sha256": "3e959a2f5c7ddfc0552940559b4c406b977e6e495628fcdde0cc3476c1e438bc",
+      "size": 50075,
+      "from": "authored/worlds/T21_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T21_build.py && python3 artefacts.py format authored/worlds/T21.json"
+    },
+    {
+      "name": "world/T22",
+      "path": "authored/worlds/T22.json",
+      "version_path": "worlds/T22.json",
+      "sha256": "eb60ab5b7caaa041d03537e10ff0184e88c7873a7d78710e37153d5b3661788c",
+      "size": 52600,
+      "from": "authored/worlds/T22_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T22_build.py && python3 artefacts.py format authored/worlds/T22.json"
+    },
+    {
+      "name": "world/T24",
+      "path": "authored/worlds/T24.json",
+      "version_path": "worlds/T24.json",
+      "sha256": "c9d843ac82160f7118856030eb92639cb86b8849e8836af9a7e33c5f6bdbacc0",
+      "size": 53873,
+      "from": "authored/worlds/T24_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T24_build.py && python3 artefacts.py format authored/worlds/T24.json"
+    },
+    {
+      "name": "world/T25",
+      "path": "authored/worlds/T25.json",
+      "version_path": "worlds/T25.json",
+      "sha256": "10a7b4dff7051d7b9ea7acb71a599d5ed6bfee857b1568cecd3bd2170a488a45",
+      "size": 54365,
+      "from": "authored/worlds/T25_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T25_build.py && python3 artefacts.py format authored/worlds/T25.json"
+    },
+    {
+      "name": "world/T26",
+      "path": "authored/worlds/T26.json",
+      "version_path": "worlds/T26.json",
+      "sha256": "ba68430975a5ca6d5e22e25bde7d15c790ac8d22009e412f3090bcf19eb5f6f0",
+      "size": 53396,
+      "from": "authored/worlds/T26_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T26_build.py && python3 artefacts.py format authored/worlds/T26.json"
+    },
+    {
+      "name": "world/T27",
+      "path": "authored/worlds/T27.json",
+      "version_path": "worlds/T27.json",
+      "sha256": "4bc4aca0837abd3a77ea81fcc4e42905d0d305ff7e6cd354d1a2eaee2cca0f6f",
+      "size": 51840,
+      "from": "authored/worlds/T27_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T27_build.py && python3 artefacts.py format authored/worlds/T27.json"
+    },
+    {
+      "name": "world/T28",
+      "path": "authored/worlds/T28.json",
+      "version_path": "worlds/T28.json",
+      "sha256": "408cab8f5fdc298f346336b8b63d8e7c25861d6121c9615f63793fa60038c384",
+      "size": 54490,
+      "from": "authored/worlds/T28_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T28_build.py && python3 artefacts.py format authored/worlds/T28.json"
+    },
+    {
+      "name": "world/T29",
+      "path": "authored/worlds/T29.json",
+      "version_path": "worlds/T29.json",
+      "sha256": "0ff1d16e4b6a2cf9643aad78a90fafa80423439566849ed82a4644ae5f5d7ecc",
+      "size": 54779,
+      "from": "authored/worlds/T29_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T29_build.py && python3 artefacts.py format authored/worlds/T29.json"
+    },
+    {
+      "name": "world/T30",
+      "path": "authored/worlds/T30.json",
+      "version_path": "worlds/T30.json",
+      "sha256": "28d3faeee7eb812a2ca25297775b56088abe08f8ec0ecc7c4a8960644257d3e1",
+      "size": 459308,
+      "from": "authored/worlds/T30_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T30_build.py && python3 artefacts.py format authored/worlds/T30.json"
+    },
+    {
+      "name": "world/T31",
+      "path": "authored/worlds/T31.json",
+      "version_path": "worlds/T31.json",
+      "sha256": "fea9fded2cde8e98efbdacd50501f27835b11913a5418e773afd355a4697d974",
+      "size": 57081,
+      "from": "authored/worlds/T31_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T31_build.py && python3 artefacts.py format authored/worlds/T31.json"
+    },
+    {
+      "name": "world/T32",
+      "path": "authored/worlds/T32.json",
+      "version_path": "worlds/T32.json",
+      "sha256": "3361e839ee7246d048446c2df7ac2bcbc4402a6a4734ce80ccc4e89a6785ac40",
+      "size": 56806,
+      "from": "authored/worlds/T32_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T32_build.py && python3 artefacts.py format authored/worlds/T32.json"
+    },
+    {
+      "name": "world/T33",
+      "path": "authored/worlds/T33.json",
+      "version_path": "worlds/T33.json",
+      "sha256": "d867379d74aae882b7c854e4ca58db0aefca7c6c1e6ef4e403259d0e3adab2d2",
+      "size": 56889,
+      "from": "authored/worlds/T33_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T33_build.py && python3 artefacts.py format authored/worlds/T33.json"
+    },
+    {
+      "name": "world/T34",
+      "path": "authored/worlds/T34.json",
+      "version_path": "worlds/T34.json",
+      "sha256": "f80a85c2866cf75ace38e8bc731d992c987bb3a1f82125a11648a4f5633ab1a1",
+      "size": 490563,
+      "from": "authored/worlds/T34_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T34_build.py && python3 artefacts.py format authored/worlds/T34.json"
+    },
+    {
+      "name": "world/T35",
+      "path": "authored/worlds/T35.json",
+      "version_path": "worlds/T35.json",
+      "sha256": "29e52059394cbc65f7dd2936e61e9c984fbec5dc636577ae82c647e7036cc161",
+      "size": 54377,
+      "from": "authored/worlds/T35_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T35_build.py && python3 artefacts.py format authored/worlds/T35.json"
+    },
+    {
+      "name": "world/T36",
+      "path": "authored/worlds/T36.json",
+      "version_path": "worlds/T36.json",
+      "sha256": "c082dcd05280cb533df6cd43585300d1dcd8c66d847d2efc2b18b5c119d18adf",
+      "size": 54867,
+      "from": "authored/worlds/T36_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T36_build.py && python3 artefacts.py format authored/worlds/T36.json"
+    },
+    {
+      "name": "world/T37",
+      "path": "authored/worlds/T37.json",
+      "version_path": "worlds/T37.json",
+      "sha256": "c35e3003506c9364fbdfb789c574df5a902e6dcfb40cc647ee728ea53c226e8e",
+      "size": 54723,
+      "from": "authored/worlds/T37_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T37_build.py && python3 artefacts.py format authored/worlds/T37.json"
+    },
+    {
+      "name": "world/T38",
+      "path": "authored/worlds/T38.json",
+      "version_path": "worlds/T38.json",
+      "sha256": "ea2cd51ed7df4634556b099dbc3fba7201cfc50c817683ffc943ffe617d47def",
+      "size": 501900,
+      "from": "authored/worlds/T38_build.py, then the repository JSON layout",
+      "rebuild": "python3 authored/worlds/T38_build.py && python3 artefacts.py format authored/worlds/T38.json"
+    },
+    {
+      "name": "world/A",
+      "path": "eval/worlds/A.json",
+      "version_path": "worlds/A.json",
+      "sha256": "7d206ff98859f271cc65d22d7ab2173265d7833ac30125ec9cc81886218b549b",
+      "size": 49900,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
+    },
+    {
+      "name": "world/B",
+      "path": "eval/worlds/B.json",
+      "version_path": "worlds/B.json",
+      "sha256": "f20c54693f0e2b79fa57b89e65d5eb6aa38faa6811975404e22f8beee0bbc0e3",
+      "size": 43705,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
+    },
+    {
+      "name": "world/C",
+      "path": "eval/worlds/C.json",
+      "version_path": "worlds/C.json",
+      "sha256": "3321e72d5dfc4dc11c25df8cf9007219721056dead861730be7a18e35f626f7b",
+      "size": 36936,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
+    },
+    {
+      "name": "world/D",
+      "path": "eval/worlds/D.json",
+      "version_path": "worlds/D.json",
+      "sha256": "f4ce3d090c1a1d32afabec2687243340f5bec1b3bc4b0f848b56efb5cb9776a1",
+      "size": 535167,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
+    },
+    {
+      "name": "world/E",
+      "path": "eval/worlds/E.json",
+      "version_path": "worlds/E.json",
+      "sha256": "594a111301b7535ab7add003455c98edf55e7801e5affeb36a39902c79672ef6",
+      "size": 67282,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
+    },
+    {
+      "name": "world/F",
+      "path": "eval/worlds/F.json",
+      "version_path": "worlds/F.json",
+      "sha256": "2ad25aebc99d99790e474453f7df5e4b1013456a58406ba8650c0c3ca36c8896",
+      "size": 66335,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
+    },
+    {
+      "name": "world/G",
+      "path": "eval/worlds/G.json",
+      "version_path": "worlds/G.json",
+      "sha256": "9dc5b5bac5dfb5f8f9dd7fd34d9ef54e91db9e8fd8b8aa2cfb2de1695c744139",
+      "size": 595810,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
+    },
+    {
+      "name": "world/T03",
+      "path": "authored/worlds/T03.json",
+      "version_path": "worlds/T03.json",
+      "sha256": "c34f42636beceb01a960966649e3fcf6f3180273ca55add46cd465996ba14dc8",
+      "size": 57066,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
+    },
+    {
+      "name": "world/T12",
+      "path": "authored/worlds/T12.json",
+      "version_path": "worlds/T12.json",
+      "sha256": "7b4e180af5a04d309e9391374d14652871929519b36f5dfd241338301aac6699",
+      "size": 49942,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
+    },
+    {
+      "name": "world/T23",
+      "path": "authored/worlds/T23.json",
+      "version_path": "worlds/T23.json",
+      "sha256": "18a1cf55835b634b964ccdd39f41fb969540d8ac1e5ddcde34998d1889deaf45",
+      "size": 52662,
+      "from": "held-out world: from the data version (its builder is held out too)",
+      "heldout": true
+    },
+    {
+      "name": "builder/build_worlds",
+      "path": "eval/worlds/build_worlds.py",
+      "version_path": "sources/eval/worlds/build_worlds.py",
+      "sha256": "79e426b3451a7ff06f9c6dbf1e4bcfa434e285221a4ed35d0c7c7588d633594c",
+      "size": 93349,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/E",
+      "path": "eval/worlds/E_build.py",
+      "version_path": "sources/eval/worlds/E_build.py",
+      "sha256": "93dc3346e45fd83c26071e712c8f636e120274db69f227e2a63cfe605fba8327",
+      "size": 58166,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/F",
+      "path": "eval/worlds/F_build.py",
+      "version_path": "sources/eval/worlds/F_build.py",
+      "sha256": "7e12298bba4908e0496f550da2edfc1d21935cfd8c72f2001a8740fcf4ab228f",
+      "size": 57606,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/G",
+      "path": "eval/worlds/G_build.py",
+      "version_path": "sources/eval/worlds/G_build.py",
+      "sha256": "ae8139f073f2a45714e6334d78e0147f9fc2d4a47cbdf71994229b161ec8f68e",
+      "size": 102387,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/T03",
+      "path": "authored/worlds/T03_build.py",
+      "version_path": "sources/authored/worlds/T03_build.py",
+      "sha256": "e65c0f92be07ca32e3d84946263173c5034c61c9dc2196157e1f9cff25f6781f",
+      "size": 42430,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/T12",
+      "path": "authored/worlds/T12_build.py",
+      "version_path": "sources/authored/worlds/T12_build.py",
+      "sha256": "474736e9e34580bc3c5ddfeee16e6ad54457f3a1d5fd615cc417d9c8d57b592e",
+      "size": 40252,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "builder/T23",
+      "path": "authored/worlds/T23_build.py",
+      "version_path": "sources/authored/worlds/T23_build.py",
+      "sha256": "9353468d936d40988ada1f7c7b24a39774465855811b0ecba1508c3a69596457",
+      "size": 41782,
+      "from": "held-out world builder: from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T03",
+      "path": "authored/sessions/T03.py",
+      "version_path": "sources/authored/sessions/T03.py",
+      "sha256": "6bd784958cafa5e121ca155bca54037e9ff65c56d34472a619700a40fd0b017b",
+      "size": 17820,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T03_02",
+      "path": "authored/sessions/T03_02.py",
+      "version_path": "sources/authored/sessions/T03_02.py",
+      "sha256": "d91b7203fcf6cf359fee260e16a033c8560f3314989069c38580823ad46aa75a",
+      "size": 13636,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T03_03",
+      "path": "authored/sessions/T03_03.py",
+      "version_path": "sources/authored/sessions/T03_03.py",
+      "sha256": "053f8f6c89ccaa11d96ca4cdaab85261bbb043c2ef42d9bdca3c271a2a2f7694",
+      "size": 19494,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T03_04",
+      "path": "authored/sessions/T03_04.py",
+      "version_path": "sources/authored/sessions/T03_04.py",
+      "sha256": "560427ef05095c9419013141258e54d76f742287511ad838ae9dd90c0a583b3c",
+      "size": 14344,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T03_g1",
+      "path": "authored/sessions/T03_g1.py",
+      "version_path": "sources/authored/sessions/T03_g1.py",
+      "sha256": "9296735420bcb7cb4e74daff1dd98d5a6c5cb92286d16664ecb140f3eb85a213",
+      "size": 7694,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T03_g2",
+      "path": "authored/sessions/T03_g2.py",
+      "version_path": "sources/authored/sessions/T03_g2.py",
+      "sha256": "6bf3f6873ec1f2dd794f0561f69dd3cfdbd21d0c884bae89355eb3486b6bf5ac",
+      "size": 10560,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12",
+      "path": "authored/sessions/T12.py",
+      "version_path": "sources/authored/sessions/T12.py",
+      "sha256": "1b63b2ac4e0a463c551509d333b3df5dd25da914a18d275d8b7df2c4e9ee93dc",
+      "size": 10147,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12_02",
+      "path": "authored/sessions/T12_02.py",
+      "version_path": "sources/authored/sessions/T12_02.py",
+      "sha256": "1fba405875064b484ba104f5522426efcdf2488233c4d5be7de342b92a88496b",
+      "size": 10348,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12_03",
+      "path": "authored/sessions/T12_03.py",
+      "version_path": "sources/authored/sessions/T12_03.py",
+      "sha256": "073ae0b34f20be6afe9759ef70a51049a1b817fb117bfb5e7ba0cbd6c963c875",
+      "size": 14443,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12_04",
+      "path": "authored/sessions/T12_04.py",
+      "version_path": "sources/authored/sessions/T12_04.py",
+      "sha256": "e30d7f33ed3e72c1b4cd64616e514257abf2b259bf87b8ebc70710f318e5b5d1",
+      "size": 31345,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12_g1",
+      "path": "authored/sessions/T12_g1.py",
+      "version_path": "sources/authored/sessions/T12_g1.py",
+      "sha256": "3b1becedc56e15464c0b076f86c63adbc8ca21ac8588b9f3df19ed2edb5a6c5b",
+      "size": 9057,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T12_g2",
+      "path": "authored/sessions/T12_g2.py",
+      "version_path": "sources/authored/sessions/T12_g2.py",
+      "sha256": "42901445fddc584b2aa5d7a29ad8a3c460ebec55666f46fe1ba8622ab422b4e8",
+      "size": 9106,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23",
+      "path": "authored/sessions/T23.py",
+      "version_path": "sources/authored/sessions/T23.py",
+      "sha256": "56139e79ea7b8f590d697fc5608e1c067d44159c982326d88445f95fd69ea376",
+      "size": 11545,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23_02",
+      "path": "authored/sessions/T23_02.py",
+      "version_path": "sources/authored/sessions/T23_02.py",
+      "sha256": "eac60c0ced1fb3f9f0804d765caee10e40cb4cd8f5345dbbe92d6dbd63f8c554",
+      "size": 15263,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23_03",
+      "path": "authored/sessions/T23_03.py",
+      "version_path": "sources/authored/sessions/T23_03.py",
+      "sha256": "b50bdd76daf3c228e5b59b9c6f3156373090dcac3512b7d8f4fd9fb1f9b4db08",
+      "size": 16353,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23_04",
+      "path": "authored/sessions/T23_04.py",
+      "version_path": "sources/authored/sessions/T23_04.py",
+      "sha256": "b49c8e8815609142d21f673d5fe165af2b94f64423627f468c71c870a53f7eb3",
+      "size": 17648,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23_g1",
+      "path": "authored/sessions/T23_g1.py",
+      "version_path": "sources/authored/sessions/T23_g1.py",
+      "sha256": "028cd658b28b5c5016594bb6a705d55982679e890282b99a84be736c1086c416",
+      "size": 8837,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "session/T23_g2",
+      "path": "authored/sessions/T23_g2.py",
+      "version_path": "sources/authored/sessions/T23_g2.py",
+      "sha256": "d8e991221a5733da7983cf2f1f2e7b471a3ef4ce537520b18ce647345e0bdd4a",
+      "size": 9327,
+      "from": "held-out session source: the val worlds' authored sessions, from the data version",
+      "heldout": true
+    },
+    {
+      "name": "keys/A",
+      "path": "eval/worlds/A.keys.json",
+      "version_path": null,
+      "sha256": "9c84ba9e1ae43603b4422e648c6a41316c8430a0253038ef82fef3044023e1de",
+      "size": 26316,
+      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" A",
+      "heldout": true
+    },
+    {
+      "name": "keys/B",
+      "path": "eval/worlds/B.keys.json",
+      "version_path": null,
+      "sha256": "aa760689c2034a6b1492a4f4c0c0fe7969b049b9898740b71106571989580dcc",
+      "size": 23767,
+      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" B",
+      "heldout": true
+    },
+    {
+      "name": "keys/C",
+      "path": "eval/worlds/C.keys.json",
+      "version_path": null,
+      "sha256": "d7ae80de9611aa852ff357c6a8e8855df9a8b2547646f3451b60ee3d0162b572",
+      "size": 19717,
+      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" C",
+      "heldout": true
+    },
+    {
+      "name": "keys/D",
+      "path": "eval/worlds/D.keys.json",
+      "version_path": null,
+      "sha256": "85697dfc0df4ba8291e7fc2a1d7a651309bb15cb64908feaaf26084bb721dd24",
+      "size": 314424,
+      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" D",
+      "heldout": true
+    },
+    {
+      "name": "keys/T03",
+      "path": "authored/worlds/T03.keys.json",
+      "version_path": null,
+      "sha256": "fe0310055c9503bc7d84daf09530204cf0bc79e7c3675d8702ea8f4082317130",
+      "size": 27958,
+      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" T03",
+      "heldout": true
+    },
+    {
+      "name": "keys/T12",
+      "path": "authored/worlds/T12.keys.json",
+      "version_path": null,
+      "sha256": "1751df701ae1e73595b33c4aeaf0aef9f4835e6c08b1905bdf109b2b90587884",
+      "size": 25860,
+      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" T12",
+      "heldout": true
+    },
+    {
+      "name": "keys/T23",
+      "path": "authored/worlds/T23.keys.json",
+      "version_path": null,
+      "sha256": "03bc6b371e086fb108cd665f2ff58a7be7724f9305998814b35327062200ae47",
+      "size": 26637,
+      "from": "nativetools seed of the world (eval/seed_worlds.py): world key to vault id",
+      "rebuild": "python3 eval/seed_worlds.py --vaults \"$ARTEFACTS_TMP\" T23",
+      "heldout": true
+    },
+    {
+      "name": "set/val",
+      "path": "eval/sets/val.jsonl",
+      "version_path": "eval/val.jsonl",
+      "sha256": "5d3d9035737ad0de19d4cf0406316e3b4b27f55a4cb2e64320126cda89308502",
+      "size": 733110,
+      "from": "frozen held-out set, val v7.4 (eval/FROZEN.md); the gold corrections were applied to the jsonl and are in no source",
+      "heldout": true
+    },
+    {
+      "name": "set/test",
+      "path": "eval/sets/test.jsonl",
+      "version_path": "eval/test.jsonl",
+      "sha256": "fedc45825fc3505d8147ee50560775b6b5e615b94d391dbe06d4d9ad04a8ed20",
+      "size": 738445,
+      "from": "frozen held-out set, test v6 (eval/FROZEN.md)",
+      "heldout": true
+    },
+    {
+      "name": "set/split",
+      "path": "eval/sets/split.json",
+      "version_path": "eval/split.json",
+      "sha256": "e0685c65c7ce377e1559488760e6ed55a9e3f7b445c2a3daee7be62ba13d5d0d",
+      "size": 65936,
+      "from": "the split and the origin of every session of val and test (eval/FROZEN.md)",
+      "heldout": true
+    },
+    {
+      "name": "set/roll-screen",
+      "path": "eval/sets/roll-screen.jsonl",
+      "version_path": "screen/roll-screen.jsonl",
+      "sha256": "c736dbcfe7e8c99f45fc637752f5506b7321feefa86afed4a2c1718fee28d6c0",
+      "size": 2830186,
+      "from": "the RFT screen set (eval/rollout.py sets); the worlds it ran in are screen/worlds/ of the version"
+    },
+    {
+      "name": "data/train",
+      "path": "data/train.jsonl.gz",
+      "version_path": "train/r1/train.jsonl.gz",
+      "sha256": "51dfbe27e7fcb82af5fe054598ef073b17ed414f742ad084ee50d121e4b4f7bf",
+      "size": 10279885,
+      "from": "the r1 training build as trained (data/README.md)"
+    },
+    {
+      "name": "data/train-val",
+      "path": "data/train-val.jsonl.gz",
+      "version_path": "train/r1/train-val.jsonl.gz",
+      "sha256": "8e03a8b4a8b90fe81b1221de57baed8321616ca026b4fd53fc021dbba5574eb1",
+      "size": 207228,
+      "from": "the trainer's validation slice of r1: sessions of val (data/README.md)",
+      "heldout": true
+    }
+  ]
+}

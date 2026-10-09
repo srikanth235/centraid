@@ -44,7 +44,8 @@ import dev.centraid.shared.screen.Step
  * amount is not an expense, and a division that does not reconcile cannot be
  * stored at all (`write_splits` refuses it), so there is nothing a debounce
  * could save on the member's way through. Save is ONE write under
- * [WriteLaw]; leaving with changes asks first; a refusal keeps every field.
+ * [WriteLaw]; leaving with changes asks first; a refusal keeps every field;
+ * a commit ends the sitting, so Save is not armed again (#1089).
  *
  * ## What the editor reads
  *
@@ -580,7 +581,11 @@ public object TallyEditorMachine :
         }
         val lines = form.lines.map { it.copy(issue = outcome?.issues?.get(it.line_key) ?: "") }
         val writing = screen.write?.phase == WriteState.Phase.PHASE_IN_FLIGHT
-        val canSave = issues.isEmpty() && !writing && screen.baseline != null && outcome?.problem == null
+        // A COMMITTED SAVE ENDS THE SITTING (#1089): `done` is set with it and the
+        // shell leaves, but nothing remembers the commit (R-1088-12), so a Save
+        // before the shell has gone would run the command again.
+        val committed = screen.write?.phase == WriteState.Phase.PHASE_COMMITTED
+        val canSave = issues.isEmpty() && !writing && !committed && screen.baseline != null && outcome?.problem == null
         val input = if (canSave && total != null) input(held, form, total, original, rate, outcome!!, settlementExponent ?: 0) else null
 
         val day = dashboard.today
@@ -722,8 +727,10 @@ public object TallyEditorMachine :
         val edit = held.screen.mode == TallyEditorState.Mode.MODE_EDIT
         val command = if (edit) EDIT_COMMAND else ADD_COMMAND
         val subject = if (edit) held.screen.expense_id else "new"
-        // ONE KEY PER SITTING AND PER CONTENT: a double tap is one expense;
-        // the same expense saved in another sitting is a new one.
+        // THE KEY IS THE SITTING'S AND THE CONTENT'S, and only correlates the
+        // answer: [WriteLaw] makes a double tap in flight one write, and
+        // [evaluate] refuses a Save after the commit. The same expense saved in
+        // another sitting is a new one.
         val key = InvokeKeys.of(command, subject, held.screen.draft_token, input.hashCode().toUInt().toString(HEX))
         val step = WriteLaw.submit(Writes, held, command, input, key)
         return Step(refold(step.state).state, step.effects)

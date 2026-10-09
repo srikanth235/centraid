@@ -1,0 +1,17 @@
+{
+  "function_close": "</function>",
+  "function_open": "<function=",
+  "im_end": "<|im_end|>",
+  "im_start": "<|im_start|>",
+  "parameter_close": "</parameter>",
+  "parameter_open": "<parameter=",
+  "think_close": "</think>",
+  "think_open": "<think>\n",
+  "tokenizer": "Qwen/Qwen3.5-0.8B",
+  "tool_call_close": "</tool_call>",
+  "tool_call_open": "<tool_call>",
+  "tool_response_close": "</tool_response>",
+  "tool_response_open": "<tool_response>",
+  "tools_close": "</tools>",
+  "tools_open": "<tools>"
+}

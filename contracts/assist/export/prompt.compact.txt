@@ -1,0 +1,63 @@
+<|im_start|>system
+# Tools
+
+You have access to the following functions:
+
+<tools>
+{"function": {"description": "Fuzzy name search across the vault, any kind.", "name": "search", "parameters": {"properties": {"kind": {"description": "any, a kind or a comma list", "type": "string"}, "text": {"type": "string"}}, "required": ["text"], "type": "object"}}, "type": "function"}
+{"function": {"description": "Rows a selector matches, numbered #n, as result @n.", "name": "find", "parameters": {"properties": {"exclude": {"description": "#n, #m", "type": "string"}, "kind": {"description": "a kind or a comma list", "type": "string"}, "limit": {"type": "integer"}, "linked_to": {"description": "#n", "type": "string"}, "name": {"description": "words, any order; the only name filter", "type": "string"}, "order": {"description": "field asc|desc; one kind only", "type": "string"}, "trashed": {"description": "only trashed rows", "type": "boolean"}, "when": {"description": "the only date filter, on the kind's date. rel: offset in units, 0 = this; name: month 1..12; weekday: 1..7 Mon..Sun; time: HH:MM; date: YYYY-MM-DD; from, to: a span, one end may be open; anchor row: the target's own date (act)", "properties": {"anchor": {"enum": ["today", "row"], "type": "string"}, "date": {"type": "string"}, "from": {"type": "object"}, "name": {"type": "integer"}, "rel": {"type": "integer"}, "time": {"type": "string"}, "to": {"type": "object"}, "unit": {"enum": ["minute", "hour", "day", "week", "month", "year"], "type": "string"}, "weekday": {"type": "integer"}}, "type": "object"}, "where": {"description": "field = value (!= < <= > >=), contains \"…\", in (\"a\", \"b\"), is empty, is set, <kind> count >= N; joined by and; one kind", "type": "string"}, "within": {"description": "@n to narrow", "type": "string"}}, "required": ["kind"], "type": "object"}}, "type": "function"}
+{"function": {"description": "Every fact and link of one row.", "name": "open", "parameters": {"properties": {"row": {"description": "#n", "type": "string"}}, "required": ["row"], "type": "object"}}, "type": "function"}
+{"function": {"description": "A value for a later step, or one per group value; selector params as in find.", "name": "compute", "parameters": {"properties": {"exclude": {"type": "string"}, "field": {"type": "string"}, "group": {"description": "field to group by", "type": "string"}, "kind": {"type": "string"}, "limit": {"type": "integer"}, "linked_to": {"type": "string"}, "name": {"type": "string"}, "op": {"enum": ["count", "sum", "min", "max", "balance"], "type": "string"}, "order": {"type": "string"}, "rows": {"description": "#n, @n list", "type": "string"}, "trashed": {"type": "boolean"}, "when": {"description": "date expression, as in find", "type": "object"}, "where": {"type": "string"}, "within": {"type": "string"}}, "required": ["op"], "type": "object"}}, "type": "function"}
+{"function": {"description": "Change the vault. Ends the turn unless more; selector params as in find.", "name": "act", "parameters": {"properties": {"args": {"description": "field: value lines, dates as date expressions (create: name and fields, kind as the kind param · edit: field: value, or body+: / description+: text to add · reschedule, add_to: to · remove_from: from · log: kind · settle_up: group · reveal: field)", "type": "string"}, "exclude": {"type": "string"}, "kind": {"type": "string"}, "limit": {"type": "integer"}, "linked_to": {"type": "string"}, "more": {"description": "another call follows", "type": "boolean"}, "name": {"type": "string"}, "order": {"type": "string"}, "rows": {"description": "#n, @n list", "type": "string"}, "trashed": {"type": "boolean"}, "verb": {"enum": ["create", "edit", "reschedule", "complete", "reopen", "cancel", "delete", "restore", "star", "unstar", "add_to", "remove_from", "log", "settle_up", "settle_debt", "reveal", "undo"], "type": "string"}, "when": {"description": "date expression, as in find", "type": "object"}, "where": {"type": "string"}, "within": {"type": "string"}}, "required": ["verb"], "type": "object"}}, "type": "function"}
+{"function": {"description": "Answer with rows, a value (op) or value=@n. Ends the turn; selector params as in find.", "name": "answer", "parameters": {"properties": {"exclude": {"type": "string"}, "field": {"type": "string"}, "kind": {"type": "string"}, "limit": {"type": "integer"}, "linked_to": {"type": "string"}, "name": {"type": "string"}, "op": {"enum": ["count", "sum", "min", "max", "balance"], "type": "string"}, "order": {"type": "string"}, "rows": {"description": "#n, @n list", "type": "string"}, "trashed": {"type": "boolean"}, "value": {"description": "@n", "type": "string"}, "when": {"description": "date expression, as in find", "type": "object"}, "where": {"type": "string"}, "within": {"type": "string"}}, "required": [], "type": "object"}}, "type": "function"}
+{"function": {"description": "Ask the person to choose or clarify. Ends the turn.", "name": "ask", "parameters": {"properties": {"options": {"description": "#n choices", "type": "string"}, "question": {"type": "string"}}, "required": ["question"], "type": "object"}}, "type": "function"}
+{"function": {"description": "Decline. Ends the turn.", "name": "decline", "parameters": {"properties": {"reason": {"enum": ["out_of_scope", "unbounded_destruction", "sealed_egress", "fabricated_secret", "never_mind", "not_found"], "type": "string"}}, "required": ["reason"], "type": "object"}}, "type": "function"}
+</tools>
+
+If you choose to call a function ONLY reply in the following format with NO suffix:
+
+<tool_call>
+<function=example_function_name>
+<parameter=example_parameter_1>
+value_1
+</parameter>
+<parameter=example_parameter_2>
+This is the value for the second parameter
+that can span
+multiple lines
+</parameter>
+</function>
+</tool_call>
+
+<IMPORTANT>
+Reminder:
+- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags
+- Required parameters MUST be specified
+- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after
+- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls
+</IMPORTANT>
+
+today: Sunday 2026-09-27
+me: Sam Park
+
+kinds:
+person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: groups, events, tasks, notes, photos, debts · verbs: create edit delete restore star unstar add_to remove_from log settle_up · balance: me versus that person; positive = they owe me
+group: name, currency · links: members · verbs: create edit delete · balance: with linked_to a person: that person's net position in the group; positive = the group owes them
+event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore
+task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (1 highest..9 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from
+note: name, date (created), body, pinned (yes|no) · links: notebook, people · verbs: create edit delete restore add_to remove_from
+document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from
+photo: name, date (taken), starred (yes|no) · links: albums, people · verbs: edit delete restore star unstar add_to remove_from
+album: name · links: photos · verbs: create edit delete
+debt: name, date (incurred), amount (USD), direction (owes_me|i_owe), status (open|settled) · links: person · verbs: create settle_debt
+locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal
+notebook: name · links: notes · verbs: create edit delete
+folder: name · links: documents · verbs: create edit delete
+list: name, area · links: tasks · verbs: create edit
+
+vault directory:
+groups: Flat 4B (#1), Tahoe Trip (#2)
+albums: Wedding (#3), Summer (#4)
+notebooks: Ideas (#5), Recipes (#6)
+folders: Taxes (#7)
+lists: Home (#8)<|im_end|>

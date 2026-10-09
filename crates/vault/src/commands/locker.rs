@@ -1504,7 +1504,7 @@ fn trash_item() -> CommandDefinition {
             let purge_at = plus_days(&ctx.now, PURGE_WINDOW_DAYS)?;
             ctx.connection().execute(
                 "UPDATE locker_item
-                    SET deleted_at = ?1, purge_at = ?2, updated_at = ?1
+                    SET deleted_at = ?1, purge_at = ?2, updated_at = ?1, row_version = row_version + 1
                   WHERE item_id = ?3",
                 rusqlite::params![ctx.now, purge_at, item_id],
             )?;
@@ -1532,7 +1532,7 @@ fn restore_item() -> CommandDefinition {
             let item_id = ctx.required_str("item_id")?.to_owned();
             ctx.connection().execute(
                 "UPDATE locker_item
-                    SET deleted_at = NULL, purge_at = NULL, updated_at = ?1
+                    SET deleted_at = NULL, purge_at = NULL, updated_at = ?1, row_version = row_version + 1
                   WHERE item_id = ?2",
                 rusqlite::params![ctx.now, item_id],
             )?;

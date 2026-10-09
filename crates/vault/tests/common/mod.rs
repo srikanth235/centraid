@@ -202,3 +202,29 @@ pub fn enrol(vault: &Vault, device_id: &str, public_key: &str) -> Result<()> {
     })?;
     Ok(())
 }
+
+/// UNDO RUNG ELEVEN on a raw connection: the chat's four tables (their
+/// triggers and indexes go with them) and the entity kind the rung seeds
+/// (R-CHAT-1). A test that winds a founded file back below rung eleven runs
+/// this first, or the climb finds the chat already there and refuses.
+pub const UNDO_RUNG_ELEVEN: &str = "DROP TABLE chat_message_attachment;
+     DROP TABLE chat_message_card;
+     DROP TABLE chat_message;
+     DROP TABLE chat_thread;
+     DELETE FROM core_entity_kind WHERE kind = 'chat.thread';";
+
+/// UNDO RUNG TWELVE on a raw connection: the chat as rung eleven left it, with
+/// whatever rows the caller writes next in the narrower shape (#1088).
+///
+/// Rung twelve rebuilds `chat_message` in place, so there is no table to drop
+/// and no kind to unseed: winding back is the four chat tables dropped
+/// ([`UNDO_RUNG_ELEVEN`], which takes the guards and indexes with them) and
+/// rung eleven's own text run again, which is the one statement of what that
+/// shape was. A test that then sets `user_version = 11` climbs rung twelve over
+/// a chat of its own making.
+pub fn undo_rung_twelve(raw: &rusqlite::Connection) {
+    raw.execute_batch(UNDO_RUNG_ELEVEN)
+        .expect("the chat's tables leave");
+    raw.execute_batch(centraid_vault::migrations::CHAT_SQL)
+        .expect("rung eleven's chat comes back");
+}

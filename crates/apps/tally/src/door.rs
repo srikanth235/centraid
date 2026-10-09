@@ -23,11 +23,13 @@
 //! - **A refusal is `Failed`, with the SENTENCE the condition wrote.** The raw
 //!   predicate stays in the audit trail; what reaches the surface is the
 //!   owner-facing sentence.
-//! - **`invoke_key` is the intent id** (D-1020-D3-5). It is mandatory on an
-//!   [`Invocation`], so the vault's replay ledger is keyed on something stable
-//!   rather than on the ordinal of the call — a replayed intent whose handler
-//!   branched differently would otherwise re-execute a committed command under
-//!   another call's key.
+//! - **`invoke_key` is the caller's correlation key** (D-1020-D3-5). It is
+//!   mandatory on an [`Invocation`], so a caller pairs an answer with the call
+//!   that caused it on something stable rather than on the ordinal of the call.
+//!   **The vault never sees it**: `Vault::execute` takes a name and an input,
+//!   and no replay ledger answers a second delivery (#1029 §1, R-1088-12), so
+//!   the same key delivered twice runs twice. A caller that may re-offer a
+//!   write makes it idempotent by its own content or an id it minted first.
 
 use centraid_vault::access::Principal;
 use centraid_vault::commands::Registry;
@@ -40,9 +42,6 @@ pub struct VaultDoor<'a> {
     vault: &'a Vault,
     registry: &'a Registry,
     principal: Principal,
-    /// The device an intent belongs to, for the replay ledger's bookkeeping.
-    /// `None` means a call that is not an outbox delivery.
-    device_id: Option<String>,
 }
 
 impl<'a> VaultDoor<'a> {
@@ -52,17 +51,7 @@ impl<'a> VaultDoor<'a> {
             vault,
             registry,
             principal,
-            device_id: None,
         }
-    }
-
-    /// The same door, delivering a seat's queued intents: every invocation is
-    /// recorded under its `invoke_key`, so a duplicate delivery is answered
-    /// from the ledger instead of running twice.
-    #[must_use]
-    pub fn for_device(mut self, device_id: impl Into<String>) -> Self {
-        self.device_id = Some(device_id.into());
-        self
     }
 }
 
@@ -75,10 +64,7 @@ impl Commands for VaultDoor<'_> {
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect(),
         );
-        let mut command = Command::new(invocation.command, input);
-        if let Some(device_id) = &self.device_id {
-            command = command.with_intent(invocation.invoke_key.clone(), device_id.clone());
-        }
+        let command = Command::new(invocation.command, input);
         match self.vault.execute(self.registry, &self.principal, &command) {
             Ok(outcome) => Ok(match outcome.status {
                 CommandStatus::Executed => Outcome::Executed {

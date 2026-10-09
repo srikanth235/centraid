@@ -185,9 +185,9 @@ class DuplicateReviewSpec : StringSpec({
             writes.none { it.command.contains("purge") } shouldBe true
         }
         DuplicateReviewMachine.TRASH_COMMAND shouldBe "media.delete_asset"
-        // THE INVOKE KEY IS THE ASSET, NOT AN ORDINAL. Without a stable key a
-        // replayed command re-executes one that already committed; an ordinal
-        // is only stable for a caller that makes the same sequence every time.
+        // THE INVOKE KEY IS THE ASSET, NOT AN ORDINAL. The key is the
+        // correlation key an answer is paired with; an ordinal is only stable
+        // for a caller that makes the same sequence every time.
         writes.map { it.invokeKey } shouldBe listOf(
             "media.delete_asset:a-1",
             "media.delete_asset:a-3",

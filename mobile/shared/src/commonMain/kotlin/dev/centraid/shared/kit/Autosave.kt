@@ -60,9 +60,9 @@ public interface AutosaveLens<S, D> : ContentLens<S, D> {
  * - [flush] saves NOW: on leave (close = done), and for a choice such as a pin,
  *   which is a decision and not typing.
  * - Each save is ONE command under ONE key per `edit_seq`
- *   ([InvokeKeys.of]`(command, subject, "seq=N")`): a replay of the same save
- *   dedups, and the next edit is a new command rather than a replay of the
- *   last.
+ *   ([InvokeKeys.of]`(command, subject, "seq=N")`): the answer to a save is
+ *   paired with it by that key, and the next edit is a new key and so a new
+ *   command. The core remembers no key (no replay ledger, #1029 §1, R-1088-12).
  * - Only changed fields are sent, measured against the baseline.
  * - **A change from the vault never overwrites words being typed.** While
  *   there are unsaved words or a save in flight, `rows_changed` and a read's

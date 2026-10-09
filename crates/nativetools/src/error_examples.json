@@ -1,0 +1,2087 @@
+{
+  "act.args_are_field_value_lines_not": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "task",
+          "name": "Book the cabin",
+          "args": 5
+        }
+      }
+    ]
+  },
+  "session.x_have_no_date_so_when": {
+    "tool": "find",
+    "argument": "when",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "folder",
+          "when": {
+            "unit": "day",
+            "rel": 0
+          }
+        }
+      }
+    ]
+  },
+  "session.order_is_field_asc_or_field": {
+    "tool": "find",
+    "argument": "order",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "order": "date sideways"
+        }
+      }
+    ]
+  },
+  "whr.x_is_shape_x_is_not": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "task",
+          "args": "name: x\neffort: lots"
+        }
+      }
+    ]
+  },
+  "whr.where_has_no_or_use_field": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "status = open or priority = 2"
+        }
+      }
+    ]
+  },
+  "act.could_not_read_the_args_line": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "task",
+          "name": "Book the cabin",
+          "args": "no colon here"
+        }
+      }
+    ]
+  },
+  "act.no_verb_verb_text_verbs_x": {
+    "tool": "act",
+    "argument": "verb",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "frobnicate",
+          "kind": "task",
+          "name": "Book the cabin"
+        }
+      }
+    ]
+  },
+  "act.undo_takes_no_rows_selector_or": {
+    "tool": "act",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "undo",
+          "rows": "#8"
+        }
+      }
+    ]
+  },
+  "act.create_takes_no_rows_parameter_a": {
+    "tool": "act",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "note",
+          "rows": "#8",
+          "args": "name: x"
+        }
+      }
+    ]
+  },
+  "act.create_takes_no_param_parameter_the": {
+    "tool": "act",
+    "argument": "name",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "note",
+          "name": "x",
+          "args": "body: y"
+        }
+      }
+    ]
+  },
+  "act.create_takes_kind_as_the_top": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "args": "kind: note\nname: x"
+        }
+      }
+    ]
+  },
+  "act.act_takes_rows_or_a_selector": {
+    "tool": "act",
+    "argument": "rows",
+    "why_none": "normalised away before the call runs: rows beside a selector run on the rows and the reply notes the selector left out (normalize.rs, rule 6); answer and compute still say this"
+  },
+  "act.act_needs_rows_n_or_a": {
+    "tool": "act",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "complete"
+        }
+      }
+    ]
+  },
+  "act.act_needs_exactly_one_kind_fields": {
+    "tool": "act",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "complete",
+          "kind": "task,event",
+          "name": "x"
+        }
+      }
+    ]
+  },
+  "act.what_fits_x": {
+    "tool": "act",
+    "argument": "name",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "reschedule",
+          "kind": "task",
+          "name": "Report",
+          "args": "to: 2026-10-10"
+        }
+      }
+    ]
+  },
+  "act.what_nothing_was_done": {
+    "tool": "act",
+    "argument": "",
+    "why_none": "the summary line of the ambiguous: reply above, never a reply of its own"
+  },
+  "act.that_row_no_longer_exists": {
+    "tool": "act",
+    "argument": "rows",
+    "why_none": "defensive: rows are re-read after every write, so a numbered row is always there"
+  },
+  "act.x_does_not_apply_to_x": {
+    "tool": "act",
+    "argument": "verb",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "complete",
+          "kind": "person",
+          "name": "Ray"
+        }
+      }
+    ]
+  },
+  "act.name_is_in_the_trash_restore": {
+    "tool": "act",
+    "argument": "name",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "complete",
+          "kind": "task",
+          "name": "Library books",
+          "trashed": true
+        }
+      }
+    ]
+  },
+  "act.name_state": {
+    "tool": "act",
+    "argument": "verb",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "complete",
+          "kind": "task",
+          "name": "Write report"
+        }
+      }
+    ]
+  },
+  "act.restore_name_was_refused_it_is": {
+    "tool": "act",
+    "argument": "verb",
+    "why_none": "reaches the reply as the refused: restore line below; this error form is the vault's refusal with no named predicate"
+  },
+  "act.x_name_was_refused_reason": {
+    "tool": "act",
+    "argument": "verb",
+    "why_none": "a vault refusal with no named predicate; the fixture vault always names one (see the refused: families)"
+  },
+  "act.x_takes_x_not_key": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "log",
+          "kind": "person",
+          "name": "Ray",
+          "args": "foo: bar"
+        }
+      }
+    ]
+  },
+  "act.log_takes_kind_x": {
+    "tool": "act",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "log",
+          "kind": "person",
+          "name": "Ray",
+          "args": "kind: foo"
+        }
+      }
+    ]
+  },
+  "act.x_takes_slot_n_not_key": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "add_to",
+          "kind": "task",
+          "name": "Book the cabin",
+          "args": "foo: bar"
+        }
+      }
+    ]
+  },
+  "act.x_needs_slot_n": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "add_to",
+          "kind": "task",
+          "name": "Book the cabin"
+        }
+      }
+    ]
+  },
+  "act.slot_is_exactly_one_n": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "add_to",
+          "kind": "task",
+          "name": "Book the cabin",
+          "args": "to: #8, #6"
+        }
+      }
+    ]
+  },
+  "act.a_x_goes_into_a_x": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "add_to",
+          "kind": "task",
+          "name": "Book the cabin",
+          "args": "to: #6"
+        }
+      }
+    ]
+  },
+  "act.settle_up_takes_group_n_and_amount": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "settle_up",
+          "kind": "person",
+          "name": "Ray",
+          "args": "foo: bar"
+        }
+      }
+    ]
+  },
+  "act.settle_up_is_with_someone_else_not": {
+    "tool": "act",
+    "argument": "name",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "person"
+        }
+      },
+      {
+        "tool": "act",
+        "args": {
+          "verb": "settle_up",
+          "rows": "#13",
+          "args": "group: #2"
+        }
+      }
+    ]
+  },
+  "act.settle_up_needs_group_n": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "settle_up",
+          "kind": "person",
+          "name": "Benedikt"
+        }
+      }
+    ]
+  },
+  "act.group_is_exactly_one_n": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "settle_up",
+          "kind": "person",
+          "name": "Ray",
+          "args": "group: #1, #2"
+        }
+      }
+    ]
+  },
+  "act.group_names_a_group_and_name": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "settle_up",
+          "kind": "person",
+          "name": "Ray",
+          "args": "group: #8"
+        }
+      }
+    ]
+  },
+  "act.amount_is_a_number_in_currency": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "settle_up",
+          "kind": "person",
+          "name": "Ray",
+          "args": "group: #2\namount: lots"
+        }
+      }
+    ]
+  },
+  "act.amount_is_more_than_zero": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "settle_up",
+          "kind": "person",
+          "name": "Ray",
+          "args": "group: #2\namount: 0"
+        }
+      }
+    ]
+  },
+  "act.reveal_takes_field_not_key": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "reveal",
+          "kind": "locker item",
+          "name": "Home wifi",
+          "args": "foo: bar"
+        }
+      }
+    ]
+  },
+  "act.reveal_takes_field_one_of_this": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "reveal",
+          "kind": "locker item",
+          "name": "Home wifi",
+          "args": "field: pin"
+        }
+      }
+    ]
+  },
+  "act.first_was_asked_for_first_and": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "user": "what is the cvv of the home wifi",
+        "tool": "act",
+        "args": {
+          "verb": "reveal",
+          "kind": "locker item",
+          "name": "Home wifi",
+          "args": "field: cvv"
+        }
+      },
+      {
+        "tool": "act",
+        "args": {
+          "verb": "reveal",
+          "kind": "locker item",
+          "name": "Home wifi",
+          "args": "field: password"
+        }
+      }
+    ]
+  },
+  "act.only_a_body_or_a_description": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "task",
+          "name": "Pay rent",
+          "args": "effort+: 5"
+        }
+      }
+    ]
+  },
+  "act.base_and_base_in_one_edit": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "note",
+          "name": "Dal",
+          "args": "body: lentils\nbody+: oat milk"
+        }
+      }
+    ]
+  },
+  "act.base_needs_the_text_to_add": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "note",
+          "name": "Dal",
+          "args": "body+: "
+        }
+      }
+    ]
+  },
+  "act.name_has_no_field_it_holds": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "reveal",
+          "kind": "locker item",
+          "name": "Home wifi",
+          "args": "field: cvv"
+        }
+      }
+    ]
+  },
+  "act.this_seat_cannot_open_the_secret": {
+    "tool": "act",
+    "argument": "verb",
+    "why_none": "the seat's own failure to open a sealed secret; the fixture seat opens every secret"
+  },
+  "act.reschedule_takes_to_date_expression_not": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "reschedule",
+          "kind": "event",
+          "name": "Dentist",
+          "args": "foo: bar"
+        }
+      }
+    ]
+  },
+  "act.reschedule_needs_a_day_an_instant": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "reschedule",
+          "kind": "task",
+          "name": "Pay rent",
+          "args": "to: {\"from\":{\"unit\":\"day\",\"rel\":1}}"
+        }
+      }
+    ]
+  },
+  "act.a_task_is_due_at_one": {
+    "tool": "act",
+    "argument": "args",
+    "why_none": "normalised away before the call runs: a task due on a closed range (a month, a week) is due on its first day and the reply notes it (act.rs, first_day_of; nt14 N5); only a session that does not normalise says this"
+  },
+  "act.an_event_moves_to_one_day": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "reschedule",
+          "kind": "event",
+          "name": "Dentist",
+          "args": "to: {\"unit\":\"week\",\"rel\":1}"
+        }
+      }
+    ]
+  },
+  "act.reschedule_does_not_apply_to_x": {
+    "tool": "act",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "reschedule",
+          "kind": "person",
+          "name": "Ray"
+        }
+      }
+    ]
+  },
+  "act.edit_needs_field_value_lines_x": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "note",
+          "name": "Dal"
+        }
+      }
+    ]
+  },
+  "act.name_cannot_be_empty": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "note",
+          "name": "Dal",
+          "args": "name: "
+        }
+      }
+    ]
+  },
+  "act.a_date_changes_with_reschedule_to": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "task",
+          "name": "Pay rent",
+          "args": "date: 2026-10-10\ndescription: pay by transfer"
+        }
+      }
+    ]
+  },
+  "act.x_have_no_field_field_x": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "task",
+          "name": "Pay rent",
+          "args": "colour: red"
+        }
+      }
+    ]
+  },
+  "act.field_cannot_be_edited_hint": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "task",
+          "name": "Pay rent",
+          "args": "completed: 2026-09-01"
+        }
+      }
+    ]
+  },
+  "act.field_cannot_be_edited": {
+    "tool": "act",
+    "argument": "args",
+    "why_none": "a Money or Date field with an edit command; the metadata has none"
+  },
+  "act.that_duration_is_out_of_range": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "event",
+          "name": "Dentist",
+          "args": "duration: 99999999999999"
+        }
+      }
+    ]
+  },
+  "act.a_item_type_item_keeps_no_field": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "edit",
+          "kind": "locker item",
+          "name": "Home wifi",
+          "args": "url: https://x.example"
+        }
+      }
+    ]
+  },
+  "act.create_needs_the_kind_parameter_set": {
+    "tool": "act",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "args": "name: x"
+        }
+      }
+    ]
+  },
+  "act.create_x_args_take_x_not": {
+    "tool": "act",
+    "argument": "args",
+    "why_none": "normalised away before the call runs: a create arg the kind does not take is dropped and the reply notes it (normalize.rs, rule 1)"
+  },
+  "act.create_x_needs_name_in_args": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "note",
+          "args": "body: x"
+        }
+      }
+    ]
+  },
+  "act.key_is_a_number": {
+    "tool": "act",
+    "argument": "args",
+    "why_none": "every numeric key of a create has a metadata field, so the field-specific number message answers first"
+  },
+  "act.key_is_one_x_n": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "task",
+          "args": "name: x\nlist: #8, #6"
+        }
+      }
+    ]
+  },
+  "act.a_new_row_s_date_is": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "event",
+          "args": "name: x\ndate: {\"from\":{\"unit\":\"day\",\"rel\":1}}"
+        }
+      }
+    ]
+  },
+  "act.create_event_needs_date_date_expression": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "event",
+          "args": "name: x"
+        }
+      }
+    ]
+  },
+  "act.create_debt_needs_person_n": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "debt",
+          "args": "name: x"
+        }
+      }
+    ]
+  },
+  "act.create_debt_needs_amount_n_currency": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "person"
+        }
+      },
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "debt",
+          "args": "name: x\nperson: #12"
+        }
+      }
+    ]
+  },
+  "act.create_debt_needs_direction_owes_me_or": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "person"
+        }
+      },
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "debt",
+          "args": "name: x\nperson: #12\namount: 5"
+        }
+      }
+    ]
+  },
+  "act.a_kind_value_item_keeps_no_field": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "locker item",
+          "args": "name: x\ntype: wifi\nurl: https://x.example"
+        }
+      }
+    ]
+  },
+  "act.x_name_said": {
+    "tool": "act",
+    "argument": "verb",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "delete",
+          "kind": "group",
+          "name": "Tahoe Trip"
+        }
+      }
+    ]
+  },
+  "act.restore_name_it_is_in_the": {
+    "tool": "act",
+    "argument": "verb",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "restore",
+          "kind": "person",
+          "name": "Old Contact",
+          "trashed": true
+        }
+      }
+    ]
+  },
+  "act.create_x_was_refused_x": {
+    "tool": "act",
+    "argument": "verb",
+    "why_none": "the vault's own reason, as the vault words it; the fixture has no create the vault refuses with a named predicate"
+  },
+  "act.nothing_to_undo": {
+    "tool": "act",
+    "argument": "verb",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "undo"
+        }
+      }
+    ]
+  },
+  "session.repeated_call_again_do_not_send": {
+    "tool": "find",
+    "argument": "",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      }
+    ]
+  },
+  "session.repeated_call_you_already_made_this": {
+    "tool": "find",
+    "argument": "",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      }
+    ]
+  },
+  "session.key_is_true_or_false_not": {
+    "tool": "find",
+    "argument": "trashed",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "trashed": "maybe"
+        }
+      }
+    ]
+  },
+  "session.key_is_true_or_false_not_2": {
+    "tool": "find",
+    "argument": "trashed",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "trashed": 5
+        }
+      }
+    ]
+  },
+  "session.key_is_a_whole_number": {
+    "tool": "find",
+    "argument": "limit",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "limit": 1.5
+        }
+      }
+    ]
+  },
+  "session.key_is_a_whole_number_not": {
+    "tool": "find",
+    "argument": "limit",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "limit": "many"
+        }
+      }
+    ]
+  },
+  "session.key_is_a_whole_number_not_2": {
+    "tool": "find",
+    "argument": "limit",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "limit": [1]
+        }
+      }
+    ]
+  },
+  "session.handle_is_not_a_row_rows": {
+    "tool": "act",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "star",
+          "rows": "foo"
+        }
+      }
+    ]
+  },
+  "session.number_was_never_shown": {
+    "tool": "act",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "star",
+          "rows": "#999"
+        }
+      }
+    ]
+  },
+  "session.number_no_longer_exists_in_the": {
+    "tool": "act",
+    "argument": "rows",
+    "why_none": "defensive: a numbered row stays in the world, trashed rows included"
+  },
+  "session.handle_is_not_a_result_results": {
+    "tool": "find",
+    "argument": "within",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "within": "foo"
+        }
+      }
+    ]
+  },
+  "session.number_was_never_issued_issued_results": {
+    "tool": "find",
+    "argument": "within",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "within": "@9"
+        }
+      }
+    ]
+  },
+  "session.rows_is_a_list_of_n": {
+    "tool": "find",
+    "argument": "linked_to",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "linked_to": ""
+        }
+      }
+    ]
+  },
+  "session.number_is_article_name_and_kind": {
+    "tool": "answer",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "answer",
+        "args": {
+          "rows": "#8",
+          "kind": "task"
+        }
+      }
+    ]
+  },
+  "session.kind_any_is_only_for_search": {
+    "tool": "find",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "any"
+        }
+      }
+    ]
+  },
+  "session.no_kind_part_kinds_x": {
+    "tool": "find",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "spaceship"
+        }
+      }
+    ]
+  },
+  "session.kind_is_empty_kinds_x": {
+    "tool": "find",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": ","
+        }
+      }
+    ]
+  },
+  "session.a_selector_needs_kind_or_within": {
+    "tool": "find",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "name": "x"
+        }
+      }
+    ]
+  },
+  "session.that_result_holds_no_rows_to": {
+    "tool": "find",
+    "argument": "within",
+    "why_none": "defensive: a result set always carries the kinds of its rows"
+  },
+  "session.key_needs_exactly_one_kind_fields": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task,note",
+          "where": "status = open"
+        }
+      }
+    ]
+  },
+  "session.cannot_order_x_by_field_order": {
+    "tool": "find",
+    "argument": "order",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "order": "colour asc"
+        }
+      }
+    ]
+  },
+  "session.limit_is_a_positive_whole_number": {
+    "tool": "find",
+    "argument": "limit",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "limit": 0
+        }
+      }
+    ]
+  },
+  "session.the_turn_has_ended_the_next": {
+    "tool": "answer",
+    "argument": "",
+    "calls": [
+      {
+        "tool": "answer",
+        "args": {
+          "kind": "task",
+          "name": "Pay rent"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      }
+    ]
+  },
+  "session.step_cap_step_cap_reached_the_turn": {
+    "tool": "find",
+    "argument": "",
+    "calls": [
+      {
+        "tool": "act",
+        "args": {
+          "verb": "create",
+          "kind": "note",
+          "args": "name: x",
+          "more": true
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "person"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "debt"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "event"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "group"
+        }
+      }
+    ]
+  },
+  "session.repeated_call_at_step_x_step": {
+    "tool": "find",
+    "argument": "",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "spaceship"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "spaceship"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "spaceship"
+        }
+      }
+    ]
+  },
+  "session.repeated_call": {
+    "tool": "find",
+    "argument": "",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      }
+    ]
+  },
+  "session.could_not_read_the_call_args": {
+    "tool": "find",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "find",
+        "args": [1]
+      }
+    ]
+  },
+  "session.could_not_read_the_call_no": {
+    "tool": "frobnicate",
+    "argument": "tool",
+    "calls": [
+      {
+        "tool": "frobnicate",
+        "args": {}
+      }
+    ]
+  },
+  "session.tool_has_no_parameter_key_tool": {
+    "tool": "find",
+    "argument": "colour",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "colour": "red"
+        }
+      }
+    ]
+  },
+  "session.open_needs_row_n": {
+    "tool": "open",
+    "argument": "row",
+    "calls": [
+      {
+        "tool": "open",
+        "args": {}
+      }
+    ]
+  },
+  "session.open_takes_exactly_one_row_n": {
+    "tool": "open",
+    "argument": "row",
+    "calls": [
+      {
+        "tool": "open",
+        "args": {
+          "row": "#8, #7"
+        }
+      }
+    ]
+  },
+  "session.ask_needs_question": {
+    "tool": "ask",
+    "argument": "question",
+    "calls": [
+      {
+        "tool": "ask",
+        "args": {}
+      }
+    ]
+  },
+  "session.decline_reason_is_one_of_x": {
+    "tool": "decline",
+    "argument": "reason",
+    "calls": [
+      {
+        "tool": "decline",
+        "args": {
+          "reason": "because"
+        }
+      }
+    ]
+  },
+  "session.answer_value_n_stands_alone": {
+    "tool": "answer",
+    "argument": "value",
+    "calls": [
+      {
+        "tool": "answer",
+        "args": {
+          "value": "@1",
+          "kind": "task"
+        }
+      }
+    ]
+  },
+  "session.handle_holds_rows_not_a_value": {
+    "tool": "answer",
+    "argument": "value",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task"
+        }
+      },
+      {
+        "tool": "answer",
+        "args": {
+          "value": "@1"
+        }
+      }
+    ]
+  },
+  "session.number_is_a_value_not_rows": {
+    "tool": "act",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "count",
+          "kind": "task"
+        }
+      },
+      {
+        "tool": "act",
+        "args": {
+          "verb": "complete",
+          "rows": "@1"
+        }
+      }
+    ]
+  },
+  "session.answer_takes_rows_or_a_selector": {
+    "tool": "answer",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "answer",
+        "args": {
+          "rows": "#8",
+          "name": "x"
+        }
+      }
+    ]
+  },
+  "session.compute_needs_op_x": {
+    "tool": "compute",
+    "argument": "op",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "kind": "task"
+        }
+      }
+    ]
+  },
+  "session.no_op_op_ops_x": {
+    "tool": "compute",
+    "argument": "op",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "kind": "task",
+          "op": "median"
+        }
+      }
+    ]
+  },
+  "session.take_rows_or_a_selector_not": {
+    "tool": "compute",
+    "argument": "rows",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "count",
+          "rows": "#8",
+          "name": "x"
+        }
+      }
+    ]
+  },
+  "session.op_needs_exactly_one_kind_fields": {
+    "tool": "compute",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "sum",
+          "field": "effort",
+          "kind": "task,event"
+        }
+      }
+    ]
+  },
+  "session.balance_takes_no_group": {
+    "tool": "compute",
+    "argument": "group",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "balance",
+          "kind": "person",
+          "name": "Ray",
+          "group": "effort"
+        }
+      }
+    ]
+  },
+  "session.count_takes_no_field": {
+    "tool": "compute",
+    "argument": "field",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "count",
+          "kind": "task",
+          "field": "effort"
+        }
+      }
+    ]
+  },
+  "session.op_needs_field_x_number_fields": {
+    "tool": "compute",
+    "argument": "field",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "sum",
+          "kind": "task"
+        }
+      }
+    ]
+  },
+  "session.op_needs_a_number_field_field": {
+    "tool": "compute",
+    "argument": "field",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "sum",
+          "kind": "task",
+          "field": "description"
+        }
+      }
+    ]
+  },
+  "whr.x_have_no_field_field_x": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "colour = red"
+        }
+      }
+    ]
+  },
+  "whr.linked_is_not_a_kind_kinds": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "foo count > 2"
+        }
+      }
+    ]
+  },
+  "whr.x_are_not_linked_to_x": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "debt",
+          "where": "task count > 1"
+        }
+      }
+    ]
+  },
+  "whr.could_not_read_part_a_linked": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "person count lots"
+        }
+      }
+    ]
+  },
+  "whr.value_is_not_a_whole_number": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "person count > 1.5"
+        }
+      }
+    ]
+  },
+  "whr.could_not_read_the_condition_part": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "= 3"
+        }
+      }
+    ]
+  },
+  "whr.where_has_no_name_field_filter": {
+    "tool": "find",
+    "argument": "where",
+    "why_none": "normalised away before the call runs: a where clause on name is lifted into the name selector or dropped, and the reply notes it (normalize.rs, rule 5)"
+  },
+  "whr.where_has_no_date_field_filter": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "date = x"
+        }
+      }
+    ]
+  },
+  "whr.x_is_a_date_where_takes": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "completed = x"
+        }
+      }
+    ]
+  },
+  "whr.contains_works_on_text_fields_x": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "effort contains \"3\""
+        }
+      }
+    ]
+  },
+  "whr.contains_takes_a_quoted_text_x": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "description contains foo"
+        }
+      }
+    ]
+  },
+  "whr.in_takes_a_list_x_in": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "status in foo"
+        }
+      }
+    ]
+  },
+  "whr.could_not_read_part_operators_contains": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "effort ~ 3"
+        }
+      }
+    ]
+  },
+  "whr.x_is_a_number_value_is": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "effort = lots"
+        }
+      }
+    ]
+  },
+  "whr.x_is_shape_value_is_not": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "priority = high"
+        }
+      }
+    ]
+  },
+  "whr.x_is_text_compare_it_with": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "description > 3"
+        }
+      }
+    ]
+  },
+  "whr.x_takes_or_or_in": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "status > open"
+        }
+      }
+    ]
+  },
+  "whr.x_is_yes_or_no_compare": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "person",
+          "where": "starred > yes"
+        }
+      }
+    ]
+  },
+  "whr.x_is_yes_or_no_not": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "person",
+          "where": "starred = maybe"
+        }
+      }
+    ]
+  },
+  "whr.field_has_no_value_value_x": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "where": "status = bogus"
+        }
+      }
+    ]
+  },
+  "values.balance_needs_one_x_the_selection": {
+    "tool": "compute",
+    "argument": "name",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "balance",
+          "kind": "person",
+          "name": "Zed"
+        }
+      }
+    ]
+  },
+  "values.balance_is_for_one_x_the": {
+    "tool": "compute",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "balance",
+          "kind": "person"
+        }
+      }
+    ]
+  },
+  "values.that_is_you_balance_is_you": {
+    "tool": "compute",
+    "argument": "name",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "balance",
+          "kind": "person",
+          "name": "Sam Park"
+        }
+      }
+    ]
+  },
+  "values.a_group_s_balance_is_one": {
+    "tool": "compute",
+    "argument": "linked_to",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "person",
+          "name": "Neha Rao"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "person",
+          "name": "Ray Ochoa"
+        }
+      },
+      {
+        "tool": "compute",
+        "args": {
+          "op": "balance",
+          "kind": "group",
+          "name": "Tahoe Trip",
+          "linked_to": "#9, #10"
+        }
+      }
+    ]
+  },
+  "values.balance_is_defined_for_person_and": {
+    "tool": "compute",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "compute",
+        "args": {
+          "op": "balance",
+          "kind": "task"
+        }
+      }
+    ]
+  },
+  "search.search_needs_text": {
+    "tool": "search",
+    "argument": "text",
+    "calls": [
+      {
+        "tool": "search",
+        "args": {}
+      }
+    ]
+  },
+  "search.no_kind_part_kinds_any_x": {
+    "tool": "search",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "search",
+        "args": {
+          "text": "x",
+          "kind": "spaceship"
+        }
+      }
+    ]
+  },
+  "search.kind_is_text_not_other": {
+    "tool": "search",
+    "argument": "kind",
+    "calls": [
+      {
+        "tool": "search",
+        "args": {
+          "text": "x",
+          "kind": 5
+        }
+      }
+    ]
+  },
+  "trace.the_trace_contradicts_the_call_why": {
+    "tool": "answer",
+    "argument": "think",
+    "calls": [
+      {
+        "tool": "answer",
+        "args": {
+          "kind": "task"
+        },
+        "think": "intent: write \"x\"\nverb: complete\nscope: one"
+      }
+    ]
+  },
+  "parse.one_call_per_message": {
+    "tool": "call_text",
+    "argument": "text",
+    "calls": [
+      {
+        "tool": "call_text",
+        "args": {
+          "text": "<tool_call>\n<function=find>\n<parameter=kind>\ntask\n</parameter>\n</function>\n</tool_call>\n<tool_call>\n<function=find>\n<parameter=kind>\nnote\n</parameter>\n</function>\n</tool_call>"
+        }
+      }
+    ]
+  },
+  "parse.could_not_read_the_call_why": {
+    "tool": "call_text",
+    "argument": "text",
+    "calls": [
+      {
+        "tool": "call_text",
+        "args": {
+          "text": "I will look it up."
+        }
+      }
+    ]
+  },
+  "dates.could_not_read_the_date_expression": {
+    "tool": "find",
+    "argument": "when",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "when": {
+            "foo": 1
+          }
+        }
+      }
+    ]
+  },
+  "session.that_is_the_same_call_again": {
+    "tool": "find",
+    "argument": "sort",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "sort": "date"
+        }
+      },
+      {
+        "tool": "find",
+        "args": {
+          "kind": "task",
+          "sort": "date"
+        }
+      }
+    ]
+  },
+  "whr.what_is_one_of_yes_true": {
+    "tool": "find",
+    "argument": "where",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "note",
+          "where": "pinned = maybe"
+        }
+      }
+    ]
+  },
+  "whr.symbol_char_names_more_than_one_currency": {
+    "why_none": "needs a vault that holds two currencies of one symbol (USD and CAD for a dollar sign); the fixture vault holds one"
+  },
+  "whr.amounts_are_in_currency_here_x": {
+    "tool": "act",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "find",
+        "args": {
+          "kind": "group",
+          "name": "Tahoe Trip"
+        }
+      },
+      {
+        "tool": "act",
+        "args": {
+          "verb": "settle_up",
+          "kind": "person",
+          "name": "Ray",
+          "args": "group: #1\namount: €5"
+        }
+      }
+    ]
+  },
+  "act.name_is_one_occurrence_of_a": {
+    "tool": "act",
+    "argument": "rows",
+    "why_none": "needs an event the vault repeats (a series read as its occurrences, World::read_event_window); the fixture world has none and no call makes one, so tests/events_local.rs drives it"
+  }
+}

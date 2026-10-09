@@ -1,0 +1,547 @@
+// THE ON-DEVICE CHAT: a session, a question, and a stream of what happens next.
+//
+// The model is a small language model running ON THIS PHONE (llama.cpp over a
+// GGUF file the shell downloaded). It may call a read an app already answers
+// and say one sentence about what came back; on the native plane (#1088) it may
+// also PROPOSE a write, which only the member's tap makes (see "A write is a
+// card" below). `crates/assist` is the plane; this file is its door.
+//
+// ## Why a request kind and not a registered command
+//
+// A turn writes nothing — no row, no receipt, not even one it proposes — and
+// runs a model, so it is neither a command (`command.proto`) nor a page read. It rides the envelope
+// the way `phone.proto`'s verbs do, and for the same reason: the reasons it
+// cannot be a command are stated where a shell author reads them.
+//
+// ## One call, many events
+//
+// `AssistSendRequest` BLOCKS until the turn is over, like every call on this
+// ABI, and answers with the outcome. While it runs the core pushes
+// `AssistEvent`s onto the event queue — the activity, the cards as soon as the
+// read returns, each piece of the sentence, then the answer or the refusal —
+// so a shell that collects `next_event` draws the turn as it happens, and one
+// that only reads the response draws the same final state. The response and
+// the terminal event are the same fact twice; `turn_id` is how a shell takes
+// whichever arrives first and drops the other.
+//
+// The shell mints `turn_id` (monotonic per session) and the core echoes it, so
+// a shell can recognise events of a turn it has already abandoned — after a
+// cancel and a new send — without waiting for the call to return.
+//
+// ## Cancelling
+//
+// `AssistCancelRequest` is its own bounded call, made from another thread while
+// a send is in flight: calls on this ABI are reentrant. It stops the running
+// generation at its next check (the engine polls during prompt processing as
+// well as between tokens) and the send answers `ASSIST_REFUSAL_REASON_CANCELLED`.
+// A cancel with nothing running is a no-op.
+//
+// ## What is in memory, and what is in the vault (R-CHAT-1)
+//
+// A session is a chat IN MEMORY: the model's view of it, the last two turns,
+// ends with the handle. What the member said and was told is the VAULT's: at
+// the end of each turn the core saves it through the `chat.save_turn` command
+// (`chat.proto` reads it back), so a conversation is backed up with the rest of
+// the vault, deletable, and per vault. `AssistStartRequest.thread_id` reopens a
+// stored thread: the core rebuilds the session from its last turns, so a
+// follow-up is routed as it would have been had the app never closed. A turn
+// that was running when the app died is lost whole, never half-kept: the save
+// is one commit at the turn's end. Locker is not an app a session can be
+// scoped to and no tool reads it.
+//
+// ## A write is a card, and a tap makes it (#1088, R-1088-2)
+//
+// On the native plane a turn that WRITES makes nothing: the runtime plans the
+// write against a copy of the vault's rows and parks it. The turn ends in an
+// ordinary `AssistAnswer` ("Proposed: …") carrying an `AssistPending`: the
+// card, one line per row the write changes, built from the runtime's
+// structured facts (the kind, the title, what moves) and not from the text the
+// model was shown. The same card rides the stream as `AssistEvent.pending`
+// just before the answer; the answer's copy is the reliable one, like every
+// other terminal fact of a turn.
+//
+// The member's tap is its own bounded call. `AssistConfirmRequest` runs the
+// parked steps once, through the commands a screen uses (so every screen that
+// reads those tables refreshes), and answers `AssistSettled`: how it ended and
+// the one line to say. A card tapped twice writes once and answers what it
+// answered the first time. `AssistDismissRequest` drops the card and writes
+// nothing. A card is in memory, one per session: a new message dismisses it, a
+// reopened thread never had it, and a tap on one that is gone is
+// `ASSIST_SETTLE_OUTCOME_NOTHING_WAITING`, not an error. A card carries no
+// "stale" flag: staleness is judged when it is tapped, against the rows as they
+// are then, and a tap on a card whose rows moved answers
+// `ASSIST_SETTLE_OUTCOME_STALE` and writes nothing.
+//
+// ## The model file
+//
+// The shell owns the download — it is the one thing Centraid ever fetches —
+// and hands the core a path. `AssistStatusRequest` answers whether a model is
+// there and whether it is loaded, which is how the shell decides between a
+// download step and a chat.
+//
+// ## The vision projector, and attachments
+//
+// A photograph is read by a second file, the vision projector, which the shell
+// fetches ONLY when a member first attaches a photo (a second download step, the
+// same shape as the first). `AssistStatusRequest.projector_path` and
+// `AssistLoadRequest.projector_path` carry its path; `AssistStatus.vision` says
+// whether it is there and whether the loaded model carries it. A load with a
+// projector path gives the loaded model its eyes WITHOUT reading the weights
+// again.
+//
+// A turn may carry attachments (`AssistSendRequest.attachments`): a photo from
+// the vault (an asset id the core resolves through the byte plane, preferring
+// the 2048-pixel preview), raw image bytes the shell picked (a camera roll
+// item, already JPEG or PNG), or a text document from the vault (a document id,
+// `text/plain` or `text/markdown`). At most one image and one document. A turn
+// with an attachment does not route: it answers over the attachment, streamed.
+// Locker is never an attachment: only `media.asset` and `core.document` ids are
+// read, and neither names a Locker item. What the vault keeps of an attachment
+// is a reference (the asset or document id) and, for a camera-roll image, a
+// thumbnail of at most 256 pixels; the picture itself is never kept and no
+// photograph leaves the device.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+message AssistRequest {
+  // 2 `load` and 3 `unload` answer with `status`'s message at `status`'s
+  // number: the answer to all three is "where the model stands now".
+  oneof kind {
+    AssistStatusRequest status = 1;
+    AssistLoadRequest load = 2;
+    AssistUnloadRequest unload = 3;
+    AssistStartRequest start = 4;
+    AssistSendRequest send = 5;
+    AssistCancelRequest cancel = 6;
+    AssistClearRequest clear = 7;
+    AssistSuggestRequest suggest = 8;
+    AssistDocumentsRequest documents = 9;
+    // The member's tap on a pending write's card, and its dismissal (#1088).
+    // Both answer `settled`.
+    AssistConfirmRequest confirm = 10;
+    AssistDismissRequest dismiss = 11;
+  }
+}
+
+message AssistResponse {
+  oneof kind {
+    AssistStatus status = 1;
+    AssistStarted started = 4;
+    AssistSent sent = 5;
+    // Answers `cancel` and `clear`.
+    AssistAck ack = 6;
+    AssistSuggestions suggestions = 8;
+    AssistDocuments documents = 9;
+    // Answers `confirm` and `dismiss`.
+    AssistSettled settled = 10;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The model.
+// ---------------------------------------------------------------------------
+
+// Where the model at a path stands. Nothing is read: this is a stat, and the
+// load is `AssistLoadRequest`.
+message AssistStatusRequest {
+  string model_path = 1;
+  // The vision projector's path, when the shell wants its state too. Empty
+  // leaves `AssistStatus.vision` unspecified.
+  string projector_path = 2;
+}
+
+// Load the model at a path into memory, replacing whatever was loaded. Blocks
+// for as long as the engine takes (seconds), so the shell calls it off its UI
+// thread and draws the wait itself.
+message AssistLoadRequest {
+  string model_path = 1;
+  // Also give the loaded model this vision projector. Empty loads the text
+  // model alone. A projector that is missing or will not attach is not an
+  // error: the answer's `vision` is then not `READY`, and the shell draws the
+  // download step again.
+  string projector_path = 2;
+}
+
+// Free the model's memory. A shell does this under memory pressure; the next
+// `AssistLoadRequest` brings it back.
+message AssistUnloadRequest {}
+
+enum AssistModelState {
+  ASSIST_MODEL_STATE_UNSPECIFIED = 0;
+  // No file at the path, or an empty one: show the download step.
+  ASSIST_MODEL_STATE_ABSENT = 1;
+  // The file is there and this build links no engine to read it. The shell
+  // draws "this build cannot run the assistant"; it is not a download problem.
+  ASSIST_MODEL_STATE_NO_ENGINE = 2;
+  // The file is there and not loaded.
+  ASSIST_MODEL_STATE_PRESENT = 3;
+  // A load is running.
+  ASSIST_MODEL_STATE_LOADING = 4;
+  // Loaded, and answering.
+  ASSIST_MODEL_STATE_READY = 5;
+}
+
+message AssistStatus {
+  AssistModelState state = 1;
+  // The file's size in bytes, 0 when there is none: what a shell compares with
+  // the size it downloaded to know a transfer was whole.
+  uint64 model_bytes = 2;
+  // Where the vision projector stands. Unspecified when the request named no
+  // projector path.
+  AssistVisionState vision = 3;
+  // The projector file's size, 0 when there is none.
+  uint64 projector_bytes = 4;
+}
+
+enum AssistVisionState {
+  ASSIST_VISION_STATE_UNSPECIFIED = 0;
+  // No file at the projector path: a photo cannot be read until it is fetched.
+  ASSIST_VISION_STATE_ABSENT = 1;
+  // The file is there and the loaded model does not carry it.
+  ASSIST_VISION_STATE_PRESENT = 2;
+  // The loaded model carries it: a photo may be attached.
+  ASSIST_VISION_STATE_READY = 3;
+}
+
+// ---------------------------------------------------------------------------
+// The session.
+// ---------------------------------------------------------------------------
+
+// Open a chat. Empty `app` is a chat over every app; an app id (`tasks`) scopes
+// it, which lists that app's tools first. An id the assistant does not read —
+// Locker among them — is `ERROR_CODE_INVALID_REQUEST`.
+//
+// A non-empty `thread_id` REOPENS a stored chat instead: the session is rebuilt
+// from the thread's last turns, its scope is the thread's own (`app` is then
+// ignored), and the turns that follow are saved into the same thread. A thread
+// that is not in the vault is `ERROR_CODE_INVALID_REQUEST`.
+message AssistStartRequest {
+  string app = 1;
+  string thread_id = 2;
+}
+
+message AssistStarted {
+  uint64 session_id = 1;
+  // The thread a reopened chat saves into; empty for a new chat, which gets
+  // one when its first turn is saved.
+  string thread_id = 2;
+  // The scope the session runs in: the request's `app`, or a reopened
+  // thread's own.
+  string scope_app = 3;
+}
+
+// Ask. `regenerate` drops the last turn and asks its question again, and
+// `text` is then ignored; with no earlier question it is
+// `ERROR_CODE_INVALID_REQUEST`. One turn runs at a time per session: a second
+// send is answered `ASSIST_REFUSAL_REASON_BUSY` rather than queued.
+//
+// A regenerate asks the SAME attachments again. A shell that still holds them
+// sends them again (a refused turn never reached the plane, so the core has
+// nothing to repeat); sent with none, the core asks the last turn's own, which
+// it kept in memory.
+message AssistSendRequest {
+  uint64 session_id = 1;
+  string text = 2;
+  // The device's IANA zone. A read that speaks of "today" answers in it, and an
+  // empty one is the vault's own, as every app query reads it.
+  string tz = 3;
+  bool regenerate = 4;
+  // Minted by the shell, monotonic per session, echoed on every event.
+  uint64 turn_id = 5;
+  // What rides on this question. At most one image (`vault_photo` or
+  // `image_bytes`) and one `vault_doc`; more is `ERROR_CODE_INVALID_REQUEST`.
+  repeated AssistAttachment attachments = 6;
+}
+
+message AssistAttachment {
+  oneof kind {
+    AssistVaultPhoto vault_photo = 1;
+    AssistVaultDoc vault_doc = 2;
+    AssistImageBytes image_bytes = 3;
+  }
+  // What the member's chip said (a title or a file name), kept with the
+  // question when the turn is saved. May be empty.
+  string label = 4;
+}
+
+// A photograph in the vault's Photos, by asset id. The core reads its preview
+// derivative (else its original, else its thumbnail), scales it to 448 pixels
+// on the long edge and decodes it; the bytes never cross this ABI.
+message AssistVaultPhoto {
+  string asset_id = 1;
+}
+
+// A text document in the vault's Docs, by document id. Only `text/plain` and
+// `text/markdown`; any other type is `ASSIST_REFUSAL_REASON_ATTACHMENT_UNSUPPORTED`.
+message AssistVaultDoc {
+  string doc_id = 1;
+}
+
+// An image the shell picked (a camera roll item). JPEG or PNG: the shell
+// converts what it cannot give as those (HEIC) before it sends. Up to 25 MB.
+message AssistImageBytes {
+  bytes content = 1;
+  string mime = 2;
+}
+
+// Stop the running turn on a session.
+message AssistCancelRequest {
+  uint64 session_id = 1;
+}
+
+// A new chat: the transcript goes, the scope stays. A running turn is
+// cancelled first.
+message AssistClearRequest {
+  uint64 session_id = 1;
+}
+
+message AssistAck {}
+
+// Three questions this vault can answer, with names and titles read from it.
+// Empty `app` is one from each of the first apps that hold something.
+message AssistSuggestRequest {
+  string app = 1;
+  string tz = 2;
+}
+
+message AssistSuggestions {
+  repeated string prompts = 1;
+}
+
+// The vault's text documents the chat can read, for the attach picker: newest
+// edit first, `text/plain` and `text/markdown` only. A PDF or a Word file is not
+// listed, because attaching it would be refused.
+message AssistDocumentsRequest {
+  // At most this many; 0 is 50.
+  uint32 limit = 1;
+}
+
+message AssistDocuments {
+  repeated AssistDocument documents = 1;
+}
+
+message AssistDocument {
+  string doc_id = 1;
+  string title = 2;
+  string media_type = 3;
+  // The document's last edit, as the vault stamps it (RFC 3339).
+  string updated_at = 4;
+}
+
+// ---------------------------------------------------------------------------
+// The turn.
+// ---------------------------------------------------------------------------
+
+message AssistSent {
+  uint64 session_id = 1;
+  uint64 turn_id = 2;
+  oneof outcome {
+    AssistAnswer answered = 3;
+    AssistRefusal refused = 4;
+  }
+  // The stored thread this turn was saved into (a new chat's first turn makes
+  // it), or empty when the turn was not saved. THE RESPONSE IS THE RELIABLE
+  // CARRIER: an event can be dropped from a full queue and a response cannot.
+  string thread_id = 5;
+  // The thread's title, as stored: the first question, trimmed.
+  string thread_title = 6;
+}
+
+// One line of the model's text and the rows it found. The cards are the
+// answer; the line is the model's gloss on them.
+message AssistAnswer {
+  string text = 1;
+  repeated AssistCard cards = 2;
+  // What the member is told beside the answer.
+  repeated AssistNotice notices = 3;
+  // The write this turn parked, waiting for the member's tap. Absent on a turn
+  // that wrote nothing.
+  AssistPending pending = 4;
+}
+
+enum AssistNotice {
+  ASSIST_NOTICE_UNSPECIFIED = 0;
+  // The attached document was longer than the model reads at once: the answer
+  // is over its first part.
+  ASSIST_NOTICE_DOC_TRUNCATED = 1;
+}
+
+// A REFERENCE TO ONE REAL ROW, and enough to name it. The app's own tile draws
+// the row and taps through to it; the display fields are the fallback for a
+// shell that has no tile for the entity yet.
+message AssistCard {
+  // The app id a shell routes by: `tasks`, `agenda`, `photos`…
+  string app = 1;
+  // What the row is, in the app's vocabulary: `task`, `event`, `person`…
+  string entity = 2;
+  string id = 3;
+  // A second key the app's route takes beside `id` — a repeating event's
+  // instance. Empty when there is none.
+  string qualifier = 4;
+  string title = 5;
+  string subtitle = 6;
+  string meta = 7;
+}
+
+enum AssistRefusalReason {
+  ASSIST_REFUSAL_REASON_UNSPECIFIED = 0;
+  // The model said no tool fits. Not an error: a question the assistant does
+  // not answer.
+  ASSIST_REFUSAL_REASON_NO_TOOL_FITS = 1;
+  // The read failed; `detail` says why, for logs.
+  ASSIST_REFUSAL_REASON_QUERY_FAILED = 2;
+  // The model's output was not a route, despite the grammar.
+  ASSIST_REFUSAL_REASON_UNPARSABLE = 3;
+  // The member stopped the turn.
+  ASSIST_REFUSAL_REASON_CANCELLED = 4;
+  // No model is loaded: the shell shows its download or load step.
+  ASSIST_REFUSAL_REASON_MODEL_ABSENT = 5;
+  // The engine failed.
+  ASSIST_REFUSAL_REASON_MODEL_FAILED = 6;
+  // A turn is already running on this session.
+  ASSIST_REFUSAL_REASON_BUSY = 7;
+  // A photo was attached and no vision projector is loaded: the shell draws
+  // its download (or load) step.
+  ASSIST_REFUSAL_REASON_VISION_ABSENT = 8;
+  // The attachment is a kind the chat does not read (a PDF, a Word file, a
+  // video).
+  ASSIST_REFUSAL_REASON_ATTACHMENT_UNSUPPORTED = 9;
+  // The attachment would not open: bytes that are not an image, a photograph
+  // whose file is not on this phone yet, a document that is gone.
+  ASSIST_REFUSAL_REASON_ATTACHMENT_UNREADABLE = 10;
+  // The attachment is bigger than the chat will take.
+  ASSIST_REFUSAL_REASON_ATTACHMENT_TOO_LARGE = 11;
+}
+
+message AssistRefusal {
+  AssistRefusalReason reason = 1;
+  // For logs and a Retry's tooltip, never for a member: the shell says its own
+  // sentence for each reason.
+  string detail = 2;
+}
+
+// What a running turn tells the shell, in this order: `activity` (or, over an
+// attachment, `reading`), then `cards` once the read returns (when it found
+// any), then `token`s, then `pending` (when the turn parked a write), then
+// exactly one of `answer` and `failed`.
+message AssistEvent {
+  uint64 session_id = 1;
+  uint64 turn_id = 2;
+  oneof kind {
+    AssistActivity activity = 3;
+    AssistCards cards = 4;
+    AssistToken token = 5;
+    AssistAnswer answer = 6;
+    AssistRefusal failed = 7;
+    AssistReading reading = 8;
+    // A write was parked: the card to draw. After `cards`, before `answer`.
+    AssistPending pending = 9;
+  }
+}
+
+// The model is reading an attachment before it answers: "Reading the photo".
+message AssistReading {
+  AssistReadingKind kind = 1;
+}
+
+enum AssistReadingKind {
+  ASSIST_READING_KIND_UNSPECIFIED = 0;
+  ASSIST_READING_KIND_PHOTO = 1;
+  ASSIST_READING_KIND_DOCUMENT = 2;
+}
+
+// The read is starting: "Looking in Tally".
+message AssistActivity {
+  string app = 1;
+  string tool = 2;
+}
+
+message AssistCards {
+  repeated AssistCard cards = 1;
+}
+
+// A piece of the sentence. The final text is `AssistAnswer.text`, which may
+// differ (it is trimmed to one line); a shell shows the pieces while they come
+// and replaces them with the answer.
+message AssistToken {
+  string text = 1;
+}
+
+// ---------------------------------------------------------------------------
+// The pending write: a card, and the tap that makes it (#1088).
+// ---------------------------------------------------------------------------
+
+// A write waiting for the member's tap. Nothing has been written.
+message AssistPending {
+  // What a `confirm` or a `dismiss` names. Minted by the core; one is waiting
+  // per session.
+  string pending_id = 1;
+  // The runtime's verb of each write call, in order: `complete`, `delete`…
+  repeated string verbs = 2;
+  // One line for each row the write changes, in order.
+  repeated AssistPendingStep steps = 3;
+  // The card asks twice: it deletes or removes, cancels, settles money, or
+  // changes something the vault cannot take back. The shell draws the confirm
+  // as the documented destructive control.
+  bool destructive = 4;
+  // Rows the write changes beyond the `steps` listed (a bulk write shows its
+  // first twelve): "and N more" is the shell's to say.
+  uint32 more = 5;
+}
+
+// ONE ROW A WRITE CHANGES, as one line the member reads before tapping.
+message AssistPendingStep {
+  // The runtime's verb for this row: `complete`, `edit`, `delete`…
+  string verb = 1;
+  // What the row is: `task`, `person`, `event`…
+  string kind = 2;
+  // The row's name.
+  string title = 3;
+  // The whole line, composed by the runtime from the chat's copy: `Complete
+  // task "Pick up the dry cleaning"`, `Reschedule task "Call plumber": due
+  // tomorrow → Fri 9 Oct`. The shell draws it as it is.
+  string summary = 4;
+  // This step deletes or removes (or cancels, or settles money).
+  bool destructive = 5;
+}
+
+// The member tapped Confirm.
+message AssistConfirmRequest {
+  uint64 session_id = 1;
+  string pending_id = 2;
+}
+
+// The member tapped Cancel. Nothing is written.
+message AssistDismissRequest {
+  uint64 session_id = 1;
+  string pending_id = 2;
+}
+
+// How a tap on the card ended.
+enum AssistSettleOutcome {
+  ASSIST_SETTLE_OUTCOME_UNSPECIFIED = 0;
+  // Every step ran. Every screen that reads those tables has been told.
+  ASSIST_SETTLE_OUTCOME_APPLIED = 1;
+  // A row the write addresses reads differently than when it was planned:
+  // nothing ran. The member asks again.
+  ASSIST_SETTLE_OUTCOME_STALE = 2;
+  // The vault refused a step. Steps before it ran; `line` carries the vault's
+  // own sentence.
+  ASSIST_SETTLE_OUTCOME_REFUSED = 3;
+  // The card was dismissed. Nothing was written.
+  ASSIST_SETTLE_OUTCOME_DISMISSED = 4;
+  // No such card is waiting: it was answered, dismissed, replaced by a new
+  // message, or never made.
+  ASSIST_SETTLE_OUTCOME_NOTHING_WAITING = 5;
+}
+
+message AssistSettled {
+  uint64 session_id = 1;
+  string pending_id = 2;
+  AssistSettleOutcome outcome = 3;
+  // The one line to say, composed by the runtime from the chat's copy
+  // ("Done.", "That changed since. Ask again.").
+  string line = 4;
+}

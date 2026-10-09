@@ -47,22 +47,37 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 
 /// What the ladder adds above the baseline: rung two's four revision guards
 /// (#1020, D-1020-N2), rung six's guard that a collection's kind never
-/// changes, and rung seven's index that makes a second Locker generation
-/// unrepresentable (R-1047-D2). Rungs three and four added the old backup
-/// plane's index and blob custody (#1029 §2, §4); rung ten drops all eight
-/// objects again (#1080), so they are founded and gone.
+/// changes, rung seven's index that makes a second Locker generation
+/// unrepresentable (R-1047-D2), rung eleven's chat: four tables, their
+/// three entity triggers and the indexes (R-CHAT-1), and rung twelve's two
+/// guards on a proposal's life (#1088). Rungs three and four
+/// added the old backup plane's index and blob custody (#1029 §2, §4); rung
+/// ten drops all eight objects again (#1080), so they are founded and gone.
 ///
 /// The corpus is a v0 file and knows nothing of the v1 ladder above rung one,
 /// so a founded v1 file legitimately carries exactly these and nothing else.
 /// Named here rather than filtered by prefix: a guard that stopped being
 /// created, or an object arriving from somewhere, both have to show up as a
 /// failure.
-const LADDER_OBJECTS: [&str; 6] = [
+const LADDER_OBJECTS: [&str; 19] = [
+    "chat_message",
+    "chat_message_attachment",
+    "chat_message_card",
+    "chat_message_is_not_born_settled",
+    "chat_message_outcome_settles_once",
+    "chat_thread",
+    "chat_thread_entity_delete",
+    "chat_thread_entity_insert",
+    "chat_thread_recent_idx",
+    "chat_thread_touch_updated_at",
     "core_collection_kind_is_immutable",
     "core_entity_revision_no_self_parent",
     "core_entity_revision_parent_is_immutable",
     "core_entity_revision_parent_is_same_object",
     "core_link_no_revises_edge",
+    "idx_chat_attachment_asset",
+    "idx_chat_attachment_document",
+    "idx_chat_attachment_thumb",
     "locker_key_one_generation",
 ];
 
@@ -417,9 +432,19 @@ fn the_entity_kind_registry_is_derived_and_equals_what_v0s_ladder_seeded() {
         .iter()
         .filter(|kind| !derived.contains(kind))
         .collect();
+    // THE KINDS A RUNG ABOVE THE CORPUS ADDS, NAMED: rung eleven's chat thread.
+    // The derivation must find it (a thread's first insert would fail its
+    // foreign key otherwise), and the corpus, being v0, cannot hold it.
+    const ADDED_BY_THE_LADDER: [&str; 1] = ["chat.thread"];
+    for kind in ADDED_BY_THE_LADDER {
+        assert!(
+            derived.iter().any(|found| found == kind),
+            "{kind} is derived"
+        );
+    }
     let extra: Vec<&String> = derived
         .iter()
-        .filter(|kind| !seeded.contains(kind))
+        .filter(|kind| !seeded.contains(kind) && !ADDED_BY_THE_LADDER.contains(&kind.as_str()))
         .collect();
     assert_eq!(
         (missing.is_empty(), extra.is_empty()),
@@ -456,10 +481,12 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     // five is the cut (#1029); rung six is the collection kind; rung seven is
     // the Locker's one generation (R-1047-D2); rung eight drops the Locker's
     // match policy (Q-1047-15); rung nine drops the notices no plane writes;
-    // rung ten drops rungs three and four's backup index (#1080).
+    // rung ten drops rungs three and four's backup index (#1080); rung eleven
+    // founds the chat (R-CHAT-1); rung twelve gives a proposal its life
+    // (#1088).
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above.
-    assert_eq!(user_version, 10);
+    assert_eq!(user_version, 12);
     assert_eq!(journal, "wal");
 }
 

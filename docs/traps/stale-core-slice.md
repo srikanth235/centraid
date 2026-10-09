@@ -5,7 +5,7 @@
 **The cause.** `mobile/shared/build.gradle.kts` links the Rust core with
 
 ```
-linkerOpts("-force_load", "$slice/libcentraid_core_ffi.a")
+linkerOpts("-Wl,-u,_centraid_open", /* …the other four… */ "$slice/libcentraid_core_ffi.a")
 ```
 
 where `slice` is a **path into `target/<triple>/<profile>/`**. It is a path and not a Gradle dependency, so nothing in the Gradle graph knows the archive exists, nothing declares it as an input, and nothing rebuilds it. Gradle's up-to-date check cannot see a file it was never told about, and the linker is perfectly happy to link a five-hour-old archive.
@@ -17,12 +17,14 @@ This is the same shape as the XCFramework's own `-force_load` lesson recorded be
 **The fix, and it is a habit rather than a patch.** Build the slice first, every time the Rust core changes:
 
 ```sh
-cargo build -p centraid-core-ffi --target aarch64-apple-ios-sim   # simulator
-cargo build -p centraid-core-ffi --target aarch64-apple-ios       # device
-cargo build -p centraid-core-ffi --target x86_64-apple-ios        # intel sim
+cargo build -p centraid-core-ffi --features llama --target aarch64-apple-ios-sim   # simulator
+cargo build -p centraid-core-ffi --features llama --target aarch64-apple-ios       # device
+cargo build -p centraid-core-ffi --features llama --target x86_64-apple-ios        # intel sim
 ```
 
 then the XCFramework, then the app. `mobile/README.md`'s iOS hand-off carries this as step 0 for the same reason.
+
+**`--features llama` is part of the habit, and leaving it off fails the same silent way.** The on-device chat's engine (llama.cpp) is off by default so that the PR gate's workspace build compiles none of it ([R-CHAT-10](../decisions.md#the-on-device-chat-keeps-its-history-in-the-vault)). A slice built without the feature links, loads and runs, and the chat reports every model file as `NO_ENGINE` — the screen that says this build cannot run the assistant. The check is the same `ls -l` below, and then `nm <archive> | grep -c llama_` (zero means no engine).
 
 **Why Gradle does not build it, and what it does do.** `-Pcentraid.coreFfiLibDir` exists so CI can hand in a slice built by `lane-prebuilt-core.yml` rather than paying for a Rust build on a Mac runner, and a Gradle task that shelled out to `cargo` would fight that override every time — so building the slice stays this habit. What Gradle does now is **declare the archive as an input of each framework link** (`linkTaskProvider` in `mobile/shared/build.gradle.kts`, [#1080](https://github.com/srikanth235/centraid/issues/1080)). Before that, even running step 0 was not enough: a core rebuilt after the last Kotlin change left the link task up to date, and the XCFramework shipped the previous core with step 0 done — which is how a fix proved green in `cargo test` reached the simulator as the old behaviour. Declaring the file builds nothing; it only makes a new archive a reason to link again, whichever directory it came from.
 
@@ -34,7 +36,7 @@ ls -l target/aarch64-apple-ios-sim/debug/libcentraid_core_ffi.a
 
 If it predates the change you are looking for, the app cannot contain it — stop debugging the Kotlin.
 
-**Android has the same shape**, through a different path: `mobile/androidApp/src/main/jniLibs/<abi>/libcentraid_core_ffi.so` is a **copied file**, so it is staler still — nothing updates it until `mobile/scripts/android-core.sh` is run again.
+**Android has the same shape**, through a different path: `mobile/androidApp/src/main/jniLibs/<abi>/libcentraid_core_ffi.so` is a **copied file**, so it is staler still — nothing updates it until `mobile/scripts/android-core.sh` is run again (it builds with `--features llama`, so the copy carries the engine).
 
 ## The same defect one layer out: Xcode links an XCFramework Gradle never assembled
 

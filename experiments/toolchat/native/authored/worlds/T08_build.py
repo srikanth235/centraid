@@ -1,0 +1,570 @@
+"""World T08: Deshawn Carter, HVAC technician in Atlanta, single dad of twins (USD vault).
+
+    python3 authored/worlds/T08_build.py      # writes authored/worlds/T08.json (deterministic)
+
+Today in the sessions is Monday 2026-04-06 17:50 (just home from a service call, the day after Easter).
+Built-in ambiguity: two Marcuses (Marcus Bell at work, Marcus Hill the boosters president), two
+"Dentist appointment" events (one per twin), recurring practices and planning calls, look-alike
+tasks (two furnace filter tasks, two rent tasks, two timesheets), two leases and two report cards
+in the documents, nicknames (Mama, Big Mama, Coach T, Dre, Unc), a hard-to-spell name (Quanisha),
+cancelled events, completed tasks, and trashed rows both inside and outside the 30-day window.
+"""
+from __future__ import annotations
+
+import json
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+
+def people():
+    return [
+        {"key": "jalen", "name": "Jalen Carter", "role": "son", "starred": True},
+        {"key": "jada", "name": "Jada Carter", "role": "daughter", "starred": True},
+        {"key": "mama", "name": "Loretta Carter", "role": "mom", "nickname": "Mama", "cadence": 7, "starred": True,
+         "last_contacted": "2026-04-05T18:00", "last_contacted_kind": "visit", "met": "Decatur"},
+        {"key": "bigmama", "name": "Hattie Mae Johnson", "role": "grandma", "nickname": "Big Mama", "cadence": 14,
+         "last_contacted": "2026-03-22T15:00", "last_contacted_kind": "call", "met": "Macon"},
+        {"key": "tanya", "name": "Tanya Brooks", "role": "sister", "cadence": 7,
+         "last_contacted": "2026-04-04T20:00", "last_contacted_kind": "message", "met": "Decatur"},
+        {"key": "reggie", "name": "Reggie Brooks", "role": "brother-in-law", "cadence": 30,
+         "last_contacted": "2026-03-14T11:00", "last_contacted_kind": "visit"},
+        {"key": "dre", "name": "Andre Carter", "role": "cousin, reunion committee", "nickname": "Dre", "cadence": 14,
+         "last_contacted": "2026-03-29T16:30", "last_contacted_kind": "call", "met": "Macon"},
+        {"key": "keisha", "name": "Lakeisha Morris", "role": "cousin, reunion treasurer", "nickname": "Keisha",
+         "cadence": 14, "last_contacted": "2026-03-31T19:00", "last_contacted_kind": "message", "met": "Macon"},
+        {"key": "bev", "name": "Beverly Carter", "role": "aunt", "nickname": "Aunt Bev", "cadence": 30,
+         "last_contacted": "2026-02-15T14:00", "last_contacted_kind": "call", "met": "Macon"},
+        {"key": "unc", "name": "Raymond Carter", "role": "uncle", "nickname": "Unc",
+         "last_contacted": "2025-12-25T16:00", "last_contacted_kind": "visit"},
+        {"key": "monique", "name": "Monique Williams", "role": "twins' mom", "cadence": 7,
+         "last_contacted": "2026-04-03T18:15", "last_contacted_kind": "message"},
+        {"key": "marcus_b", "name": "Marcus Bell", "role": "HVAC tech, Peachtree Comfort Air", "cadence": 30,
+         "last_contacted": "2026-04-06T12:30", "last_contacted_kind": "call", "met": "trade school, 2011"},
+        {"key": "marcus_h", "name": "Marcus Hill", "role": "boosters president", "met": "Eastside Eagles",
+         "last_contacted": "2026-03-30T20:00", "last_contacted_kind": "message"},
+        {"key": "coach_t", "name": "Terrence Odom", "role": "head coach, Eastside Eagles", "nickname": "Coach T",
+         "met": "Eastside Eagles", "last_contacted": "2026-04-02T19:40", "last_contacted_kind": "visit"},
+        {"key": "quanisha", "name": "Quanisha Dawson", "role": "boosters treasurer", "met": "Eastside Eagles",
+         "last_contacted": "2026-03-16T18:00", "last_contacted_kind": "message"},
+        {"key": "darnell", "name": "Darnell Price", "role": "union steward", "met": "union hall", "cadence": 21,
+         "last_contacted": "2026-03-11T21:00", "last_contacted_kind": "visit"},
+        {"key": "vic", "name": "Victor Ramirez", "role": "union business agent", "met": "union hall",
+         "last_contacted": "2026-02-11T21:00", "last_contacted_kind": "visit"},
+        {"key": "luis", "name": "Luis Ortega", "role": "apprentice, Peachtree Comfort Air",
+         "last_contacted": "2026-04-06T15:00", "last_contacted_kind": "message"},
+        {"key": "sheila", "name": "Sheila Grant", "role": "dispatcher, Peachtree Comfort Air"},
+        {"key": "mike", "name": "Mike Sullivan", "role": "service manager, Peachtree Comfort Air",
+         "last_contacted": "2026-04-01T08:00", "last_contacted_kind": "call"},
+        {"key": "pastor", "name": "Calvin Moore", "role": "pastor, New Hope Baptist", "nickname": "Pastor Moore",
+         "last_contacted": "2026-04-05T12:00", "last_contacted_kind": "visit"},
+        {"key": "okafor", "name": "Adaeze Okafor", "role": "twins' math teacher"},
+        {"key": "dr_shah", "name": "Anjali Shah", "role": "dentist"},
+        {"key": "tasha", "name": "Natasha Reid", "role": "neighbor, carpool", "nickname": "Tasha", "cadence": 14,
+         "last_contacted": "2026-04-02T17:00", "last_contacted_kind": "message", "met": "Kirkwood"},
+        {"key": "brandon", "name": "Brandon Lee", "role": "carpool dad", "met": "Eastside Eagles"},
+        {"key": "omar", "name": "Omar Haddad", "role": "carpool dad", "met": "Eastside Eagles"},
+        {"key": "kevin", "name": "Kevin Doyle", "role": "neighbor", "met": "Kirkwood",
+         "last_contacted": "2026-03-20T10:00", "last_contacted_kind": "visit"},
+        {"key": "trey", "name": "Trey Jackson", "role": "friend", "met": "Mays High", "cadence": 21,
+         "last_contacted": "2026-03-06T21:00", "last_contacted_kind": "call"},
+        {"key": "gloria", "name": "Gloria Nunez", "role": "property manager"},
+        {"key": "carl", "name": "Carl Pruitt", "role": "old boss, Metro Heating", "trashed": "2026-03-28T10:00"},
+        {"key": "jerome", "name": "Jerome Watts", "role": "barber", "trashed": "2026-01-20T10:00"},
+    ]
+
+
+GROUPS = [
+    {"key": "boosters", "name": "Eagles boosters", "members": ["marcus_h", "quanisha", "coach_t", "tasha"],
+     "created": "2025-08-10T19:00"},
+    {"key": "reunion_g", "name": "Carter reunion 2026", "members": ["dre", "keisha", "tanya", "bev"],
+     "created": "2026-01-18T16:00"},
+    {"key": "carpool", "name": "Practice carpool", "members": ["tasha", "brandon", "omar"], "created": "2026-03-10T20:00"},
+    {"key": "union_fund", "name": "Union dinner fund", "members": ["darnell", "vic", "marcus_b", "luis"],
+     "created": "2026-02-01T12:00"},
+    {"key": "fishing", "name": "Lanier fishing trip", "members": ["trey", "kevin", "reggie"], "created": "2026-03-01T10:00"},
+    {"key": "fantasy", "name": "Fantasy league 2025", "members": ["trey", "kevin"], "created": "2025-08-20T21:00"},
+]
+
+EXPENSES = [
+    {"group": "boosters", "name": "Concession stand supplies", "amount": 186.40, "paid_by": "me",
+     "split": ["me", "marcus_h", "quanisha", "coach_t"], "date": "2026-03-07"},
+    {"group": "boosters", "name": "Car wash signs", "amount": 64, "paid_by": "quanisha",
+     "split": ["me", "marcus_h", "quanisha", "tasha"], "date": "2026-03-28"},
+    {"group": "boosters", "name": "Team banner", "amount": 120, "paid_by": "marcus_h",
+     "split": ["me", "marcus_h", "quanisha", "coach_t"], "date": "2026-02-20"},
+    {"group": "reunion_g", "name": "Pavilion deposit", "amount": 400, "paid_by": "me",
+     "split": ["me", "dre", "keisha", "tanya"], "date": "2026-02-05"},
+    {"group": "reunion_g", "name": "T-shirt design proof", "amount": 45, "paid_by": "dre",
+     "split": ["me", "dre", "keisha"], "date": "2026-03-18"},
+    {"group": "reunion_g", "name": "Hotel block hold", "amount": 250, "paid_by": "keisha",
+     "split": ["me", "dre", "keisha", "tanya", "bev"], "date": "2026-03-25"},
+    {"group": "union_fund", "name": "Wings for the meeting", "amount": 96, "paid_by": "darnell",
+     "split": ["me", "darnell", "vic", "marcus_b"], "date": "2026-03-11"},
+    {"group": "union_fund", "name": "Retirement plaque", "amount": 80, "paid_by": "me",
+     "split": ["me", "darnell", "vic", "marcus_b", "luis"], "date": "2026-02-11"},
+    {"group": "fishing", "name": "Cabin deposit", "amount": 210, "paid_by": "trey",
+     "split": ["me", "trey", "kevin", "reggie"], "date": "2026-03-15"},
+    {"group": "fishing", "name": "Bait and ice", "amount": 38, "paid_by": "me",
+     "split": ["me", "trey", "kevin"], "date": "2026-03-21"},
+]
+
+LISTS = [
+    {"key": "reunion_l", "name": "Reunion", "area": "family"},
+    {"key": "house_l", "name": "House", "area": "home"},
+    {"key": "work_l", "name": "Work", "area": "work and certs"},
+    {"key": "boosters_l", "name": "Boosters", "area": "football"},
+    {"key": "union_l", "name": "Union", "area": "union work"},
+    {"key": "school_l", "name": "Kids school", "area": "family school"},
+]
+
+PRACTICE = ["2026-03-17", "2026-03-19", "2026-03-24", "2026-03-26", "2026-03-31", "2026-04-02", "2026-04-07",
+            "2026-04-09", "2026-04-14", "2026-04-16", "2026-04-21", "2026-04-23", "2026-04-28", "2026-04-30",
+            "2026-05-05", "2026-05-07", "2026-05-12", "2026-05-14"]
+
+
+def events():
+    out = []
+    for x in PRACTICE:
+        d = date.fromisoformat(x)
+        out.append({"key": f"prac_{d.strftime('%m%d')}", "name": "Spring football practice", "start": f"{d}T18:00",
+                    "end": f"{d}T19:30", "attendees": ["jalen", "coach_t"], "description": "Eastside field"})
+    for x in ["2026-02-02", "2026-03-02", "2026-04-13", "2026-05-11"]:
+        d = date.fromisoformat(x)
+        out.append({"key": f"boost_{d.strftime('%m%d')}", "name": "Boosters meeting", "start": f"{d}T19:00",
+                    "end": f"{d}T20:00", "attendees": ["marcus_h", "quanisha"]})
+    for x in ["2026-02-11", "2026-03-11", "2026-04-08", "2026-05-13"]:
+        d = date.fromisoformat(x)
+        out.append({"key": f"union_{d.strftime('%m%d')}", "name": "Union chapter meeting", "start": f"{d}T19:00",
+                    "end": f"{d}T21:00", "attendees": ["darnell"], "description": "union hall, Moreland Ave"})
+    for x in ["2026-03-22", "2026-04-12", "2026-04-26", "2026-05-10"]:
+        d = date.fromisoformat(x)
+        out.append({"key": f"rcall_{d.strftime('%m%d')}", "name": "Reunion planning call", "start": f"{d}T16:00",
+                    "end": f"{d}T17:00", "attendees": ["dre", "keisha"]})
+    for x in ["2026-04-03", "2026-04-17", "2026-05-01", "2026-05-15"]:
+        d = date.fromisoformat(x)
+        out.append({"key": f"handoff_{d.strftime('%m%d')}", "name": "Kids to Monique's", "start": f"{d}T18:00",
+                    "end": f"{d}T18:30", "attendees": ["monique"]})
+    for x in ["2026-04-10", "2026-04-24", "2026-05-08"]:
+        d = date.fromisoformat(x)
+        out.append({"key": f"oncall_{d.strftime('%m%d')}", "name": "On-call shift", "start": f"{d}T17:00",
+                    "end": f"{d}T23:00"})
+    out += [
+        {"key": "dentist_jalen", "name": "Dentist appointment", "start": "2026-04-09T15:30", "end": "2026-04-09T16:15",
+         "attendees": ["jalen", "dr_shah"]},
+        {"key": "dentist_jada", "name": "Dentist appointment", "start": "2026-04-23T15:30", "end": "2026-04-23T16:15",
+         "attendees": ["jada", "dr_shah"]},
+        {"key": "reunion_ev", "name": "Carter family reunion", "start": "2026-07-17T18:00", "end": "2026-07-19T14:00",
+         "attendees": ["mama", "bigmama", "tanya", "dre", "keisha", "bev", "unc", "jalen", "jada"],
+         "description": "Lake Tobesofkee pavilion, Macon"},
+        {"key": "ptc", "name": "Parent-teacher conference", "start": "2026-04-14T16:30", "end": "2026-04-14T17:00",
+         "attendees": ["okafor"]},
+        {"key": "bday", "name": "Twins' 13th birthday party", "start": "2026-05-30T14:00", "end": "2026-05-30T17:00",
+         "attendees": ["jalen", "jada", "mama", "tanya"]},
+        {"key": "easter", "name": "Easter service", "start": "2026-04-05T10:00", "end": "2026-04-05T12:00",
+         "attendees": ["mama", "pastor"]},
+        {"key": "easter_dinner", "name": "Easter dinner at Mama's", "start": "2026-04-05T14:00", "end": "2026-04-05T18:00",
+         "attendees": ["mama", "bigmama", "tanya", "reggie"]},
+        {"key": "epa", "name": "EPA 608 refresher class", "start": "2026-04-18T08:00", "end": "2026-04-18T12:00"},
+        {"key": "walkthrough", "name": "Pavilion walkthrough in Macon", "start": "2026-04-18T14:00", "end": "2026-04-18T15:30",
+         "attendees": ["dre"]},
+        {"key": "science_fair", "name": "Jada's science fair", "start": "2026-04-15T18:00", "end": "2026-04-15T20:00",
+         "attendees": ["jada"]},
+        {"key": "concert", "name": "Spring band concert", "start": "2026-05-06T19:00", "end": "2026-05-06T20:30",
+         "attendees": ["jada"]},
+        {"key": "oil_change", "name": "Truck oil change", "start": "2026-04-15T07:00", "end": "2026-04-15T07:45"},
+        {"key": "haircut", "name": "Haircut", "start": "2026-04-11T09:00", "end": "2026-04-11T09:30"},
+        {"key": "car_wash", "name": "Boosters car wash", "start": "2026-04-25T09:00", "end": "2026-04-25T14:00",
+         "attendees": ["marcus_h", "quanisha", "tasha"]},
+        {"key": "fish_fry", "name": "Boosters fish fry", "start": "2026-03-28T16:00", "end": "2026-03-28T19:00",
+         "attendees": ["marcus_h"], "cancelled": "2026-03-25T12:00"},
+        {"key": "lanier", "name": "Lake Lanier fishing trip", "start": "2026-05-16T05:30", "end": "2026-05-16T15:00",
+         "attendees": ["trey", "kevin", "reggie"]},
+        {"key": "movie", "name": "Movie night with Trey", "start": "2026-03-27T20:00", "end": "2026-03-27T22:30",
+         "attendees": ["trey"], "cancelled": "2026-03-26T09:00"},
+        {"key": "softball", "name": "Union softball game", "start": "2026-04-04T10:00", "end": "2026-04-04T12:00",
+         "attendees": ["marcus_b", "luis"], "cancelled": "2026-04-03T21:00"},
+        {"key": "draft", "name": "Fantasy draft night", "start": "2026-03-05T20:00", "end": "2026-03-05T23:00",
+         "attendees": ["trey", "kevin"], "trashed": "2026-03-01T09:00"},
+        {"key": "coffee_darnell", "name": "Coffee with Darnell", "start": "2026-04-20T07:00", "end": "2026-04-20T07:45",
+         "attendees": ["darnell"], "description": "go over the grievance"},
+        {"key": "tax_appt", "name": "Tax appointment", "start": "2026-04-10T12:00", "end": "2026-04-10T13:00"},
+        {"key": "physical", "name": "Jalen's sports physical", "start": "2026-04-29T16:00", "end": "2026-04-29T16:40",
+         "attendees": ["jalen"], "status": "tentative"},
+    ]
+    return out
+
+
+def tasks():
+    t = [
+        # reunion
+        {"key": "pavilion", "name": "Book reunion pavilion", "completed": "2026-02-05T12:00", "list": "reunion_l"},
+        {"key": "shirts", "name": "Order reunion T-shirts", "due": "2026-04-30", "priority": 2, "effort": 60,
+         "list": "reunion_l", "description": "royal blue, family tree on the back"},
+        {"key": "sizes", "name": "Collect shirt sizes", "parent": "shirts", "due": "2026-04-20"},
+        {"key": "design", "name": "Get shirt design from Dre", "parent": "shirts", "due": "2026-04-15"},
+        {"key": "invites", "name": "Send reunion invites", "due": "2026-04-20", "priority": 1, "effort": 90,
+         "list": "reunion_l"},
+        {"key": "dues", "name": "Collect reunion dues", "status": "in_progress", "list": "reunion_l", "priority": 3},
+        {"key": "menu", "name": "Plan reunion menu", "due": "2026-05-15", "effort": 90, "list": "reunion_l"},
+        {"key": "hotel", "name": "Book hotel block in Macon", "due": "2026-04-17", "priority": 2, "list": "reunion_l"},
+        {"key": "slideshow", "name": "Make reunion slideshow", "due": "2026-07-10", "effort": 240, "list": "reunion_l"},
+        {"key": "tree", "name": "Print family tree poster", "due": "2026-07-01", "effort": 30},
+        # house
+        {"key": "filter_mar", "name": "Change furnace filter", "due": "2026-03-01", "completed": "2026-03-01T10:00",
+         "list": "house_l", "effort": 15},
+        {"key": "filter_apr", "name": "Change furnace filter", "due": "2026-04-06", "list": "house_l", "effort": 15},
+        {"key": "garage", "name": "Fix garage door opener", "effort": 45, "list": "house_l", "priority": 4},
+        {"key": "rent_apr", "name": "Pay rent", "due": "2026-04-01", "completed": "2026-03-31T20:00", "list": "house_l"},
+        {"key": "rent_may", "name": "Pay rent", "due": "2026-05-01", "list": "house_l", "priority": 2},
+        {"key": "gutters", "name": "Clean gutters", "due": "2026-04-18", "effort": 120, "list": "house_l"},
+        {"key": "smoke", "name": "Replace smoke detector batteries", "effort": 20, "list": "house_l"},
+        {"key": "dishwasher", "name": "Call Gloria about the dishwasher", "due": "2026-04-08", "list": "house_l",
+         "priority": 2},
+        # work
+        {"key": "nate", "name": "Study for NATE exam", "due": "2026-06-12", "effort": 300, "priority": 3,
+         "status": "in_progress", "list": "work_l"},
+        {"key": "nate_ch4", "name": "Heat pump chapter", "parent": "nate", "due": "2026-04-19"},
+        {"key": "nate_ch5", "name": "Airflow chapter", "parent": "nate", "due": "2026-05-03"},
+        {"key": "nate_quiz", "name": "Practice test", "parent": "nate", "due": "2026-06-01"},
+        {"key": "ts_mar", "name": "Submit timesheet", "due": "2026-03-27", "completed": "2026-03-27T16:00", "list": "work_l"},
+        {"key": "ts_apr", "name": "Submit timesheet", "due": "2026-04-10", "list": "work_l", "effort": 10},
+        {"key": "restock", "name": "Restock the van", "due": "2026-04-07", "effort": 30, "list": "work_l"},
+        {"key": "manifold", "name": "Order digital gauge manifold", "priority": 4, "list": "work_l"},
+        {"key": "osha", "name": "Finish OSHA 10 online", "status": "in_progress", "effort": 180, "list": "work_l"},
+        {"key": "recovery_tank", "name": "Return recovery tank to supply house", "due": "2026-04-09", "effort": 30},
+        # boosters
+        {"key": "flyers", "name": "Print car wash flyers", "due": "2026-04-20", "list": "boosters_l", "effort": 30},
+        {"key": "raffle", "name": "Sell raffle tickets", "status": "in_progress", "list": "boosters_l"},
+        {"key": "concession", "name": "Count concession money", "completed": "2026-03-08T21:00", "list": "boosters_l"},
+        {"key": "budget_email", "name": "Email boosters budget", "due": "2026-04-12", "priority": 2, "list": "boosters_l"},
+        {"key": "banner", "name": "Pick up team banner", "status": "cancelled", "list": "boosters_l"},
+        {"key": "hoses", "name": "Borrow hoses for the car wash", "due": "2026-04-24", "list": "boosters_l"},
+        # union
+        {"key": "grievance", "name": "Submit grievance paperwork", "due": "2026-04-13", "priority": 1, "effort": 60,
+         "list": "union_l", "description": "overtime rotation, March schedule"},
+        {"key": "union_dues", "name": "Pay union dues", "due": "2026-04-15", "list": "union_l"},
+        {"key": "dinner_rsvp", "name": "RSVP for the union dinner", "completed": "2026-03-20T12:00", "list": "union_l"},
+        {"key": "proposal", "name": "Read contract proposal", "effort": 60, "list": "union_l", "priority": 5},
+        # school
+        {"key": "field_trip", "name": "Sign Jada's field trip form", "due": "2026-04-08", "priority": 1, "list": "school_l"},
+        {"key": "poster", "name": "Buy poster board for science fair", "due": "2026-04-13", "list": "school_l"},
+        {"key": "lunch", "name": "Top up lunch accounts", "due": "2026-04-10", "list": "school_l", "effort": 10},
+        {"key": "sched_physical", "name": "Schedule Jalen's physical", "completed": "2026-03-30T12:00", "list": "school_l"},
+        {"key": "band_shirt", "name": "Order band shirt for Jada", "completed": "2026-03-12T19:00", "list": "school_l"},
+        {"key": "cleats", "name": "Buy Jalen new cleats", "due": "2026-04-12", "priority": 3},
+        {"key": "summer_camp", "name": "Sign twins up for summer camp", "due": "2026-05-01", "priority": 2, "effort": 45},
+        # personal, truck, money
+        {"key": "taxes", "name": "File taxes", "due": "2026-04-15", "priority": 1, "effort": 120, "status": "in_progress"},
+        {"key": "find_1099", "name": "Find 1099 from side jobs", "parent": "taxes", "completed": "2026-03-29T20:00"},
+        {"key": "w2_upload", "name": "Upload W-2", "parent": "taxes", "due": "2026-04-09"},
+        {"key": "registration", "name": "Renew truck registration", "due": "2026-04-30", "priority": 3},
+        {"key": "tires", "name": "Get truck tires rotated", "effort": 60},
+        {"key": "bigmama_meds", "name": "Pick up Big Mama's prescriptions", "due": "2026-04-07", "priority": 2},
+        {"key": "call_bev", "name": "Call Aunt Bev about the guest list", "due": "2026-04-11"},
+        {"key": "grill", "name": "Clean the grill", "status": "cancelled"},
+        {"key": "library", "name": "Return library books", "due": "2026-03-28", "trashed": "2026-03-30T09:00"},
+        {"key": "gym_cancel", "name": "Cancel gym membership", "trashed": "2026-02-01T09:00"},
+    ]
+    # water bill, monthly on the 20th
+    for m in range(1, 4):
+        t.append({"key": f"water_{m:02d}", "name": "Pay water bill", "due": f"2026-{m:02d}-20",
+                  "completed": f"2026-{m:02d}-19T19:00"})
+    t.append({"key": "water_04", "name": "Pay water bill", "due": "2026-04-20"})
+    return t
+
+
+NOTEBOOKS = [
+    {"key": "reunion_nb", "name": "Reunion"},
+    {"key": "hvac_nb", "name": "HVAC notes"},
+    {"key": "boosters_nb", "name": "Boosters"},
+    {"key": "union_nb", "name": "Union"},
+    {"key": "recipes_nb", "name": "Recipes"},
+    {"key": "kids_nb", "name": "Kids"},
+    {"key": "scratch_nb", "name": "Scratch"},
+]
+
+NOTES = [
+    {"key": "guest_ideas", "name": "Reunion guest list", "body": "Big Mama's side 60, Unc's side 35, Aunt Bev wants to add the Macon church folks",
+     "notebook": "reunion_nb", "created": "2026-02-10T21:00", "pinned": True},
+    {"key": "reunion_menu", "name": "Reunion menu ideas", "body": "brisket, mac and cheese, greens, peach cobbler, no pork for Aunt Bev",
+     "notebook": "reunion_nb", "created": "2026-03-08T20:30"},
+    {"key": "shirt_notes", "name": "T-shirt sizes so far", "body": "Jalen YL, Jada YM, Mama XL, Tanya M, still waiting on Dre's side",
+     "notebook": "reunion_nb", "created": "2026-03-29T17:00"},
+    {"key": "pavilion_notes", "name": "Pavilion rules", "body": "no glass, music off by 10pm, $150 cleaning deposit",
+     "notebook": "reunion_nb", "created": "2026-02-05T13:00"},
+    {"key": "superheat", "name": "Superheat and subcooling", "body": "TXV systems check subcooling 8-12F, fixed orifice check superheat",
+     "notebook": "hvac_nb", "created": "2026-01-14T21:00", "pinned": True},
+    {"key": "r410", "name": "R-410A pressure chart", "body": "118 psig at 40F, 318 psig at 100F, check the dataplate",
+     "notebook": "hvac_nb", "created": "2026-02-22T20:00"},
+    {"key": "heat_pump", "name": "Heat pump defrost notes", "body": "defrost board test pins, 30/60/90 minute jumper",
+     "notebook": "hvac_nb", "created": "2026-03-17T21:30"},
+    {"key": "franklin", "name": "Mrs. Franklin's unit", "body": "Carrier 2012, capacitor 45/5, keeps tripping the float switch",
+     "notebook": "hvac_nb", "created": "2026-04-02T18:30"},
+    {"key": "carwash_plan", "name": "Car wash plan", "body": "3 stations, $10 a car, kids hold signs on Glenwood",
+     "notebook": "boosters_nb", "created": "2026-03-28T20:00"},
+    {"key": "concession_prices", "name": "Concession prices", "body": "hot dog $3, nachos $4, water $1, Gatorade $2",
+     "notebook": "boosters_nb", "created": "2026-02-20T19:30"},
+    {"key": "grievance_notes", "name": "Grievance timeline", "body": "Mar 3 skipped on OT list, Mar 10 again, told Mike on Mar 12",
+     "notebook": "union_nb", "created": "2026-03-13T22:00"},
+    {"key": "contract_q", "name": "Contract questions", "body": "tool allowance, on-call pay, apprentice ratio",
+     "notebook": "union_nb", "created": "2026-03-11T22:00"},
+    {"key": "gumbo", "name": "Mama's gumbo", "body": "dark roux, andouille, okra last, file at the table",
+     "notebook": "recipes_nb", "created": "2025-11-26T18:00"},
+    {"key": "wings", "name": "Lemon pepper wings", "body": "bake at 400 then flash fry, lemon pepper wet",
+     "notebook": "recipes_nb", "created": "2026-02-08T19:00"},
+    {"key": "cobbler", "name": "Peach cobbler", "body": "Big Mama's recipe, nutmeg not cinnamon, brisket smoker for dessert too",
+     "notebook": "recipes_nb", "created": "2026-03-01T15:00"},
+    {"key": "jada_sizes", "name": "Kids sizes", "body": "Jalen shoe 9.5 cleats, Jada shoe 7, both need new jeans",
+     "notebook": "kids_nb", "created": "2026-03-21T12:00"},
+    {"key": "custody", "name": "Summer schedule with Monique", "body": "June with me, July split, reunion weekend both kids with me",
+     "notebook": "kids_nb", "created": "2026-03-15T21:00"},
+    {"key": "allergy", "name": "Jalen's allergies", "body": "penicillin, tree nuts; epi pen in the gym bag",
+     "notebook": "kids_nb", "created": "2025-09-02T08:00", "pinned": True},
+    {"key": "truck_notes", "name": "Truck maintenance log", "body": "oil at 118k, brakes at 112k, tires rotated at 115k",
+     "created": "2026-01-30T18:00"},
+    {"key": "side_jobs", "name": "Side job prices", "body": "tune-up $89, capacitor swap $150, minisplit install quote per job",
+     "created": "2026-02-14T20:00"},
+    {"key": "gift_ideas", "name": "Birthday gift ideas", "body": "Jalen wants a PS5 game, Jada wants a keyboard",
+     "created": "2026-04-01T22:00"},
+    {"key": "fishing_list", "name": "Fishing trip packing", "body": "rods, tackle box, cooler, sunscreen, cabin key from Trey",
+     "created": "2026-03-21T19:00"},
+    {"key": "prayer", "name": "Prayer list", "body": "Big Mama's hip, Unc's job search, Keisha's new baby",
+     "created": "2026-03-29T13:00"},
+    {"key": "old_draft", "name": "Fantasy draft order", "body": "Trey 1, Kevin 2, me 3", "created": "2025-08-25T21:00",
+     "trashed": "2026-03-02T10:00"},
+    {"key": "old_quote", "name": "Old minisplit quote", "body": "Daikin 12k for the Kirkwood job, $3,200",
+     "created": "2026-01-05T12:00", "trashed": "2026-03-31T10:00"},
+]
+
+FOLDERS = [
+    {"key": "taxes_f", "name": "Taxes 2025"},
+    {"key": "truck_f", "name": "Truck"},
+    {"key": "school_f", "name": "Kids school"},
+    {"key": "reunion_f", "name": "Reunion"},
+    {"key": "certs_f", "name": "Work certs"},
+    {"key": "house_f", "name": "House"},
+    {"key": "oldjob_f", "name": "Old job"},
+]
+
+DOCUMENTS = [
+    {"key": "w2", "name": "W-2 2025", "folder": "taxes_f", "starred": True, "created": "2026-01-29T18:00"},
+    {"key": "f1099", "name": "1099 side work", "folder": "taxes_f", "created": "2026-03-29T20:10"},
+    {"key": "return24", "name": "Tax return 2024", "folder": "taxes_f", "created": "2025-04-12T15:00"},
+    {"key": "title", "name": "Truck title", "folder": "truck_f", "created": "2023-06-01T10:00"},
+    {"key": "ins_card", "name": "Truck insurance card", "folder": "truck_f", "starred": True, "created": "2026-01-02T09:00"},
+    {"key": "rego", "name": "Truck registration 2025", "folder": "truck_f", "created": "2025-04-28T11:00"},
+    {"key": "birth_certs", "name": "Twins' birth certificates", "folder": "school_f", "starred": True,
+     "created": "2025-08-01T10:00"},
+    {"key": "rc_jalen", "name": "Jalen report card", "folder": "school_f", "created": "2026-03-20T16:00"},
+    {"key": "rc_jada", "name": "Jada report card", "folder": "school_f", "created": "2026-03-20T16:05"},
+    {"key": "pavilion_contract", "name": "Pavilion rental contract", "folder": "reunion_f", "created": "2026-02-05T12:30"},
+    {"key": "hotel_quote", "name": "Hotel block quote", "folder": "reunion_f", "created": "2026-03-25T14:00"},
+    {"key": "epa_cert", "name": "EPA 608 certificate", "folder": "certs_f", "starred": True, "created": "2019-05-14T10:00"},
+    {"key": "union_contract", "name": "Union contract 2024-2027", "folder": "certs_f", "created": "2024-07-01T10:00"},
+    {"key": "lease25", "name": "Apartment lease 2025", "folder": "house_f", "created": "2025-04-15T10:00"},
+    {"key": "lease26", "name": "Apartment lease 2026", "folder": "house_f", "created": "2026-03-30T17:45"},
+    {"key": "custody_doc", "name": "Custody agreement", "starred": True, "created": "2022-09-12T10:00"},
+    {"key": "invoice", "name": "Franklin service invoice", "created": "2026-04-02T19:00"},
+    {"key": "trip_form", "name": "Field trip permission form", "folder": "school_f", "created": "2026-04-03T08:00"},
+    {"key": "dental_card", "name": "Dental insurance card", "created": "2026-01-10T09:30"},
+    {"key": "paystub", "name": "Old pay stub", "created": "2026-03-13T08:00", "trashed": "2026-03-20T10:00"},
+]
+
+ALBUMS = [
+    {"key": "eagles_album", "name": "Eagles football"},
+    {"key": "easter_album", "name": "Easter 2026"},
+    {"key": "reunion24_album", "name": "Reunion 2024"},
+    {"key": "twins_album", "name": "Twins"},
+    {"key": "jobs_album", "name": "Job sites"},
+    {"key": "fishing_album", "name": "Fishing"},
+]
+
+PHOTOS = [
+    {"key": "p_td", "name": "Jalen's first touchdown", "taken": "2025-10-18T11:20", "albums": ["eagles_album", "twins_album"],
+     "people": ["jalen"], "starred": True},
+    {"key": "p_team", "name": "Eagles team photo", "taken": "2025-09-06T10:00", "albums": ["eagles_album"],
+     "people": ["jalen", "coach_t"]},
+    {"key": "p_sideline", "name": "Sideline with Coach T", "taken": "2025-10-25T12:30", "albums": ["eagles_album"],
+     "people": ["coach_t", "marcus_h"]},
+    {"key": "p_banquet", "name": "End of season banquet", "taken": "2025-12-06T19:00", "albums": ["eagles_album"],
+     "people": ["jalen", "coach_t", "marcus_h", "quanisha"]},
+    {"key": "p_practice", "name": "Spring practice drills", "taken": "2026-03-24T18:40", "albums": ["eagles_album"],
+     "people": ["jalen"]},
+    {"key": "p_egg", "name": "Easter egg hunt", "taken": "2026-04-05T15:00", "albums": ["easter_album"],
+     "people": ["jalen", "jada"]},
+    {"key": "p_church", "name": "Easter Sunday outfits", "taken": "2026-04-05T09:40", "albums": ["easter_album"],
+     "people": ["jalen", "jada", "mama"], "starred": True},
+    {"key": "p_table", "name": "Easter dinner table", "taken": "2026-04-05T16:10", "albums": ["easter_album"],
+     "people": ["mama", "bigmama", "tanya", "reggie"]},
+    {"key": "p_bigmama", "name": "Big Mama with the twins", "taken": "2026-04-05T16:45", "albums": ["easter_album", "twins_album"],
+     "people": ["bigmama", "jalen", "jada"], "starred": True},
+    {"key": "p_ham", "name": "Mama carving the ham", "taken": "2026-04-05T15:50", "albums": ["easter_album"],
+     "people": ["mama"]},
+    {"key": "p_r24_group", "name": "Reunion group shot 2024", "taken": "2024-07-20T17:00", "albums": ["reunion24_album"],
+     "people": ["mama", "bigmama", "tanya", "dre", "keisha", "bev", "unc"]},
+    {"key": "p_r24_spades", "name": "Spades table", "taken": "2024-07-20T21:00", "albums": ["reunion24_album"],
+     "people": ["unc", "dre"]},
+    {"key": "p_r24_grill", "name": "Unc on the grill", "taken": "2024-07-20T14:00", "albums": ["reunion24_album"],
+     "people": ["unc"]},
+    {"key": "p_r24_kids", "name": "Cousins at the lake", "taken": "2024-07-21T11:00", "albums": ["reunion24_album"],
+     "people": ["jalen", "jada"]},
+    {"key": "p_r24_shirts", "name": "Reunion shirts 2024", "taken": "2024-07-19T19:00", "albums": ["reunion24_album"]},
+    {"key": "p_fair", "name": "Jada's volcano project", "taken": "2026-03-29T14:00", "albums": ["twins_album"],
+     "people": ["jada"]},
+    {"key": "p_band", "name": "Jada at band practice", "taken": "2026-02-26T17:30", "albums": ["twins_album"],
+     "people": ["jada"]},
+    {"key": "p_bday12", "name": "Twins' 12th birthday cake", "taken": "2025-05-31T15:00", "albums": ["twins_album"],
+     "people": ["jalen", "jada", "mama"]},
+    {"key": "p_school", "name": "First day of seventh grade", "taken": "2025-08-04T07:15", "albums": ["twins_album"],
+     "people": ["jalen", "jada"]},
+    {"key": "p_rooftop", "name": "Rooftop unit on Peachtree", "taken": "2026-03-12T11:00", "albums": ["jobs_album"]},
+    {"key": "p_coil", "name": "Frozen evaporator coil", "taken": "2026-03-19T14:20", "albums": ["jobs_album"]},
+    {"key": "p_minisplit", "name": "Minisplit install in Kirkwood", "taken": "2026-02-18T16:00", "albums": ["jobs_album"],
+     "people": ["luis"]},
+    {"key": "p_ducts", "name": "Crushed duct in the attic", "taken": "2026-04-02T10:30", "albums": ["jobs_album"]},
+    {"key": "p_dataplate", "name": "Carrier dataplate", "taken": "2026-04-02T18:20", "albums": ["jobs_album"]},
+    {"key": "p_bass", "name": "Trey's big bass", "taken": "2025-06-14T08:00", "albums": ["fishing_album"],
+     "people": ["trey"], "starred": True},
+    {"key": "p_dock", "name": "Sunrise at the dock", "taken": "2025-06-14T06:30", "albums": ["fishing_album"]},
+    {"key": "p_boat", "name": "Kevin's boat", "taken": "2025-06-14T09:10", "albums": ["fishing_album"],
+     "people": ["kevin", "trey"]},
+    {"key": "p_union", "name": "Union hall retirement party", "taken": "2026-02-11T20:30",
+     "people": ["darnell", "vic", "marcus_b"]},
+    {"key": "p_van", "name": "Work van all stocked", "taken": "2026-03-31T07:00"},
+    {"key": "p_selfie", "name": "Selfie with Marcus at the supply house", "taken": "2026-03-05T12:10",
+     "people": ["marcus_b"]},
+    {"key": "p_gutter", "name": "Gutter full of leaves", "taken": "2026-03-30T17:30"},
+    {"key": "p_receipt", "name": "Receipt for poster board", "taken": "2026-04-04T13:00", "trashed": "2026-04-04T13:05"},
+    {"key": "p_blurry", "name": "Blurry kickoff shot", "taken": "2025-10-18T11:00", "trashed": "2026-02-10T09:00"},
+]
+
+DEBTS = [
+    {"key": "d_trey", "person": "trey", "direction": "owes_me", "amount": 60, "name": "Hawks tickets", "date": "2026-03-06"},
+    {"key": "d_kevin", "person": "kevin", "direction": "i_owe", "amount": 25, "name": "Borrowed ladder rental", "date": "2026-03-20"},
+    {"key": "d_tanya", "person": "tanya", "direction": "i_owe", "amount": 75, "name": "Easter groceries", "date": "2026-04-04"},
+    {"key": "d_dre", "person": "dre", "direction": "owes_me", "amount": 120, "name": "Reunion shirt deposit", "date": "2026-03-18"},
+    {"key": "d_monique", "person": "monique", "direction": "owes_me", "amount": 210, "name": "Half of summer camp deposit",
+     "date": "2026-03-02"},
+    {"key": "d_luis", "person": "luis", "direction": "owes_me", "amount": 40, "name": "Lunch money for the week", "date": "2026-03-27",
+     "settled": "2026-04-03T12:00"},
+    {"key": "d_marcus_b", "person": "marcus_b", "direction": "i_owe", "amount": 35, "name": "Gas money to the supply house",
+     "date": "2026-04-01"},
+    {"key": "d_mama", "person": "mama", "direction": "i_owe", "amount": 300, "name": "Truck repair loan", "date": "2025-12-10"},
+    {"key": "d_quanisha", "person": "quanisha", "direction": "owes_me", "amount": 18.50, "name": "Raffle ticket cash",
+     "date": "2026-03-30"},
+    {"key": "d_reggie", "person": "reggie", "direction": "owes_me", "amount": 50, "name": "Fantasy league buy-in",
+     "date": "2025-09-01", "settled": "2025-10-15T10:00"},
+    {"key": "d_coach", "person": "coach_t", "direction": "owes_me", "amount": 12, "name": "Pizza for film night",
+     "date": "2026-03-19"},
+    {"key": "d_tanya2", "person": "tanya", "direction": "owes_me", "amount": 45, "name": "Twins' birthday decorations",
+     "date": "2026-04-02"},
+]
+
+LOCKER = [
+    {"key": "wifi", "name": "Home wifi", "type": "wifi", "password": "EaglesNest2026!", "starred": True},
+    {"key": "servicetitan", "name": "Work dispatch app login", "type": "login", "username": "dcarter",
+     "url": "https://dispatch.peachtreecomfort.com", "password": "Coil-Cleaner-88"},
+    {"key": "portal", "name": "School parent portal", "type": "login", "username": "deshawn.carter",
+     "url": "https://parents.eastsidems.org", "password": "JJtwins2013"},
+    {"key": "bank_login", "name": "Credit union login", "type": "login", "username": "dcarter72",
+     "url": "https://online.peachcu.org", "password": "Truck-F150-go", "code": "ZX9Q"},
+    {"key": "visa", "name": "Credit union Visa", "type": "card", "card_number": "4111 2233 4455 6677", "cvv": "318",
+     "starred": True},
+    {"key": "gas_card", "name": "Company fuel card", "type": "card", "card_number": "7071 5500 1122 3344", "cvv": "044"},
+    {"key": "gate_code", "name": "Storage unit gate code", "type": "note", "notes": "4471#, unit 118 on the left"},
+    {"key": "ssn", "name": "Social Security card", "type": "identity", "password": "XXX-XX-4471"},
+    {"key": "alarm", "name": "House alarm code", "type": "password", "password": "0613"},
+    {"key": "pi_key", "name": "Thermostat hub SSH key", "type": "ssh_key", "password": "ssh-ed25519 AAAAC3Nz-hvac-hub",
+     "notes": "raspberry pi on the garage thermostat"},
+    {"key": "weather_api", "name": "Weather API key", "type": "api_credential", "code": "wx-7f3a91",
+     "notes": "for the thermostat hub"},
+    {"key": "passport", "name": "Passport", "type": "passport", "notes": "expires 2031"},
+    {"key": "checking", "name": "Credit union checking", "type": "bank_account", "notes": "routing 261071315, direct deposit"},
+    {"key": "license", "name": "Driver's license", "type": "driving_licence", "notes": "Georgia class C, expires 2029"},
+    {"key": "office", "name": "Office 365 license", "type": "software_licence", "code": "O365-DC-7788"},
+    {"key": "crypto", "name": "Coinbase wallet", "type": "crypto_wallet", "notes": "a little BTC from 2021, seed phrase in the fire box"},
+    {"key": "costco", "name": "Costco membership", "type": "membership", "notes": "executive, renews August"},
+    {"key": "union_card", "name": "Union membership card", "type": "membership", "notes": "member 440218", "starred": True},
+    {"key": "epa_card", "name": "EPA 608 card", "type": "document", "notes": "universal certification, 2019"},
+    {"key": "old_netflix", "name": "Old Netflix login", "type": "login", "username": "carterfam", "password": "netflix123",
+     "url": "https://netflix.com", "trashed": "2026-03-25T09:00"},
+]
+
+LINKS = [
+    {"from": "shirts", "to": "dre"},
+    {"from": "design", "to": "dre"},
+    {"from": "dues", "to": "keisha"},
+    {"from": "hotel", "to": "keisha"},
+    {"from": "call_bev", "to": "bev"},
+    {"from": "dishwasher", "to": "gloria"},
+    {"from": "grievance", "to": "darnell"},
+    {"from": "proposal", "to": "vic"},
+    {"from": "budget_email", "to": "quanisha"},
+    {"from": "flyers", "to": "marcus_h"},
+    {"from": "field_trip", "to": "jada"},
+    {"from": "poster", "to": "jada"},
+    {"from": "cleats", "to": "jalen"},
+    {"from": "bigmama_meds", "to": "bigmama"},
+    {"from": "restock", "to": "luis"},
+    {"from": "guest_ideas", "to": "bev"},
+    {"from": "guest_ideas", "to": "bigmama"},
+    {"from": "shirt_notes", "to": "dre"},
+    {"from": "grievance_notes", "to": "darnell"},
+    {"from": "grievance_notes", "to": "mike"},
+    {"from": "gumbo", "to": "mama"},
+    {"from": "cobbler", "to": "bigmama"},
+    {"from": "custody", "to": "monique"},
+    {"from": "allergy", "to": "jalen"},
+    {"from": "fishing_list", "to": "trey"},
+    {"from": "carwash_plan", "to": "marcus_h"},
+]
+
+
+def world():
+    return {
+        "me": "Deshawn Carter",
+        "epoch": "2025-01-05T09:00",
+        "seed": "T08",
+        "currency": "USD",
+        "people": people(),
+        "groups": GROUPS,
+        "expenses": EXPENSES,
+        "lists": LISTS,
+        "events": events(),
+        "tasks": tasks(),
+        "notebooks": NOTEBOOKS,
+        "notes": NOTES,
+        "folders": FOLDERS,
+        "documents": DOCUMENTS,
+        "albums": ALBUMS,
+        "photos": PHOTOS,
+        "debts": DEBTS,
+        "locker": LOCKER,
+        "links": LINKS,
+    }
+
+
+def check_overlaps(evs):
+    spans = []
+    for e in evs:
+        s = datetime.fromisoformat(e["start"])
+        f = datetime.fromisoformat(e["end"])
+        spans.append((s, f, e["key"]))
+    spans.sort()
+    end, last = None, None
+    for s1, f1, k1 in spans:
+        assert end is None or end <= s1, f"overlap {last} / {k1}"
+        if end is None or f1 > end:
+            end, last = f1, k1
+    keys = [e["key"] for e in evs]
+    assert len(keys) == len(set(keys))
+
+
+if __name__ == "__main__":
+    w = world()
+    check_overlaps(w["events"])
+    out = HERE / "T08.json"
+    out.write_text(json.dumps(w, indent=1, ensure_ascii=False) + "\n")
+    print(f"wrote {out}: " + ", ".join(f"{k} {len(v)}" for k, v in w.items() if isinstance(v, list)))

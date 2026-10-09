@@ -319,7 +319,7 @@ public class ScreenRuntime<S, E>(
         if (handle == null) {
             // NO VAULT IS NOT A CRASH, and not an empty list either: a device
             // before its first pairing has not learned that it holds nothing.
-            host.send(reads.refused(Reads.refused("No vault is open on this device.")))
+            host.send(reads.refused(Reads.noVault()))
             return
         }
         val request = Envelope(
@@ -439,9 +439,13 @@ internal suspend fun <S, E> serveSchedule(effect: ScreenEffect.Schedule, host: S
  *
  * `invoke_key` IS the screen's `invokeKey`, which is content-derived rather
  * than ordinal (the kit's `InvokeKeys`: `"knowledge.edit_note:<noteId>:seq=<n>"`).
- * It kept a replayed intent from re-executing a command that had already
- * committed, and it does exactly that here — `command.proto` calls the field
- * required for that reason.
+ * It is the shell's CORRELATION key: the answer comes back under it
+ * ([ScreenWrites.settled]), which is how a screen tells which write was
+ * answered. The core requires the field and the vault never sees it. There is
+ * NO replay ledger (#1029 §1, R-1088-12), so the same key sent again runs the
+ * command again: a write a screen may re-offer is idempotent by its own
+ * content or by an id the phone minted first, and `WriteLaw.submit` treats the
+ * same key still in flight as one write.
  */
 internal suspend fun <S, E> serveWrite(
     write: ScreenEffect.SubmitWrite,
@@ -467,7 +471,7 @@ internal suspend fun <S, E> serveWrite(
     }
     val handle = pinned.core
     if (handle == null) {
-        settle(CommandStatus.COMMAND_STATUS_DENIED, "No vault is open on this device.")
+        settle(CommandStatus.COMMAND_STATUS_DENIED, Reads.NO_VAULT)
         return
     }
     val request = Envelope(

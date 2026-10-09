@@ -274,6 +274,61 @@ class HomeReadsSpec : StringSpec({
         HomeReads.TABLES shouldContain "people_profile"
     }
 
+    // --- the photos mosaic draws what can be drawn --------------------------
+
+    "the mosaic steps over an asset with no thumbnail, and the count still counts it" {
+        // The home.photos select is asset_id, title, captured_at, and the door
+        // appends thumbnail_path at index 3.
+        fun asset(id: String, thumbnail: String?) = centraid.core.v1.Row(
+            values = listOf(
+                centraid.core.v1.Value(text = id),
+                centraid.core.v1.Value(text = ""),
+                centraid.core.v1.Value(text = "2026-06-15T09:00:00Z"),
+                centraid.core.v1.Value(text = thumbnail.orEmpty()),
+            ),
+        )
+        // Newest first: the video (no poster) is the newest asset.
+        val rows = listOf(
+            asset("video", null),
+            asset("a", "/s/a.data"),
+            asset("b", "/s/b.data"),
+            asset("c", "/s/c.data"),
+            asset("d", "/s/d.data"),
+            asset("e", "/s/e.data"),
+        )
+        val tile = HomeReads.arrived("photos", rows, capped = false).tile.shouldNotBeNull()
+        tile.count.shouldNotBeNull().value_ shouldBe 6
+        tile.body.shouldNotBeNull().photos.shouldNotBeNull().cells.map { it.asset_id } shouldBe
+            listOf("a", "b", "c", "d")
+    }
+
+    "with nothing drawable the newest four stay as grey cells, so the sentence under them says why" {
+        fun asset(id: String) = centraid.core.v1.Row(
+            values = listOf(
+                centraid.core.v1.Value(text = id),
+                centraid.core.v1.Value(text = ""),
+                centraid.core.v1.Value(text = "2026-06-15T09:00:00Z"),
+                centraid.core.v1.Value(text = ""),
+            ),
+        )
+        val cells = HomeReads.arrived("photos", (1..6).map { asset("p$it") }, capped = false)
+            .tile.shouldNotBeNull().body.shouldNotBeNull().photos.shouldNotBeNull().cells
+        cells.map { it.asset_id } shouldBe listOf("p1", "p2", "p3", "p4")
+        cells.all { it.thumbnail_path == null } shouldBe true
+    }
+
+    "the tally tile states its count with the noun and no balance it cannot stand behind" {
+        fun group(id: String) = centraid.core.v1.Row(
+            values = listOf(centraid.core.v1.Value(text = id), centraid.core.v1.Value(text = "USD")),
+        )
+        fun caption(rows: Int, capped: Boolean = false) =
+            HomeReads.arrived("tally", (1..rows).map { group("g$it") }, capped).tile.shouldNotBeNull()
+                .body.shouldNotBeNull().tally.shouldNotBeNull().also { it.figure.shouldBeNull() }.caption
+        caption(1) shouldBe "1 group"
+        caption(3) shouldBe "3 groups"
+        caption(200, capped = true) shouldBe "200+ groups"
+    }
+
     // --- the count's noun agrees with the number (#1047) --------------------
 
     "every tile's count noun is singular at one row and plural otherwise — \"1 group\", never \"1 groups\"" {

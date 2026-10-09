@@ -180,10 +180,10 @@ public object FaceReviewMachine : ScreenMachine<FaceReviewState, FaceReviewEvent
             // and refuses exactly the way that one does.
             event.person_created != null ->
                 if (event.person_created.party_id.isEmpty()) {
-                    Step(state)
+                    Step(state.copy(creating_region = ""))
                 } else {
                     answered(
-                        state,
+                        state.copy(creating_region = ""),
                         event.person_created.region_id,
                         CONFIRM,
                         event.person_created.party_id,
@@ -263,18 +263,24 @@ public object FaceReviewMachine : ScreenMachine<FaceReviewState, FaceReviewEvent
         // still open, visibly, and the name the member typed is painted onto
         // the candidate so a failed create leaves their words on the screen
         // rather than swallowing them.
+        // ONE CREATE AT A TIME (#1089): the picker stays open while it runs, so a
+        // double tap reaches here twice. Its answer, or `PersonCreated`, frees it.
+        confirmed.new_name.isNotEmpty() && state.creating_region.isNotEmpty() -> Step(state)
+
         confirmed.new_name.isNotEmpty() -> Step(
             state.copy(
                 data_ = named(state.data_, confirmed.region_id, confirmed.new_name),
                 write_failure = null,
+                creating_region = confirmed.region_id,
             ),
             listOf(
                 ScreenEffect.SubmitWrite(
                     command = CREATE_PERSON_COMMAND,
                     inputJson = createPersonInput(confirmed.new_name),
-                    // STABLE FOR THE SAME INTENT, never an ordinal: naming this
-                    // face this thing twice is one person, not two rows with
-                    // the same name (`NotesEditorMachine`'s note on the field).
+                    // STABLE FOR THE SAME INTENT, never an ordinal, so the answer
+                    // is told from another face's. It correlates and nothing more:
+                    // the core remembers no key (R-1088-12), so this create is run
+                    // each time it is sent.
                     invokeKey =
                         "$CREATE_PERSON_COMMAND:${confirmed.region_id}:${confirmed.new_name}",
                 ),
@@ -357,6 +363,15 @@ public object FaceReviewMachine : ScreenMachine<FaceReviewState, FaceReviewEvent
      * A PARKED FEED EMITS NO RE-READ (census §E seam 8).
      */
     private fun settled(
+        state: FaceReviewState,
+        settled: FaceReviewEvent.WriteSettled,
+    ): Step<FaceReviewState> = settledBy(
+        // THE CREATE'S ANSWER FREES THE PICKER for another try (#1089).
+        if (settled.region_id == state.creating_region) state.copy(creating_region = "") else state,
+        settled,
+    )
+
+    private fun settledBy(
         state: FaceReviewState,
         settled: FaceReviewEvent.WriteSettled,
     ): Step<FaceReviewState> = when {

@@ -77,6 +77,9 @@
               # The two protobuf packages and their breaking-change checks.
               pkgs.buf
               pkgs.protobuf
+              # llama.cpp (the on-device chat's engine, `crates/assist-llama`)
+              # is built from source by the `cmake` crate on every target.
+              pkgs.cmake
 
               # Plain SQLite: no SQLCipher, per the ruling. `rusqlite` is built
               # with the `bundled` feature, so this is for the `sqlite3` shell

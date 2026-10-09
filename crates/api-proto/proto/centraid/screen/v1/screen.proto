@@ -1155,6 +1155,8 @@ message TileBody {
   }
 
   message Tally {
+    // ABSENT when Home states no balance (it does not project one yet): the
+    // body is then `caption` alone, which is the count and its noun.
     Money figure = 1;
     string caption = 2;
     // The rolling comparison, when there is one. Absent renders nothing rather
@@ -1296,6 +1298,12 @@ message HomeState {
   // `BackupLines` finished it from the core's `backup_status`. The shell told
   // Home it (`BackupLineChanged`), so a reload carries it.
   BackupLine backup_line = 9;
+  // TOLD TO HOME: the vault in front was founded TODAY, in the device's zone.
+  // One of the facts the notice slot is settled from (`HomeData.sample_notice`);
+  // told and not derived because `commonMain` has no zone database and a day
+  // rolls over under an open app. Reset by a vault switch: it is a fact about
+  // one vault.
+  bool founded_today = 10;
 }
 
 message HomeData {
@@ -1330,6 +1338,12 @@ message HomeData {
   // full width and the other drew it at a half. A row here carries APP IDS and
   // not tiles, so the tile itself is still stated exactly once.
   repeated TileRow grid_rows = 7;
+  // THE SAMPLE LINE HOLDS HOME'S ONE NOTICE SLOT (R-SAMPLE-8). Decided by the
+  // machine from the roster, the vault in front and `founded_today`: on the
+  // sample vault always, on the member's own vault while a sample is held and
+  // only on the day the vault was founded. While it is set a shell draws this
+  // line in place of `HomeState.backup_line`, so Home never draws both.
+  bool sample_notice = 9;
 }
 
 // One drawn row of the springboard: the app ids in it, left to right.
@@ -1420,6 +1434,21 @@ message VaultLockup {
   // belongs to.
   string frozen_line = 9;
 
+  // THIS IS THE SAMPLE VAULT: founded beside the member's first vault and
+  // filled with a scenario to look around in. Read out of the vault itself
+  // (`core_vault.settings_json`'s `sample` mark, `ready`), never off a list
+  // beside it. A sample vault never pairs and never backs up, so a shell hides
+  // pairing for it and offers "Remove sample" instead.
+  bool sample = 10;
+
+  // WHEN THIS VAULT WAS FOUNDED, as `core_vault.created_at` spells it (RFC 3339,
+  // UTC), or empty for a lockup the shell has not identified. Read out of the
+  // vault like its name, never kept beside it. What it is for is Home's one
+  // notice slot: the sample line owns that slot on the member's own vault only
+  // on the day the vault was founded, and "which day" is the shell's to say
+  // because only the platform knows the zone (`HomeEvent.FoundingDayKnown`).
+  string founded_at = 11;
+
   // `gateway_name`, which no layer could ever write; `offline`, which only
   // meant something beside it; and `link`, whose enum made pairing a STATE of
   // a vault. See the message header and [State].
@@ -1494,12 +1523,20 @@ message HomeEvent {
     VaultPicked vault_picked = 12;
     RosterChanged roster_changed = 13;
     BackupLineChanged backup_line = 14;
+    FoundingDayKnown founding_day = 15;
   }
 
   // The foreground vault's backup line moved: a pass ended, the foreground
   // switched, or the vault froze. See `HomeState.backup_line`.
   message BackupLineChanged {
     BackupLine line = 1;
+  }
+
+  // WHETHER THE VAULT IN FRONT WAS FOUNDED TODAY, in the device's zone. Sent
+  // after every rebind, which is when the vault in front can have changed; told
+  // about the foreground vault, not read by Home.
+  message FoundingDayKnown {
+    bool founded_today = 1;
   }
 
   // `VaultsListed`, the one-shot survey. See `RosterChanged`.
@@ -2459,6 +2496,11 @@ message PhotosCollectionsState {
   // Without it a refusal is SILENT: every screen here has a `WriteSettled`
   // event carrying a sentence and, for one draft, nowhere to put it.
   optional ReadFailure write_failure = 6;
+  // THE KEY OF THE `media.create_album` IN FLIGHT, empty when none (#1089).
+  // The sheet stays open until the commit, so a double tap on Create reaches
+  // the reducer twice, and the core remembers no key (R-1088-12): the second
+  // would make a second album. Cleared by the settle that carries this key.
+  string create_key = 7;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -2526,6 +2568,8 @@ message PhotosCollectionsEvent {
   message WriteSettled {
     bool committed = 1;
     string sentence = 2;
+    // The key of the write answered (#1089): which of the screen's writes this was.
+    string invoke_key = 3;
   }
 }
 
@@ -2980,6 +3024,12 @@ message FaceReviewState {
   // Without it a refusal is SILENT: every screen here has a `WriteSettled`
   // event carrying a sentence and, for one draft, nowhere to put it.
   optional ReadFailure write_failure = 8;
+  // THE REGION WHOSE `people.add_person` IS IN FLIGHT, empty when none (#1089).
+  // The picker stays open over the question while the create runs, so a double
+  // tap reaches the reducer twice, and the core remembers no key (R-1088-12):
+  // the second would make a second person. One create at a time; cleared by the
+  // settle or the `PersonCreated` for this region.
+  string creating_region = 9;
 }
 
 message FaceReviewData {
@@ -11082,6 +11132,11 @@ message VaultWordsState {
     PHASE_RESTORE_FIRST = 7;
     // The flow is over; the shell closes the sheet.
     PHASE_CLOSED = 8;
+    // MINTING NEW WORDS ONLY, before any is minted: one sentence that the 24
+    // words are the only way back into the vault, and Continue. Nothing is on
+    // the screen but copy, so it is not `secure`. A phone that makes its vault
+    // from a seed it already holds shows no words and so no framing.
+    PHASE_FRAMING = 9;
   }
 }
 
@@ -11608,4 +11663,447 @@ message BackupScreenEvent {
   }
 
   message Dismissed {}
+}
+
+// ---------------------------------------------------------------------------
+// --- Chat: the on-device assistant ---
+// ---------------------------------------------------------------------------
+//
+// `chat`. A tab on the bottom bar (Home · Chat · More), not an app: it has no
+// tile and no route of its own, and a chat opened from an app is the same
+// screen with `scope_app` set. The model runs ON THIS PHONE over the core's
+// `Request::Assist` (`assist.proto`). It reads; and a write it proposes is a
+// CONFIRM CARD on its answer (`ChatPending`) that runs only on the member's tap.
+//
+// THE ANSWER IS CARDS. A reply is one short line of model text and the rows it
+// found — a task, a photograph, a ledger line, a person — each a reference
+// (`ChatCard`) that the app's own tile draws and taps through to. The model
+// routes and phrases; the apps draw the data. A shell that has no tile for an
+// entity yet draws the card's own title, subtitle and meta.
+//
+// THE TRANSCRIPT IS THE VAULT'S (R-CHAT-1). Each completed turn is saved by the
+// core through the `chat.*` commands; this state is rebuilt from the core's
+// events while a turn runs and from `chat.thread` when a stored chat is opened.
+// Past chats are listed in a DRAWER (`threads`), newest first, and the header
+// reads: the drawer, the chat's title with the vault beside it, and a menu.
+//
+// THE MODEL FILE IS A STEP, NOT A SCREEN. Until a model is on the phone the
+// state is `PHASE_NEEDS_MODEL` and `model_step` carries the one sentence, the
+// size and the action; the shell owns the download (the only thing Centraid
+// ever fetches) and reports its progress as events.
+
+message ChatState {
+  Phase phase = 1;
+  // THE HEADER'S CENTRE: the open chat's title, or "New chat" while there is
+  // none yet; and the line under it, "<vault name> · on this phone".
+  string title = 2;
+  string subtitle = 3;
+  // The app the chat was opened from, or empty. Not drawn: the shell opens the
+  // next chat from the same place.
+  string scope_app = 4;
+  // The thread, oldest first. Empty while a fresh chat shows `empty_line` and
+  // `suggestions`.
+  repeated ChatMessage messages = 5;
+  // One sentence, present only while the thread is empty and the model ready.
+  string empty_line = 6;
+  // Up to three questions this vault can answer, present only while the thread
+  // is empty. A tap is a `sent` event carrying the text.
+  repeated string suggestions = 7;
+  // A turn is running. The composer offers Stop instead of Send.
+  bool streaming = 8;
+  // "Looking in Tally" while a read runs, empty otherwise.
+  string activity = 9;
+  // One line about the last failure, empty when there is none. A failed model
+  // download and a failed turn both land here.
+  string error = 10;
+  // The download, load and unavailable steps. Present in every phase but
+  // `PHASE_READY`.
+  ChatModelStep model_step = 11;
+  // Labels, so the view owns no word.
+  string composer_placeholder = 12;
+  string send_label = 13;
+  string stop_label = 14;
+  string new_chat_label = 15;
+  string retry_label = 16;
+  string copy_label = 17;
+  // The last turn is over and can be asked again: Retry is drawn on it.
+  bool can_retry = 18;
+  // The thread has something in it: New chat is drawn.
+  bool can_new_chat = 19;
+  // ATTACHMENTS (v1: at most one photo and one text document per message).
+  //
+  // What waits in the composer, oldest first. Empty once the turn is sent.
+  repeated ChatAttachment pending = 20;
+  // The attach control is drawn: a turn is not running and there is room for
+  // another attachment.
+  bool can_attach = 21;
+  // The labels of the attach control and its three sources, so the view owns no
+  // word: "Attach", "Photo from vault", "Photo library", "Document", "Remove".
+  string attach_label = 22;
+  string attach_vault_photo_label = 23;
+  string attach_library_photo_label = 24;
+  string attach_document_label = 25;
+  string remove_attachment_label = 26;
+  // The photo reader's own step, drawn above the composer while a photo waits
+  // for the vision projector: the offer to fetch it, its progress, or its load.
+  // Absent otherwise. The thread stays; this is not the model's phase.
+  ChatModelStep vision_step = 27;
+  // The photo reader's step is the offer (not yet downloading): the composer
+  // cannot send until it is fetched or the photo is removed.
+  bool vision_blocked = 28;
+
+  // THE DRAWER AND THE HEADER'S MENU (R-CHAT-2).
+  //
+  // The drawer is open: the past chats slide in from the left over the thread.
+  bool drawer_open = 29;
+  // Past chats, newest activity first. Present whatever the model's phase: a
+  // member can read and delete chats before a model is on the phone.
+  repeated ChatThreadItem threads = 30;
+  // One line, present only when `threads` is empty: "No chats yet."
+  string threads_empty_line = 31;
+  // The stored chat this thread is saved in, or empty for a chat that has not
+  // finished a turn. Not drawn: a shell names it to rename and delete.
+  string thread_id = 32;
+  // The header menu offers Rename and Delete: there is a stored chat to act on.
+  bool can_manage_thread = 33;
+  // Labels, so the view owns no word.
+  string drawer_label = 34;
+  string menu_label = 35;
+  string rename_label = 36;
+  string delete_label = 37;
+  string delete_all_label = 38;
+  string cancel_label = 39;
+  string save_label = 40;
+  string rename_title = 41;
+  string delete_title = 42;
+  string delete_body = 43;
+  string delete_all_title = 44;
+  string delete_all_body = 45;
+  // "This item is gone." for a card whose row was deleted since the answer.
+  string card_gone_line = 46;
+  // The marker the drawer puts on the open chat, for a screen reader.
+  string current_label = 47;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    // Asking the core whether a model is there. Draws nothing but the header.
+    PHASE_CHECKING = 1;
+    // No model on this phone: the download step.
+    PHASE_NEEDS_MODEL = 2;
+    // The shell is fetching it; `model_step` carries the progress.
+    PHASE_DOWNLOADING = 3;
+    // The model is being read into memory.
+    PHASE_LOADING = 4;
+    // The thread.
+    PHASE_READY = 5;
+    // This build cannot run a model, or the core would not answer. A state to
+    // draw, not a download problem.
+    PHASE_UNAVAILABLE = 6;
+  }
+}
+
+// ONE PAST CHAT, as the drawer lists it.
+message ChatThreadItem {
+  string thread_id = 1;
+  string title = 2;
+  // "5 min ago", "Yesterday": when the chat last moved.
+  string ago = 3;
+  // The chat that is open now.
+  bool current = 4;
+  // "<title>, <ago>", with the open one marked.
+  string accessibility_label = 5;
+}
+
+message ChatModelStep {
+  // NEEDS_MODEL: "530 MB download", and empty when the size is not known.
+  string size_line = 1;
+  // NEEDS_MODEL: "This is the only time Centraid fetches anything."
+  string note_line = 2;
+  // NEEDS_MODEL: "Download model". Empty in every other phase.
+  string action_label = 3;
+  // DOWNLOADING: whether `progress` means anything yet.
+  bool progress_known = 4;
+  // DOWNLOADING: 0.0 to 1.0.
+  float progress = 5;
+  // DOWNLOADING, LOADING and UNAVAILABLE: the one clause the step says.
+  string status_line = 6;
+}
+
+message ChatMessage {
+  // Monotonic within a chat. The view's diffing key and the argument of `copy`.
+  uint64 id = 1;
+  Role role = 2;
+  // The user's words, or the model's one line. While `streaming` it is the
+  // text so far.
+  string text = 3;
+  // The rows the answer found, to draw as the apps' own tiles. Empty on a
+  // user message.
+  repeated ChatCard cards = 4;
+  // The assistant's line is still being written (or its read is running).
+  bool streaming = 5;
+  // The turn was stopped, or failed after showing something.
+  bool stopped = 6;
+  // "You said: …", "Centraid said: …".
+  string accessibility_label = 7;
+  // What the member attached to this question: a marker and a thumbnail, never
+  // bytes. Present on a user message only.
+  repeated ChatAttachment attachments = 8;
+  // One line beside an answer: "Read the first part of the document." Empty
+  // when there is none.
+  string note = 9;
+  // The write this answer proposes, drawn as a confirm card under the line.
+  // Absent on an answer that proposes nothing and on a user message. The view
+  // draws it only once the answer has stopped streaming.
+  ChatPending pending = 10;
+
+  enum Role {
+    ROLE_UNSPECIFIED = 0;
+    ROLE_USER = 1;
+    ROLE_ASSISTANT = 2;
+  }
+}
+
+// A WRITE THE MODEL PROPOSED, as the confirm card under its answer (#1088,
+// R-1088-2). On the phone every write the model makes waits here; only the
+// member's tap on Confirm makes it, and nothing the model wrote reaches the
+// vault before that. The lines are the core's (`AssistPendingStep.summary`),
+// composed from the rows the write changes and not from the model's text.
+//
+// The card settles once. WAITING offers Confirm and Cancel; a tap moves it to
+// WORKING while the core runs the steps, and then to APPLIED, STALE or
+// NOT_DONE with `settled_line` saying how it ended. There is no toast and no
+// Undo: an applied card says "Done." and stays where it was.
+message ChatPending {
+  // What a confirm or a cancel names; empty only on an INERT card drawn from a
+  // stored `proposed` answer, which no session holds and nothing can name.
+  string pending_id = 1;
+  State state = 2;
+  // One line for each row the write changes, in order.
+  repeated ChatPendingStep steps = 3;
+  // "and 3 more" when the write changes more rows than `steps` lists, else empty.
+  string more_line = 4;
+  // "Confirm" and "Cancel". Drawn while WAITING (enabled) and WORKING (not).
+  string confirm_label = 5;
+  string cancel_label = 6;
+  // The card asks twice: Confirm is drawn as the outlined destructive control
+  // (DESIGN.md), never filled.
+  bool destructive = 7;
+  // How the card ended, one clause: "Done.", "Not done.", "That changed since.
+  // Ask again." Empty while WAITING or WORKING.
+  string settled_line = 8;
+  // "Proposed change, removes something: Delete task "Old"."
+  string accessibility_label = 9;
+
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    // Confirm and Cancel are offered.
+    STATE_WAITING = 1;
+    // Confirm was tapped and the core is running the steps.
+    STATE_WORKING = 2;
+    // The steps ran. `settled_line` is the core's sentence.
+    STATE_APPLIED = 3;
+    // Cancelled, or the vault refused a step, or the card was gone when tapped.
+    STATE_NOT_DONE = 4;
+    // A row the write addresses changed while the card waited: nothing ran.
+    STATE_STALE = 5;
+    // A newer message superseded the card before it was answered, or the thread
+    // was reopened and no session holds the write (R-1088-10): no buttons.
+    STATE_INERT = 6;
+  }
+}
+
+message ChatPendingStep {
+  // The whole line, as the core composed it.
+  string summary = 1;
+  // This line deletes or removes, cancels, or settles money.
+  bool destructive = 2;
+}
+
+// ONE ATTACHMENT, as the composer and the transcript draw it.
+message ChatAttachment {
+  // Minted by the machine, monotonic within a chat; what a remove names.
+  uint64 id = 1;
+  Kind kind = 2;
+  // The photograph's title or the document's name, or empty. Drawn on the chip.
+  string label = 3;
+  // A file the shell draws as the chip's thumbnail (a photo only), or empty.
+  string thumbnail_path = 4;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_PHOTO = 1;
+    KIND_DOCUMENT = 2;
+  }
+}
+
+// A REFERENCE TO ONE REAL ROW (`AssistCard`, as the shell holds it).
+message ChatCard {
+  // The app id a shell routes by.
+  string app = 1;
+  // What the row is, in the app's vocabulary: `task`, `event`, `person`…
+  string entity = 2;
+  string id = 3;
+  // A second key the app's route takes beside `id`. Empty when there is none.
+  string qualifier = 4;
+  string title = 5;
+  string subtitle = 6;
+  string meta = 7;
+}
+
+message ChatEvent {
+  oneof kind {
+    Opened opened = 1;
+    Sent sent = 2;
+    Stopped stopped = 3;
+    Regenerated regenerated = 4;
+    NewChat new_chat = 5;
+    Copied copied = 6;
+    DownloadTapped download = 7;
+    DownloadProgress download_progress = 8;
+    DownloadFinished download_finished = 9;
+    Attached attached = 10;
+    AttachmentRemoved attachment_removed = 11;
+    // 12 was `VisionLoaded`, which nothing sent: the projector's file arriving
+    // is `DownloadFinished` with `vision` set.
+    DrawerToggled drawer = 13;
+    ThreadOpened thread_opened = 14;
+    ThreadRenamed thread_renamed = 15;
+    ThreadDeleted thread_deleted = 16;
+    AllThreadsDeleted all_threads_deleted = 17;
+    PendingConfirmed pending_confirmed = 18;
+    PendingCancelled pending_cancelled = 19;
+  }
+  reserved 12;
+
+  // The tab appeared. `app` scopes the chat to the app it was opened from;
+  // empty is every app. Opening again with the same scope changes nothing, so
+  // the thread survives switching tabs.
+  message Opened {
+    string app = 1;
+    // How big the model download is, in bytes, as the shell knows it (it owns
+    // the transfer). Zero is unknown, and the size line is then absent.
+    uint64 model_bytes = 2;
+    // The foreground vault's name, for the header's second line. Empty is
+    // "no name", and the line then says only where the chat runs.
+    string vault_name = 3;
+    // The member CHOSE this scope from the composer's menu, so a different one
+    // starts a new chat. False is the tab merely appearing: a chat with
+    // something in it, or a stored thread with a scope of its own, is left
+    // alone whatever `app` says.
+    bool scope_chosen = 4;
+  }
+
+  // The composer's send, or a tapped suggestion.
+  message Sent {
+    string text = 1;
+  }
+
+  // INTENT: stop the running turn.
+  message Stopped {}
+
+  // INTENT: ask the last question again, replacing the last answer.
+  message Regenerated {}
+
+  // INTENT: clear the thread. A running turn is stopped first.
+  message NewChat {}
+
+  // INTENT: put a message's text on the clipboard (the shell's platform act).
+  message Copied {
+    uint64 message_id = 1;
+  }
+
+  // The download step's action. `vision` says which step: the photo reader's
+  // (the vision projector) and not the model's.
+  message DownloadTapped {
+    bool vision = 1;
+  }
+
+  // What the shell's download reported. `total_bytes` is zero when unknown.
+  // `vision`: it is the projector's transfer.
+  message DownloadProgress {
+    uint64 done_bytes = 1;
+    uint64 total_bytes = 2;
+    bool vision = 3;
+  }
+
+  // The download ended; `ok` is false when it stopped short.
+  message DownloadFinished {
+    bool ok = 1;
+    bool vision = 2;
+  }
+
+  // The member chose something to attach. The shell resolves its own picker and
+  // hands over what the core needs: a vault asset id, a vault document id, or
+  // the bytes of a camera-roll image. `thumbnail_path` is a file the shell
+  // already drew a thumbnail to (a photo only); `label` names it on the chip.
+  message Attached {
+    oneof source {
+      VaultPhoto vault_photo = 1;
+      LibraryPhoto library_photo = 2;
+      VaultDocument vault_document = 3;
+    }
+    string label = 4;
+    string thumbnail_path = 5;
+  }
+
+  message VaultPhoto {
+    string asset_id = 1;
+  }
+
+  // JPEG or PNG bytes. HEIC is converted by the shell before it sends.
+  message LibraryPhoto {
+    bytes content = 1;
+    string mime = 2;
+  }
+
+  message VaultDocument {
+    string doc_id = 1;
+  }
+
+  // INTENT: take a waiting attachment out of the composer.
+  message AttachmentRemoved {
+    uint64 id = 1;
+  }
+
+  // The shell's picker was dismissed or its pick could not be read: nothing
+  // changes. (No message: the shell simply sends nothing.)
+
+  // INTENT: the drawer's menu control, or its scrim, or the Chat tab pressed
+  // while the chat is showing.
+  message DrawerToggled {
+    // The drawer should be showing (true) or shut (false).
+    bool opened = 1;
+  }
+
+  // INTENT: open a past chat from the drawer. The one that is open already only
+  // closes the drawer; a running turn is stopped first.
+  message ThreadOpened {
+    string thread_id = 1;
+  }
+
+  // INTENT: rename a chat. A blank title changes nothing.
+  message ThreadRenamed {
+    string thread_id = 1;
+    string title = 2;
+  }
+
+  // INTENT: delete one chat, after the shell's own confirmation. The open chat
+  // goes back to a new one.
+  message ThreadDeleted {
+    string thread_id = 1;
+  }
+
+  // INTENT: delete every chat in this vault, after the shell's confirmation.
+  message AllThreadsDeleted {}
+
+  // INTENT: Confirm on the confirm card `pending_id` names. The card is the
+  // confirmation: the shell asks nothing more.
+  message PendingConfirmed {
+    string pending_id = 1;
+  }
+
+  // INTENT: Cancel on the confirm card `pending_id` names. Nothing is written.
+  message PendingCancelled {
+    string pending_id = 1;
+  }
 }

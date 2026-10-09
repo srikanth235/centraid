@@ -1,0 +1,27 @@
+[package]
+name = "centraid-assist"
+description = "The on-device chat plane: the native tool runtime, its turn loop, the attached and free replies and the Model trait an engine implements."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_assist"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-apps-agenda = { path = "../apps/agenda" }
+centraid-apps-kit = { path = "../apps/kit" }
+centraid-apps-tally = { path = "../apps/tally" }
+centraid-search = { path = "../search" }
+centraid-vault = { path = "../vault" }
+jiff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+flate2.workspace = true

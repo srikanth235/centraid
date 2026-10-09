@@ -52,7 +52,11 @@ centraid-apps-notes = { path = "../apps/notes" }
 centraid-apps-tally = { path = "../apps/tally" }
 # The door an app crate reads through (`PageDoor`), and the rows it answers.
 centraid-apps-kit = { path = "../apps/kit" }
-# THE FTS DOOR, for `agenda.search`. It owns every `MATCH` in the workspace and
+# THE ON-DEVICE CHAT PLANE: the native tool runtime, its turn loop, the attached
+# and free replies and the `Model` trait an engine implements. It holds no
+# vault; this crate gives it one through `assist::door::CoreDoor`.
+centraid-assist = { path = "../assist" }
+# THE FTS DOOR, for the app queries' search. It owns every `MATCH` in the workspace and
 # takes a connection; the core hands it `Vault::read`'s, and writes no SQL.
 centraid-search = { path = "../search" }
 # THE ONE CONTENT STORE (#1025 S3, D-1025-S3-1). A core opens the vault, so a
@@ -88,6 +92,14 @@ rustix.workspace = true
 # and every flow `block_on`s it from the shell's own thread. This crate opens
 # no socket of its own and listens on none.
 tokio.workspace = true
+# DECODING AND SCALING AN ATTACHED PHOTOGRAPH (`assist::attach`): the chat's
+# model reads 448 pixels on the long edge, so the core decodes what the vault
+# or the shell hands it and scales it before the engine ever sees it. The same
+# pure-Rust decoder the derivatives are made with; no new codec.
+image.workspace = true
+# THE STORED THUMBNAIL of a camera-roll image rides the `chat.save_turn` command
+# as a `data:` URI (`assist::store`).
+base64.workspace = true
 centraid-ontology = { path = "../ontology" }
 centraid-protocol = { path = "../protocol" }
 centraid-vault = { path = "../vault" }
@@ -102,6 +114,10 @@ serde_json.workspace = true
 # A REAL GATEWAY ON A REAL SOCKET for the phone's flows (#1080): the gateway
 # crate's own test harness, the whole server, spawned on 127.0.0.1:0.
 centraid-gateway = { path = "../gateway" }
+# THE HARNESS'S DOOR for the chat's native runtime (#1088): the read-equality
+# test opens a copy of the sample vault through it and asks the core's door the
+# same questions.
+centraid-nativetools = { path = "../nativetools" }
 tempfile.workspace = true
 
 [[test]]

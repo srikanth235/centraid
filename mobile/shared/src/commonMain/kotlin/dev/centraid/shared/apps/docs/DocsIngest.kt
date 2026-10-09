@@ -195,7 +195,11 @@ public object DocsIngestMachine : ScreenMachine<DocsIngestState, DocsIngestEvent
     /**
      * The write that files this ingest, as `(command, input, key)`. Keyed on
      * the document id this phone minted: a retry is the same write, and the
-     * core's replay ledger answers a duplicate rather than filing twice.
+     * vault REFUSES a second filing of an id it already holds
+     * (`document_id_is_free`), so a duplicate cannot file twice. "Try again" is
+     * offered only after a failure, and a failure rolled back. The key itself is
+     * only the shell's correlation key: there is no replay ledger (#1029 §1,
+     * R-1088-12).
      */
     internal fun filing(state: DocsIngestState, stagedSha: String): Triple<String, String, String>? = when {
         state.kind == DocsDriveEvent.AddRequested.Kind.KIND_TEXT -> Triple(

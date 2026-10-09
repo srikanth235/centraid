@@ -1,0 +1,639 @@
+"""World T22: Sven Lindqvist, IKEA warehouse shift lead in Malmö (SEK vault).
+
+    python3 authored/worlds/T22_build.py      # writes authored/worlds/T22.json (deterministic)
+
+Today in the sessions is Monday 2026-07-13 21:25 (high summer; Sven is on the late shift rota).
+Sven is married to Ahmed; their adopted son Elias is seven. Sven's parents (Mamma, Pappa) live
+in Lund; he co-owns a summer house on Österlen with his sister Karin and her husband Johan, plays
+in a Tuesday padel league, and is active in an adoptive parents' network. Built-in ambiguity: two
+Johans (brother-in-law Johan Berg, warehouse manager Johan Nilsson), two Eriks (padel partner,
+league organiser), nicknames (Mamma, Pappa, Micke, Tobbe), a misspelled-looking name (Dragan
+Petrovic), two "Dentist for Elias" and two "Parents network picnic" events, two swimming
+lessons, recurring padel matches and shift leads meetings, near-duplicate tasks ("Book padel
+court", monthly electricity bills), two lists sharing "Summer house", cancelled events, completed
+tasks, rows trashed inside and past the 30-day restore window, an empty group, an empty folder,
+an empty notebook and an empty album, and one group in EUR.
+"""
+from __future__ import annotations
+
+import json
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+
+def people():
+    return [
+        # family
+        {"key": "ahmed", "name": "Ahmed Haddad", "role": "husband", "starred": True, "met": "Göteborg",
+         "last_contacted": "2026-07-13T18:00", "last_contacted_kind": "visit"},
+        {"key": "elias", "name": "Elias Lindqvist", "role": "son, 7"},
+        {"key": "birgitta", "name": "Birgitta Lindqvist", "role": "mother, Lund", "nickname": "Mamma", "cadence": 7,
+         "starred": True, "last_contacted": "2026-07-08T19:00", "last_contacted_kind": "call"},
+        {"key": "lennart", "name": "Lennart Lindqvist", "role": "father, Lund", "nickname": "Pappa", "cadence": 7,
+         "last_contacted": "2026-07-08T19:00", "last_contacted_kind": "call"},
+        {"key": "karin", "name": "Karin Berg", "role": "sister, summer house co-owner", "cadence": 14,
+         "last_contacted": "2026-07-01T20:00", "last_contacted_kind": "message"},
+        {"key": "johan_b", "name": "Johan Berg", "role": "brother-in-law, summer house co-owner", "cadence": 30,
+         "last_contacted": "2026-06-19T15:00", "last_contacted_kind": "visit"},
+        {"key": "samira", "name": "Samira Haddad", "role": "Ahmed's sister, Göteborg", "cadence": 30,
+         "last_contacted": "2026-06-02T21:00", "last_contacted_kind": "call"},
+        {"key": "nour", "name": "Nour Haddad", "role": "Ahmed's mother", "cadence": 21,
+         "last_contacted": "2026-06-28T12:00", "last_contacted_kind": "visit"},
+        # warehouse
+        {"key": "johan_n", "name": "Johan Nilsson", "role": "warehouse manager", "cadence": 7,
+         "last_contacted": "2026-07-08T10:00", "last_contacted_kind": "meeting"},
+        {"key": "fatima", "name": "Fatima Osman", "role": "forklift driver, late shift"},
+        {"key": "mikael", "name": "Mikael Persson", "role": "shift lead, early shift", "nickname": "Micke",
+         "cadence": 7, "last_contacted": "2026-07-10T14:00", "last_contacted_kind": "meeting"},
+        {"key": "linnea", "name": "Linnea Holm", "role": "HR partner", "cadence": 30,
+         "last_contacted": "2026-06-15T13:00", "last_contacted_kind": "meeting"},
+        {"key": "dragan", "name": "Dragan Petrovic", "role": "forklift driver, late shift"},
+        {"key": "aisha", "name": "Aisha Yusuf", "role": "picker, new starter"},
+        {"key": "olle", "name": "Olle Svensson", "role": "safety rep", "cadence": 14,
+         "last_contacted": "2026-07-06T10:00", "last_contacted_kind": "meeting"},
+        # padel
+        {"key": "erik_s", "name": "Erik Sjöberg", "role": "padel partner", "starred": True, "cadence": 7,
+         "last_contacted": "2026-07-11T20:00", "last_contacted_kind": "visit"},
+        {"key": "erik_l", "name": "Erik Lund", "role": "padel league organiser"},
+        {"key": "hanna", "name": "Hanna Ek", "role": "padel league"},
+        {"key": "tobias", "name": "Tobias Wallin", "role": "padel league", "nickname": "Tobbe"},
+        {"key": "mats", "name": "Mats Åkesson", "role": "padel league, captain", "cadence": 14,
+         "last_contacted": "2026-07-07T21:00", "last_contacted_kind": "message"},
+        # parents network
+        {"key": "maria", "name": "Maria Gustafsson", "role": "parents network coordinator", "cadence": 30,
+         "last_contacted": "2026-06-14T13:00", "last_contacted_kind": "visit"},
+        {"key": "david", "name": "David Kim", "role": "adoptive dad, friend", "starred": True, "cadence": 14,
+         "last_contacted": "2026-07-03T18:00", "last_contacted_kind": "coffee"},
+        {"key": "lena", "name": "Lena Kim", "role": "David's wife"},
+        {"key": "jonas", "name": "Jonas Ekström", "role": "social worker"},
+        {"key": "petra", "name": "Petra Olsson", "role": "Elias's teacher"},
+        # others
+        {"key": "sofia", "name": "Sofia Malm", "role": "dentist"},
+        {"key": "kent", "name": "Kent Olofsson", "role": "plumber, Simrishamn"},
+        {"key": "gunnar", "name": "Gunnar Frisk", "role": "neighbour"},
+        {"key": "yasmin", "name": "Yasmin Ali"},
+        # trashed: one inside the 30-day window, one past it
+        {"key": "bosse", "name": "Bosse Karlsson", "role": "old colleague", "trashed": "2026-07-01T09:00"},
+        {"key": "rikard", "name": "Rikard Ahl", "role": "old landlord", "trashed": "2026-05-20T09:00"},
+    ]
+
+
+GROUPS = [
+    {"key": "sommarhus", "name": "Summer house Österlen", "members": ["karin", "johan_b", "ahmed"],
+     "created": "2024-04-01T10:00"},
+    {"key": "padel_g", "name": "Padel league kitty", "members": ["erik_s", "erik_l", "hanna", "tobias", "mats"],
+     "created": "2026-04-20T10:00"},
+    {"key": "parents_g", "name": "Parents network", "members": ["maria", "david", "lena"],
+     "created": "2025-09-01T10:00"},
+    {"key": "berlin_g", "name": "Berlin weekend", "currency": "EUR", "members": ["ahmed", "david", "lena"],
+     "created": "2026-06-01T10:00"},
+    {"key": "fika_g", "name": "Late shift fika fund", "members": ["fatima", "mikael", "dragan", "aisha", "olle"],
+     "created": "2026-02-01T10:00"},
+    {"key": "crayfish_g", "name": "Crayfish party 2026", "members": ["karin", "gunnar"],
+     "created": "2026-07-05T10:00"},
+]
+
+EXPENSES = [
+    {"group": "sommarhus", "name": "Roof tiles", "amount": 6400, "paid_by": "me",
+     "split": ["me", "karin", "johan_b"], "date": "2026-05-12"},
+    {"group": "sommarhus", "name": "Electricity Q2", "amount": 1800, "paid_by": "karin",
+     "split": ["me", "karin"], "date": "2026-07-02"},
+    {"group": "sommarhus", "name": "Lawn mower", "amount": 3200, "paid_by": "johan_b",
+     "split": ["me", "karin", "johan_b", "ahmed"], "date": "2026-06-06"},
+    {"group": "padel_g", "name": "Court rent July", "amount": 1500, "paid_by": "me",
+     "split": ["me", "erik_s", "hanna", "tobias", "mats"], "date": "2026-07-01"},
+    {"group": "padel_g", "name": "New balls", "amount": 480, "paid_by": "erik_s",
+     "split": ["me", "erik_s", "erik_l", "mats"], "date": "2026-07-07"},
+    {"group": "parents_g", "name": "Picnic food", "amount": 900, "paid_by": "maria",
+     "split": ["me", "maria", "david"], "date": "2026-06-14"},
+    {"group": "berlin_g", "name": "Hotel deposit", "amount": 360, "paid_by": "david",
+     "split": ["me", "ahmed", "david", "lena"], "date": "2026-06-20", "currency": "EUR"},
+    {"group": "fika_g", "name": "Coffee beans", "amount": 600, "paid_by": "me",
+     "split": ["me", "fatima", "mikael", "dragan"], "date": "2026-07-06"},
+    {"group": "fika_g", "name": "Cinnamon buns", "amount": 250, "paid_by": "fatima",
+     "split": ["me", "fatima", "aisha", "olle", "dragan"], "date": "2026-07-10"},
+]
+
+LISTS = [
+    {"key": "home_l", "name": "Home", "area": "family"},
+    {"key": "work_l", "name": "Warehouse", "area": "work"},
+    {"key": "padel_l", "name": "Padel", "area": "sport"},
+    {"key": "sh_l", "name": "Summer house", "area": "family"},
+    {"key": "shr_l", "name": "Summer house repairs", "area": "house"},
+    {"key": "school_l", "name": "Elias school", "area": "family"},
+    {"key": "shop_l", "name": "Shopping"},
+]
+
+
+def events():
+    out = []
+    # padel league, Tuesday evenings
+    d = date(2026, 5, 5)
+    while d <= date(2026, 8, 25):
+        ev = {"key": f"padel_{d.strftime('%m%d')}", "name": "Padel league match", "start": f"{d}T19:00",
+              "end": f"{d}T20:30", "attendees": ["erik_s"], "description": "Padelcenter Hyllie"}
+        if d == date(2026, 6, 23):
+            ev["cancelled"] = "2026-06-15T09:00"
+        out.append(ev)
+        d += timedelta(weeks=1)
+    # shift leads meeting, Wednesday afternoons
+    d = date(2026, 6, 3)
+    while d <= date(2026, 8, 12):
+        ev = {"key": f"leads_{d.strftime('%m%d')}", "name": "Shift leads meeting", "start": f"{d}T14:00",
+              "end": f"{d}T15:00", "attendees": ["johan_n", "mikael"], "description": "office by gate 4"}
+        if d == date(2026, 7, 29):
+            ev["cancelled"] = "2026-07-10T12:00"
+        out.append(ev)
+        d += timedelta(weeks=1)
+    out += [
+        # family
+        {"key": "dentist_jun", "name": "Dentist for Elias", "start": "2026-06-10T15:00", "end": "2026-06-10T15:30",
+         "attendees": ["elias", "sofia"], "description": "Folktandvården Limhamn"},
+        {"key": "dentist_aug", "name": "Dentist for Elias", "start": "2026-08-19T15:00", "end": "2026-08-19T15:30",
+         "attendees": ["elias", "sofia"], "description": "Folktandvården Limhamn"},
+        {"key": "midsummer", "name": "Midsummer at the summer house", "start": "2026-06-19T12:00",
+         "end": "2026-06-19T22:00", "attendees": ["karin", "johan_b", "ahmed", "elias", "birgitta", "lennart"]},
+        {"key": "picnic_jun", "name": "Parents network picnic", "start": "2026-06-14T11:00", "end": "2026-06-14T14:00",
+         "attendees": ["maria", "david", "lena"], "description": "Slottsparken"},
+        {"key": "picnic_aug", "name": "Parents network picnic", "start": "2026-08-16T11:00", "end": "2026-08-16T14:00",
+         "attendees": ["maria", "david", "lena"], "description": "Pildammsparken"},
+        {"key": "jonas_talk", "name": "Talk with Jonas about Elias's file", "start": "2026-07-16T10:00",
+         "end": "2026-07-16T11:00", "attendees": ["jonas", "ahmed"], "description": "family centre, Rosengård"},
+        {"key": "camp_pickup", "name": "Pick up Elias from football camp", "start": "2026-07-17T16:00",
+         "end": "2026-07-17T16:30", "attendees": ["elias"]},
+        {"key": "mamma70", "name": "Mamma's 70th birthday dinner", "start": "2026-07-25T18:00",
+         "end": "2026-07-25T22:00", "attendees": ["birgitta", "lennart", "karin", "johan_b", "ahmed", "elias"],
+         "description": "Grand Hotel Lund"},
+        {"key": "knee", "name": "Pappa's knee check-up", "start": "2026-07-15T09:00", "end": "2026-07-15T10:00",
+         "attendees": ["lennart"], "description": "Skånes universitetssjukhus Lund"},
+        {"key": "anniversary", "name": "Anniversary dinner with Ahmed", "start": "2026-07-18T19:00",
+         "end": "2026-07-18T22:00", "attendees": ["ahmed"], "description": "table for two, Västra Hamnen"},
+        {"key": "swim_1", "name": "Swimming lesson for Elias", "start": "2026-07-14T17:00", "end": "2026-07-14T17:45",
+         "attendees": ["elias"]},
+        {"key": "swim_2", "name": "Swimming lesson for Elias", "start": "2026-07-21T17:00", "end": "2026-07-21T17:45",
+         "attendees": ["elias"]},
+        {"key": "cinema", "name": "Cinema with Elias", "start": "2026-07-12T15:00", "end": "2026-07-12T17:00",
+         "attendees": ["elias"]},
+        {"key": "samira_call", "name": "Call with Samira", "start": "2026-07-14T21:00", "end": "2026-07-14T21:30",
+         "attendees": ["samira"]},
+        {"key": "samira_visit", "name": "Samira and Nour visiting", "start": "2026-07-30T12:00",
+         "end": "2026-07-30T20:00", "attendees": ["samira", "nour"]},
+        {"key": "school_start", "name": "Elias starts year 2", "start": "2026-08-18T08:00", "end": "2026-08-18T09:00",
+         "attendees": ["elias", "petra"]},
+        {"key": "sh_meeting", "name": "Summer house co-owners meeting", "start": "2026-07-26T15:00",
+         "end": "2026-07-26T16:30", "attendees": ["karin", "johan_b", "ahmed"]},
+        {"key": "plumber", "name": "Plumber for the summer house sink", "start": "2026-07-27T09:00",
+         "end": "2026-07-27T11:00", "attendees": ["kent"]},
+        {"key": "drive_osterlen", "name": "Drive to Österlen", "start": "2026-07-24T16:00", "end": "2026-07-24T18:00"},
+        {"key": "car_service", "name": "Car service at Bilia", "start": "2026-07-20T07:30", "end": "2026-07-20T08:30"},
+        {"key": "kayak", "name": "Kayaking with David", "start": "2026-07-19T10:00", "end": "2026-07-19T13:00",
+         "attendees": ["david"], "cancelled": "2026-07-10T20:00"},
+        {"key": "karin_dinner", "name": "Dinner at Karin's", "start": "2026-07-09T18:00", "end": "2026-07-09T21:00",
+         "attendees": ["karin", "johan_b"], "cancelled": "2026-07-08T12:00"},
+        {"key": "haircut", "name": "Haircut", "start": "2026-07-02T17:00", "end": "2026-07-02T17:30",
+         "trashed": "2026-07-03T09:00"},
+        {"key": "padel_trial", "name": "Padel trial session", "start": "2026-04-20T18:00", "end": "2026-04-20T19:00",
+         "attendees": ["erik_l"], "trashed": "2026-05-01T09:00"},
+        {"key": "crayfish_2025", "name": "Crayfish party", "start": "2025-08-22T18:00", "end": "2025-08-22T23:00",
+         "attendees": ["karin", "johan_b", "gunnar"]},
+        {"key": "berlin_flight", "name": "Flight to Berlin", "start": "2026-09-04T07:10", "end": "2026-09-04T08:20",
+         "attendees": ["ahmed", "david", "lena"], "description": "SK 2675 from Kastrup"},
+        {"key": "micke_coffee", "name": "Coffee with Micke", "start": "2026-07-15T15:30", "end": "2026-07-15T16:00",
+         "attendees": ["mikael"]},
+        # warehouse
+        {"key": "inventory", "name": "Summer inventory count", "start": "2026-07-21T06:00", "end": "2026-07-21T14:00",
+         "attendees": ["johan_n", "mikael", "fatima"], "description": "all aisles, scanners from the office"},
+        {"key": "forklift_training", "name": "Forklift refresher training", "start": "2026-07-22T08:00",
+         "end": "2026-07-22T12:00", "attendees": ["fatima", "dragan", "olle"], "description": "yard behind gate 2"},
+        {"key": "safety_walk", "name": "Safety walk with Olle", "start": "2026-07-14T10:00", "end": "2026-07-14T11:00",
+         "attendees": ["olle"]},
+        {"key": "linnea_1on1", "name": "1:1 with Linnea", "start": "2026-07-16T13:00", "end": "2026-07-16T13:30",
+         "attendees": ["linnea"]},
+        {"key": "appraisal", "name": "Appraisal with Johan", "start": "2026-07-08T10:00", "end": "2026-07-08T11:00",
+         "attendees": ["johan_n"]},
+        {"key": "aisha_intro", "name": "Aisha's first late shift", "start": "2026-07-06T14:00",
+         "end": "2026-07-06T15:00", "attendees": ["aisha", "fatima"]},
+        # padel
+        {"key": "padel_final", "name": "Padel league final", "start": "2026-08-29T10:00", "end": "2026-08-29T13:00",
+         "attendees": ["erik_s", "hanna", "tobias", "mats"], "description": "Padelcenter Hyllie"},
+        {"key": "padel_bbq", "name": "Padel club barbecue", "start": "2026-07-11T17:00", "end": "2026-07-11T21:00",
+         "attendees": ["erik_s", "erik_l", "hanna", "tobias"]},
+        {"key": "padel_doubles", "name": "Doubles practice with Erik", "start": "2026-07-16T18:00",
+         "end": "2026-07-16T19:00", "attendees": ["erik_s"]},
+    ]
+    return out
+
+
+def tasks():
+    t = [
+        # home
+        {"key": "dishwasher", "name": "Fix the dishwasher", "due": "2026-07-16", "priority": 2, "effort": 60,
+         "list": "home_l", "description": "error E24, check the drain filter"},
+        {"key": "smoke_alarm", "name": "Change smoke alarm batteries", "due": "2026-07-15", "effort": 10, "list": "home_l"},
+        {"key": "car_insurance", "name": "Renew car insurance", "due": "2026-07-31", "priority": 1, "effort": 30,
+         "list": "home_l"},
+        {"key": "parking_fine", "name": "Pay parking fine", "due": "2026-07-03", "effort": 5, "list": "home_l"},
+        {"key": "gutter", "name": "Clean the gutters", "due": "2026-06-20", "completed": "2026-06-21T11:00",
+         "list": "home_l"},
+        # summer house
+        {"key": "fence", "name": "Paint the summer house fence", "status": "in_progress", "priority": 3, "effort": 480,
+         "list": "sh_l", "description": "falu red, two coats"},
+        {"key": "hose", "name": "Buy new garden hose", "due": "2026-07-24", "effort": 20, "list": "sh_l"},
+        {"key": "sh_share", "name": "Transfer summer house share to Karin", "due": "2026-07-26", "priority": 1,
+         "effort": 10, "list": "sh_l"},
+        {"key": "book_plumber", "name": "Book plumber for the sink", "due": "2026-07-10",
+         "completed": "2026-07-09T08:00", "list": "sh_l"},
+        {"key": "roof_tile", "name": "Fix the leaking roof tile", "due": "2026-07-25", "priority": 1, "effort": 120,
+         "list": "shr_l"},
+        {"key": "sauna", "name": "Replace the sauna stove", "status": "cancelled", "effort": 240, "list": "shr_l"},
+        {"key": "shutters", "name": "Oil the window shutters", "due": "2026-08-08", "priority": 4, "effort": 90,
+         "list": "shr_l"},
+        # warehouse
+        {"key": "aug_schedule", "name": "Shift schedule for August", "due": "2026-07-20", "priority": 1, "effort": 90,
+         "status": "in_progress", "list": "work_l", "description": "late shift, cover the holiday gaps"},
+        {"key": "holiday_req", "name": "Collect holiday requests", "parent": "aug_schedule", "due": "2026-07-15",
+         "effort": 30},
+        {"key": "licences", "name": "Check forklift licences", "parent": "aug_schedule", "due": "2026-07-17",
+         "effort": 45},
+        {"key": "send_sched", "name": "Send schedule to Johan", "parent": "aug_schedule", "due": "2026-07-20",
+         "effort": 15},
+        {"key": "inv_prep", "name": "Prepare the inventory count", "due": "2026-07-20", "priority": 1, "effort": 120,
+         "list": "work_l", "description": "print aisle sheets, charge the scanners"},
+        {"key": "racking", "name": "Report broken pallet racking", "due": "2026-07-10",
+         "completed": "2026-07-09T22:00", "list": "work_l"},
+        {"key": "vests", "name": "Order new safety vests", "priority": 3, "effort": 15, "list": "work_l"},
+        {"key": "onboard", "name": "Onboard Aisha", "status": "in_progress", "effort": 240, "list": "work_l",
+         "description": "buddy with Fatima for two weeks"},
+        {"key": "sick_report", "name": "Send the sick leave report", "due": "2026-07-14", "effort": 20, "list": "work_l"},
+        {"key": "scanners", "name": "Return broken scanners", "due": "2026-07-17", "effort": 15, "priority": 2},
+        # padel
+        {"key": "court_1", "name": "Book padel court", "due": "2026-07-16", "effort": 5, "list": "padel_l"},
+        {"key": "court_2", "name": "Book padel court", "due": "2026-07-08", "completed": "2026-07-07T09:00",
+         "list": "padel_l"},
+        {"key": "balls", "name": "Buy new padel balls", "due": "2026-07-14", "effort": 10, "list": "padel_l"},
+        {"key": "league_fee", "name": "Pay the league fee", "due": "2026-05-01", "completed": "2026-04-28T20:00",
+         "list": "padel_l"},
+        # school
+        {"key": "backpack", "name": "Buy a school backpack", "due": "2026-08-10", "effort": 30, "list": "school_l"},
+        {"key": "labels", "name": "Label Elias's clothes for camp", "due": "2026-07-12",
+         "completed": "2026-07-12T19:00", "list": "school_l"},
+        {"key": "swim_signup", "name": "Sign Elias up for swimming", "completed": "2026-06-01T12:00",
+         "list": "school_l"},
+        {"key": "fritids_form", "name": "Hand in the fritids form", "due": "2026-08-01", "priority": 2, "effort": 15,
+         "list": "school_l"},
+        # shopping
+        {"key": "mamma_gift", "name": "Buy birthday present for Mamma", "due": "2026-07-24", "priority": 2,
+         "effort": 60, "list": "shop_l", "description": "the glass bowl from Kosta she liked"},
+        {"key": "sunscreen", "name": "Buy sunscreen", "effort": 5, "list": "shop_l"},
+        {"key": "charcoal", "name": "Buy charcoal", "due": "2026-07-18", "effort": 10, "list": "shop_l"},
+        # party
+        {"key": "party", "name": "Mamma's 70th", "due": "2026-07-25", "priority": 2, "status": "in_progress"},
+        {"key": "cake", "name": "Order the cake", "parent": "party", "due": "2026-07-20", "effort": 15},
+        {"key": "speech", "name": "Write a speech", "parent": "party", "due": "2026-07-24", "effort": 60},
+        # misc
+        {"key": "agency", "name": "Call the adoption agency about Elias's file", "due": "2026-07-15", "priority": 2,
+         "effort": 20, "description": "ask for the translated medical records"},
+        {"key": "passport", "name": "Renew my passport", "due": "2026-09-01", "priority": 3, "effort": 90},
+        {"key": "photos_nour", "name": "Send photos to Nour", "due": "2026-07-14", "effort": 15},
+        {"key": "anniv_plan", "name": "Plan the anniversary dinner", "due": "2026-07-10",
+         "completed": "2026-07-05T21:00"},
+        {"key": "plants", "name": "Water Karin's plants", "due": "2026-07-18", "effort": 15},
+        {"key": "guest_room", "name": "Renovate the guest room", "status": "cancelled", "priority": 5},
+        {"key": "bike", "name": "Sell the old bike", "list": "home_l", "trashed": "2026-07-05T10:00"},
+        {"key": "gym", "name": "Cancel gym membership", "trashed": "2026-05-15T10:00"},
+    ]
+    # electricity bill, monthly on the 25th
+    for m in range(3, 7):
+        t.append({"key": f"el_{m:02d}", "name": "Pay electricity bill", "due": f"2026-{m:02d}-25",
+                  "completed": f"2026-{m:02d}-24T20:00", "list": "home_l", "effort": 5})
+    t.append({"key": "el_07", "name": "Pay electricity bill", "due": "2026-07-25", "list": "home_l", "effort": 5})
+    # fritids fee, monthly on the 28th
+    for m in (5, 6):
+        t.append({"key": f"fee_{m:02d}", "name": "Pay the fritids fee", "due": f"2026-{m:02d}-28",
+                  "completed": f"2026-{m:02d}-27T19:00"})
+    t.append({"key": "fee_07", "name": "Pay the fritids fee", "due": "2026-07-28"})
+    return t
+
+
+NOTEBOOKS = [
+    {"key": "work_nb", "name": "Warehouse"},
+    {"key": "padel_nb", "name": "Padel tactics"},
+    {"key": "adoption_nb", "name": "Adoption"},
+    {"key": "recipes_nb", "name": "Recipes"},
+    {"key": "sh_nb", "name": "Summer house log"},
+    {"key": "journal_nb", "name": "Old journal"},
+]
+
+NOTES = [
+    {"key": "late_rota", "name": "Late shift rota", "body": "Fatima and Dragan on forklifts, Aisha on picking",
+     "notebook": "work_nb", "created": "2026-07-06T15:00", "pinned": True},
+    {"key": "racking_note", "name": "Racking damage", "body": "aisle 14 upright bent, reported to Johan",
+     "notebook": "work_nb", "created": "2026-07-09T22:10"},
+    {"key": "inv_plan", "name": "Inventory plan", "body": "start with aisles 1 to 20, bulk area after lunch",
+     "notebook": "work_nb", "created": "2026-07-12T22:10"},
+    {"key": "appraisal_notes", "name": "Appraisal notes", "body": "wants me on the lean project in autumn",
+     "notebook": "work_nb", "created": "2026-07-08T11:30"},
+    {"key": "serve", "name": "Serve returns", "body": "stay back on the glass, lob to Hanna's backhand",
+     "notebook": "padel_nb", "created": "2026-07-07T21:30"},
+    {"key": "lineup", "name": "League lineup", "body": "me and Erik first, Mats and Tobbe second",
+     "notebook": "padel_nb", "created": "2026-07-09T20:00", "pinned": True},
+    {"key": "agency_q", "name": "Questions for the agency", "body": "medical records, birth certificate translation",
+     "notebook": "adoption_nb", "created": "2026-07-02T21:00"},
+    {"key": "elias_story", "name": "Elias's story book", "body": "photos from the orphanage, the flight home",
+     "notebook": "adoption_nb", "created": "2026-05-20T20:00", "pinned": True},
+    {"key": "jonas_notes", "name": "Notes from Jonas", "body": "talk openly, let Elias lead the questions",
+     "notebook": "adoption_nb", "created": "2026-06-10T19:00"},
+    {"key": "meatballs", "name": "Mamma's meatballs", "body": "half pork half beef, allspice, fry in butter",
+     "notebook": "recipes_nb", "created": "2026-03-14T18:00"},
+    {"key": "maqluba", "name": "Nour's maqluba", "body": "aubergine, cauliflower, flip the pot at the table",
+     "notebook": "recipes_nb", "created": "2026-06-28T13:00"},
+    {"key": "rhubarb", "name": "Rhubarb pie", "body": "oat crumble, vanilla sauce", "notebook": "recipes_nb",
+     "created": "2026-05-30T16:00"},
+    {"key": "sh_water", "name": "Water meter readings", "body": "June 1432, July 1468", "notebook": "sh_nb",
+     "created": "2026-07-05T10:00"},
+    {"key": "sh_keys", "name": "Who has keys", "body": "Karin two, me one, Gunnar the spare",
+     "notebook": "sh_nb", "created": "2026-04-12T12:00"},
+    {"key": "gift_ideas", "name": "Gift ideas for Mamma", "body": "Kosta glass bowl, theatre tickets",
+     "created": "2026-07-10T21:00"},
+    {"key": "anniv_ideas", "name": "Anniversary ideas", "body": "Västra Hamnen, then a walk on the pier",
+     "created": "2026-07-01T22:00"},
+    {"key": "speech_draft", "name": "Speech draft", "body": "70 years, the summer in Skagen, Pappa's boat",
+     "created": "2026-07-13T20:30"},
+    {"key": "camp_info", "name": "Football camp info", "body": "9 to 16 every day, bring lunch and shin pads",
+     "created": "2026-07-10T08:00"},
+    {"key": "berlin_plan", "name": "Berlin plan", "body": "Kreuzberg hotel, Sunday market, David books dinner",
+     "created": "2026-06-20T21:00"},
+    {"key": "padel_scores", "name": "Padel scores", "body": "won 6-3 6-4 on 7 July", "created": "2026-07-07T21:00"},
+    {"key": "car_notes", "name": "Car notes", "body": "service due at 60000 km, winter tyres in the garage",
+     "created": "2026-06-30T18:00"},
+    {"key": "wifi_summer", "name": "Summer house router", "body": "restart the box in the hall cupboard",
+     "created": "2026-06-18T12:00"},
+    {"key": "old_budget", "name": "Old budget", "body": "2025 household budget", "created": "2025-12-01T10:00",
+     "trashed": "2026-07-04T10:00"},
+    {"key": "old_rota", "name": "Old rota", "body": "spring rota", "created": "2026-03-01T10:00",
+     "trashed": "2026-05-25T10:00"},
+]
+
+FOLDERS = [
+    {"key": "home_f", "name": "Home"},
+    {"key": "work_f", "name": "IKEA"},
+    {"key": "adopt_f", "name": "Adoption papers"},
+    {"key": "sh_f", "name": "Summer house"},
+    {"key": "car_f", "name": "Car"},
+    {"key": "old_f", "name": "Old stuff"},
+]
+
+DOCUMENTS = [
+    {"key": "lease", "name": "Apartment contract", "folder": "home_f", "created": "2023-03-01T10:00", "starred": True},
+    {"key": "home_ins", "name": "Home insurance policy", "folder": "home_f", "created": "2026-01-10T10:00"},
+    {"key": "tax_2025", "name": "Tax return 2025", "folder": "home_f", "created": "2026-04-30T21:00"},
+    {"key": "contract", "name": "Employment contract", "folder": "work_f", "created": "2019-08-15T10:00",
+     "starred": True},
+    {"key": "payslip_jun", "name": "Payslip June", "folder": "work_f", "created": "2026-06-25T08:00"},
+    {"key": "payslip_may", "name": "Payslip May", "folder": "work_f", "created": "2026-05-25T08:00"},
+    {"key": "forklift_cert", "name": "Forklift licence", "folder": "work_f", "created": "2024-02-02T10:00"},
+    {"key": "adoption_decision", "name": "Adoption decision", "folder": "adopt_f", "created": "2020-11-03T10:00",
+     "starred": True},
+    {"key": "birth_cert", "name": "Elias's birth certificate", "folder": "adopt_f", "created": "2020-11-03T10:05"},
+    {"key": "medical_rec", "name": "Elias's medical records", "folder": "adopt_f", "created": "2026-07-02T09:30"},
+    {"key": "deed", "name": "Summer house deed", "folder": "sh_f", "created": "2024-04-01T10:00", "starred": True},
+    {"key": "co_owner", "name": "Co-ownership agreement", "folder": "sh_f", "created": "2024-04-01T10:30"},
+    {"key": "car_reg", "name": "Car registration", "folder": "car_f", "created": "2022-05-10T10:00"},
+    {"key": "service_book", "name": "Service booklet", "folder": "car_f", "created": "2026-07-01T17:00"},
+    {"key": "scan_1", "name": "Scan 0417", "created": "2026-07-12T21:40"},
+    {"key": "scan_2", "name": "Scan 0418", "created": "2026-07-12T21:41"},
+    {"key": "camp_form", "name": "Football camp form", "created": "2026-07-06T19:00"},
+    {"key": "berlin_booking", "name": "Berlin hotel booking", "created": "2026-06-20T20:30"},
+    {"key": "old_payslip", "name": "Payslip April", "folder": "work_f", "created": "2026-04-25T08:00",
+     "trashed": "2026-07-06T09:00"},
+    {"key": "old_lease", "name": "Old lease Möllevången", "folder": "home_f", "created": "2021-01-01T10:00",
+     "trashed": "2026-05-02T09:00"},
+]
+
+ALBUMS = [
+    {"key": "elias_al", "name": "Elias"},
+    {"key": "padel_al", "name": "Padel 2026"},
+    {"key": "sh_al", "name": "Summer house"},
+    {"key": "midsummer_al", "name": "Midsummer"},
+    {"key": "work_al", "name": "Warehouse team"},
+    {"key": "berlin_al", "name": "Berlin 2025"},
+    {"key": "crayfish_al", "name": "Crayfish 2026"},
+]
+
+PHOTOS = [
+    {"key": "p_cinema", "name": "Elias with popcorn", "taken": "2026-07-12T15:10", "albums": ["elias_al"],
+     "people": ["elias"]},
+    {"key": "p_camp", "name": "First day of football camp", "taken": "2026-07-13T09:05", "albums": ["elias_al"],
+     "people": ["elias"], "starred": True},
+    {"key": "p_swim", "name": "Elias in the pool", "taken": "2026-07-07T17:20", "albums": ["elias_al"],
+     "people": ["elias"]},
+    {"key": "p_bday7", "name": "Elias turns seven", "taken": "2026-03-02T16:00", "albums": ["elias_al"],
+     "people": ["elias", "ahmed", "birgitta", "lennart"], "starred": True},
+    {"key": "p_bike", "name": "Elias on the new bike", "taken": "2026-05-16T11:00", "albums": ["elias_al"],
+     "people": ["elias", "ahmed"]},
+    {"key": "p_gotcha", "name": "Gotcha day cake", "taken": "2025-11-03T18:00", "albums": ["elias_al"],
+     "people": ["elias", "ahmed"], "starred": True},
+    {"key": "p_trophy", "name": "Round robin winners", "taken": "2026-06-30T20:40", "albums": ["padel_al"],
+     "people": ["erik_s"], "starred": True},
+    {"key": "p_bbq", "name": "Padel barbecue", "taken": "2026-07-11T19:00", "albums": ["padel_al"],
+     "people": ["erik_s", "erik_l", "hanna", "tobias"]},
+    {"key": "p_court", "name": "Court 3 at Hyllie", "taken": "2026-07-07T19:05", "albums": ["padel_al"]},
+    {"key": "p_team", "name": "League team photo", "taken": "2026-05-05T18:50", "albums": ["padel_al"],
+     "people": ["erik_s", "hanna", "tobias", "mats"]},
+    {"key": "p_dock", "name": "The jetty at sunset", "taken": "2026-06-20T22:10", "albums": ["sh_al"],
+     "starred": True},
+    {"key": "p_fence", "name": "Half-painted fence", "taken": "2026-07-05T14:00", "albums": ["sh_al"]},
+    {"key": "p_garden", "name": "Apple tree in bloom", "taken": "2026-05-10T12:00", "albums": ["sh_al"]},
+    {"key": "p_roof", "name": "Roof tile damage", "taken": "2026-07-05T13:30", "albums": ["sh_al"]},
+    {"key": "p_pole", "name": "Dancing round the maypole", "taken": "2026-06-19T15:00",
+     "albums": ["midsummer_al", "sh_al"], "people": ["elias", "karin", "ahmed"]},
+    {"key": "p_herring", "name": "Midsummer lunch table", "taken": "2026-06-19T13:00", "albums": ["midsummer_al"],
+     "people": ["birgitta", "lennart", "karin", "johan_b"]},
+    {"key": "p_wreath", "name": "Elias with a flower wreath", "taken": "2026-06-19T14:00",
+     "albums": ["midsummer_al", "elias_al"], "people": ["elias"], "starred": True},
+    {"key": "p_team_w", "name": "Late shift crew", "taken": "2026-06-12T22:00", "albums": ["work_al"],
+     "people": ["fatima", "dragan", "mikael", "olle"]},
+    {"key": "p_racking", "name": "Bent upright aisle 14", "taken": "2026-07-09T21:50", "albums": ["work_al"]},
+    {"key": "p_aisha", "name": "Aisha's first shift", "taken": "2026-07-06T14:30", "albums": ["work_al"],
+     "people": ["aisha", "fatima"]},
+    {"key": "p_wall", "name": "East Side Gallery", "taken": "2025-09-13T11:00", "albums": ["berlin_al"],
+     "people": ["ahmed"]},
+    {"key": "p_currywurst", "name": "Currywurst stand", "taken": "2025-09-13T13:00", "albums": ["berlin_al"],
+     "people": ["ahmed", "david"]},
+    {"key": "p_tv", "name": "TV tower at night", "taken": "2025-09-14T21:00", "albums": ["berlin_al"]},
+    {"key": "p_lund", "name": "Mamma and Pappa in the garden", "taken": "2026-07-08T18:30",
+     "people": ["birgitta", "lennart"]},
+    {"key": "p_ribersborg", "name": "Ribersborg beach", "taken": "2026-07-10T16:00", "people": ["ahmed", "elias"]},
+    {"key": "p_bridge", "name": "Öresund bridge from the beach", "taken": "2026-07-10T16:20"},
+    {"key": "p_turning", "name": "Turning Torso", "taken": "2026-07-01T20:00"},
+    {"key": "p_receipt", "name": "Receipt from the hardware store", "taken": "2026-07-05T11:00"},
+    {"key": "p_whiteboard", "name": "Rota whiteboard", "taken": "2026-07-06T15:10"},
+    {"key": "p_picnic", "name": "Picnic in Slottsparken", "taken": "2026-06-14T12:30",
+     "people": ["maria", "david", "lena", "elias"]},
+    {"key": "p_samira", "name": "Samira at Nour's", "taken": "2026-06-28T13:30", "people": ["samira", "nour"]},
+    {"key": "p_anniv", "name": "Wedding day", "taken": "2021-07-18T16:00", "people": ["ahmed"], "starred": True},
+    {"key": "p_blurry", "name": "Blurry jetty", "taken": "2026-06-20T22:11", "albums": ["sh_al"],
+     "trashed": "2026-07-02T09:00"},
+    {"key": "p_dup", "name": "Duplicate beach shot", "taken": "2026-07-10T16:01", "trashed": "2026-07-11T09:00"},
+    {"key": "p_old", "name": "Old office party", "taken": "2024-12-13T21:00", "trashed": "2026-05-30T09:00"},
+]
+
+DEBTS = [
+    {"key": "d_erik", "person": "erik_s", "direction": "owes_me", "amount": 300, "name": "Court share",
+     "date": "2026-07-07"},
+    {"key": "d_tobias", "person": "tobias", "direction": "owes_me", "amount": 250, "name": "Padel balls",
+     "date": "2026-07-11"},
+    {"key": "d_hanna", "person": "hanna", "direction": "owes_me", "amount": 250, "name": "Barbecue meat",
+     "date": "2026-07-11"},
+    {"key": "d_karin", "person": "karin", "direction": "i_owe", "amount": 1200, "name": "Ferry tickets",
+     "date": "2026-06-18"},
+    {"key": "d_david", "person": "david", "direction": "i_owe", "amount": 450, "name": "Concert tickets",
+     "date": "2026-06-05"},
+    {"key": "d_micke", "person": "mikael", "direction": "owes_me", "amount": 120, "name": "Lunch at the canteen",
+     "date": "2026-07-10"},
+    {"key": "d_gunnar", "person": "gunnar", "direction": "i_owe", "amount": 800, "name": "Ladder and paint",
+     "date": "2026-07-05"},
+    {"key": "d_samira", "person": "samira", "direction": "owes_me", "amount": 2000, "name": "Train tickets",
+     "date": "2026-05-28"},
+    {"key": "d_johan_b", "person": "johan_b", "direction": "owes_me", "amount": 650, "name": "Wood stain",
+     "date": "2026-06-06", "settled": "2026-06-20T12:00"},
+    {"key": "d_fatima", "person": "fatima", "direction": "i_owe", "amount": 90, "name": "Coffee",
+     "date": "2026-07-12"},
+    {"key": "d_lena", "person": "lena", "direction": "owes_me", "amount": 500, "name": "Babysitter share",
+     "date": "2026-04-18", "settled": "2026-05-02T10:00"},
+    {"key": "d_mats", "person": "mats", "direction": "i_owe", "amount": 250, "name": "Grip tape",
+     "date": "2026-07-13"},
+]
+
+LOCKER = [
+    {"key": "bankid", "name": "Swedbank", "type": "login", "username": "sven.lindqvist",
+     "url": "https://www.swedbank.se", "password": "Hyllie-Padel-44", "starred": True, "notes": "personal"},
+    {"key": "ikea_portal", "name": "IKEA co-worker portal", "type": "login", "username": "svlin2",
+     "url": "https://coworker.ikea.com", "password": "Gate4-Late-Shift!", "notes": "work"},
+    {"key": "matchi", "name": "Matchi padel booking", "type": "login", "username": "svenpadel",
+     "url": "https://www.matchi.se", "password": "Torso-Lob-19"},
+    {"key": "visa", "name": "Swedbank Visa", "type": "card", "card_number": "4571 2200 1133 9870", "cvv": "318",
+     "starred": True},
+    {"key": "alarm", "name": "Summer house alarm", "type": "note", "notes": "code 2-4-6-0, panel behind the door"},
+    {"key": "id_card", "name": "ID card", "type": "identity", "password": "19850312-4471"},
+    {"key": "wifi", "name": "Home wifi", "type": "wifi", "password": "elias-rocket-2019"},
+    {"key": "wifi_sh", "name": "Summer house wifi", "type": "wifi", "password": "osterlen-apple-7"},
+    {"key": "locker_pin", "name": "Staff locker code", "type": "password", "password": "7719"},
+    {"key": "nas_key", "name": "Home NAS key", "type": "ssh_key", "notes": "photo backup box"},
+    {"key": "weather_api", "name": "Weather station API", "type": "api_credential", "notes": "summer house sensor"},
+    {"key": "passport_l", "name": "Swedish passport", "type": "passport", "notes": "expires September 2026"},
+    {"key": "savings", "name": "Summer house account", "type": "bank_account", "notes": "shared with Karin"},
+    {"key": "licence", "name": "Driving licence", "type": "driving_licence", "notes": "B and forklift endorsement"},
+    {"key": "office_lic", "name": "Office 365 family", "type": "software_licence", "notes": "renews in October"},
+    {"key": "crypto", "name": "Bitcoin wallet", "type": "crypto_wallet", "notes": "small, from 2021"},
+    {"key": "gym_card", "name": "Padelcenter membership", "type": "membership", "notes": "Hyllie, gold level",
+     "starred": True},
+    {"key": "fsk", "name": "Försäkringskassan papers", "type": "document", "notes": "parental leave decisions"},
+    {"key": "old_tele2", "name": "Old Tele2 login", "type": "login", "username": "svenl85",
+     "url": "https://www.tele2.se", "password": "Moller-85", "trashed": "2026-05-10T09:00"},
+    {"key": "old_spotify", "name": "Spotify family", "type": "login", "username": "sven.ahmed",
+     "url": "https://www.spotify.com", "password": "Kastrup-Beat-3", "trashed": "2026-07-07T09:00"},
+]
+
+LINKS = [
+    {"from": "dishwasher", "to": "ahmed"},
+    {"from": "sh_share", "to": "karin"},
+    {"from": "roof_tile", "to": "johan_b"},
+    {"from": "roof_tile", "to": "kent"},
+    {"from": "fence", "to": "johan_b"},
+    {"from": "aug_schedule", "to": "johan_n"},
+    {"from": "send_sched", "to": "johan_n"},
+    {"from": "licences", "to": "fatima"},
+    {"from": "licences", "to": "dragan"},
+    {"from": "onboard", "to": "aisha"},
+    {"from": "onboard", "to": "fatima"},
+    {"from": "court_1", "to": "erik_s"},
+    {"from": "mamma_gift", "to": "birgitta"},
+    {"from": "party", "to": "birgitta"},
+    {"from": "agency", "to": "jonas"},
+    {"from": "photos_nour", "to": "nour"},
+    {"from": "plants", "to": "karin"},
+    {"from": "backpack", "to": "elias"},
+    {"from": "fritids_form", "to": "elias"},
+    {"from": "late_rota", "to": "fatima"},
+    {"from": "late_rota", "to": "dragan"},
+    {"from": "late_rota", "to": "aisha"},
+    {"from": "racking_note", "to": "johan_n"},
+    {"from": "appraisal_notes", "to": "johan_n"},
+    {"from": "serve", "to": "hanna"},
+    {"from": "lineup", "to": "erik_s"},
+    {"from": "lineup", "to": "mats"},
+    {"from": "lineup", "to": "tobias"},
+    {"from": "jonas_notes", "to": "jonas"},
+    {"from": "agency_q", "to": "jonas"},
+    {"from": "meatballs", "to": "birgitta"},
+    {"from": "maqluba", "to": "nour"},
+    {"from": "sh_keys", "to": "karin"},
+    {"from": "sh_keys", "to": "gunnar"},
+    {"from": "gift_ideas", "to": "birgitta"},
+    {"from": "anniv_ideas", "to": "ahmed"},
+    {"from": "speech_draft", "to": "birgitta"},
+    {"from": "speech_draft", "to": "lennart"},
+    {"from": "berlin_plan", "to": "david"},
+    {"from": "padel_scores", "to": "erik_s"},
+]
+
+
+def world():
+    return {
+        "me": "Sven Lindqvist",
+        "epoch": "2023-01-01T09:00",
+        "seed": "T22",
+        "currency": "SEK",
+        "people": people(),
+        "groups": GROUPS,
+        "expenses": EXPENSES,
+        "lists": LISTS,
+        "events": events(),
+        "tasks": tasks(),
+        "notebooks": NOTEBOOKS,
+        "notes": NOTES,
+        "folders": FOLDERS,
+        "documents": DOCUMENTS,
+        "albums": ALBUMS,
+        "photos": PHOTOS,
+        "debts": DEBTS,
+        "locker": LOCKER,
+        "links": LINKS,
+    }
+
+
+def check_overlaps(evs):
+    spans = []
+    for e in evs:
+        if e.get("trashed"):
+            continue
+        s = datetime.fromisoformat(e["start"])
+        f = datetime.fromisoformat(e["end"])
+        spans.append((s, f, e["key"]))
+    spans.sort()
+    end, last = None, None
+    for s1, f1, k1 in spans:
+        assert end is None or end <= s1, f"overlap {last} / {k1}"
+        if end is None or f1 > end:
+            end, last = f1, k1
+
+
+def check_keys(w):
+    keys = []
+    for v in w.values():
+        if isinstance(v, list):
+            keys += [r["key"] for r in v if isinstance(r, dict) and "key" in r]
+    dup = {k for k in keys if keys.count(k) > 1}
+    assert not dup, dup
+
+
+if __name__ == "__main__":
+    w = world()
+    check_overlaps(w["events"])
+    check_keys(w)
+    out = HERE / "T22.json"
+    out.write_text(json.dumps(w, indent=1, ensure_ascii=False) + "\n")
+    print(f"wrote {out}: " + ", ".join(f"{k} {len(v)}" for k, v in w.items() if isinstance(v, list)))

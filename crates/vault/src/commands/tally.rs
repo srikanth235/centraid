@@ -324,9 +324,10 @@ fn write_payers(
     )?;
     for (party_id, paid) in payers {
         ctx.connection().execute(
-            "INSERT INTO tally_expense_payer (expense_id, party_id, paid_minor)
-             VALUES (?1, ?2, ?3)",
-            rusqlite::params![expense_id, party_id, paid],
+            "INSERT INTO tally_expense_payer
+               (expense_id, party_id, paid_minor, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?4)",
+            rusqlite::params![expense_id, party_id, paid, ctx.now],
         )?;
     }
     Ok(())
@@ -360,9 +361,10 @@ fn write_splits(
     )?;
     for (party_id, share) in splits {
         ctx.connection().execute(
-            "INSERT INTO tally_expense_split (expense_id, party_id, share_minor)
-             VALUES (?1, ?2, ?3)",
-            rusqlite::params![expense_id, party_id, share],
+            "INSERT INTO tally_expense_split
+               (expense_id, party_id, share_minor, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?4)",
+            rusqlite::params![expense_id, party_id, share, ctx.now],
         )?;
     }
     Ok(())
@@ -447,8 +449,8 @@ fn write_line_items(
         ctx.connection().execute(
             "INSERT INTO tally_expense_line_item
                (line_item_id, expense_id, receipt_id, kind, description, amount_minor,
-                sort_order, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                sort_order, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
             rusqlite::params![
                 line_item_id,
                 expense_id,
@@ -622,10 +624,10 @@ fn insert_expense_row(
     ctx.connection().execute(
         "INSERT INTO tally_expense
            (expense_id, group_id, description, amount_minor, currency, paid_by, spent_on,
-            category, split_method, split_params_json, created_at,
+            category, split_method, split_params_json, created_at, updated_at,
             original_amount_minor, original_currency,
             settlement_currency, rate_scaled, rate_scale, rate_source, rate_date)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
         rusqlite::params![
             expense_id,
             group_id,
@@ -799,8 +801,8 @@ fn record_expense_revision(
     ctx.connection().execute(
         "INSERT INTO core_entity_revision
            (revision_id, entity_type, entity_id, operation, snapshot_json,
-            recorded_at, undo_until, undone_at, actor_party_id, invocation_id)
-         VALUES (?1, 'tally.expense', ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8)",
+            recorded_at, undo_until, undone_at, actor_party_id, invocation_id, updated_at)
+         VALUES (?1, 'tally.expense', ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8, ?5)",
         rusqlite::params![
             revision_id,
             expense_id,
@@ -833,7 +835,8 @@ fn restore_expense_snapshot(
                 split_params_json = ?5, spent_on = ?6, category = ?7,
                 original_amount_minor = ?8, original_currency = ?9,
                 settlement_currency = ?10, rate_scaled = ?11, rate_scale = ?12,
-                rate_source = ?13, rate_date = ?14, deleted_at = ?15, purge_at = ?16
+                rate_source = ?13, rate_date = ?14, deleted_at = ?15, purge_at = ?16,
+                updated_at = ?18, row_version = row_version + 1
           WHERE expense_id = ?17",
         rusqlite::params![
             text("description"),
@@ -853,6 +856,7 @@ fn restore_expense_snapshot(
             text("deleted_at"),
             text("purge_at"),
             expense_id,
+            ctx.now,
         ],
     )?;
     ctx.connection().execute(
@@ -861,12 +865,14 @@ fn restore_expense_snapshot(
     )?;
     for split in snapshot["splits"].as_array().into_iter().flatten() {
         ctx.connection().execute(
-            "INSERT INTO tally_expense_split (expense_id, party_id, share_minor)
-             VALUES (?1, ?2, ?3)",
+            "INSERT INTO tally_expense_split
+               (expense_id, party_id, share_minor, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?4)",
             rusqlite::params![
                 expense_id,
                 split.get("party_id").and_then(serde_json::Value::as_str),
                 split.get("share_minor").and_then(serde_json::Value::as_i64),
+                ctx.now,
             ],
         )?;
     }
@@ -897,9 +903,10 @@ fn restore_expense_snapshot(
     };
     for (party_id, paid) in payers {
         ctx.connection().execute(
-            "INSERT INTO tally_expense_payer (expense_id, party_id, paid_minor)
-             VALUES (?1, ?2, ?3)",
-            rusqlite::params![expense_id, party_id, paid],
+            "INSERT INTO tally_expense_payer
+               (expense_id, party_id, paid_minor, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?4)",
+            rusqlite::params![expense_id, party_id, paid, ctx.now],
         )?;
     }
     if let Some(lines) = snapshot.get("lines").and_then(serde_json::Value::as_array) {
@@ -915,8 +922,8 @@ fn restore_expense_snapshot(
             ctx.connection().execute(
                 "INSERT INTO tally_expense_line_item
                    (line_item_id, expense_id, receipt_id, kind, description, amount_minor,
-                    sort_order, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    sort_order, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
                 rusqlite::params![
                     line_item_id,
                     expense_id,
@@ -2132,7 +2139,8 @@ fn edit_expense() -> CommandDefinition {
                         spent_on = COALESCE(?6, spent_on), category = ?7,
                         original_amount_minor = ?8, original_currency = ?9,
                         settlement_currency = ?10, rate_scaled = ?11, rate_scale = ?12,
-                        rate_source = ?13, rate_date = ?14
+                        rate_source = ?13, rate_date = ?14,
+                        updated_at = ?16, row_version = row_version + 1
                   WHERE expense_id = ?15",
                 rusqlite::params![
                     ctx.required_str("description")?,
@@ -2150,6 +2158,7 @@ fn edit_expense() -> CommandDefinition {
                     rate_source.unwrap_or_else(|| "identity".to_owned()),
                     rate_date,
                     expense_id,
+                    ctx.now,
                 ],
             )?;
             write_payers(ctx, &expense_id, group_id.as_deref(), &payers, &allowed)?;
@@ -2222,7 +2231,9 @@ fn delete_expense() -> CommandDefinition {
             let (revision_id, undo_until) =
                 record_expense_revision(ctx, &expense_id, "trash", false)?;
             ctx.connection().execute(
-                "UPDATE tally_expense SET deleted_at = ?1, purge_at = ?2 WHERE expense_id = ?3",
+                "UPDATE tally_expense SET deleted_at = ?1, purge_at = ?2, updated_at = ?1,
+                        row_version = row_version + 1
+                  WHERE expense_id = ?3",
                 rusqlite::params![ctx.now, plus_days(&ctx.now, PURGE_WINDOW_DAYS)?, expense_id],
             )?;
             Ok(serde_json::json!({
@@ -2260,9 +2271,10 @@ fn restore_expense() -> CommandDefinition {
             let expense_id = ctx.required_str("expense_id")?.to_owned();
             record_expense_revision(ctx, &expense_id, "restore", false)?;
             ctx.connection().execute(
-                "UPDATE tally_expense SET deleted_at = NULL, purge_at = NULL
+                "UPDATE tally_expense SET deleted_at = NULL, purge_at = NULL, updated_at = ?2,
+                        row_version = row_version + 1
                   WHERE expense_id = ?1",
-                [&expense_id],
+                rusqlite::params![expense_id, ctx.now],
             )?;
             Ok(serde_json::json!({ "expense_id": expense_id }))
         },

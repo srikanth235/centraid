@@ -1987,8 +1987,10 @@ pub(crate) fn created_row_id(ctx: &CommandCtx<'_, '_>, property: &str) -> String
 
 /// Refuse a minted id the vault already holds. Absent id, no opinion.
 ///
-/// A seat-minted id the vault has seen is a REPLAY or a COLLISION, never an
-/// instruction to overwrite the row someone else is looking at.
+/// A caller-minted id the vault has seen is a repeated offer or a COLLISION,
+/// never an instruction to overwrite the row someone else is looking at. With no
+/// replay ledger (#1029 §1, R-1088-12) this refusal IS what makes a shell's
+/// second offer of a pre-minted id safe, and `docs_commands.rs` pins it.
 pub(crate) fn minted_id_is_free(
     ctx: &CommandCtx<'_, '_>,
     property: &str,

@@ -76,8 +76,12 @@ pub struct Handle {
     /// `None` is a core opened at a path with no file and `create: false` —
     /// a shell asking to open a vault a restore has not written yet. It is a
     /// state the shell draws ("no vault here"), not a failure.
-    vault: Mutex<Option<Vault>>,
-    registry: Registry,
+    ///
+    /// An `Arc` because a chat's native session outlives any one call and
+    /// reaches the vault through [`crate::assist::door::CoreDoor`], which holds
+    /// a clone of this very lock: one lock, one open file, whoever asks.
+    vault: Arc<Mutex<Option<Vault>>>,
+    registry: Arc<Registry>,
     ui_thread_name: Option<String>,
     events: Arc<EventQueue>,
     closed: AtomicBool,
@@ -157,6 +161,10 @@ pub struct Handle {
     /// phone, zeroed on relock, and nothing otherwise. See
     /// [`crate::locker::phone`].
     locker: crate::locker::phone::Cell,
+    /// THE ON-DEVICE CHAT'S SESSIONS AND ITS VIEW OF THE MODEL SLOT. In memory
+    /// only; see [`crate::assist`]. `pub(crate)` because that module is where
+    /// `Request::Assist` is answered.
+    pub(crate) assist: crate::assist::Hub,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -256,8 +264,8 @@ impl Core {
             plane: crate::phone::Plane::of(&path).with_ceiling(spool_ceiling),
             path,
             keys,
-            vault: Mutex::new(vault),
-            registry: Registry::with_system_commands()?,
+            vault: Arc::new(Mutex::new(vault)),
+            registry: Arc::new(Registry::with_system_commands()?),
             ui_thread_name,
             events: Arc::new(EventQueue::new()),
             staging: crate::stage::Staging::default(),
@@ -273,6 +281,7 @@ impl Core {
             reconciled: AtomicBool::new(false),
             owned_bytes: Mutex::new(None),
             locker: Mutex::new(None),
+            assist: crate::assist::Hub::new(),
         })
     }
 
@@ -758,7 +767,7 @@ impl Handle {
 
     /// The command catalogue this core serves.
     #[must_use]
-    pub const fn registry(&self) -> &Registry {
+    pub fn registry(&self) -> &Registry {
         &self.registry
     }
 
@@ -772,7 +781,45 @@ impl Handle {
         centraid_vault::Principal::owner(OWNER_DEVICE)
     }
 
+    /// THE DOOR A CHAT'S NATIVE SESSION READS AND WRITES THROUGH (#1088).
+    ///
+    /// It holds clones of this handle's own lock, registry and event queue, so
+    /// it outlives the call that made it and still reaches the one open vault
+    /// only through [`Self::with_vault`]'s mutex. See
+    /// [`crate::assist::door::CoreDoor`].
+    pub fn assist_door(&self) -> crate::assist::door::CoreDoor {
+        crate::assist::door::CoreDoor::new(
+            Arc::clone(&self.vault),
+            Arc::clone(&self.registry),
+            self.events(),
+            self.owner(),
+        )
+    }
+
+    /// WHETHER THE VAULT THIS CORE HOLDS IS A SAMPLE VAULT, finished or not
+    /// (`centraid_vault::bootstrap::SampleMark`). False for a core holding no
+    /// vault, and for a vault whose mark will not read — a refusal below is a
+    /// guard, and a vault that cannot answer is not one this guard owns.
+    #[must_use]
+    pub fn holds_a_sample(&self) -> bool {
+        self.vault
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .and_then(|vault| vault.sample_mark().ok().flatten())
+            .is_some()
+    }
+
     // ------------------------------------------------------------ internals --
+
+    /// Refuse `what` when this core holds a sample vault. See
+    /// [`CoreError::SampleVault`].
+    fn refuse_a_sample(&self, what: &'static str) -> Result<()> {
+        if self.holds_a_sample() {
+            return Err(CoreError::SampleVault { what });
+        }
+        Ok(())
+    }
 
     fn check_open(&self) -> Result<()> {
         if let Some(diagnostic_id) = self.poisoned_as() {
@@ -851,9 +898,28 @@ impl Handle {
             // `CoreError::Unpaired` when there is no file at all, which is the
             // correct refusal: founding needs a file, and a path that opened is
             // what `create` produced.
-            K::Found(request) => Ok(response(wire::response::Kind::Found(
-                self.with_vault(|vault| crate::api::found(vault, request))?,
-            ))),
+            //
+            // A SAMPLE FOUND SEALS ITS LOCKER UNDER THIS CORE'S OWN KEYS: the
+            // ones derived at open from the member's seed and this vault's
+            // index, lent for the length of the found. A core opened with no
+            // seed lends none, and the sample has no Locker.
+            K::Found(request) => Ok(response(wire::response::Kind::Found(self.with_vault(
+                |vault| {
+                    let changes = crate::events::ChangeFeed::new(self.events());
+                    let sealing = self.keys.as_ref().map(|keys| crate::sample::Sealing {
+                        keys,
+                        cell: &self.locker,
+                        changes: &changes,
+                    });
+                    crate::api::found(
+                        vault,
+                        &self.registry,
+                        &self.owner(),
+                        request,
+                        sealing.as_ref(),
+                    )
+                },
+            )?))),
             K::Command(command) => {
                 let changes = crate::events::ChangeFeed::new(self.events());
                 Ok(response(wire::response::Kind::Command(self.with_vault(
@@ -895,10 +961,20 @@ impl Handle {
             // the vault is held for the snapshot's copy and the reads a pass
             // makes, never across the network, so a screen's reads go on while
             // a backup runs.
-            K::Drain(request) => Ok(response(wire::response::Kind::Drain(self.drain(request)?))),
+            //
+            // A SAMPLE VAULT NEVER DRAINS: no row of the scenario may reach the
+            // member's gateway (R-SAMPLE). Asked before the pass starts, so a
+            // refusal costs nothing.
+            K::Drain(request) => {
+                self.refuse_a_sample("back up")?;
+                Ok(response(wire::response::Kind::Drain(self.drain(request)?)))
+            }
             // PAIRING NEEDS NO VAULT TO BE OPEN: it needs the vault's keys,
             // and keeps the gateway in the ledger beside the file.
+            // A SAMPLE VAULT NEVER PAIRS, for the drain's reason: a paired
+            // vault is one the next pass would back up.
             K::PairPhone(request) => {
+                self.refuse_a_sample("pair")?;
                 let runtime = self.runtime_handle()?;
                 Ok(response(wire::response::Kind::PairPhone(
                     crate::phone::pair::pair(&self.plane, self.keys.as_ref(), request, &runtime)?,
@@ -924,6 +1000,11 @@ impl Handle {
             // mints them before there is a vault to found, and a restore
             // judges them before there is one to lay down. Pure functions of
             // the words and the OS's entropy — see `phone::phrase`.
+            // THE ON-DEVICE CHAT (see `assist.proto`). A turn runs on this
+            // thread and holds the vault only inside a read.
+            K::Assist(request) => Ok(response(wire::response::Kind::Assist(
+                crate::assist::answer(self, request)?,
+            ))),
             K::Phrase(request) => Ok(response(wire::response::Kind::Phrase(
                 crate::phone::phrase::answer(request)?,
             ))),
@@ -941,7 +1022,9 @@ impl Handle {
             )))),
             // THE BACKUP PLANE'S DOORS BESIDE THE PASS (#1080). See
             // `phone.proto` and `crate::phone`.
+            // A sample's objects are handed to no upload, for the drain's reason.
             K::Handoff(request) => {
+                self.refuse_a_sample("back up")?;
                 let runtime = self.runtime_handle()?;
                 Ok(response(wire::response::Kind::Handoff(
                     crate::phone::drain::handoff(&self.plane, self.keyring()?, request, &runtime)?,
@@ -1310,7 +1393,12 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             | K::Reconcile(_)
             | K::ForgetDestination(_)
             | K::Releasable(_)
-            | K::Released(_),
+            | K::Released(_)
+            // A CHAT TURN IS BOUNDED BY ITS CEILINGS: `STEP_CAP` (6) steps of at most
+            // 512 tokens, each read from memory, and a free reply of at most 256.
+            // It stops through `AssistCancel`, not through this registry, so it
+            // is not classed cancellable here.
+            | K::Assist(_),
         )
         | None => RequestKind::Bounded,
         // A DRAIN IS AS LONG AS THE SPOOL IS and a RESTORE as long as the
@@ -1534,6 +1622,7 @@ mod tests {
             kind: Some(wire::request::Kind::Found(wire::FoundRequest {
                 display_name: "Tahoe".to_owned(),
                 owner_name: "Me".to_owned(),
+                ..wire::FoundRequest::default()
             })),
         };
         let Some(wire::response::Kind::Found(answer)) =

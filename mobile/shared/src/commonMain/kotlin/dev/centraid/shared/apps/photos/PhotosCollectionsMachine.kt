@@ -137,19 +137,29 @@ public object PhotosCollectionsMachine :
         // there is one.
         event.album_created != null -> {
             val title = event.album_created.name.trim()
-            if (title.isEmpty()) {
+            if (state.sheet != PhotosCollectionsState.Sheet.SHEET_NEW_ALBUM) {
+                // THE SHEET IS THE SITTING (#1089). A commit closes it, and nothing
+                // remembers the commit (R-1088-12): a Create that still reaches
+                // this reducer after the sheet has gone would make a second album.
+                Step(state)
+            } else if (state.create_key.isNotEmpty()) {
+                // ONE CREATE AT A TIME (#1089): the sheet stays open until the
+                // commit, so a double tap reaches here twice. The answer frees it.
+                Step(state)
+            } else if (title.isEmpty()) {
                 // AN EMPTY NAME IS NOT A WRITE. `media.create_album`'s schema
                 // has `"title": { "minLength": 1 }`, so this would be refused
                 // by the vault — and a command a screen KNOWS will be refused
                 // is a round trip a member waits through for nothing.
                 Step(state)
             } else {
+                val key = "$CREATE_COMMAND:$title"
                 Step(
                     // THE LAST REFUSAL GOES WHEN A NEW ATTEMPT IS MADE. A
                     // sentence about the previous try, sitting under a name
                     // the member has since changed, is a sentence about
                     // nothing.
-                    state.copy(write_failure = null),
+                    state.copy(write_failure = null, create_key = key),
                     listOf(
                         ScreenEffect.SubmitWrite(
                             command = CREATE_COMMAND,
@@ -166,7 +176,7 @@ public object PhotosCollectionsMachine :
                             // and a pure reducer has no clock and no randomness to
                             // mint one with. The vault mints it, and the row comes
                             // back through the change event above.
-                            invokeKey = "$CREATE_COMMAND:$title",
+                            invokeKey = key,
                         ),
                     ),
                 )
@@ -204,16 +214,18 @@ public object PhotosCollectionsMachine :
         // name the member typed rather than over a screen that has moved on.
         event.write_settled != null -> {
             val settled = event.write_settled
+            // THE CREATE'S ANSWER FREES THE SHEET for another try (#1089).
+            val freed = if (settled.invoke_key == state.create_key) state.copy(create_key = "") else state
             if (settled.committed) {
                 Step(
-                    state.copy(
+                    freed.copy(
                         sheet = PhotosCollectionsState.Sheet.SHEET_NONE,
                         write_failure = null,
                     ),
                 )
             } else {
                 Step(
-                    state.copy(
+                    freed.copy(
                         // THE CORE'S OWN SENTENCE WHEN IT HAS ONE, and a plain
                         // one when it does not — never silence. A refusal with
                         // no words was this screen's state until the field

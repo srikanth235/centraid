@@ -16,9 +16,9 @@
 //! | [`content`] | **stub** | content path minting is wave 3 |
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_vault::Vault;
 use centraid_vault::commands::{Command, CommandStatus, Registry};
 use centraid_vault::page::KeysetPage;
+use centraid_vault::{Principal, Vault};
 
 use crate::convert::value_from_wire;
 use crate::error::{CoreError, Result};
@@ -319,6 +319,14 @@ fn output_name(entry: &str) -> &str {
 /// answer becomes a change event on the queue a shell drains. Before it, the
 /// only producer of change events was the seat's applier — so on a phone with
 /// no seat nothing ever pushed one, and every screen was a poll or a lie.
+///
+/// **`invoke_key` is the shell's correlation key, and nothing remembers it.**
+/// The request must carry one — it is how a shell pairs this answer with the
+/// write that caused it (`ScreenWrites.settled`) — but it stops here: the vault
+/// is handed a name and an input, and there is no replay ledger (#1029 §1,
+/// R-1088-12). The same key sent twice runs the command twice
+/// (`tests/replay.rs` pins it), so a write a shell may re-offer is idempotent by
+/// its own content or by an id the phone minted.
 pub fn invoke(
     vault: &Vault,
     registry: &Registry,
@@ -326,11 +334,42 @@ pub fn invoke(
     request: &wire::Command,
     changes: &crate::events::ChangeFeed,
 ) -> Result<wire::CommandOutcome> {
+    let outcome = invoke_raw(vault, registry, principal, request, changes)?;
+    Ok(wire::CommandOutcome {
+        status: match outcome.status {
+            CommandStatus::Executed => wire::CommandStatus::Executed,
+            CommandStatus::Failed => wire::CommandStatus::Failed,
+        } as i32,
+        output: serde_json::to_vec(&outcome.output).map_err(|error| CoreError::Invariant {
+            context: format!("a handler's own output is not JSON: {error}"),
+        })?,
+        // THE AUTHOR'S SENTENCE, never the raw predicate. The predicate reaches
+        // the audit trail and never a member.
+        reason: outcome.reason.unwrap_or_default(),
+        invocation_id: outcome.invocation_id,
+        receipt_id: outcome.receipt_id,
+        revoked_at: None,
+    })
+}
+
+/// [`invoke`]'s gate order and change feed, answered as the vault's own
+/// outcome rather than the wire's: the chat's door (`assist::door`) needs the
+/// predicate that failed, which the wire answer deliberately drops, to tell the
+/// runtime WHY a write was refused. Same `invoke_key` rule, same
+/// after-the-commit change events.
+pub(crate) fn invoke_raw(
+    vault: &Vault,
+    registry: &Registry,
+    principal: &centraid_vault::Principal,
+    request: &wire::Command,
+    changes: &crate::events::ChangeFeed,
+) -> Result<centraid_vault::commands::CommandOutcome> {
     if request.invoke_key.is_empty() {
         // REQUIRED, unlike v0, where the fallback was the call's ORDINAL and
         // only stable for a handler making the same call sequence every time.
-        // Without it a replayed intent can re-execute a command that already
-        // committed.
+        // It is the shell's correlation key (an answer is paired with the write
+        // that caused it by this string) and it is not used past this check: no
+        // ledger answers a repeat of it (#1029 §1, R-1088-12).
         return Err(CoreError::InvalidRequest {
             detail: "a command carries no invoke_key; an ordinal fallback is only stable for a \
                      handler that makes the same calls every time"
@@ -350,21 +389,7 @@ pub fn invoke(
     // screen redrawn from a transaction that could still roll back is the
     // failure this ordering exists to prevent.
     changes.tables_changed(&outcome.tables);
-    Ok(wire::CommandOutcome {
-        status: match outcome.status {
-            CommandStatus::Executed => wire::CommandStatus::Executed,
-            CommandStatus::Failed => wire::CommandStatus::Failed,
-        } as i32,
-        output: serde_json::to_vec(&outcome.output).map_err(|error| CoreError::Invariant {
-            context: format!("a handler's own output is not JSON: {error}"),
-        })?,
-        // THE AUTHOR'S SENTENCE, never the raw predicate. The predicate reaches
-        // the audit trail and never a member.
-        reason: outcome.reason.unwrap_or_default(),
-        invocation_id: outcome.invocation_id,
-        receipt_id: outcome.receipt_id,
-        revoked_at: None,
-    })
+    Ok(outcome)
 }
 
 /// The registered definition, so a shell can render a form for it.
@@ -430,11 +455,58 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
 /// refusal carries `ERROR_CODE_VAULT_ALREADY_HELD` and names the id already
 /// here, so a shell that raced itself can tell "I founded it" from "something
 /// is wrong".
-pub fn found(vault: &Vault, request: &wire::FoundRequest) -> Result<wire::FoundResponse> {
+///
+/// **WHAT THE NEW VAULT HOLDS is the request's `content`** (`vault.proto`'s
+/// `FoundContent`). `UNSPECIFIED` — a found that names no content — is the
+/// found and nothing else. `STARTERS` adds a note and a task to the member's
+/// own vault through the command plane, and a refused starter leaves the vault
+/// founded and empty rather than failing it.
+/// `SAMPLE` founds the SAMPLE vault — the mark, the Tahoe scenario across seven
+/// apps, its Locker when the core holds keys, the mark finished last
+/// ([`crate::sample::found`]) — and any refusal fails the whole found, so the
+/// shell deletes the directory rather than holding half a scenario.
+///
+/// `sealing` is the open core's keys and Locker session, which only a sample
+/// found reads: it seals the sample's Locker under the member's own `K`. `None`
+/// (a core opened with no seed) founds the sample without Locker.
+pub fn found(
+    vault: &Vault,
+    registry: &Registry,
+    principal: &Principal,
+    request: &wire::FoundRequest,
+    sealing: Option<&crate::sample::Sealing<'_>>,
+) -> Result<wire::FoundResponse> {
     if let Some(vault_id) = vault.vault_id()? {
         return Err(CoreError::VaultAlreadyHeld { vault_id });
     }
-    let founded = vault.found(&request.display_name, &request.owner_name)?;
+    let content =
+        wire::FoundContent::try_from(request.content).map_err(|_| CoreError::InvalidRequest {
+            detail: format!(
+                "found content {} is not one this build knows",
+                request.content
+            ),
+        })?;
+    let founded = match content {
+        wire::FoundContent::Sample => crate::sample::found(
+            vault,
+            registry,
+            principal,
+            &request.display_name,
+            &request.owner_name,
+            crate::sample::now_ms(),
+            sealing,
+        )?,
+        wire::FoundContent::Unspecified | wire::FoundContent::Starters => {
+            let founded = vault.found(&request.display_name, &request.owner_name)?;
+            if content == wire::FoundContent::Starters {
+                let report = crate::sample::starters(vault, registry, principal);
+                if !report.is_whole() {
+                    tracing::warn!(refused = ?report.refused, "a starter row was refused");
+                }
+            }
+            founded
+        }
+    };
     Ok(wire::FoundResponse {
         vault_id: founded.vault_id,
         owner_party_id: founded.owner_party_id,
@@ -452,6 +524,18 @@ pub fn content(_content_id: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// [`found`] with the registry and the owner a handle would pass.
+    fn found_here(vault: &Vault, request: &wire::FoundRequest) -> Result<wire::FoundResponse> {
+        let registry = Registry::with_system_commands().expect("the registry builds");
+        found(
+            vault,
+            &registry,
+            &Principal::owner("test-device"),
+            request,
+            None,
+        )
+    }
 
     fn query(select: &[&str], sort: &str, pk: &str) -> wire::PageQuery {
         wire::PageQuery {
@@ -702,11 +786,12 @@ mod tests {
         // BEFORE: the migrations are laid and there is no vault in them.
         assert_eq!(vault.vault_id().expect("read"), None);
 
-        let answer = found(
+        let answer = found_here(
             &vault,
             &wire::FoundRequest {
                 display_name: "Tahoe".to_owned(),
                 owner_name: "Me".to_owned(),
+                ..wire::FoundRequest::default()
             },
         )
         .expect("the found is answered");
@@ -736,20 +821,22 @@ mod tests {
         let scratch = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
-        let first = found(
+        let first = found_here(
             &vault,
             &wire::FoundRequest {
                 display_name: "First".to_owned(),
                 owner_name: "Me".to_owned(),
+                ..wire::FoundRequest::default()
             },
         )
         .expect("the first found is answered");
 
-        let refusal = found(
+        let refusal = found_here(
             &vault,
             &wire::FoundRequest {
                 display_name: "Second".to_owned(),
                 owner_name: "Me".to_owned(),
+                ..wire::FoundRequest::default()
             },
         )
         .expect_err("a second found is refused");
@@ -772,7 +859,7 @@ mod tests {
         let scratch = centraid_ontology::golden::scratch_dir();
         std::fs::create_dir_all(&scratch).expect("the directory is made");
         let vault = Vault::create(scratch.join("v.db")).expect("a vault file");
-        let answer = found(&vault, &wire::FoundRequest::default()).expect("founded");
+        let answer = found_here(&vault, &wire::FoundRequest::default()).expect("founded");
         assert!(!answer.vault_id.is_empty());
         assert_eq!(vault.display_name().expect("read").as_deref(), Some(""));
         let _ = std::fs::remove_dir_all(&scratch);

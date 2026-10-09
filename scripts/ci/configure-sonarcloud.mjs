@@ -51,6 +51,7 @@ const SOURCE_EXCLUSIONS = [
   "tests/**",
   "packages/test-kit/**",
   "packages/**/dist/**",
+  "experiments/**", // #1044 training and evaluation estate: ships in no artifact
   "**/*.wasm",
   // SQLite DDL: Autoscan applies Oracle PL/SQL rules, and the three DDL
   // snapshots (copies of one schema) dominate CPD. SQL is owned by the ladder

@@ -12,9 +12,12 @@ import dev.centraid.shared.screen.Step
  * INVOKE KEYS, BUILT ONE WAY (was ~20 string concatenations).
  *
  * `command:subject:intent…`. CONTENT-DERIVED, never ordinal: the same intent
- * on the same subject is the same key, so a double tap dedups in the core;
- * a different intent — toggling back, the next edit of an editor — is a new
- * key, so it is a new command and not a replay of the last one.
+ * on the same subject is the same key, so a double tap while the first write is
+ * in flight is one write ([WriteLaw.submit]); a different intent — toggling
+ * back, the next edit of an editor — is a new key, so its answer is told apart
+ * from the last one's. The key is the shell's CORRELATION key and nothing the
+ * core or the vault remembers (no replay ledger, #1029 §1, R-1088-12): the same
+ * key sent again after the first settled runs the command again.
  */
 public object InvokeKeys {
     public fun of(command: String, subject: String, vararg intent: String): String =
@@ -34,6 +37,12 @@ public interface WriteLens<S> {
  * ONE WRITE IN FLIGHT, and a refused one keeps the content (the read law and
  * the write law are different laws: a failed write never replaces what the
  * member was looking at).
+ *
+ * NOTHING MORE: once a write has settled it is forgotten, here as in the core
+ * (R-1088-12), so a screen that stays up after a COMMITTED create or save must
+ * end that sitting itself — Save not armed, the form gone — or its next tap
+ * files the same thing again (#1089). The keys differ per attempt in some
+ * editors (`try=N`, a token), so no key comparison in this law could do it.
  */
 public object WriteLaw {
     /** Submit. The same key already in flight is the same write, and nothing. */

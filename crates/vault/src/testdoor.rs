@@ -74,9 +74,9 @@ pub fn parties(connection: &Connection) -> Vec<(String, String)> {
 /// How many parties carry this display name.
 ///
 /// A NAME AND NOT AN ID, because the test that asks is about a write the
-/// MEMBER made — an offline `core.add_party` whose id the seat minted and the
-/// caller never saw. Counting by name is how it checks the row arrived exactly
-/// once, which is what a replayed intent would break.
+/// MEMBER made — a `core.add_party` whose id the vault minted and the caller
+/// never saw. Counting by name is how it checks the row arrived exactly once,
+/// which a command that ran twice would break.
 #[must_use]
 pub fn parties_named(connection: &Connection, display_name: &str) -> i64 {
     connection

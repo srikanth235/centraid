@@ -69,6 +69,7 @@ One command gates the tree ([#1020](https://github.com/srikanth235/centraid/issu
 | commit | the pre-commit hook | `.githooks/pre-commit` |
 | push | the pre-push hook | `.githooks/pre-push` |
 | want CI's answer early | `cargo xtask gate --profile pr` — `local` plus supply chain, CI policy, secrets, release build, the TypeScript static tier, emitters, the call budget and the fault door | [`gate.yml`](../.github/workflows/gate.yml), required on every pull request and push to `main`, beside `dependency-review` |
+| the on-device engine (`crates/assist-llama`, or `crates/core-ffi` with llama.cpp) changed | `cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings`, then `cargo test` over the same packages and feature — the `engine` job's two commands; `cmake` and a C++ compiler required, about five minutes of llama.cpp cold. `cargo xtask gate` compiles none of it | [`gate.yml`](../.github/workflows/gate.yml)'s `engine` job |
 | Kotlin changed | `cargo xtask gate --profile mobile-jvm` — builds `centraid-core-ffi`, runs `./gradlew mobileJvm`, regenerates the native theme and screen fixtures and fails on drift. Budget 420 s | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml) |
 | nightly | `cargo xtask gate --profile nightly` — `pr` plus `device-lanes` and the deeper suites. One lane alone: `--lane <name>` | [`gate-nightly.yml`](../.github/workflows/gate-nightly.yml), 05:30 UTC |
 | release | `cargo xtask gate --profile release` — `nightly` plus `artifact-identity` and `prebuilt-core-required` | [`release.yml`](../.github/workflows/release.yml)'s lanes |
@@ -96,7 +97,7 @@ node .governance/law/codeowners.mjs --check   # exit 1 on drift
 node .governance/law/codeowners.mjs --write   # regenerate from the packs' lawPaths
 ```
 
-What the **host** would enforce — branch protection requiring code-owner review on the default branch, and `gate`, `dependency-review` and `governance` in the required set — is configured outside this repository and is the owner's to enable. It is **not confirmed enabled**; the rules observe and report either way.
+What the **host** would enforce — branch protection requiring code-owner review on the default branch, and `gate`, `engine`, `dependency-review` and `governance` in the required set — is configured outside this repository and is the owner's to enable. It is **not confirmed enabled**; the rules observe and report either way.
 
 **`governance.yml` cannot be given a `timeout-minutes` by hand.** It is listed in `.governance/install.yaml`'s `managed_digests`, so `managed-tree-integrity` fails on any edit to it, and `scripts/lint-workflow-pins.mjs` skips any file whose first lines carry `# governance-kit:managed`. The supported path to a timeout is a kit update.
 

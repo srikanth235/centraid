@@ -18,8 +18,17 @@
 //!   `schedule.edit_event_occurrence` matched no occurrence at all and the
 //!   skipped day came back, on the web agenda, on the phone and on Tally's
 //!   template dashboard, silently, all three.
+//! - **A BARE DATE IS A WHOLE DAY, NOT A MIDNIGHT** (#1090). A task whose
+//!   anchor is `2026-03-01` recurs on civil days: its occurrences are dates,
+//!   the same in every zone, and [`next_occurrence`] / [`collapse_missed`]
+//!   answer dates. Read as the UTC midnight `parse_instant_ms` would make of
+//!   it, each period was "missed" at 00:00Z and the next one fell on the
+//!   previous evening anywhere west of Greenwich — a daily task left Today at
+//!   20:00 in New York. Such a series has no zone of its own, so `zone` names
+//!   the calendar `now` (or a completion) is read on: the member's.
 
 use super::rrule::{self, DAY_TOKENS, Freq, ParsedRrule};
+use super::temporal;
 use super::zone::{
     FireZone, WallTime, add_wall_days, add_wall_months, parse_wall_iso, wall_epoch,
     wall_from_epoch, wall_iso, wall_weekday,
@@ -593,6 +602,8 @@ pub struct NextOccurrenceInput<'a> {
     pub rrule: &'a str,
     pub scheduled_start: &'a str,
     pub after: &'a str,
+    /// The series' zone. A bare-date series has none of its own: `zone` is the
+    /// calendar an `after` instant is read on (UTC's when `None`).
     pub zone: Option<&'a FireZone>,
     pub anchor: RecurrenceAnchor,
 }
@@ -627,9 +638,59 @@ impl RecurrenceAnchor {
     }
 }
 
+/// Is `start` a BARE CIVIL DATE (`2026-03-01`)? A series anchored on one is
+/// ALL-DAY: it recurs on dates, not instants (see the module header).
+#[must_use]
+pub fn is_all_day_anchor(start: &str) -> bool {
+    temporal::classify(start) == Some(temporal::Kind::LocalDate)
+}
+
+/// The civil day (`YYYY-MM-DD`) a date or an instant falls on: a date is its
+/// own day, an instant is read on `zone`'s calendar (UTC's without one).
+fn civil_day(value: &str, zone: Option<&FireZone>) -> Option<String> {
+    if is_all_day_anchor(value) {
+        return Some(value.to_owned());
+    }
+    let millis = parse_instant_ms(value)?;
+    let wall = zone.map_or_else(|| wall_from_epoch(millis), |zone| zone.zoned_parts(millis));
+    Some(wall_iso(wall, false))
+}
+
+/// A `YYYY-MM-DD` as its day number in the wall epoch, for ordering.
+fn day_epoch(day: &str) -> Option<i64> {
+    parse_wall_iso(day).map(wall_epoch)
+}
+
+/// The first date strictly after the day `input.after` falls on, in an
+/// ALL-DAY series.
+fn next_all_day(input: &NextOccurrenceInput<'_>) -> Option<String> {
+    let after = civil_day(input.after, input.zone)?;
+    let after_epoch = day_epoch(&after)?;
+    let start = if input.anchor == RecurrenceAnchor::Completion {
+        after.as_str()
+    } else {
+        input.scheduled_start
+    };
+    let horizon = wall_iso(add_wall_days(parse_wall_iso(&after)?, 10 * 366), false);
+    expand(
+        &ExpandInput::new(input.rrule, start, &after, &horizon)
+            .with_semantics(Semantics::AllDay)
+            .at_most(4_000),
+    )
+    .into_iter()
+    .find(|occurrence| day_epoch(&occurrence.start).is_some_and(|day| day > after_epoch))
+    .map(|occurrence| occurrence.start)
+}
+
 /// The first occurrence strictly after `after`, or `None`.
+///
+/// A series anchored on a bare date answers a DATE: strictly after the day
+/// `after` falls on (read on `zone`'s calendar when it is an instant).
 #[must_use]
 pub fn next_occurrence(input: &NextOccurrenceInput<'_>) -> Option<String> {
+    if is_all_day_anchor(input.scheduled_start) {
+        return next_all_day(input);
+    }
     let start = if input.anchor == RecurrenceAnchor::Completion {
         input.after
     } else {
@@ -658,6 +719,9 @@ pub const MAX_MISSED: usize = 1_000;
 pub struct CollapseInput<'a> {
     pub rrule: &'a str,
     pub scheduled_start: &'a str,
+    /// The series' zone. A bare-date series has none of its own: `zone` is the
+    /// calendar `now` and a completion are read on — the member's, so "today"
+    /// is the day they are living (UTC's when `None`).
     pub zone: Option<&'a FireZone>,
     pub anchor: RecurrenceAnchor,
     /// The evaluation clock — **never the host's `now`**.
@@ -684,9 +748,88 @@ fn later_of<'a>(left: &'a str, right: Option<&'a str>) -> &'a str {
     }
 }
 
+/// [`collapse_missed`] for an ALL-DAY series: every period is a civil day,
+/// so a period is "missed" only once its day is behind the day `now` falls on
+/// in `zone` — today's own is live until today ends.
+fn collapse_all_day(input: &CollapseInput<'_>) -> Collapsed {
+    let Some(today) = civil_day(input.now, input.zone) else {
+        return Collapsed::default();
+    };
+    let (Some(today_epoch), Some(today_wall)) = (day_epoch(&today), parse_wall_iso(&today)) else {
+        return Collapsed::default();
+    };
+    let after = |after: &str, anchor| {
+        next_all_day(&NextOccurrenceInput {
+            rrule: input.rrule,
+            scheduled_start: input.scheduled_start,
+            after,
+            zone: input.zone,
+            anchor,
+        })
+    };
+    if input.anchor == RecurrenceAnchor::Completion {
+        let next_due = match input.last_completed_at {
+            None => Some(input.scheduled_start.to_owned()),
+            Some(completed) => after(completed, RecurrenceAnchor::Completion),
+        };
+        let Some(next_due) = next_due else {
+            return Collapsed::default();
+        };
+        let missed = usize::from(day_epoch(&next_due).is_some_and(|day| day < today_epoch));
+        return Collapsed {
+            missed,
+            next_due: Some(next_due),
+        };
+    }
+    // Occurrences on [start, today); a completion covers its own day and every
+    // day before it.
+    let completed_day = input
+        .last_completed_at
+        .and_then(|completed| civil_day(completed, input.zone))
+        .and_then(|day| day_epoch(&day).map(|epoch| (day, epoch)));
+    let from = match &completed_day {
+        Some((day, epoch))
+            if day_epoch(input.scheduled_start).is_none_or(|start| *epoch > start) =>
+        {
+            day.as_str()
+        }
+        _ => input.scheduled_start,
+    };
+    let elapsed = if day_epoch(from).is_some_and(|from| from < today_epoch) {
+        expand(
+            &ExpandInput::new(input.rrule, input.scheduled_start, from, &today)
+                .with_semantics(Semantics::AllDay)
+                .at_most(MAX_MISSED),
+        )
+    } else {
+        Vec::new()
+    };
+    let missed = elapsed
+        .iter()
+        .filter(|occurrence| match &completed_day {
+            None => true,
+            Some((_, completed)) => {
+                day_epoch(&occurrence.start).is_some_and(|day| day > *completed)
+            }
+        })
+        .count();
+    // The first occurrence on or after today: strictly after yesterday.
+    let yesterday = wall_iso(add_wall_days(today_wall, -1), false);
+    Collapsed {
+        missed,
+        next_due: after(&yesterday, RecurrenceAnchor::Scheduled),
+    }
+}
+
 /// Collapse the periods a repeating task went past.
+///
+/// A series anchored on a bare date collapses by CIVIL DAY against the day
+/// `now` falls on in `zone`, and answers dates (the module header).
 #[must_use]
 pub fn collapse_missed(input: &CollapseInput<'_>) -> Collapsed {
+    if is_all_day_anchor(input.scheduled_start) {
+        return collapse_all_day(input);
+    }
     let Some(now_ms) = parse_instant_ms(input.now) else {
         return Collapsed::default();
     };
@@ -1042,5 +1185,167 @@ mod tests {
             parse_instant_ms("2026-03-01")
         );
         assert_eq!(parse_basic_instant("banana"), None);
+    }
+
+    // -- A DATE IS A WHOLE DAY, not a midnight (#1090) -----------------------
+
+    fn civil_days(from: &str, to: &str) -> i64 {
+        let day = |text: &str| wall_epoch(parse_wall_iso(text).expect("a date"));
+        (day(to) - day(from)) / 86_400_000
+    }
+
+    fn collapse_scheduled(
+        rrule: &str,
+        start: &str,
+        zone: &FireZone,
+        now: &str,
+        last_completed_at: Option<&str>,
+    ) -> Collapsed {
+        collapse_missed(&CollapseInput {
+            rrule,
+            scheduled_start: start,
+            zone: Some(zone),
+            anchor: RecurrenceAnchor::Scheduled,
+            now,
+            last_completed_at,
+        })
+    }
+
+    /// THE HOURS THE ROUND-TRIP SPEC FELL INTO. A daily task whose anchor is
+    /// `2026-10-03` has an occurrence on each civil day, and the one on the
+    /// member's today is live until that day ends in the member's zone — at
+    /// every half hour of two days, in zones either side of UTC. Expanded as a
+    /// UTC midnight it was "missed" at 00:00Z and the next one was the next
+    /// UTC midnight: 20:00 the evening before in New York, so the task was
+    /// due tomorrow from 20:00 on.
+    #[test]
+    fn a_bare_date_series_is_due_on_the_zones_day_for_all_of_it() {
+        for name in [
+            "America/New_York",
+            "America/Los_Angeles",
+            "Etc/UTC",
+            "Asia/Tokyo",
+            "Pacific/Auckland",
+        ] {
+            let zone = zone(name);
+            let mut now = parse_instant_ms("2026-10-07T00:00:00.000Z").expect("an instant");
+            let end = parse_instant_ms("2026-10-09T00:00:00.000Z").expect("an instant");
+            while now < end {
+                let now_text = crate::clock::format_iso_ms(now);
+                let today = wall_iso(zone.zoned_parts(now), false);
+                let collapsed =
+                    collapse_scheduled("FREQ=DAILY", "2026-10-03", &zone, &now_text, None);
+                assert_eq!(
+                    collapsed.next_due.as_deref(),
+                    Some(today.as_str()),
+                    "{name} at {now_text}"
+                );
+                assert_eq!(
+                    i64::try_from(collapsed.missed).expect("a count"),
+                    civil_days("2026-10-03", &today),
+                    "{name} at {now_text}: the days before today, and not today"
+                );
+                now += 30 * 60_000;
+            }
+        }
+    }
+
+    /// Completing an occurrence covers its day, and every day before it.
+    #[test]
+    fn a_completion_covers_its_own_civil_day_in_a_bare_date_series() {
+        let new_york = zone("America/New_York");
+        let now = "2026-10-08T03:25:00.000Z"; // 23:25 on the 7th
+        // Tuesdays: 1, 8, 15, 22, 29 September and 6 October.
+        let behind = collapse_scheduled("FREQ=WEEKLY", "2026-09-01", &new_york, now, None);
+        assert_eq!(
+            (behind.missed, behind.next_due.as_deref()),
+            (6, Some("2026-10-13"))
+        );
+        // Ticked on the 23rd: the 29th and the 6th are still behind.
+        let ticked = collapse_scheduled(
+            "FREQ=WEEKLY",
+            "2026-09-01",
+            &new_york,
+            now,
+            Some("2026-09-23T15:00:00.000Z"),
+        );
+        assert_eq!(
+            (ticked.missed, ticked.next_due.as_deref()),
+            (2, Some("2026-10-13"))
+        );
+        // Ticked at 19:00 on the 6th (23:00Z): the 6th is covered.
+        let current = collapse_scheduled(
+            "FREQ=WEEKLY",
+            "2026-09-01",
+            &new_york,
+            now,
+            Some("2026-10-06T23:00:00.000Z"),
+        );
+        assert_eq!(
+            (current.missed, current.next_due.as_deref()),
+            (0, Some("2026-10-13"))
+        );
+        // Ticked at 21:00 on the 6th, which is the 7th in UTC: still the 6th.
+        let late = collapse_scheduled(
+            "FREQ=WEEKLY",
+            "2026-09-01",
+            &new_york,
+            now,
+            Some("2026-10-07T01:00:00.000Z"),
+        );
+        assert_eq!(late.missed, 0);
+    }
+
+    /// The rollover from a date is a date.
+    #[test]
+    fn a_bare_date_series_rolls_over_to_a_date() {
+        let new_york = zone("America/New_York");
+        let next = |rrule: &str, start: &str, after: &str, anchor: RecurrenceAnchor| {
+            next_occurrence(&NextOccurrenceInput {
+                rrule,
+                scheduled_start: start,
+                after,
+                zone: Some(&new_york),
+                anchor,
+            })
+        };
+        let scheduled = RecurrenceAnchor::Scheduled;
+        assert_eq!(
+            next("FREQ=DAILY", "2026-10-03", "2026-10-03", scheduled).as_deref(),
+            Some("2026-10-04")
+        );
+        assert_eq!(
+            next(
+                "FREQ=WEEKLY;INTERVAL=2",
+                "2026-10-03",
+                "2026-10-03",
+                scheduled
+            )
+            .as_deref(),
+            Some("2026-10-17")
+        );
+        // From the completion: "every 3 days after I last did it". Ticked at
+        // 23:25 on the 7th in New York (03:25Z on the 8th) is the 7th.
+        assert_eq!(
+            next(
+                "FREQ=DAILY;INTERVAL=3",
+                "2026-10-03",
+                "2026-10-08T03:25:00.000Z",
+                RecurrenceAnchor::Completion,
+            )
+            .as_deref(),
+            Some("2026-10-10")
+        );
+        // A zoned series keeps its instants.
+        assert_eq!(
+            next(
+                "FREQ=DAILY",
+                "2026-10-03T14:00:00.000Z",
+                "2026-10-03T14:00:00.000Z",
+                scheduled,
+            )
+            .as_deref(),
+            Some("2026-10-04T14:00:00.000Z")
+        );
     }
 }

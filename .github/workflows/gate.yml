@@ -13,18 +13,20 @@ name: gate
 # a workflow that needs `paths:` filters to be affordable can never be a
 # required check, because a filtered-out workflow reports no status and a
 # required check that never reports blocks the PR forever. So there is one
-# PR-triggered workflow and everything a PR must satisfy is inside it. Two jobs,
-# not one, and neither is path-filtered so both always report:
-# `gate` runs the profile, and `dependency-review` is the one PR gate that
-# cannot be a step of a command (see its comment below).
+# PR-triggered workflow and everything a PR must satisfy is inside it. Three jobs,
+# not one, and none is path-filtered so all always report:
+# `gate` runs the profile, `engine` checks the on-device chat's llama.cpp build
+# that the profile's cold budget has no room for (see its comment below), and
+# `dependency-review` is the one PR gate that cannot be a step of a command
+# (see its comment below).
 # `scripts/lint-workflow-pins.mjs` rule 5 enforces the single-entry-point
 # property and now names this file.
 #
 # OWNER HAND-OFF — branch protection must be repointed. The required check today
 # is `check`, ci.yml's aggregator, and ci.yml no longer listens on
-# `pull_request`, so `check` will stop reporting. The owner must make `gate` AND
-# `dependency-review` (both jobs here) the required checks; until then pull
-# requests will block. Branch protection is configured outside this repository,
+# `pull_request`, so `check` will stop reporting. The owner must make `gate`,
+# `engine` AND `dependency-review` (the three jobs here) the required checks;
+# until then pull requests will block. Branch protection is configured outside this repository,
 # like the code-owner review requirement — see crates/xtask/README.md and
 # docs/toolchain.md.
 #
@@ -194,6 +196,97 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+  # THE ON-DEVICE CHAT'S ENGINE, checked here and not in `gate` (#1078, R-CHAT-10
+  # in docs/decisions.md). llama.cpp is a `cmake` build of about five minutes
+  # cold, and compiling it inside the `pr` profile added 196 s to its clippy
+  # step, 343 s to test and 199 s to release-build on this runner, which put
+  # the profile's cold run over its 1,500 s budget. So `centraid-assist-llama`'s
+  # `engine` feature and `centraid-core-ffi`'s `llama` feature are OFF in a
+  # workspace build — `gate` compiles, lints and tests the rest of the tree
+  # without llama.cpp, including the engine-free half of `centraid-assist-llama`
+  # (`generate`, `wire`, `Config`) and the ABI's no-engine behaviour — and THIS job
+  # builds, lints and tests the two crates with the engine ON: the loader, the
+  # process-wide host, the `assist-step` binary, the two real-model suites'
+  # compile, `centraid-core-ffi`'s engine-wired tests, and the five-symbol `nm`
+  # check over a cdylib that
+  # carries llama.cpp. What no pull-request job checks is a phone's
+  # cross-compile of the engine (Android NDK, iOS Metal), which
+  # `lane-prebuilt-core.yml` does on a release tag.
+  #
+  # OUTSIDE `cargo xtask gate` ON PURPOSE: the profile's budget is a ceiling on
+  # the feedback a pull request waits for, and this job's cost is not a
+  # property of the change under review. It runs beside `gate`, so a PR waits
+  # for the slower of the two, not their sum. Not path-filtered, so it always
+  # reports and can be required (#557).
+  #
+  # ITS OWN CARGO CACHE KEY, not the `v1` preset: both jobs would save on `main`
+  # under one key, and whichever finished first would decide what a PR's `gate`
+  # restores — an engine-flavoured `target/` with no `release/` in it, which
+  # is a cold `release-build` inside the 1,500 s budget. `cmake` and a C++
+  # compiler are on the ubuntu-latest image.
+  engine:
+    runs-on: ubuntu-latest
+    # No budget of its own; the bound is a backstop against a hung job (#557).
+    timeout-minutes: 45
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          # `audit`, for the reason the `gate` job states.
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # No Bun packages: this job runs cargo and nothing else.
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+          cargo-cache: none
+      # Restore always, save only from `main` (#637), exactly as the setup
+      # action's `v1` preset does, under a key of this job's own.
+      - name: Restore Cargo (engine)
+        id: cargo-engine
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-engine-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-engine-${{ runner.os }}-${{ runner.arch }}-
+      - id: channel
+        run: |
+          set -euo pipefail
+          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
+          if [ -z "$channel" ]; then
+            echo "::error::engine: rust-toolchain.toml has no [toolchain] channel"
+            exit 1
+          fi
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: ${{ steps.channel.outputs.channel }}
+          components: clippy
+      # `centraid-core-ffi/llama` turns on `centraid-assist-llama/engine` too
+      # (the package/feature form names one package's feature unambiguously
+      # across two `-p`s), so both crates are built with llama.cpp.
+      - name: Clippy, engine on
+        run: cargo clippy -p centraid-assist-llama -p centraid-core-ffi --all-targets --features centraid-core-ffi/llama -- -D warnings
+      # `cargo test` rather than nextest: two crates, a handful of binaries, and
+      # it runs their doctests too. The real-model suites are `#[ignore]`d and
+      # need a GGUF file the repository does not carry.
+      - name: Test, engine on
+        run: cargo test -p centraid-assist-llama -p centraid-core-ffi --features centraid-core-ffi/llama
+      - name: Save Cargo (engine)
+        if: github.ref == 'refs/heads/main' && steps.cargo-engine.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ steps.cargo-engine.outputs.cache-primary-key }}
+
   # The ONE pull-request gate that cannot be a step of `cargo xtask gate`: it is
   # a GitHub Action reading the PR's dependency diff through the API, not a
   # command over the tree. It keeps its own job so `pull-requests: write` is not
@@ -246,3 +339,120 @@ jobs:
     uses: ./.github/workflows/lane-prebuilt-core.yml
     with:
       binary-only: true
+
+  # THE NATIVE HARNESS'S CPU PYTHON TESTS (#1044), on every pull request and every
+  # push to `main`, unfiltered: `experiments/toolchat/native` is Python, and nothing
+  # in `cargo xtask gate --profile pr` runs Python. It is a job of its own, outside
+  # that command and its 1500 s budget, because it needs what the gate does not: a
+  # Python toolchain, ~200 MB of CPU torch, a tokenizer from the model hub and a
+  # build of the `nativetools` binary the tests drive. (The gate still reads and
+  # scans the tree: the Rust tests read `authored/golden_v3.json`, and `secrets`
+  # scans every file.)
+  #
+  # What it runs is `experiments/toolchat/native/run_cpu_tests.py`: all 26 test
+  # modules of `authored/`, `authored/gen/`, `eval/` and `train/`, each in an
+  # interpreter of its own, none skipped and none left out. Two tests of `authored/test_noise.py` are red on this tree for a
+  # reason the owner has yet to rule on (HANDOFF.md, "Known failing checks"); the
+  # script names them, runs them every time, and fails when they start to pass.
+  # Nothing here needs model weights or a GPU. Reproduce a run by following the
+  # steps below by hand, or read them as the setup the script's docstring lists.
+  #
+  # Its inputs are pinned by content, not by name: `requirements-ci.txt` carries a
+  # hash for every package (`pip install --require-hashes`), the tokenizer is
+  # fetched at a commit and checked against SHA-256 sums, and the actions are SHAs.
+  native-python:
+    runs-on: ubuntu-latest
+    # A cold run is a ~3 minute Rust build, a ~1 minute install and the suite. The
+    # suite took 31.5 minutes with its modules run one at a time on four cores and
+    # takes ~16 with them four at a time (`--jobs 4`): train/test_dpo.py, on two
+    # threads, is the tail, and every other module is done in ~10. The bound is a
+    # backstop well above that, not a second budget.
+    timeout-minutes: 60
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          # `audit` for the reason `gate` uses it: crates.io, PyPI, the PyTorch
+          # index and the model hub are not an allowlist anybody has learned yet.
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The same channel read as the `gate` job's, from the one version file.
+      - id: channel
+        run: |
+          set -euo pipefail
+          channel="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml | head -1)"
+          if [ -z "$channel" ]; then
+            echo "::error::native-python: rust-toolchain.toml has no [toolchain] channel"
+            exit 1
+          fi
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: ${{ steps.channel.outputs.channel }}
+      # No Cargo cache: the `gate` job owns the `cargo-v1` entry, and a second job
+      # saving under its key on `main` could leave it holding only this build.
+      - name: Build the nativetools binary
+        run: cargo build --locked -p centraid-nativetools --bin nativetools
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          # The minor the training image runs (train/vm/run_job.sh).
+          python-version: "3.11"
+      - name: Install the pinned Python dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --require-hashes --only-binary=:all: --no-deps \
+            -r experiments/toolchat/native/requirements-ci.txt
+      # The trainer's tiny-model tests build a random model from the config of
+      # Qwen3.5-0.8B and tokenize with its tokenizer: six small files, 23 MB, and no
+      # weights. The commit pins the tree; the sums pin each file. The tests then
+      # read them offline, where `from_pretrained` resolves `main` through refs/main.
+      - name: Fetch the Qwen3.5-0.8B tokenizer and config
+        env:
+          HF_HOME: ${{ runner.temp }}/hf
+          QWEN_REVISION: 2fc06364715b967f1860aea9cf38778875588b17
+        run: |
+          set -euo pipefail
+          attempt=1
+          until hf download Qwen/Qwen3.5-0.8B --revision "${QWEN_REVISION}" \
+            config.json tokenizer.json tokenizer_config.json vocab.json merges.txt chat_template.jinja; do
+            if [ "$attempt" -ge 3 ]; then
+              exit 1
+            fi
+            echo "::warning::hf download failed (attempt ${attempt}); retrying"
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+          repo="${HF_HOME}/hub/models--Qwen--Qwen3.5-0.8B"
+          mkdir -p "${repo}/refs"
+          printf '%s' "${QWEN_REVISION}" > "${repo}/refs/main"
+          cd "${repo}/snapshots/${QWEN_REVISION}"
+          sha256sum -c - <<'SUMS'
+          273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80  chat_template.jinja
+          b90b86f35c8e6925ef74ee04d0e758f0a845c83a42089ad82bbaa948de9b4204  config.json
+          a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d  merges.txt
+          5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42  tokenizer.json
+          49e2b6e395f959f077f1e992b338919c0d4a9732fc6e613995e06557f843500c  tokenizer_config.json
+          ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003  vocab.json
+          SUMS
+      # The built data of the native task is not in the tree (R-1088-16,
+      # `experiments/toolchat/native/artefacts.json`). What the suite reads is the
+      # 35 public train worlds, which a builder in the tree rebuilds byte for byte
+      # and the manifest verifies. It reads no held-out file (val, test, their
+      # worlds), so there is no secret here and no download, and a pull request
+      # from a fork runs the same steps. The tests that need a seeded household
+      # seed a public world into a temporary directory themselves.
+      - name: Materialise the public worlds
+        working-directory: experiments/toolchat/native
+        run: |
+          set -euo pipefail
+          python artefacts.py fetch --public-only
+          python artefacts.py check --public-only
+      - name: Run the CPU suite
+        env:
+          NATIVETOOLS: ${{ github.workspace }}/target/debug/nativetools
+          HF_HOME: ${{ runner.temp }}/hf
+          HF_HUB_OFFLINE: "1"
+          EVAL_VAULTS: ${{ runner.temp }}/vaults
+          GEN_INTEGRATION: "1"
+          NOISE_INTEGRATION: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python experiments/toolchat/native/run_cpu_tests.py --jobs 4

@@ -145,6 +145,16 @@ pub unsafe extern "C" fn centraid_open(
         // their camera roll.
         let path = config.path.clone();
         let handle = Core::open(config)?;
+        // ONE MODEL SLOT PER PROCESS, WITH THE ENGINE IN IT. A phone holds
+        // several vault handles and one half-gigabyte model, so every handle
+        // shares the host `centraid-assist-llama` built (and registered its
+        // loader on) the first time anybody asked. Without this line — which is
+        // the `llama` feature, off in the PR gate's workspace build — a model
+        // file is `NO_ENGINE`: there, and nothing to read it with.
+        #[cfg(feature = "llama")]
+        handle
+            .assist()
+            .use_host(centraid_assist_llama::process_host());
         if let Err(error) = handle.open_own_bytes(path.with_extension("bytes")) {
             tracing::warn!(
                 "the byte store did not open; this core holds text and refuses \

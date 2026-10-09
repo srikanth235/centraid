@@ -12,6 +12,10 @@
 //! common` gives for the same allowance.
 #![allow(dead_code)]
 
+// The chat's half (#1078): a sample vault behind a real handle, and the chat's
+// calls over the wire. Its own module because nothing in it is the backup's.
+pub mod chat;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 

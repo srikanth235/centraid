@@ -2366,6 +2366,7 @@ fn add_debt() -> CommandDefinition {
           "required": ["party_id", "direction", "amount_minor"],
           "additionalProperties": false,
           "properties": {
+            "debt_id": { "type": "string", "minLength": 1 },
             "party_id": { "type": "string", "minLength": 1 },
             "direction": { "type": "string", "enum": ["owe", "owed"] },
             "amount_minor": { "type": "integer", "minimum": 1 },
@@ -2396,12 +2397,7 @@ fn add_debt() -> CommandDefinition {
         postconditions: &[CommandCondition {
             predicate: "debt_added",
             check: |ctx| {
-                let debt_id = ctx
-                    .produced_ids
-                    .borrow()
-                    .first()
-                    .cloned()
-                    .unwrap_or_default();
+                let debt_id = super::core::created_row_id(ctx, "debt_id");
                 let count: i64 = ctx.connection().query_row(
                     "SELECT COUNT(*) FROM tally_obligation WHERE obligation_id = ?1",
                     [&debt_id],
@@ -2419,7 +2415,36 @@ fn add_debt() -> CommandDefinition {
                 .and_then(serde_json::Value::as_i64)
                 .unwrap_or_default();
             let reason = ctx.optional_str("reason").map(str::to_owned);
-            let debt_id = ctx.next_id();
+            // THE CALLER'S ID IS HONOURED (#922 G2), else the first one minted (so the
+            // postcondition finds it as `produced_ids[0]`, the debt's id before the friend's). The
+            // chat's confirm card names the debt before the member taps (#1088), so the id on the
+            // card is the id the row gets.
+            //
+            // A TAKEN ID IS REFUSED HERE AND NOT BY A PRECONDITION, deliberately: `add_person` and
+            // its siblings have a `minted_id_is_free` condition, but the gate writes one
+            // `agent_invocation_check` row per condition and each row takes an id, so a new
+            // condition would move every id a vault mints after a debt, with or without `debt_id`.
+            // The assistant's harness seeds worlds with ids from one sequence and orders rows by
+            // them, so that would change what the model reads. `core_entity` is where an id is held
+            // whatever kind holds it (#916): a debt id another row has is refused in a sentence
+            // before the entity trigger could abort on it.
+            let debt_id = match ctx.optional_str("debt_id") {
+                Some(given) => {
+                    let held: i64 = ctx.connection().query_row(
+                        "SELECT COUNT(*) FROM core_entity WHERE entity_id = ?1",
+                        [given],
+                        |row| row.get(0),
+                    )?;
+                    if held > 0 {
+                        return Err(VaultError::InvalidInput {
+                            name: "debt_id".to_owned(),
+                            detail: "a row already holds the id this write minted".to_owned(),
+                        });
+                    }
+                    given.to_owned()
+                }
+                None => ctx.next_id(),
+            };
             let owner = owner_party_id(ctx)?;
             let (from_party, to_party) = if direction == "owe" {
                 (owner.clone(), party_id.clone())

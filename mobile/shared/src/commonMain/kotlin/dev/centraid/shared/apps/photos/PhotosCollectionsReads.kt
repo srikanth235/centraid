@@ -611,6 +611,7 @@ public object PhotosCollectionsReads :
                 // and a shell that made its own from a peer's words would be
                 // the hole in that rule.
                 sentence = sentence,
+                invoke_key = invokeKey,
             ),
         )
 

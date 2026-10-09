@@ -241,6 +241,86 @@ fn two_documents_over_one_sha_are_two_documents() {
     );
 }
 
+/// A FILING THE SHELL OFFERS AGAIN UNDER ITS MINTED ID FILES ONCE, and a "Try
+/// again" after a failure files cleanly (#1029 §1, R-1088-12).
+///
+/// Docs mints the document id on the phone, before the first write, and keeps
+/// it for the whole ingest. There is no replay ledger to answer a second offer
+/// — `core.add_document` and `core.create_text_document` are
+/// `Idempotency::Once` and the vault never sees the shell's `invoke_key` — so
+/// two things carry the whole guarantee, and this pins both:
+///
+/// 1. a second offer of an id the vault holds is REFUSED by `document_id_is_free`
+///    with a sentence, and the vault still holds one document;
+/// 2. a first offer that was refused rolled back, so "Try again", which is only
+///    offered after a failure and reuses the same id, finds nothing in the way.
+#[test]
+fn a_filing_offered_again_under_its_minted_id_files_once() {
+    let drive = Drive::open("docs-minted-id");
+    let store = FsBlobStore::open(drive.scratch.join("blobs")).expect("a store opens");
+    let documents = |id: &str| {
+        drive.count(
+            "SELECT COUNT(*) FROM core_document WHERE document_id = ?1",
+            &[id],
+        )
+    };
+
+    // A TEXT DOCUMENT, offered twice under one id.
+    let text_id = "01920000-0000-7000-8000-0000000000a1";
+    let input = json!({ "document_id": text_id, "title": "Notes" });
+    let first = drive.run("core.create_text_document", input.clone());
+    assert_eq!(first["document_id"], json!(text_id));
+    let again = drive.try_run("core.create_text_document", input);
+    assert_eq!(again.status, CommandStatus::Failed);
+    assert_eq!(again.predicate.as_deref(), Some("document_id_is_free"));
+    assert_eq!(
+        again.reason.as_deref(),
+        Some("That document already exists."),
+        "the member is told in a sentence, not left with a second row"
+    );
+    assert_eq!(documents(text_id), 1);
+
+    // AN UPLOAD, offered twice under one id: the same.
+    let bytes = pdf_bytes("a scanned lease");
+    let sha = drive.stage(&store, &bytes, "application/pdf", "lease.pdf");
+    let upload_id = "01920000-0000-7000-8000-0000000000a2";
+    let input = json!({ "document_id": upload_id, "title": "Lease", "staged_sha": sha });
+    drive.run("core.add_document", input.clone());
+    let again = drive.try_run("core.add_document", input);
+    assert_eq!(again.status, CommandStatus::Failed);
+    assert_eq!(again.predicate.as_deref(), Some("document_id_is_free"));
+    assert_eq!(documents(upload_id), 1);
+    assert_eq!(
+        drive.count(
+            "SELECT COUNT(*) FROM core_content_representation r
+               JOIN core_document d ON d.current_content_id = r.content_id
+              WHERE d.document_id = ?1",
+            &[upload_id]
+        ),
+        1,
+        "and the refused offer wrote no second reading of the bytes"
+    );
+
+    // "TRY AGAIN": the first offer failed (nothing staged those bytes), the
+    // failure rolled back, and the same id then files.
+    let retry_id = "01920000-0000-7000-8000-0000000000a3";
+    let later = pdf_bytes("a lease staged late");
+    let late_sha = digest(&later);
+    let input = json!({ "document_id": retry_id, "title": "Late", "staged_sha": late_sha });
+    let failed = drive.try_run("core.add_document", input.clone());
+    assert_eq!(failed.status, CommandStatus::Failed);
+    assert_eq!(failed.predicate.as_deref(), Some("staged_or_owned"));
+    assert_eq!(
+        documents(retry_id),
+        0,
+        "a refused filing leaves no document behind"
+    );
+    drive.stage(&store, &later, "application/pdf", "late.pdf");
+    let filed = drive.run("core.add_document", input);
+    assert_eq!(filed["document_id"], json!(retry_id));
+    assert_eq!(documents(retry_id), 1);
+}
+
 /// THE WHOLE TEXT PATH, and every gate in front of it.
 #[test]
 fn a_text_document_files_edits_and_versions() {

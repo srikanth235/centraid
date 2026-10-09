@@ -255,7 +255,9 @@ pub fn complete(ctx: &TaskLifecycle<'_>, task_id: &str) -> Result<TaskLifecycleR
     }
     let series_id = series_id_of(ctx.connection, &row)?;
     ctx.connection.execute(
-        "UPDATE schedule_task SET status = 'completed', completed_at = ?1 WHERE task_id = ?2",
+        "UPDATE schedule_task SET status = 'completed', completed_at = ?1, updated_at = ?1,
+                row_version = row_version + 1
+          WHERE task_id = ?2",
         rusqlite::params![ctx.now, task_id],
     )?;
     let mut result = TaskLifecycleResult {
@@ -355,8 +357,10 @@ pub fn reopen(ctx: &TaskLifecycle<'_>, task_id: &str, status: &str) -> Result<Ta
         });
     }
     ctx.connection.execute(
-        "UPDATE schedule_task SET status = ?1, completed_at = NULL WHERE task_id = ?2",
-        rusqlite::params![status, task_id],
+        "UPDATE schedule_task SET status = ?1, completed_at = NULL, updated_at = ?3,
+                row_version = row_version + 1
+          WHERE task_id = ?2",
+        rusqlite::params![status, task_id, ctx.now],
     )?;
     Ok(TaskLifecycleResult {
         task_id: task_id.to_owned(),
@@ -377,8 +381,10 @@ pub fn cancel(ctx: &TaskLifecycle<'_>, task_id: &str) -> Result<TaskLifecycleRes
         return Err(refuse("task_exists", "That task is not here to cancel."));
     };
     ctx.connection.execute(
-        "UPDATE schedule_task SET status = 'cancelled', completed_at = NULL WHERE task_id = ?1",
-        [task_id],
+        "UPDATE schedule_task SET status = 'cancelled', completed_at = NULL, updated_at = ?2,
+                row_version = row_version + 1
+          WHERE task_id = ?1",
+        rusqlite::params![task_id, ctx.now],
     )?;
     Ok(TaskLifecycleResult {
         task_id: task_id.to_owned(),

@@ -1,0 +1,283 @@
+from gold import *
+import json
+
+
+def W(expr):
+    return json.dumps(expr, separators=(",", ":"))
+
+
+S("T19-076", "six turns coffee fund star where create person settle_up new already count",
+  T("who's in the pharmacy coffee fund", rows("nadia", "rachid", "imane", "kenza", "me"),
+    ref=[ans(kind="person", linked_to="$coffee")]),
+  T("star the pharmacy technician, he's been great this month", diff(upd("rachid", starred=True)),
+    ref=[act("star", kind="person", where='role = "pharmacy technician"')]),
+  T("add Loubna Rami, she starts monday on the till", diff(new("person", name="Loubna Rami", role=ANY)),
+    ref=[act("create", args=lines(kind="person", name="Loubna Rami", role="cashier"))]),
+  T("put her in the coffee fund and settle her up there so she starts at zero",
+    diff(link("coffee", "+1"), already=["+1"]),
+    ref=[act("add_to", rows="$c1", args=lines(to="$coffee"), more=True),
+         act("settle_up", rows="$c1", kind="person", args=lines(group="$coffee")),
+         ans(rows="$c1")]),
+  T("how many in the fund", val(6),
+    ref=[ans(op="count", kind="person", linked_to="$coffee")]),
+  T("and what's nadia's position in it", val((20, "MAD")),
+    ref=[ans(op="balance", kind="group", name="Pharmacy coffee fund", linked_to="$nadia")]))
+
+S("T19-077", "find role star prev event read",
+  T("who's the kids' paediatrician", rows("dr_kettani"),
+    ref=[find(kind="person", where='role contains "paediatrician"'), ans(rows="@prev")]),
+  T("star him, i always forget his name", diff(upd("dr_kettani", starred=True)),
+    ref=[act("star", rows="@prev")]),
+  T("when is adam's check-up with dr kettani", rows("adam_checkup"),
+    ref=[ans(kind="event", name="Adam's check-up with Dr Kettani")]))
+
+S("T19-078", "trashed person restore edit cadence read",
+  T("is sanae kabbaj in my deleted contacts", rows("sanae"),
+    ref=[ans(kind="person", name="Sanae Kabbaj", trashed=True)]),
+  T("restore her, she's back for the summer", diff(restore("sanae")),
+    ref=[act("restore", rows="$sanae")]),
+  T("set her cadence to thirty days", diff(upd("sanae", cadence=30)),
+    ref=[act("edit", rows="$sanae", args=lines(cadence=30))]),
+  T("who's on a thirty day cadence", rows("simo", "mouhcine", "sanae"),
+    ref=[ans(kind="person", where="cadence = 30 days")]),
+  T("log a call with samira too, she rang about the rota", ask("samira_b", "samira_a"),
+    ref=[act("log", kind="person", name="Samira", args=lines(kind="call")),
+         askc("samira bennani or samira alaoui?", options="$samira_b, $samira_a")]))
+
+S("T19-079", "seven turns lina party subtasks complete multi create group overlap ask create event cancel new album",
+  T("what are the subtasks of plan lina's birthday party", rows("cake", "invites"),
+    ref=[ans(kind="task", linked_to="$party_plan")]),
+  T("invite the class is done, and order the cake too",
+    diff(upd("invites", status="completed", completed=ANY), upd("cake", status="completed", completed=ANY)),
+    ref=[act("complete", rows="$invites, $cake")]),
+  T("make a group Lina's birthday so youssef and i can split the costs",
+    diff(new("group", name="Lina's birthday"), link("new", "me")),
+    ref=[act("create", args=lines(kind="group", name="Lina's birthday"))]),
+  T("put Clown rehearsal on saturday the twenty-fifth at 3pm", ask(),
+    ref=[bad(act("create", args=lines(kind="event", name="Clown rehearsal", date=D("2026-04-25", "15:00"),
+                                      duration=60))),
+         askc("omar is visiting 12 to 6 that saturday. another time?")]),
+  T("sunday twenty-sixth at 11", diff(new("event", name="Clown rehearsal", date="2026-04-26T11:00")),
+    ref=[act("create", args=lines(kind="event", name="Clown rehearsal", date=D("2026-04-26", "11:00"), duration=60))]),
+  T("the clown cancelled on us. cancel it", diff(upd("+2", status="cancelled")),
+    ref=[act("cancel", rows="$c2")]),
+  T("make an album Lina turns 5 for the party pics", diff(new("album", name="Lina turns 5")),
+    ref=[act("create", args=lines(kind="album", name="Lina turns 5"))]))
+
+S("T19-080", "delete note named trashed notes restore restore window ask",
+  T("delete books to read, i never open it", diff(trash("books")),
+    ref=[act("delete", kind="note", name="Books to read")]),
+  T("which notes have i deleted", rows("books", "old_garde", "ramadan_menu", "old_rota"),
+    ref=[ans(kind="note", trashed=True)]),
+  T("bring back old night duty schedule, kenza wants the 2025 rota", diff(restore("old_garde")),
+    ref=[act("restore", rows="$old_garde")]),
+  T("and the ramadan menu one", ask(),
+    ref=[find(kind="note", name="Ramadan menu", trashed=True),
+         bad(act("restore", rows="$ramadan_menu")),
+         askc("the ramadan menu has been in the bin since february, past 30 days, so it can't come back. write a new one?")]))
+
+S("T19-081", "find document date edit where delete prev",
+  T("the doc i saved on ninth april, which one was it", rows("bus_tickets"),
+    ref=[find(kind="document", when=W(D("2026-04-09"))), ans(rows="@prev")]),
+  T("rename it CTM tickets to Ifrane", diff(upd("bus_tickets", name="CTM tickets to Ifrane")),
+    ref=[act("edit", kind="document", when=W(D("2026-04-09")), args=lines(name="CTM tickets to Ifrane"))]),
+  T("we're driving now, delete it", diff(trash("bus_tickets")),
+    ref=[act("delete", rows="@prev")]))
+
+S("T19-082", "create document add_to new folder read star",
+  T("save a doc Baba's HbA1c results April, put it in baba medical and star it",
+    diff(new("document", name="Baba's HbA1c results April", starred=True), link("f_baba", "new")),
+    ref=[act("create", args=lines(kind="document", name="Baba's HbA1c results April"), more=True),
+         act("add_to", rows="$new", args=lines(to="$f_baba"), more=True),
+         act("star", rows="$new")]),
+  T("what's in baba medical", rows("prescription", "labs", "cnss_card", "+1"),
+    ref=[ans(kind="document", linked_to="$f_baba")]),
+  T("rename the new one to Baba's HbA1c April, shorter", diff(upd("+1", name="Baba's HbA1c April")),
+    ref=[act("edit", rows="$c1", args=lines(name="Baba's HbA1c April"))]))
+
+S("T19-083", "edit photo named delete write read photo undo album",
+  T("rename shelf b after the reorg to Shelf B new layout", diff(upd("shelf_after", name="Shelf B new layout")),
+    ref=[act("edit", rows="$shelf_after", args=lines(name="Shelf B new layout"))]),
+  T("delete shelf b before the reorg and show me what's left in the pharmacy album",
+    rows("sign", "team", "shelf_after", "fridge_p", also=diff(trash("shelf_before"), unlink("a_pharm", "shelf_before"))),
+    ref=[act("delete", rows="$shelf_before", more=True), ans(kind="photo", linked_to="$a_pharm")]),
+  T("undo that, i want the before and after", diff(restore("shelf_before"), link("a_pharm", "shelf_before")),
+    ref=[act("undo")]),
+  T("so what's in the pharmacy album", rows("sign", "team", "shelf_before", "shelf_after", "fridge_p"),
+    ref=[ans(kind="photo", linked_to="$a_pharm")]))
+
+S("T19-084", "locker starred edit where type url empty",
+  T("which locker items are starred", rows("gmail", "cnss_online", "visa", "ordre_card"),
+    ref=[find(kind="locker item", where="starred = yes"), ans(rows="@prev")]),
+  T("on the crypto wallet one change the note to: seed words moved to the bank box",
+    diff(upd("crypto", notes=has("bank box"))),
+    ref=[act("edit", kind="locker item", where='type = "crypto_wallet"',
+             args=lines(notes="seed words moved to the bank box"))]),
+  T("starred ones with no url", rows("visa", "ordre_card"),
+    ref=[ans(kind="locker item", where="starred = yes and url is empty")]))
+
+S("T19-085", "locker trashed restore named ambiguous ask reveal",
+  T("anything in the locker trash", rows("yahoo"),
+    ref=[ans(kind="locker item", trashed=True)]),
+  T("restore old yahoo mail", diff(restore("yahoo")),
+    ref=[act("restore", rows="$yahoo")]),
+  T("show me the pharmacy password", ask("wifi_pharm", "pc_pass"),
+    ref=[act("reveal", kind="locker item", name="Pharmacy", args=lines(field="password")),
+         askc("the pharmacy wifi or the pharmacy pc?", options="$wifi_pharm, $pc_pass")]),
+  T("the pc one", diff(reveal=[("pc_pass", "Shelf-B-2026")]),
+    ref=[act("reveal", rows="$pc_pass", args=lines(field="password"))]))
+
+S("T19-086", "locker create login note reveal new",
+  T("save Lina's school portal in the locker, username lina.elamrani",
+    diff(new("locker item", name="Lina's school portal", username="lina.elamrani")),
+    ref=[act("create", args=lines(kind="locker item", name="Lina's school portal", type="login",
+                                  username="lina.elamrani"))]),
+  T("and a locker note Nursery gate code: 2580", diff(new("locker item", name="Nursery gate code")),
+    ref=[act("create", args=lines(kind="locker item", name="Nursery gate code", type="note", notes="2580"))]),
+  T("what's that gate code", diff(reveal=[("+2", "2580")]),
+    ref=[act("reveal", rows="$c2", kind="locker item", args=lines(field="notes"))]))
+
+S("T19-087", "four turns find notebook delete prev find list edit prev",
+  T("which notebooks have one note in them", rows("nb_old"),
+    ref=[find(kind="notebook", where="note count = 1"), ans(rows="@prev")]),
+  T("delete it", diff(gone("nb_old"), unlink("nb_old", "old_idea")),
+    ref=[act("delete", rows="@prev")]),
+  T("and which lists have no tasks", rows("summer_l"),
+    ref=[find(kind="list", where="task count = 0"), ans(rows="@prev")]),
+  T("call it Summer in Agadir, area travel", diff(upd("summer_l", name="Summer in Agadir", area="travel")),
+    ref=[act("edit", rows="@prev", args=lines(name="Summer in Agadir", area="travel"))]),
+  T("delete the ramadan 2025 notebook as well", diff(gone("nb_ramadan")),
+    ref=[act("delete", rows="$nb_ramadan")]))
+
+S("T19-089", "task person count person task count complete named",
+  T("which tasks have three or more people on them", rows("rota", "rota_mail"),
+    ref=[find(kind="task", where="person count > 2"), ans(rows="@prev")]),
+  T("who's on send the school run rota for may", rows("samira_b", "samira_a", "driss"),
+    ref=[ans(kind="person", linked_to="$rota_mail")]),
+  T("who has more than one task", rows("baba", "adam", "lina", "nadia", "dr_fassi"),
+    ref=[ans(kind="person", where="task count > 1")]),
+  T("approve nadia's leave, done", diff(upd("leave", status="completed", completed=ANY)),
+    ref=[act("complete", kind="task", name="Approve Nadia's leave")]),
+  T("and reopen replace baba's glucometer battery, the new one died already",
+    diff(upd("battery", status="open", completed=None)),
+    ref=[act("reopen", kind="task", name="Replace Baba's glucometer battery")]))
+
+S("T19-090", "person open spans date time rel photo count",
+  T("who have i been in touch with since friday 9am",
+    rows("omar", "salma", "aicha", "khalid", "rachid", "baba", "samira_b", "nadia", "dada", "youssef_a"),
+    ref=[find(kind="person", when=W({"from": U("week", -1, weekday=5, time="09:00")})), ans(rows="@prev")]),
+  T("and since last week", rows("samira_a", "youssef_b", "hamza", "omar", "salma", "aicha", "khalid", "rachid", "baba",
+                               "samira_b", "nadia", "dada", "youssef_a"),
+    ref=[ans(kind="person", when=W({"from": U("week", -1)}))]),
+  T("any of those in two or more photos", rows("salma", "baba", "youssef_a"),
+    ref=[ans(kind="person", within="@prev", where="photo count >= 2")]))
+
+S("T19-091", "person open spans search nickname log",
+  T("who did i talk to since the thirteenth at 8am", rows("khalid", "rachid", "baba", "samira_b", "nadia", "dada",
+                                                   "youssef_a"),
+    ref=[ans(kind="person", when=W({"from": D("2026-04-13", "08:00")}))]),
+  T("since two weeks ago?", rows("driss", "kenza", "zineb", "samira_a", "youssef_b", "hamza", "omar", "salma", "aicha",
+                                 "khalid", "rachid", "baba", "samira_b", "nadia", "dada", "youssef_a"),
+    ref=[ans(kind="person", when=W({"from": U("week", -2)}))]),
+  T("log a visit with hajja, went over after work", diff(upd("zineb", date=ANY)),
+    ref=[act("log", kind="person", name="Hajja", args=lines(kind="visit")), search("hajja", kind="person"),
+         act("log", rows="$zineb", args=lines(kind="visit"))]))
+
+S("T19-092", "five turns compute sum debts max settle named sum",
+  T("how much do i owe vs how much am i owed, open debts only", vgroups({"i_owe": (1800, "MAD"), "owes_me": (3150, "MAD")}),
+    ref=[comp(op="sum", field="amount", group="direction", kind="debt", where='status = "open"'), ans(value="@prev")]),
+  T("biggest one i owe", val((1000, "MAD")),
+    ref=[ans(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
+  T("that's the cash for the pharmacy till, i paid youssef back. settle it", diff(upd("d_youssef", status="settled")),
+    ref=[act("settle_debt", kind="debt", name="Cash for the pharmacy till")]),
+  T("total i owe after that?", val((800, "MAD")),
+    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
+  T("and who's that to", rows("d_nadia", "d_samira", "d_aicha", "d_khalid"),
+    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]))
+
+S("T19-093", "five turns debt span direction empty person count ask settle_up",
+  T("open debts from march up to last thursday", rows("d_driss", "d_hamza", "d_omar", "d_kenza", "d_samira", "d_khalid"),
+    ref=[ans(kind="debt", where='status = "open"', when=W(span(U("month", 0, name=3), U("week", -1, weekday=4))))]),
+  T("any debts with no direction on them", rows(),
+    ref=[ans(kind="debt", where="direction is empty")]),
+  T("or with nobody attached", rows(),
+    ref=[ans(kind="debt", where="person count < 1")]),
+  T("ok settle up with omar", ask("baba_care", "ifrane"),
+    ref=[askc("in baba's care or the ifrane weekend?", options="$baba_care, $ifrane")]),
+  T("baba's care", diff(settle=["Omar Al-Sayed"]),
+    ref=[act("settle_up", rows="$omar", args=lines(group="$baba_care"))]))
+
+S("T19-094", "six turns trashed task recovery restore restore window ask create read",
+  T("is the balcony door task around", rows("balcony"),
+    ref=[find(kind="task", name="balcony door"), ans(rows="$balcony")]),
+  T("restore it, the landlord hasn't fixed it", diff(restore("balcony")),
+    ref=[act("restore", rows="$balcony")]),
+  T("bring back buy a new mop too", ask(),
+    ref=[bad(act("restore", kind="task", name="Buy a new mop", trashed=True)),
+         askc("that one's been in the bin since february, too old to restore. add it again?")]),
+  T("yeah add it again, shopping list", diff(new("task", name="Buy a new mop"), link("shop_l", "new")),
+    ref=[act("create", args=lines(kind="task", name="Buy a new mop", list="$shop_l"))]),
+  T("what's on the shopping list", rows("goggles", "hajja_gift", "+1"),
+    ref=[ans(kind="task", linked_to="$shop_l")]),
+  T("buy a gift for hajja is done, got her the prayer rug", diff(upd("hajja_gift", status="completed", completed=ANY)),
+    ref=[act("complete", kind="task", name="Buy a gift for Hajja")]))
+
+S("T19-095", "delete event where cancelled trashed event restore reschedule",
+  T("remove the cancelled lunch from last week", diff(trash("kenza_lunch")),
+    ref=[act("delete", kind="event", where='status = "cancelled"', when=W(U("week", -1)))]),
+  T("anything else cancelled coming up", rows("yoga"),
+    ref=[ans(kind="event", where='status = "cancelled"', when=W({"from": U("day", 0)}))]),
+  T("is the car service in the trash", rows("car_service"),
+    ref=[ans(kind="event", name="Car service"), ans(rows="$car_service")]),
+  T("put it back", diff(restore("car_service")),
+    ref=[act("restore", rows="$car_service")]),
+  T("and move it to next thursday 9am", diff(upd("car_service", date="2026-04-23T09:00")),
+    ref=[act("reschedule", rows="$car_service", args=lines(to=U("week", 1, weekday=4, time="09:00")))]))
+
+S("T19-096", "find two youssefs ask event hour later",
+  T("when did i last see youssef", ask("youssef_a", "youssef_b"),
+    ref=[find(kind="person", name="Youssef"),
+         askc("youssef your husband or youssef berrada?", options="$youssef_a, $youssef_b")]),
+  T("berrada", rows("youssef_b"),
+    ref=[ans(rows="$youssef_b")]),
+  T("what's my next meeting with him", rows("berrada_meet"),
+    ref=[ans(kind="event", linked_to="$youssef_b", when=W({"from": U("day", 0)}))]),
+  T("push it an hour later", diff(upd("berrada_meet", date="2026-04-15T12:00")),
+    ref=[act("reschedule", rows="$berrada_meet", args=lines(to={"unit": "hour", "rel": 1, "anchor": "row"}))]),
+  T("and set up another one with him next week", ask(),
+    ref=[askc("sure, which day and what time next week?")]))
+
+S("T19-097", "single ambiguous delete event ask",
+  T("delete the nurse visit for baba", ask("nurse_1", "nurse_2"),
+    ref=[act("delete", kind="event", name="Nurse visit for Baba"),
+         find(kind="event", name="Nurse visit for Baba"),
+         askc("the one on the 20th or the 27th?", options="$nurse_1, $nurse_2")]))
+
+S("T19-098", "single ask without options",
+  T("cancel my school run", ask(),
+    ref=[askc("which day? you're down for every tuesday and thursday")]))
+
+S("T19-099", "single complete write read list",
+  T("mark swap the gas bottle done and tell me what's left on the home list",
+    rows("sink", "car_ins", "lydec_05", also=diff(upd("gas", status="completed", completed=ANY))),
+    ref=[act("complete", kind="task", name="Swap the gas bottle", more=True),
+         ans(kind="task", linked_to="$home_l", where='status = "open"')]))
+
+S("T19-100", "five turns reschedule write read already compute min",
+  T("move order glucose test strips to thursday, update baba's glucose log is done, make the cnss reimbursement priority one, then show me baba's list",
+    rows("insulin", "strips", "battery", "glucose_log_t", "shoes", "reimburse", "meal_plan",
+         also=diff(upd("strips", date="2026-04-16"), upd("glucose_log_t", status="completed", completed=ANY),
+                   upd("reimburse", priority=1))),
+    ref=[act("reschedule", kind="task", name="Order glucose test strips", args=lines(to=U("week", 0, weekday=4)),
+             more=True),
+         act("complete", kind="task", name="Update Baba's glucose log", more=True),
+         act("edit", rows="$reimburse", args=lines(priority=1), more=True),
+         ans(kind="task", linked_to="$baba_l")]),
+  T("tick replace baba's glucometer battery", diff(already=["battery"]),
+    ref=[act("complete", rows="$battery"), ans(rows="$battery")]),
+  T("what's the quickest thing on there", val(10),
+    ref=[ans(op="min", field="effort", kind="task", linked_to="$baba_l", where='status = "open"')]),
+  T("which one is that", rows("strips"),
+    ref=[ans(kind="task", linked_to="$baba_l", where='status = "open" and effort = 10 minutes')]),
+  T("do it tomorrow instead", diff(upd("strips", date="2026-04-15")),
+    ref=[act("reschedule", rows="$strips", args=lines(to=U("day", 1)))]))
