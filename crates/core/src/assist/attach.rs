@@ -23,6 +23,15 @@
 //!
 //! **Locker is never an attachment**, structurally: the only ids read are
 //! `media.asset` and `core.document`, and no Locker item is either.
+//!
+//! # OFF IN THE SHIPPED BUILD (R-1088-19)
+//!
+//! [`OFFERED`] is the one switch. The shipped model (S2) was fine-tuned on the tool format and
+//! cannot describe a photograph or a document: given the projector's image it writes a tool call
+//! and runs to the length cap. So the core refuses a request that carries an attachment with
+//! [`Refusal::AttachmentUnsupported`], never loads the vision projector, and the shells do not
+//! draw the attach control (`ChatMachine.ATTACHMENTS_OFFERED`, which flips with this). Everything
+//! below stays, tested, for the model that can read them.
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_assist::Refusal;
@@ -32,6 +41,14 @@ use image::imageops::FilterType;
 
 use crate::error::{CoreError, Result};
 use crate::handle::Handle;
+
+/// WHETHER THE CHAT TAKES ATTACHMENTS AT ALL: `false`, because the shipped model cannot describe a
+/// file (R-1088-19). While it is, a send that carries one is refused
+/// [`Refusal::AttachmentUnsupported`] before anything is resolved or generated, and a load
+/// attaches no vision projector. Every handle starts from it ([`super::Hub::attachments_offered`]).
+/// Flip it together with the shells' `ChatMachine.ATTACHMENTS_OFFERED` when a model that reads
+/// attachments ships.
+pub const OFFERED: bool = false;
 
 /// The most bytes of an image the chat will take from a shell or a file.
 pub const IMAGE_BYTES_MAX: usize = 25 * 1024 * 1024;

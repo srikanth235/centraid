@@ -13,7 +13,6 @@
 //! │        call_text(message) ──► {text, ends_turn, effect, obs}  ──► log (message + observation)
 //! └──────── until ends_turn, STEP_CAP, a cancel between steps, or the engine failing
 //! effect ──► cards (the kind table) + a line composed from the copy
-//!            (a decline `out_of_scope` is the one turn whose words are generated: the free reply)
 //! ```
 //!
 //! # WHAT THE MEMBER READS IS THE RUNTIME'S (R-1088-10)
@@ -23,18 +22,14 @@
 //! chat's copy ([`words`]). The rows are [`cards`]: the chat's existing `Card`, mapped from the
 //! thirteen kinds into the seven apps.
 //!
-//! # THE FREE REPLY (#1088)
+//! # NO FREE REPLY (R-1088-19)
 //!
-//! One decline reads differently. A turn that ends in `decline out_of_scope` (a greeting, a question
-//! about the world, a request the chat cannot do) is answered with a few words from ONE free
-//! generation ([`Plane::chat`]: no tools, no grammar, 256 tokens), because "Outside what chat can do
-//! here." is a poor reply to "hi". The generation is told it has read nothing and can send, call and
-//! change nothing, so "text Sam" is never answered as if it were done. Every other decline keeps
-//! its canned sentence, and so does this one when the generation fails or says nothing; a stop ends
-//! the turn as any stop does. Only the MODEL's own decline gets words: one the runtime composes (a
-//! refused write) keeps its sentence.
-//! The words are the turn's `Answered` text, saved like any answer, so a reopened thread shows what
-//! was said.
+//! A turn that ends in `decline out_of_scope` (a greeting, a question about the world, a request
+//! the chat cannot do) is answered with the runtime's canned sentence, like every other decline,
+//! and no second generation runs. The shipped model was fine-tuned on the tool format only: given
+//! a plain prose prompt it writes tool calls and think loops, never prose, so a free generation
+//! after the decline would show the member that. A later model brings the free reply back
+//! (R-1088-19).
 //!
 //! # WRITES PARK (R-1088-2)
 //!
@@ -73,9 +68,8 @@ use crate::native::step::{StepOptions, decode_step};
 use crate::native::think::TraceMode;
 use crate::native::world::Key;
 use crate::native::{Flags, Session};
-use crate::prompt::{Budget, HISTORY_TURNS, Recorded, Turn, question};
 use crate::result::{CARD_CAP, Card};
-use crate::turn::{Answered, Event, Plane, Refusal};
+use crate::turn::{Answered, Event, Refusal};
 use log::Log;
 pub use pending::CardStep;
 use words::{Say, say, say_with};
@@ -88,9 +82,6 @@ pub const MESSAGE_MAX: usize = 800;
 pub struct NativeChat {
     session: Session,
     log: Log,
-    /// The last turns' question and the words that ended them: what the free reply reads, which
-    /// is never the runtime's conversation (that is [`Self::log`], tool calls and all).
-    said: Vec<Turn>,
 }
 
 /// The civil date and time of an instant in an IANA zone; UTC when the zone is empty or unknown.
@@ -125,7 +116,6 @@ impl NativeChat {
         Ok(Self {
             session,
             log: Log::new(system),
-            said: Vec::new(),
         })
     }
 
@@ -336,13 +326,7 @@ impl<'a> NativePlane<'a> {
                 notices: Vec::new(),
             });
         };
-        let mut concluded = conclude(&chat.session, &reply)?;
-        if declined_out_of_scope(&reply)
-            && let Some(words) = self.free_words(chat, &message, cancel, sink)?
-        {
-            concluded.text = words;
-        }
-        chat.remember(&message, &concluded.text);
+        let concluded = conclude(&chat.session, &reply)?;
         if !concluded.cards.is_empty() {
             sink(Event::Cards(concluded.cards.clone()));
         }
@@ -353,57 +337,6 @@ impl<'a> NativePlane<'a> {
         }
         Ok(concluded)
     }
-}
-
-impl NativePlane<'_> {
-    /// The words of the model's own decline `out_of_scope`: one free generation over what this
-    /// chat said last, streamed as it is written. `None` when it fails or says nothing, and the
-    /// turn then says the canned sentence.
-    ///
-    /// # Errors
-    /// [`Refusal::Cancelled`] when the member stops it: a stop ends this turn as it ends every
-    /// other.
-    fn free_words(
-        &self,
-        chat: &NativeChat,
-        message: &str,
-        cancel: &Cancel,
-        sink: &mut dyn FnMut(Event),
-    ) -> Result<Option<String>, Refusal> {
-        let plane = Plane {
-            model: self.model,
-            budget: Budget::DEFAULT,
-        };
-        match plane.chat(&chat.said, message, cancel, sink) {
-            Ok(words) => Ok(Some(words)),
-            Err(Refusal::Cancelled) => Err(Refusal::Cancelled),
-            Err(_) => Ok(None),
-        }
-    }
-}
-
-impl NativeChat {
-    /// Keep what a turn that ended was asked and answered, for the free reply's next prompt.
-    fn remember(&mut self, message: &str, said: &str) {
-        self.said.push(Turn {
-            user: question(message),
-            record: Recorded::Answer(said.to_owned()),
-        });
-        let surplus = self.said.len().saturating_sub(HISTORY_TURNS);
-        self.said.drain(..surplus);
-    }
-}
-
-/// Whether the turn ended in the MODEL's own `decline out_of_scope`. A decline the runtime
-/// composes (`composed`: a verb that does not apply, a write it refused, a Locker call) keeps its
-/// sentence whatever its reason word is: free words after a refused write could say it was made.
-fn declined_out_of_scope(reply: &Value) -> bool {
-    let effect = &reply["effect"];
-    effect["decline"]["reason"].as_str() == Some("out_of_scope")
-        && !["composed", "locker_off"]
-            .iter()
-            .any(|key| effect[*key].as_bool().unwrap_or(false))
-        && effect["refusal"].is_null()
 }
 
 fn failed(error: ModelError) -> Refusal {

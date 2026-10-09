@@ -7,7 +7,9 @@
 //! taps, writes once when they do and nothing when they dismiss it or the rows changed; a stop
 //! between steps ends the turn and costs the model no further call; a reopened thread and a retry
 //! start a fresh session while a vault that changed does not; an event question reads the
-//! member's own days; and an attachment never leaves its own path.
+//! member's own days; a decline `out_of_scope` is the canned sentence with no second generation
+//! (R-1088-19); and an attachment is refused while the chat takes none, and never leaves its own
+//! path when it does.
 
 mod common;
 
@@ -1273,10 +1275,79 @@ fn a_retry_asks_the_question_again_in_a_fresh_session() {
     assert_eq!(thread(&sample, &retry.thread_id).messages.len(), 2);
 }
 
+/// The sample vault's first text document, as a send carries it.
+fn a_document_attachment(sample: &common::chat::Sample) -> wire::AssistAttachment {
+    let documents = match sample
+        .assist(Ask::Documents(wire::AssistDocumentsRequest { limit: 5 }))
+        .unwrap()
+        .kind
+    {
+        Some(wire::assist_response::Kind::Documents(listed)) => listed.documents,
+        other => panic!("{other:?}"),
+    };
+    let doc = documents.first().expect("the sample holds a text document");
+    wire::AssistAttachment {
+        kind: Some(wire::assist_attachment::Kind::VaultDoc(
+            wire::AssistVaultDoc {
+                doc_id: doc.doc_id.clone(),
+            },
+        )),
+        label: doc.title.clone(),
+    }
+}
+
+#[test]
+fn the_shipped_chat_refuses_an_attachment_and_asks_the_model_nothing() {
+    // R-1088-19: the shipped model cannot describe a file, so `attach::OFFERED` is off and a
+    // request that still carries one is refused before anything is resolved or generated.
+    let model = Arc::new(ScriptedModel::new(["never said"]));
+    let sample = native_sample(model.clone());
+    assert!(!sample.handle.assist().attachments_offered());
+    let attachment = a_document_attachment(&sample);
+    let session = sample.start("");
+    let send = |turn, attachments| match sample
+        .assist(Ask::Send(wire::AssistSendRequest {
+            session_id: session,
+            text: "summarise this".to_owned(),
+            tz: common::chat::TZ.to_owned(),
+            regenerate: false,
+            turn_id: turn,
+            attachments,
+        }))
+        .unwrap()
+        .kind
+    {
+        Some(wire::assist_response::Kind::Sent(sent)) => sent,
+        other => panic!("{other:?}"),
+    };
+    let sent = send(1, vec![attachment]);
+    assert_eq!(
+        refusal_of(&sent),
+        wire::AssistRefusalReason::AttachmentUnsupported as i32
+    );
+    assert!(model.requests().is_empty(), "the model was not asked");
+    assert!(
+        story(&sample.drain_assist_events())
+            .iter()
+            .all(|word| word != "reading" && word != "token"),
+        "no reading marker, no words"
+    );
+
+    // the same chat still answers a question that carries none
+    let [think, call] = step("plan: no", "decline", &[("reason", "out_of_scope")]);
+    let asks = Arc::new(ScriptedModel::new([think, call]));
+    sample.install(asks.clone());
+    assert_eq!(
+        answered(&send(2, Vec::new())).text,
+        "Outside what chat can do here."
+    );
+}
+
 #[test]
 fn an_attachment_never_leaves_the_attached_path_whichever_plane_answers_the_rest() {
     let model = Arc::new(ScriptedModel::new(["It is about a trip."]));
     let sample = native_sample(model.clone());
+    sample.handle.assist().offer_attachments(true);
     let documents = match sample
         .assist(Ask::Documents(wire::AssistDocumentsRequest { limit: 5 }))
         .unwrap()
@@ -1382,66 +1453,47 @@ fn the_prompt_of_a_three_turn_conversation_against_the_engines_context() {
 }
 
 // ---------------------------------------------------------------------------
-// 5. The free reply (#1088): the words of a decline `out_of_scope`
+// 5. No free reply (R-1088-19): a decline `out_of_scope` is the canned sentence
 // ---------------------------------------------------------------------------
 
+/// What the free generation used to say. It is scripted AFTER the decline in every test below, so
+/// a plane that still asked for it would be handed it and the assertions would see it.
 const FREE_WORDS: &str =
     "I can look things up in your vault, but I can't send messages. Try asking about your tasks.";
-
-/// A decline `out_of_scope`, then the words the free generation says.
-fn out_of_scope_then(words: &str) -> Vec<String> {
-    let [think, call] = step("plan: no", "decline", &[("reason", "out_of_scope")]);
-    vec![think, call, words.to_owned()]
-}
 
 fn model_of(outputs: Vec<String>) -> Arc<ScriptedModel> {
     Arc::new(ScriptedModel::new(outputs))
 }
 
+/// A decline `out_of_scope`, then words nobody should ever ask for.
+fn out_of_scope_then_free_words() -> Vec<String> {
+    let [think, call] = step("plan: no", "decline", &[("reason", "out_of_scope")]);
+    vec![think, call, FREE_WORDS.to_owned()]
+}
+
 #[test]
-fn a_decline_out_of_scope_is_answered_in_free_words_streamed_and_told_it_can_do_nothing() {
-    let model = model_of(out_of_scope_then(FREE_WORDS));
+fn a_decline_out_of_scope_is_the_canned_sentence_with_exactly_one_generation() {
+    use centraid_assist::native_turn::words::{Say, say};
+    let model = model_of(out_of_scope_then_free_words());
     let sample = native_sample(model.clone());
     let session = sample.start("");
     let sent = sample.send(session, 1, "text Sam that I am running late");
 
     let answer = answered(&sent);
-    assert_eq!(answer.text, FREE_WORDS);
+    assert_eq!(answer.text, say(Say::DeclineOutOfScope));
+    assert_eq!(answer.text, "Outside what chat can do here.");
     assert!(answer.cards.is_empty() && answer.pending.is_none());
 
-    // the words streamed as they were written, then the answer closes the turn
-    let story = story(&sample.drain_assist_events());
-    assert!(
-        story.iter().filter(|word| *word == "token").count() >= 2,
-        "{story:?}"
-    );
-    assert_eq!(story.last().map(String::as_str), Some("answer"));
-    assert!(!story.iter().any(|word| word.starts_with("activity")));
-
-    // ONE free generation after the step's two: no tools, no grammar, the 256-token ceiling, and
-    // a system turn that says it cannot send, call or change anything
-    let requests = model.requests();
-    assert_eq!(requests.len(), 3);
-    let free = &requests[2];
-    assert_eq!(free.grammar, None);
-    assert_eq!(free.max_tokens, 256);
-    assert!(!free.prompt.contains("<tools>"));
-    assert!(
-        free.prompt
-            .contains("You cannot send messages, make calls or change anything")
-    );
-    assert!(free.prompt.contains("text Sam that I am running late"));
-    assert!(
-        free.prompt
-            .ends_with(centraid_assist::prompt::ASSISTANT_TURN)
-    );
+    // the step's two messages (a think, a call) and nothing after: no free generation
+    assert_eq!(model.requests().len(), 2);
+    // and no word streamed: the canned sentence arrives as the answer alone
+    assert_eq!(story(&sample.drain_assist_events()), ["answer"]);
 }
 
 #[test]
-fn every_other_decline_keeps_its_canned_sentence_and_asks_for_no_free_words() {
-    // `a_decline_other_than_out_of_scope…` holds the sentences; this holds the count: the free
-    // generation is out_of_scope's alone.
+fn every_decline_keeps_its_canned_sentence_and_asks_for_no_free_words() {
     for reason in [
+        "out_of_scope",
         "unbounded_destruction",
         "sealed_egress",
         "fabricated_secret",
@@ -1457,49 +1509,9 @@ fn every_other_decline_keeps_its_canned_sentence_and_asks_for_no_free_words() {
 }
 
 #[test]
-fn a_free_reply_that_fails_or_says_nothing_falls_back_to_the_canned_sentence() {
-    let canned = "Outside what chat can do here.";
-    let [think, call] = step("plan: no", "decline", &[("reason", "out_of_scope")]);
-
-    // the engine fails: the script is spent after the step
-    let sample = native_sample(model_of(vec![think.clone(), call.clone()]));
-    let session = sample.start("");
-    let sent = sample.send(session, 1, "text Sam");
-    assert_eq!(answered(&sent).text, canned);
-    assert_eq!(story(&sample.drain_assist_events()), ["answer"]);
-
-    // the model says nothing
-    let sample = native_sample(model_of(vec![think, call, "  \n".to_owned()]));
-    let session = sample.start("");
-    assert_eq!(answered(&sample.send(session, 1, "text Sam")).text, canned);
-}
-
-#[test]
-fn a_stop_during_the_free_reply_ends_the_turn_cancelled_like_every_other_stop() {
-    let [think, call] = step("plan: no", "decline", &[("reason", "out_of_scope")]);
-    let stopped = ScriptedModel::new([think, call, FREE_WORDS.to_owned()]).cancelling_during(2, 2);
-    let sample = native_sample(Arc::new(stopped));
-    let session = sample.start("");
-    let sent = sample.send(session, 1, "text Sam");
-    assert_eq!(
-        refusal_of(&sent),
-        wire::AssistRefusalReason::Cancelled as i32
-    );
-    // what streamed before the stop is what is kept, marked stopped
-    let stored = thread(&sample, &sent.thread_id);
-    assert_eq!(
-        stored.messages[1].outcome,
-        wire::ChatStoredOutcome::Stopped as i32
-    );
-    assert!(FREE_WORDS.starts_with(&stored.messages[1].text));
-    assert!(!stored.messages[1].text.is_empty());
-}
-
-#[test]
 fn a_decline_the_runtime_composes_keeps_its_sentence_even_when_its_reason_is_out_of_scope() {
     // A verb that does not apply to the kind: the model asks to complete a note, and the runtime
-    // refuses the write and ends the turn `out_of_scope`. Free words after a refused write could
-    // say it was made, so no second generation is asked for.
+    // refuses the write and ends the turn `out_of_scope`.
     let model = model_of(
         [
             step("plan: look", "find", &[("kind", "note")]),
@@ -1518,11 +1530,7 @@ fn a_decline_the_runtime_composes_keeps_its_sentence_even_when_its_reason_is_out
     let session = sample.start("");
     let sent = sample.send(session, 1, "complete my notes");
     assert_eq!(answered(&sent).text, "Outside what chat can do here.");
-    assert_eq!(
-        model.prompts().len(),
-        4,
-        "two steps, and no free generation"
-    );
+    assert_eq!(model.prompts().len(), 4, "two steps, and nothing after");
     assert!(
         !story(&sample.drain_assist_events())
             .iter()
@@ -1531,16 +1539,16 @@ fn a_decline_the_runtime_composes_keeps_its_sentence_even_when_its_reason_is_out
 }
 
 #[test]
-fn the_free_words_are_what_a_reopened_thread_shows() {
-    let sample = native_sample(model_of(out_of_scope_then(FREE_WORDS)));
+fn the_canned_sentence_is_what_a_reopened_thread_shows() {
+    let sample = native_sample(model_of(out_of_scope_then_free_words()));
     let session = sample.start("");
     let sent = sample.send(session, 1, "text Sam that I am running late");
 
-    // saved as an answer, in the member's words and the model's, with no cards
+    // saved as an answer, in the member's words and the runtime's, with no cards
     let stored = thread(&sample, &sent.thread_id);
     assert_eq!(stored.messages.len(), 2);
     assert_eq!(stored.messages[0].text, "text Sam that I am running late");
-    assert_eq!(stored.messages[1].text, FREE_WORDS);
+    assert_eq!(stored.messages[1].text, "Outside what chat can do here.");
     assert_eq!(
         stored.messages[1].outcome,
         wire::ChatStoredOutcome::Answered as i32
@@ -1562,33 +1570,6 @@ fn the_free_words_are_what_a_reopened_thread_shows() {
     assert_eq!(reopened.thread_id, sent.thread_id);
     assert_eq!(
         thread(&sample, &reopened.thread_id).messages[1].text,
-        FREE_WORDS
+        "Outside what chat can do here."
     );
-}
-
-#[test]
-fn a_free_reply_reads_what_the_chat_said_last() {
-    let mut outputs: Vec<String> = read_tasks().into_iter().flatten().collect();
-    outputs.extend(out_of_scope_then(
-        "You asked about your tasks a moment ago.",
-    ));
-    let model = model_of(outputs);
-    let sample = native_sample(model.clone());
-    let session = sample.start("");
-    assert_eq!(
-        answered(&sample.send(session, 1, "what tasks do I have?")).text,
-        FOUND_TASKS
-    );
-    let sent = sample.send(session, 2, "thanks, what did I just ask?");
-    assert_eq!(
-        answered(&sent).text,
-        "You asked about your tasks a moment ago."
-    );
-
-    // the free reply's prompt holds the turn before it as the words said, never as the runtime's
-    // conversation (no tool calls, no observations)
-    let free = model.prompts().pop().unwrap();
-    assert!(free.contains("<|im_start|>user\nwhat tasks do I have?<|im_end|>"));
-    assert!(free.contains(&format!("<|im_start|>assistant\n{FOUND_TASKS}<|im_end|>")));
-    assert!(!free.contains("<tool_response>") && !free.contains("<tool_call>"));
 }

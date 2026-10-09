@@ -272,7 +272,7 @@ fn real_tokens(model: &Arc<dyn Model>, text: &str) -> u32 {
 #[ignore = "needs a model file: set CENTRAID_ASSIST_MODEL"]
 fn the_token_estimate_never_undercounts_the_real_tokenizer() {
     use centraid_assist::attach::{Attachments, TextDoc, attach_prompt};
-    use centraid_assist::prompt::{Recorded, Turn, chat_prompt, estimate_tokens};
+    use centraid_assist::prompt::{Recorded, Turn, estimate_tokens};
 
     let Some(model) = model() else { return };
     let kinds: Vec<(&str, String)> = vec![
@@ -349,8 +349,7 @@ fn the_token_estimate_never_undercounts_the_real_tokenizer() {
         );
     }
 
-    // The plane's own prompts: a native step's, the free reply's after two turns, and an
-    // attachment's over a document.
+    // The plane's own prompts: a native step's and an attachment's over a document.
     let history = [
         Turn {
             user: "what tasks do I have?".to_owned(),
@@ -373,10 +372,6 @@ fn the_token_estimate_never_undercounts_the_real_tokenizer() {
     let mut worst = f64::MAX;
     for (label, text) in [
         ("native step", native_prompt("what tasks do I have?")),
-        (
-            "free reply",
-            chat_prompt(&history, "text Sam that I am late"),
-        ),
         (
             "attachment",
             attach_prompt(&history, &document, "what should I bring?", budget).text,

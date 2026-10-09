@@ -517,6 +517,7 @@ fn a_thread_that_is_not_in_the_vault_does_not_reopen() {
 #[test]
 fn a_camera_roll_image_is_saved_as_a_small_thumbnail_and_never_as_itself() {
     let sample = common::chat::sample();
+    sample.handle.assist().offer_attachments(true);
     sample.install(Arc::new(ScriptedModel::new(["It is a gradient."]).seeing()));
     let session = sample.start("");
     let original = png(1200, 800);
@@ -563,6 +564,7 @@ fn a_camera_roll_image_is_saved_as_a_small_thumbnail_and_never_as_itself() {
 #[test]
 fn a_vault_document_is_saved_as_a_reference_and_its_label() {
     let sample = common::chat::sample();
+    sample.handle.assist().offer_attachments(true);
     let documents = match sample
         .assist(Ask::Documents(wire::AssistDocumentsRequest { limit: 5 }))
         .unwrap()

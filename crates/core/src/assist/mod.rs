@@ -1,8 +1,8 @@
 //! THE CHAT'S DOOR INTO THE CORE: sessions in memory, turns run on the caller's
 //! thread, events onto the queue the shell already drains.
 //!
-//! `crates/assist` is the plane — the native runtime, its turn loop, the attached and free
-//! replies — and holds no vault and no engine. This module is what joins it to a [`Handle`]:
+//! `crates/assist` is the plane — the native runtime, its turn loop and the attached path — and
+//! holds no vault and no engine. This module is what joins it to a [`Handle`]:
 //!
 //! * [`door`] is the native runtime's way into the open vault (#1088): the query path a screen
 //!   uses for reads, `api::invoke` for the writes a confirmed card makes;
@@ -14,11 +14,12 @@
 //! # ONE PLANE, ONE ARM (#1088)
 //!
 //! A turn is answered by the native plane: the model drives `centraid_assist::native_turn` over
-//! the same runtime the fine-tuning loop trains. A turn with an attachment takes the attached path
-//! instead (R-1088-9). Everything around the turn is shared: the slot, `BUSY`, stop, the event
-//! queue, and the saved turn. A native chat's session lives in its [`Slot`], in memory
-//! (R-1088-10): a new chat, a reopened thread, a retry and a turn that did not end each start a
-//! fresh one. A write the model makes parks behind a card
+//! the same runtime the fine-tuning loop trains. A turn with an attachment would take the attached
+//! path instead (R-1088-9), but [`attach::OFFERED`] is off (R-1088-19): such a request is refused
+//! `AttachmentUnsupported` and the vision projector is never loaded. Everything around the turn is
+//! shared: the slot, `BUSY`, stop, the event queue, and the saved turn. A native chat's session
+//! lives in its [`Slot`], in memory (R-1088-10): a new chat, a reopened thread, a retry and a turn
+//! that did not end each start a fresh one. A write the model makes parks behind a card
 //! (R-1088-2): [`Handle::assist_pending`] says what waits, [`Handle::assist_confirm`] makes it, once,
 //! and [`Handle::assist_dismiss`] drops it. On the wire the card is `AssistPending` (an event, and
 //! the answer's own copy), the tap is `AssistConfirmRequest` or `AssistDismissRequest`, and both
@@ -128,6 +129,9 @@ struct Sessions {
 pub struct Hub {
     host: Mutex<Arc<ModelHost>>,
     sessions: Mutex<Sessions>,
+    /// Whether this handle's chat takes attachments: [`attach::OFFERED`] unless
+    /// [`Self::offer_attachments`] says otherwise.
+    attachments: AtomicBool,
 }
 
 impl Default for Hub {
@@ -143,7 +147,24 @@ impl Hub {
         Self {
             host: Mutex::new(Arc::new(ModelHost::new())),
             sessions: Mutex::new(Sessions::default()),
+            attachments: AtomicBool::new(attach::OFFERED),
         }
+    }
+
+    /// Whether a send may carry an attachment and a load may attach the vision projector. It is
+    /// [`attach::OFFERED`], which is off while the shipped model cannot describe a file
+    /// (R-1088-19).
+    #[must_use]
+    pub fn attachments_offered(&self) -> bool {
+        self.attachments.load(Ordering::SeqCst)
+    }
+
+    /// Turn the attached path on or off for this handle alone, so the tests of the dormant path
+    /// (a document read, a photograph decoded, a projector loaded) keep running while
+    /// [`attach::OFFERED`] is off. A shipped build never calls it: a model that reads attachments
+    /// flips the constant.
+    pub fn offer_attachments(&self, on: bool) {
+        self.attachments.store(on, Ordering::SeqCst);
     }
 
     /// Share a model slot between handles. A phone holds several vaults and one
@@ -454,7 +475,8 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
             // GIVE THE MODEL ITS EYES when a projector was named. A projector
             // that will not attach is not a failed load: the text model is
             // loaded, and the answer says the projector is not READY.
-            if !asked.projector_path.is_empty()
+            if hub.attachments_offered()
+                && !asked.projector_path.is_empty()
                 && let Err(error) = host.attach_vision(std::path::Path::new(&asked.projector_path))
             {
                 tracing::warn!("the vision projector would not attach: {error}");
@@ -733,6 +755,11 @@ fn send(handle: &Handle, asked: &wire::AssistSendRequest) -> Result<wire::Assist
         session.last_attachments().cloned()
     } else if asked.attachments.is_empty() {
         None
+    } else if !hub.attachments_offered() {
+        // R-1088-19: the shipped model cannot describe a file. Nothing is resolved, decoded or
+        // generated; the question is kept so a Retry asks it again, as for any refused attachment.
+        session.note_question(&text);
+        return Ok(end_without_a_turn(&Refusal::AttachmentUnsupported, None));
     } else {
         // A photo needs a projector, and finding that out costs nothing: say so
         // before a photograph is decoded.

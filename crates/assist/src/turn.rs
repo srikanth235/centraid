@@ -1,13 +1,17 @@
-//! THE SHARED VOCABULARY OF A TURN, the attached turn, and the free reply.
+//! THE SHARED VOCABULARY OF A TURN, and the attached turn.
 //!
 //! The native plane (`native_turn`) answers every question about the vault: the model drives the
 //! runtime one call per message and the member reads cards and a line the runtime composes. What
-//! is here is what that loop and the two paths beside it share:
+//! is here is what that loop and the path beside it share:
 //!
 //! ```text
 //! question + attachment ──► attached (one streamed answer over it, no tools)
-//! question the vault cannot answer ──► chat (a few free words, streamed, no tools)
 //! ```
+//!
+//! The path beside the loop is off in the shipped build (R-1088-19): the core refuses a request
+//! that carries an attachment ([`crate::attach`] and `centraid_core::assist::attach::OFFERED`).
+//! There is no free reply any more either: a model's decline `out_of_scope` is the runtime's
+//! canned sentence, with no second generation.
 //!
 //! **Every way out is typed.** A turn ends as [`Answered`] or as a [`Refusal`], and the sink has
 //! seen the matching [`Event`] by then, so a shell that only watches events and one that only
@@ -16,11 +20,8 @@
 use crate::app::App;
 use crate::attach::{ATTACH_MAX_TOKENS, Attachments, Notice, attach_prompt};
 use crate::model::{Cancel, Control, Finish, GenerateRequest, ImageInput, Model, ModelError};
-use crate::prompt::{Budget, END_OF_TURN, Recorded, Turn, chat_prompt, question};
+use crate::prompt::{Budget, END_OF_TURN, Recorded, Turn, question};
 use crate::result::Card;
-
-/// The longest free reply, in tokens.
-pub const CHAT_MAX_TOKENS: u32 = 256;
 
 /// Why a turn did not answer.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -80,7 +81,7 @@ pub enum Event {
     Cards(Vec<Card>),
     /// The model is reading an attachment: "Reading the photo".
     Reading(Reading),
-    /// A piece of the words being generated (the free reply, an attachment's answer).
+    /// A piece of the words being generated (an attachment's answer).
     Token(String),
     /// The turn is done and this is its answer.
     Answer {
@@ -202,7 +203,7 @@ impl Session {
     }
 }
 
-/// What a turn over an attachment, or a free reply, needs besides its session.
+/// What a turn over an attachment needs besides its session.
 pub struct Plane<'a> {
     pub model: &'a dyn Model,
     pub budget: Budget,
@@ -319,46 +320,6 @@ impl Plane<'_> {
         })
     }
 
-    /// THE FREE REPLY: the vault has no answer to give, so the model talks — unconstrained,
-    /// streamed, short — over the last [`crate::prompt::HISTORY_TURNS`] turns that said
-    /// something. It reads nothing and does nothing ([`chat_prompt`] says so).
-    ///
-    /// # Errors
-    /// [`Refusal::Cancelled`] when stopped, [`Refusal::ModelFailed`] when the engine fails or says
-    /// nothing. The caller chooses what the member reads then; no event is sunk for the refusal.
-    pub fn chat(
-        &self,
-        history: &[Turn],
-        user: &str,
-        cancel: &Cancel,
-        sink: &mut dyn FnMut(Event),
-    ) -> Result<String, Refusal> {
-        let prompt = chat_prompt(history, user);
-        let generated = self.generate(
-            &GenerateRequest {
-                prompt: &prompt,
-                grammar: None,
-                max_tokens: CHAT_MAX_TOKENS,
-                stop: &[END_OF_TURN],
-                temperature: 0.0,
-                cancel,
-                images: &[],
-            },
-            &mut |piece| {
-                sink(Event::Token(piece.to_owned()));
-                Control::Continue
-            },
-        )?;
-        if generated.finish == Finish::Cancelled {
-            return Err(Refusal::Cancelled);
-        }
-        let text = generated.text.trim().to_owned();
-        if text.is_empty() {
-            return Err(Refusal::ModelFailed("the model said nothing".to_owned()));
-        }
-        Ok(text)
-    }
-
     fn generate(
         &self,
         request: &GenerateRequest<'_>,
@@ -422,20 +383,6 @@ mod tests {
             plane.run_attached_turn(session, text, attachments, &Cancel::new(), &mut |event| {
                 events.push(event)
             });
-        (result, events)
-    }
-
-    fn chat(
-        model: &ScriptedModel,
-        history: &[Turn],
-        cancel: &Cancel,
-    ) -> (Result<String, Refusal>, Vec<Event>) {
-        let plane = Plane {
-            model,
-            budget: Budget::DEFAULT,
-        };
-        let mut events = Vec::new();
-        let result = plane.chat(history, "hello", cancel, &mut |event| events.push(event));
         (result, events)
     }
 
@@ -551,10 +498,11 @@ mod tests {
         );
         assert_eq!(turn.record, Recorded::Attachment("A river.".to_owned()));
 
-        // A free reply after it sees the marker and the earlier answer, and carries no image.
+        // A second attachment turn after it sees the marker and the earlier answer, and carries
+        // no image of the first.
         let follow = ScriptedModel::new(["It is on the left."]);
-        let (said, _) = chat(&follow, session.history(), &Cancel::new());
-        assert_eq!(said.unwrap(), "It is on the left.");
+        let (said, _) = run_attached(&follow, &mut session, "And the list?", &packing_list(1));
+        assert_eq!(said.unwrap().text, "It is on the left.");
         let requests = follow.requests();
         assert!(
             requests[0]
@@ -663,11 +611,13 @@ mod tests {
                 },
             })
             .collect();
-        let restored = Session::restore(Some(App::Tasks), history, Some("question 6".to_owned()));
+        let mut restored =
+            Session::restore(Some(App::Tasks), history, Some("question 6".to_owned()));
         assert_eq!(restored.scope(), Some(App::Tasks));
         let model = ScriptedModel::new(["ok."]);
-        let (said, _) = chat(&model, restored.history(), &Cancel::new());
-        said.unwrap();
+        run_attached(&model, &mut restored, "And the list?", &packing_list(1))
+            .0
+            .unwrap();
         let prompt = &model.prompts()[0];
         assert!(!prompt.contains("question 4"), "no prompt growth: {prompt}");
         assert!(prompt.contains("question 5") && prompt.contains("question 6"));
@@ -706,39 +656,5 @@ mod tests {
         assert!(session.history().is_empty());
         assert_eq!(session.scope(), Some(App::Tally));
         assert_eq!(session.prepare_regenerate(), None);
-    }
-
-    // ---------------------------------------------------------------- free reply --
-
-    #[test]
-    fn a_free_reply_streams_without_a_grammar_and_is_capped() {
-        let model = ScriptedModel::new(["I can look things up, not do them."]);
-        let (result, events) = chat(&model, &[], &Cancel::new());
-        assert_eq!(result.unwrap(), "I can look things up, not do them.");
-        let request = &model.requests()[0];
-        assert_eq!(request.grammar, None);
-        assert_eq!(request.max_tokens, CHAT_MAX_TOKENS);
-        assert_eq!(request.stop, vec![END_OF_TURN.to_owned()]);
-        assert!(request.prompt.contains("cannot send messages"));
-        let streamed: String = events
-            .iter()
-            .filter_map(|event| match event {
-                Event::Token(piece) => Some(piece.as_str()),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(streamed, "I can look things up, not do them.");
-    }
-
-    #[test]
-    fn a_free_reply_that_says_nothing_cancels_or_fails_is_a_typed_refusal() {
-        let (silent, _) = chat(&ScriptedModel::new(["   "]), &[], &Cancel::new());
-        assert!(matches!(silent, Err(Refusal::ModelFailed(_))));
-        let (broken, _) = chat(&ScriptedModel::empty(), &[], &Cancel::new());
-        assert!(matches!(broken, Err(Refusal::ModelFailed(_))));
-        let stopped =
-            ScriptedModel::new(["Hello there, how are you today?"]).cancelling_during(0, 2);
-        let (stopped, _) = chat(&stopped, &[], &Cancel::new());
-        assert_eq!(stopped.unwrap_err(), Refusal::Cancelled);
     }
 }

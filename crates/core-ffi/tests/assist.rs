@@ -32,6 +32,14 @@ impl Opened {
         Self::open(true)
     }
 
+    /// A sample vault whose chat takes attachments, for the tests of the path that is off in the
+    /// shipped build (R-1088-19).
+    fn offering_attachments() -> Self {
+        let opened = Self::sample();
+        opened.core().assist().offer_attachments(true);
+        opened
+    }
+
     /// A sample vault exactly as `centraid_open` leaves it: the process-wide
     /// model slot, with the real engine's loader in it under `llama` and with
     /// no loader at all without it.
@@ -250,28 +258,31 @@ fn a_turn_crosses_the_abi_and_its_events_come_back_encoded_and_in_order() {
 }
 
 #[test]
-fn a_free_reply_crosses_the_abi_as_streamed_tokens_and_then_the_answer() {
+fn a_decline_out_of_scope_crosses_the_abi_as_the_canned_sentence_and_no_streamed_words() {
+    // R-1088-19: no free reply. The words scripted after the decline are never asked for.
     let opened = Opened::sample();
-    opened
-        .core()
-        .assist()
-        .host()
-        .install(Arc::new(ScriptedModel::new(
-            std::iter::once(message(
-                "plan: no",
-                "decline",
-                &[("reason", "out_of_scope")],
-            ))
-            .flatten()
-            .chain(["Hello. I can look things up for you.".to_owned()]),
-        )));
+    let model = Arc::new(ScriptedModel::new(
+        std::iter::once(message(
+            "plan: no",
+            "decline",
+            &[("reason", "out_of_scope")],
+        ))
+        .flatten()
+        .chain(["Hello. I can look things up for you.".to_owned()]),
+    ));
+    opened.core().assist().host().install(model.clone());
     opened.events();
     let session = start(&opened);
     let sent = send_with(&opened, session, 1, "hi", Vec::new());
     let Some(wire::assist_sent::Outcome::Answered(answer)) = sent.outcome else {
         panic!("the turn answers")
     };
-    assert_eq!(answer.text, "Hello. I can look things up for you.");
+    assert_eq!(answer.text, "Outside what chat can do here.");
+    assert_eq!(
+        model.requests().len(),
+        2,
+        "a think and a call, then nothing"
+    );
     let kinds: Vec<&'static str> = opened
         .events()
         .into_iter()
@@ -284,9 +295,7 @@ fn a_free_reply_crosses_the_abi_as_streamed_tokens_and_then_the_answer() {
             _ => None,
         })
         .collect();
-    assert!(kinds.iter().filter(|kind| **kind == "token").count() >= 2);
-    assert_eq!(kinds.last(), Some(&"answer"));
-    assert!(!kinds.contains(&"other"), "{kinds:?}");
+    assert_eq!(kinds, ["answer"], "no word streams: {kinds:?}");
 }
 
 #[test]
@@ -591,7 +600,7 @@ fn the_real_model_answers_questions_over_the_sample_vault() {
             panic!("a send answers")
         };
         eprintln!("[{:.2} s] {text}", started.elapsed().as_secs_f64());
-        // What the model streamed (the free reply), and the looking it did first.
+        // What the model streamed, and the looking it did first.
         let events = opened.events();
         for event in &events {
             if let Some(wire::event::Kind::Assist(wire::AssistEvent {
@@ -613,7 +622,7 @@ fn the_real_model_answers_questions_over_the_sample_vault() {
             })
             .collect();
         if !streamed.is_empty() {
-            eprintln!("    free reply: {streamed:?}");
+            eprintln!("    streamed: {streamed:?}");
         }
         match sent.outcome {
             Some(wire::assist_sent::Outcome::Answered(answered)) => {
@@ -850,8 +859,52 @@ fn refusal_of(sent: &wire::AssistSent) -> i32 {
 }
 
 #[test]
-fn a_document_attachment_is_read_through_the_core_and_answered_without_tools() {
+fn the_shipped_chat_refuses_every_attachment_and_never_loads_the_projector() {
+    // R-1088-19: `attach::OFFERED` is off, so a send that carries a document or a photo is
+    // refused `AttachmentUnsupported` before the model is asked or the file is read, and a load
+    // that names a projector leaves the vision state at PRESENT, never READY.
     let opened = Opened::sample();
+    assert!(!opened.core().assist().attachments_offered());
+    let model = Arc::new(ScriptedModel::new(["never said"]).seeing());
+    opened.core().assist().host().install(model.clone());
+    opened.events();
+    let session = start(&opened);
+    let packing = document_titled(&opened, "Tahoe packing list");
+    let asset = photo(&opened, 0);
+    for (turn, attachment) in (1u64..).zip([doc_of(&packing), photo_of(&asset)]) {
+        let sent = send_with(&opened, session, turn, "What is in this?", vec![attachment]);
+        assert_eq!(
+            refusal_of(&sent),
+            wire::AssistRefusalReason::AttachmentUnsupported as i32
+        );
+    }
+    assert!(model.requests().is_empty(), "the model was not asked");
+
+    // The same load that makes a fake model READY when attachments are offered
+    // (`a_status_and_a_load_say_where_the_projector_stands`) leaves it PRESENT.
+    opened
+        .core()
+        .assist()
+        .host()
+        .install(Arc::new(ScriptedModel::empty()));
+    let projector = opened.dir.join("mmproj.gguf");
+    std::fs::write(&projector, b"projector bytes").expect("a file");
+    let answer = assist(
+        &opened,
+        wire::assist_request::Kind::Load(wire::AssistLoadRequest {
+            model_path: "anywhere".to_owned(),
+            projector_path: projector.display().to_string(),
+        }),
+    );
+    let Some(wire::assist_response::Kind::Status(status)) = answer.kind else {
+        panic!("a load answers with a status")
+    };
+    assert_eq!(status.vision, wire::AssistVisionState::Present as i32);
+}
+
+#[test]
+fn a_document_attachment_is_read_through_the_core_and_answered_without_tools() {
+    let opened = Opened::offering_attachments();
     let model = Arc::new(ScriptedModel::new([
         "Bring the rain shell, boots and a headlamp.",
     ]));
@@ -906,7 +959,7 @@ fn a_document_attachment_is_read_through_the_core_and_answered_without_tools() {
 
 #[test]
 fn a_vault_photo_reaches_the_model_decoded_and_scaled_and_needs_a_projector() {
-    let opened = Opened::sample();
+    let opened = Opened::offering_attachments();
     let asset = photo(&opened, 0);
 
     // No projector: a typed refusal before the photograph is decoded.
@@ -964,7 +1017,7 @@ fn a_vault_photo_reaches_the_model_decoded_and_scaled_and_needs_a_projector() {
 
 #[test]
 fn what_the_chat_does_not_read_is_a_typed_refusal_and_a_malformed_request_is_an_error() {
-    let opened = Opened::sample();
+    let opened = Opened::offering_attachments();
     let seeing = Arc::new(ScriptedModel::empty().seeing());
     opened.core().assist().host().install(seeing.clone());
     let session = start(&opened);
@@ -1037,7 +1090,7 @@ fn what_the_chat_does_not_read_is_a_typed_refusal_and_a_malformed_request_is_an_
 
 #[test]
 fn retry_over_a_document_asks_the_same_document_again() {
-    let opened = Opened::sample();
+    let opened = Opened::offering_attachments();
     let model = Arc::new(ScriptedModel::new(["First answer.", "Second answer."]));
     opened.core().assist().host().install(model.clone());
     let packing = document_titled(&opened, "Tahoe packing list");
@@ -1082,7 +1135,7 @@ fn retry_over_a_document_asks_the_same_document_again() {
 
 #[test]
 fn a_status_and_a_load_say_where_the_projector_stands() {
-    let opened = Opened::sample();
+    let opened = Opened::offering_attachments();
     let dir = opened.dir.join("models");
     std::fs::create_dir_all(&dir).expect("a directory");
     let projector = dir.join("mmproj.gguf");
@@ -1193,6 +1246,7 @@ fn the_real_model_reads_sample_photos_and_a_sample_document_attachments() {
         return;
     };
     let opened = Opened::as_opened();
+    opened.core().assist().offer_attachments(true);
     let (code, loaded) = {
         let (code, envelope) = opened.call_raw(wire::request::Kind::Assist(wire::AssistRequest {
             kind: Some(wire::assist_request::Kind::Load(wire::AssistLoadRequest {

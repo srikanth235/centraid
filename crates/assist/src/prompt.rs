@@ -1,14 +1,12 @@
-//! THE PROMPT PIECES the paths around the native runtime share: Qwen's ChatML, the free reply's
-//! prompt, the turn a thread stores, and the token budget.
+//! THE PROMPT PIECES the path beside the native runtime shares: Qwen's ChatML, the turn a thread
+//! stores, and the token budget.
 //!
 //! The native plane's own prompt (the tool list, the kind card, the conversation) is
 //! [`crate::native::prompt`] and [`crate::native_turn::log`]. What is here is everything else the
-//! model is asked:
-//!
-//! 1. **The free reply** ([`chat_prompt`]): a question the vault cannot answer ("hi", "what can
-//!    you do?") gets a few unconstrained words, told it has read nothing.
-//! 2. **An attachment** ([`crate::attach::attach_prompt`]): a photograph or a document and a
-//!    question, built from [`message`], [`question`] and the budget below.
+//! model is asked: **an attachment** ([`crate::attach::attach_prompt`]), a photograph or a
+//! document and a question, built from [`message`], [`question`] and the budget below. It is off
+//! in the shipped build (R-1088-19), and so is the free reply that once stood beside it: the
+//! shipped model writes the tool format for any prose prompt.
 //!
 //! # THE BUDGET
 //!
@@ -19,7 +17,7 @@
 //! disagree. A turn with an attachment is the prompt that can use the most of it
 //! ([`Budget::attach_limit`]).
 
-/// How many earlier turns ride in the free reply's and an attachment's prompt.
+/// How many earlier turns ride in an attachment's prompt.
 pub const HISTORY_TURNS: usize = 2;
 
 /// The longest question the plane reads, in characters.
@@ -116,8 +114,8 @@ pub enum Recorded {
     Answer(String),
     /// It said no tool fits.
     NoTool,
-    /// It answered over an attachment, or said a few free words. The free-reply and
-    /// attachment prompts show it, under the turn's marker line.
+    /// It answered over an attachment. The attachment prompt shows it, under the turn's marker
+    /// line.
     Attachment(String),
 }
 
@@ -202,41 +200,10 @@ pub fn question(text: &str) -> String {
     normalize(text).chars().take(USER_MAX).collect()
 }
 
-/// FREE REPLY: what the model is told when the vault has no answer to give.
-///
-/// A question no read answers ("hi", "what can you do?", "text Sam") gets a short,
-/// unconstrained reply streamed token by token, rather than the runtime's canned sentence
-/// (`native_turn`, a decline `out_of_scope`). It reads nothing and does nothing, so it can only
-/// talk; it is told so, told never to invent rows, and told it cannot act from this reply, so a
-/// request to send, call or change something is never answered as if it had been done.
-const CHAT_SYSTEM: &str = "You are Centraid, a private assistant that runs entirely on the member's phone. Their vault holds tasks, notes, documents, calendar events, people, photos and expenses. Reply in a few short, friendly sentences. You have not looked at their vault for this reply, so never state facts about their data; suggest a question about one of those apps instead. You cannot send messages, make calls or change anything from this reply, so never say or imply that you did; say plainly that you cannot, and offer what you can look up.";
-
-/// The free-reply prompt: [`CHAT_SYSTEM`], the last [`HISTORY_TURNS`] turns
-/// that said something, and the question, opened at [`ASSISTANT_TURN`].
-#[must_use]
-pub fn chat_prompt(history: &[Turn], user: &str) -> String {
-    let shown: Vec<&Turn> = history
-        .iter()
-        .filter(|turn| turn.record != Recorded::NoTool)
-        .collect();
-    let mut out = message("system", CHAT_SYSTEM);
-    for turn in &shown[shown.len().saturating_sub(HISTORY_TURNS)..] {
-        out.push_str(&message("user", &turn.user));
-        let said = match &turn.record {
-            Recorded::Tool { answer, .. } => answer.as_str(),
-            Recorded::Answer(text) | Recorded::Attachment(text) => text.as_str(),
-            Recorded::NoTool => continue,
-        };
-        out.push_str(&message("assistant", said));
-    }
-    out.push_str(&message("user", &question(user)));
-    out.push_str(ASSISTANT_TURN);
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::attach::{Attachments, TextDoc, attach_prompt};
 
     fn recorded(n: usize) -> Turn {
         Turn {
@@ -259,22 +226,6 @@ mod tests {
     }
 
     #[test]
-    fn a_free_reply_prompt_is_chatml_ending_where_the_model_begins() {
-        let prompt = chat_prompt(&[], "hello");
-        assert!(prompt.starts_with("<|im_start|>system\nYou are Centraid"));
-        assert!(prompt.ends_with(&format!(
-            "<|im_start|>user\nhello<|im_end|>\n{ASSISTANT_TURN}"
-        )));
-    }
-
-    #[test]
-    fn the_free_reply_is_told_it_can_act_on_nothing() {
-        let prompt = chat_prompt(&[], "text Sam that I am late");
-        assert!(prompt.contains("cannot send messages, make calls or change anything"));
-        assert!(prompt.contains("have not looked at their vault"));
-    }
-
-    #[test]
     fn only_the_last_two_turns_that_said_something_ride_along() {
         let mut history: Vec<Turn> = (1..=4).map(recorded).collect();
         history.push(Turn {
@@ -285,7 +236,14 @@ mod tests {
             user: "a photo".to_owned(),
             record: Recorded::Attachment("A river.".to_owned()),
         });
-        let prompt = chat_prompt(&history, "and tomorrow?");
+        let doc = Attachments {
+            image: None,
+            doc: Some(TextDoc {
+                name: "List".to_owned(),
+                text: "Item 1\n".to_owned(),
+            }),
+        };
+        let prompt = attach_prompt(&history, &doc, "and tomorrow?", Budget::DEFAULT).text;
         assert!(!prompt.contains("question 3") && !prompt.contains("refused"));
         assert!(prompt.contains("question 4"));
         assert!(prompt.contains("<|im_start|>assistant\nanswer 4<|im_end|>"));

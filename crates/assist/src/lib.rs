@@ -11,13 +11,13 @@
 //! | Module | What it owns |
 //! |---|---|
 //! | [`native`] | The tool runtime: eight flat tools over a vault, one metadata table, the date evaluator, observations and the system prompt (`experiments/toolchat/native/SPEC.md`). |
-//! | [`native_turn`] | The turn loop (#1088): the model drives [`native`] one call per message; the chat's own cards, a line composed from the effect, and the free reply when a question is out of scope. |
+//! | [`native_turn`] | The turn loop (#1088): the model drives [`native`] one call per message; the chat's own cards and a line composed from the effect (a decline `out_of_scope` is the canned sentence, R-1088-19). |
 //! | [`app`] | The seven apps a card or a chat scope can name. Locker is not one. |
 //! | [`result`] | The result card: a reference to a real row. |
-//! | [`prompt`] | The Qwen ChatML pieces both paths share: the free-reply prompt, the stored turn, the question, the token estimate and the context budget. |
+//! | [`prompt`] | The Qwen ChatML pieces the attached path shares: the stored turn, the question, the token estimate and the context budget. |
 //! | [`model`], [`host`] | The [`model::Model`] trait an engine implements, and the slot a loaded model lives in. |
 //! | [`attach`] | A photograph or a text document riding on one question: the prompt, the truncation, the marker the history keeps. |
-//! | [`turn`] | The shared vocabulary of a turn (events, answers, typed refusals), the attached turn and the free reply. |
+//! | [`turn`] | The shared vocabulary of a turn (events, answers, typed refusals), and the attached turn, which the shipped build keeps off (R-1088-19). |
 //! | [`suggest`] | Three questions this vault can answer, read from the same world the runtime reads. |
 //! | [`testing`] | Deterministic stand-ins for the engine. |
 //!
