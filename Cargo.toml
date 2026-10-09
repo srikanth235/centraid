@@ -49,7 +49,7 @@ image = { version = "0.25.10", default-features = false, features = [
   "webp",
 ] }
 blake3 = "1.8"
-jsonschema = "0.30"
+jsonschema = "0.58"
 proptest = "1"
 # `session` is the log plane's capture mechanism and it requires `bundled`
 # (#1020, D-1020-D1-3): the amalgamation is compiled with SQLITE_ENABLE_SESSION
@@ -105,7 +105,7 @@ tracing = "0.1"
 
 # Wave 2 lane C — the schema workspace, the transport-generic protocol and the
 # one binary (#1020).
-base64 = "0.22"
+base64 = "0.23"
 bytes = "1"
 prost = "0.14"
 prost-build = "0.14"
@@ -123,7 +123,7 @@ hyper = { version = "1", default-features = false, features = [
 ] }
 hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
 http-body-util = "0.1"
-rand = "0.9"
+rand = "0.10"
 tokio = { version = "1", features = [
   "macros",
   "rt-multi-thread",
@@ -151,7 +151,7 @@ aes-gcm = "0.11"
 chacha20poly1305 = "0.11"
 ryu-js = "1.0.3"
 tempfile = "3"
-zstd = "0.13"
+zstd = "0.14"
 # THE SPOOL'S BUDGET IS A TENTH OF THE FREE SPACE (#1080, "Ledger"), and the
 # standard library cannot say how much is free. `statvfs` is POSIX and rustix
 # answers it with no `unsafe` in this tree, on iOS and Android alike. Already
