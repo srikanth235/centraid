@@ -31,8 +31,16 @@ public object PhoneImport {
      * command carries an `invoke_key`**: the core refuses one with none
      * (`api::invoke`), so the key is minted per write, here.
      */
+    public suspend fun write(core: CentraidCore, command: String, input: String): Boolean =
+        executed(core, command, input) != null
+
+    /**
+     * [write], answering the command's OUTPUT when the core executed it and
+     * null when it did not — an import that must name the row it just made
+     * (a series' `event_id`, for its exceptions) reads it here.
+     */
     @OptIn(ExperimentalUuidApi::class)
-    public suspend fun write(core: CentraidCore, command: String, input: String): Boolean {
+    public suspend fun executed(core: CentraidCore, command: String, input: String): String? {
         val answer = core.call(
             Envelope(
                 request_id = 0,
@@ -45,8 +53,8 @@ public object PhoneImport {
                 ),
             ),
         )
-        return answer is CoreOutcome.Answered &&
-            answer.value.response?.command?.status == CommandStatus.COMMAND_STATUS_EXECUTED
+        val outcome = (answer as? CoreOutcome.Answered)?.value?.response?.command ?: return null
+        return outcome.output.utf8().takeIf { outcome.status == CommandStatus.COMMAND_STATUS_EXECUTED }
     }
 
     /** A JSON string literal. `commonMain` carries no JSON dependency. */

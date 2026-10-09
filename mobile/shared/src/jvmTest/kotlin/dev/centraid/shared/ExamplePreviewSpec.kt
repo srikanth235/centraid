@@ -1,5 +1,8 @@
 package dev.centraid.shared
 
+import centraid.core.v1.AgendaEvent
+import centraid.core.v1.AgendaUpcoming
+import centraid.core.v1.AppQueryResponse
 import centraid.core.v1.CommandOutcome
 import centraid.core.v1.CommandStatus
 import centraid.core.v1.Envelope
@@ -20,6 +23,7 @@ import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.apps.agenda.CalendarImport
 import dev.centraid.shared.apps.agenda.PhoneEvent
+import dev.centraid.shared.apps.agenda.PhoneSeries
 import dev.centraid.shared.apps.people.ContactsImport
 import dev.centraid.shared.apps.tasks.PhoneReminder
 import dev.centraid.shared.apps.tasks.RemindersImport
@@ -43,6 +47,7 @@ import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
+import okio.ByteString.Companion.encodeUtf8
 import java.io.File
 import kotlin.io.path.createTempDirectory
 
@@ -387,6 +392,7 @@ class ExamplePreviewSpec : StringSpec({
                     PhoneEvent(title = "  ", start = "2026-10-14T09:00:00", end = "2026-10-14T10:00:00"),
                 ),
                 deviceTz = "Europe/London",
+                now = NOW,
             )
             outcome shouldBe PhoneImport.Outcome(added = 3, refused = 0)
             asked.map { it.second } shouldBe listOf(
@@ -401,6 +407,113 @@ class ExamplePreviewSpec : StringSpec({
             CalendarImport.sentence(PhoneImport.Outcome(added = 0, refused = 2)) shouldBe AgendaCopy.IMPORT_CALENDAR_FAILED
             CalendarImport.sentence(PhoneImport.Outcome(added = 0, refused = 0)) shouldBe AgendaCopy.IMPORT_CALENDAR_NONE
         }
+    }
+
+    "a repeating series stays one series, its cancelled and moved occurrences its exceptions" {
+        runTest {
+            val asked = mutableListOf<Pair<String, String>>()
+            // THE VAULT'S EXPANSION of the Monday series over the window:
+            // every Monday from 5 October to 7 December, at 09:00 in New York.
+            val mondays = listOf("10-05", "10-12", "10-19", "10-26", "11-02", "11-09", "11-16", "11-23", "11-30", "12-07")
+                .map { "2026-$it" + "T09:00:00" }
+            val core = CentraidCore.answering(Dispatchers.Unconfined) { envelope ->
+                val request = envelope.request
+                when {
+                    request?.page != null -> Envelope(
+                        response = Response(page = Page(rows = listOf(Row(values = listOf(Value(text = "cal-1")))))),
+                    )
+                    request?.app_query?.agenda_upcoming != null -> Envelope(
+                        response = Response(
+                            app_query = AppQueryResponse(
+                                agenda_upcoming = AgendaUpcoming(
+                                    events = mondays.map { AgendaEvent(event_id = "ev-1", dtstart = it, original_start_local = it) } +
+                                        AgendaEvent(event_id = "ev-other", dtstart = "2026-10-20T09:00:00", original_start_local = "2026-10-20T09:00:00"),
+                                ),
+                            ),
+                        ),
+                    )
+                    request?.command != null -> {
+                        val command = request.command!!
+                        val input = command.input.utf8()
+                        asked += command.name to input
+                        // THE VAULT REFUSES A RULE IT CANNOT HONOUR (`rrule.rs`).
+                        val refused = input.contains("BYSETPOS")
+                        Envelope(
+                            response = Response(
+                                command = CommandOutcome(
+                                    status = if (refused) CommandStatus.COMMAND_STATUS_DENIED else CommandStatus.COMMAND_STATUS_EXECUTED,
+                                    output = "{\"event_id\":\"ev-1\",\"attendees\":0}".encodeUtf8(),
+                                ),
+                            ),
+                        )
+                    }
+                    else -> Envelope(response = Response())
+                }
+            }
+            val standup = PhoneSeries(
+                id = "series-1",
+                rrule = "FREQ=WEEKLY;BYDAY=MO;WKST=SU",
+                start = "2026-09-07T09:00:00",
+                end = "2026-09-07T09:30:00",
+            )
+            fun monday(day: String) = PhoneEvent(
+                title = "Standup",
+                start = "2026-${day}T09:00:00",
+                end = "2026-${day}T09:30:00",
+                tz = "America/New_York",
+                series = standup,
+            )
+            // 19 OCTOBER WAS CANCELLED ON THE PHONE; 12 OCTOBER WAS MOVED TO 10:00 AND RENAMED.
+            val shown = mondays.map { it.substring(5, 10) }.filter { it != "10-19" && it != "10-12" }.map(::monday) +
+                monday("10-12").copy(
+                    title = "Standup (late)",
+                    start = "2026-10-12T10:00:00",
+                    end = "2026-10-12T10:30:00",
+                    originalStart = "2026-10-12T09:00:00",
+                    moved = true,
+                )
+            val lastFriday = PhoneSeries(id = "series-2", rrule = "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1", start = "2026-09-25T17:00:00", end = "2026-09-25T18:00:00")
+            val drinks = listOf("10-30", "11-27").map {
+                PhoneEvent(title = "Drinks", start = "2026-${it}T17:00:00", end = "2026-${it}T18:00:00", tz = "Europe/London", series = lastFriday)
+            }
+            val outcome = CalendarImport.run(core, shown + drinks, deviceTz = "Europe/London", now = NOW)
+            outcome shouldBe PhoneImport.Outcome(added = 3, refused = 0)
+            asked.map { it.second } shouldBe listOf(
+                // ONE SERIES, its rule kept and its own first occurrence its start.
+                "{\"summary\":\"Standup\",\"calendar_id\":\"cal-1\",\"dtstart\":\"2026-09-07T09:00:00\",\"dtend\":\"2026-09-07T09:30:00\",\"busy\":\"busy\",\"tz\":\"America/New_York\",\"rrule\":\"FREQ=WEEKLY;BYDAY=MO;WKST=SU\"}",
+                "{\"event_id\":\"ev-1\",\"original_start_local\":\"2026-10-19T09:00:00\",\"scope\":\"occurrence\",\"action\":\"skip\"}",
+                "{\"event_id\":\"ev-1\",\"original_start_local\":\"2026-10-12T09:00:00\",\"scope\":\"occurrence\",\"action\":\"override\"," +
+                    "\"dtstart\":\"2026-10-12T10:00:00\",\"dtend\":\"2026-10-12T10:30:00\",\"tz\":\"America/New_York\",\"summary\":\"Standup (late)\"}",
+                // A REFUSED RULE FALLS BACK TO ITS OCCURRENCES, each its own event.
+                "{\"summary\":\"Drinks\",\"calendar_id\":\"cal-1\",\"dtstart\":\"2026-09-25T17:00:00\",\"dtend\":\"2026-09-25T18:00:00\",\"busy\":\"busy\",\"tz\":\"Europe/London\",\"rrule\":\"FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1\"}",
+                "{\"summary\":\"Drinks\",\"calendar_id\":\"cal-1\",\"dtstart\":\"2026-09-25T17:00:00\",\"dtend\":\"2026-09-25T18:00:00\",\"busy\":\"free\",\"tz\":\"Europe/London\",\"rrule\":\"FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1\"}",
+                "{\"summary\":\"Drinks\",\"calendar_id\":\"cal-1\",\"dtstart\":\"2026-10-30T17:00:00\",\"dtend\":\"2026-10-30T18:00:00\",\"busy\":\"busy\",\"tz\":\"Europe/London\"}",
+                "{\"summary\":\"Drinks\",\"calendar_id\":\"cal-1\",\"dtstart\":\"2026-11-27T17:00:00\",\"dtend\":\"2026-11-27T18:00:00\",\"busy\":\"busy\",\"tz\":\"Europe/London\"}",
+            )
+        }
+    }
+
+    "an occurrence the vault does not expand is kept as its own event, and no skip is written at the window's edge" {
+        val series = CalendarImport.Series(
+            event = PhoneEvent(title = "Yoga", start = "2026-09-01T07:00:00", end = "2026-09-01T08:00:00", tz = "Europe/London"),
+            rrule = "FREQ=DAILY",
+            occurrences = listOf(
+                PhoneEvent(title = "Yoga", start = "2026-10-10T07:00:00", end = "2026-10-10T08:00:00", tz = "Europe/London"),
+                PhoneEvent(title = "Yoga", start = "2026-10-11T07:00:00", end = "2026-10-11T08:00:00", tz = "Europe/London"),
+            ),
+        )
+        // THE WINDOW IS 2 OCTOBER TO 10 DECEMBER; its first and last days are margin.
+        val upcoming = listOf("2026-10-02T07:00:00", "2026-10-10T07:00:00", "2026-12-10T07:00:00").associateBy { it }
+        CalendarImport.reconcile(series, "ev-1", upcoming, NOW).shouldBeEmpty()
+        CalendarImport.strays(series, upcoming, NOW).map { it.start } shouldBe listOf("2026-10-11T07:00:00")
+    }
+
+    "a rule loses only the parts that restate its anchor" {
+        CalendarImport.rule("RRULE:FREQ=MONTHLY;BYMONTHDAY=7", "2026-09-07T09:00:00") shouldBe "FREQ=MONTHLY"
+        CalendarImport.rule("FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=7;", "2026-09-07") shouldBe "FREQ=YEARLY"
+        CalendarImport.rule("FREQ=MONTHLY;BYMONTHDAY=8", "2026-09-07") shouldBe "FREQ=MONTHLY;BYMONTHDAY=8"
+        CalendarImport.rule("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE", "2026-09-07") shouldBe "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE"
+        CalendarImport.rule("", "2026-09-07") shouldBe ""
     }
 
     "a reminder becomes a task with its notes and due day, one per title and day" {
@@ -420,3 +533,6 @@ class ExamplePreviewSpec : StringSpec({
         RemindersImport.sentence(PhoneImport.Outcome(added = 0, refused = 1)) shouldBe TasksCopy.IMPORT_REMINDERS_FAILED
     }
 })
+
+/** 9 October 2026, 12:00 UTC: the import window is 2 October to 10 December. */
+private const val NOW: Long = 1_791_547_200_000

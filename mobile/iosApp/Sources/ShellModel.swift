@@ -1018,8 +1018,8 @@ final class ShellModel: ObservableObject {
             case .calendar:
                 switch await PhoneCalendar.read() {
                 case .denied: finish(words.denied)
-                case let .read(found):
-                    self.calendar.run(events: found, deviceTz: TimeZone.current.identifier, onDone: finish)
+                case let .read(found, now):
+                    self.calendar.run(events: found, deviceTz: TimeZone.current.identifier, now: now, onDone: finish)
                 }
             case .reminders:
                 switch await PhoneReminders.read() {
