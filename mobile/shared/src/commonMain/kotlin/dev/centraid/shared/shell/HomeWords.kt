@@ -31,24 +31,15 @@ public object HomeWords {
     public const val FIRST_LAUNCH_RESTORE: String = SharedCopy.FIRST_LAUNCH_RESTORE
 
     /**
-     * THE SAMPLE VAULT'S WORDS: the one sentence Day One and the deck say about
-     * it, and its two verbs. The vault's own name is `Shelf.SAMPLE_VAULT_NAME`,
-     * because it is written into the vault rather than drawn beside it.
+     * "SEE AN EXAMPLE"'S WORDS: the link under an app's day-one empty state,
+     * the banner over the preview and its one exit, the sentence a write in
+     * the preview is refused with, and what a preview that would not open says.
      */
-    public const val SAMPLE_LINE: String = SharedCopy.SAMPLE_LINE
-    public const val SAMPLE_REMOVE: String = SharedCopy.SAMPLE_REMOVE
-    public const val SAMPLE_ADD: String = SharedCopy.SAMPLE_ADD
-
-    /** "Add sample" while the scenario is still being seeded: the row's quiet, disabled label. */
-    public const val SAMPLE_ADDING: String = SharedCopy.SAMPLE_ADDING
-
-    /**
-     * "Remove sample"'s confirmation: the destructive verb and the one
-     * sentence under it. Removal deletes a vault, so it is confirmed even
-     * though nothing of the member's goes with it.
-     */
-    public const val SAMPLE_REMOVE_CONFIRM: String = SharedCopy.SAMPLE_REMOVE_CONFIRM
-    public const val SAMPLE_REMOVE_BODY: String = SharedCopy.SAMPLE_REMOVE_BODY
+    public const val SEE_EXAMPLE: String = SharedCopy.SEE_EXAMPLE
+    public const val EXAMPLE_BANNER: String = SharedCopy.EXAMPLE_BANNER
+    public const val EXAMPLE_DONE: String = SharedCopy.EXAMPLE_DONE
+    public const val EXAMPLE_READ_ONLY: String = SharedCopy.EXAMPLE_READ_ONLY
+    public const val EXAMPLE_FAILED: String = SharedCopy.EXAMPLE_FAILED
 
     public const val BAND_HOME: String = SharedCopy.BAND_HOME
     public const val BAND_MORE: String = SharedCopy.BAND_MORE

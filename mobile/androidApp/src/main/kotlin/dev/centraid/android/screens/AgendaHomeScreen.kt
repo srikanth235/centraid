@@ -66,7 +66,9 @@ import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.DeniedGate
+import dev.centraid.android.kit.LocalPhoneImport
 import dev.centraid.android.kit.hueColor
+import dev.centraid.android.kit.importLabel
 import dev.centraid.android.kit.rememberFollowedText
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -333,7 +335,20 @@ private fun AgendaList(
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
-            if (data.empty_action.isNotEmpty()) {
+            // DAY ONE, WHERE THE PHONE HOLDS A CALENDAR (`import_source`): the
+            // import in place of `empty_action` when the shell provides the
+            // door — null inside a preview — and can read that source. "New
+            // event" stays in the header, so the one action here is the
+            // faster way to the member's own events.
+            val importVerb = importLabel(data.import_source)
+            val door = LocalPhoneImport.current
+            if (importVerb.isNotEmpty() && door != null) {
+                QuietButton(
+                    label = importVerb,
+                    testTag = "agenda-empty-import",
+                    modifier = Modifier.padding(top = 16.dp),
+                ) { door(data.import_source) }
+            } else if (data.empty_action.isNotEmpty()) {
                 QuietButton(
                     label = data.empty_action,
                     testTag = "agenda-empty-action",
@@ -345,11 +360,17 @@ private fun AgendaList(
     }
 
     val listState = rememberLazyListState()
+    // NO EVENT OF THE MEMBER'S YET, only marks (due tasks, birthdays): the
+    // phone's calendar is offered quietly above them, at the point of use.
+    val importVerb = importLabel(data.import_source)
+    val door = LocalPhoneImport.current
+    val offersImport = importVerb.isNotEmpty() && door != null
     // THE KEYS, IN DRAW ORDER, so landing can find its index without the view
     // deciding where to land: the machine's `landing` names the day and
     // whether the now line is the target.
-    val keys = remember(data) {
+    val keys = remember(data, offersImport) {
         buildList {
+            if (offersImport) add("import")
             data.days.forEach { section ->
                 if (section.month_heading != null) add("month-${section.day}")
                 add("day-${section.day}")
@@ -372,6 +393,15 @@ private fun AgendaList(
         state = listState,
         modifier = Modifier.fillMaxSize().testTag("agenda-list"),
     ) {
+        if (offersImport && door != null) {
+            item(key = "import") {
+                QuietButton(
+                    label = importVerb,
+                    testTag = "agenda-import",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                ) { door(data.import_source) }
+            }
+        }
         data.days.forEach { section -> daySection(section, state.chrome?.shelf_label.orEmpty(), onEvent) }
         item(key = "foot") { Spacer(Modifier.height(16.dp)) }
     }

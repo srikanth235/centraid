@@ -32,7 +32,6 @@ struct MakeVaultSheet: View {
     @ObservedObject var shell: ShellModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
-    @State private var removingSample = false
 
     var body: some View {
         NavigationStack {
@@ -58,27 +57,6 @@ struct MakeVaultSheet: View {
                     }
                 }
 
-                // THE SAMPLE VAULT'S DOOR (R-SAMPLE-1): remove it while it is
-                // held, add a fresh one back when it is not. Removal deletes a
-                // vault, so it asks first — the same confirm Home's notice
-                // raises.
-                Section(ShellWords.sampleMark) {
-                    if shell.hasSample {
-                        Button(ShellWords.sampleRemove) { removingSample = true }
-                            .foregroundStyle(Theme.color("net", scheme))
-                            .accessibilityIdentifier("vault-sample-remove")
-                    } else if shell.addingSample {
-                        // SEEDING: quiet and not tappable, so a second tap
-                        // cannot start a second found.
-                        Button(ShellWords.sampleAdding) {}
-                            .disabled(true)
-                            .accessibilityIdentifier("vault-sample-adding")
-                    } else {
-                        Button(ShellWords.sampleAdd) { shell.addSample() }
-                            .accessibilityIdentifier("vault-sample-add")
-                    }
-                }
-
                 // THE TRANSFER RULES, ALWAYS REACHABLE (#1025 S4).
                 //
                 // The header's "N originals waiting for Wi-Fi" line is the
@@ -93,7 +71,6 @@ struct MakeVaultSheet: View {
                         .accessibilityIdentifier("vault-transfer-rules")
                 }
             }
-            .sampleRemoveConfirm(isPresented: $removingSample, shell: shell)
             .navigationTitle("Vault")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

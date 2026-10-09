@@ -45,6 +45,19 @@
     <uses-feature
         android:name="android.hardware.camera.any"
         android:required="false" />
+    <!-- Contacts, for People's one-tap import only (docs/decisions.md,
+         "Onboarding without sample data"): asked for when the member taps
+         "Import contacts" on People's day-one empty state, never at launch
+         (`screens/people/ContactsImporter.kt`). Read once, written into the
+         member's vault as their own people; nothing is synced back. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Calendar, for Agenda's one-tap import only (docs/decisions.md,
+         "Onboarding without sample data"): asked for when the member taps
+         "Import calendar" on Agenda's day one, never at launch
+         (`screens/agenda/CalendarImporter.kt`). The window's occurrences are
+         read once and written into the member's vault as their own events;
+         nothing is synced back. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- "BACK UP NOW" AND A BACKLOG (#1080, the shells; `backup/BackupNow.kt`).

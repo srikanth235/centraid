@@ -2,7 +2,7 @@
 //! door reads, and a write is refused until parking lands.
 //!
 //! The harness opens a vault FILE; the core's door reaches the vault the core
-//! already holds. Over the same sample vault they must answer the same rows, or
+//! already holds. Over the same scenario they must answer the same rows, or
 //! the phone and the fine-tuning loop run one runtime over two worlds.
 
 use std::path::Path;
@@ -14,7 +14,7 @@ use centraid_core::assist::door::WRITES_OFF_PREDICATE;
 use centraid_core::{Core, CoreConfig};
 use centraid_nativetools::vaultio::{Handle as Harness, SetClock};
 
-/// The sample vault, closed to its file, copied, and the original reopened by a
+/// A vault holding the scenario, closed to its file, copied, and the original reopened by a
 /// fresh core. The copy is what the harness opens.
 struct Pair {
     dir: std::path::PathBuf,
@@ -34,19 +34,38 @@ fn pair() -> Pair {
     std::fs::create_dir_all(&dir).expect("a directory");
     let path = dir.join("vault.db");
     let copy = dir.join("harness.db");
-    // Found the sample into `dir` the way the shared helper does, then end the
-    // file so the log is in it (`docs/traps/wal-checkpoint.md`) and copy it.
+    // Found a vault into `dir` and seed the scenario the way the shared helper
+    // does, then end the file so the log is in it
+    // (`docs/traps/wal-checkpoint.md`) and copy it.
     let core = Core::open(CoreConfig::new(&path)).expect("a core opens");
     core.open_own_bytes(path.with_extension("bytes"))
         .expect("the byte store opens");
-    core.call(&wire::Request {
-        kind: Some(wire::request::Kind::Found(wire::FoundRequest {
-            display_name: "Sample".to_owned(),
-            owner_name: "Me".to_owned(),
-            content: wire::FoundContent::Sample as i32,
-        })),
-    })
-    .expect("the sample vault founds");
+    let answer = core
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::Found(wire::FoundRequest {
+                display_name: "Sample".to_owned(),
+                owner_name: "Me".to_owned(),
+                content: wire::FoundContent::Unspecified as i32,
+                tz: String::new(),
+            })),
+        })
+        .expect("the vault founds");
+    let Some(wire::response::Kind::Found(founded)) = answer.kind else {
+        panic!("a found answered {:?}", answer.kind);
+    };
+    let report = core
+        .with_vault(|vault| {
+            centraid_core::example::seed(
+                vault,
+                core.registry(),
+                &core.owner(),
+                &founded.owner_party_id,
+                &|_| true,
+                centraid_core::example::now_ms(),
+            )
+        })
+        .expect("the scenario seeds");
+    assert!(report.is_whole(), "the scenario seeds whole: {report:?}");
     core.close_file().expect("the file ends");
     std::fs::copy(&path, &copy).expect("the copy is made");
     drop(core);
@@ -77,7 +96,7 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
     let from_harness = world_of(&harness);
     assert!(
         from_core.len() > 2_000,
-        "the sample vault is not empty: {} bytes",
+        "the scenario is not empty: {} bytes",
         from_core.len()
     );
     assert_eq!(from_core, from_harness);
@@ -101,7 +120,7 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
         let b = harness
             .table(table, columns, sort, pk)
             .expect("harness reads");
-        assert!(!a.is_empty(), "{table} holds rows in the sample");
+        assert!(!a.is_empty(), "{table} holds rows in the scenario");
         assert_eq!(a, b, "{table}");
     }
     assert_eq!(
@@ -115,7 +134,7 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
         .rows
         .values()
         .find(|row| row.kind == Kind::Person && row.name != world.me)
-        .expect("the sample holds a person");
+        .expect("the scenario holds a person");
     let word = person
         .name
         .split_whitespace()
@@ -242,7 +261,10 @@ fn events_on_the_core_door_are_the_ones_the_harness_door_reads_in_every_zone() {
             .events(&from, &to, tz)
             .unwrap_or_else(|e| panic!("{tz}: {e}"));
         let b = harness.events(&from, &to, tz).unwrap();
-        assert!(!a.is_empty(), "{tz}: the sample holds events in the window");
+        assert!(
+            !a.is_empty(),
+            "{tz}: the scenario holds events in the window"
+        );
         assert_eq!(format!("{a:?}"), format!("{b:?}"), "{tz}");
     }
     assert!(

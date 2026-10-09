@@ -289,6 +289,54 @@ fn a_busy_conflict_and_a_backwards_range_are_both_refused() {
 }
 
 #[test]
+fn a_free_event_overlaps_a_busy_one_and_blocks_nothing() {
+    // ICALENDAR'S TRANSP: what a phone's calendar holds as free — and the
+    // busy event an import keeps rather than drops — lands beside an overlap.
+    let bench = Bench::new("free");
+    let calendar_id = bench.calendar("Work", "Etc/UTC");
+    bench.run(
+        "schedule.propose_event",
+        json!({
+            "summary": "Standup",
+            "dtstart": "2026-03-02T09:00:00.000Z",
+            "dtend": "2026-03-02T09:30:00.000Z",
+            "start_tz": "Etc/UTC",
+            "calendar_id": calendar_id,
+        }),
+    );
+    let free = bench.run(
+        "schedule.propose_event",
+        json!({
+            "summary": "Office hours",
+            "dtstart": "2026-03-02T09:15:00.000Z",
+            "dtend": "2026-03-02T10:00:00.000Z",
+            "start_tz": "Etc/UTC",
+            "calendar_id": calendar_id,
+            "busy": "free",
+        }),
+    );
+    assert_eq!(
+        bench.number(
+            "SELECT COUNT(*) FROM schedule_event_ext WHERE event_id = ?1 AND busy = 'free'",
+            &[&free["event_id"].as_str().expect("an event id")],
+        ),
+        1,
+        "the event is stored free"
+    );
+    // AND A FREE EVENT IS NOT A CONFLICT for a busy one proposed over it.
+    bench.run(
+        "schedule.propose_event",
+        json!({
+            "summary": "Lunch",
+            "dtstart": "2026-03-02T09:45:00.000Z",
+            "dtend": "2026-03-02T10:30:00.000Z",
+            "start_tz": "Etc/UTC",
+            "calendar_id": calendar_id,
+        }),
+    );
+}
+
+#[test]
 fn rescheduling_and_cancelling_revise_one_identity_rather_than_writing_a_row() {
     let bench = Bench::new("revise");
     let calendar_id = bench.calendar("Work", "Etc/UTC");

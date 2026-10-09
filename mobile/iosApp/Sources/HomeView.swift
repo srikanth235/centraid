@@ -130,10 +130,9 @@ struct HomeView: View {
             // THE BACKUP LINE (#1080): where this vault's backup stands, in
             // the machine's words, and the door to the Backup screen. It is
             // the backup's and not the lockup's: the lockup says where the
-            // VAULT is, and the phone is the vault. It yields Home's one
-            // notice slot to the sample line while the machine says so
-            // (R-SAMPLE-8), so the two are never drawn together.
-            if !home.data.sampleNotice {
+            // VAULT is, and the phone is the vault. Not over "See an example":
+            // the line is the member's vault's, and the rows on screen are not.
+            if !home.vault.example {
                 BackupLineView(line: home.backupLine) { shell.openBackup() }
             }
             HomeTitleRow { shell.vaultSheetOpen = true }
@@ -149,14 +148,6 @@ struct HomeView: View {
                 FailureBody(failure: failure)
             case let .data(data):
                 VStack(alignment: .leading, spacing: 0) {
-                    // ONE NOTICE SLOT, SETTLED BY THE MACHINE (R-SAMPLE-8).
-                    // The sample line has it on the sample vault, and on the
-                    // member's own vault for the day it was founded; the
-                    // backup line under the lockup has it otherwise. This view
-                    // reads one flag and decides nothing.
-                    if data.sampleNotice {
-                        SampleNoticeRow(shell: shell)
-                    }
                     if data.springboard == .firstRun {
                         DayOne(data: data, shell: shell)
                     } else {
@@ -284,46 +275,6 @@ private struct StatusRibbon: View {
         .accessibilityLabel(
             [status.copy, status.action].filter { !$0.isEmpty }.joined(separator: ". ")
         )
-    }
-}
-
-/// THE SAMPLE VAULT'S ONE LINE (R-SAMPLE-1): a sentence and one secondary
-/// action, outlined and never filled — the springboard below keeps the view's
-/// one ink element. Removing deletes a vault, so the action asks first.
-private struct SampleNoticeRow: View {
-    @ObservedObject var shell: ShellModel
-    @Environment(\.colorScheme) private var scheme
-    @State private var asking = false
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(ShellWords.sampleLine)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("text", scheme))
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            KitOutlineButton(label: ShellWords.sampleRemove) { asking = true }
-                .accessibilityIdentifier("home-sample-remove")
-        }
-        .padding(.horizontal, pageMargin)
-        .padding(.vertical, 8)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("home-sample-notice")
-        .sampleRemoveConfirm(isPresented: $asking, shell: shell)
-    }
-}
-
-extension View {
-    /// "Remove sample"'s confirmation, the one both doors raise (Home's notice
-    /// and Settings): the destructive verb, Cancel, and one sentence.
-    func sampleRemoveConfirm(isPresented: Binding<Bool>, shell: ShellModel) -> some View {
-        alert(ShellWords.sampleRemove, isPresented: isPresented) {
-            Button(ShellWords.sampleRemoveConfirm, role: .destructive) { shell.removeSample() }
-                .accessibilityIdentifier("sample-remove-confirm")
-            Button(ShellWords.cancel, role: .cancel) {}
-        } message: {
-            Text(ShellWords.sampleRemoveBody)
-        }
     }
 }
 
@@ -1149,8 +1100,8 @@ private struct VaultSheet: View {
                     .padding(.horizontal, CentraidGeometry.pageMargin)
             }
 
-            // THE ROSTER IS DRAWN AS THE SHELF LISTS IT, the sample last
-            // (R-SAMPLE-1): the order is `Shelf`'s, and this view sorts nothing.
+            // THE ROSTER IS DRAWN AS THE SHELF LISTS IT: the order is
+            // `Shelf`'s, and this view sorts nothing.
             List(vaults, id: \.vaultID) { vault in
                 Button {
                     if vault.vaultID != active.vaultID {
@@ -1175,16 +1126,6 @@ private struct VaultSheet: View {
                                 Text(ShellWords.vaultName(vault.vaultName))
                                     .centraidType("smallStrong")
                                     .foregroundStyle(Theme.color("text", scheme))
-                                // THE SAMPLE'S MARK, from the lockup's own
-                                // `sample` and never from its name: a member
-                                // may call a vault of their own "Sample". It
-                                // is dropped while the vault's name already
-                                // says it ("Sample [Sample]" is one word
-                                // twice) and kept once the member renamed it.
-                                if vault.sample, vault.vaultName != ShellWords.sampleMark {
-                                    StatusChipView(.with { $0.label = ShellWords.sampleMark; $0.tone = .neutral })
-                                        .accessibilityIdentifier("vault-sample-mark")
-                                }
                             }
                             // THE SAME SECOND LINE THE HEADER DRAWS, from the
                             // same `stateLine` and the same `RosterChanged`

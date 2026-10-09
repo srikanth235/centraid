@@ -530,7 +530,7 @@ Every string has a budget, and the budget is the contract. Copy lives in `copy/<
 | Button, action, menu row | 1–2 words, verb first. Never "Click here to…" |
 | Toast / success | A fragment — "Photo deleted". Never "successfully". |
 | StatusLine | One clause |
-| Empty state | One sentence and at most one action. No feature explanation, no healthy-state essay. |
+| Empty state | One sentence and at most one action. No feature explanation, no healthy-state essay. An app's day-one empty may also carry the shell's "See an example" link — a quiet text link, never a second button ([R-ONBOARD-3](docs/decisions.md#onboarding-without-sample-data)) — and where the phone holds the data its import is the one action ([R-ONBOARD-4](docs/decisions.md#onboarding-without-sample-data)). |
 | Banner (offline, degraded) | One sentence: the state, plus one action or one consequence |
 | Error | What happened and what to do, ≤ ~12 words. No apology, no "Please try again." |
 | Settings label + description | The label carries the meaning; the description is one sentence or absent |

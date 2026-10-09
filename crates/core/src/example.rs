@@ -1,32 +1,30 @@
-//! THE SAMPLE SCENARIO: one weekend at Tahoe, across seven apps.
+//! THE EXAMPLE SCENARIO: one weekend at Tahoe, across seven apps.
 //!
-//! A member's first vault opens onto nothing, and an app full of empty states
-//! teaches nobody what it is for. So a phone that founds its first vault also
-//! founds a SECOND, separate vault — the **sample vault** — and fills it with
-//! this scenario: Maya, Jake, Grandpa Ray and Chris, notes and a packing list,
-//! a week on the calendar, a camera roll with real bytes, and an uneven expense
-//! ledger. The member's own vault stays clean; removing the sample is
-//! forgetting its directory, and nothing of the member's goes with it.
+//! An app full of empty states teaches nobody what it is for, and a member who
+//! taps "See an example" wants to see it lived in before their own rows are.
+//! So the shell opens a SEPARATE, EPHEMERAL core over a temporary directory
+//! with [`crate::CoreConfig::example`] set, founds it with
+//! `FOUND_CONTENT_EXAMPLE` ([`crate::api::found`]), renders the apps from it,
+//! then closes it and deletes the directory. This module is what that found
+//! writes: Maya, Jake, Grandpa Ray and Chris, notes and a packing list, a week
+//! on the calendar, a camera roll with real bytes, and an uneven expense
+//! ledger (docs/decisions.md, "Onboarding without sample data",
+//! `#onboarding-without-sample-data`).
 //!
-//! **One scenario, two callers.** The phone reaches it through `FoundRequest`
-//! with `FOUND_CONTENT_SAMPLE` ([`crate::api::found`]); the dev binary
-//! `seed-demo-vault` (`crates/centraid`) seeds the same rows into a fixture
-//! vault and adds Locker on top. Keeping one copy is what keeps a screenshot of
-//! a demo fixture and a member's sample vault the same product.
+//! **AN EXAMPLE IS NEVER THE MEMBER'S VAULT.** It is never on the shelf, never
+//! keyed (`Core::open` refuses an example config that carries a seed), never
+//! backed up (the handle refuses every backup door), never indexed for chat
+//! (the handle refuses `Assist`), and refuses every write after its one found
+//! (`CoreError::Example`). Onboarding's goal is time to the member's OWN data,
+//! so no row of this scenario may ever land in a vault the member keeps: a
+//! core that is not an example refuses `FOUND_CONTENT_EXAMPLE` outright.
 //!
-//! **LOCKER IS SEALED UNDER THE MEMBER'S OWN KEYS, never the demo's.** A phone
-//! that holds the member's seed founds the sample KEYED at an index of its own
-//! (`Shelf.foundSample`), and [`found`] then seeds a handful of obviously fake
-//! Locker items through the same door the shell uses — a Locker unlock with the
-//! vault's keys, then `locker.add_item`, whose secrets the core seals under that
-//! vault's `K` ([`locker`]). The dev binary's Locker is sealed under the PUBLIC
-//! all-`abandon` words, which is right for a fixture and must never exist in a
-//! product vault: nothing here names those words, a demo seed or a seed of this
-//! module's own, and `sample_vault_tests` asserts the items open under the
-//! member's seed and index and DO NOT open under the demo's. A core opened with
-//! no seed has no `K`, so it founds the sample without Locker rather than
-//! minting a stand-in. Locker is not one of [`APPS`] (the dev binary's `--only`
-//! names those); it is seeded by its own step.
+//! **One scenario, two callers.** The example core reaches it through
+//! [`found`]; the dev binary `seed-demo-vault` (`crates/centraid`) seeds the
+//! same rows through [`seed`] into a fixture vault and adds its own Locker on
+//! top. Keeping one copy is what keeps a screenshot of a demo fixture and the
+//! example a member opens the same product. There is NO LOCKER here: Locker's
+//! secrets are sealed under a vault's keys, and an example has none.
 //!
 //! **THROUGH THE REAL COMMAND PLANE, never SQL.** Every row is a
 //! `Vault::execute` of a registered command, so it carries the `core_entity`
@@ -35,8 +33,8 @@
 //! read — the calendar Agenda files events under — is a page through
 //! [`crate::api::page`], the same door a shell reads through.
 //!
-//! **Dates are relative to now.** An agenda seeded around a fixed instant is a
-//! sample that is empty by next month, so every date is the wall clock plus or
+//! **Dates are relative to now.** An agenda seeded around a fixed instant is an
+//! example that is empty by next month, so every date is the wall clock plus or
 //! minus whole days.
 //!
 //! **The bytes ship with the library.** Eighteen PNG frames, 672 KB, every one
@@ -53,13 +51,8 @@ use serde_json::{Value, json};
 
 use crate::error::{CoreError, Result};
 
-mod locker;
-
-pub use locker::Sealing;
-
 /// The apps the scenario seeds through [`seed`], in the order it seeds them.
-/// Locker is not one of them: it needs the vault's keys, so [`found`] seeds it
-/// as its own step ([`locker`]); see the module header.
+/// Locker is not one of them, and never will be: see the module header.
 pub const APPS: [&str; 7] = [
     "people", "notes", "docs", "photos", "tasks", "tally", "agenda",
 ];
@@ -67,9 +60,10 @@ pub const APPS: [&str; 7] = [
 /// What a seeding pass did not do.
 ///
 /// A refusal is LOUD and the pass continues: one app's schema drifting is not
-/// a reason to leave the other six empty, and a silent skip would be a sample
+/// a reason to leave the other six empty, and a silent skip would be an example
 /// whose gaps nobody can see. The caller decides what a refusal costs — the
-/// phone fails the whole found, the dev binary exits non-zero.
+/// example's found fails whole, the dev binary exits non-zero, and a starter
+/// row ([`crate::starters`]) is only a warning.
 #[derive(Debug, Default)]
 pub struct Report {
     /// `"<command>: <reason>"`, one per refused command.
@@ -95,17 +89,13 @@ pub fn now_ms() -> i64 {
         .unwrap_or_default()
 }
 
-/// FOUND THE SAMPLE VAULT in an open, empty file, and seed it.
+/// FOUND THE EXAMPLE in an open, empty file, and seed every app.
 ///
-/// The order is the crash story ([`centraid_vault::bootstrap::SampleMark`]):
-/// the vault row and the mark at `seeding` in one commit, the scenario through
-/// the command plane, **Locker last when the core holds keys**, the mark at
-/// `ready` after both. A pass that is not whole fails here and leaves the mark
-/// at `seeding`, so the file is never mistaken for a finished sample — the
-/// phone deletes its directory, and with it every sealed item.
-///
-/// `sealing` is the open core's keys and Locker session; `None` is a core
-/// opened with no seed, which founds the sample without Locker.
+/// A plain found — no mark: what makes this file an example is the core it was
+/// opened in ([`crate::CoreConfig::example`]) and the temporary directory the
+/// shell deletes, never a cell in the file. A pass that is not whole fails
+/// here, and the shell deletes the directory rather than drawing half a
+/// scenario.
 ///
 /// # Errors
 ///
@@ -119,13 +109,12 @@ pub fn found(
     display_name: &str,
     owner_name: &str,
     now_ms: i64,
-    sealing: Option<&Sealing<'_>>,
 ) -> Result<Founded> {
     if let Some(vault_id) = vault.vault_id()? {
         return Err(CoreError::VaultAlreadyHeld { vault_id });
     }
-    let founded = vault.found_sample(display_name, owner_name)?;
-    let mut report = seed(
+    let founded = vault.found(display_name, owner_name)?;
+    let report = seed(
         vault,
         registry,
         principal,
@@ -133,19 +122,13 @@ pub fn found(
         &|_| true,
         now_ms,
     )?;
-    if let Some(sealing) = sealing {
-        report
-            .refused
-            .extend(locker::seed(vault, registry, principal, sealing));
-    }
     if !report.is_whole() {
         let mut why = report.refused;
         why.extend(report.gaps.into_iter().map(|gap| format!("{gap}: no body")));
         return Err(CoreError::Invariant {
-            context: format!("the sample vault did not seed whole: {}", why.join("; ")),
+            context: format!("the example did not seed whole: {}", why.join("; ")),
         });
     }
-    vault.finish_sample()?;
     Ok(founded)
 }
 
@@ -207,40 +190,11 @@ pub fn seed(
     Ok(seeder.report)
 }
 
-/// TWO STARTER ROWS in a member's own first vault: a note and a task, so the
-/// vault they just made is not a blank wall. Best-effort by design — a refused
-/// starter leaves an empty vault, which is still a vault.
-#[must_use]
-pub fn starters(vault: &Vault, registry: &Registry, principal: &Principal) -> Report {
-    let mut seeder = Seeder {
-        vault,
-        registry,
-        principal,
-        report: Report::default(),
-    };
-    seeder.run(
-        "knowledge.create_note",
-        json!({
-            "title": "Start here",
-            "body_text": "This note lives in your vault, on this phone. Edit it, or delete it once you have written your own.",
-            "format": "plain",
-        }),
-    );
-    seeder.run(
-        "schedule.add_task",
-        json!({
-            "title": "Pair your laptop so this vault has a backup",
-            "priority": 5,
-        }),
-    );
-    seeder.report
-}
-
 /// The first calendar's id, read through the page door a shell reads through.
 fn first_calendar(vault: &Vault) -> Option<String> {
     let request = wire::PageRequest {
         query: Some(wire::PageQuery {
-            name: "sample.calendar".to_owned(),
+            name: "example.calendar".to_owned(),
             select: vec!["calendar_id".to_owned()],
             from: "schedule_calendar".to_owned(),
             r#where: None,
@@ -282,6 +236,12 @@ fn at(now: i64, days: i64, hour: i64, minute: i64) -> String {
 }
 
 /// The date alone, `YYYY-MM-DD`, `days` from the anchor.
+/// `now`'s UTC calendar day, `YYYY-MM-DD`: the starters' fallback when the
+/// found named no zone the bundled database knows.
+pub(crate) fn utc_day(now: i64) -> String {
+    day(now, 0)
+}
+
 fn day(now: i64, days: i64) -> String {
     iso((now / DAY_MS) * DAY_MS + days * DAY_MS)[..10].to_owned()
 }
@@ -311,16 +271,17 @@ fn iso(millis: i64) -> String {
     )
 }
 
-/// One command, run and reported.
-struct Seeder<'a> {
-    vault: &'a Vault,
-    registry: &'a Registry,
-    principal: &'a Principal,
-    report: Report,
+/// One command, run and reported. `pub(crate)` because the starter rows
+/// ([`crate::starters`]) run through the same door and report the same way.
+pub(crate) struct Seeder<'a> {
+    pub(crate) vault: &'a Vault,
+    pub(crate) registry: &'a Registry,
+    pub(crate) principal: &'a Principal,
+    pub(crate) report: Report,
 }
 
 impl Seeder<'_> {
-    fn run(&mut self, name: &'static str, body: Value) -> Option<Value> {
+    pub(crate) fn run(&mut self, name: &'static str, body: Value) -> Option<Value> {
         match self
             .vault
             .execute(self.registry, self.principal, &Command::new(name, body))
@@ -328,7 +289,7 @@ impl Seeder<'_> {
             Ok(outcome) if outcome.status == CommandStatus::Executed => Some(outcome.output),
             Ok(outcome) => {
                 let why = outcome.reason.unwrap_or_else(|| "no reason".to_owned());
-                tracing::warn!(command = name, %why, "a sample command was refused");
+                tracing::warn!(command = name, %why, "an example command was refused");
                 self.report.refused.push(format!("{name}: {why}"));
                 None
             }
@@ -340,7 +301,7 @@ impl Seeder<'_> {
                 None
             }
             Err(error) => {
-                tracing::warn!(command = name, %error, "a sample command errored");
+                tracing::warn!(command = name, %error, "an example command errored");
                 self.report.refused.push(format!("{name}: {error}"));
                 None
             }
@@ -624,7 +585,7 @@ fn seed_docs(seeder: &mut Seeder, now: i64) {
 // Photos.
 //
 // The frames' titles, places and capture times are v0's, and the bytes are the
-// eighteen PNGs under `sample/photos/`, compiled in.
+// eighteen PNGs under `example/photos/`, compiled in.
 // ---------------------------------------------------------------------------
 
 /// WHERE THE ROLL WAS SHOT, frame by frame.
@@ -921,25 +882,25 @@ const ALBUM_FILES: [&str; 4] = [
 ];
 const ALBUM_COVER: &str = "emerald-bay-overlook.png";
 
-/// THE SAMPLE ROLL, COMPILED IN.
+/// THE EXAMPLE ROLL, COMPILED IN.
 ///
 /// `include_bytes!` and not a runtime read: a phone has no repository to read
 /// them from, and the dev binary is run from wherever cargo puts it. 672 KB of PNG across eighteen frames, every one of them 360 px
 /// or less on its long edge — which is v0's own ceiling, chosen so the grid
 /// paints an original directly instead of probing a `?variant=thumb`
 /// derivative nothing has generated.
-macro_rules! sample {
+macro_rules! roll {
     ($($file:literal),* $(,)?) => {
-        fn sample_bytes(file: &str) -> Option<&'static [u8]> {
+        fn roll_bytes(file: &str) -> Option<&'static [u8]> {
             match file {
-                $($file => Some(include_bytes!(concat!("sample/photos/", $file))),)*
+                $($file => Some(include_bytes!(concat!("example/photos/", $file))),)*
                 _ => None,
             }
         }
     };
 }
 
-sample!(
+roll!(
     "ana-and-marco-table.png",
     "ana-kitchen-window.png",
     "ana-porch-evening.png",
@@ -975,7 +936,7 @@ const VIDEO_BASE64: &str = "AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29t";
 /// a coordinate — half of one is no location at all, and accepting it would
 /// let this seeder believe it had placed a photograph it had not.
 fn frame_input(frame: &Frame, now: i64) -> Option<Value> {
-    let bytes = sample_bytes(frame.file)?;
+    let bytes = roll_bytes(frame.file)?;
     let mut input = json!({
         "data_uri": format!(
             "data:image/png;base64,{}",

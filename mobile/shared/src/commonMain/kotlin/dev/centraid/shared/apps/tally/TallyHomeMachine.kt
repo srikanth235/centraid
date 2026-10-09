@@ -186,6 +186,8 @@ public object TallyHomeMachine :
                 headline = TallyCopy.DAY_ONE,
                 body = TallyCopy.DAY_ONE_SUB,
                 action_label = TallyCopy.DAY_ONE_ACT,
+                // Drawn only while `day_one`, so "See an example" is too.
+                offers_example = true,
             ),
             status_line = if (dashboard.ledger_window_filled) TallyCopy.WINDOW_FILLED else TallyCopy.BALANCES_STATUS,
             hero = hero(dashboard, dayOne),

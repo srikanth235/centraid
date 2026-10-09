@@ -62,7 +62,7 @@ extern "C" {
  *
  * `config` is `len` bytes of UTF-8 JSON: `{"path": "...", "create": bool?,
  * "uiThreadName": "..."?, "expectedIdentity": "<digest>"?, "vault": {"seed":
- * "<128 hex>", "index": n}?}`. JSON and not protobuf, because a configuration
+ * "<128 hex>", "index": n}?, "example": bool?}`. JSON and not protobuf, because a configuration
  * is read once at startup by a human-written call site and being able to log
  * it verbatim — the seed aside — is worth more than the encoding.
  *
@@ -77,6 +77,11 @@ extern "C" {
  *
  * `vault` is the seed the 24 words derive and this vault's index, out of the
  * shell's secure store and borrowed for this call (`CONTRACT.md` §4b).
+ * `example: true` opens an EXAMPLE core over a temporary path, for "See an
+ * example" (`CoreConfig::example`): never keyed — a `vault` beside it is
+ * refused with `BAD_ARGUMENT` — and answering only reads and its one
+ * `FOUND_CONTENT_EXAMPLE` found. Absent is `false`, a member's core.
+ *
  * `role`, `pairing` and `device` are ignored: there is one kind of core, and
  * a gateway knows this phone by the token its pairing minted (#1080).
  *

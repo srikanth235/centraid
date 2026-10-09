@@ -48,9 +48,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  * waking one opens SQLite inside a background window, and the gateway refuses
  * the other's writes.
  *
- * The **sample** vault is skipped too, and never drains at all: its rows are a
- * scenario to look around in and must never reach the member's gateway, and the
- * core would refuse the pass anyway (`CoreError::SampleVault`, R-SAMPLE-5).
+ * The **example** ("See an example") is never a holding, so it is never
+ * walked at all; its core would refuse the pass anyway (`CoreError::Example`).
  *
  * ## A PASS MAY TAKE MORE THAN ONE ROUND
  *
@@ -123,7 +122,7 @@ public class ShelfDrain(
      * a background window ([WakeReason.SCHEDULED]).
      */
     public suspend fun run(deadlineMs: Long, reason: WakeReason = WakeReason.SCHEDULED): List<Outcome> {
-        val drainable = holdings().filter { it.core != null && it.moved == null && !it.sample }
+        val drainable = holdings().filter { it.core != null && it.moved == null }
         if (drainable.isEmpty()) return emptyList()
         val read = conditions()
         val each = if (deadlineMs <= 0L) 0L else deadlineMs / drainable.size

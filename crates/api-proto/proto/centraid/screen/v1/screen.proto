@@ -1298,12 +1298,11 @@ message HomeState {
   // `BackupLines` finished it from the core's `backup_status`. The shell told
   // Home it (`BackupLineChanged`), so a reload carries it.
   BackupLine backup_line = 9;
-  // TOLD TO HOME: the vault in front was founded TODAY, in the device's zone.
-  // One of the facts the notice slot is settled from (`HomeData.sample_notice`);
-  // told and not derived because `commonMain` has no zone database and a day
-  // rolls over under an open app. Reset by a vault switch: it is a fact about
-  // one vault.
-  bool founded_today = 10;
+  // `founded_today`, which only settled the sample line's claim on the notice
+  // slot; retired with the sample vault (docs/decisions.md, "Onboarding without
+  // sample data").
+  reserved 10;
+  reserved "founded_today";
 }
 
 message HomeData {
@@ -1338,12 +1337,11 @@ message HomeData {
   // full width and the other drew it at a half. A row here carries APP IDS and
   // not tiles, so the tile itself is still stated exactly once.
   repeated TileRow grid_rows = 7;
-  // THE SAMPLE LINE HOLDS HOME'S ONE NOTICE SLOT (R-SAMPLE-8). Decided by the
-  // machine from the roster, the vault in front and `founded_today`: on the
-  // sample vault always, on the member's own vault while a sample is held and
-  // only on the day the vault was founded. While it is set a shell draws this
-  // line in place of `HomeState.backup_line`, so Home never draws both.
-  bool sample_notice = 9;
+  // `sample_notice`, the sample line's claim on the notice slot; retired with
+  // the sample vault (docs/decisions.md, "Onboarding without sample data"), so
+  // the slot is the backup line's alone.
+  reserved 9;
+  reserved "sample_notice";
 }
 
 // One drawn row of the springboard: the app ids in it, left to right.
@@ -1434,20 +1432,18 @@ message VaultLockup {
   // belongs to.
   string frozen_line = 9;
 
-  // THIS IS THE SAMPLE VAULT: founded beside the member's first vault and
-  // filled with a scenario to look around in. Read out of the vault itself
-  // (`core_vault.settings_json`'s `sample` mark, `ready`), never off a list
-  // beside it. A sample vault never pairs and never backs up, so a shell hides
-  // pairing for it and offers "Remove sample" instead.
-  bool sample = 10;
+  // THIS IS THE EXAMPLE PREVIEW, never a vault the member holds: an ephemeral
+  // core over a temporary directory, seeded with the example scenario for "See
+  // an example" and deleted when the member leaves it (`ExamplePreview`). Not
+  // on the roster, never keyed, never backed up and refusing every write. A
+  // shell draws "Example — not your data" and its one exit while it is set.
+  bool example = 12;
 
-  // WHEN THIS VAULT WAS FOUNDED, as `core_vault.created_at` spells it (RFC 3339,
-  // UTC), or empty for a lockup the shell has not identified. Read out of the
-  // vault like its name, never kept beside it. What it is for is Home's one
-  // notice slot: the sample line owns that slot on the member's own vault only
-  // on the day the vault was founded, and "which day" is the shell's to say
-  // because only the platform knows the zone (`HomeEvent.FoundingDayKnown`).
-  string founded_at = 11;
+  // `sample`, the separate sample vault's mark, and `founded_at`, which only
+  // settled the sample line's claim on Home's notice slot; both retired with
+  // the sample vault (docs/decisions.md, "Onboarding without sample data").
+  reserved 10, 11;
+  reserved "sample", "founded_at";
 
   // `gateway_name`, which no layer could ever write; `offline`, which only
   // meant something beside it; and `link`, whose enum made pairing a STATE of
@@ -1523,7 +1519,6 @@ message HomeEvent {
     VaultPicked vault_picked = 12;
     RosterChanged roster_changed = 13;
     BackupLineChanged backup_line = 14;
-    FoundingDayKnown founding_day = 15;
   }
 
   // The foreground vault's backup line moved: a pass ended, the foreground
@@ -1532,12 +1527,10 @@ message HomeEvent {
     BackupLine line = 1;
   }
 
-  // WHETHER THE VAULT IN FRONT WAS FOUNDED TODAY, in the device's zone. Sent
-  // after every rebind, which is when the vault in front can have changed; told
-  // about the foreground vault, not read by Home.
-  message FoundingDayKnown {
-    bool founded_today = 1;
-  }
+  // `FoundingDayKnown`, which told Home whether the vault in front was founded
+  // today for the sample line; retired with the sample vault.
+  reserved 15;
+  reserved "founding_day";
 
   // `VaultsListed`, the one-shot survey. See `RosterChanged`.
   reserved 11;
@@ -4013,6 +4006,12 @@ message AgendaHomeData {
   // WHERE OPENING LANDS: this section, at its now line when it has one. Empty
   // `day` is the top.
   AgendaLanding landing = 12;
+  // WHILE THE VAULT HOLDS NO EVENT IN THE WINDOW (marks — due tasks,
+  // birthdays — aside), where the phone already holds the member's calendar: a
+  // shell that can read it offers the import — as the empty state's action in
+  // place of `empty_action` on day one, and as a quiet row above the list when
+  // marks fill it. See `EmptyState.import_source`.
+  ImportSource import_source = 13;
 }
 
 message AgendaLanding {
@@ -4763,6 +4762,37 @@ message EmptyState {
   string headline = 1;
   string body = 2;
   string action_label = 3;
+  // THIS IS AN APP'S DAY-ONE EMPTY STATE, and the shell may offer "See an
+  // example" beside it: a read-only preview of a full app rendered from an
+  // ephemeral example core, which leaves nothing behind. Set by a machine only
+  // on the state an app shows when it holds nothing at all — never on a
+  // filtered, searched or sub-list empty — and the words are the shell's
+  // (`SharedCopy.SEE_EXAMPLE`), never the app's.
+  bool offers_example = 4;
+  // WHERE THE PHONE ALREADY HOLDS THIS APP'S DATA, on an app's day-one empty
+  // state only. A shell that can read that source draws its import as the
+  // empty state's action in place of `action_label` — asked here, at the point
+  // of use, never as an up-front permission wall — and a shell that cannot
+  // draws `action_label` as before. The app's own add stays in its header.
+  ImportSource import_source = 5;
+}
+
+// A SOURCE ON THE PHONE ITSELF that an app's day-one empty state can import
+// from in one tap (docs/decisions.md, "Onboarding without sample data"). The
+// OS asks its own permission when the member taps it, never before.
+enum ImportSource {
+  IMPORT_SOURCE_UNSPECIFIED = 0;
+  // The phone's contacts, into People: a person per contact, with its phone
+  // numbers, email addresses and birthday.
+  IMPORT_SOURCE_CONTACTS = 1;
+  // The phone's calendars the member writes to, into Agenda: each event from
+  // a week back to two months on, timed or all-day, free or busy as the
+  // calendar holds it. Subscribed and birthday calendars are not read.
+  IMPORT_SOURCE_CALENDAR = 2;
+  // The phone's open reminders, into Tasks: a task per reminder, with its due
+  // day and notes. iOS has a system source; Android has none, so its shell
+  // draws the app's own action.
+  IMPORT_SOURCE_REMINDERS = 3;
 }
 
 // Search opens a field on the current surface; it is never a destination.

@@ -119,9 +119,6 @@ public object PairLaptopMachine {
                     Readiness.NEEDS_WORDS ->
                         model.copy(phase = PairLaptopState.Phase.PHASE_NEEDS_WORDS, notice = CustodyCopy.PAIR_NEEDS_WORDS, rekey = true)
                     Readiness.NO_VAULT -> model.copy(phase = PairLaptopState.Phase.PHASE_NEEDS_WORDS, notice = CustodyCopy.PAIR_NO_VAULT)
-                    // A SAMPLE VAULT NEVER PAIRS (the core refuses it), so the
-                    // screen closes on a sentence rather than taking a code.
-                    Readiness.SAMPLE -> model.copy(phase = PairLaptopState.Phase.PHASE_NEEDS_WORDS, notice = CustodyCopy.PAIR_SAMPLE)
                 },
             ),
         )
@@ -165,8 +162,8 @@ public object PairLaptopMachine {
             PairLaptopState.Phase.PHASE_PAIRED -> CustodyCopy.PAIRED_TITLE
             PairLaptopState.Phase.PHASE_FAILED -> CustodyCopy.PAIR_FAILED_TITLE
             // "Your words come first" only where words ARE the way out (the
-            // re-key door below); no vault, or the sample in front, keeps the
-            // screen's own title over its one sentence.
+            // re-key door below); no vault keeps the screen's own title over
+            // its one sentence.
             PairLaptopState.Phase.PHASE_NEEDS_WORDS ->
                 if (model.rekey) CustodyCopy.PAIR_NEEDS_WORDS_TITLE else CustodyCopy.PAIR_TITLE
             PairLaptopState.Phase.PHASE_CLOSED -> ""
@@ -228,9 +225,6 @@ public enum class Readiness {
     READY,
     NEEDS_WORDS,
     NO_VAULT,
-
-    /** The vault in front is the sample vault, which never pairs. */
-    SAMPLE,
 }
 
 /** The machine's model. The pairing code's secret is spent on first use, and the code is still never printed. */
@@ -343,14 +337,15 @@ public class PairLaptopBridge {
                 val holding = session?.shelf?.foregroundHolding()
                 when {
                     holding == null -> Readiness.NO_VAULT
-                    holding.sample -> Readiness.SAMPLE
                     holding.keyed -> Readiness.READY
                     else -> Readiness.NEEDS_WORDS
                 }
             },
             door = {
                 val open = session
-                if (open?.shelf?.foregroundHolding() == null) null else CorePairDoor({ open.shelf.core() })
+                // THE HOLDING'S OWN CORE, never `Shelf.core()`: that answers the
+                // example while a preview is open, and a pairing is the member's.
+                if (open?.shelf?.foregroundHolding() == null) null else CorePairDoor({ open.shelf.memberCore() })
             },
             after = { session?.backupStatus?.refreshForeground() },
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),

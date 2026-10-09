@@ -8,6 +8,7 @@ import centraid.screen.v1.AgendaDaySection
 import centraid.screen.v1.AgendaEmpty
 import centraid.screen.v1.AgendaEventRow
 import centraid.screen.v1.AgendaHomeData
+import centraid.screen.v1.ImportSource
 import centraid.screen.v1.AgendaHomeState
 import centraid.screen.v1.AgendaLanding
 import centraid.screen.v1.AgendaNowLine
@@ -186,6 +187,16 @@ internal object AgendaFold {
             empty_title = emptyTitle,
             empty_body = emptyBody,
             empty_action = emptyAction,
+            // NO EVENT OF THE MEMBER'S YET, AND THE PHONE ALREADY HOLDS A
+            // CALENDAR: the import is offered, where the shell can read one.
+            // Not "day one" alone: a first vault's starter tasks and an
+            // imported contact's birthday fill the list with marks, and an
+            // offer keyed on an empty screen would never be seen.
+            import_source = if (term == null && hidden.isEmpty() && upcoming.events.isEmpty()) {
+                ImportSource.IMPORT_SOURCE_CALENDAR
+            } else {
+                ImportSource.IMPORT_SOURCE_UNSPECIFIED
+            },
             calendars = upcoming.calendars.map { calendar ->
                 val isHidden = calendar.calendar_id in hidden
                 AgendaCalendarChoice(

@@ -87,16 +87,19 @@ pub enum CoreError {
         moved_at_ms: i64,
     },
 
-    /// THIS IS THE SAMPLE VAULT, AND IT NEVER LEAVES THE PHONE.
+    /// THIS IS AN EXAMPLE, AND AN EXAMPLE ONLY SHOWS.
     ///
-    /// A sample vault is founded beside the member's first vault to look around
-    /// in (`crate::sample`). Pairing it would put a laptop behind it and
-    /// draining it would put the scenario's rows in the member's backup, so the
-    /// core refuses both — the shell hides the doors, and this is the guard
-    /// behind them. `INVALID_REQUEST`, because asking is the mistake: nothing
-    /// about the vault's state would make the same request right later.
-    #[error("this is the sample vault, and a sample vault does not {what}")]
-    SampleVault { what: &'static str },
+    /// A core opened as an example (`CoreConfig::example`) is an ephemeral,
+    /// unkeyed copy of the Tahoe scenario the shell deletes when the member
+    /// leaves it (`crate::example`). It answers reads and its one found; a
+    /// write would be a row the member believes they kept, a backup door would
+    /// put the scenario behind their gateway, and the chat would index rows
+    /// that are not theirs — so the core refuses all of them, and the shell's
+    /// hidden doors are not the only guard. `INVALID_REQUEST`, because asking
+    /// is the mistake: nothing about the example's state would make the same
+    /// request right later.
+    #[error("this is an example, and an example does not {what}")]
+    Example { what: &'static str },
 
     /// The request itself is wrong: a zero limit, a cursor with a non-decimal
     /// seq, a page query with no order column. Not the state.
@@ -181,7 +184,7 @@ impl CoreError {
             Self::InvalidRequest { .. }
             | Self::NotCancellable { .. }
             | Self::Decode(_)
-            | Self::SampleVault { .. } => ErrorCode::InvalidRequest,
+            | Self::Example { .. } => ErrorCode::InvalidRequest,
             Self::Unsupported { .. } => ErrorCode::UnsupportedMessage,
             Self::ReadBoundReached { .. } => ErrorCode::ReadBoundReached,
             Self::NotYetAvailable { .. } => ErrorCode::NotYetAvailable,

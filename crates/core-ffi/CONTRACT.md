@@ -66,15 +66,18 @@ Test: `every_request_carries_a_request_id_and_cancel_names_one`
   "create": false,
   "uiThreadName": "main",
   "expectedIdentity": "<artifact digest>",
-  "vault": { "seed": "<128 lowercase hex characters>", "index": 0 }
+  "vault": { "seed": "<128 lowercase hex characters>", "index": 0 },
+  "example": false
 }
 ```
 
 `path` is the only required key. `create` defaults to `true` — a shell that names a path and says nothing else is founding a vault there — and `false` opens only a file that exists, which is what a shell opening the file a restore is about to write passes. `expectedIdentity` is clause 9's stale-core refusal, made before a handle exists. `vault` is the secret, and §4b is about it.
 
+**`example: true` opens an example core** (`CoreConfig::example`, docs/decisions.md "Onboarding without sample data"): the shell opens one over a temporary directory for "See an example", founds it with `FOUND_CONTENT_EXAMPLE`, renders from it, closes it and deletes the directory. An example is **never keyed** — `example` beside a `vault` seed is refused with `BAD_ARGUMENT` before the file is touched — and it answers only `hello`, `page`, `content_urls`, `app_query`, `phrase` and its one found; every other request is refused with `ERROR_CODE_INVALID_REQUEST` ("this is an example, and an example does not …"), and it opens no backup ledger. A core that is not an example refuses `FOUND_CONTENT_EXAMPLE`. Absent, or anything but `true`, is a member's core.
+
 **Three keys a shell may still send are ignored, never refused.** `role` named one of three kinds of core and there is one ([#1029](https://github.com/srikanth235/centraid/issues/1029) §1); `pairing` was the enrolment record an iroh endpoint was checked against at open, and `device` the device key a pair or a restore minted — a gateway now knows a phone by the bearer token its pairing minted, which the backup ledger beside the vault keeps ([#1080](https://github.com/srikanth235/centraid/issues/1080)). An older shell against a newer core is the version-skew case the handshake exists for, and refusing the open over a stale key would turn it into a product that will not start.
 
-Test: `a_configuration_defaults_to_founding_and_an_explicit_choice_wins` (`src/marshal.rs`)
+Test: `a_configuration_defaults_to_founding_and_an_explicit_choice_wins`, `an_example_is_opened_only_when_the_shell_says_so` (`src/marshal.rs`); `crates/core/tests/example_preview.rs`
 
 ## 4b. The vault's seed crosses the ABI, and this library writes no key down
 

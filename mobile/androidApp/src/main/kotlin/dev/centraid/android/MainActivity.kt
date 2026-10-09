@@ -8,6 +8,23 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import dev.centraid.android.kit.ExampleBanner
+import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.LocalPhoneImport
+import dev.centraid.android.kit.LocalExampleOffer
+import dev.centraid.android.kit.ShellBanner
+import dev.centraid.android.screens.agenda.rememberCalendarImport
+import dev.centraid.android.screens.people.rememberContactsImport
+import dev.centraid.android.theme.centraidType
+import dev.centraid.shared.shell.HomeWords
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.ui.platform.LocalView
@@ -40,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import centraid.screen.v1.HomeEvent
+import centraid.screen.v1.ImportSource
 import dev.centraid.android.backup.MediaStoreDeleter
 import dev.centraid.android.backup.ProcessSession
 import dev.centraid.android.screens.backup.BackupSheets
@@ -104,6 +122,10 @@ public class MainActivity : FragmentActivity() {
      */
     private val shelfUnread =
         kotlinx.coroutines.flow.MutableStateFlow<Boolean?>(null).asStateFlow()
+
+    /** What the example banner reads while the core is opening: no preview. */
+    private val notPreviewing =
+        kotlinx.coroutines.flow.MutableStateFlow(false).asStateFlow()
     /**
      * EVERY APP'S ROUTES, ONE LINE EACH (K5). Each holds its own bridges for
      * the activity's life — `ChangeStream.route` is registration with no
@@ -355,6 +377,101 @@ public class MainActivity : FragmentActivity() {
                     val current = stack
                     stack = routes.firstNotNullOfOrNull { it.back(current, scope) } ?: current.pop()
                 }
+                // "SEE AN EXAMPLE" (docs/decisions.md, "Onboarding without
+                // sample data"). While a preview is open the session — Home and
+                // every attached screen — reads an EPHEMERAL example core, and
+                // this shell owes three things: the banner with its one exit,
+                // a re-read of the app the member asked from on the way in and
+                // on the way out, and an end to the preview when the member
+                // leaves that app any other way.
+                val previewing by (homeSession?.shelf?.previewing ?: notPreviewing)
+                    .collectAsStateWithLifecycle()
+                // THE APP THE MEMBER ASKED FROM. Set BEFORE the preview opens,
+                // so the leave-watch below never sees "previewing, and no app"
+                // in the moment between; null with a preview open is a preview
+                // this composition did not start (a rotation reset the stack to
+                // Home), and that preview ends.
+                var previewedApp by remember { mutableStateOf<AppRoutes?>(null) }
+                var leavingExample by remember { mutableStateOf(false) }
+                // A SCREEN READS BECAUSE IT WAS OPENED: each route's open is a
+                // `LaunchedEffect` on arriving. Bumping this re-keys the route
+                // below, so its effects run again and it reads the core the
+                // session is bound to NOW — the example's, or the member's.
+                var readEpoch by remember { mutableIntStateOf(0) }
+                // THE SHELL'S ONE BANNER LINE: what a shell-level act did (the
+                // example did not open, the contacts import's progress and
+                // outcome). It stays until its Done — DESIGN.md has no toast —
+                // and a held line (an import still running) has no Done.
+                var shellNote by remember { mutableStateOf(ShellNote("", holds = false)) }
+                // BACK TO [app]'S ROOT, re-read: the stack down to the app's
+                // first entry, and the route re-keyed.
+                fun reopenRoot(app: AppRoutes) {
+                    val entries = stack.entries
+                    val root = entries.indexOfFirst { app.handles(it) }
+                    if (root >= 0) stack = NavStack(entries.take(root + 1))
+                    readEpoch += 1
+                }
+                // THE ONE EXIT: the example closes (its core, its directory)
+                // and the session rebinds onto the member's vault — off the
+                // main thread, as every core open is — then [reopen], if any,
+                // re-reads and shows its own day-one empty state again.
+                fun leaveExample(reopen: AppRoutes?) {
+                    val live = homeSession ?: return
+                    if (leavingExample) return
+                    leavingExample = true
+                    previewedApp = null
+                    scope.launch {
+                        withContext(Dispatchers.IO) { live.leaveExample() }
+                        leavingExample = false
+                        if (reopen != null) reopenRoot(reopen)
+                    }
+                }
+                // REMEMBERED, so the local below changes only when the offer
+                // does: a fresh lambda every recomposition would redraw every
+                // reader of it. The stack and the app are read at the tap.
+                val exampleOffer: (() -> Unit)? = remember(homeSession, previewing) {
+                    homeSession?.takeIf { !previewing }?.let { live -> {
+                        val app = routes.firstOrNull { it.handles(stack.current) }
+                        if (app != null && previewedApp == null) {
+                            previewedApp = app
+                            scope.launch {
+                                val opened = withContext(Dispatchers.IO) { live.seeExample() }
+                                if (opened) {
+                                    reopenRoot(app)
+                                } else {
+                                    previewedApp = null
+                                    shellNote = ShellNote(HomeWords.EXAMPLE_FAILED, holds = false)
+                                }
+                            }
+                        }
+                    } }
+                }
+                // THE PHONE'S STORES → THE APPS, at the tap: Contacts → People
+                // (`ContactsImporter`), Calendar → Agenda (`CalendarImporter`).
+                // One door keyed by source, into the member's vault only, so
+                // not offered inside a preview. Android has no system
+                // reminders: `importLabel` names no verb for them, so the
+                // door is never called with one.
+                val contactsImport = rememberContactsImport(homeSession) { sentence, holds ->
+                    shellNote = ShellNote(sentence, holds)
+                }
+                val calendarImport = rememberCalendarImport(homeSession) { sentence, holds ->
+                    shellNote = ShellNote(sentence, holds)
+                }
+                val phoneImport: ((ImportSource) -> Unit)? =
+                    remember(contactsImport, calendarImport, previewing, homeSession) {
+                        if (previewing || homeSession == null) {
+                            null
+                        } else {
+                            { source ->
+                                when (source) {
+                                    ImportSource.IMPORT_SOURCE_CONTACTS -> contactsImport()
+                                    ImportSource.IMPORT_SOURCE_CALENDAR -> calendarImport()
+                                    else -> Unit
+                                }
+                            }
+                        }
+                    }
                 // THE FIRST-LAUNCH GATE: the shelf's one answer to "does this
                 // device hold no vault", read here and nowhere else.
                 val holdsNoVault by (homeSession?.shelf?.holdsNoVault ?: shelfUnread)
@@ -395,12 +512,38 @@ public class MainActivity : FragmentActivity() {
                 val nav = remember(scope) {
                     RouteNav(read = { stack }, write = { next -> stack = next }, scope = scope)
                 }
+                // LEAVING THE PREVIEWED APP ENDS THE PREVIEW — back to Home, or
+                // anywhere else: the example belongs to the app it was asked
+                // from, and Home over an example would be a Home of strangers.
+                LaunchedEffect(previewing, route, previewedApp, leavingExample) {
+                    if (previewing && !leavingExample && (previewedApp == null || route !== previewedApp)) {
+                        leaveExample(reopen = null)
+                    }
+                }
+                Column(Modifier.fillMaxSize()) {
+                if (previewing) {
+                    ExampleBanner(onDone = { leaveExample(reopen = previewedApp ?: route) })
+                }
+                if (shellNote.sentence.isNotEmpty() && !previewing) {
+                    ShellBanner(
+                        sentence = shellNote.sentence,
+                        action = if (shellNote.holds) "" else HomeWords.EXAMPLE_DONE,
+                        tag = "import",
+                        onAct = { shellNote = ShellNote("", holds = false) },
+                    )
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                CompositionLocalProvider(
+                    LocalExampleOffer provides exampleOffer,
+                    LocalPhoneImport provides phoneImport,
+                ) {
                 // EVERY APP'S ROOT WATCH (`AppRoutes.Global`), on every screen.
                 routes.forEach { app -> key(app) { app.Global(nav) } }
                 if (route != null) {
                     // KEYED ON THE APP, so one app's effects never carry
-                    // into another's at this one call site.
-                    key(route) { route.Routes(stack.current, nav) }
+                    // into another's at this one call site — and on the read
+                    // epoch, so entering or leaving an example re-opens it.
+                    key(route, readEpoch) { route.Routes(stack.current, nav) }
                 } else if (holdsNoVault == true) {
                     // A DEVICE THAT HOLDS NO VAULT opens onto the way to make
                     // one, not onto a Home with nothing to read. The words
@@ -560,6 +703,9 @@ public class MainActivity : FragmentActivity() {
                         }
                     }
                 }
+                }
+                }
+                }
                 // THE 24 WORDS' SHEET, over whatever is drawn (#1047 E3).
                 words.Sheets()
                 // THE BACKUP SCREEN (#1080). "Add a gateway" is pairing: the
@@ -575,6 +721,9 @@ public class MainActivity : FragmentActivity() {
             }
         }
     }
+
+    /** The shell's banner line; [holds] draws it with no Done (an import running). */
+    private data class ShellNote(val sentence: String, val holds: Boolean)
 
     private companion object {
         /** The launch extra a debug build reads its demo seed from. See `DevSeed`. */

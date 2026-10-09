@@ -33,6 +33,7 @@ import centraid.screen.v1.Loading
 import centraid.screen.v1.ReadFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.shared.shell.HomeWords
 
 /**
  * THE READ LAW'S FOUR ARMS, AS A VIEW SEES THEM (K5, #1029).
@@ -173,6 +174,19 @@ public fun FailureView(
  * NOTHING HERE: one sentence, at most one more, and at most one action
  * (DESIGN.md copy table). The strings are finished; the action is the
  * screen's own event.
+ *
+ * AN APP'S DAY ONE adds two things the machine asks for and the shell
+ * answers, both through CompositionLocals so no screen threads them:
+ *
+ * - **An import in place of the action** (`import_source`), when the shell
+ *   provides the import door ([LocalPhoneImport]) and can read that source
+ *   ([importLabel] is not empty — Android has no system reminders). The app's
+ *   own add stays in its header, so the one action here is the faster way to
+ *   the member's own data. Without an importer the action is drawn as before.
+ * - **"See an example"** (`offers_example`) under it, a quiet link, when the
+ *   shell provides [LocalExampleOffer].
+ *
+ * Inside a preview both handlers are null, and neither is drawn.
  */
 @Composable
 public fun EmptyStateView(
@@ -180,6 +194,14 @@ public fun EmptyStateView(
     onAction: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    val importVerb = importLabel(empty.import_source)
+    val door = LocalPhoneImport.current
+    val importer: (() -> Unit)? = if (importVerb.isNotEmpty() && door != null) {
+        { door(empty.import_source) }
+    } else {
+        null
+    }
+    val example = if (empty.offers_example) LocalExampleOffer.current else null
     Column(
         modifier.fillMaxSize().padding(24.dp).testTag("kit-empty"),
         verticalArrangement = Arrangement.Center,
@@ -193,12 +215,35 @@ public fun EmptyStateView(
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
-        if (empty.action_label.isNotEmpty() && onAction != null) {
+        if (importer != null) {
+            QuietButton(
+                label = importVerb,
+                testTag = "kit-empty-import",
+                modifier = Modifier.padding(top = 16.dp),
+                onPress = importer,
+            )
+        } else if (empty.action_label.isNotEmpty() && onAction != null) {
             QuietButton(
                 label = empty.action_label,
                 testTag = "kit-empty-action",
                 modifier = Modifier.padding(top = 16.dp),
                 onPress = onAction,
+            )
+        }
+        if (example != null) {
+            // A QUIET LINK, NOT A SECOND BUTTON: the empty state keeps its one
+            // action, and the example is the look before the first step.
+            Text(
+                HomeWords.SEE_EXAMPLE,
+                style = centraidType("control"),
+                color = centraidColor("link"),
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clip(RoundedCornerShape(KitGeometry.RADIUS))
+                    .clickable(role = Role.Button, onClick = example)
+                    .padding(vertical = 12.dp)
+                    .testTag("kit-empty-example"),
             )
         }
     }

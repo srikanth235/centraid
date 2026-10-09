@@ -42,6 +42,14 @@ class ConfigurationJsonSpec : StringSpec({
         )
         keyed.toJson("main").contains("\"device\"") shouldBe false
         keyed.toString() shouldBe "CoreConfiguration(databasePath=/v/a.sqlite3, create=true, " +
-            "expectedDigest=${ArtifactIdentity.DEV}, vaultSeedHex=<redacted>, vaultIndex=1)"
+            "expectedDigest=${ArtifactIdentity.DEV}, vaultSeedHex=<redacted>, vaultIndex=1, example=false)"
+    }
+
+    "an example core says so, and an ordinary open's JSON is unchanged by the flag" {
+        // `ExamplePreview`'s one opener: the core refuses this beside a seed,
+        // so the shell never sends both.
+        val json = CoreConfiguration(databasePath = "/t/x/vault.db", example = true).toJson("main")
+        json shouldBe """{"path":"/t/x/vault.db","create":true,"uiThreadName":"main","example":true}"""
+        CoreConfiguration(databasePath = "/v/a.sqlite3").toJson("main").contains("example") shouldBe false
     }
 })

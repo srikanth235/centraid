@@ -37,7 +37,7 @@ import kotlin.jvm.JvmStatic
  * whether that deployment had relays. There is nothing to dial.
  *
  * `crates/core-ffi`'s `config_from_json` reads exactly what is left — `path`,
- * `create`, `uiThreadName`, `expectedIdentity` — and IGNORES a `role` an older
+ * `create`, `uiThreadName`, `expectedIdentity`, the seed and `example` — and IGNORES a `role` an older
  * shell still sends rather than refusing the open, which is the version-skew
  * case the handshake exists for.
  */
@@ -92,6 +92,17 @@ public data class CoreConfiguration(
     public val vaultSeedHex: String? = null,
     /** The derivation index this vault was minted at. Ignored with no seed. */
     public val vaultIndex: Int = 0,
+    /**
+     * THIS CORE IS AN EXAMPLE PREVIEW, NEVER A VAULT THE MEMBER HOLDS.
+     *
+     * `crates/core`'s `CoreConfig::example`: the core answers one found of
+     * `FOUND_CONTENT_EXAMPLE` and reads, and refuses every write, every Locker
+     * request, every backup door and the chat. It is NEVER KEYED — the core
+     * refuses an open that carries both this and a seed — so the example
+     * scenario cannot be sealed under, or reach, anything of the member's.
+     * `dev.centraid.shared.shell.ExamplePreview` is the one opener.
+     */
+    public val example: Boolean = false,
 ) {
     /**
      * REDACTED: the generated `toString` of a data class prints every field,
@@ -105,7 +116,7 @@ public data class CoreConfiguration(
         "CoreConfiguration(databasePath=$databasePath, create=$create, " +
             "expectedDigest=$expectedDigest, " +
             "vaultSeedHex=${if (vaultSeedHex == null) "absent" else "<redacted>"}, " +
-            "vaultIndex=$vaultIndex)"
+            "vaultIndex=$vaultIndex, example=$example)"
 
     internal fun toJson(uiThreadName: String): String = buildString {
         append('{')
@@ -116,6 +127,8 @@ public data class CoreConfiguration(
             append(",\"vault\":{\"seed\":").append(quote(it))
                 .append(",\"index\":").append(vaultIndex).append('}')
         }
+        // ABSENT UNLESS TRUE, so every ordinary open's JSON is the one it was.
+        if (example) append(",\"example\":true")
         append('}')
     }
 

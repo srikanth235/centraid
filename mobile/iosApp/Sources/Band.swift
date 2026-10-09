@@ -534,15 +534,31 @@ enum ShellWords {
     static var vaultsForget: String { HomeWords.shared.VAULTS_FORGET }
     static var vaultsForgetBody: String { HomeWords.shared.VAULTS_FORGET_BODY }
     static var cancel: String { KitWords.shared.CANCEL }
-    /// THE SAMPLE VAULT (R-SAMPLE-1): Home's one notice line, its two verbs,
-    /// the switcher's mark (the vault's own name), and the removal's confirm.
-    static var sampleLine: String { HomeWords.shared.SAMPLE_LINE }
-    static var sampleRemove: String { HomeWords.shared.SAMPLE_REMOVE }
-    static var sampleAdd: String { HomeWords.shared.SAMPLE_ADD }
-    static var sampleAdding: String { HomeWords.shared.SAMPLE_ADDING }
-    static var sampleMark: String { SharedCopy.shared.SAMPLE_VAULT_NAME }
-    static var sampleRemoveConfirm: String { HomeWords.shared.SAMPLE_REMOVE_CONFIRM }
-    static var sampleRemoveBody: String { HomeWords.shared.SAMPLE_REMOVE_BODY }
+    /// "SEE AN EXAMPLE": the link under a day-one empty state, the banner
+    /// over the preview and its one exit, and a preview that would not open.
+    static var seeExample: String { HomeWords.shared.SEE_EXAMPLE }
+    static var exampleBanner: String { HomeWords.shared.EXAMPLE_BANNER }
+    static var exampleDone: String { HomeWords.shared.EXAMPLE_DONE }
+    static var exampleFailed: String { HomeWords.shared.EXAMPLE_FAILED }
+    /// CONTACTS → PEOPLE, the one importer a day-one empty state offers today.
+    static var importContacts: String { PeopleCopy.shared.IMPORT_CONTACTS }
+    static var importContactsRunning: String { PeopleCopy.shared.IMPORT_CONTACTS_RUNNING }
+    static var importContactsDenied: String { PeopleCopy.shared.IMPORT_CONTACTS_DENIED }
+    static var importCalendar: String { AgendaCopy.shared.IMPORT_CALENDAR }
+    static var importCalendarRunning: String { AgendaCopy.shared.IMPORT_CALENDAR_RUNNING }
+    static var importCalendarDenied: String { AgendaCopy.shared.IMPORT_CALENDAR_DENIED }
+    static var importReminders: String { TasksCopy.shared.IMPORT_REMINDERS }
+    static var importRemindersRunning: String { TasksCopy.shared.IMPORT_REMINDERS_RUNNING }
+    static var importRemindersDenied: String { TasksCopy.shared.IMPORT_REMINDERS_DENIED }
+    /// The import's verb for a day-one empty state, by where the phone holds the data.
+    static func importLabel(_ source: Centraid_Screen_V1_ImportSource) -> String {
+        switch source {
+        case .contacts: return importContacts
+        case .calendar: return importCalendar
+        case .reminders: return importReminders
+        default: return ""
+        }
+    }
     static func vaultName(_ name: String) -> String { HomeWords.shared.vaultName(name: name) }
     static func forgetTitle(_ name: String) -> String { HomeWords.shared.forgetTitle(name: name) }
     #else
@@ -553,8 +569,11 @@ enum ShellWords {
     static let firstLaunchHouseTitle = "", firstLaunchHouseBody = "", firstLaunchKeyTitle = "", firstLaunchKeyBody = "", firstLaunchCopyTitle = "", firstLaunchCopyBody = "", firstLaunchNext = "", firstLaunchSkip = ""
     static let wordsRestore = "", showWords = "", pairLaptop = ""
     static let vaultsCurrent = "", vaultsForget = "", vaultsForgetBody = "", cancel = ""
-    static let sampleLine = "", sampleRemove = "", sampleAdd = "", sampleAdding = "", sampleMark = ""
-    static let sampleRemoveConfirm = "", sampleRemoveBody = ""
+    static let seeExample = "", exampleBanner = "", exampleDone = "", exampleFailed = ""
+    static let importContacts = "", importContactsRunning = "", importContactsDenied = ""
+    static let importCalendar = "", importCalendarRunning = "", importCalendarDenied = ""
+    static let importReminders = "", importRemindersRunning = "", importRemindersDenied = ""
+    static func importLabel(_ source: Centraid_Screen_V1_ImportSource) -> String { "" }
     static func vaultName(_ name: String) -> String { name }
     static func forgetTitle(_ name: String) -> String { "" }
     #endif

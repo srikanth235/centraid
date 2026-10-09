@@ -329,7 +329,7 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
                 PeopleFold.dayOne()
             state.chip == PeopleChipKey.PEOPLE_CHIP_KEY_STARRED -> EmptyState(headline = PeopleCopy.EMPTY_STARRED)
             state.chip == PeopleChipKey.PEOPLE_CHIP_KEY_DUE -> EmptyState(headline = PeopleCopy.EMPTY_DUE)
-            else -> PeopleFold.dayOne()
+            else -> PeopleFold.chipEmpty()
         }
         return data.copy(
             roster = roster.copy(

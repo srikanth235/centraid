@@ -12,7 +12,7 @@
 //! common` gives for the same allowance.
 #![allow(dead_code)]
 
-// The chat's half (#1078): a sample vault behind a real handle, and the chat's
+// The chat's half (#1078): the scenario in a vault behind a real handle, and the chat's
 // calls over the wire. Its own module because nothing in it is the backup's.
 pub mod chat;
 

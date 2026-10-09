@@ -104,7 +104,7 @@ final class ChatModel: ObservableObject {
     private func attachBridge() {
         guard let session else { return }
         bridge.attach(
-            core: { [weak session] in session?.shelf.core() },
+            core: { [weak session] in session?.shelf.memberCore() },
             modelPath: { ChatModelStore.modelPath },
             timeZone: { TimeZone.current.identifier },
             startDownload: { ChatModelDownloader.shared.start(.model) },

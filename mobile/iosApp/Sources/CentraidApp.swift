@@ -67,6 +67,7 @@ struct CentraidApp: App {
                 // onto the way to make one, not onto a Home with nothing to
                 // read. The shelf's answer, never a count taken here.
                 root
+                    .safeAreaInset(edge: .top, spacing: 0) { ShellBanner(shell: shell) }
                     .navigationDestination(for: ShellModel.Route.self) { route in
                         Group {
                             switch route {
@@ -232,8 +233,23 @@ struct CentraidApp: App {
                         // sat on its skeleton for ever. `id: route` makes the
                         // swap a new task (`NavigationAndMountSpec`).
                         .task(id: route) { shell.opened(route) }
+                        // THE DAY-ONE DOORS (docs/decisions.md, "Onboarding
+                        // without sample data"): an app's empty state offers
+                        // the example and the phone's own data — and nothing
+                        // while a preview is open.
+                        .environment(\.seeExample, shell.previewing ? nil : { shell.seeExample() })
+                        .environment(\.importFromPhone, shell.previewing ? nil : { shell.importFromPhone($0) })
+                        // "EXAMPLE — NOT YOUR DATA" over every route while a
+                        // preview is open, with its one exit; else the import's
+                        // line. ON EACH DESTINATION and not on the stack: an
+                        // app hides the navigation bar and draws its own header
+                        // at the top of its safe area, and an inset on the
+                        // stack did not reach a pushed cover — the banner drew
+                        // over the app's title and its add.
+                        .safeAreaInset(edge: .top, spacing: 0) { ShellBanner(shell: shell) }
                     }
             }
+
             // EVERY APP'S ROOT WATCHER (#1047): Docs' filed-document push and
             // its picker, Locker's prompt and lifecycle, Tally's save sheet.
             .background { AppGlobals(shell: shell) }

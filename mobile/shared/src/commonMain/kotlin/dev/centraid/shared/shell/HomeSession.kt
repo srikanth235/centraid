@@ -231,11 +231,11 @@ public class HomeSession private constructor(
     /**
      * Bind the iOS mover's loop to this session's vaults (`HomeBridge`). A
      * frozen vault hands nothing off: the gateway would refuse its writes. Nor
-     * does the sample, which is never backed up (R-SAMPLE-5).
+     * does the example, which is never a holding at all.
      */
     public fun attachUploads(loop: UploadLoop) {
         uploads = loop
-        fun drainable() = shelf.all().filter { it.core != null && it.moved == null && !it.sample }
+        fun drainable() = shelf.all().filter { it.core != null && it.moved == null }
         loop.attach(
             UploadLoop.Binding(
                 vaults = { drainable().map { it.vaultId } },
@@ -279,7 +279,8 @@ public class HomeSession private constructor(
      * the core knew no such destination, null when there was no core to ask.
      */
     public suspend fun forgetDestination(gatewayId: String): ForgetAnswer? {
-        val forgotten = CoreBackupDoors { shelf.core() }.forget(gatewayId)
+        // THE MEMBER'S CORE: `shelf.core()` answers the example in a preview.
+        val forgotten = CoreBackupDoors { shelf.memberCore() }.forget(gatewayId)
         backupStatus.refreshForeground()
         return forgotten
     }
@@ -378,7 +379,7 @@ public class HomeSession private constructor(
             // READ OFF THE SHELF AT THE MOMENT OF THE WRITE (#1029 F1). A
             // vault frozen while the member was mid-edit must refuse the save
             // they then press, and a value read at attach would not.
-            readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+            readOnly = { shelf.readOnlySentence() },
             zone = { services.clock.read().zone },
         ).start()
     }
@@ -448,7 +449,7 @@ public class HomeSession private constructor(
         reads = reads,
         scope = scope,
         writes = null,
-        readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+        readOnly = { shelf.readOnlySentence() },
         zone = { services.clock.read().zone },
     ).start()
 
@@ -486,7 +487,7 @@ public class HomeSession private constructor(
             writes = writes,
             left = left,
             stranded = strand,
-            readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+            readOnly = { shelf.readOnlySentence() },
         ).start()
     }
 
@@ -504,24 +505,22 @@ public class HomeSession private constructor(
      * showed a member a Rust error's `Display` — and a sentence a member reads
      * is the shell's to write.
      *
-     * **THE MEMBER'S FIRST VAULT COMES WITH COMPANY.** When the shelf holds
-     * no vault of the member's own, the new one gets two starter rows (a note
-     * and a task) and, once it is in front, the SAMPLE VAULT is founded beside
-     * it ([Shelf.foundSample]) — in the background, best-effort, and without
-     * taking the front. A sample that fails to seed is deleted by the shelf
-     * and the member's vault is untouched; "Add sample" ([addSample]) is the
-     * way back. A second vault of their own gets neither. A restore is not a
-     * found and gets neither either.
+     * **THE MEMBER'S FIRST VAULT GETS THE TEACHING STARTER ROWS** — a few
+     * notes and tasks of their own that each teach one gesture and are done by
+     * doing it (docs/decisions.md, "Onboarding without sample data"). A second
+     * vault of their own gets none, and a restore is not a found.
      */
     public suspend fun found(
         name: String = Shelf.DEFAULT_VAULT_NAME,
         ownerName: String = Shelf.DEFAULT_OWNER_NAME,
     ): FoundResult {
-        val first = shelf.all().none { !it.sample }
-        return when (val outcome = shelf.found(name = name, ownerName = ownerName, starters = first)) {
+        val first = shelf.all().isEmpty()
+        val outcome = shelf.found(name = name, ownerName = ownerName, starters = first)
+        // REBOUND EITHER WAY: a found ends a preview whether or not it lands,
+        // and nothing may stay bound to the example's closed core.
+        rebind()
+        return when (outcome) {
             is Shelf.FoundOutcome.Founded -> {
-                rebind()
-                if (first) scope.launch { shelf.foundSample() }
                 FoundResult.Made(outcome.holding.name)
             }
             is Shelf.FoundOutcome.Refused -> FoundResult.Refused(
@@ -545,26 +544,28 @@ public class HomeSession private constructor(
     }
 
     /**
-     * ADD THE SAMPLE VAULT BACK ("Add sample"). [Shelf.foundSample]: founded
-     * and seeded beside whatever is in front, which stays in front. Answers
-     * whether the device holds the sample afterwards.
+     * "SEE AN EXAMPLE" (docs/decisions.md, "Onboarding without sample data").
+     *
+     * Opens an ephemeral, read-only example core ([Shelf.openExample]) and
+     * rebinds onto it, so Home and every app screen read the example until
+     * [leaveExample]. The member's foreground vault does not move and nothing
+     * of it is opened, written or backed up. Answers whether the preview opened.
      */
-    public suspend fun addSample(): Boolean {
-        shelf.foundSample()
-        return shelf.hasSample.value
+    public suspend fun seeExample(): Boolean {
+        val opened = shelf.openExample()
+        rebind()
+        return opened
     }
 
     /**
-     * REMOVE THE SAMPLE VAULT ("Remove sample"). [Shelf.forget] on the sample's
-     * holding: its directory is deleted whole and the member's own vault is in
-     * front afterwards. Nothing of the member's is touched, but it still
-     * deletes a vault, so the shell confirms before calling this
-     * (`HomeWords.SAMPLE_REMOVE_BODY`). A device holding no sample is left as
-     * it is.
+     * LEAVE THE EXAMPLE: its core closes, its directory is deleted, and the
+     * session rebinds onto the member's own vault. A session with no preview
+     * open is left as it is.
      */
-    public suspend fun removeSample() {
-        val sample = shelf.sampleHolding() ?: return
-        forget(sample.vaultId)
+    public suspend fun leaveExample() {
+        if (!shelf.previewing.value) return
+        shelf.closeExample()
+        rebind()
     }
 
     /**
@@ -740,7 +741,6 @@ public class HomeSession private constructor(
         if (open != null && open === bound) {
             publishSeat()
             publishLockup()
-            publishFoundingDay()
             return@withLock
         }
         changeReader?.cancelAndJoin()
@@ -771,7 +771,6 @@ public class HomeSession private constructor(
         val front = shelf.foregroundHolding()?.vaultId
         val reading = backupStatus.refreshForeground()
         if (front != null) freezeIfMoved(front, reading, movedAtMs = null)
-        publishFoundingDay()
     }
 
     /**
@@ -814,23 +813,10 @@ public class HomeSession private constructor(
      * `synced` costs nothing and does not throw away a tile.
      */
     private suspend fun publishLockup() {
-        val lockup = shelf.foregroundHolding()?.lockup() ?: VaultLockup()
+        // THE EXAMPLE'S OWN LOCKUP WHILE A PREVIEW IS OPEN, `example` set: the
+        // header and the banner say whose rows these are on every route.
+        val lockup = shelf.exampleLockup() ?: shelf.foregroundHolding()?.lockup() ?: VaultLockup()
         host.send(HomeEvent(vault_changed = HomeEvent.VaultChanged(vault = lockup)))
-    }
-
-    /**
-     * WHETHER THE VAULT IN FRONT WAS FOUNDED TODAY, the notice slot's one told
-     * input (R-SAMPLE-8). Read here, at every rebind, because the zone is the
-     * platform's and the machine is pure; sent after the lockup, so a switch
-     * resets what Home holds right before this arrives.
-     */
-    private suspend fun publishFoundingDay() {
-        val holding = shelf.foregroundHolding()
-        val foundedToday = holding != null &&
-            FoundingDay.isToday(holding.foundedAt, services.clock.read())
-        host.send(
-            HomeEvent(founding_day = HomeEvent.FoundingDayKnown(founded_today = foundedToday)),
-        )
     }
 
     /**
@@ -885,7 +871,10 @@ public class HomeSession private constructor(
      * something real.
      */
     private suspend fun switchTo(vaultId: String) {
-        shelf.bringToFront(vaultId) ?: return
+        // REBOUND EVEN WHEN THE SWITCH IS REFUSED: the shelf ends a preview
+        // before it tries, and a session left bound to the closed example core
+        // would read nothing.
+        shelf.bringToFront(vaultId)
         // THE LOCKUP IS WHAT STARTS THE RELOAD: the machine sees a vault whose
         // id differs from the one it is holding, throws away every tile it read
         // out of the old vault, and asks for the new one's — which the
@@ -951,7 +940,10 @@ public class HomeSession private constructor(
             // rather than awaited: the listener runs on the one consumer of the
             // core's bounded, drop-nothing event queue, and a listener that
             // waited for a network there would stall it.
-            session.changes.onCommit = { scope.launch { session.drain.afterCommit() } }
+            // A preview's own found is not a commit of the member's.
+            session.changes.onCommit = {
+                if (!shelf.previewing.value) scope.launch { session.drain.afterCommit() }
+            }
             // THE RADIO MOVED: a link that came back, or Wi-Fi after cellular,
             // is when withheld originals can go. Debounced on its own clock.
             services.networkStatus.onChange { reading -> scope.launch { session.drain.onConnectivity(reading) } }

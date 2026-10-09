@@ -108,28 +108,35 @@ public class HomeBridge {
     }
 
     /**
-     * WHETHER THIS DEVICE HOLDS THE SAMPLE VAULT, as it changes
-     * ([Shelf.hasSample]) — "Remove sample" when true, "Add sample" when
-     * false. Fires once with the current answer and again on every change, on
-     * the main dispatcher.
+     * WHETHER "SEE AN EXAMPLE" IS OPEN, as it changes ([Shelf.previewing]).
+     * Fires once with the current answer and again on every change, on the
+     * main dispatcher. The banner's text and its one exit are drawn while true.
      */
-    public fun observeHasSample(onChange: (Boolean) -> Unit) {
+    public fun observePreviewing(onChange: (Boolean) -> Unit) {
         onSession { opened ->
-            scope.launch { opened.shelf.hasSample.collect { onChange(it) } }
+            scope.launch { opened.shelf.previewing.collect { onChange(it) } }
         }
     }
 
-    /** "Add sample": [HomeSession.addSample]. [onDone] says whether one is held after. */
-    public fun addSample(onDone: (Boolean) -> Unit = {}) {
+    /**
+     * "SEE AN EXAMPLE": [HomeSession.seeExample]. [onDone] says whether the
+     * preview opened; the shell re-opens the app the member asked from, so it
+     * reads the example.
+     */
+    public fun seeExample(onDone: (Boolean) -> Unit = {}) {
         val session = this.session ?: return onDone(false)
-        scope.launch { onDone(session.addSample()) }
+        scope.launch { onDone(session.seeExample()) }
     }
 
-    /** "Remove sample": [HomeSession.removeSample]. [onDone] fires once it is gone. */
-    public fun removeSample(onDone: () -> Unit = {}) {
+    /**
+     * THE EXAMPLE BANNER'S ONE EXIT: [HomeSession.leaveExample]. [onDone]
+     * fires once the member's own vault is bound again, so the shell re-opens
+     * the app onto its empty state.
+     */
+    public fun leaveExample(onDone: () -> Unit = {}) {
         val session = this.session ?: return onDone()
         scope.launch {
-            session.removeSample()
+            session.leaveExample()
             onDone()
         }
     }

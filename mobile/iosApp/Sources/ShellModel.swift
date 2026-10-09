@@ -84,7 +84,11 @@ final class ShellModel: ObservableObject {
         case photoEditor(String, [String])
     }
 
-    @Published var path: [Route] = []
+    @Published var path: [Route] = [] {
+        // LEAVING THE APP THE EXAMPLE WAS OPENED FROM ENDS IT: the banner's
+        // Done is the one exit, and backing out of the app is the same act.
+        didSet { endExampleIfLeft() }
+    }
     @Published var masked = false
 
     /// WHICH PLACE THE BAND'S ROOT IS SHOWING: Home's springboard, or the Chat
@@ -185,15 +189,19 @@ final class ShellModel: ObservableObject {
     /// answer is the shared shelf's (`Shelf.holdsNoVault`), and this is only
     /// where SwiftUI hears it.
     @Published var holdsNoVault: Bool?
-    /// WHETHER THIS DEVICE HOLDS THE SAMPLE VAULT (`Shelf.hasSample`,
-    /// R-SAMPLE-1): Home's one notice line and Settings' "Remove sample" while
-    /// true, Settings' "Add sample" while false. False until the shelf says.
-    @Published var hasSample = false
-    /// "ADD SAMPLE" IS SEEDING: founding and filling the sample is seconds of
-    /// work, and Settings' row says so quietly (disabled, "Adding sample")
-    /// instead of looking like a tap that did nothing. Cleared when the shelf
-    /// answers, whether or not it now holds one.
-    @Published var addingSample = false
+    /// "SEE AN EXAMPLE" IS OPEN (`Shelf.previewing`): every screen reads the
+    /// ephemeral example core, and the banner with its one exit is drawn over
+    /// every route. False until the shelf says.
+    @Published var previewing = false
+    /// The app route the example was opened from: what Done re-opens, and what
+    /// leaving ends the preview.
+    private var exampleRoute: Route?
+    /// THE SHELL'S ONE BANNER LINE that is not the example's: the contacts
+    /// import's progress and outcome (DESIGN.md: a banner, never a toast).
+    /// Empty draws nothing.
+    @Published var importNotice = ""
+    /// The contacts import is running: its banner has no exit until it ends.
+    @Published var importing = false
     /// Whether the vault sheet is up.
     @Published var vaultSheetOpen = false
     /// Whether the transfer-rules sheet is up (#1025 S4).
@@ -284,6 +292,9 @@ final class ShellModel: ObservableObject {
     /// connected it. The other three still go through `unwired()` below, and
     /// `mobile/README.md` carries that hand-off.
     private let home = HomeBridge()
+    private let contacts = ContactsImportBridge()
+    private let calendar = CalendarImportBridge()
+    private let reminders = RemindersImportBridge()
 
     /// The three app screens' bridges (#1025 S5, lane L5).
     ///
@@ -339,7 +350,7 @@ final class ShellModel: ObservableObject {
         }
         photos.observe { [weak self] bytes in self?.photosState = bytes.data }
         home.observeHoldsNoVault { [weak self] none in self?.holdsNoVaultChanged(none.boolValue) }
-        home.observeHasSample { [weak self] held in self?.hasSample = held.boolValue }
+        home.observePreviewing { [weak self] open in self?.previewing = open.boolValue }
         vaultWords.observe { [weak self] bytes in self?.vaultWordsChanged(bytes.data) }
         wordsEntry.observe { [weak self] bytes in self?.wordsEntryChanged(bytes.data) }
         wordsShow.observe { [weak self] bytes in self?.wordsShowChanged(bytes.data) }
@@ -390,6 +401,9 @@ final class ShellModel: ObservableObject {
             self.vaultWords.attach(session: session)
             self.wordsEntry.attach(session: session)
             self.pairLaptop.attach(session: session)
+            self.contacts.attach(session: session)
+            self.calendar.attach(session: session)
+            self.reminders.attach(session: session)
             self.backup.attach(session: session)
             self.photoShelf.attach(session: session)
             self.photoLightbox.attach(session: session)
@@ -923,29 +937,105 @@ final class ShellModel: ObservableObject {
         #endif
     }
 
-    // MARK: The sample vault (R-SAMPLE-1)
+    // MARK: "See an example" (docs/decisions.md, "Onboarding without sample data")
 
-    /// REMOVE THE SAMPLE VAULT, once the member confirmed. `Shelf.forget` on
-    /// its holding: its directory goes whole and the member's own vault is in
-    /// front afterwards, through the ordinary roster and lockup streams. A
-    /// route pushed inside the sample would be drawing a vault that is gone,
-    /// so the stack goes first.
-    func removeSample() {
-        path = []
-        gatewayStatus = ""
+    /// OPEN THE EXAMPLE from the app on top: the session rebinds every screen
+    /// onto an ephemeral example core, and the app is told it opened again so
+    /// it reads the example's full rows. The member's vault is not touched.
+    func seeExample() {
         #if canImport(CentraidShared)
-        home.removeSample {}
+        guard !previewing, let route = path.last else { return }
+        exampleRoute = route
+        home.seeExample { [weak self] opened in
+            guard let self else { return }
+            if opened.boolValue {
+                self.reopen(route)
+            } else {
+                self.exampleRoute = nil
+                self.importNotice = ShellWords.exampleFailed
+            }
+        }
         #endif
     }
 
-    /// "Add sample": found and seed a fresh one beside whatever is in front,
-    /// which stays in front. `hasSample` flips when the shelf holds it.
-    func addSample() {
+    /// THE BANNER'S ONE EXIT: close the example, and land on the app it was
+    /// opened from, which reads the member's own vault — its empty state.
+    func leaveExample() {
         #if canImport(CentraidShared)
-        guard !addingSample else { return }
-        addingSample = true
-        home.addSample { [weak self] _ in self?.addingSample = false }
+        let route = exampleRoute
+        exampleRoute = nil
+        home.leaveExample { [weak self] in
+            guard let self, let route else { return }
+            self.reopen(route)
+        }
         #endif
+    }
+
+    /// The member backed out of the app the example was opened from.
+    private func endExampleIfLeft() {
+        guard let route = exampleRoute, !path.contains(route) else { return }
+        exampleRoute = nil
+        #if canImport(CentraidShared)
+        home.leaveExample {}
+        #endif
+    }
+
+    /// Put [route] alone on the stack and tell its screen it opened, so it
+    /// re-reads from whichever core the session is bound to now.
+    private func reopen(_ route: Route) {
+        if path != [route] { path = [route] }
+        opened(route)
+    }
+
+    // MARK: One-tap imports (docs/decisions.md, "Onboarding without sample data")
+
+    /// IMPORT FROM WHERE THE PHONE ALREADY HOLDS THE DATA, asked at the point
+    /// of use: the OS asks its own permission now, and never at launch.
+    /// Contacts → People, Calendar → Agenda, Reminders → Tasks.
+    func importFromPhone(_ source: Centraid_Screen_V1_ImportSource) {
+        #if canImport(CentraidShared)
+        guard !importing else { return }
+        let words: (running: String, denied: String)
+        switch source {
+        case .contacts: words = (ShellWords.importContactsRunning, ShellWords.importContactsDenied)
+        case .calendar: words = (ShellWords.importCalendarRunning, ShellWords.importCalendarDenied)
+        case .reminders: words = (ShellWords.importRemindersRunning, ShellWords.importRemindersDenied)
+        default: return
+        }
+        importing = true
+        importNotice = words.running
+        let finish: (String) -> Void = { [weak self] sentence in
+            self?.importing = false
+            self?.importNotice = sentence
+        }
+        Task { @MainActor in
+            switch source {
+            case .contacts:
+                switch await PhoneContacts.read() {
+                case .denied: finish(words.denied)
+                case let .read(found): self.contacts.run(contacts: found, onDone: finish)
+                }
+            case .calendar:
+                switch await PhoneCalendar.read() {
+                case .denied: finish(words.denied)
+                case let .read(found):
+                    self.calendar.run(events: found, deviceTz: TimeZone.current.identifier, onDone: finish)
+                }
+            case .reminders:
+                switch await PhoneReminders.read() {
+                case .denied: finish(words.denied)
+                case let .read(found): self.reminders.run(reminders: found, onDone: finish)
+                }
+            default: finish("")
+            }
+        }
+        #endif
+    }
+
+    /// The import banner's Done.
+    func dismissImportNotice() {
+        guard !importing else { return }
+        importNotice = ""
     }
 
     /// Clear member-visible copy that named a vault no longer in front.

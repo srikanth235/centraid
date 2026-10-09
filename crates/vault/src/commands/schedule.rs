@@ -476,6 +476,13 @@ fn propose_event() -> CommandDefinition {
         CommandCondition {
             predicate: "no_busy_conflict",
             check: |ctx| {
+                // A FREE EVENT BLOCKS NOTHING, so it conflicts with nothing
+                // (iCalendar's TRANSP): an event a phone's calendar already
+                // holds as free — and an imported busy one the importer keeps
+                // rather than drops — lands beside whatever overlaps it.
+                if ctx.optional_str("busy") == Some("free") {
+                    return Ok(None);
+                }
                 // A time that does not resolve is `times_resolve`'s refusal.
                 let Ok(Bounds {
                     start: Some(dtstart),
@@ -598,6 +605,7 @@ fn propose_event() -> CommandDefinition {
             "attendee_party_ids": { "type": "array", "items": { "type": "string" } },
             "rrule": { "type": "string", "minLength": 1 },
             "conferencing_uri": { "type": "string", "minLength": 1 },
+            "busy": { "type": "string", "enum": ["busy", "free"], "description": "Whether the event blocks its time (iCalendar TRANSP). Absent is busy; a free event is never refused for overlapping a busy one." },
             "reminders": {
               "type": "array",
               "items": {
@@ -677,11 +685,12 @@ fn propose_event() -> CommandDefinition {
                 "INSERT INTO schedule_event_ext
                    (event_ext_id, event_id, calendar_id, busy, conferencing_uri,
                     reminders_json, travel_buffer_min)
-                 VALUES (?1, ?2, ?3, 'busy', ?4, ?5, NULL)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)",
                 rusqlite::params![
                     event_ext_id,
                     event_id,
                     calendar_id,
+                    ctx.optional_str("busy").unwrap_or("busy"),
                     ctx.optional_str("conferencing_uri"),
                     reminders,
                 ],
