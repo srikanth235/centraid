@@ -452,7 +452,7 @@ class ExamplePreviewSpec : StringSpec({
             }
             val standup = PhoneSeries(
                 id = "series-1",
-                rrule = "FREQ=WEEKLY;BYDAY=MO;WKST=SU",
+                rrule = "FREQ=WEEKLY;BYDAY=MO;WKST=MO",
                 start = "2026-09-07T09:00:00",
                 end = "2026-09-07T09:30:00",
             )
@@ -480,7 +480,7 @@ class ExamplePreviewSpec : StringSpec({
             outcome shouldBe PhoneImport.Outcome(added = 3, refused = 0)
             asked.map { it.second } shouldBe listOf(
                 // ONE SERIES, its rule kept and its own first occurrence its start.
-                "{\"summary\":\"Standup\",\"calendar_id\":\"cal-1\",\"dtstart\":\"2026-09-07T09:00:00\",\"dtend\":\"2026-09-07T09:30:00\",\"busy\":\"busy\",\"tz\":\"America/New_York\",\"rrule\":\"FREQ=WEEKLY;BYDAY=MO;WKST=SU\"}",
+                "{\"summary\":\"Standup\",\"calendar_id\":\"cal-1\",\"dtstart\":\"2026-09-07T09:00:00\",\"dtend\":\"2026-09-07T09:30:00\",\"busy\":\"busy\",\"tz\":\"America/New_York\",\"rrule\":\"FREQ=WEEKLY;BYDAY=MO\"}",
                 "{\"event_id\":\"ev-1\",\"original_start_local\":\"2026-10-19T09:00:00\",\"scope\":\"occurrence\",\"action\":\"skip\"}",
                 "{\"event_id\":\"ev-1\",\"original_start_local\":\"2026-10-12T09:00:00\",\"scope\":\"occurrence\",\"action\":\"override\"," +
                     "\"dtstart\":\"2026-10-12T10:00:00\",\"dtend\":\"2026-10-12T10:30:00\",\"tz\":\"America/New_York\",\"summary\":\"Standup (late)\"}",
@@ -504,8 +504,72 @@ class ExamplePreviewSpec : StringSpec({
         )
         // THE WINDOW IS 2 OCTOBER TO 10 DECEMBER; its first and last days are margin.
         val upcoming = listOf("2026-10-02T07:00:00", "2026-10-10T07:00:00", "2026-12-10T07:00:00").associateBy { it }
-        CalendarImport.reconcile(series, "ev-1", upcoming, NOW).shouldBeEmpty()
+        CalendarImport.reconcile(series, "ev-1", upcoming, NOW, "Europe/London").shouldBeEmpty()
         CalendarImport.strays(series, upcoming, NOW).map { it.start } shouldBe listOf("2026-10-11T07:00:00")
+    }
+
+    "a moved occurrence keeps the series' zone, and one moved in from past the window is an override, not a stray" {
+        val floating = PhoneSeries(id = "s", rrule = "FREQ=WEEKLY", start = "2026-09-07T09:00:00", end = "2026-09-07T09:30:00")
+        val series = CalendarImport.Series(
+            event = PhoneEvent(title = "Standup", start = "2026-09-07T09:00:00", end = "2026-09-07T09:30:00"),
+            rrule = "FREQ=WEEKLY",
+            occurrences = listOf(
+                // NO ZONE OF ITS OWN: the series was proposed in the device's.
+                PhoneEvent(
+                    title = "Standup", start = "2026-10-12T11:00:00", end = "2026-10-12T11:30:00",
+                    series = floating, originalStart = "2026-10-12T09:00:00", moved = true,
+                ),
+                // MOVED IN FROM 14 DECEMBER, past the window's end.
+                PhoneEvent(
+                    title = "Standup", start = "2026-12-01T09:00:00", end = "2026-12-01T09:30:00",
+                    series = floating, originalStart = "2026-12-14T09:00:00", moved = true,
+                ),
+            ),
+        )
+        val upcoming = mapOf("2026-10-12T09:00:00" to "2026-10-12T09:00:00")
+        val writes = CalendarImport.reconcile(series, "ev-1", upcoming, NOW, "Asia/Kolkata")
+        writes.map { it.input } shouldBe listOf(
+            "{\"event_id\":\"ev-1\",\"original_start_local\":\"2026-10-12T09:00:00\",\"scope\":\"occurrence\",\"action\":\"override\"," +
+                "\"dtstart\":\"2026-10-12T11:00:00\",\"dtend\":\"2026-10-12T11:30:00\",\"tz\":\"Asia/Kolkata\"}",
+            "{\"event_id\":\"ev-1\",\"original_start_local\":\"2026-12-14T09:00:00\",\"scope\":\"occurrence\",\"action\":\"override\"," +
+                "\"dtstart\":\"2026-12-01T09:00:00\",\"dtend\":\"2026-12-01T09:30:00\",\"tz\":\"Asia/Kolkata\"}",
+        )
+        // A REFUSED OVERRIDE KEEPS THE MOVED OCCURRENCE AS ITS OWN EVENT.
+        writes.map { it.fallback?.start } shouldBe listOf("2026-10-12T11:00:00", "2026-12-01T09:00:00")
+        CalendarImport.strays(series, upcoming, NOW).shouldBeEmpty()
+    }
+
+    "a series whose expansion cannot be read writes nothing beyond the series" {
+        runTest {
+            val asked = mutableListOf<String>()
+            val core = CentraidCore.answering(Dispatchers.Unconfined) { envelope ->
+                val request = envelope.request
+                when {
+                    request?.page != null -> Envelope(
+                        response = Response(page = Page(rows = listOf(Row(values = listOf(Value(text = "cal-1")))))),
+                    )
+                    request?.command != null -> {
+                        asked += request.command!!.name
+                        Envelope(
+                            response = Response(
+                                command = CommandOutcome(
+                                    status = CommandStatus.COMMAND_STATUS_EXECUTED,
+                                    output = "{\"event_id\":\"ev-1\"}".encodeUtf8(),
+                                ),
+                            ),
+                        )
+                    }
+                    // THE READ FAILS: no answer at all.
+                    else -> Envelope(response = Response())
+                }
+            }
+            val weekly = PhoneSeries(id = "s", rrule = "FREQ=WEEKLY", start = "2026-09-07T09:00:00", end = "2026-09-07T09:30:00")
+            val occurrences = listOf("10-12", "10-19").map {
+                PhoneEvent(title = "Standup", start = "2026-${it}T09:00:00", end = "2026-${it}T09:30:00", tz = "Europe/London", series = weekly)
+            }
+            CalendarImport.run(core, occurrences, deviceTz = "Europe/London", now = NOW) shouldBe PhoneImport.Outcome(added = 1, refused = 0)
+            asked shouldBe listOf("schedule.propose_event")
+        }
     }
 
     "a rule loses only the parts that restate its anchor" {
@@ -514,6 +578,10 @@ class ExamplePreviewSpec : StringSpec({
         CalendarImport.rule("FREQ=MONTHLY;BYMONTHDAY=8", "2026-09-07") shouldBe "FREQ=MONTHLY;BYMONTHDAY=8"
         CalendarImport.rule("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE", "2026-09-07") shouldBe "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE"
         CalendarImport.rule("", "2026-09-07") shouldBe ""
+        // A WKST THAT MOVES NO DAY GOES; one that does stays, for the vault to judge.
+        CalendarImport.rule("FREQ=WEEKLY;WKST=MO", "2026-09-07") shouldBe "FREQ=WEEKLY"
+        CalendarImport.rule("FREQ=WEEKLY;INTERVAL=2;WKST=MO", "2026-09-07") shouldBe "FREQ=WEEKLY;INTERVAL=2"
+        CalendarImport.rule("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,SU;WKST=MO", "2026-09-07") shouldBe "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,SU;WKST=MO"
     }
 
     "a reminder becomes a task with its notes and due day, one per title and day" {

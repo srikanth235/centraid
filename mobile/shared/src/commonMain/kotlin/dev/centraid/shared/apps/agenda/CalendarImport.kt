@@ -91,10 +91,15 @@ public data class PhoneSeries(
  * cancelled there, and becomes a skip; one the member moved becomes an
  * override (`schedule.edit_event_occurrence`); one the phone shows and the
  * vault does not expand is written on its own, so nothing is lost where the
- * two readings of a rule differ. **A rule the vault refuses** — `BYSETPOS`,
- * `BYMONTHDAY`, a positional `BYDAY` (`rrule.rs`) — falls back to the
- * occurrences in the window, each its own event: a refused rule kept would
- * expand to nothing, and a reworded one would repeat on the wrong days.
+ * two readings of a rule differ. **A rule the vault refuses** — `BYSETPOS`
+ * or a positional `BYDAY`, for instance (`rrule.rs` holds the whole list) —
+ * falls back to the occurrences in the window, each its own event: a refused
+ * rule kept would expand to nothing, and a reworded one would repeat on the
+ * wrong days.
+ *
+ * **The one loss**: an occurrence the member moved from inside the window to
+ * outside it is not in the phone's answer at all, so it reads as cancelled
+ * and becomes a skip. The phone's read cannot tell the two apart.
  */
 public object CalendarImport {
     /** THE WINDOW READ: a week back, so the day-one Agenda has its recent past, and two months on. */
@@ -126,11 +131,15 @@ public object CalendarImport {
                 continue
             }
             added += 1
-            val upcoming = upcoming(core, eventId, deviceTz, now)
-            // AN EXCEPTION THE VAULT REFUSED leaves that occurrence as the
-            // rule has it; the series itself has landed.
-            for ((command, input) in reconcile(series, eventId, upcoming, now)) {
-                if (!PhoneImport.write(core, command, input)) refused += 1
+            // AN UNREAD EXPANSION WRITES NOTHING MORE: without it every
+            // occurrence would look like a stray and land twice.
+            val upcoming = upcoming(core, eventId, deviceTz, now) ?: continue
+            for (edit in reconcile(series, eventId, upcoming, now, deviceTz)) {
+                if (PhoneImport.write(core, AgendaWrites.OCCURRENCE, edit.input)) continue
+                // A REFUSED SKIP leaves that occurrence as the rule has it; a
+                // refused override keeps the moved occurrence as its own event.
+                val fallback = edit.fallback
+                if (fallback == null) refused += 1 else tally(single(core, fallback, calendar, deviceTz))
             }
             for (event in strays(series, upcoming, now)) tally(single(core, event, calendar, deviceTz))
         }
@@ -204,8 +213,9 @@ public object CalendarImport {
      * THE RULE AS THE VAULT TAKES IT, or empty for none. The `RRULE:` prefix
      * goes, and a part that only restates the anchor goes with it — a monthly
      * rule's `BYMONTHDAY` on the first occurrence's own day, a yearly one's
-     * `BYMONTH` on its own month — because EventKit and Google write those
-     * out and the vault, which steps from the anchor, refuses them. Any other
+     * `BYMONTH` on its own month, a `WKST` that moves no day — because
+     * EventKit and Google write those out and the vault, which steps from the
+     * anchor, refuses them. Any other
      * part stays, and a rule the vault cannot honour is refused there.
      */
     public fun rule(rrule: String, start: String): String {
@@ -215,9 +225,15 @@ public object CalendarImport {
         val freq = parts.firstOrNull { it.startsWith("FREQ=") }?.removePrefix("FREQ=") ?: return ""
         val day = start.substring(8, 10).trimStart('0')
         val month = start.substring(5, 7).trimStart('0')
+        // `WKST` only moves a WEEKLY rule's `BYDAY` days when it steps more
+        // than one week; anywhere else it changes nothing, and iOS writes it
+        // on every rule of a Monday-first phone.
+        val interval = parts.firstOrNull { it.startsWith("INTERVAL=") }?.removePrefix("INTERVAL=")?.toIntOrNull() ?: 1
+        val weekStartMatters = freq == "WEEKLY" && interval > 1 && parts.any { it.startsWith("BYDAY=") }
         return parts.filterNot { part ->
             (freq == "MONTHLY" || freq == "YEARLY") && part == "BYMONTHDAY=$day" ||
-                freq == "YEARLY" && part == "BYMONTH=$month"
+                freq == "YEARLY" && part == "BYMONTH=$month" ||
+                !weekStartMatters && part.startsWith("WKST=")
         }.joinToString(";")
     }
 
@@ -254,41 +270,63 @@ public object CalendarImport {
      *   the rule put it, carrying its own times and, where they differ from
      *   the series', its title and notes.
      */
-    public fun reconcile(series: Series, eventId: String, upcoming: Map<String, String>, now: Long): List<Pair<String, String>> {
+    public fun reconcile(
+        series: Series,
+        eventId: String,
+        upcoming: Map<String, String>,
+        now: Long,
+        deviceTz: String,
+    ): List<OccurrenceEdit> {
         val allDay = series.event.allDay
         val shown = series.occurrences.map { key(it.originalStart.ifEmpty { it.start }, allDay) }.toSet()
         val (first, last) = inner(now)
-        val writes = mutableListOf<Pair<String, String>>()
+        val writes = mutableListOf<OccurrenceEdit>()
         for ((key, local) in upcoming) {
             if (key in shown || key.take(10) < first || key.take(10) > last) continue
-            writes += AgendaWrites.OCCURRENCE to occurrence(eventId, local, "skip")
+            writes += OccurrenceEdit(occurrence(eventId, local, "skip"), fallback = null)
         }
         for (moved in series.occurrences.filter { it.moved }) {
+            // KEYED ON THE VAULT'S OWN SPELLING when the window holds the
+            // original; otherwise — moved in from past the window — on the
+            // phone's, which the vault checks against the series itself.
             val original = key(moved.originalStart.ifEmpty { moved.start }, allDay)
-            val local = upcoming[original] ?: continue
+            val local = upcoming[original] ?: original
             val fields = mutableListOf(
                 "\"dtstart\":${PhoneImport.quote(moved.start)}",
                 "\"dtend\":${PhoneImport.quote(moved.end)}",
             )
-            fields += when (val zone = zoneOf(moved, "")) {
-                null -> if (moved.allDay) "\"recurrence_semantics\":\"all-day\"" else ""
+            // THE ZONE THE SERIES WAS PROPOSED IN: an occurrence with none of
+            // its own is the device's, as the series was, never a bare clock
+            // the vault would read as UTC.
+            fields += when (val zone = zoneOf(moved, deviceTz)) {
+                null -> "\"recurrence_semantics\":${PhoneImport.quote(if (moved.allDay) "all-day" else "floating")}"
                 else -> "\"tz\":${PhoneImport.quote(zone)}"
             }
             val title = moved.title.trim()
             if (title.isNotEmpty() && title != series.event.title) fields += "\"summary\":${PhoneImport.quote(title)}"
             val notes = moved.notes.trim()
             if (notes != series.event.notes) fields += "\"description\":${PhoneImport.quote(notes)}"
-            writes += AgendaWrites.OCCURRENCE to occurrence(eventId, local, "override", fields.filter { it.isNotEmpty() })
+            writes += OccurrenceEdit(occurrence(eventId, local, "override", fields), fallback = events(listOf(moved)).firstOrNull())
         }
         return writes
     }
 
     /**
+     * ONE `schedule.edit_event_occurrence` INPUT, and what to write instead
+     * when the vault refuses it: nothing for a skip, the moved occurrence as
+     * its own event for an override.
+     */
+    public data class OccurrenceEdit(
+        public val input: String,
+        public val fallback: PhoneEvent?,
+    )
+
+    /**
      * THE OCCURRENCES THE SERIES DOES NOT CARRY: one the phone shows inside
      * the window whose original start the vault's expansion lacks — the two
-     * readings of the rule differ there, or the member moved it in from
-     * outside the window — written as an event of its own, so the member's
-     * calendar loses nothing.
+     * readings of the rule differ there — written as an event of its own, so
+     * the member's calendar loses nothing. A moved occurrence is never one:
+     * [reconcile] overrides it, and writes it on its own only if refused.
      */
     public fun strays(series: Series, upcoming: Map<String, String>, now: Long): List<PhoneEvent> {
         val allDay = series.event.allDay
@@ -296,7 +334,7 @@ public object CalendarImport {
         return events(
             series.occurrences.filter { occurrence ->
                 val key = key(occurrence.originalStart.ifEmpty { occurrence.start }, allDay)
-                key !in upcoming && (occurrence.moved || key.take(10) >= first && key.take(10) <= last)
+                !occurrence.moved && key !in upcoming && key.take(10) >= first && key.take(10) <= last
             },
         )
     }
@@ -341,11 +379,12 @@ public object CalendarImport {
 
     /**
      * The series' occurrences as the vault expands them over the window, by
-     * key, each to its exact `original_start_local`; empty when the read fails,
-     * which writes no exception rather than a wrong one.
+     * key, each to its exact `original_start_local`; null when the read fails
+     * — the expansion cap, a refusal, an unparsed `event_id` — which writes no
+     * exception and no stray rather than a wrong one.
      */
-    private suspend fun upcoming(core: CentraidCore, eventId: String, deviceTz: String, now: Long): Map<String, String> {
-        if (eventId.isEmpty()) return emptyMap()
+    private suspend fun upcoming(core: CentraidCore, eventId: String, deviceTz: String, now: Long): Map<String, String>? {
+        if (eventId.isEmpty()) return null
         val query = AppQueryRequest(
             agenda_upcoming = AgendaUpcomingRequest(
                 from = rfc3339FromEpochMillis(windowStart(now)),
@@ -354,7 +393,7 @@ public object CalendarImport {
             ),
         )
         val answer = core.call(Envelope(request_id = 0, request = Request(app_query = query)))
-        val events = (answer as? CoreOutcome.Answered)?.value?.response?.app_query?.agenda_upcoming?.events.orEmpty()
+        val events = (answer as? CoreOutcome.Answered)?.value?.response?.app_query?.agenda_upcoming?.events ?: return null
         return events.filter { it.event_id == eventId }
             .mapNotNull { it.original_start_local?.takeIf(String::isNotEmpty) }
             .associateBy { local -> key(local, local.length == 10) }
