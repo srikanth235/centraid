@@ -229,7 +229,7 @@ pub fn starters(vault: &Vault, registry: &Registry, principal: &Principal) -> Re
     seeder.run(
         "schedule.add_task",
         json!({
-            "title": "Pair your laptop so this vault has a backup",
+            "title": "Pair a backup device so this vault has a backup",
             "priority": 5,
         }),
     );

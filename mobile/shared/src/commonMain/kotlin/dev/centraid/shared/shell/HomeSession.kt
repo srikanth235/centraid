@@ -516,9 +516,11 @@ public class HomeSession private constructor(
     public suspend fun found(
         name: String = Shelf.DEFAULT_VAULT_NAME,
         ownerName: String = Shelf.DEFAULT_OWNER_NAME,
+        /** The entry a vault on its own words is founded on (R-1047-E18). */
+        own: String? = null,
     ): FoundResult {
         val first = shelf.all().none { !it.sample }
-        return when (val outcome = shelf.found(name = name, ownerName = ownerName, starters = first)) {
+        return when (val outcome = shelf.found(name = name, ownerName = ownerName, starters = first, own = own)) {
             is Shelf.FoundOutcome.Founded -> {
                 rebind()
                 if (first) scope.launch { shelf.foundSample() }

@@ -79,40 +79,6 @@ class CustodyAndBackupClaimSpec : StringSpec({
 
     // ---------------------------------------------------------------- custody --
 
-    "the phrase check asks three distinct positions, drawn from platform entropy" {
-        val random = JvmSecureRandom()
-        repeat(50) {
-            val asked = PhraseMachine.positions { bound -> random.bytes(4).let { bytes ->
-                // Four bytes folded into the bound, which is all this file needs
-                // of a generator: the draw itself is `SecureRandom`'s.
-                ((bytes[0].toInt() and 0xFF) shl 8 or (bytes[1].toInt() and 0xFF)) % bound
-            } }
-            asked shouldHaveSize PhraseMachine.POSITIONS_ASKED
-            withClue("positions must be distinct, sorted and 1-based") {
-                asked.toSet() shouldHaveSize PhraseMachine.POSITIONS_ASKED
-                (asked == asked.sorted()).shouldBeTrue()
-                asked.all { it in 1..PhraseMachine.WORDS }.shouldBeTrue()
-            }
-        }
-    }
-
-    "a draw that will not yield enough positions fills in rather than hanging" {
-        // A setup screen that hung because entropy was uncooperative is worse
-        // than one that asks 1, 2 and 3.
-        val asked = PhraseMachine.positions { 0 }
-        asked shouldBe listOf(1, 2, 3)
-    }
-
-    "the check is answered by the phrase, forgiving case and spacing and nothing else" {
-        val phrase = List(PhraseMachine.WORDS) { "word${it + 1}" }
-        PhraseMachine.matches(phrase, 2, "word2").shouldBeTrue()
-        PhraseMachine.matches(phrase, 9, "  WORD9 ").shouldBeTrue()
-        PhraseMachine.matches(phrase, 20, "word19").shouldBeFalse()
-        PhraseMachine.matches(phrase, 25, "word25").shouldBeFalse()
-        // AN EMPTY ANSWER IS NEVER CORRECT, however forgiving the check is.
-        PhraseMachine.matches(List(PhraseMachine.WORDS) { "" }, 1, "   ").shouldBeFalse()
-    }
-
     "iOS and Android are told different things about their key, and Android is told the truth" {
         // THE ASYMMETRY IS THE POINT. Block Store restores only in the
         // device-setup flow, so on Android the written phrase is the common

@@ -389,6 +389,7 @@ final class ShellModel: ObservableObject {
             self.photos.attach(session: session)
             self.vaultWords.attach(session: session)
             self.wordsEntry.attach(session: session)
+            self.wordsShow.attach(session: session)
             self.pairLaptop.attach(session: session)
             self.backup.attach(session: session)
             self.photoShelf.attach(session: session)

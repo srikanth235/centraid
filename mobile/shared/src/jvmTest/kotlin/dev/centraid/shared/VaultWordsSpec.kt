@@ -1,9 +1,9 @@
 package dev.centraid.shared
 
+import io.kotest.matchers.types.shouldBeInstanceOf
 import centraid.screen.v1.VaultWordsEvent
 import centraid.screen.v1.VaultWordsState
 import centraid.screen.v1.WordsEntryState
-import centraid.screen.v1.WordAsk
 import dev.centraid.design.copy.WordsCopy
 import dev.centraid.shared.custody.Enrollment
 import dev.centraid.shared.custody.PhraseDoor
@@ -24,7 +24,6 @@ import dev.centraid.shared.shell.Shelf
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
-import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.CoroutineScope
@@ -54,68 +53,46 @@ class VaultWordsSpec : StringSpec({
     val primary = view(VaultWordsEvent(primary = VaultWordsEvent.Primary()))
     val secondary = view(VaultWordsEvent(secondary = VaultWordsEvent.Secondary()))
 
-    /** Opened, and a phone with no seed: the framing, before any word is minted. */
-    fun framed(): Words {
+    /** Opened, no seed, minted at once. */
+    fun shown(): Words {
         val open = reduce(VaultWordsMachine.initial(), opened)
         open.effects shouldBe listOf(WordsEffect.Assess)
         val assessed = reduce(open.model, WordsInput.Standing(Enrollment.Standing.NO_SEED, "Only on this iPhone."))
-        assessed.effects.shouldBeEmpty()
-        return assessed.model
+        assessed.effects shouldBe listOf(WordsEffect.Mint)
+        return reduce(assessed.model, WordsInput.Minted(minted)).model
     }
 
-    fun typed(position: Int, text: String) =
-        view(VaultWordsEvent(typed = VaultWordsEvent.WordTyped(position = position, text = text)))
-
-    /** Opened, no seed, framed, continued, minted, asking 2, 9 and 20. */
-    fun shown(): Words {
-        val continued = reduce(framed(), primary)
-        continued.effects shouldBe listOf(WordsEffect.Mint)
-        return reduce(continued.model, WordsInput.Minted(minted, listOf(2, 9, 20))).model
-    }
-
-    "a phone with no seed is FRAMED first: one sentence and Continue, no word minted, nothing secret" {
-        val framing = framed()
-        framing.state.phase shouldBe VaultWordsState.Phase.PHASE_FRAMING
-        framing.state.title shouldBe WordsCopy.FRAMING_TITLE
-        framing.state.body shouldBe WordsCopy.FRAMING_BODY
-        framing.state.primary_label shouldBe WordsCopy.FRAMING_PRIMARY
-        framing.state.primary_enabled shouldBe true
-        framing.state.secondary_label shouldBe WordsCopy.CANCEL
-        // NO WORD EXISTS YET: the mint waits for Continue, and nothing on the
-        // screen needs the capture shield.
-        framing.holdsWords shouldBe false
-        framing.state.secure shouldBe false
-        framing.state.words.shouldBeEmpty()
-        framing.state.asks.shouldBeEmpty()
-        // THE CUSTODY SENTENCE IS KEPT for the show that follows, and not drawn here.
-        framing.state.custody shouldBe ""
-
-        // CONTINUE MINTS, and the words then show with the sentence read before.
-        val continued = reduce(framing, primary)
-        continued.effects shouldBe listOf(WordsEffect.Mint)
-        continued.model.state.phase shouldBe VaultWordsState.Phase.PHASE_CHECKING
-        val show = reduce(continued.model, WordsInput.Minted(minted, listOf(2, 9, 20))).model.state
+    "a phone with no seed mints at once: no framing screen, and the words show with the custody sentence and Save a copy" {
+        val open = reduce(VaultWordsMachine.initial(), opened)
+        val assessed = reduce(open.model, WordsInput.Standing(Enrollment.Standing.NO_SEED, "Only on this iPhone."))
+        assessed.effects shouldBe listOf(WordsEffect.Mint)
+        assessed.model.state.phase shouldBe VaultWordsState.Phase.PHASE_CHECKING
+        assessed.model.state.save_label shouldBe ""
+        val show = reduce(assessed.model, WordsInput.Minted(minted)).model.state
         show.phase shouldBe VaultWordsState.Phase.PHASE_SHOW
         show.custody shouldBe "Only on this iPhone."
+        show.save_label shouldBe WordsCopy.SAVE_LABEL
+        show.primary_label shouldBe WordsCopy.SHOW_PRIMARY
     }
 
-    "cancelling or swiping away the framing closes the flow with nothing minted or kept" {
-        val cancelled = reduce(framed(), secondary)
+    "cancelling or swiping away the shown words closes the flow and drops them, keeping nothing" {
+        val cancelled = reduce(shown(), secondary)
         cancelled.effects.shouldBeEmpty()
         cancelled.model.state.phase shouldBe VaultWordsState.Phase.PHASE_CLOSED
         cancelled.model.holdsWords shouldBe false
 
-        val dismissed = reduce(framed(), view(VaultWordsEvent(dismissed = VaultWordsEvent.Dismissed())))
+        val dismissed = reduce(shown(), view(VaultWordsEvent(dismissed = VaultWordsEvent.Dismissed())))
         dismissed.effects.shouldBeEmpty()
         dismissed.model.state.phase shouldBe VaultWordsState.Phase.PHASE_CLOSED
         // A MINT THAT ANSWERS AFTER THE MEMBER LEFT changes nothing.
-        reduce(dismissed.model, WordsInput.Minted(minted, listOf(2, 9, 20))).model.holdsWords shouldBe false
+        reduce(dismissed.model, WordsInput.Minted(minted)).model.holdsWords shouldBe false
     }
 
-    "the framing is for NEW words only: a settled or unsettled seed never sees it" {
+    "the words are for NEW seeds only: a settled or unsettled seed never sees them" {
         val open = reduce(VaultWordsMachine.initial(), opened).model
+        reduce(open, WordsInput.Standing(Enrollment.Standing.SETTLED, "")).model.state.words.shouldBeEmpty()
         reduce(open, WordsInput.Standing(Enrollment.Standing.SETTLED, "")).model.state.phase shouldBe
-            VaultWordsState.Phase.PHASE_MAKING
+            VaultWordsState.Phase.PHASE_CHOOSE
         reduce(open, WordsInput.Standing(Enrollment.Standing.UNSETTLED, "")).model.state.phase shouldBe
             VaultWordsState.Phase.PHASE_RESTORE_FIRST
     }
@@ -131,54 +108,45 @@ class VaultWordsSpec : StringSpec({
         show.secondary_label shouldBe WordsCopy.CANCEL
     }
 
-    "the check asks three positions and draws no word of the phrase" {
-        val confirm = reduce(shown(), primary).model
-        confirm.state.phase shouldBe VaultWordsState.Phase.PHASE_CONFIRM
-        confirm.state.secure shouldBe true
-        confirm.state.words.shouldBeEmpty()
-        confirm.state.asks.map { it.position } shouldBe listOf(2, 9, 20)
-        confirm.state.asks.map { it.prompt } shouldBe listOf("Word 2", "Word 9", "Word 20")
-        confirm.state.body shouldBe "Type words 2, 9, 20 from what you wrote down."
-        // NOTHING TYPED, NOTHING TO CHECK.
-        confirm.state.primary_enabled shouldBe false
-    }
-
-    "a wrong word is marked, keeps nothing, and the words can be shown again" {
-        var model = reduce(shown(), primary).model
-        model = reduce(model, typed(2, "ability")).model
-        model = reduce(model, typed(9, "abuse")).model
-        model = reduce(model, typed(20, "act")).model
-        val step = reduce(model, primary)
-        step.effects.shouldBeEmpty()
-        step.model.state.phase shouldBe VaultWordsState.Phase.PHASE_CONFIRM
-        step.model.state.notice shouldBe WordsCopy.CHECK_WRONG
-        step.model.state.asks.map { it.mark } shouldBe
-            listOf(WordAsk.Mark.MARK_RIGHT, WordAsk.Mark.MARK_WRONG, WordAsk.Mark.MARK_RIGHT)
-
-        val again = reduce(step.model, secondary).model
-        again.state.phase shouldBe VaultWordsState.Phase.PHASE_SHOW
-        again.state.words shouldHaveSize 24
-    }
-
-    "three right words KEEP the phrase, which is then dropped before the vault is made" {
-        var model = reduce(shown(), primary).model
-        model = reduce(model, typed(2, " Ability ")).model
-        model = reduce(model, typed(9, "absurd")).model
-        model = reduce(model, typed(20, "act")).model
-        model.state.primary_enabled shouldBe true
-        val keep = reduce(model, primary)
+    "I HAVE SAVED THEM keeps the phrase at once, which is then dropped before the vault is made" {
+        val keep = reduce(shown(), primary)
         keep.model.state.phase shouldBe VaultWordsState.Phase.PHASE_MAKING
         keep.model.state.secure shouldBe false
+        keep.model.state.words.shouldBeEmpty()
         keep.effects.single().shouldBeKeep()
 
         val kept = reduce(keep.model, WordsInput.Kept(null))
-        kept.effects shouldBe listOf(WordsEffect.Make)
+        kept.effects shouldBe listOf(WordsEffect.Make())
         kept.model.holdsWords shouldBe false
 
         val made = reduce(kept.model, WordsInput.Made(FoundResult.Made("My vault"))).model
-        made.state.phase shouldBe VaultWordsState.Phase.PHASE_MADE
+        // NO "READY" SCREEN: the sheet closes, the sentence rides along for Home.
+        made.state.phase shouldBe VaultWordsState.Phase.PHASE_CLOSED
         made.state.body shouldBe "My vault is on this phone, and your 24 words bring it back."
-        reduce(made, primary).model.state.phase shouldBe VaultWordsState.Phase.PHASE_CLOSED
+    }
+
+    "the sync checkbox is ticked by default, unticking it changes the footnote, and the keep carries the choice" {
+        val open = reduce(VaultWordsMachine.initial(), opened).model
+        val assessed = reduce(
+            open,
+            WordsInput.Standing(Enrollment.Standing.NO_SEED, "Saved in iCloud Keychain.", "Save my key in iCloud Keychain"),
+        ).model
+        val shown = reduce(assessed, WordsInput.Minted(minted)).model
+        shown.state.sync_label shouldBe "Save my key in iCloud Keychain"
+        shown.state.sync_on shouldBe true
+        shown.state.custody shouldBe "Saved in iCloud Keychain."
+        reduce(shown, primary).effects.single().let { (it as WordsEffect.Keep).sync shouldBe true }
+
+        val off = reduce(shown, view(VaultWordsEvent(sync = VaultWordsEvent.SyncToggled(on = false)))).model
+        off.state.sync_on shouldBe false
+        off.state.custody shouldBe WordsCopy.CUSTODY_THIS_PHONE
+        reduce(off, primary).effects.single().let { (it as WordsEffect.Keep).sync shouldBe false }
+    }
+
+    "a platform that does not sync draws no checkbox" {
+        val show = shown().state
+        show.sync_label shouldBe ""
+        show.sync_on shouldBe false
     }
 
     "cancelling or dismissing drops the words and keeps nothing" {
@@ -187,7 +155,7 @@ class VaultWordsSpec : StringSpec({
         cancelled.model.state.phase shouldBe VaultWordsState.Phase.PHASE_CLOSED
         cancelled.model.holdsWords shouldBe false
 
-        val dismissed = reduce(reduce(shown(), primary).model, view(VaultWordsEvent(dismissed = VaultWordsEvent.Dismissed())))
+        val dismissed = reduce(shown(), view(VaultWordsEvent(dismissed = VaultWordsEvent.Dismissed())))
         dismissed.model.holdsWords shouldBe false
         // A LATE ANSWER TO A CLOSED FLOW changes nothing.
         reduce(dismissed.model, WordsInput.Kept(null)).effects.shouldBeEmpty()
@@ -196,8 +164,13 @@ class VaultWordsSpec : StringSpec({
     "a phone whose seed is settled makes the vault with no words; an unsettled one is sent to restore" {
         val open = reduce(VaultWordsMachine.initial(), opened).model
         val settled = reduce(open, WordsInput.Standing(Enrollment.Standing.SETTLED, ""))
-        settled.effects shouldBe listOf(WordsEffect.Make)
-        settled.model.state.words.shouldBeEmpty()
+        // A NAME AND THE OWN-WORDS CHOICE FIRST (R-1047-E18); unticked, no words.
+        settled.effects.shouldBeEmpty()
+        settled.model.state.phase shouldBe VaultWordsState.Phase.PHASE_CHOOSE
+        settled.model.state.own_on shouldBe false
+        val made = reduce(settled.model, primary)
+        made.effects shouldBe listOf(WordsEffect.Make())
+        made.model.state.words.shouldBeEmpty()
 
         val unsettled = reduce(open, WordsInput.Standing(Enrollment.Standing.UNSETTLED, "")).model.state
         unsettled.phase shouldBe VaultWordsState.Phase.PHASE_RESTORE_FIRST
@@ -208,15 +181,16 @@ class VaultWordsSpec : StringSpec({
     }
 
     "a refused mint and a refused keep each say so and offer the right retry" {
-        val minting = reduce(framed(), primary).model
-        val noMint = reduce(minting, WordsInput.Minted(null, emptyList()))
+        val minting = reduce(
+            reduce(VaultWordsMachine.initial(), opened).model,
+            WordsInput.Standing(Enrollment.Standing.NO_SEED, "Only on this iPhone."),
+        ).model
+        val noMint = reduce(minting, WordsInput.Minted(null))
         noMint.model.state.phase shouldBe VaultWordsState.Phase.PHASE_FAILED
         noMint.model.state.notice shouldBe WordsCopy.MINT_FAILED
         reduce(noMint.model, primary).effects shouldBe listOf(WordsEffect.Assess)
 
-        var model = reduce(shown(), primary).model
-        listOf(2 to "ability", 9 to "absurd", 20 to "act").forEach { (at, word) -> model = reduce(model, typed(at, word)).model }
-        val refused = reduce(reduce(model, primary).model, WordsInput.Kept(Enrollment.Refusal.STORE_REFUSED)).model
+        val refused = reduce(reduce(shown(), primary).model, WordsInput.Kept(Enrollment.Refusal.STORE_REFUSED)).model
         refused.state.notice shouldBe WordsCopy.KEEP_FAILED
         // THE WORDS ARE STILL HELD, so "Try again" keeps the same ones.
         refused.holdsWords shouldBe true
@@ -225,13 +199,13 @@ class VaultWordsSpec : StringSpec({
 
     "no model, input or effect prints a word" {
         shown().toString() shouldNotContain "abandon"
-        WordsInput.Minted(minted, listOf(1)).toString() shouldNotContain "abandon"
+        WordsInput.Minted(minted).toString() shouldNotContain "abandon"
         WordsEffect.Keep(minted).toString() shouldNotContain "abandon"
     }
 
     // --- the flow over an enrollment -----------------------------------------
 
-    "running: frame, mint, show, check, then the seed is stored and settled BEFORE the vault is founded" {
+    "running: mint, show, keep, then the seed is stored and settled BEFORE the vault is founded" {
         runTest {
             val services = FakePlatformServices()
             val secrets = VaultSecrets(services.secureStore, services.syncedSecrets)
@@ -253,7 +227,7 @@ class VaultWordsSpec : StringSpec({
                         RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
                 },
                 keeper = object : Enrollment.Keeper {
-                    override suspend fun found(): FoundResult {
+                    override suspend fun found(own: String?, name: String?): FoundResult {
                         order += "found stored=${secrets.seed() != null}"
                         return FoundResult.Made("My vault")
                     }
@@ -264,21 +238,60 @@ class VaultWordsSpec : StringSpec({
             )
             val flow = VaultWordsFlow({ enrollment }, services, CoroutineScope(Dispatchers.Unconfined))
             flow.reduce(opened)
-            // THE FRAMING WAITS FOR CONTINUE: the core has minted nothing.
-            flow.state.value.phase shouldBe VaultWordsState.Phase.PHASE_FRAMING
-            order.shouldBeEmpty()
-            flow.reduce(primary)
+            // THE WORDS COME STRAIGHT AWAY: there is no framing step to continue past.
             flow.state.value.phase shouldBe VaultWordsState.Phase.PHASE_SHOW
-            val asked = flow.current.asking
-            asked shouldHaveSize 3
             flow.reduce(primary)
-            asked.forEach { flow.reduce(typed(it, minted[it - 1])) }
-            flow.reduce(primary)
-            withClue(flow.state.value.notice) { flow.state.value.phase shouldBe VaultWordsState.Phase.PHASE_MADE }
+            withClue(flow.state.value.notice) { flow.state.value.phase shouldBe VaultWordsState.Phase.PHASE_CLOSED }
             order shouldBe listOf("mint", "seed", "found stored=true")
             secrets.seedSettled() shouldBe true
             flow.current.holdsWords shouldBe false
         }
+    }
+    "a vault on its own words: named, minted, shown as its own, kept under its entry and made on it" {
+        val open = reduce(VaultWordsMachine.initial(), opened).model
+        val choose = reduce(open, WordsInput.Standing(Enrollment.Standing.SETTLED, "Saved in iCloud.", "Save my key")).model
+        choose.state.own_label shouldBe WordsCopy.OWN_LABEL
+        choose.state.name_label shouldBe WordsCopy.NAME_LABEL
+        val ticked = reduce(choose, view(VaultWordsEvent(own = VaultWordsEvent.OwnToggled(on = true)))).model
+        ticked.state.own_on shouldBe true
+        ticked.state.body shouldBe WordsCopy.CHOOSE_OWN_BODY
+        // NO NAME, NO VAULT: the name is how a restore lists it.
+        ticked.state.primary_enabled shouldBe false
+        reduce(ticked, primary).effects.shouldBeEmpty()
+
+        val named = reduce(ticked, view(VaultWordsEvent(name = VaultWordsEvent.NameTyped(text = "Family")))).model
+        named.state.primary_enabled shouldBe true
+        val minting = reduce(named, primary)
+        minting.effects shouldBe listOf(WordsEffect.Mint)
+        val show = reduce(minting.model, WordsInput.Minted(minted)).model
+        show.state.title shouldBe WordsCopy.SHOW_OWN_TITLE.replace("{name}", "Family")
+        show.state.sync_label shouldBe "Save my key"
+
+        val keep = reduce(show, primary)
+        keep.effects.single().shouldBeInstanceOf<WordsEffect.KeepOwn>().name shouldBe "Family"
+        val kept = reduce(keep.model, WordsInput.Kept(null, own = "0123456789abcdef"))
+        kept.effects shouldBe listOf(WordsEffect.Make(own = "0123456789abcdef", name = "Family"))
+        kept.model.holdsWords shouldBe false
+        val made = reduce(kept.model, WordsInput.Made(FoundResult.Made("Family"))).model.state
+        made.body shouldBe WordsCopy.MADE_OWN_BODY.replace("{name}", "Family")
+    }
+
+    "an entry kept for a vault that was never made is dropped when the member walks away" {
+        val open = reduce(VaultWordsMachine.initial(), opened).model
+        val choose = reduce(open, WordsInput.Standing(Enrollment.Standing.SETTLED, "")).model
+        val named = reduce(
+            reduce(choose, view(VaultWordsEvent(own = VaultWordsEvent.OwnToggled(on = true)))).model,
+            view(VaultWordsEvent(name = VaultWordsEvent.NameTyped(text = "Work"))),
+        ).model
+        val show = reduce(reduce(named, primary).model, WordsInput.Minted(minted)).model
+        val kept = reduce(reduce(show, primary).model, WordsInput.Kept(null, own = "0123456789abcdef")).model
+        val failed = reduce(kept, WordsInput.Made(FoundResult.Refused("No."))).model
+        failed.state.phase shouldBe VaultWordsState.Phase.PHASE_FAILED
+        // TRY AGAIN founds on the same entry; Cancel drops it.
+        reduce(failed, primary).effects shouldBe listOf(WordsEffect.Make(own = "0123456789abcdef", name = "Work"))
+        reduce(failed, secondary).effects shouldBe listOf(WordsEffect.DropOwn("0123456789abcdef"))
+        // A plain vault keeps no entry, so leaving drops nothing.
+        reduce(choose, secondary).effects.shouldBeEmpty()
     }
 })
 

@@ -1,5 +1,6 @@
 package dev.centraid.android.screens.words
 
+import android.content.Intent
 import android.os.Build
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -46,11 +48,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
@@ -76,16 +80,17 @@ import androidx.compose.ui.unit.dp
 import centraid.screen.v1.RestoredVaultLine
 import centraid.screen.v1.VaultWordsEvent
 import centraid.screen.v1.VaultWordsState
-import centraid.screen.v1.WordAsk
 import centraid.screen.v1.WordCell
 import centraid.screen.v1.WordEntry
 import centraid.screen.v1.WordsEntryEvent
 import centraid.screen.v1.WordsEntryState
+import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.WordsCopy
 
 // THE 24 WORDS, DRAWN (#1047 E3). Two screens over the shared machines:
 // `words.make` (`VaultWordsBridge`) and `words.enter` (`WordsEntryBridge`).
@@ -117,25 +122,30 @@ import dev.centraid.design.CentraidGeometry
 
 @Composable
 internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent) -> Unit) {
-    val requesters = remember { mutableMapOf<Int, FocusRequester>() }
-    var focus by remember { mutableStateOf<Int?>(null) }
-    val focusManager = LocalFocusManager.current
-    val keyboard = LocalSoftwareKeyboardController.current
-    val leaveFields = {
-        focus = null
-        // HIDE FIRST: the controller hides through the field's input
-        // session, which the cleared focus ends.
-        keyboard?.hide()
-        focusManager.clearFocus()
-    }
-    // CONFIRM opens with the keyboard on the first word asked.
-    LaunchedEffect(state.phase) {
-        focus = if (state.phase == VaultWordsState.Phase.PHASE_CONFIRM) state.asks.firstOrNull()?.position else null
-    }
-    FocusOn(focus, requesters)
     WordsPage(testTag = "words-make", description = state.accessibility_label) {
         WordsHead(state.title, state.body)
+        // CHOOSE (R-1047-E18): the vault's name, and whether it is kept on its
+        // own 24 words.
+        if (state.name_label.isNotEmpty()) {
+            EndpointField(
+                label = state.name_label,
+                value = state.name,
+                enabled = true,
+                name = true,
+                onEdit = { text -> onEvent(VaultWordsEvent(name = VaultWordsEvent.NameTyped(text = text))) },
+            )
+        }
+        if (state.own_label.isNotEmpty()) {
+            SyncCheckbox(state.own_label, state.own_on, testTag = "words-make-own") { on ->
+                onEvent(VaultWordsEvent(own = VaultWordsEvent.OwnToggled(on = on)))
+            }
+        }
         if (state.words.isNotEmpty()) ShownWords(state.words)
+        if (state.sync_label.isNotEmpty()) {
+            SyncCheckbox(state.sync_label, state.sync_on) { on ->
+                onEvent(VaultWordsEvent(sync = VaultWordsEvent.SyncToggled(on = on)))
+            }
+        }
         if (state.custody.isNotEmpty()) {
             Text(
                 state.custody,
@@ -144,31 +154,8 @@ internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent)
                 modifier = Modifier.testTag("words-custody"),
             )
         }
-        for (ask in state.asks) {
-            val position = ask.position
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    ask.prompt,
-                    style = centraidType("annotLabel"),
-                    color = centraidColor("textSoft"),
-                    modifier = Modifier.clearAndSetSemantics { },
-                )
-                WordField(
-                    value = ask.typed,
-                    tone = askTone(ask.mark),
-                    spoken = ask.prompt,
-                    testTag = "words-ask-$position",
-                    requester = requesters.getOrPut(position) { FocusRequester() },
-                    last = state.asks.lastOrNull()?.position == position,
-                    onEdit = { text ->
-                        onEvent(VaultWordsEvent(typed = VaultWordsEvent.WordTyped(position = position, text = text)))
-                    },
-                    onNext = {
-                        val later = state.asks.map { it.position }.firstOrNull { it > position }
-                        if (later == null) leaveFields() else focus = later
-                    },
-                )
-            }
+        if (state.save_label.isNotEmpty() && state.words.isNotEmpty()) {
+            SaveCopyButton(state.save_label, state.words.map { it.word })
         }
         WordsNotice(state.notice)
         if (state.phase == VaultWordsState.Phase.PHASE_CHECKING || state.phase == VaultWordsState.Phase.PHASE_MAKING) {
@@ -181,10 +168,7 @@ internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent)
             primaryEnabled = state.primary_enabled,
             secondary = state.secondary_label,
             prefix = "words-make",
-            onPrimary = {
-                leaveFields()
-                onEvent(VaultWordsEvent(primary = VaultWordsEvent.Primary()))
-            },
+            onPrimary = { onEvent(VaultWordsEvent(primary = VaultWordsEvent.Primary())) },
             onSecondary = { onEvent(VaultWordsEvent(secondary = VaultWordsEvent.Secondary())) },
         )
         if (state.restore_label.isNotEmpty()) {
@@ -195,10 +179,62 @@ internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent)
     }
 }
 
-private fun askTone(mark: WordAsk.Mark): String = when (mark) {
-    WordAsk.Mark.MARK_RIGHT -> "success"
-    WordAsk.Mark.MARK_WRONG -> "net"
-    else -> "lineStrong"
+/**
+ * THE SYNC CHECKBOX (`VaultWordsState.sync_label`): ticked keeps the key in
+ * Block Store, unticked keeps it on this phone only.
+ */
+@Composable
+private fun SyncCheckbox(label: String, on: Boolean, testTag: String = "words-sync", onToggle: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+            .toggleable(value = on, role = Role.Checkbox, onValueChange = onToggle)
+            .testTag(testTag),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier
+                .size(22.dp)
+                .background(if (on) centraidColor("text") else Color.Transparent, RoundedCornerShape(5.dp))
+                .border(1.5.dp, centraidColor(if (on) "text" else "lineStrong"), RoundedCornerShape(5.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (on) CentraidIcon(iconKey = "Check", tint = centraidColor("textInv"), size = 13.dp)
+        }
+        Text(label, style = centraidType("body"), color = centraidColor("text"))
+    }
+}
+
+/**
+ * SAVE A COPY (`VaultWordsState.save_label`). The words leave as one line of
+ * text through the system chooser, so the member picks where they live — a
+ * password manager, Files, a note only they can open. The machine hears
+ * nothing back. Duty 2 above (no clipboard) is relaxed here, on the member's
+ * own tap: the chooser carries the system's own Copy, which Android gives an
+ * app no way to remove.
+ */
+@Composable
+private fun SaveCopyButton(label: String, words: List<String>) {
+    val context = LocalContext.current
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+            .clickable {
+                val send = Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_SUBJECT, WordsCopy.SAVE_SUBJECT)
+                    .putExtra(Intent.EXTRA_TEXT, words.joinToString(" "))
+                runCatching { context.startActivity(Intent.createChooser(send, label)) }
+            }
+            .testTag("words-save-copy")
+            .semantics { role = Role.Button },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = centraidType("smallStrong"), color = centraidColor("link"))
+    }
 }
 
 /**
@@ -319,6 +355,19 @@ internal fun WordsEntryScreen(state: WordsEntryState, onEvent: (WordsEntryEvent)
                 }
             }
         }
+        // A HELD RESTORE NAMES the vaults on their own words it will also
+        // bring back (R-1047-E18).
+        if (state.held_keys_label.isNotEmpty()) {
+            Column(
+                Modifier.testTag("words-held-keys").semantics(mergeDescendants = true) { },
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(state.held_keys_label, style = centraidType("small"), color = centraidColor("textSoft"))
+                for (name in state.held_keys) {
+                    Text(name, style = centraidType("bodyStrong"), color = centraidColor("text"))
+                }
+            }
+        }
         if (state.endpoint_label.isNotEmpty()) {
             EndpointField(
                 label = state.endpoint_label,
@@ -342,6 +391,11 @@ internal fun WordsEntryScreen(state: WordsEntryState, onEvent: (WordsEntryEvent)
         for ((index, line) in state.stayed.withIndex()) StayedLine(line, index)
         if (state.retry_label.isNotEmpty()) {
             StayedRetry(state.retry_label) { onEvent(WordsEntryEvent(retry = WordsEntryEvent.Retry())) }
+        }
+        if (state.words_label.isNotEmpty()) {
+            StayedRetry(state.words_label, testTag = "words-use-words") {
+                onEvent(WordsEntryEvent(use_words = WordsEntryEvent.UseWords()))
+            }
         }
         WordsControls(
             primary = state.primary_label,
@@ -432,7 +486,14 @@ private fun EntryCell(
  * autofill, since it sits on the same shielded screen.
  */
 @Composable
-private fun EndpointField(label: String, value: String, enabled: Boolean, onEdit: (String) -> Unit) {
+private fun EndpointField(
+    label: String,
+    value: String,
+    enabled: Boolean,
+    /** A vault's name (R-1047-E18): words capitalised, plain text, its own tag. */
+    name: Boolean = false,
+    onEdit: (String) -> Unit,
+) {
     val text = rememberSentText(value)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.clearAndSetSemantics { })
@@ -458,16 +519,16 @@ private fun EndpointField(label: String, value: String, enabled: Boolean, onEdit
                     enabled = enabled,
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.None,
+                        capitalization = if (name) KeyboardCapitalization.Words else KeyboardCapitalization.None,
                         autoCorrectEnabled = false,
-                        keyboardType = KeyboardType.Uri,
+                        keyboardType = if (name) KeyboardType.Text else KeyboardType.Uri,
                         imeAction = ImeAction.Done,
                     ),
                     textStyle = centraidType("body").copy(color = centraidColor("text")),
                     cursorBrush = SolidColor(centraidColor("text")),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("words-endpoint")
+                        .testTag(if (name) "words-make-name" else "words-endpoint")
                         .semantics {
                             contentDescription = label
                             contentDataType = ContentDataType.None
@@ -524,16 +585,17 @@ private fun StayedLine(line: String, index: Int) {
 /**
  * `retry_label`'s control (R-1047-R6): ask the laptop again for the vaults
  * that stayed. A link-weight text button, like [WordsControls]' secondary; the
- * label and when it shows are the machine's.
+ * label and when it shows are the machine's. `words_label`'s control (leave a
+ * held-seed restore for the grid) is the same link.
  */
 @Composable
-private fun StayedRetry(label: String, onRetry: () -> Unit) {
+private fun StayedRetry(label: String, testTag: String = "words-retry", onRetry: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
             .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
             .clickable(onClick = onRetry)
-            .testTag("words-retry")
+            .testTag(testTag)
             .semantics { role = Role.Button },
         contentAlignment = Alignment.CenterStart,
     ) {

@@ -196,6 +196,8 @@ public data class UnclaimedVaultAt(
     public val index: Int,
     /** The vault's identity public key, hex. */
     public val vaultId: String = "",
+    /** The vault seed it is under when it is on its own words (R-1047-E18); null for the member's. */
+    public val own: String? = null,
 )
 
 /** One vault a restore laid down (`RestoredVault`). */
@@ -207,6 +209,8 @@ public data class RestoredVaultAt(
     public val rows: Long = 0,
     /** Grouped digits to compare with the laptop's; empty when not computed. */
     public val safetyNumber: String = "",
+    /** The vault seed it came back from when it is on its own words (R-1047-E18); null for the member's. */
+    public val own: String? = null,
 )
 
 /**
@@ -219,13 +223,13 @@ public data class RestoredVaultAt(
 public object CustodyCopy {
 
     /** The pairing screen's heading, and what it asks for. */
-    public const val PAIR_TITLE: String = "Pair with your laptop"
+    public const val PAIR_TITLE: String = "Pair with your backup device"
 
     public const val PAIR_ASK: String =
-        "Run “centraid-gateway pair” on your laptop and scan the square it prints. " +
+        "Run “centraid-gateway pair” on your backup device and scan the square it prints. " +
             "You can paste the text underneath it instead."
 
-    public const val PAIR_EMPTY: String = "Scan the square your laptop printed, or paste its text."
+    public const val PAIR_EMPTY: String = "Scan the square your backup device printed, or paste its text."
 
     public const val PAIR_PASTE_LABEL: String = "Pairing code"
 
@@ -233,9 +237,9 @@ public object CustodyCopy {
 
     public const val PAIR_PRIMARY: String = "Pair"
 
-    public const val PAIRING: String = "Pairing with your laptop…"
+    public const val PAIRING: String = "Pairing with your backup device…"
 
-    public const val PAIRED_TITLE: String = "Check it's your laptop"
+    public const val PAIRED_TITLE: String = "Check it's your backup device"
 
     public const val PAIR_FAILED_TITLE: String = "Not paired"
 
@@ -243,10 +247,10 @@ public object CustodyCopy {
 
     /** A vault opened without its words has no identity to pair with. */
     public const val PAIR_NEEDS_WORDS: String =
-        "This vault is open without your 24 words, so it cannot prove to your laptop whose it is. " +
+        "This vault is open without your 24 words, so it cannot prove to your backup device whose it is. " +
             "Enter your words first, then pair."
 
-    public const val PAIR_NO_VAULT: String = "Make a vault on this phone first, then pair it with your laptop."
+    public const val PAIR_NO_VAULT: String = "Make a vault on this phone first, then pair it with your backup device."
 
     /**
      * THE SAMPLE VAULT IS IN FRONT. It never pairs — the core refuses — so the
@@ -261,7 +265,7 @@ public object CustodyCopy {
     public const val TRY_AGAIN: String = "Try again"
 
     public const val PAIR_UNREACHABLE: String =
-        "Your laptop did not answer. Check it is awake and on the same network, then try again."
+        "Your backup device did not answer. Check it is awake and on the same network, then try again."
 
     public const val PAIR_NOTHING_TO_COMPARE: String =
         "Centraid could not check who answered, so it did not pair. Try again."
@@ -275,7 +279,7 @@ public object CustodyCopy {
      * middle.
      */
     public fun pairedLine(answer: PairAnswer): String {
-        val who = answer.destinationLabel.ifBlank { "your laptop" }
+        val who = answer.destinationLabel.ifBlank { "your backup device" }
         val where = if (answer.destinationAddress.isBlank()) "" else " at ${answer.destinationAddress}"
         return "Paired with $who$where. Check every group of the number below matches the safety number " +
             "centraid-gateway printed on $who. If it does not match, do not carry on — " +

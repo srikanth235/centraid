@@ -109,11 +109,12 @@ public class WordsSheets(
     public fun attach(session: HomeSession, scope: CoroutineScope) {
         make.attach(session)
         enter.attach(session)
+        show.attach(session)
         pair.attach(session)
         attached = true
         scope.launch {
             make.states.collect { state ->
-                if (state.phase == VaultWordsState.Phase.PHASE_MADE) made = (made.first + 1) to state.body
+                if (state.phase == VaultWordsState.Phase.PHASE_CLOSED && state.body.isNotEmpty()) made = (made.first + 1) to state.body
                 if (state.phase != VaultWordsState.Phase.PHASE_CLOSED) {
                     makeLive = true
                 } else if (makeLive) {

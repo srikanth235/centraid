@@ -55,6 +55,21 @@ public interface SyncedSecrets {
      */
     public suspend fun forgetSeed()
 
+    /**
+     * A VAULT KEPT ON ITS OWN WORDS (R-1047-E18) synchronises its seed beside
+     * the member's, under its own [key] (`VaultSecrets.OWN_SEED_PREFIX` + its
+     * entry id, and `VaultSecrets.OWN_SEED_INDEX` naming every entry). The
+     * same exception as [putSeed], for the same reason — each is a seed a
+     * member restores FROM — and nothing derived. **Replaces.**
+     */
+    public suspend fun put(key: String, value: String): Boolean
+
+    /** What [put] stored under [key], or null. */
+    public suspend fun get(key: String): String?
+
+    /** Forget [key]. */
+    public suspend fun remove(key: String)
+
     /** What the platform says about synchronising. */
     public data class Availability(
         /** Whether a seed put here would reach another device. */
@@ -68,6 +83,12 @@ public interface SyncedSecrets {
          * makes the written phrase the common path there.
          */
         public val restoresAfterSetup: Boolean,
+        /**
+         * The checkbox a member unticks to keep the key on this phone only
+         * ([IOS_SYNC_LABEL], [ANDROID_SYNC_LABEL]). Empty when [synchronizing]
+         * is false: there is nothing to opt out of.
+         */
+        public val optInLabel: String = "",
     )
 
     public companion object {
@@ -78,6 +99,12 @@ public interface SyncedSecrets {
         public const val IOS_SENTENCE: String =
             "Your key is saved in your iCloud Keychain. Sign in to iCloud on a new iPhone and " +
                 "your vaults come back."
+
+        /** iOS: the checkbox that keeps the key in iCloud Keychain. */
+        public const val IOS_SYNC_LABEL: String = "Save my key in iCloud Keychain"
+
+        /** Android: the checkbox that keeps the key in Block Store. */
+        public const val ANDROID_SYNC_LABEL: String = "Back up my key with Google"
 
         /** iOS, with iCloud Keychain off. */
         public const val IOS_OFF_SENTENCE: String =

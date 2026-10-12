@@ -224,7 +224,7 @@ class WordsEntrySpec : StringSpec({
 
         val retry = EntryInput.View(WordsEntryEvent(retry = WordsEntryEvent.Retry()))
         val retrying = reduce(done, retry)
-        retrying.effects shouldBe listOf(EntryEffect.RestoreStayed(listOf(1), "ab"))
+        retrying.effects shouldBe listOf(EntryEffect.RestoreStayed(listOf(UnclaimedVaultAt(index = 1, vaultId = "ab".repeat(32))), "ab"))
         retrying.model.state.phase shouldBe WordsEntryState.Phase.PHASE_WORKING
         retrying.model.state.progress shouldBe WordsCopy.RESTORING
         // NO GRID COMES BACK: the words are gone and nothing secret is drawn.
@@ -363,6 +363,22 @@ class WordsEntrySpec : StringSpec({
         nothing.notice shouldBe WordsCopy.RESTORE_NOTHING_HELD
     }
 
+    "a held-seed restore offers the grid instead, keeping the pasted code" {
+        val held = coded(open(WordsEntryState.Purpose.PURPOSE_RESTORE_HELD))
+        held.state.words_label shouldBe WordsCopy.RESTORE_HELD_WORDS
+        val useWords = EntryInput.View(WordsEntryEvent(use_words = WordsEntryEvent.UseWords()))
+        val grid = reduce(held, useWords).model
+        grid.state.purpose shouldBe WordsEntryState.Purpose.PURPOSE_RESTORE
+        grid.state.cells shouldHaveSize 24
+        grid.state.secure shouldBe true
+        grid.state.endpoint shouldBe code
+        grid.state.words_label shouldBe ""
+        grid.state.primary_enabled shouldBe false
+        // Only a held restore has a grid to go to.
+        reduce(open(WordsEntryState.Purpose.PURPOSE_REKEY), useWords).model.state.purpose shouldBe
+            WordsEntryState.Purpose.PURPOSE_REKEY
+    }
+
     "leaving drops every word" {
         val closed = reduce(filled(WordsEntryState.Purpose.PURPOSE_RESTORE), EntryInput.View(WordsEntryEvent(secondary = WordsEntryEvent.Secondary()))).model
         closed.state.phase shouldBe WordsEntryState.Phase.PHASE_CLOSED
@@ -373,5 +389,29 @@ class WordsEntrySpec : StringSpec({
         val ready = filled(WordsEntryState.Purpose.PURPOSE_RESTORE)
         ready.toString() shouldNotContain "abandon"
         reduce(ready, primary).effects.single().toString() shouldNotContain "abandon"
+    }
+    "vaults from two seeds are numbered once each: the member's first, then each vault on its own words" {
+        val working = reduce(coded(open(WordsEntryState.Purpose.PURPOSE_RESTORE_HELD)), primary).model
+        val answer = RestoreAnswer(
+            vaults = listOf(
+                RestoredVaultAt("/v/f/vault.db", 0, rows = 1, own = "0123456789abcdef"),
+                RestoredVaultAt("/v/a/vault.db", 0, rows = 1),
+            ),
+            unclaimed = listOf(UnclaimedVaultAt(index = 1)),
+        )
+        val done = reduce(working, EntryInput.Restored(Enrollment.Restored.Done(answer, 2))).model.state
+        done.restored.map { it.line } shouldBe listOf(
+            WordsCopy.RESTORED_LINE_ONE.replace("{index}", "1"),
+            WordsCopy.RESTORED_LINE_ONE.replace("{index}", "3"),
+        )
+        done.stayed shouldBe listOf(WordsCopy.RESTORED_STAYED.replace("{index}", "2"))
+    }
+
+    "a held restore lists the vaults on their own words it will also bring back" {
+        val held = open(WordsEntryState.Purpose.PURPOSE_RESTORE_HELD)
+        held.state.held_keys.shouldBeEmpty()
+        val listed = reduce(held, EntryInput.HeldKeys(listOf("Family", ""))).model.state
+        listed.held_keys_label shouldBe WordsCopy.RESTORE_HELD_OWN_LABEL
+        listed.held_keys shouldBe listOf("Family", WordsCopy.RESTORE_HELD_OWN_UNNAMED)
     }
 })

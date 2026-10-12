@@ -21,10 +21,10 @@ public object HomeWords {
     public const val FIRST_LAUNCH_BODY: String = SharedCopy.FIRST_LAUNCH_BODY
     public const val FIRST_LAUNCH_HOUSE_TITLE: String = SharedCopy.FIRST_LAUNCH_HOUSE_TITLE
     public const val FIRST_LAUNCH_HOUSE_BODY: String = SharedCopy.FIRST_LAUNCH_HOUSE_BODY
-    public const val FIRST_LAUNCH_KEY_TITLE: String = SharedCopy.FIRST_LAUNCH_KEY_TITLE
-    public const val FIRST_LAUNCH_KEY_BODY: String = SharedCopy.FIRST_LAUNCH_KEY_BODY
-    public const val FIRST_LAUNCH_COPY_TITLE: String = SharedCopy.FIRST_LAUNCH_COPY_TITLE
-    public const val FIRST_LAUNCH_COPY_BODY: String = SharedCopy.FIRST_LAUNCH_COPY_BODY
+    public const val FIRST_LAUNCH_ASSISTANT_TITLE: String = SharedCopy.FIRST_LAUNCH_ASSISTANT_TITLE
+    public const val FIRST_LAUNCH_ASSISTANT_BODY: String = SharedCopy.FIRST_LAUNCH_ASSISTANT_BODY
+    public const val FIRST_LAUNCH_BACKUP_TITLE: String = SharedCopy.FIRST_LAUNCH_BACKUP_TITLE
+    public const val FIRST_LAUNCH_BACKUP_BODY: String = SharedCopy.FIRST_LAUNCH_BACKUP_BODY
     public const val FIRST_LAUNCH_NEXT: String = SharedCopy.FIRST_LAUNCH_NEXT
     public const val FIRST_LAUNCH_SKIP: String = SharedCopy.FIRST_LAUNCH_SKIP
     public const val FIRST_LAUNCH_MAKE: String = SharedCopy.FIRST_LAUNCH_MAKE

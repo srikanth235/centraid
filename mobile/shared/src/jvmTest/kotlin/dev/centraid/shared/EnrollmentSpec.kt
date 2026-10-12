@@ -1,5 +1,9 @@
 package dev.centraid.shared
 
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldNotBeNull
+import centraid.screen.v1.WordsEntryEvent
+import centraid.screen.v1.WordsEntryState
 import dev.centraid.shared.custody.Enrollment
 import dev.centraid.shared.custody.PhraseDoor
 import dev.centraid.shared.custody.PhraseVerdict
@@ -10,6 +14,7 @@ import dev.centraid.shared.custody.RestoreResult
 import dev.centraid.shared.custody.RestoredVaultAt
 import dev.centraid.shared.custody.UnclaimedVaultAt
 import dev.centraid.shared.custody.VaultSecrets
+import dev.centraid.shared.custody.WordsEntryFlow
 import dev.centraid.shared.platform.FakePlatformServices
 import dev.centraid.shared.shell.FoundResult
 import dev.centraid.shared.shell.Shelf
@@ -41,6 +46,9 @@ class EnrollmentSpec : StringSpec({
         val log = mutableListOf<String>()
         var restoreAnswer: RestoreAnswer? = null
 
+        /** Per seed (its first four hex characters), when a spec needs two seeds to answer differently. */
+        var answerBySeed: Map<String, RestoreAnswer> = emptyMap()
+
         /** What the door answers when [restoreAnswer] is null. */
         var refusal: RestoreRefusal = RestoreRefusal.UNREACHABLE
 
@@ -66,7 +74,7 @@ class EnrollmentSpec : StringSpec({
 
             override suspend fun restoreSeed(seedHex: String, payload: String?): RestoreResult {
                 log += "restore-seed ${seedHex.take(4)} payload=$payload"
-                return answered()
+                return answerBySeed[seedHex.take(4)]?.let { RestoreResult.Restored(it) } ?: answered()
             }
 
             override suspend fun restoreStayed(seedHex: String, payload: String?, indices: List<Int>): RestoreResult {
@@ -76,8 +84,9 @@ class EnrollmentSpec : StringSpec({
         }
 
         val keeper = object : Enrollment.Keeper {
-            override suspend fun found(): FoundResult {
-                log += "found seed=${secrets.seed() != null} settled=${secrets.seedSettled()}"
+            override suspend fun found(own: String?, name: String?): FoundResult {
+                log += "found seed=${secrets.seed() != null} settled=${secrets.seedSettled()}" +
+                    (if (own != null) " own=${secrets.ownSeed(own)?.take(4)} name=$name" else "")
                 return FoundResult.Made("My vault")
             }
 
@@ -228,7 +237,7 @@ class EnrollmentSpec : StringSpec({
             phone.restoreAnswer = RestoreAnswer(
                 vaults = listOf(RestoredVaultAt("/v/c/vault.db", 1)),
             )
-            val again = phone.enrollment.restoreStayed(listOf(1), "ab")
+            val again = phone.enrollment.restoreStayed(listOf(UnclaimedVaultAt(1)), "ab")
                 .shouldBeInstanceOf<Enrollment.Restored.Done>()
             again.added shouldBe 1
             phone.log.drop(2) shouldBe listOf(
@@ -238,11 +247,11 @@ class EnrollmentSpec : StringSpec({
             // STILL REFUSED, NOTHING HELD: the vaults already here are untouched.
             phone.restoreAnswer = null
             phone.refusal = RestoreRefusal.NOT_TAKEN
-            phone.enrollment.restoreStayed(listOf(1), null) shouldBe Enrollment.Restored.NotTaken
+            phone.enrollment.restoreStayed(listOf(UnclaimedVaultAt(1)), null) shouldBe Enrollment.Restored.NotTaken
             phone.log.last() shouldBe "restore-stayed aaaa payload=null indices=[1]"
             // NO SEED HERE, NO RETRY: nothing is dialled.
             val bare = Phone()
-            bare.enrollment.restoreStayed(listOf(1), null) shouldBe Enrollment.Restored.Refused(Enrollment.Refusal.NOT_A_PHRASE)
+            bare.enrollment.restoreStayed(listOf(UnclaimedVaultAt(1)), null) shouldBe Enrollment.Restored.Refused(Enrollment.Refusal.NOT_A_PHRASE)
             bare.log.shouldBeEmpty()
         }
     }
@@ -261,6 +270,31 @@ class EnrollmentSpec : StringSpec({
             phone.log shouldBe listOf("restore-seed aaaa payload=${"ab".repeat(32)}", "adopt [0, 1] seed=true")
             phone.enrollment.standing() shouldBe Enrollment.Standing.SETTLED
             phone.secrets.words().shouldBeNull()
+        }
+    }
+
+    "a restore opened while the keychain holds a seed opens WITHOUT the grid; with none, it opens the grid" {
+        runTest {
+            fun opened(phone: Phone): WordsEntryState.Purpose {
+                val flow = WordsEntryFlow({ phone.phrase }, { phone.enrollment }, this)
+                flow.send(WordsEntryEvent(opened = WordsEntryEvent.Opened(purpose = WordsEntryState.Purpose.PURPOSE_RESTORE)))
+                testScheduler.advanceUntilIdle()
+                return flow.current.purpose
+            }
+            // iCloud Keychain, or Block Store in Android's setup wizard, put it here.
+            val synced = Phone().also { it.services.syncedSecrets.putSeed(seedA) }
+            opened(synced) shouldBe WordsEntryState.Purpose.PURPOSE_RESTORE_HELD
+            opened(Phone()) shouldBe WordsEntryState.Purpose.PURPOSE_RESTORE
+        }
+    }
+
+    "the keychain's seed is not the backup's: typed words replace it while no vault here opens with it" {
+        runTest {
+            val phone = Phone()
+            phone.services.syncedSecrets.putSeed(seedA)
+            phone.restoreAnswer = RestoreAnswer(vaults = listOf(RestoredVaultAt("/v/b/vault.db", 0)))
+            phone.enrollment.restore(wordsB, null).shouldBeInstanceOf<Enrollment.Restored.Done>()
+            phone.secrets.seed() shouldBe "bb".repeat(64)
         }
     }
 
@@ -307,16 +341,18 @@ class EnrollmentSpec : StringSpec({
         }
     }
 
-    "different words are refused, before the laptop is asked, on a phone whose vaults open with its own" {
+    "different words never replace the seed this phone's vaults open with: a re-key is refused, a restore asks for them as their own" {
         runTest {
             val phone = Phone()
             phone.secrets.rememberSeed(seedA)
             phone.secrets.rememberVaultIndex("v-a", 0)
-            phone.enrollment.restore(wordsB, null) shouldBe
-                Enrollment.Restored.Refused(Enrollment.Refusal.DIFFERENT_WORDS)
             phone.enrollment.rekey(wordsB) shouldBe Enrollment.Rekeyed.Refused(Enrollment.Refusal.DIFFERENT_WORDS)
             phone.log shouldBe emptyList()
+            // R-1047-E18: other words are a vault on its own words; a laptop
+            // that answers nothing stores nothing for them.
+            phone.enrollment.restore(wordsB, null) shouldBe Enrollment.Restored.Unreachable
             phone.secrets.seed() shouldBe seedA
+            phone.secrets.ownSeeds().shouldBeEmpty()
         }
     }
 
@@ -350,6 +386,69 @@ class EnrollmentSpec : StringSpec({
             phone.indexed = 1
             phone.enrollment.rekey(wordsA) shouldBe Enrollment.Rekeyed.Done(1)
             phone.secrets.seed() shouldBe seedA
+        }
+    }
+    // --- a vault on its own words (R-1047-E18) ---------------------------------
+
+    "own words are kept under an entry of their own, never the member's slot, and the vault is made on that entry" {
+        runTest {
+            val phone = Phone()
+            phone.enrollment.keep(wordsA).shouldBeNull()
+            val kept = phone.enrollment.keepOwn(wordsB, "Family").shouldBeInstanceOf<Enrollment.OwnKept.Kept>()
+            phone.secrets.seed() shouldBe seedA
+            phone.secrets.ownSeed(kept.id) shouldBe "bb".repeat(64)
+            phone.secrets.ownWords(kept.id) shouldBe wordsB
+            phone.secrets.words() shouldBe wordsA
+            phone.enrollment.make(kept.id, "Family")
+            phone.log.last() shouldBe "found seed=true settled=true own=bbbb name=Family"
+            phone.enrollment.heldKeys() shouldBe listOf("Family")
+        }
+    }
+
+    "a held restore asks for the member's seed AND every vault on its own words the keychain carried" {
+        runTest {
+            val phone = Phone()
+            phone.services.syncedSecrets.putSeed(seedA)
+            val family = phone.secrets.keepOwnSeed("bb".repeat(64), "Family")
+            phone.restoreAnswer = RestoreAnswer(vaults = listOf(RestoredVaultAt("/v/x/vault.db", 0)))
+            val done = phone.enrollment.restoreHeld(null).shouldBeInstanceOf<Enrollment.Restored.Done>()
+            done.added shouldBe 2
+            done.answer.vaults.map { it.own } shouldBe listOf(null, family)
+            phone.log shouldBe listOf(
+                "restore-seed aaaa payload=null",
+                "adopt [0] seed=true",
+                "restore-seed bbbb payload=null",
+                "adopt [0] seed=true",
+            )
+            phone.enrollment.standing() shouldBe Enrollment.Standing.SETTLED
+        }
+    }
+
+    "words that are not the member's, on a phone whose vaults open with the member's, restore as a vault on its own words" {
+        runTest {
+            val phone = Phone()
+            phone.enrollment.keep(wordsA).shouldBeNull()
+            phone.secrets.rememberVaultIndex("v-a", 0)
+            phone.restoreAnswer = RestoreAnswer(vaults = listOf(RestoredVaultAt("/v/b/vault.db", 0)))
+            val done = phone.enrollment.restore(wordsB, null).shouldBeInstanceOf<Enrollment.Restored.Done>()
+            val own = done.answer.vaults.single().own.shouldNotBeNull()
+            phone.secrets.seed() shouldBe seedA
+            phone.secrets.ownSeed(own) shouldBe "bb".repeat(64)
+            // TYPED AGAIN, the same entry answers — not a second one.
+            phone.enrollment.restore(wordsB, null).shouldBeInstanceOf<Enrollment.Restored.Done>()
+            phone.secrets.ownSeeds() shouldHaveSize 1
+        }
+    }
+
+    "a vault on its own words the backup device holds nothing for is NAMED, not left out" {
+        runTest {
+            val both = Phone()
+            both.services.syncedSecrets.putSeed(seedA)
+            both.secrets.keepOwnSeed("bb".repeat(64), "Family")
+            both.answerBySeed = mapOf("aaaa" to RestoreAnswer(vaults = listOf(RestoredVaultAt("/v/x/vault.db", 0))), "bbbb" to RestoreAnswer(vaults = emptyList()))
+            val done = both.enrollment.restoreHeld(null).shouldBeInstanceOf<Enrollment.Restored.Done>()
+            done.added shouldBe 1
+            done.missing shouldBe listOf("Family")
         }
     }
 })

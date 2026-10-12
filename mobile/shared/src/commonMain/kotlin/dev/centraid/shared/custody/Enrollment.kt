@@ -36,6 +36,14 @@ import dev.centraid.shared.shell.Shelf
  *   a restore named as staying with the old phone, by index, from the seed
  *   that restore stored. The vaults already here are never laid down again.
  *
+ * * **A vault on its own words** ([keepOwn], then [make] with its entry,
+ *   R-1047-E18): fresh words are minted and shown as for the first vault,
+ *   and their seed is kept under an entry of its own — never the member's
+ *   slot — before the vault is founded on it at index 0. A restore brings
+ *   such a vault back from its entry when the keychain carried it
+ *   ([restoreHeld]), or from its words typed on a phone whose own words
+ *   differ ([restore]).
+ *
  * **The words are kept beside the seed** (Q-1047-19): whenever this phone
  * stores a seed from words — made, restored or re-keyed — it keeps the words
  * in the device-only store too, so settings can show them again
@@ -49,7 +57,11 @@ public class Enrollment(
 ) {
     /** The shelf's half: founding, holding what a restore laid down, re-keying. */
     public interface Keeper {
-        public suspend fun found(): FoundResult
+        /**
+         * Found a vault: on the member's seed, or — [own] set — on that entry's
+         * (R-1047-E18), named [name] when the member gave one.
+         */
+        public suspend fun found(own: String? = null, name: String? = null): FoundResult
 
         public suspend fun adoptRestored(restored: List<Shelf.Restored>): Int
 
@@ -86,17 +98,56 @@ public class Enrollment(
      * STORE [words]' SEED AND SETTLE IT — after the check, before the found.
      * Null when kept.
      */
-    public suspend fun keep(words: List<String>): Refusal? {
+    public suspend fun keep(words: List<String>, sync: Boolean = true): Refusal? {
         val seed = phrase.seed(words) ?: return Refusal.NOT_A_PHRASE
-        return store(seed, words)
+        return store(seed, words, sync)
     }
 
-    /** Found a vault at the next index; the seed is already stored. */
-    public suspend fun make(): FoundResult = keeper.found()
+    /** Found a vault at the next index — or on entry [own]'s seed; the seed is already stored. */
+    public suspend fun make(own: String? = null, name: String? = null): FoundResult = keeper.found(own, name)
+
+    /** What [keepOwn] answered: the entry the seed is kept under, or why not. */
+    public sealed interface OwnKept {
+        public data class Kept(public val id: String) : OwnKept
+
+        public data class Refused(public val because: Refusal) : OwnKept
+    }
+
+    /**
+     * KEEP FRESH WORDS FOR ONE VAULT, before it is founded (R-1047-E18). Their
+     * seed goes under an entry of its own — synchronised when [sync] and the
+     * platform takes it — and the words beside it, device-only, so settings
+     * can show them again. The member's seed is not touched.
+     */
+    public suspend fun keepOwn(words: List<String>, label: String, sync: Boolean = true): OwnKept {
+        val seed = phrase.seed(words) ?: return OwnKept.Refused(Refusal.NOT_A_PHRASE)
+        val id = runCatching { secrets.keepOwnSeed(seed, label, sync) }.getOrNull()
+            ?: return OwnKept.Refused(Refusal.STORE_REFUSED)
+        if (secrets.ownSeed(id) != seed) {
+            secrets.forgetOwnSeed(id)
+            return OwnKept.Refused(Refusal.STORE_REFUSED)
+        }
+        runCatching { secrets.rememberOwnWords(id, words.map { it.trim().lowercase() }) }
+        return OwnKept.Kept(id)
+    }
+
+    /** A kept entry no vault was founded on — the member walked away. */
+    public suspend fun dropOwn(id: String) {
+        secrets.forgetOwnSeed(id)
+    }
 
     public sealed interface Restored {
-        public class Done(public val answer: RestoreAnswer, public val added: Int) : Restored {
-            override fun toString(): String = "Done(added=$added)"
+        public class Done(
+            public val answer: RestoreAnswer,
+            public val added: Int,
+            /**
+             * The vaults on their own words (R-1047-E18) whose key came back
+             * and for which the backup device held nothing, by name — told to
+             * the member rather than left out of the list.
+             */
+            public val missing: List<String> = emptyList(),
+        ) : Restored {
+            override fun toString(): String = "Done(added=$added, missing=${missing.size})"
         }
 
         public data object Unreachable : Restored
@@ -119,12 +170,25 @@ public class Enrollment(
     /** BRING THIS MEMBER'S VAULTS BACK FROM [words]. See the header for the order. */
     public suspend fun restore(words: List<String>, endpoint: String?): Restored {
         val seed = phrase.seed(words) ?: return Restored.Refused(Refusal.NOT_A_PHRASE)
-        if (conflicts(seed)) return Restored.Refused(Refusal.DIFFERENT_WORDS)
+        // WORDS THAT ARE NOT THE MEMBER'S, on a phone whose vaults open with
+        // the member's, are a vault on its own words (R-1047-E18) — or one the
+        // keychain already holds an entry for.
+        val asOwn = conflicts(seed) || secrets.ownSeedMatching(seed) != null
         val answer = when (val result = restoreDoor.restore(words, endpoint)) {
             is RestoreResult.Restored -> result.answer
             is RestoreResult.Refused -> return stopped(result.because)
         }
         if (answer.vaults.isEmpty()) return Restored.NothingHeld
+        if (asOwn) {
+            val id = secrets.ownSeedMatching(seed)
+                ?: when (val kept = keepOwn(words, label = "")) {
+                    is OwnKept.Kept -> kept.id
+                    is OwnKept.Refused -> return Restored.Refused(kept.because)
+                }
+            val tagged = answer.taggedOwn(id)
+            val added = keeper.adoptRestored(tagged.vaults.map { Shelf.Restored(path = it.path, index = it.index, own = id) })
+            return Restored.Done(tagged, added)
+        }
         store(seed, words)?.let { return Restored.Refused(it) }
         val added = keeper.adoptRestored(answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) })
         return Restored.Done(answer, added)
@@ -140,16 +204,47 @@ public class Enrollment(
      * the indices the words spent.
      */
     public suspend fun restoreHeld(endpoint: String?): Restored {
-        val seed = secrets.seed() ?: return Restored.Refused(Refusal.NOT_A_PHRASE)
-        val answer = when (val result = restoreDoor.restoreSeed(seed, endpoint)) {
-            is RestoreResult.Restored -> result.answer
-            is RestoreResult.Refused -> return stopped(result.because)
+        // EVERY SEED THE KEYCHAIN CARRIED (R-1047-E18): the member's, and each
+        // vault kept on its own words, asked in turn. One that answered with
+        // nothing, or was refused, does not stop the others.
+        val member = secrets.seed()
+        val owned = secrets.ownSeeds()
+        if (member == null && owned.isEmpty()) return Restored.Refused(Refusal.NOT_A_PHRASE)
+        val answers = mutableListOf<RestoreAnswer>()
+        val missing = mutableListOf<String>()
+        var refusal: Restored? = null
+        var added = 0
+        if (member != null) {
+            when (val result = restoreDoor.restoreSeed(member, endpoint)) {
+                is RestoreResult.Restored -> if (result.answer.vaults.isNotEmpty()) {
+                    secrets.settleSeed()
+                    added += keeper.adoptRestored(result.answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) })
+                    answers += result.answer
+                }
+                is RestoreResult.Refused -> refusal = stopped(result.because)
+            }
         }
-        if (answer.vaults.isEmpty()) return Restored.NothingHeld
-        secrets.settleSeed()
-        val added = keeper.adoptRestored(answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) })
-        return Restored.Done(answer, added)
+        for (entry in owned) {
+            when (val result = restoreDoor.restoreSeed(entry.seedHex, endpoint)) {
+                is RestoreResult.Restored -> if (result.answer.vaults.isNotEmpty()) {
+                    val tagged = result.answer.taggedOwn(entry.id)
+                    added += keeper.adoptRestored(tagged.vaults.map { Shelf.Restored(path = it.path, index = it.index, own = entry.id) })
+                    answers += tagged
+                } else {
+                    missing += entry.label
+                }
+                is RestoreResult.Refused -> {
+                    if (refusal == null) refusal = stopped(result.because)
+                    missing += entry.label
+                }
+            }
+        }
+        if (answers.isEmpty()) return refusal ?: Restored.NothingHeld
+        return Restored.Done(merged(answers), added, missing)
     }
+
+    /** What a held restore will ask for: the member's vaults, and each vault on its own words by name. */
+    public suspend fun heldKeys(): List<String> = secrets.ownSeeds().map { it.label }
 
     /**
      * BRING BACK THE VAULTS THAT STAYED, ON THEIR OWN (R-1047-R6): a restore
@@ -158,16 +253,41 @@ public class Enrollment(
      * so no words are asked for and nothing is stored; the core leaves the
      * vaults this phone holds as they are, and only what came back is held.
      */
-    public suspend fun restoreStayed(indices: List<Int>, endpoint: String?): Restored {
-        val seed = secrets.seed() ?: return Restored.Refused(Refusal.NOT_A_PHRASE)
-        val answer = when (val result = restoreDoor.restoreStayed(seed, endpoint, indices)) {
-            is RestoreResult.Restored -> result.answer
-            is RestoreResult.Refused -> return stopped(result.because)
+    public suspend fun restoreStayed(stayed: List<UnclaimedVaultAt>, endpoint: String?): Restored {
+        // ONE ASK PER SEED: the member's indices under the member's seed, a
+        // vault on its own words under its entry's (R-1047-E18).
+        val answers = mutableListOf<RestoreAnswer>()
+        var refusal: Restored? = null
+        var added = 0
+        for ((own, group) in stayed.groupBy { it.own }) {
+            val seed = (if (own != null) secrets.ownSeed(own) else secrets.seed())
+                ?: run { if (refusal == null) refusal = Restored.Refused(Refusal.NOT_A_PHRASE); null }
+                ?: continue
+            when (val result = restoreDoor.restoreStayed(seed, endpoint, group.map { it.index })) {
+                is RestoreResult.Restored -> if (result.answer.vaults.isNotEmpty()) {
+                    val tagged = if (own != null) result.answer.taggedOwn(own) else result.answer
+                    added += keeper.adoptRestored(tagged.vaults.map { Shelf.Restored(path = it.path, index = it.index, own = own) })
+                    answers += tagged
+                }
+                is RestoreResult.Refused -> if (refusal == null) refusal = stopped(result.because)
+            }
         }
-        if (answer.vaults.isEmpty()) return Restored.NothingHeld
-        val added = keeper.adoptRestored(answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) })
-        return Restored.Done(answer, added)
+        if (answers.isEmpty()) return refusal ?: Restored.NothingHeld
+        return Restored.Done(merged(answers), added)
     }
+
+    /** [this] answer's vaults, marked as entry [id]'s. */
+    private fun RestoreAnswer.taggedOwn(id: String): RestoreAnswer = RestoreAnswer(
+        vaults = vaults.map { it.copy(own = id) },
+        gapScanned = gapScanned,
+        unclaimed = unclaimed.map { it.copy(own = id) },
+    )
+
+    private fun merged(answers: List<RestoreAnswer>): RestoreAnswer = answers.singleOrNull() ?: RestoreAnswer(
+        vaults = answers.flatMap { it.vaults },
+        gapScanned = answers.sumOf { it.gapScanned },
+        unclaimed = answers.flatMap { it.unclaimed },
+    )
 
     public sealed interface Rekeyed {
         public data class Done(public val keyed: Int) : Rekeyed
@@ -206,8 +326,8 @@ public class Enrollment(
         return held != seed && secrets.anyVaultIndex()
     }
 
-    private suspend fun store(seed: String, words: List<String>): Refusal? {
-        runCatching { secrets.rememberSeed(seed) }.onFailure { return Refusal.STORE_REFUSED }
+    private suspend fun store(seed: String, words: List<String>, sync: Boolean = true): Refusal? {
+        runCatching { secrets.rememberSeed(seed, sync) }.onFailure { return Refusal.STORE_REFUSED }
         // `rememberSeed` answers whether the platform SYNCHRONISES, not
         // whether it stored; the read-back is what says it is there.
         if (secrets.seed() != seed) return Refusal.STORE_REFUSED
@@ -232,7 +352,8 @@ public class Enrollment(
             phrase = CorePhraseDoor { session.shelf.core() ?: session.shelf.custodyCore() },
             restoreDoor = dev.centraid.shared.sync.CoreRestoreDoor { session.shelf.custodyCore() },
             keeper = object : Keeper {
-                override suspend fun found(): FoundResult = session.found()
+                override suspend fun found(own: String?, name: String?): FoundResult =
+                    session.found(name = name?.trim()?.takeIf { it.isNotEmpty() } ?: Shelf.DEFAULT_VAULT_NAME, own = own)
 
                 override suspend fun adoptRestored(restored: List<Shelf.Restored>): Int =
                     session.adoptRestored(restored)

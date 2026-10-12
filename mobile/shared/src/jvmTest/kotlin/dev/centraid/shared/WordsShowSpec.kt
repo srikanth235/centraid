@@ -95,4 +95,27 @@ class WordsShowSpec : StringSpec({
             flow.state.value.words.map { it.word } shouldBe words
         }
     }
+
+    "the vault in front on its own words shows ITS words, by its name (R-1047-E18)" {
+        runTest {
+            val services = FakePlatformServices()
+            val secrets = VaultSecrets(services.secureStore, services.syncedSecrets)
+            secrets.rememberWords(words)
+            val own = secrets.keepOwnSeed("cd".repeat(64), "Family")
+            val ownWords = words.reversed()
+            secrets.rememberOwnWords(own, ownWords)
+            secrets.bindOwnVault("v-family", own)
+            val flow = WordsShowFlow({ secrets }, CoroutineScope(Dispatchers.Unconfined)) { "v-family" to "Family" }
+            flow.reduce(opened)
+            flow.reduce(verified)
+            flow.state.value.title shouldBe WordsCopy.SHOW_OWN_TITLE.replace("{name}", "Family")
+            flow.state.value.words.map { it.word } shouldBe ownWords
+
+            // A VAULT ON THE MEMBER'S WORDS in front shows the member's.
+            val member = WordsShowFlow({ secrets }, CoroutineScope(Dispatchers.Unconfined)) { "v-main" to "My vault" }
+            member.reduce(opened)
+            member.reduce(verified)
+            member.state.value.words.map { it.word } shouldBe words
+        }
+    }
 })

@@ -193,7 +193,7 @@ public object LockerCopy {
     public const val ITEM_GONE_BODY: String = "It was erased, or never on this phone."
     public const val ITEM_STATUS: String = "Sealed at rest. A reveal writes a receipt and conceals itself after 30 seconds."
     public const val KEEPS_BACKUP: String = "Backup"
-    public const val KEEPS_BACKUP_DETAIL: String = "The laptop keeps sealed items · it never has the key"
+    public const val KEEPS_BACKUP_DETAIL: String = "Your backup device keeps sealed items · it never has the key"
     public const val KEEPS_LIST: String = "The list"
     public const val KEEPS_LIST_DETAIL: String = "Titles, usernames, addresses and tags, readable at rest so the list and search work"
     public const val KEEPS_RECEIPTS: String = "Receipts"

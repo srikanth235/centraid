@@ -278,7 +278,7 @@ class BackupScreenSpec : StringSpec({
             BackupInput.Forgot("gw-1", "Home laptop", forgotten = true, revoked = true),
         )
         revoked.model.state.notice shouldBe
-            "This phone no longer backs up to Home laptop. Your laptop will refuse this phone from now on."
+            "This phone no longer backs up to Home laptop. Your backup device will refuse this phone from now on."
         revoked.effects shouldBe listOf(BackupEffect.Read)
         // NOT TOLD: the token stays live there, so the member is told how to end it.
         BackupScreenMachine.reduce(ready(), BackupInput.Forgot("gw-1", "Home laptop", forgotten = true, revoked = false))

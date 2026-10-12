@@ -516,10 +516,10 @@ enum ShellWords {
     static var firstLaunchBody: String { HomeWords.shared.FIRST_LAUNCH_BODY }
     static var firstLaunchHouseTitle: String { HomeWords.shared.FIRST_LAUNCH_HOUSE_TITLE }
     static var firstLaunchHouseBody: String { HomeWords.shared.FIRST_LAUNCH_HOUSE_BODY }
-    static var firstLaunchKeyTitle: String { HomeWords.shared.FIRST_LAUNCH_KEY_TITLE }
-    static var firstLaunchKeyBody: String { HomeWords.shared.FIRST_LAUNCH_KEY_BODY }
-    static var firstLaunchCopyTitle: String { HomeWords.shared.FIRST_LAUNCH_COPY_TITLE }
-    static var firstLaunchCopyBody: String { HomeWords.shared.FIRST_LAUNCH_COPY_BODY }
+    static var firstLaunchAssistantTitle: String { HomeWords.shared.FIRST_LAUNCH_ASSISTANT_TITLE }
+    static var firstLaunchAssistantBody: String { HomeWords.shared.FIRST_LAUNCH_ASSISTANT_BODY }
+    static var firstLaunchBackupTitle: String { HomeWords.shared.FIRST_LAUNCH_BACKUP_TITLE }
+    static var firstLaunchBackupBody: String { HomeWords.shared.FIRST_LAUNCH_BACKUP_BODY }
     static var firstLaunchNext: String { HomeWords.shared.FIRST_LAUNCH_NEXT }
     static var firstLaunchSkip: String { HomeWords.shared.FIRST_LAUNCH_SKIP }
     static var firstLaunchMake: String { HomeWords.shared.FIRST_LAUNCH_MAKE }
@@ -550,7 +550,7 @@ enum ShellWords {
     static let photosAbsent = "", dayOneTitle = "", dayOneBody = "", firstMoves = ""
     static let vaultsTitle = "", vaultsOne = ""
     static let firstLaunchBody = "", firstLaunchMake = "", firstLaunchRestore = ""
-    static let firstLaunchHouseTitle = "", firstLaunchHouseBody = "", firstLaunchKeyTitle = "", firstLaunchKeyBody = "", firstLaunchCopyTitle = "", firstLaunchCopyBody = "", firstLaunchNext = "", firstLaunchSkip = ""
+    static let firstLaunchHouseTitle = "", firstLaunchHouseBody = "", firstLaunchAssistantTitle = "", firstLaunchAssistantBody = "", firstLaunchBackupTitle = "", firstLaunchBackupBody = "", firstLaunchNext = "", firstLaunchSkip = ""
     static let wordsRestore = "", showWords = "", pairLaptop = ""
     static let vaultsCurrent = "", vaultsForget = "", vaultsForgetBody = "", cancel = ""
     static let sampleLine = "", sampleRemove = "", sampleAdd = "", sampleAdding = "", sampleMark = ""

@@ -460,6 +460,7 @@ public class IosSyncedSecrets : SyncedSecrets {
             // Keychain item comes back whenever the member signs in, not only
             // during a setup wizard.
             restoresAfterSetup = true,
+            optInLabel = if (synchronizing) SyncedSecrets.IOS_SYNC_LABEL else "",
         )
     }
 
@@ -470,6 +471,14 @@ public class IosSyncedSecrets : SyncedSecrets {
 
     override suspend fun forgetSeed() {
         delete(SyncedSecrets.SEED_KEY)
+    }
+
+    override suspend fun put(key: String, value: String): Boolean = write(key, value)
+
+    override suspend fun get(key: String): String? = read(key)
+
+    override suspend fun remove(key: String) {
+        delete(key)
     }
 
     private fun read(key: String): String? = memScoped {

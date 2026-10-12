@@ -147,12 +147,12 @@ class DrainPassSpec : StringSpec({
         )
         deadline shouldBe "Still backing up — 3 MB to go. It will finish on its own."
         DrainCopy.stoppedSentence(DrainAnswer(0, DrainAnswer.Stopped.EMPTY)) shouldBe
-            "Your laptop has everything this phone had ready to send."
+            "Your backup device has everything this phone had ready to send."
         DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNREACHABLE)) shouldBe
-            "Your laptop didn't answer. Nothing was lost; we'll pick up where we left off."
+            "Your backup device didn't answer. Nothing was lost; we'll pick up where we left off."
         // A MACHINE THAT IS NOT THE GATEWAY (#1080): it was sent nothing.
         DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNTRUSTED)) shouldBe
-            "The machine that answered is not your laptop, so this phone sent it nothing. Nothing was lost."
+            "The machine that answered is not your backup device, so this phone sent it nothing. Nothing was lost."
         listOf(
             DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.DEADLINE)),
             DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNREACHABLE)),

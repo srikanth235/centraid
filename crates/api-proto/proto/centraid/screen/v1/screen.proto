@@ -11093,8 +11093,7 @@ message VaultWordsState {
   // SHOW: the 24 words, in order. Empty in every other phase — the words
   // reach a state only while they are being shown.
   repeated WordCell words = 5;
-  // CONFIRM: the positions asked, and what was typed into each.
-  repeated WordAsk asks = 6;
+  reserved 6; // `asks`: the three-word check is gone.
   // The one control the phase offers; empty when there is none to draw.
   string primary_label = 7;
   bool primary_enabled = 8;
@@ -11113,6 +11112,26 @@ message VaultWordsState {
   // phone holds a seed (that is what RESTORE_FIRST means), and it restores
   // with no words typed (#1047, Q-1047-18).
   WordsEntryState.Purpose restore_purpose = 14;
+  // SHOW: the label of "Save a copy". The shell performs it — it hands the
+  // 24 words, as one line of text, to the platform's share sheet — and sends
+  // nothing back, so the machine never learns whether a copy was made. Empty
+  // in every other phase.
+  string save_label = 15;
+  // SHOW, on a platform that syncs: the checkbox that keeps the key in the
+  // platform's synced store ("Save my key in iCloud Keychain", "Back up my key
+  // with Google"), and whether it is ticked. Ticked by default; unticked keeps
+  // the key on this phone only. Empty label: draw no checkbox.
+  string sync_label = 16;
+  bool sync_on = 17;
+  // CHOOSE: the checkbox that keeps this vault on its own 24 words
+  // (R-1047-E18), sending `OwnToggled`; `own_on` is whether it is ticked.
+  // Empty hides it.
+  string own_label = 18;
+  bool own_on = 19;
+  // CHOOSE: the vault's name, as typed (`NameTyped`). A vault on its own words
+  // needs one — it is how a restore lists it. Empty label hides the field.
+  string name_label = 20;
+  string name = 21;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -11120,8 +11139,10 @@ message VaultWordsState {
     PHASE_CHECKING = 1;
     // The words are shown, once.
     PHASE_SHOW = 2;
-    // Three of them are asked back.
-    PHASE_CONFIRM = 3;
+    // 3 was PHASE_CONFIRM, the three-word check. It is gone: "I have saved them"
+    // keeps the seed.
+    reserved 3;
+    reserved "PHASE_CONFIRM";
     // The key is being kept and the vault founded.
     PHASE_MAKING = 4;
     PHASE_MADE = 5;
@@ -11132,11 +11153,13 @@ message VaultWordsState {
     PHASE_RESTORE_FIRST = 7;
     // The flow is over; the shell closes the sheet.
     PHASE_CLOSED = 8;
-    // MINTING NEW WORDS ONLY, before any is minted: one sentence that the 24
-    // words are the only way back into the vault, and Continue. Nothing is on
-    // the screen but copy, so it is not `secure`. A phone that makes its vault
-    // from a seed it already holds shows no words and so no framing.
-    PHASE_FRAMING = 9;
+    // 9 was PHASE_FRAMING, the "have paper ready" screen before the words. It is
+    // gone: the words show straight away and say what they are for.
+    reserved 9;
+    reserved "PHASE_FRAMING";
+    // A phone whose words already root its vaults makes the next one here:
+    // a name, and whether it is kept on its own words (R-1047-E18).
+    PHASE_CHOOSE = 10;
   }
 }
 
@@ -11148,33 +11171,26 @@ message WordCell {
   string accessibility_label = 3;
 }
 
-message WordAsk {
-  uint32 position = 1;
-  // "Word 7".
-  string prompt = 2;
-  string typed = 3;
-  Mark mark = 4;
-
-  enum Mark {
-    MARK_UNSPECIFIED = 0;
-    MARK_UNANSWERED = 1;
-    MARK_RIGHT = 2;
-    MARK_WRONG = 3;
-  }
-}
-
 message VaultWordsEvent {
   oneof kind {
     Opened opened = 1;
     // The phase's primary control, whatever it is labelled.
     Primary primary = 2;
     Secondary secondary = 3;
-    WordTyped typed = 4;
     // The sheet was swiped away. Drops the words; keeps nothing.
     Dismissed dismissed = 5;
     // INTENT: the shell opens words.enter for PURPOSE_RESTORE.
     RestoreTapped restore = 6;
+    // The sync checkbox was tapped. SHOW only.
+    SyncToggled sync = 7;
+    // The own-words checkbox was tapped. CHOOSE only.
+    OwnToggled own = 8;
+    // The name field changed. CHOOSE only.
+    NameTyped name = 9;
   }
+
+  // 4 was `typed`, a word typed into the three-word check, which is gone.
+  reserved 4;
 
   message Opened {}
 
@@ -11182,14 +11198,21 @@ message VaultWordsEvent {
 
   message Secondary {}
 
-  message WordTyped {
-    uint32 position = 1;
-    string text = 2;
-  }
-
   message Dismissed {}
 
   message RestoreTapped {}
+
+  message SyncToggled {
+    bool on = 1;
+  }
+
+  message OwnToggled {
+    bool on = 1;
+  }
+
+  message NameTyped {
+    string text = 1;
+  }
 }
 
 // --- words.enter: type the words back ---------------------------------------
@@ -11234,6 +11257,15 @@ message WordsEntryState {
   // vaults alone (`RestoreRequest.indices`, R-1047-R6), sending `Retry`.
   // Empty hides it. The vaults already here are never laid down again.
   string retry_label = 18;
+  // ENTERING a held-seed restore: the control that sends `UseWords` and
+  // draws the grid instead, for a member whose keychain key is not the one
+  // their backup was sealed with. Empty hides it.
+  string words_label = 19;
+  // ENTERING a held-seed restore: each vault on its own words the keychain
+  // also carried, by name (R-1047-E18), under `held_keys_label`. Empty hides
+  // both.
+  repeated string held_keys = 20;
+  string held_keys_label = 21;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -11309,6 +11341,8 @@ message WordsEntryEvent {
     Secondary secondary = 6;
     // `retry_label`'s control: restore the vaults that stayed, on their own.
     Retry retry = 7;
+    // `words_label`'s control: leave the held seed and type the 24 words.
+    UseWords use_words = 8;
   }
 
   message Opened {
@@ -11317,6 +11351,8 @@ message WordsEntryEvent {
   }
 
   message Retry {}
+
+  message UseWords {}
 
   message WordTyped {
     uint32 position = 1;

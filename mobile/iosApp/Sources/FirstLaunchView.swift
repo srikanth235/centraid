@@ -10,18 +10,20 @@ import SwiftUI
 ///
 /// ## Three paper slips, because the model is the unfamiliar part
 ///
-/// No account, the phone holds everything, 24 words are the key, and the
-/// laptop keeps a copy it cannot open: a member who has not met those ideas
-/// reads the words screen as a formality. So the gate is a small deck of
-/// three slips — the house, the key, the copy — each a sentence over a
-/// picture drawn from the system's own parts (the real app marks, the shape
-/// of the word grid, `--net` for the one thing that leaves the device). The
+/// Eight apps on the phone, an assistant that runs there too, and encrypted
+/// backups to systems the member owns: three claims, none of which needs the
+/// 24 words to be understood (the words screen explains itself when it comes).
+/// So the gate is a small deck of three slips — the apps, the assistant, the
+/// backups — each a sentence over a picture drawn from the system's own parts
+/// (the real app marks, a question and its answer, `--net` for the one thing
+/// that leaves the device). The
 /// slip is the paper metaphor of DESIGN.md's surfaces: raised paper, darker
 /// than the page in light. No feature tour — the apps are shown as one
 /// house, never explained one by one.
 ///
-/// Next flings the top slip away (so does a swipe); the slips behind are the
-/// count of what is left. Restore is on every slip, and Skip jumps to the
+/// Next flings the top slip away (so does a swipe left, anywhere on the deck;
+/// a swipe right brings the last one back); the slips behind are the count of
+/// what is left. Restore is on every slip, and Skip jumps to the
 /// last one: a member with their words in hand is never made to sit through
 /// the model.
 ///
@@ -72,15 +74,20 @@ struct FirstLaunchView: View {
             ZStack {
                 slip(0, title: ShellWords.firstLaunchHouseTitle,
                      sentence: ShellWords.firstLaunchHouseBody, id: "house") { HouseScene() }
-                slip(1, title: ShellWords.firstLaunchKeyTitle,
-                     sentence: ShellWords.firstLaunchKeyBody, id: "key") { KeyScene() }
-                slip(2, title: ShellWords.firstLaunchCopyTitle,
-                     sentence: ShellWords.firstLaunchCopyBody, id: "copy") { CopyScene() }
+                slip(1, title: ShellWords.firstLaunchAssistantTitle,
+                     sentence: ShellWords.firstLaunchAssistantBody, id: "assistant") { AssistantScene() }
+                slip(2, title: ShellWords.firstLaunchBackupTitle,
+                     sentence: ShellWords.firstLaunchBackupBody, id: "backup") { CopyScene() }
             }
             .frame(maxWidth: 300)
             .frame(height: Self.slipHeight)
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .animation(reduceMotion ? nil : FirstLaunchMotion.entry, value: page)
+            // THE WHOLE BAND IS THE SURFACE, not only the slip under the finger:
+            // a swipe that starts on the paper's margin still turns the deck.
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .gesture(deckSwipe)
 
             Spacer(minLength: 0)
 
@@ -107,6 +114,24 @@ struct FirstLaunchView: View {
         .accessibilityIdentifier("first-launch")
     }
 
+    /// Left throws the top slip; right brings the last thrown one back. The
+    /// last slip stays put when thrown — it carries the way in — but can be
+    /// swiped back from.
+    private var deckSwipe: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                if page < Self.last { drag = min(0, value.translation.width) }
+            }
+            .onEnded { value in
+                let forward = value.translation.width < -80 && page < Self.last
+                let back = value.translation.width > 80 && page > 0
+                withAnimation(reduceMotion ? nil : FirstLaunchMotion.entry) {
+                    drag = 0
+                    if forward { page += 1 } else if back { page -= 1 }
+                }
+            }
+    }
+
     /// One slip, placed by how far it is from the top of the deck: thrown
     /// (already read) it leaves up and to the left; the top one follows the
     /// finger; the two behind step down and in, tilted a little apart.
@@ -126,21 +151,6 @@ struct FirstLaunchView: View {
             .zIndex(Double(10 - rel))
             .allowsHitTesting(rel == 0)
             .accessibilityHidden(rel != 0)
-            .gesture(
-                DragGesture(minimumDistance: 12)
-                    .onChanged { value in
-                        if page < Self.last { drag = min(0, value.translation.width) }
-                    }
-                    .onEnded { value in
-                        // A fling or a long enough drag throws the slip; the last one
-                        // stays, because it carries the way in.
-                        let thrown = value.translation.width < -80 && page < Self.last
-                        withAnimation(reduceMotion ? nil : FirstLaunchMotion.entry) {
-                            drag = 0
-                            if thrown { page += 1 }
-                        }
-                    }
-            )
     }
 }
 
@@ -207,48 +217,59 @@ private struct HouseScene: View {
     }
 }
 
-/// TWENTY-FOUR NUMBERED SLOTS AND NO WORD IN ANY OF THEM: the shape of what
-/// the next screens ask for. Three are ringed — the three the words flow asks
-/// back.
-private struct KeyScene: View {
+/// A QUESTION AND ITS ANSWER, DRAWN FROM THE ASSISTANT'S OWN PARTS: the
+/// member's line on the right, the assistant's on the left with the app it read
+/// from — a real mark, so the picture says "your things" and not "a chatbot".
+/// Bars stand in for words; nothing here reads as a particular question.
+private struct AssistantScene: View {
     @Environment(\.colorScheme) private var scheme
 
-    private static let askedBack: Set<Int> = [2, 13, 21]
-    /// Word-ish lengths for the ink bars, so the grid reads as words.
-    private static let lengths: [CGFloat] = [14, 9, 16, 11, 8, 15, 12, 10, 17, 9, 14, 11,
-                                             15, 8, 12, 16, 10, 14, 9, 15, 11, 16, 8, 12]
-
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4),
-                  spacing: 6) {
-            ForEach(0..<24, id: \.self) { index in
-                let ringed = Self.askedBack.contains(index)
-                HStack(spacing: 4) {
-                    Text("\(index + 1)")
-                        .centraidType("mono")
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                    Capsule()
-                        .fill(Theme.color("text", scheme))
-                        .frame(width: Self.lengths[index], height: 4)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 4)
-                .frame(height: 26)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
-                        .strokeBorder(Theme.color(ringed ? "text" : "line", scheme),
-                                      lineWidth: ringed ? 1.5 : 1)
-                )
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Spacer(minLength: 40)
+                bubble(bars: [92, 58], fill: "bgSunken", stroke: "line")
+            }
+            HStack(alignment: .top, spacing: 8) {
+                bubble(bars: [112, 96, 64], fill: "bg", stroke: "lineStrong")
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 6) {
+                AppMark(appID: "tasks", size: 22)
+                Capsule()
+                    .fill(Theme.color("line", scheme))
+                    .frame(width: 70, height: 5)
+            }
+            .padding(.leading, 6)
+        }
+        .padding(.top, 18)
+        .frame(height: 150, alignment: .top)
+    }
+
+    private func bubble(bars: [CGFloat], fill: String, stroke: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(bars.enumerated()), id: \.offset) { _, width in
+                Capsule()
+                    .fill(Theme.color("text", scheme))
+                    .frame(width: width, height: 5)
             }
         }
-        .frame(height: 170, alignment: .top)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                .fill(Theme.color(fill, scheme))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                .strokeBorder(Theme.color(stroke, scheme), lineWidth: 1)
+        )
     }
 }
 
 /// THE ONE THING THAT LEAVES THE DEVICE, drawn in the colour that means
 /// exactly that: a `--net` rule from the phone to a laptop, and a sealed copy
-/// of the vault on the laptop's screen while the original stays home.
+/// of the vault on the other machine's screen while the original stays home.
 private struct CopyScene: View {
     @Environment(\.colorScheme) private var scheme
 

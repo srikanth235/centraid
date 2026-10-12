@@ -2,7 +2,6 @@ package dev.centraid.shared.custody
 
 import centraid.screen.v1.VaultWordsEvent
 import centraid.screen.v1.VaultWordsState
-import centraid.screen.v1.WordAsk
 import centraid.screen.v1.WordCell
 import centraid.screen.v1.WordsEntryState
 import dev.centraid.design.copy.WordsCopy
@@ -24,20 +23,20 @@ import kotlinx.coroutines.sync.withLock
  * MAKE A VAULT, AND ITS 24 WORDS (#1047 E1, R-1047-E1/E2) — as a pure machine.
  *
  * `words.make`. The order is [Enrollment]'s: what this phone already holds is
- * read first; a phone with no seed FRAMES the words (one sentence to have
- * paper ready, and Continue), MINTS them (the core's CSPRNG), SHOWS
- * them once on a secure screen, asks three back, and only then has the core
+ * read first; a phone with no seed MINTS the words (the core's CSPRNG), SHOWS
+ * them once on a secure screen, and on the member's say-so has the core
  * turn them into the seed that is stored and settled; the vault is founded
  * after that, keyed from its first commit. A phone whose seed is its own makes
  * the vault at the next index with no words at all. A phone holding a seed
  * that arrived from elsewhere is sent to restore first.
  *
- * **The framing comes before the mint, so no word exists while it is up**, and
- * it is only for NEW words: a phone that makes its vault from a seed it already
- * holds shows no words and no framing, and restoring and showing the words
- * again are other machines (`WordsEntryMachine`, `WordsShowMachine`) whose
- * members already know what the words are. It is no step of [Enrollment]'s
- * order — nothing is stored or founded by it (R-1047-E1's order is untouched).
+ * **There is no framing screen.** The words are shown straight away, and the
+ * screen itself says what they are for and offers to save a copy of them
+ * (`save_label`, drawn and performed by the shell): the phone's own copy lives
+ * and dies with the phone, so a copy kept elsewhere is the only way back from a
+ * lost one. A phone that makes its vault from a seed it already holds shows no
+ * words, and restoring and showing the words again are other machines
+ * (`WordsEntryMachine`, `WordsShowMachine`).
  *
  * **The words live in [Words.phrase] from the mint until the seed is kept**,
  * and in the drawn state only while [VaultWordsState.Phase.PHASE_SHOW] is up.
@@ -59,7 +58,7 @@ public object VaultWordsMachine {
             is WordsInput.View -> view(model, input.event)
             is WordsInput.Standing -> standing(model, input)
             is WordsInput.Minted -> minted(model, input)
-            is WordsInput.Kept -> kept(model, input.refusal)
+            is WordsInput.Kept -> kept(model, input.refusal, input.own)
             is WordsInput.Made -> made(model, input.result)
         }
     }
@@ -68,20 +67,13 @@ public object VaultWordsMachine {
         val phase = model.phase
         return when {
             event.opened != null -> WordsStep(render(Words(phase = VaultWordsState.Phase.PHASE_CHECKING)), listOf(WordsEffect.Assess))
-            event.dismissed != null -> WordsStep(closed())
-            event.typed != null && phase == VaultWordsState.Phase.PHASE_CONFIRM -> {
-                val at = event.typed.position
-                if (at !in model.asking) return WordsStep(model)
-                WordsStep(
-                    render(
-                        model.copy(
-                            typed = model.typed + (at to event.typed.text),
-                            marks = model.marks + (at to WordAsk.Mark.MARK_UNANSWERED),
-                            notice = "",
-                        ),
-                    ),
-                )
-            }
+            event.dismissed != null -> leave(model)
+            event.sync != null && phase == VaultWordsState.Phase.PHASE_SHOW && model.syncLabel.isNotEmpty() ->
+                WordsStep(render(model.copy(sync = event.sync.on)))
+            event.own != null && phase == VaultWordsState.Phase.PHASE_CHOOSE ->
+                WordsStep(render(model.copy(own = event.own.on)))
+            event.name != null && phase == VaultWordsState.Phase.PHASE_CHOOSE ->
+                WordsStep(render(model.copy(name = event.name.text)))
             event.primary != null -> primary(model)
             event.secondary != null -> secondary(model)
             // `restore` IS AN INTENT: the shell opens words.enter.
@@ -90,68 +82,76 @@ public object VaultWordsMachine {
     }
 
     private fun primary(model: Words): WordsStep = when (model.phase) {
-        // CONTINUE: only now are the words minted. Back to CHECKING, which is
-        // the phase `minted` answers in, with the custody sentence kept.
-        VaultWordsState.Phase.PHASE_FRAMING -> WordsStep(
-            render(model.copy(phase = VaultWordsState.Phase.PHASE_CHECKING)),
-            listOf(WordsEffect.Mint),
-        )
-        VaultWordsState.Phase.PHASE_SHOW -> WordsStep(
-            render(model.copy(phase = VaultWordsState.Phase.PHASE_CONFIRM, typed = emptyMap(), marks = emptyMap(), notice = "")),
-        )
-        VaultWordsState.Phase.PHASE_CONFIRM -> {
-            val marks = model.asking.associateWith { at ->
-                if (PhraseMachine.matches(model.phrase, at, model.typed[at].orEmpty())) {
-                    WordAsk.Mark.MARK_RIGHT
-                } else {
-                    WordAsk.Mark.MARK_WRONG
-                }
-            }
-            if (marks.values.all { it == WordAsk.Mark.MARK_RIGHT }) {
-                WordsStep(
-                    render(model.copy(phase = VaultWordsState.Phase.PHASE_MAKING, marks = marks, notice = "")),
-                    listOf(WordsEffect.Keep(model.phrase)),
-                )
-            } else {
-                WordsStep(render(model.copy(marks = marks, notice = WordsCopy.CHECK_WRONG)))
-            }
+        // "MAKE VAULT": on the member's words now, or — kept on its own —
+        // after fresh words are minted and shown (R-1047-E18).
+        VaultWordsState.Phase.PHASE_CHOOSE -> when {
+            !model.own -> WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_MAKING)), listOf(make(model)))
+            model.name.isBlank() -> WordsStep(model)
+            else -> WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_CHECKING)), listOf(WordsEffect.Mint))
         }
+        // "I HAVE SAVED THEM": the core turns the words into the seed and keeps it.
+        VaultWordsState.Phase.PHASE_SHOW -> WordsStep(
+            render(model.copy(phase = VaultWordsState.Phase.PHASE_MAKING, notice = "")),
+            listOf(keep(model)),
+        )
         VaultWordsState.Phase.PHASE_MADE -> WordsStep(closed())
         VaultWordsState.Phase.PHASE_FAILED -> when (model.retry) {
             Retry.MINT -> WordsStep(render(Words(phase = VaultWordsState.Phase.PHASE_CHECKING)), listOf(WordsEffect.Assess))
             Retry.KEEP -> WordsStep(
                 render(model.copy(phase = VaultWordsState.Phase.PHASE_MAKING, notice = "")),
-                listOf(WordsEffect.Keep(model.phrase)),
+                listOf(keep(model)),
             )
-            Retry.MAKE -> WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_MAKING, notice = "")), listOf(WordsEffect.Make))
-            Retry.NONE -> WordsStep(closed())
+            Retry.MAKE -> WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_MAKING, notice = "")), listOf(make(model)))
+            Retry.NONE -> leave(model)
         }
         else -> WordsStep(model)
     }
 
     private fun secondary(model: Words): WordsStep = when (model.phase) {
-        // "SHOW THE WORDS AGAIN": back to the list, the typing dropped.
-        VaultWordsState.Phase.PHASE_CONFIRM -> WordsStep(
-            render(model.copy(phase = VaultWordsState.Phase.PHASE_SHOW, typed = emptyMap(), marks = emptyMap(), notice = "")),
-        )
-        VaultWordsState.Phase.PHASE_FRAMING,
+        VaultWordsState.Phase.PHASE_CHOOSE,
         VaultWordsState.Phase.PHASE_SHOW,
         VaultWordsState.Phase.PHASE_FAILED,
         VaultWordsState.Phase.PHASE_RESTORE_FIRST,
-        -> WordsStep(closed())
+        -> leave(model)
         else -> WordsStep(model)
+    }
+
+    /** Keep the shown words: as the member's seed, or as this vault's own. */
+    private fun keep(model: Words): WordsEffect =
+        if (model.own) WordsEffect.KeepOwn(model.phrase, model.name.trim(), model.sync) else WordsEffect.Keep(model.phrase, model.sync)
+
+    private fun make(model: Words): WordsEffect.Make =
+        WordsEffect.Make(own = model.ownId, name = model.name.trim().takeIf { it.isNotEmpty() })
+
+    /**
+     * CLOSE, and drop an entry kept for a vault that was never made: words the
+     * member wrote down for a found that did not happen key nothing.
+     */
+    private fun leave(model: Words): WordsStep {
+        val orphan = model.ownId?.takeIf { model.phase != VaultWordsState.Phase.PHASE_MADE }
+        return WordsStep(closed(), listOfNotNull(orphan?.let { WordsEffect.DropOwn(it) }))
     }
 
     private fun standing(model: Words, input: WordsInput.Standing): WordsStep {
         if (model.phase != VaultWordsState.Phase.PHASE_CHECKING) return WordsStep(model)
         return when (input.standing) {
-            // NO WORDS YET: frame them first, and mint when the member says
-            // Continue (see the header).
+            // NO WORDS YET: mint them now, and keep the custody sentence for
+            // the show that follows. `minted` answers in CHECKING.
             Enrollment.Standing.NO_SEED ->
-                WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_FRAMING, custody = input.custody)))
-            // THE WORDS ALREADY ROOT THIS PHONE'S VAULTS: the next index, no words.
+                WordsStep(render(model.copy(custody = input.custody, syncLabel = input.syncLabel)), listOf(WordsEffect.Mint))
+            // THE WORDS ALREADY ROOT THIS PHONE'S VAULTS: a name, and the
+            // choice to keep this one on its own words (R-1047-E18); not
+            // ticked, the next index with no words.
             Enrollment.Standing.SETTLED ->
-                WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_MAKING)), listOf(WordsEffect.Make))
+                WordsStep(
+                    render(
+                        model.copy(
+                            phase = VaultWordsState.Phase.PHASE_CHOOSE,
+                            custody = input.custody,
+                            syncLabel = input.syncLabel,
+                        ),
+                    ),
+                )
             Enrollment.Standing.UNSETTLED ->
                 WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_RESTORE_FIRST)))
         }
@@ -163,14 +163,18 @@ public object VaultWordsMachine {
         if (words == null || words.size != PhraseMachine.WORDS) {
             return WordsStep(failed(model, WordsCopy.MINT_FAILED, Retry.MINT))
         }
-        return WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_SHOW, phrase = words, asking = input.asking)))
+        return WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_SHOW, phrase = words)))
     }
 
-    private fun kept(model: Words, refusal: Enrollment.Refusal?): WordsStep {
+    private fun kept(model: Words, refusal: Enrollment.Refusal?, own: String? = null): WordsStep {
         if (model.phase != VaultWordsState.Phase.PHASE_MAKING) return WordsStep(model)
         return when (refusal) {
-            // KEPT: the words are dropped here, and the vault is founded.
-            null -> WordsStep(render(model.copy(phrase = emptyList(), typed = emptyMap())), listOf(WordsEffect.Make))
+            // KEPT: the words are dropped here, and the vault is founded —
+            // on its own entry when it has one.
+            null -> {
+                val next = model.copy(phrase = emptyList(), ownId = own ?: model.ownId)
+                WordsStep(render(next), listOf(make(next)))
+            }
             Enrollment.Refusal.DIFFERENT_WORDS -> WordsStep(failed(model.copy(phrase = emptyList()), WordsCopy.DIFFERENT_WORDS, Retry.NONE))
             Enrollment.Refusal.NOT_A_PHRASE -> WordsStep(failed(model.copy(phrase = emptyList()), WordsCopy.MINT_FAILED, Retry.MINT))
             Enrollment.Refusal.STORE_REFUSED -> WordsStep(failed(model, WordsCopy.KEEP_FAILED, Retry.KEEP))
@@ -180,7 +184,14 @@ public object VaultWordsMachine {
     private fun made(model: Words, result: FoundResult): WordsStep {
         if (model.phase != VaultWordsState.Phase.PHASE_MAKING) return WordsStep(model)
         return when (result) {
-            is FoundResult.Made -> WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_MADE, vaultName = result.vaultName)))
+            // NO "VAULT READY" SCREEN: the sheet closes onto Home, and the
+            // sentence it would have said rides on the closed state for
+            // Home's status line to take.
+            is FoundResult.Made -> {
+                val said = render(model.copy(phase = VaultWordsState.Phase.PHASE_MADE, vaultName = result.vaultName)).state.body
+                val gone = closed()
+                WordsStep(gone.copy(state = gone.state.copy(body = said)))
+            }
             is FoundResult.Refused -> WordsStep(failed(model, result.sentence, Retry.MAKE))
             FoundResult.NoSession -> WordsStep(failed(model, WordsCopy.STILL_OPENING, Retry.MAKE))
         }
@@ -194,11 +205,11 @@ public object VaultWordsMachine {
     /** Every word the screen says, for the model's phase. */
     internal fun render(model: Words): Words {
         val phase = model.phase
-        val secure = phase == VaultWordsState.Phase.PHASE_SHOW || phase == VaultWordsState.Phase.PHASE_CONFIRM
+        val secure = phase == VaultWordsState.Phase.PHASE_SHOW
+        val ownName = model.name.trim()
         val title = when (phase) {
-            VaultWordsState.Phase.PHASE_FRAMING -> WordsCopy.FRAMING_TITLE
-            VaultWordsState.Phase.PHASE_SHOW -> WordsCopy.SHOW_TITLE
-            VaultWordsState.Phase.PHASE_CONFIRM -> WordsCopy.CHECK_TITLE
+            VaultWordsState.Phase.PHASE_CHOOSE -> WordsCopy.CHOOSE_TITLE
+            VaultWordsState.Phase.PHASE_SHOW -> if (model.own) WordsCopy.SHOW_OWN_TITLE.replace("{name}", ownName) else WordsCopy.SHOW_TITLE
             VaultWordsState.Phase.PHASE_MADE -> WordsCopy.MADE_TITLE
             VaultWordsState.Phase.PHASE_FAILED -> WordsCopy.FAILED_TITLE
             VaultWordsState.Phase.PHASE_RESTORE_FIRST -> WordsCopy.RESTORE_FIRST_TITLE
@@ -206,29 +217,26 @@ public object VaultWordsMachine {
             else -> WordsCopy.MAKING_TITLE
         }
         val body = when (phase) {
-            VaultWordsState.Phase.PHASE_FRAMING -> WordsCopy.FRAMING_BODY
-            VaultWordsState.Phase.PHASE_SHOW -> WordsCopy.SHOW_BODY
-            VaultWordsState.Phase.PHASE_CONFIRM ->
-                WordsCopy.CHECK_BODY.replace("{positions}", model.asking.joinToString(", "))
-            VaultWordsState.Phase.PHASE_MADE -> WordsCopy.MADE_BODY.replace("{name}", model.vaultName)
+            VaultWordsState.Phase.PHASE_CHOOSE -> if (model.own) WordsCopy.CHOOSE_OWN_BODY else WordsCopy.CHOOSE_BODY
+            VaultWordsState.Phase.PHASE_SHOW -> if (model.own) WordsCopy.SHOW_OWN_BODY.replace("{name}", ownName) else WordsCopy.SHOW_BODY
+            VaultWordsState.Phase.PHASE_MADE ->
+                (if (model.own) WordsCopy.MADE_OWN_BODY else WordsCopy.MADE_BODY).replace("{name}", model.vaultName)
             VaultWordsState.Phase.PHASE_RESTORE_FIRST -> WordsCopy.RESTORE_FIRST_BODY
             VaultWordsState.Phase.PHASE_MAKING, VaultWordsState.Phase.PHASE_CHECKING -> WordsCopy.MAKING_BODY
             else -> ""
         }
         val primary = when (phase) {
-            VaultWordsState.Phase.PHASE_FRAMING -> WordsCopy.FRAMING_PRIMARY
+            VaultWordsState.Phase.PHASE_CHOOSE -> WordsCopy.CHOOSE_PRIMARY
             VaultWordsState.Phase.PHASE_SHOW -> WordsCopy.SHOW_PRIMARY
-            VaultWordsState.Phase.PHASE_CONFIRM -> WordsCopy.CHECK_PRIMARY
             VaultWordsState.Phase.PHASE_MADE -> WordsCopy.DONE
             VaultWordsState.Phase.PHASE_FAILED -> if (model.retry == Retry.NONE) WordsCopy.DONE else WordsCopy.TRY_AGAIN
             else -> ""
         }
         val secondary = when (phase) {
-            VaultWordsState.Phase.PHASE_FRAMING,
+            VaultWordsState.Phase.PHASE_CHOOSE,
             VaultWordsState.Phase.PHASE_SHOW,
             VaultWordsState.Phase.PHASE_RESTORE_FIRST,
             -> WordsCopy.CANCEL
-            VaultWordsState.Phase.PHASE_CONFIRM -> WordsCopy.CHECK_SECONDARY
             VaultWordsState.Phase.PHASE_FAILED -> if (model.retry == Retry.NONE) "" else WordsCopy.CANCEL
             else -> ""
         }
@@ -243,25 +251,11 @@ public object VaultWordsMachine {
         } else {
             emptyList()
         }
-        val asks = if (phase == VaultWordsState.Phase.PHASE_CONFIRM) {
-            model.asking.map { at ->
-                WordAsk(
-                    position = at,
-                    prompt = WordsCopy.CHECK_PROMPT.replace("{n}", "$at"),
-                    typed = model.typed[at].orEmpty(),
-                    mark = model.marks[at] ?: WordAsk.Mark.MARK_UNANSWERED,
-                )
-            }
-        } else {
-            emptyList()
-        }
-        val enabled = when (phase) {
-            VaultWordsState.Phase.PHASE_CONFIRM -> model.asking.all { model.typed[it].orEmpty().isNotBlank() }
-            else -> primary.isNotEmpty()
-        }
+        // A VAULT ON ITS OWN WORDS NEEDS A NAME: it is how a restore lists it.
+        val enabled = primary.isNotEmpty() &&
+            !(phase == VaultWordsState.Phase.PHASE_CHOOSE && model.own && ownName.isEmpty())
         val accessibility = when (phase) {
             VaultWordsState.Phase.PHASE_SHOW -> WordsCopy.SHOW_A11Y
-            VaultWordsState.Phase.PHASE_FRAMING -> listOf(title, body).joinToString(". ")
             else -> listOf(title, model.notice).filter { it.isNotEmpty() }.joinToString(". ")
         }
         return model.copy(
@@ -271,12 +265,24 @@ public object VaultWordsMachine {
                 title = title,
                 body = body,
                 words = words,
-                asks = asks,
                 primary_label = primary,
                 primary_enabled = enabled,
                 secondary_label = secondary,
                 notice = model.notice,
-                custody = if (phase == VaultWordsState.Phase.PHASE_SHOW) model.custody else "",
+                custody = when {
+                    phase != VaultWordsState.Phase.PHASE_SHOW -> ""
+                    // UNTICKED: the platform's sentence would describe a copy
+                    // that will not be made.
+                    model.syncLabel.isNotEmpty() && !model.sync -> WordsCopy.CUSTODY_THIS_PHONE
+                    else -> model.custody
+                },
+                save_label = if (phase == VaultWordsState.Phase.PHASE_SHOW) WordsCopy.SAVE_LABEL else "",
+                sync_label = if (phase == VaultWordsState.Phase.PHASE_SHOW) model.syncLabel else "",
+                sync_on = phase == VaultWordsState.Phase.PHASE_SHOW && model.syncLabel.isNotEmpty() && model.sync,
+                own_label = if (phase == VaultWordsState.Phase.PHASE_CHOOSE) WordsCopy.OWN_LABEL else "",
+                own_on = phase == VaultWordsState.Phase.PHASE_CHOOSE && model.own,
+                name_label = if (phase == VaultWordsState.Phase.PHASE_CHOOSE) WordsCopy.NAME_LABEL else "",
+                name = if (phase == VaultWordsState.Phase.PHASE_CHOOSE) model.name else "",
                 restore_label = if (phase == VaultWordsState.Phase.PHASE_RESTORE_FIRST) WordsCopy.RESTORE_FIRST_ACTION else "",
                 accessibility_label = accessibility,
                 // RESTORE_FIRST MEANS A SEED IS HERE (UNSETTLED), so the restore
@@ -295,7 +301,7 @@ public object VaultWordsMachine {
 public enum class Retry { NONE, MINT, KEEP, MAKE }
 
 /**
- * The machine's whole model. **Redacted**: [phrase] and [typed] are the
+ * The machine's whole model. **Redacted**: [phrase] is the
  * member's words, and a model that reached a log line or a crash report would
  * carry every vault they have.
  */
@@ -303,18 +309,25 @@ public data class Words(
     public val phase: VaultWordsState.Phase = VaultWordsState.Phase.PHASE_CHECKING,
     public val state: VaultWordsState = VaultWordsState(),
     internal val phrase: List<String> = emptyList(),
-    public val asking: List<Int> = emptyList(),
-    internal val typed: Map<Int, String> = emptyMap(),
-    public val marks: Map<Int, WordAsk.Mark> = emptyMap(),
     public val custody: String = "",
+    /** The platform's sync checkbox; empty where nothing syncs. */
+    public val syncLabel: String = "",
+    /** Whether the seed goes to the synced store. Ticked by default. */
+    public val sync: Boolean = true,
     public val notice: String = "",
     public val retry: Retry = Retry.NONE,
     public val vaultName: String = "",
+    /** CHOOSE: keep this vault on its own words (R-1047-E18). */
+    public val own: Boolean = false,
+    /** CHOOSE: the name typed for the vault. */
+    public val name: String = "",
+    /** The entry this vault's own seed was kept under, once kept. */
+    public val ownId: String? = null,
 ) {
     /** Whether the words are held right now. For the specs; never the words. */
     public val holdsWords: Boolean get() = phrase.isNotEmpty()
 
-    override fun toString(): String = "Words(phase=$phase, asking=$asking, retry=$retry, <redacted>)"
+    override fun toString(): String = "Words(phase=$phase, retry=$retry, <redacted>)"
 }
 
 public sealed interface WordsInput {
@@ -322,16 +335,23 @@ public sealed interface WordsInput {
         override fun toString(): String = "View(<redacted>)"
     }
 
-    /** What this phone holds; [custody] is the platform's sentence about its key. */
-    public data class Standing(public val standing: Enrollment.Standing, public val custody: String) : WordsInput
+    /**
+     * What this phone holds; [custody] is the platform's sentence about its
+     * key, and [syncLabel] its opt-out checkbox (empty where nothing syncs).
+     */
+    public data class Standing(
+        public val standing: Enrollment.Standing,
+        public val custody: String,
+        public val syncLabel: String = "",
+    ) : WordsInput
 
-    /** The core's words and the positions drawn to ask; null words is a refused mint. */
-    public class Minted(public val words: List<String>?, public val asking: List<Int>) : WordsInput {
+    /** The core's words; null is a refused mint. */
+    public class Minted(public val words: List<String>?) : WordsInput {
         override fun toString(): String = "Minted(<redacted>)"
     }
 
-    /** The seed was kept (null), or why not. */
-    public data class Kept(public val refusal: Enrollment.Refusal?) : WordsInput
+    /** The seed was kept (null), or why not; [own] is the entry a vault's own seed went under. */
+    public data class Kept(public val refusal: Enrollment.Refusal?, public val own: String? = null) : WordsInput
 
     public data class Made(public val result: FoundResult) : WordsInput
 }
@@ -340,16 +360,24 @@ public sealed interface WordsEffect {
     /** Read [Enrollment.standing] and the custody sentence. */
     public data object Assess : WordsEffect
 
-    /** Mint through the core and draw the positions from the platform CSPRNG. */
+    /** Mint the words through the core. */
     public data object Mint : WordsEffect
 
-    /** Have the core seed [words], and store and settle the seed. */
-    public class Keep(internal val words: List<String>) : WordsEffect {
+    /** Have the core seed [words], and store and settle the seed — synced when [sync]. */
+    public class Keep(internal val words: List<String>, public val sync: Boolean = true) : WordsEffect {
         override fun toString(): String = "Keep(<redacted>)"
     }
 
-    /** Found the vault at the next index. */
-    public data object Make : WordsEffect
+    /** Have the core seed [words] and keep the seed for one vault alone, labelled [name] (R-1047-E18). */
+    public class KeepOwn(internal val words: List<String>, public val name: String, public val sync: Boolean = true) : WordsEffect {
+        override fun toString(): String = "KeepOwn(<redacted>)"
+    }
+
+    /** Found the vault: at the next index, or on entry [own]'s seed; named [name] when given. */
+    public data class Make(public val own: String? = null, public val name: String? = null) : WordsEffect
+
+    /** Forget entry [id]: kept for a vault that was never made. */
+    public data class DropOwn(public val id: String) : WordsEffect
 }
 
 public data class WordsStep(public val model: Words, public val effects: List<WordsEffect> = emptyList())
@@ -390,34 +418,32 @@ public class VaultWordsFlow(
     private suspend fun run(effect: WordsEffect) {
         val enrolled = enrollment()
         val next: WordsInput = when (effect) {
-            WordsEffect.Assess -> WordsInput.Standing(
-                standing = enrolled?.standing() ?: Enrollment.Standing.NO_SEED,
-                custody = runCatching { services.syncedSecrets.availability() }
-                    .map { PhraseMachine.custodySentence(it) }
-                    .getOrDefault(""),
-            )
-            WordsEffect.Mint -> WordsInput.Minted(
-                words = enrolled?.mint(),
-                asking = PhraseMachine.positions { bound -> draw(bound) },
-            )
+            WordsEffect.Assess -> {
+                val availability = runCatching { services.syncedSecrets.availability() }.getOrNull()
+                WordsInput.Standing(
+                    standing = enrolled?.standing() ?: Enrollment.Standing.NO_SEED,
+                    custody = availability?.let { PhraseMachine.custodySentence(it) }.orEmpty(),
+                    syncLabel = availability?.optInLabel.orEmpty(),
+                )
+            }
+            WordsEffect.Mint -> WordsInput.Minted(words = enrolled?.mint())
             // NULL IS "KEPT", so no enrollment at all is its own refusal
             // rather than an elvis that would read a success as one.
             is WordsEffect.Keep -> WordsInput.Kept(
-                if (enrolled == null) Enrollment.Refusal.STORE_REFUSED else enrolled.keep(effect.words),
+                if (enrolled == null) Enrollment.Refusal.STORE_REFUSED else enrolled.keep(effect.words, effect.sync),
             )
-            WordsEffect.Make -> WordsInput.Made(enrolled?.make() ?: FoundResult.NoSession)
+            is WordsEffect.KeepOwn -> when (val kept = enrolled?.keepOwn(effect.words, effect.name, effect.sync)) {
+                null -> WordsInput.Kept(Enrollment.Refusal.STORE_REFUSED)
+                is Enrollment.OwnKept.Kept -> WordsInput.Kept(null, kept.id)
+                is Enrollment.OwnKept.Refused -> WordsInput.Kept(kept.because)
+            }
+            is WordsEffect.Make -> WordsInput.Made(enrolled?.make(effect.own, effect.name) ?: FoundResult.NoSession)
+            is WordsEffect.DropOwn -> {
+                enrolled?.dropOwn(effect.id)
+                return
+            }
         }
         reduce(next)
-    }
-
-    /** A value below [bound] from the platform CSPRNG, by rejection so no position is favoured. */
-    private fun draw(bound: Int): Int {
-        val limit = (65_536 / bound) * bound
-        while (true) {
-            val bytes = services.secureRandom.bytes(2)
-            val value = ((bytes[0].toInt() and 0xFF) shl 8) or (bytes[1].toInt() and 0xFF)
-            if (value < limit) return value % bound
-        }
     }
 }
 

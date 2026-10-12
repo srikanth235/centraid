@@ -82,6 +82,17 @@ class VaultSecretsSpec : StringSpec({
         }
     }
 
+    "a member who unticks the sync keeps the seed on THIS phone only, even where the platform syncs" {
+        runTest {
+            val services = FakePlatformServices()
+            val vault = VaultSecrets(services.secureStore, services.syncedSecrets)
+            val seed = "ef".repeat(64)
+            vault.rememberSeed(seed, sync = false) shouldBe false
+            vault.seed() shouldBe seed
+            services.syncedSecrets.seed().shouldBeNull()
+        }
+    }
+
     "forgetting the seed is complete" {
         runTest {
             val (_, vault) = secrets()

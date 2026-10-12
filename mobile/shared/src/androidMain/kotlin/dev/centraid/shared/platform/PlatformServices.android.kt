@@ -211,6 +211,7 @@ public class AndroidSyncedSecrets(private val context: Context) : SyncedSecrets 
             // API does, and a build that discovered otherwise would be reading
             // a different API.
             restoresAfterSetup = false,
+            optInLabel = if (cloud) SyncedSecrets.ANDROID_SYNC_LABEL else "",
         )
     } catch (error: Exception) {
         SyncedSecrets.Availability(
@@ -220,11 +221,24 @@ public class AndroidSyncedSecrets(private val context: Context) : SyncedSecrets 
         )
     }
 
-    override suspend fun putSeed(seedHex: String): Boolean = try {
+    override suspend fun putSeed(seedHex: String): Boolean = put(SyncedSecrets.SEED_KEY, seedHex)
+
+    override suspend fun seed(): String? = get(SyncedSecrets.SEED_KEY)
+
+    override suspend fun forgetSeed() {
+        remove(SyncedSecrets.SEED_KEY)
+    }
+
+    /**
+     * BLOCK STORE HOLDS AT MOST 16 KEYS PER APP: the member's seed, the index
+     * of vaults on their own words, and so fourteen such vaults. A refused
+     * put answers false and the seed stays on this phone only.
+     */
+    override suspend fun put(key: String, value: String): Boolean = try {
         Blockstore.getClient(context).storeBytes(
             StoreBytesData.Builder()
-                .setBytes(seedHex.encodeToByteArray())
-                .setKey(SyncedSecrets.SEED_KEY)
+                .setBytes(value.encodeToByteArray())
+                .setKey(key)
                 .setShouldBackupToCloud(true)
                 .build(),
         ).await()
@@ -233,30 +247,30 @@ public class AndroidSyncedSecrets(private val context: Context) : SyncedSecrets 
         false
     }
 
-    override suspend fun seed(): String? = try {
+    override suspend fun get(key: String): String? = try {
         Blockstore.getClient(context).retrieveBytes(
             RetrieveBytesRequest.Builder()
-                .setKeys(listOf(SyncedSecrets.SEED_KEY))
+                .setKeys(listOf(key))
                 .build(),
         ).await()
-            .blockstoreDataMap[SyncedSecrets.SEED_KEY]
+            .blockstoreDataMap[key]
             ?.bytes
             ?.decodeToString()
     } catch (error: Exception) {
         null
     }
 
-    override suspend fun forgetSeed() {
+    override suspend fun remove(key: String) {
         try {
             Blockstore.getClient(context).deleteBytes(
                 com.google.android.gms.auth.blockstore.DeleteBytesRequest.Builder()
-                    .setKeys(listOf(SyncedSecrets.SEED_KEY))
+                    .setKeys(listOf(key))
                     .build(),
             ).await()
         } catch (error: Exception) {
             // A SEED THAT WOULD NOT DELETE IS NOT AN ERROR A MEMBER CAN ACT ON.
             // The local copy is gone either way, and Block Store's own copy is
-            // overwritten by the next `putSeed`.
+            // overwritten by the next put under the same key.
         }
     }
 }

@@ -70,13 +70,13 @@ public object DrainCopy {
     public fun stoppedSentence(answer: DrainAnswer): String = when (answer.stopped) {
         // EMPTY IS THE SPOOL'S, NOT THE LIBRARY'S: an item still waiting for
         // Wi-Fi or a charger was never sealed, so "everything" would be a claim.
-        DrainAnswer.Stopped.EMPTY -> "Your laptop has everything this phone had ready to send."
+        DrainAnswer.Stopped.EMPTY -> "Your backup device has everything this phone had ready to send."
         DrainAnswer.Stopped.DEADLINE ->
             "Still backing up — ${bytes(answer.pendingBytes)} to go. It will finish on its own."
         DrainAnswer.Stopped.UNREACHABLE ->
-            "Your laptop didn't answer. Nothing was lost; we'll pick up where we left off."
+            "Your backup device didn't answer. Nothing was lost; we'll pick up where we left off."
         DrainAnswer.Stopped.UNTRUSTED ->
-            "The machine that answered is not your laptop, so this phone sent it nothing. Nothing was lost."
+            "The machine that answered is not your backup device, so this phone sent it nothing. Nothing was lost."
         DrainAnswer.Stopped.MOVED ->
             "This vault moved to another phone. This phone keeps what it has, read-only."
     }

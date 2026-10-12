@@ -210,7 +210,7 @@ class PairAndRestoreSpec : StringSpec({
 
     "a gateway with no label is still named, and no address is left out rather than blank" {
         val line = CustodyCopy.pairedLine(PairAnswer(safetyNumber = number))
-        line shouldContain "Paired with your laptop."
+        line shouldContain "Paired with your backup device."
         line shouldNotContain " at ."
     }
 })

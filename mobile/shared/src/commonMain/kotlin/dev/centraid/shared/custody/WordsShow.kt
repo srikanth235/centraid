@@ -5,6 +5,7 @@ import centraid.screen.v1.WordsShowEvent
 import centraid.screen.v1.WordsShowState
 import dev.centraid.design.copy.WordsCopy
 import dev.centraid.shared.platform.platformServices
+import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -62,9 +63,9 @@ public object WordsShowMachine {
         if (model.phase != WordsShowState.Phase.PHASE_LOADING) return ShowStep(model)
         val words = input.words
         return if (words != null && words.size == VaultSecrets.WORDS) {
-            ShowStep(render(model.copy(phase = WordsShowState.Phase.PHASE_SHOW, words = words)))
+            ShowStep(render(model.copy(phase = WordsShowState.Phase.PHASE_SHOW, words = words, ownName = input.ownName)))
         } else {
-            ShowStep(render(model.copy(phase = WordsShowState.Phase.PHASE_NONE_HERE, seedHeld = input.seedHeld)))
+            ShowStep(render(model.copy(phase = WordsShowState.Phase.PHASE_NONE_HERE, seedHeld = input.seedHeld, ownName = input.ownName)))
         }
     }
 
@@ -73,16 +74,23 @@ public object WordsShowMachine {
     internal fun render(model: Shown): Shown {
         val phase = model.phase
         val show = phase == WordsShowState.Phase.PHASE_SHOW
-        val title = when (phase) {
-            WordsShowState.Phase.PHASE_NONE_HERE -> WordsCopy.SHOW_AGAIN_NONE_TITLE
-            WordsShowState.Phase.PHASE_CLOSED -> ""
+        // THE VAULT IN FRONT IS ON ITS OWN WORDS (R-1047-E18): its words, by its name.
+        val own = model.ownName
+        val title = when {
+            phase == WordsShowState.Phase.PHASE_NONE_HERE -> WordsCopy.SHOW_AGAIN_NONE_TITLE
+            phase == WordsShowState.Phase.PHASE_CLOSED -> ""
+            own != null && phase == WordsShowState.Phase.PHASE_SHOW -> WordsCopy.SHOW_OWN_TITLE.replace("{name}", own)
             else -> WordsCopy.SHOW_AGAIN_TITLE
         }
         val body = when (phase) {
             WordsShowState.Phase.PHASE_ASK -> WordsCopy.SHOW_AGAIN_ASK_BODY
-            WordsShowState.Phase.PHASE_SHOW -> WordsCopy.SHOW_AGAIN_BODY
-            WordsShowState.Phase.PHASE_NONE_HERE ->
-                if (model.seedHeld) WordsCopy.SHOW_AGAIN_NONE_SYNCED else WordsCopy.SHOW_AGAIN_NONE
+            WordsShowState.Phase.PHASE_SHOW ->
+                if (own != null) WordsCopy.SHOW_AGAIN_OWN_BODY.replace("{name}", own) else WordsCopy.SHOW_AGAIN_BODY
+            WordsShowState.Phase.PHASE_NONE_HERE -> when {
+                own != null -> WordsCopy.SHOW_AGAIN_OWN_NONE.replace("{name}", own)
+                model.seedHeld -> WordsCopy.SHOW_AGAIN_NONE_SYNCED
+                else -> WordsCopy.SHOW_AGAIN_NONE
+            }
             else -> ""
         }
         val primary = when (phase) {
@@ -128,6 +136,8 @@ public data class Shown(
     internal val words: List<String> = emptyList(),
     /** NONE_HERE: a seed is held (it came by sync), so the sentence says where the words are. */
     public val seedHeld: Boolean = false,
+    /** The vault in front, when it is on its own words (R-1047-E18); null for the member's words. */
+    public val ownName: String? = null,
     public val notice: String = "",
 ) {
     /** Whether the words are held right now. For the specs; never the words. */
@@ -141,8 +151,15 @@ public sealed interface ShowInput {
         override fun toString(): String = "View(<redacted>)"
     }
 
-    /** What the store holds: the words or null, and whether a seed is held. */
-    public class Loaded(public val words: List<String>?, public val seedHeld: Boolean) : ShowInput {
+    /**
+     * What the store holds: the words or null, and whether a seed is held —
+     * for the vault in front, named [ownName] when it is on its own words.
+     */
+    public class Loaded(
+        public val words: List<String>?,
+        public val seedHeld: Boolean,
+        public val ownName: String? = null,
+    ) : ShowInput {
         override fun toString(): String = "Loaded(<redacted>)"
     }
 }
@@ -157,6 +174,8 @@ public data class ShowStep(public val model: Shown, public val effects: List<Sho
 public class WordsShowFlow(
     private val secrets: () -> VaultSecrets,
     private val scope: CoroutineScope,
+    /** The vault in front — its id and name — or null; whose words to show (R-1047-E18). */
+    private val foreground: suspend () -> Pair<String, String>? = { null },
 ) {
     private val model = MutableStateFlow(WordsShowMachine.initial())
     private val lock = Mutex()
@@ -185,10 +204,20 @@ public class WordsShowFlow(
         val next: ShowInput = when (effect) {
             ShowEffect.Load -> {
                 val store = secrets()
-                ShowInput.Loaded(
-                    words = runCatching { store.words() }.getOrNull(),
-                    seedHeld = runCatching { store.seed() != null }.getOrDefault(false),
-                )
+                val front = runCatching { foreground() }.getOrNull()
+                val own = front?.let { (vaultId, _) -> runCatching { store.ownSeedOf(vaultId) }.getOrNull() }
+                if (own != null) {
+                    ShowInput.Loaded(
+                        words = runCatching { store.ownWords(own) }.getOrNull(),
+                        seedHeld = runCatching { store.ownSeed(own) != null }.getOrDefault(false),
+                        ownName = front.second,
+                    )
+                } else {
+                    ShowInput.Loaded(
+                        words = runCatching { store.words() }.getOrNull(),
+                        seedHeld = runCatching { store.seed() != null }.getOrDefault(false),
+                    )
+                }
             }
         }
         reduce(next)
@@ -217,10 +246,17 @@ public class WordsShowBridge {
         WordsShowFlow(
             secrets = { VaultSecrets(platformServices().secureStore, platformServices().syncedSecrets) },
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            foreground = { session?.shelf?.foregroundHolding()?.let { it.vaultId to it.name } },
         )
     }
     private var onState: ((ByteArray) -> Unit)? = null
     private var collecting = false
+    private var session: HomeSession? = null
+
+    /** The session whose vault in front decides whose words are shown (R-1047-E18). */
+    public fun attach(session: HomeSession) {
+        this.session = session
+    }
 
     public fun observe(onState: (ByteArray) -> Unit) {
         this.onState = onState
