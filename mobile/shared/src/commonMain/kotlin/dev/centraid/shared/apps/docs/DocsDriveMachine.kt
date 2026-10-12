@@ -726,8 +726,13 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
                     EmptyState(headline = DocsCopy.EMPTY_FOLDER, action_label = DocsCopy.EMPTY_ALL_ACTION) to
                         DocsDriveData.EmptyAction.EMPTY_ACTION_ADD
                 }
-            else -> EmptyState(headline = DocsCopy.EMPTY_ALL, action_label = DocsCopy.EMPTY_ALL_ACTION) to
-                DocsDriveData.EmptyAction.EMPTY_ACTION_ADD
+            // THE WHOLE DRIVE IS EMPTY: the one Docs empty that offers "See an
+            // example" — never a filtered, searched or folder empty.
+            else -> EmptyState(
+                headline = DocsCopy.EMPTY_ALL,
+                action_label = DocsCopy.EMPTY_ALL_ACTION,
+                offers_example = true,
+            ) to DocsDriveData.EmptyAction.EMPTY_ACTION_ADD
         }
     }
 

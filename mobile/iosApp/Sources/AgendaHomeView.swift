@@ -17,6 +17,8 @@ struct AgendaHomeView: View {
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    /// The shell's import door, nil where it offers none (and inside an example).
+    @Environment(\.importFromPhone) private var importFromPhone
 
     private var state: Centraid_Screen_V1_AgendaHomeState {
         (try? Centraid_Screen_V1_AgendaHomeState(serializedBytes: data)) ?? .init()
@@ -93,13 +95,30 @@ struct AgendaHomeView: View {
                 .accessibilityIdentifier("agenda-denied")
         case let .data(home):
             if home.empty != .none, home.empty != .unspecified {
-                AgendaMessage(
-                    title: home.emptyTitle,
-                    detail: home.emptyBody,
-                    action: home.emptyAction,
-                    onAction: { send(AgendaEvents.make { $0.newEvent = .init() }) }
-                )
-                .accessibilityIdentifier("agenda-empty")
+                VStack(spacing: 0) {
+                    // WHERE THE PHONE HOLDS A CALENDAR, ITS IMPORT IS DAY ONE'S
+                    // ACTION; "New event" stays in the header.
+                    if !ShellWords.importLabel(home.importSource).isEmpty, let importFromPhone {
+                        AgendaMessage(
+                            title: home.emptyTitle,
+                            detail: home.emptyBody,
+                            action: ShellWords.importLabel(home.importSource),
+                            onAction: { importFromPhone(home.importSource) }
+                        )
+                        .accessibilityIdentifier("agenda-empty")
+                    } else {
+                        AgendaMessage(
+                            title: home.emptyTitle,
+                            detail: home.emptyBody,
+                            action: home.emptyAction,
+                            onAction: { send(AgendaEvents.make { $0.newEvent = .init() }) }
+                        )
+                        .accessibilityIdentifier("agenda-empty")
+                    }
+                    // DAY ONE ONLY — never a day or a search with nothing in
+                    // it — offers "See an example".
+                    if home.empty == .dayOne { SeeExampleLink() }
+                }
             } else {
                 AgendaList(home: home, chrome: state.chrome, send: send)
             }
@@ -244,11 +263,24 @@ private struct AgendaList: View {
     let home: Centraid_Screen_V1_AgendaHomeData
     let chrome: Centraid_Screen_V1_AgendaChrome
     let send: (Data) -> Void
+    /// The shell's import door, nil where it offers none (and inside an example).
+    @Environment(\.importFromPhone) private var importFromPhone
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
+                    // NO EVENT OF THE MEMBER'S YET, only marks (due tasks,
+                    // birthdays): the phone's calendar is offered quietly above
+                    // them, at the point of use.
+                    if !ShellWords.importLabel(home.importSource).isEmpty, let importFromPhone {
+                        KitOutlineButton(label: ShellWords.importLabel(home.importSource)) {
+                            importFromPhone(home.importSource)
+                        }
+                        .accessibilityIdentifier("agenda-import")
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.vertical, 8)
+                    }
                     ForEach(home.days, id: \.day) { section in
                         AgendaSectionView(section: section, chrome: chrome, send: send)
                             .id(section.day)

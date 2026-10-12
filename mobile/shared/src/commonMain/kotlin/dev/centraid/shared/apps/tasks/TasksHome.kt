@@ -18,6 +18,7 @@ import centraid.core.v1.TasksTask
 import centraid.core.v1.TasksView
 import centraid.screen.v1.Denied
 import centraid.screen.v1.EmptyState
+import centraid.screen.v1.ImportSource
 import centraid.screen.v1.ListRow
 import centraid.screen.v1.Loading
 import centraid.screen.v1.ReadFailure
@@ -572,13 +573,30 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
         val groups = withAdds(TasksRows.groups(source, ctx), ops, screen.destination, board.today)
         val dayOne = (board.counts?.let { it.open_ == 0 && it.closed == 0 } ?: false) &&
             board.projects.isEmpty() && ops.adds.isEmpty()
+        // NOTHING OPEN — day one, or the starters finished — is when the
+        // phone's reminders are offered: a first vault's starter tasks mean
+        // day one is never seen, and "all done" is the point of use.
+        val reminders = if ((board.counts?.open_ ?: -1) == 0 && ops.adds.isEmpty()) {
+            ImportSource.IMPORT_SOURCE_REMINDERS
+        } else {
+            ImportSource.IMPORT_SOURCE_UNSPECIFIED
+        }
         val empty = when {
             groups.isNotEmpty() -> EmptyState()
-            dayOne -> EmptyState(headline = TasksCopy.DAY_ONE)
+            // DAY ONE, and only day one, offers "See an example".
+            // and the phone's reminders, where the shell can read them.
+            dayOne -> EmptyState(
+                headline = TasksCopy.DAY_ONE,
+                offers_example = true,
+                import_source = ImportSource.IMPORT_SOURCE_REMINDERS,
+            )
             screen.destination == TODAY ->
-                EmptyState(headline = if (ops.completed > 0) TasksCopy.TODAY_DONE else TasksCopy.TODAY_EMPTY)
-            screen.destination == UPCOMING -> EmptyState(headline = TasksCopy.UPCOMING_EMPTY)
-            else -> EmptyState(headline = TasksCopy.INBOX_EMPTY)
+                EmptyState(
+                    headline = if (ops.completed > 0) TasksCopy.TODAY_DONE else TasksCopy.TODAY_EMPTY,
+                    import_source = reminders,
+                )
+            screen.destination == UPCOMING -> EmptyState(headline = TasksCopy.UPCOMING_EMPTY, import_source = reminders)
+            else -> EmptyState(headline = TasksCopy.INBOX_EMPTY, import_source = reminders)
         }
         val shown = TasksRows.rootCount(groups)
         val catchUp = state.catchUp

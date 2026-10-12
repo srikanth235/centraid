@@ -63,8 +63,6 @@ class HomeNoVaultSpec : StringSpec({
             settled.data_.shouldBeNull()
             settled.loading.shouldBeNull()
             settled.failure.shouldNotBeNull().sentence shouldBe Reads.NO_VAULT
-            // No vault, so nothing was founded today: the notice slot has no sample line.
-            settled.founded_today shouldBe false
             session.close()
         } finally {
             dir.deleteRecursively()

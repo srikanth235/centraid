@@ -15,6 +15,7 @@ import centraid.core.v1.PeopleTouch
 import centraid.core.v1.PeopleTouchRequest
 import centraid.screen.v1.Denied
 import centraid.screen.v1.EmptyState
+import centraid.screen.v1.ImportSource
 import centraid.screen.v1.PeopleCardRow
 import centraid.screen.v1.PeopleChip
 import centraid.screen.v1.PeopleChipKey
@@ -160,6 +161,20 @@ public object PeopleFold {
         headline = PeopleCopy.EMPTY_ROSTER_TITLE,
         body = PeopleCopy.EMPTY_ROSTER_BODY,
         action_label = PeopleCopy.ADD_PERSON,
+        offers_example = true,
+        // THE PHONE ALREADY HOLDS THE MEMBER'S PEOPLE: a shell that can read
+        // its contacts offers them here, in place of "Add person".
+        import_source = ImportSource.IMPORT_SOURCE_CONTACTS,
+    )
+
+    /**
+     * A CHIP WITH NOTHING IN IT over a roster that holds people: day one's
+     * words, but not day one, so it offers neither "See an example" nor the
+     * phone's contacts.
+     */
+    public fun chipEmpty(): EmptyState = dayOne().copy(
+        offers_example = false,
+        import_source = ImportSource.IMPORT_SOURCE_UNSPECIFIED,
     )
 
     private fun chip(key: PeopleChipKey, label: String, count: Int): PeopleChip = PeopleChip(

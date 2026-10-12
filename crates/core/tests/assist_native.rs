@@ -1328,7 +1328,7 @@ fn an_attachment_never_leaves_the_attached_path_whichever_plane_answers_the_rest
 /// THE MEASUREMENT (D14): how much of the engine's context a three-turn conversation takes. The
 /// estimate is the plane's own pessimistic count (`prompt::estimate_tokens`), so the real
 /// tokenizer reads fewer. With `ASSIST_NATIVE_DUMP=<dir>` the test writes every prompt it sent to
-/// `<dir>/prompt-N.txt`, to count with the model's own `tokenizer.json`: on the sample vault the
+/// `<dir>/prompt-N.txt`, to count with the model's own `tokenizer.json`: on the scenario the
 /// twelve prompts read 1342 to 2960 Qwen3.5 tokens (the estimate: 1803 to 4095), the system turn
 /// alone 1326 (estimate 1774). The 8,192-token context is the length the model was trained on
 /// (R-1088-11); the test pins that three turns, by the pessimistic count, stay inside three

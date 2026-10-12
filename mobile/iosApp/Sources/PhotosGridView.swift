@@ -327,10 +327,15 @@ struct PhotosGridView: View {
                             remedy: "Photographs you mark as a favorite appear here."
                         )
                     } else {
-                        ScreenEmptyView(
-                            sentence: "No photographs on this device yet.",
-                            remedy: "Import your camera roll and they appear here."
-                        )
+                        VStack(spacing: 0) {
+                            ScreenEmptyView(
+                                sentence: "No photographs on this device yet.",
+                                remedy: "Import your camera roll and they appear here."
+                            )
+                            // THE LIBRARY IS EMPTY, NOT A FILTER: day one, so
+                            // "See an example" beside the camera roll's import.
+                            SeeExampleLink()
+                        }
                     }
                 } else if grid.grain == .years || grid.grain == .months {
                     LibraryGrainCards(

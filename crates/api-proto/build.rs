@@ -95,6 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.PeopleHomeEvent.kind.data")
         .boxed(".centraid.screen.v1.PeoplePersonState.content.data")
         .boxed(".centraid.screen.v1.PeoplePersonEvent.kind.data")
+        .boxed(".centraid.screen.v1.TasksHomeState.content.data")
         .boxed(".centraid.screen.v1.TasksDetailState.content.data")
         .boxed(".centraid.screen.v1.DocsDriveEvent.kind.data")
         .boxed(".centraid.screen.v1.DocsDocumentState.content.data")

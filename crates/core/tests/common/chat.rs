@@ -1,8 +1,11 @@
-//! A sample vault behind a real handle, and the chat's calls over the wire.
+//! A member's vault holding the Tahoe scenario behind a real handle, and the
+//! chat's calls over the wire.
 //!
-//! Shared by the chat's integration files. The sample is founded through
-//! the door a phone uses (`FoundRequest` with `FOUND_CONTENT_SAMPLE`), so what
-//! these tests read is the Tahoe scenario as a member's phone holds it.
+//! Shared by the chat's integration files. The vault is founded through the
+//! door a phone uses (`FoundRequest`, no content) and then seeded with the
+//! example scenario (`centraid_core::example::seed`) through the command plane,
+//! so what these tests read is the rows a phone holds — and, unlike an example
+//! core, the vault stays WRITABLE, because these tests write through the chat.
 
 use std::sync::Arc;
 
@@ -46,7 +49,7 @@ pub fn script(steps: &[[String; 2]]) -> Arc<ScriptedModel> {
     Arc::new(ScriptedModel::new(steps.iter().flatten().cloned()))
 }
 
-/// The two steps of a read: look at the tasks, then answer with them. On the sample vault that is
+/// The two steps of a read: look at the tasks, then answer with them. On the scenario that is
 /// twelve tasks, six of them drawn.
 pub fn read_tasks() -> [[String; 2]; 2] {
     [
@@ -55,7 +58,7 @@ pub fn read_tasks() -> [[String; 2]; 2] {
     ]
 }
 
-/// What a read of the tasks says on the sample vault.
+/// What a read of the tasks says on the scenario.
 pub const FOUND_TASKS: &str = "Found 12 tasks. Showing 6.";
 
 /// The one step of a turn the model declines.
@@ -63,7 +66,8 @@ pub fn decline(reason: &str) -> [String; 2] {
     step("plan: no", "decline", &[("reason", reason)])
 }
 
-/// A founded sample vault, with its byte store, and no model loaded.
+/// A founded vault seeded with the scenario, with its byte store, and no
+/// model loaded.
 pub fn sample() -> Sample {
     let dir = centraid_ontology::golden::scratch_dir();
     std::fs::create_dir_all(&dir).expect("the directory is made");
@@ -72,17 +76,39 @@ pub fn sample() -> Sample {
     handle
         .open_own_bytes(path.with_extension("bytes"))
         .expect("the byte store opens");
+    seed_scenario(&handle);
+    Sample { dir, handle }
+}
+
+/// FOUND `handle`'s file through the wire with no content, then seed the whole
+/// scenario into it through the command plane, and insist it landed whole.
+pub fn seed_scenario(handle: &Handle) {
     let answer = handle
         .call(&wire::Request {
             kind: Some(wire::request::Kind::Found(wire::FoundRequest {
                 display_name: "Sample".to_owned(),
                 owner_name: "Me".to_owned(),
-                content: wire::FoundContent::Sample as i32,
+                content: wire::FoundContent::Unspecified as i32,
+                tz: String::new(),
             })),
         })
-        .expect("the sample vault founds");
-    assert!(matches!(answer.kind, Some(wire::response::Kind::Found(_))));
-    Sample { dir, handle }
+        .expect("the vault founds");
+    let Some(wire::response::Kind::Found(founded)) = answer.kind else {
+        panic!("a found answered {:?}", answer.kind);
+    };
+    let report = handle
+        .with_vault(|vault| {
+            centraid_core::example::seed(
+                vault,
+                handle.registry(),
+                &handle.owner(),
+                &founded.owner_party_id,
+                &|_| true,
+                centraid_core::example::now_ms(),
+            )
+        })
+        .expect("the scenario seeds");
+    assert!(report.is_whole(), "the scenario seeds whole: {report:?}");
 }
 
 impl Sample {

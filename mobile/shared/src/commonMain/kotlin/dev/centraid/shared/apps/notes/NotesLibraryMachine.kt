@@ -420,11 +420,13 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
                 action_label = NotesCopy.NEW_NOTE,
             )
             filtered -> EmptyState(headline = NotesCopy.EMPTY_FILTERED_HEADLINE, body = NotesCopy.EMPTY_FILTERED_BODY)
-            // DAY ONE: nothing written yet, and one action that takes content.
+            // DAY ONE: nothing written yet, and one action that takes content —
+            // and the shell's "See an example" beside it.
             else -> EmptyState(
                 headline = NotesCopy.EMPTY_DAY_ONE_HEADLINE,
                 body = NotesCopy.EMPTY_DAY_ONE,
                 action_label = NotesCopy.NEW_NOTE,
+                offers_example = true,
             )
         }
         return data.copy(

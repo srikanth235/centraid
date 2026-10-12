@@ -82,10 +82,11 @@ public interface DeviceClock {
         public val epochMillis: Long,
         /**
          * The zone's offset from UTC AT [epochMillis], in minutes (east is
-         * positive). It exists for ONE question `commonMain` cannot answer from
-         * the name above: which local calendar day an instant falls on
-         * ([dev.centraid.shared.shell.FoundingDay]). Never a calendar and never
-         * used to place an agenda — the core does that, in [zone].
+         * positive). **Read by nothing in `commonMain` since the founding-day
+         * notice was retired** (docs/decisions.md, "Onboarding without sample
+         * data"); each platform still fills it, and dropping it is a follow-up
+         * across the three actuals. Never a calendar and never used to place
+         * an agenda — the core does that, in [zone].
          */
         public val utcOffsetMinutes: Int = 0,
     )

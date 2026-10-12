@@ -183,6 +183,15 @@ targets:
         # or `centraid-gateway pair` prints (#1080). One key, so the sentence
         # names both; Upload runs out of process and needs none.
         NSCameraUsageDescription: Centraid uses the camera to scan paper documents into Docs, and to read the square your laptop shows when you pair it.
+        # WHY PEOPLE ASKS FOR CONTACTS (docs/decisions.md, "Onboarding without
+        # sample data"): asked when the member taps "Import contacts" on
+        # People's day-one empty state, never at launch, and read once into
+        # their own vault on this phone.
+        NSContactsUsageDescription: Centraid copies the contacts you choose into People, in your own vault on this phone.
+        # AND CALENDAR → AGENDA, REMINDERS → TASKS: asked at the tap on each
+        # app's day-one empty state. iOS 17's full-access keys; the import reads.
+        NSCalendarsFullAccessUsageDescription: Centraid copies your calendar's events into Agenda, in your own vault on this phone.
+        NSRemindersFullAccessUsageDescription: Centraid copies your open reminders into Tasks, in your own vault on this phone.
         # WHY CENTRAID ASKS FOR THE LOCAL NETWORK (#1047 E5; #1080). A gateway
         # is dialled at the addresses its pairing record keeps, which are
         # usually on the member's own Wi-Fi; iOS asks before an app reaches a

@@ -173,7 +173,7 @@ pub fn apply_field_mask(rows: Vec<RowImage>, decision: &Decision) -> Vec<RowImag
 /// **And `json_extract(<cell>, '<$.path>') AS <name>`**, the second shape the
 /// kit's grammar already admits (`json_extract` is in its word list). A shell
 /// has no JSON parser in `commonMain`, so a key inside a JSON cell is read by
-/// the vault — a vault's sample mark out of `core_vault.settings_json`, a
+/// the vault — a vault's time zone out of `core_vault.settings_json`, a
 /// place's gazetteer name out of `core_place.address_json`. It was quoted whole
 /// like the presence test was, so it answered a string literal and every such
 /// column read NULL. The cell and the name are checked as identifiers and the
@@ -1722,8 +1722,8 @@ mod keyset_tests {
     #[test]
     fn a_json_key_is_projected_as_one_and_a_near_miss_as_a_name() {
         assert_eq!(
-            projected("json_extract(settings_json, '$.sample') AS sample"),
-            "json_extract(\"settings_json\", '$.sample') AS \"sample\""
+            projected("json_extract(settings_json, '$.timeZone') AS zone"),
+            "json_extract(\"settings_json\", '$.timeZone') AS \"zone\""
         );
         assert_eq!(
             projected("json_extract(address_json, '$.gazetteer.name') AS gazetteer"),
@@ -1744,19 +1744,32 @@ mod keyset_tests {
         }
     }
 
-    /// AND THE VAULT READS IT: the sample mark comes back as its word.
+    /// AND THE VAULT READS IT: a key in the vault's own settings bag comes back
+    /// as its text.
     #[test]
     fn a_json_key_reads_back_through_the_page_door() {
         let dir = std::env::temp_dir().join(format!("centraid-json-key-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("the scratch dir is made");
         let vault = Vault::create(dir.join("vault.db")).expect("a vault");
-        vault.found_sample("Sample", "Me").expect("founded");
+        vault.found("Mine", "Me").expect("founded");
+        // NO COMMAND WRITES `settings_json`, so the test writes the one key it
+        // reads back — `timeZone`, the key `Vault::time_zone` reads.
+        vault
+            .commit(|tx| {
+                tx.set_producer("test.settings");
+                tx.connection().execute(
+                    "UPDATE core_vault SET settings_json = '{\"timeZone\":\"America/Los_Angeles\"}'",
+                    [],
+                )?;
+                Ok(())
+            })
+            .expect("the settings are written");
         let page = vault
             .keyset_page(&KeysetPage {
-                name: "test.mark".to_owned(),
+                name: "test.zone".to_owned(),
                 select: vec![
                     "vault_id".to_owned(),
-                    "json_extract(settings_json, '$.sample') AS sample".to_owned(),
+                    "json_extract(settings_json, '$.timeZone') AS zone".to_owned(),
                 ],
                 from: "core_vault".to_owned(),
                 predicate: None,
@@ -1772,7 +1785,10 @@ mod keyset_tests {
             })
             .expect("the page reads");
         let row = page.rows.first().expect("one vault row");
-        assert_eq!(row.get("sample"), Some(&Value::Text("seeding".to_owned())));
+        assert_eq!(
+            row.get("zone"),
+            Some(&Value::Text("America/Los_Angeles".to_owned()))
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

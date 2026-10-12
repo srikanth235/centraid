@@ -5,7 +5,7 @@
 # unavailable line), or a ready model (an empty thread with suggestions). The
 # flow asserts the tab opens and that one of those three draws, never a blank.
 #
-# Needs a vault-holding install (the sample vault, `sample-vault.yaml`). For the
+# Needs a vault-holding install (`onboarding.yaml` leaves one). For the
 # ready branch launch a DEBUG build with
 # `SIMCTL_CHILD_CENTRAID_DEV_MODEL=<path to the .gguf>` so no download happens.
 appId: dev.centraid.Centraid

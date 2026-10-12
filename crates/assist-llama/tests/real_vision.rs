@@ -37,13 +37,13 @@ fn paths() -> Option<(PathBuf, PathBuf)> {
     ))
 }
 
-/// A sample-vault photograph, scaled the way the core scales it.
+/// An example-scenario photograph, scaled the way the core scales it.
 fn photo(name: &str, edge: u32) -> (u32, u32, Vec<u8>) {
     let path = format!(
-        "{}/../core/src/sample/photos/{name}.png",
+        "{}/../core/src/example/photos/{name}.png",
         env!("CARGO_MANIFEST_DIR")
     );
-    let decoded = image::open(&path).expect("a sample photo");
+    let decoded = image::open(&path).expect("an example photo");
     let scaled = decoded.resize(edge, edge, image::imageops::FilterType::Triangle);
     let rgb = scaled.to_rgb8();
     (rgb.width(), rgb.height(), rgb.into_raw())

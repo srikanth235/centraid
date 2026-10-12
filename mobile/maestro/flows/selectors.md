@@ -29,17 +29,12 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `backup-forget-<gatewayId>` | Backup | one gateway's Forget |
 | `backup-battery` | Backup | the battery-optimisation remedy — **Android only**; iOS has no such setting |
 | `home-band-chat` | Home | the band's Chat tab (the second place, after Home) |
-| `home-sample-notice` | Home | the sample vault's one notice line (R-SAMPLE-8) |
-| `home-sample-remove` | Home | the notice's outlined "Remove sample" |
-| `sample-remove-confirm` | Home, Settings | the destructive "Remove" in the removal's confirm alert |
+| `example-banner` | every route | "Example — not your data" while a preview is open (and `example-done`, its one exit) |
+| `import-banner` | every route | the contacts import's progress and outcome (and `import-done`) |
 | `home-vault-sheet` | Home | the vault switcher sheet |
 | `vault-row-<vaultId>` | Home | one switcher row (and `vault-forget-<vaultId>`) |
-| `vault-sample-mark` | Home | the "Sample" chip on a switcher row, shown only when the vault was renamed |
 | `vault-found-button` | Settings | "Make a vault on this phone" |
 | `vault-restore-button` | Settings | "Restore my vaults" |
-| `vault-sample-remove` | Settings | "Remove sample", while a sample is held |
-| `vault-sample-add` | Settings | "Add sample", while none is held |
-| `vault-sample-adding` | Settings | the disabled "Adding sample" while it seeds |
 | `vault-done` | Settings | the sheet's Done |
 | `first-launch` | First launch | the deck (and `first-launch-skip`, `first-launch-<id>` for its actions) |
 | `chat` | Chat | the tab's root |
@@ -56,6 +51,8 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `chat-pending-cancel` | Chat | its Cancel |
 | `chat-pending-settled` | Chat | the one clause that says how the card ended ("Done.", "Not done.") |
 | `chat-new` | Chat | the header's New chat |
+| `kit-empty-example` | any app | "See an example" under an app's day-one empty state |
+| `kit-empty-import` | any app | the import from where the phone holds the data ("Import contacts" on People), in place of the empty state's action |
 
 Home, its Settings and vault sheets, the Backup screen, the first-launch deck and Chat set tags; the Backup screen's ids are written in both shells and selected by no flow yet. The iOS shell runs on a simulator against the real `HomeMachine` through `HomeBridge`, so the iOS half of each id renders; the Android half is compiled and unobserved, because no machine here has an Android emulator.
 

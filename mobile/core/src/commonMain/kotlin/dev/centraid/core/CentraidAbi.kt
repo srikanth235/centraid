@@ -65,7 +65,8 @@ internal sealed interface AbiOpen {
  * `centraid_open`, per platform.
  *
  * `config` is the UTF-8 JSON the ABI documents:
- * `{"path":…,"create":…?,"uiThreadName":…?,"expectedIdentity":…?}`. JSON and
+ * `{"path":…,"create":…?,"uiThreadName":…?,"expectedIdentity":…?,"vault":…?,
+ * "example":…?}`. JSON and
  * not protobuf because a configuration is read once at startup by a
  * human-written call site and being able to log it verbatim is worth more than
  * the encoding (`crates/core-ffi/README.md`).
