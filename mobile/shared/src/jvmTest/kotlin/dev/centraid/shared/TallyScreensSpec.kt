@@ -685,6 +685,28 @@ class TallyScreensSpec : StringSpec({
         cleared.screen.data_.shouldBeNull()
     }
 
+    "search: the words the core corrected are on the field, a new term clears them, and an answer for a cleared field draws none (#1097)" {
+        val typed = TallySearchMachine.reduce(
+            TallySearchMachine.initial(),
+            view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "feery"))),
+        ).state
+        val corrected = TallyInput.Answered(
+            listOf(AppQueryResponse(tally_search = TallySearch(results = listOf(expenseRow("e1")), total_matches = 1, corrected = "ferry"))),
+        )
+        val fixed = TallySearchMachine.reduce(typed, corrected).state
+        fixed.screen.field_?.corrected shouldBe "ferry"
+        // An exact answer says nothing was corrected.
+        TallySearchMachine.reduce(typed, TallyInput.Answered(listOf(AppQueryResponse(tally_search = TallySearch(results = listOf(expenseRow("e1"))))))).state
+            .screen.field_?.corrected shouldBe ""
+        // A NEW TERM clears it.
+        TallySearchMachine.reduce(fixed, view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "feer")))).state
+            .screen.field_?.corrected shouldBe ""
+        // AN ANSWER THAT LANDS AFTER THE FIELD WAS CLEARED draws none.
+        val cleared = TallySearchMachine.reduce(fixed, view(TallySearchEvent(cleared = TallySearchEvent.Cleared()))).state
+        cleared.screen.field_?.corrected shouldBe ""
+        TallySearchMachine.reduce(cleared, corrected).state.screen.field_?.corrected shouldBe ""
+    }
+
     "Tally's trash restores and never offers to destroy" {
         val loaded = TallyTrashMachine.reduce(
             TallyTrashMachine.initial(),

@@ -67,7 +67,7 @@ public object NotesLibraryReads :
     override fun arrived(answers: List<AppQueryResponse>): NotesLibraryEvent {
         answers.firstNotNullOfOrNull { it.notes_search }?.let { search ->
             return NotesLibraryEvent(
-                search_arrived = NotesLibraryEvent.SearchArrived(rows = search.hits.map(NotesFold::hit)),
+                search_arrived = NotesLibraryEvent.SearchArrived(rows = search.hits.map(NotesFold::hit), corrected = search.corrected),
             )
         }
         val library = answers.firstNotNullOfOrNull { it.notes_library }

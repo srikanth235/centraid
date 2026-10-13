@@ -75,7 +75,9 @@ public object DocsDriveReads :
     /** By arm, not by position: the request depends on the state. */
     override fun arrived(answers: List<AppQueryResponse>): DocsDriveEvent {
         answers.firstNotNullOfOrNull { it.docs_search }?.let { search ->
-            return DocsDriveEvent(data_ = DocsDriveEvent.DataArrived(data_ = DocsFold.search(search)))
+            return DocsDriveEvent(
+                data_ = DocsDriveEvent.DataArrived(data_ = DocsFold.search(search), corrected = search.corrected),
+            )
         }
         val drive = answers.firstNotNullOfOrNull { it.docs_drive }
             ?: return refused(Reads.refused(NO_ANSWER))

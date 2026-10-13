@@ -219,6 +219,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                             anchor_day = "",
                             search_open = false,
                             search_term = "",
+                            search_corrected = "",
                             sheet = AgendaHomeState.Sheet.SHEET_NONE,
                             due_open_days = emptyList(),
                             loading = Loading(first_load = true),
@@ -270,7 +271,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             event.search_term != null -> {
                 val opened = openSearch(state)
                 val typed = opened.copy(
-                    screen = opened.screen.copy(search_term = event.search_term.term),
+                    screen = opened.screen.copy(search_term = event.search_term.term, search_corrected = ""),
                 )
                 if (activeTerm(typed.screen) == null) {
                     // NO TERM, NO SEARCH: the window's own list, re-folded.
@@ -410,7 +411,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
 
     /** Search shut, and its term CLEARED (v0 kept it — a defect not carried). */
     private fun closedSearch(state: AgendaHome): AgendaHome = state.copy(
-        screen = state.screen.copy(search_open = false, search_term = ""),
+        screen = state.screen.copy(search_open = false, search_term = "", search_corrected = ""),
         answers = state.answers?.copy(search = null),
     )
 
@@ -471,7 +472,13 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             )
         }
         val today = context.today.ifEmpty { upcoming.today }
-        val screen = state.screen.copy(anchor_day = state.screen.anchor_day.ifEmpty { today })
+        val searching = activeTerm(state.screen) != null
+        val screen = state.screen.copy(
+            anchor_day = state.screen.anchor_day.ifEmpty { today },
+            // THE WORDS THE HITS ANSWER: kept only while a term is, and only
+            // when this answer is a search's.
+            search_corrected = if (searching) answer.search?.corrected ?: "" else "",
+        )
         val held = AgendaAnswers(
             upcoming = upcoming,
             context = context,
@@ -501,6 +508,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                     denied = AgendaFold.denied(denial),
                     search_open = false,
                     search_term = "",
+                    search_corrected = "",
                     sheet = AgendaHomeState.Sheet.SHEET_NONE,
                 ),
             ),

@@ -46,6 +46,30 @@ class HomeSearchSpec : StringSpec({
 
     val opened = step(HomeSearchMachine.initial(), HomeSearchEvent(opened = HomeSearchEvent.Opened())).state
 
+    "the words the core corrected are on the field, a new term clears them, and an answer for another term draws none (#1097)" {
+        val slipped = typed(opened, "sunscren").state
+        fun answered(term: String, corrected: String) = HomeSearchReads.arrived(
+            listOf(
+                AppQueryResponse(
+                    vault_search = VaultSearch(hits = listOf(hit("tasks", "schedule.task", "t1", "Buy sunscreen")), corrected = corrected),
+                ),
+            ),
+            listOf(AppQueryRequest(vault_search = VaultSearchRequest(term = term, tz = now.zone))),
+        )
+        val fixed = step(slipped, answered("sunscren", "sunscreen")).state
+        fixed.field_!!.corrected shouldBe "sunscreen"
+        fixed.field_.answered_term shouldBe "sunscren"
+        // An exact answer says nothing was corrected.
+        step(slipped, answered("sunscren", "")).state.field_!!.corrected shouldBe ""
+        // A trailing space is not another term.
+        step(typed(opened, "sunscren ").state, answered("sunscren", "sunscreen")).state.field_!!.corrected shouldBe "sunscreen"
+        // A NEW TERM clears it, and so does cancelling the field.
+        typed(fixed, "sunscree").state.field_!!.corrected shouldBe ""
+        step(fixed, HomeSearchEvent(cancelled = HomeSearchEvent.Cancelled())).state.field_!!.corrected shouldBe ""
+        // AN ANSWER FOR AN OLDER TERM than the one on screen is dropped whole.
+        step(slipped, answered("sun", "sunscreen")).state.field_!!.corrected shouldBe ""
+    }
+
     "the hits are grouped by app in Home's tile order, each counted, each row named by its kind" {
         val data = HomeSearchMachine.fold(
             listOf(

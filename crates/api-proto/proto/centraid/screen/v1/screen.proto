@@ -1827,6 +1827,8 @@ message HomeSearchEvent {
   message DataArrived {
     HomeSearchData data = 1;
     string term = 2;
+    // The answer's `corrected` (EMPTY for an exact answer).
+    string corrected = 3;
   }
 
   message ReadRefused {
@@ -4149,6 +4151,11 @@ message AgendaHomeState {
   // read". Computed, so both platforms draw the same list; no calendar rows
   // until an answer has named the calendars.
   repeated AgendaMoreRow more_rows = 18;
+  // THE WORDS THE HITS ANSWER when the core corrected a typo in `search_term`
+  // (#1097); EMPTY for an exact answer. Agenda's search is a mode of this
+  // screen and not a `SearchField`, so the correction sits beside the term.
+  // A new term, closing search, and a refusal clear it.
+  string search_corrected = 19;
 
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
@@ -5064,10 +5071,15 @@ enum ImportSource {
 // Search opens a field on the current surface; it is never a destination.
 // `answered_term` is the term the rows on screen answer, so an answer for a
 // term the member has since changed is recognisably stale. Closing clears both.
+// `corrected` is the words the rows answer when the core corrected a typo in
+// `term` (#1097); EMPTY for an exact answer. The shell draws it as "Showing
+// results for <corrected>" under the field; a new term, a close, or an answer
+// that is not the current one clears it.
 message SearchField {
   bool open = 1;
   string term = 2;
   string answered_term = 3;
+  string corrected = 4;
 }
 
 // ONE WRITE IN FLIGHT ON A DETAIL SCREEN. A refused write keeps the content;
@@ -5643,6 +5655,8 @@ message NotesLibraryEvent {
 
   message SearchArrived {
     repeated NotesNoteRow rows = 1;
+    // The answer's `corrected` (EMPTY for an exact answer).
+    string corrected = 2;
   }
 
   message ReadRefused {
@@ -6483,6 +6497,8 @@ message PeopleHomeEvent {
   message DataArrived {
     optional PeopleHomeData data = 1;
     optional PeopleSearchData search = 2;
+    // A search answer's `corrected` (EMPTY for an exact answer).
+    string corrected = 3;
   }
 
   message ReadRefused {
@@ -8418,6 +8434,8 @@ message DocsDriveEvent {
   message DataArrived {
     DocsDriveData data = 1;
     optional DocsRail rail = 2;
+    // A search answer's `corrected` (EMPTY for an exact answer or a shelf).
+    string corrected = 3;
   }
 
   message ReadRefused {

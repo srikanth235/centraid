@@ -336,6 +336,30 @@ class PeopleSpec : StringSpec({
         closed.state.search_data.shouldBeNull()
     }
 
+    "search: the words the core corrected are on the field, a new term clears them, and an answer for a closed search draws none (#1097)" {
+        val landed = home(opened(), roster(person("p1", "Dana"))).state
+        val typed = run(
+            PeopleHomeMachine,
+            landed,
+            PeopleHomeEvent(search_opened = PeopleHomeEvent.SearchOpened()),
+            PeopleHomeEvent(search_term = PeopleHomeEvent.SearchTermChanged(term = "danna")),
+        ).state
+        val corrected = PeopleHomeReads.arrived(listOf(AppQueryResponse(people_search = PeopleSearch(corrected = "dana"))))
+        val fixed = PeopleHomeMachine.reduce(typed, corrected).state
+        fixed.search.shouldNotBeNull().corrected shouldBe "dana"
+        // An exact answer says nothing was corrected.
+        PeopleHomeMachine.reduce(typed, PeopleHomeReads.arrived(listOf(AppQueryResponse(people_search = PeopleSearch()))))
+            .state.search.shouldNotBeNull().corrected shouldBe ""
+        // A NEW TERM clears it.
+        PeopleHomeMachine.reduce(fixed, PeopleHomeEvent(search_term = PeopleHomeEvent.SearchTermChanged(term = "dann")))
+            .state.search.shouldNotBeNull().corrected shouldBe ""
+        // AN ANSWER FOR A SEARCH CLOSED SINCE draws none.
+        val closed = PeopleHomeMachine.reduce(typed, PeopleHomeEvent(search_closed = PeopleHomeEvent.SearchClosed())).state
+        PeopleHomeMachine.reduce(closed, corrected).state.search.shouldNotBeNull().corrected shouldBe ""
+        PeopleHomeMachine.reduce(fixed, PeopleHomeEvent(search_closed = PeopleHomeEvent.SearchClosed()))
+            .state.search.shouldNotBeNull().corrected shouldBe ""
+    }
+
     // --- Home: Touch -----------------------------------------------------
 
     "Touch: tiles, Reconnect with days over and a Log a touch action, Upcoming nearest first, Recent in words" {

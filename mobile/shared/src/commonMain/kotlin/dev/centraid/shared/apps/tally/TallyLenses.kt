@@ -346,7 +346,7 @@ public object TallySearchMachine :
         }
 
     override fun absorb(held: TallyHeld<TallySearchState>): TallyHeld<TallySearchState> =
-        SearchLaw.answered(Field, held, held.screen.field_?.term ?: "")
+        SearchLaw.answered(Field, held, held.screen.field_?.term ?: "", held.answers.search?.corrected ?: "")
 
     override fun fold(held: TallyHeld<TallySearchState>): TallySearchData? {
         val answer = held.answers.search ?: return null

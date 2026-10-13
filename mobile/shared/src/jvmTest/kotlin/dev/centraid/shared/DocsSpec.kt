@@ -273,6 +273,25 @@ class DocsSpec : StringSpec({
         DocsDriveReads.requests(closed.state, now).single().docs_drive.shouldNotBeNull()
     }
 
+    "search: the words the core corrected are on the field, a new term clears them, and an answer for a closed search draws none (#1097)" {
+        var s = onScreen(driveAnswer(folders = listOf(DocsFolder(folder_id = "f", name = "Taxes"))))
+        s = drive(DocsDriveEvent(search_opened = DocsDriveEvent.SearchOpened()), s).state
+        val typed = drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "lese")), s)
+        val corrected = AppQueryResponse(docs_search = DocsSearch(today = TODAY, corrected = "lease"))
+        val fixed = drive(DocsDriveReads.arrived(listOf(corrected)), typed.state).state
+        fixed.search!!.corrected shouldBe "lease"
+        // An exact answer says nothing was corrected.
+        drive(DocsDriveReads.arrived(listOf(AppQueryResponse(docs_search = DocsSearch(today = TODAY)))), typed.state)
+            .state.search!!.corrected shouldBe ""
+        // A NEW TERM clears it.
+        drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "leas")), fixed)
+            .state.search!!.corrected shouldBe ""
+        // AN ANSWER FOR A SEARCH CLOSED SINCE draws none.
+        val closed = drive(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed()), typed.state).state
+        drive(DocsDriveReads.arrived(listOf(corrected)), closed).state.search!!.corrected shouldBe ""
+        drive(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed()), fixed).state.search!!.corrected shouldBe ""
+    }
+
     // --- Empties, day one, denied -----------------------------------------
 
     "every shelf has its own empty sentence and at most one action" {

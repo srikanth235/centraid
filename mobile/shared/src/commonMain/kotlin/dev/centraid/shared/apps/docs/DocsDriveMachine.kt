@@ -187,7 +187,7 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
             val arrived = event.data_.data_ ?: DocsDriveData()
             val rail = event.data_.rail ?: s.rail
             val answered = if (arrived.mode == DocsDriveData.Mode.MODE_SEARCH) {
-                SearchLaw.answered(Search, s, s.search?.term ?: "")
+                SearchLaw.answered(Search, s, s.search?.term ?: "", event.data_.corrected)
             } else {
                 s
             }

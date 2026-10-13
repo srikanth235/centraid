@@ -96,6 +96,7 @@ public object PeopleHomeReads :
             data_ = PeopleHomeEvent.DataArrived(
                 data_ = roster?.let(PeopleFold::roster) ?: touch?.let(PeopleFold::touch),
                 search = search?.let(PeopleFold::search),
+                corrected = search?.corrected ?: "",
             ),
         )
     }

@@ -7,6 +7,7 @@ import centraid.core.v1.LockerItemRow
 import centraid.core.v1.LockerItems
 import centraid.core.v1.LockerRevealRefusal
 import centraid.core.v1.LockerReview
+import centraid.core.v1.LockerSearch
 import centraid.core.v1.LockerSecret
 import centraid.core.v1.LockerTypeCount
 import centraid.core.v1.Row
@@ -460,6 +461,27 @@ class LockerSpec : StringSpec({
         // The Items filters are the room's chip row, and only Items carries them.
         closed.screen.data_!!.filters.map { it.key } shouldContain LockerHomeMachine.ALL
         opened.screen.data_?.filters.orEmpty().shouldBeEmpty()
+    }
+
+    "search: the words the core corrected are on the field, a new term clears them, and an answer for another term draws none (#1097)" {
+        val (open, _) = home.run(openHome, LockerInput.Lock(open = true), LockerInput.Answered(listOf(items(row("a", "Bank")))))
+        val opened = home.reduce(open, homeView(LockerHomeEvent(search_opened = LockerHomeEvent.SearchOpened()))).state
+        val typed = home.reduce(opened, homeView(LockerHomeEvent(search_typed = LockerHomeEvent.SearchTyped(term = "bnak")))).state
+        fun answer(term: String, corrected: String) = LockerInput.Answered(
+            listOf(AppQueryResponse(locker_search = LockerSearch(term = term, items = listOf(row("a", "Bank")), corrected = corrected))),
+        )
+        val fixed = home.reduce(typed, answer("bnak", "bank")).state
+        fixed.screen.search!!.corrected shouldBe "bank"
+        // An exact answer says nothing was corrected.
+        home.reduce(typed, answer("bnak", "")).state.screen.search!!.corrected shouldBe ""
+        // A NEW TERM clears it.
+        home.reduce(fixed, homeView(LockerHomeEvent(search_typed = LockerHomeEvent.SearchTyped(term = "bnk")))).state
+            .screen.search!!.corrected shouldBe ""
+        // AN ANSWER FOR AN OLDER TERM than the one on screen draws none.
+        home.reduce(typed, answer("bn", "bank")).state.screen.search!!.corrected shouldBe ""
+        // Closing clears it.
+        home.reduce(fixed, homeView(LockerHomeEvent(search_closed = LockerHomeEvent.SearchClosed()))).state
+            .screen.search!!.corrected shouldBe ""
     }
 
     // --- one item -----------------------------------------------------------

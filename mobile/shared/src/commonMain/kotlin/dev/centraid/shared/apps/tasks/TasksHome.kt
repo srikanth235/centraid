@@ -456,7 +456,7 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
             // A SEARCH CLOSED WHILE ITS HITS WERE READING IS NOT REOPENED.
             search = if (term == null) null else answer.search ?: state.search,
             screen = if (term != null && answer.search != null) {
-                SearchLaw.answered(Search, state, state.screen.search?.term ?: "").screen
+                SearchLaw.answered(Search, state, state.screen.search?.term ?: "", answer.search?.corrected ?: "").screen
             } else {
                 state.screen
             },

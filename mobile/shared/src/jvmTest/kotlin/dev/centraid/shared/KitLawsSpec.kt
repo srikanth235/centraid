@@ -189,6 +189,29 @@ class KitLawsSpec : StringSpec({
         SearchLaw.answerIsCurrent(lens, SearchLaw.closed(lens, field).state, "dinner") shouldBe false
     }
 
+    "search: the words corrected are kept for the current answer, cleared by a new term or a close, and never set for a stale or blank one (#1097)" {
+        val lens = object : SearchLens<SearchField> {
+            override val screenId: String = "probe.search"
+            override fun field(state: SearchField): SearchField = state
+            override fun with(state: SearchField, field: SearchField): SearchField = field
+        }
+        val typed = SearchLaw.term(lens, SearchLaw.opened(lens, SearchField()).state, "dinnre").state
+        val fixed = SearchLaw.answered(lens, typed, "dinnre", "dinner")
+        fixed.corrected shouldBe "dinner"
+        fixed.answered_term shouldBe "dinnre"
+        // The default is an exact answer, which also clears an earlier correction.
+        SearchLaw.answered(lens, fixed, "dinnre").corrected shouldBe ""
+        // A new term and a close clear it.
+        SearchLaw.term(lens, fixed, "dinn").state.corrected shouldBe ""
+        SearchLaw.closed(lens, fixed).state.corrected shouldBe ""
+        // An answer for another term, a closed field or a blank term sets none.
+        SearchLaw.answered(lens, typed, "din", "dinner").corrected shouldBe ""
+        SearchLaw.answered(lens, SearchLaw.closed(lens, fixed).state, "dinnre", "dinner").corrected shouldBe ""
+        SearchLaw.answered(lens, SearchLaw.term(lens, typed, " ").state, " ", "dinner").corrected shouldBe ""
+        // Spaces at the ends are not another term.
+        SearchLaw.answered(lens, SearchLaw.term(lens, typed, "dinnre ").state, "dinnre", "dinner").corrected shouldBe "dinner"
+    }
+
     // --- Autosave ---------------------------------------------------------
 
     "autosave: each edit schedules its own token, and a stale tick saves nothing" {

@@ -21,6 +21,8 @@ import centraid.screen.v1.SeatState
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.kit.ScreenBridge
+import dev.centraid.shared.kit.SearchLaw
+import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -80,7 +82,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
             val asked = termOf(state)
             if (asked.isEmpty()) Step(state) else Step(loading(state), listOf(read()))
         }
-        event.data_ != null -> Step(arrived(state, event.data_.data_ ?: HomeSearchData(), event.data_.term))
+        event.data_ != null ->
+            Step(arrived(state, event.data_.data_ ?: HomeSearchData(), event.data_.term, event.data_.corrected))
         event.refused != null ->
             if (termOf(state).isEmpty()) Step(state) else Step(state.failed(event.refused.failure ?: Reads.refused("")))
         event.denied != null ->
@@ -97,7 +100,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
     private fun term(state: HomeSearchState, term: String): Step<HomeSearchState> {
         val field = state.field_ ?: SearchField()
         if (field.open_ && field.term == term && state.resting == null) return Step(state)
-        val next = state.copy(field_ = field.copy(open_ = true, term = term))
+        // A NEW TERM clears the words the last one was corrected to.
+        val next = state.copy(field_ = field.copy(open_ = true, term = term, corrected = ""))
         if (term.isBlank()) return Step(rest(next.copy(field_ = next.field_?.copy(answered_term = ""))))
         return Step(loading(next), listOf(read()))
     }
@@ -107,7 +111,12 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
     private fun termOf(state: HomeSearchState): String = state.field_?.term?.trim().orEmpty()
 
     /** The answer, if it answers the term on screen. */
-    private fun arrived(state: HomeSearchState, data: HomeSearchData, answered: String): HomeSearchState {
+    private fun arrived(
+        state: HomeSearchState,
+        data: HomeSearchData,
+        answered: String,
+        corrected: String,
+    ): HomeSearchState {
         val field = state.field_ ?: return state
         if (!field.open_ || termOf(state).isEmpty() || termOf(state) != answered.trim()) return state
         val shown = if (data.groups.isEmpty()) {
@@ -120,8 +129,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         } else {
             data.copy(empty = null)
         }
-        return state.copy(
-            field_ = field.copy(answered_term = answered.trim()),
+        // The words the rows answer are kept by the law, for an answer still current.
+        return SearchLaw.answered(Field, state, answered.trim(), corrected).copy(
             resting = null,
             loading = null,
             failure = null,
@@ -136,6 +145,14 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         if (asked.isEmpty()) return state
         val recent = (listOf(asked) + state.recent.filterNot { it.equals(asked, ignoreCase = true) }).take(RECENT_MAX)
         return state.copy(recent = recent)
+    }
+
+    private object Field : SearchLens<HomeSearchState> {
+        override val screenId: String = SCREEN_ID
+
+        override fun field(state: HomeSearchState): SearchField = state.field_ ?: SearchField()
+
+        override fun with(state: HomeSearchState, field: SearchField): HomeSearchState = state.copy(field_ = field)
     }
 
     private fun rest(state: HomeSearchState): HomeSearchState = state.copy(
@@ -265,6 +282,7 @@ public object HomeSearchReads : ScreenQueries<HomeSearchState, HomeSearchEvent> 
             data_ = HomeSearchEvent.DataArrived(
                 data_ = HomeSearchMachine.fold(answers.firstNotNullOfOrNull { it.vault_search }?.hits ?: emptyList()),
                 term = requests.firstNotNullOfOrNull { it.vault_search }?.term.orEmpty(),
+                corrected = answers.firstNotNullOfOrNull { it.vault_search }?.corrected.orEmpty(),
             ),
         )
 

@@ -479,6 +479,29 @@ class AgendaHomeSpec : StringSpec({
         closed.state.screen.data_.shouldNotBeNull().days.map { it.day } shouldBe listOf("2026-06-16")
     }
 
+    "search: the words the core corrected are on the screen, a new term clears them, and an answer for a closed search draws none (#1097)" {
+        val home = landed(schedule, upcoming(timed("a", "Stand-up", "2026-06-16T09:00")))
+        val typed = drive(home, searchOpened(), term("dentsit")).state
+        val corrected = AgendaInput.Answered(
+            upcoming = null,
+            context = context(),
+            search = AgendaSearch(
+                events = listOf(timed("d", "Dentist", "2026-05-02T14:00").copy(calendar_id = "cal-1")),
+                corrected = "dentist",
+            ),
+        )
+        val fixed = drive(typed, corrected).state
+        fixed.screen.search_corrected shouldBe "dentist"
+        // An exact answer says nothing was corrected.
+        drive(typed, AgendaInput.Answered(null, context(), AgendaSearch())).state.screen.search_corrected shouldBe ""
+        // A NEW TERM clears it.
+        drive(fixed, term("dents")).state.screen.search_corrected shouldBe ""
+        // AN ANSWER FOR A SEARCH CLOSED SINCE draws none.
+        val closed = drive(typed, view(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed()))).state
+        drive(closed, corrected).state.screen.search_corrected shouldBe ""
+        drive(fixed, view(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed()))).state.screen.search_corrected shouldBe ""
+    }
+
     "search from Waiting covers every event, not only the ones waiting on you (#1047)" {
         val invite = timed("w", "Offsite", "2026-06-16T09:00").copy(attendees = listOf(you("needs-action")))
         val home = landed(waiting, upcoming(invite, timed("a", "Stand-up", "2026-06-16T10:00")))

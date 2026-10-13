@@ -380,6 +380,31 @@ class TasksSpec : StringSpec({
         closed.state.screen.data_.groups.single().title shouldBe "Today"
     }
 
+    "search: the words the core corrected are on the field, a new term clears them, and an answer for a closed search draws none (#1097)" {
+        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
+        val open = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
+        val typed = TasksHomeMachine.reduce(open, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "sunscren")))).state
+        val fixed = TasksHomeMachine.reduce(
+            typed,
+            TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Buy sunscreen")), corrected = "sunscreen")),
+        ).state
+        fixed.screen.search!!.corrected shouldBe "sunscreen"
+        // An exact answer says nothing was corrected.
+        TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Call Ana")))))
+            .state.screen.search!!.corrected shouldBe ""
+        // A NEW TERM clears it; the rows stay until its answer lands.
+        TasksHomeMachine.reduce(fixed, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "sunscree"))))
+            .state.screen.search!!.corrected shouldBe ""
+        // A SEARCH CLOSED WHILE ITS HITS WERE READING draws no correction.
+        val closed = TasksHomeMachine.reduce(typed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed()))).state
+        TasksHomeMachine.reduce(
+            closed,
+            TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Buy sunscreen")), corrected = "sunscreen")),
+        ).state.screen.search!!.corrected shouldBe ""
+        TasksHomeMachine.reduce(fixed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())))
+            .state.screen.search!!.corrected shouldBe ""
+    }
+
     "the band: the tab you are on is nothing; another reads; More is a sheet without Search; the search bar opens the field" {
         val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY))
         TasksHomeMachine.reduce(landed, view(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = "today")))).effects.shouldBeEmpty()

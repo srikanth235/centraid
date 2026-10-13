@@ -303,7 +303,7 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
             } else {
                 val rows = event.search_arrived.rows
                 Step(
-                    SearchLaw.answered(Search, state, term).copy(
+                    SearchLaw.answered(Search, state, term, event.search_arrived.corrected).copy(
                         results = NotesSearchResults(
                             term = term,
                             rows = rows,

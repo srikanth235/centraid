@@ -335,6 +335,27 @@ class NotesAppSpec : StringSpec({
         closed.state.data_.shouldNotBeNull()
     }
 
+    "library: the words the core corrected are on the field, a new term clears them, and an answer for a closed search draws none (#1097)" {
+        val state = loadedLibrary(row("n-1", "A"))
+        val open = NotesLibraryMachine.reduce(state, NotesLibraryEvent(search_opened = NotesLibraryEvent.SearchOpened()))
+        val typed = NotesLibraryMachine.reduce(open.state, NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "mlik"))).state
+        val hit = NotesSearchHit(note_id = "n-1", title = "A", preview = "buy milk", snippet = "buy ⟦milk⟧ today")
+        val corrected = NotesLibraryReads.arrived(listOf(AppQueryResponse(notes_search = NotesSearch(hits = listOf(hit), corrected = "milk"))))
+        val fixed = NotesLibraryMachine.reduce(typed, corrected).state
+        fixed.search!!.corrected shouldBe "milk"
+        // An exact answer says nothing was corrected.
+        NotesLibraryMachine.reduce(typed, NotesLibraryReads.arrived(listOf(AppQueryResponse(notes_search = NotesSearch(hits = listOf(hit))))))
+            .state.search!!.corrected shouldBe ""
+        // A NEW TERM clears it.
+        NotesLibraryMachine.reduce(fixed, NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "mli")))
+            .state.search!!.corrected shouldBe ""
+        // AN ANSWER FOR A SEARCH CLOSED SINCE draws none.
+        val closed = NotesLibraryMachine.reduce(typed, NotesLibraryEvent(search_closed = NotesLibraryEvent.SearchClosed())).state
+        NotesLibraryMachine.reduce(closed, corrected).state.search!!.corrected shouldBe ""
+        NotesLibraryMachine.reduce(fixed, NotesLibraryEvent(search_closed = NotesLibraryEvent.SearchClosed()))
+            .state.search!!.corrected shouldBe ""
+    }
+
     "library: a change while searching re-reads the search, and the library on close" {
         val searching = NotesLibraryMachine.run(
             loadedLibrary(row("n-1", "A")),

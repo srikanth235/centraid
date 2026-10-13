@@ -233,7 +233,7 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
         val term = activeTerm(state)
         if (event.search != null) {
             if (term == null) return Step(settled)
-            val answered = SearchLaw.answered(Search, settled, term)
+            val answered = SearchLaw.answered(Search, settled, term, event.corrected)
             return Step(answered.copy(search_data = event.search.copy(term = term)))
         }
         val data = event.data_ ?: return Step(settled)
