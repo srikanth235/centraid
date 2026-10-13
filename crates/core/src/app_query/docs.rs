@@ -26,7 +26,7 @@ use centraid_vault::Vault;
 use centraid_vault::page::format_byte_size;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, settle, zone_of};
+use super::{RecordingSearch, VaultDoor, corrected_search, settle, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -167,16 +167,26 @@ pub(super) fn search(
             inner: &index,
             door,
         };
-        Ok(Ok(docs::load_search_term(
-            door,
+        let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
+        Ok(Ok(corrected_search(
             &search,
-            &centraid_search::Principal::Owner,
+            &[centraid_apps_docs::queries::DOCUMENT_TARGET_TYPE],
             &asked.term,
-            usize::try_from(asked.limit).unwrap_or(usize::MAX),
+            |data: &docs::SearchData| data.documents.is_empty(),
+            |term| {
+                docs::load_search_term(
+                    door,
+                    &search,
+                    &centraid_search::Principal::Owner,
+                    term,
+                    limit,
+                )
+            },
         )))
     })??;
-    settle(door, loaded, |data| {
+    settle(door, loaded, |(data, corrected)| {
         Answer::DocsSearch(wire::DocsSearch {
+            corrected,
             documents: data
                 .documents
                 .into_iter()

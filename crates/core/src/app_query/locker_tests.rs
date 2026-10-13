@@ -422,6 +422,125 @@ fn search_is_the_typed_text_of_a_live_item_and_never_a_secret() {
     assert!(hits("   ").is_empty());
 }
 
+/// THE WIDENED WALK (#1097, R6): every typed field a member can see on an item
+/// is found by search — the memo, the note, the full name, the email, the phone,
+/// the card brand and an alias — and each answer is exact, so `corrected` stays
+/// empty.
+#[test]
+fn search_finds_the_memo_the_note_the_identity_the_brand_and_an_alias() {
+    let scratch = Scratch::founded();
+    scratch.unlock();
+    scratch.run(
+        "locker.add_item",
+        json!({ "item_id": "item-id", "type": "identity", "title": "Passport office",
+                "fullname": "Priya Raghunathan", "email": "priya@mail.example",
+                "phone": "555-0142" }),
+    );
+    scratch.run(
+        "locker.add_item",
+        json!({ "item_id": "item-card", "type": "card", "title": "Everyday",
+                "brand": "Mastercard", "card_number": "5555555555554444" }),
+    );
+    scratch.run(
+        "locker.add_item",
+        json!({ "item_id": "item-login", "type": "login", "title": "Streaming",
+                "username": "sam", "alias": "telly-box", "password": PASSWORD }),
+    );
+    scratch.run(
+        "locker.set_memo",
+        json!({ "item_id": "item-login", "note": "shared with the lodger downstairs" }),
+    );
+    scratch.relock();
+    for (term, item) in [
+        ("raghunathan", "item-id"),
+        ("priya@mail", "item-id"),
+        ("555-0142", "item-id"),
+        ("mastercard", "item-card"),
+        ("telly-box", "item-login"),
+        ("lodger", "item-login"),
+    ] {
+        let found = scratch.search(term);
+        let ids: Vec<&str> = found.items.iter().map(|row| row.item_id.as_str()).collect();
+        assert_eq!(ids, [item], "{term}");
+        assert!(found.corrected.is_empty(), "{term} was an exact hit");
+    }
+}
+
+/// A TYPO IS CORRECTED FROM THE WALKED ROWS' OWN WORDS (#1097, R4, R6): the
+/// row answers, `corrected` names the words searched, and an exact answer is
+/// untouched.
+#[test]
+fn a_typo_is_corrected_from_the_items_own_words_and_re_walked() {
+    let scratch = stocked();
+    let slipped = scratch.search("bnak");
+    let ids: Vec<&str> = slipped
+        .items
+        .iter()
+        .map(|row| row.item_id.as_str())
+        .collect();
+    assert_eq!(ids, ["item-bank"]);
+    assert_eq!(slipped.corrected, "bank");
+    // A word of the memo or a note is a word it corrects to, too.
+    let noted = scratch.search("recvoery");
+    assert_eq!(noted.corrected, "recovery");
+    assert_eq!(noted.items.len(), 1);
+    // The exact answer is unchanged and says nothing was corrected.
+    let exact = scratch.search("bank");
+    assert_eq!(exact.items.len(), 1);
+    assert!(exact.corrected.is_empty());
+    // A word the items do not hold, one edit from nothing, finds nothing and is
+    // not reported; neither is a word under four letters.
+    let nothing = scratch.search("zebras");
+    assert!(nothing.items.is_empty() && nothing.corrected.is_empty());
+    let short = scratch.search("bnk");
+    assert!(short.items.is_empty() && short.corrected.is_empty());
+    // Punctuation stuck to the typed word is read around.
+    assert_eq!(scratch.search("bnak?").corrected, "bank");
+}
+
+/// NO SEALED VALUE IS A MATCH OR A CORRECTION (#1097, doctrine 2): a password
+/// whose first word is one slip from the typed word is never offered, and the
+/// item whose password it is stays unfound.
+#[test]
+fn a_sealed_value_is_never_matched_and_never_offered_as_a_correction() {
+    let scratch = Scratch::founded();
+    scratch.unlock();
+    scratch.run(
+        "locker.add_item",
+        json!({ "item_id": "item-vault", "type": "login", "title": "Savings portal",
+                "username": "saver", "password": "budget2025secret",
+                "notes": "quarterly statement" }),
+    );
+    scratch.relock();
+    // `budgte` is one swap from `budget`, the first word of the password.
+    let typo = scratch.search("budgte");
+    assert!(typo.items.is_empty(), "{:?}", typo.items);
+    assert!(typo.corrected.is_empty(), "offered {:?}", typo.corrected);
+    // The exact text of the password finds nothing either.
+    for term in ["budget2025secret", "budget", "2025secret"] {
+        assert!(scratch.search(term).items.is_empty(), "{term}");
+    }
+    // The bytes of the answer never carry it.
+    let bytes = scratch.ask_bytes(Q::LockerSearch(wire::LockerSearchRequest {
+        term: "budgte".to_owned(),
+        limit: 0,
+        tz: TZ.to_owned(),
+    }));
+    assert!(!contains(&bytes, "budget2025secret"));
+    // Sanity that the item is searchable by its typed text...
+    assert_eq!(scratch.search("savings").items.len(), 1);
+    // ...and THE CONTROL: the same word typed into a memo, which is searchable
+    // text, is exactly what the correction then lands on. The test above is not
+    // vacuous: it fails if a sealed value ever joins the walked words.
+    scratch.run(
+        "locker.set_memo",
+        json!({ "item_id": "item-vault", "note": "budget review in spring" }),
+    );
+    let control = scratch.search("budgte");
+    assert_eq!(control.corrected, "budget");
+    assert_eq!(control.items.len(), 1);
+}
+
 #[test]
 fn review_names_what_metadata_can_show() {
     let scratch = stocked();

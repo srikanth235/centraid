@@ -161,7 +161,7 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
             // WHERE A REPEATING HIT OPENS (#1047): the occurrence it means,
             // asked of the same door after the hits are folded.
             let loaded = search_events(vault, &door, &asked.term, asked.limit)?.and_then(
-                |(data, denial)| {
+                |((data, corrected), denial)| {
                     let next = if denial.is_none() {
                         data.events
                             .iter()
@@ -170,11 +170,11 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
                     } else {
                         Vec::new()
                     };
-                    Ok(((data, next), denial))
+                    Ok(((data, next, corrected), denial))
                 },
             );
-            settle(&door, loaded, |(data, next)| {
-                A::AgendaSearch(search_to_wire(data, next, &zone))
+            settle(&door, loaded, |(data, next, corrected)| {
+                A::AgendaSearch(search_to_wire(data, next, corrected, &zone))
             })?
         }
         Q::DocsDrive(asked) => docs::drive(vault, &door, &now, asked)?,
@@ -309,7 +309,7 @@ fn search_events(
     door: &VaultDoor<'_>,
     term: &str,
     limit: u32,
-) -> Result<KitResult<(agenda::SearchData, Option<centraid_apps_kit::Denial>)>> {
+) -> Result<KitResult<Corrected<agenda::SearchData>>> {
     vault.read(|connection| {
         let index = match centraid_search::SqliteDoor::open(connection) {
             Ok(index) => index,
@@ -323,12 +323,21 @@ fn search_events(
             inner: &index,
             door,
         };
-        Ok(Ok(agenda::load_search_term(
-            door,
+        let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+        Ok(Ok(corrected_search(
             &search,
-            &centraid_search::Principal::Owner,
+            &[agenda::EVENT_TARGET_TYPE],
             term,
-            usize::try_from(limit).unwrap_or(usize::MAX),
+            |data: &agenda::SearchData| data.events.is_empty(),
+            |term| {
+                agenda::load_search_term(
+                    door,
+                    &search,
+                    &centraid_search::Principal::Owner,
+                    term,
+                    limit,
+                )
+            },
         )))
     })?
 }
@@ -347,16 +356,77 @@ impl centraid_search::Search for RecordingSearch<'_, '_> {
         principal: &centraid_search::Principal,
         request: &centraid_search::SearchRequest,
     ) -> std::result::Result<centraid_search::Answer, centraid_search::SearchError> {
-        self.inner.query(principal, request).inspect_err(|error| {
-            if !matches!(
-                error,
-                centraid_search::SearchError::NoSearchableWords { .. }
-            ) {
-                self.door.keep(CoreError::Invariant {
-                    context: format!("the search index refused: {error}"),
-                });
-            }
-        })
+        self.inner
+            .query(principal, request)
+            .inspect_err(|error| self.keep(error))
+    }
+
+    /// **FORWARDED, because the trait's default is `Ok(None)`.** A recorder that
+    /// only wrapped `query` would silently correct nothing for every caller in
+    /// this crate; the failure is kept the way `query`'s is.
+    fn correct(
+        &self,
+        principal: &centraid_search::Principal,
+        entities: &[&str],
+        query: &str,
+    ) -> std::result::Result<Option<String>, centraid_search::SearchError> {
+        self.inner
+            .correct(principal, entities, query)
+            .inspect_err(|error| self.keep(error))
+    }
+}
+
+impl RecordingSearch<'_, '_> {
+    fn keep(&self, error: &centraid_search::SearchError) {
+        if !matches!(
+            error,
+            centraid_search::SearchError::NoSearchableWords { .. }
+        ) {
+            self.door.keep(CoreError::Invariant {
+                context: format!("the search index refused: {error}"),
+            });
+        }
+    }
+}
+
+/// A loader's answer through [`corrected_search`]: the data and the words it was
+/// corrected to (empty when none), then the denial, if any.
+type Corrected<T> = ((T, String), Option<centraid_apps_kit::Denial>);
+
+/// THE CORRECTION PASS, once for every surface the full-text door answers
+/// (#1097, R4, R8).
+///
+/// `run` is the surface's whole search at one term; `is_empty` says whether its
+/// answer holds nothing. The exact term runs first. **Only when that answer is
+/// empty and carries no denial** does the door correct the term against the
+/// vocabulary of `entities` (the domains the surface is about to search again);
+/// with a correction the surface runs again, and the corrected words are kept
+/// **only if that run found something**. A denial is never corrected around, and
+/// a correction that found nothing is not reported. The second element of the
+/// answer is the corrected words, empty when none answered — the wire's
+/// `corrected`.
+///
+/// A failure of the door's `correct` is the recorder's to keep (it is kept the
+/// way `query`'s is); here it only means there is no correction.
+fn corrected_search<T>(
+    search: &dyn centraid_search::Search,
+    entities: &[&str],
+    term: &str,
+    is_empty: impl Fn(&T) -> bool,
+    mut run: impl FnMut(&str) -> KitResult<(T, Option<centraid_apps_kit::Denial>)>,
+) -> KitResult<Corrected<T>> {
+    let (exact, denial) = run(term)?;
+    if denial.is_some() || !is_empty(&exact) || term.trim().is_empty() {
+        return Ok(((exact, String::new()), denial));
+    }
+    let Ok(Some(words)) = search.correct(&centraid_search::Principal::Owner, entities, term) else {
+        return Ok(((exact, String::new()), None));
+    };
+    let (again, denial) = run(&words)?;
+    if denial.is_none() && !is_empty(&again) {
+        Ok(((again, words), None))
+    } else {
+        Ok(((exact, String::new()), None))
     }
 }
 
@@ -496,10 +566,12 @@ fn upcoming_to_wire(
 fn search_to_wire(
     data: agenda::SearchData,
     next: Vec<Option<agenda::EventRow>>,
+    corrected: String,
     zone: &FireZone,
 ) -> wire::AgendaSearch {
     let mut next = next.into_iter();
     wire::AgendaSearch {
+        corrected,
         events: data
             .events
             .into_iter()
@@ -1112,6 +1184,130 @@ mod tests {
             ))
             .expect_err("a zero limit is refused");
         assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
+    }
+
+    /// A TYPO FINDS THE EVENT AND SAYS WHAT WAS SEARCHED (#1097, R4, R8).
+    #[test]
+    fn a_typo_finds_the_event_and_says_what_it_searched() {
+        let scratch = Scratch::founded();
+        let cabin = scratch.propose(
+            "Cabin weekend",
+            "2099-06-05T16:00:00.000Z",
+            "2099-06-05T18:00:00.000Z",
+            None,
+        );
+        scratch.propose(
+            "Dentist",
+            "2099-06-03T09:00:00.000Z",
+            "2099-06-03T10:00:00.000Z",
+            None,
+        );
+        let search = |term: &str| {
+            let wire::app_query_response::Answer::AgendaSearch(found) = scratch
+                .ask(wire::app_query_request::Query::AgendaSearch(
+                    wire::AgendaSearchRequest {
+                        term: term.to_owned(),
+                        limit: 10,
+                        tz: TZ.to_owned(),
+                    },
+                ))
+                .expect("search answers")
+            else {
+                panic!("search answered as something else");
+            };
+            found
+        };
+        let slipped = search("cabni");
+        assert_eq!(slipped.events.len(), 1);
+        assert_eq!(slipped.events[0].event_id, cabin);
+        assert_eq!(slipped.corrected, "cabin");
+        let exact = search("cabin");
+        assert_eq!(exact.events.len(), 1);
+        assert!(exact.corrected.is_empty());
+        let nothing = search("zeppelin");
+        assert!(nothing.events.is_empty() && nothing.corrected.is_empty());
+    }
+
+    /// THE RECORDER FORWARDS THE CORRECTION. `Search::correct` defaults to
+    /// `Ok(None)`, so a recorder that wraps only `query` is a recorder that
+    /// quietly corrects nothing for every caller in this crate; this fails the
+    /// moment the forward is removed.
+    #[test]
+    fn the_recording_door_forwards_correct_and_keeps_its_failure() {
+        use centraid_search::{Answer, Principal, Search, SearchError, SearchRequest};
+
+        struct Inner(std::result::Result<Option<String>, SearchError>);
+        impl Search for Inner {
+            fn query(
+                &self,
+                _: &Principal,
+                request: &SearchRequest,
+            ) -> std::result::Result<Answer, SearchError> {
+                Err(SearchError::NoSearchableWords {
+                    query: request.query.clone(),
+                })
+            }
+            fn correct(
+                &self,
+                _: &Principal,
+                _: &[&str],
+                _: &str,
+            ) -> std::result::Result<Option<String>, SearchError> {
+                self.0.clone()
+            }
+        }
+
+        let scratch = Scratch::founded();
+        scratch
+            .handle
+            .with_vault(|vault| {
+                let door = VaultDoor::new(vault);
+                let said = Inner(Ok(Some("cabin".to_owned())));
+                let recording = RecordingSearch {
+                    inner: &said,
+                    door: &door,
+                };
+                assert_eq!(
+                    recording.correct(&Principal::Owner, &["core.event"], "cabni"),
+                    Ok(Some("cabin".to_owned())),
+                    "the inner door's correction is the recorder's"
+                );
+                // A failure of the vocabulary is kept the way `query`'s is, so
+                // `settle` reports it rather than the member seeing "no match".
+                let broken = Inner(Err(SearchError::NotADomain {
+                    entity: "locker.item".to_owned(),
+                    count: 7,
+                }));
+                let recording = RecordingSearch {
+                    inner: &broken,
+                    door: &door,
+                };
+                assert!(
+                    recording
+                        .correct(&Principal::Owner, &["locker.item"], "cabni")
+                        .is_err()
+                );
+                assert!(
+                    door.take_failure().is_some(),
+                    "a refusal of `correct` is kept"
+                );
+                // ...but a term with no searchable word is an answer, not a failure.
+                let none = Inner(Err(SearchError::NoSearchableWords {
+                    query: "---".to_owned(),
+                }));
+                let recording = RecordingSearch {
+                    inner: &none,
+                    door: &door,
+                };
+                assert!(
+                    recording
+                        .correct(&Principal::Owner, &["core.event"], "---")
+                        .is_err()
+                );
+                assert!(door.take_failure().is_none());
+                Ok(())
+            })
+            .expect("the vault is open");
     }
 
     /// A CEILING IS A TYPED REFUSAL. Eight daily series over most of a year is

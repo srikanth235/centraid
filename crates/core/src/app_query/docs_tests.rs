@@ -567,6 +567,45 @@ fn activity_answers_and_an_unknown_zone_is_refused() {
     assert_eq!(zero.code(), wire::ErrorCode::InvalidRequest);
 }
 
+/// A TYPO FINDS THE DOCUMENT AND SAYS WHAT WAS SEARCHED (#1097, R4, R8).
+#[test]
+fn a_typo_finds_the_document_and_says_what_it_searched() {
+    let scratch = Scratch::founded();
+    let lease = scratch.add("Lease agreement", "rent is paid monthly", None);
+    scratch.add("Recipe", "flour and eggs", None);
+    let search = |term: &str| {
+        let wire::app_query_response::Answer::DocsSearch(found) = scratch
+            .ask(wire::app_query_request::Query::DocsSearch(
+                wire::DocsSearchRequest {
+                    term: term.to_owned(),
+                    limit: 10,
+                    tz: TZ.to_owned(),
+                },
+            ))
+            .expect("search answers")
+        else {
+            panic!("search answered as something else");
+        };
+        found
+    };
+    let slipped = search("leasae");
+    assert_eq!(titles_of(&slipped), ["Lease agreement"]);
+    assert_eq!(slipped.documents[0].document_id, lease);
+    assert_eq!(slipped.corrected, "lease");
+    let exact = search("lease");
+    assert_eq!(exact.documents.len(), 1);
+    assert!(exact.corrected.is_empty());
+    assert!(search("zeppelin").corrected.is_empty());
+}
+
+fn titles_of(found: &wire::DocsSearch) -> Vec<&str> {
+    found
+        .documents
+        .iter()
+        .map(|document| document.title.as_str())
+        .collect()
+}
+
 impl Scratch {
     /// Stage bytes the way a shell does: begin, one chunk, end — the handle's
     /// hash is what `core.add_document` names as `staged_sha`.

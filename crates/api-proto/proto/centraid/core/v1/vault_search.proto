@@ -38,6 +38,13 @@ message VaultSearch {
   // In the domains' order (`centraid_search::DOMAINS`), each domain's rows in
   // the index's rank order. A shell groups and orders them as it draws.
   repeated VaultSearchHit hits = 1;
+  // THE WORDS THE ROWS ANSWER (#1097, R4, R8). Set only when the term as typed
+  // found nothing and a correction of its words did: the typed words with each
+  // mistyped one replaced by a word the vault's own index holds, and the rows
+  // above are the ones that corrected run found. EMPTY for an exact answer and
+  // when no correction found anything. A shell says "Showing results for
+  // <corrected>".
+  string corrected = 2;
 }
 
 // One row a member can open, from the index — five strings and the readings

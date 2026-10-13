@@ -588,6 +588,48 @@ fn search_answers_ranked_live_tasks() {
     );
 }
 
+/// A TYPO FINDS THE ROW AND SAYS WHAT WAS SEARCHED (#1097, R4, R8): the exact
+/// term answers as before, and only an empty exact answer is corrected.
+#[test]
+fn a_typo_finds_the_task_and_says_what_it_searched() {
+    let scratch = Scratch::founded();
+    let cabin = scratch.titled("Book the cabin", Some("2099-06-03"));
+    scratch.titled("Dentist", None);
+    let search = |term: &str| {
+        let A::TasksSearch(found) = scratch
+            .ask(Q::TasksSearch(wire::TasksSearchRequest {
+                term: term.to_owned(),
+                limit: 10,
+                tz: TZ.to_owned(),
+            }))
+            .expect("search answers")
+        else {
+            panic!("search answered as something else");
+        };
+        found
+    };
+    let slipped = search("cabni");
+    let ids: Vec<&str> = slipped
+        .tasks
+        .iter()
+        .map(|task| task.task_id.as_str())
+        .collect();
+    assert_eq!(ids, [cabin.as_str()]);
+    assert_eq!(slipped.corrected, "cabin");
+    assert!(
+        slipped.tasks[0]
+            .snippet
+            .as_deref()
+            .is_some_and(|snippet| snippet.contains('⟦')),
+        "the snippet marks the corrected word"
+    );
+    let exact = search("cabin");
+    assert_eq!(exact.tasks.len(), 1);
+    assert!(exact.corrected.is_empty(), "an exact hit is not corrected");
+    let nothing = search("zeppelin");
+    assert!(nothing.tasks.is_empty() && nothing.corrected.is_empty());
+}
+
 /// CATCH UP: each overdue row in one pile, and a week away named.
 #[test]
 fn catch_up_names_a_long_absence() {

@@ -227,6 +227,7 @@ pub(super) fn search(
                 .map(|listed| row(listed, &zone))
                 .collect(),
             truncated: data.truncated,
+            corrected: data.corrected.unwrap_or_default(),
         })
     })
 }

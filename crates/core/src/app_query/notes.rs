@@ -22,7 +22,9 @@ use centraid_vault::Vault;
 
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, non_empty, settle, zone_if_any, zone_of};
+use super::{
+    RecordingSearch, VaultDoor, corrected_search, non_empty, settle, zone_if_any, zone_of,
+};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -191,10 +193,17 @@ pub(super) fn search(
 ) -> Result<Answer> {
     let zone = zone_if_any(vault, &asked.tz)?;
     let loaded = with_search(vault, door, |search| {
-        queries::load_search(door, search, &Principal::Owner, &asked.term)
+        corrected_search(
+            search,
+            &[queries::NOTE_TARGET_TYPE],
+            &asked.term,
+            |data: &queries::SearchData| data.notes.is_empty(),
+            |term| queries::load_search(door, search, &Principal::Owner, term),
+        )
     })?;
-    settle(door, loaded, |data| {
+    settle(door, loaded, |(data, corrected)| {
         Answer::NotesSearch(wire::NotesSearch {
+            corrected,
             hits: data
                 .notes
                 .into_iter()
@@ -670,6 +679,43 @@ mod tests {
             }))
             .expect_err("no zone is refused");
         assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
+    }
+
+    /// A TYPO FINDS THE NOTE AND SAYS WHAT WAS SEARCHED (#1097, R4, R8).
+    #[test]
+    fn a_typo_finds_the_note_and_says_what_it_searched() {
+        let scratch = Scratch::founded();
+        let kept = scratch.run(
+            "knowledge.create_note",
+            serde_json::json!({ "title": "Tomato stakes", "body_text": "Buy cedar stakes" }),
+        )["note_id"]
+            .as_str()
+            .expect("a note id")
+            .to_owned();
+        let search = |term: &str| {
+            let Ok(Answer::NotesSearch(found)) =
+                scratch.ask(Q::NotesSearch(wire::NotesSearchRequest {
+                    term: term.to_owned(),
+                    tz: TZ.to_owned(),
+                }))
+            else {
+                panic!("search answers");
+            };
+            found
+        };
+        let slipped = search("cedra");
+        let hits: Vec<&str> = slipped
+            .hits
+            .iter()
+            .map(|hit| hit.note_id.as_str())
+            .collect();
+        assert_eq!(hits, [kept.as_str()]);
+        assert_eq!(slipped.corrected, "cedar");
+        let exact = search("cedar");
+        assert_eq!(exact.hits.len(), 1);
+        assert!(exact.corrected.is_empty());
+        let nothing = search("zeppelin");
+        assert!(nothing.hits.is_empty() && nothing.corrected.is_empty());
     }
 
     /// TRASH IS ITS OWN SHELF: a deleted note leaves the library and the search

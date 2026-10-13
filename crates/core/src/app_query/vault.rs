@@ -8,9 +8,14 @@
 //! door, runs that loader and converts — plus the one thing a hit needs to be
 //! OPENED rather than linked: a photo is a content item in the index and a
 //! media asset in Photos, so its asset is read here, by content id, and a
-//! photo whose asset is gone or trashed is dropped.
+//! photo whose asset is gone or trashed is dropped; a person is a `core.party`
+//! in the index and a live `people_profile` in People, so a party with no live
+//! profile (a Tally friend, a trashed person) is dropped too.
+//!
+//! **A TYPO IS CORRECTED ACROSS THE SEVEN DOMAINS** (#1097, R4, R8), only when
+//! the whole answer is empty, and the answer says so in `corrected`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_kit::error::KitResult;
@@ -22,7 +27,7 @@ use centraid_search::{Principal, Target};
 use centraid_vault::Vault;
 
 use super::notes::subtitle_day;
-use super::{VaultDoor, settle, zone_if_any};
+use super::{VaultDoor, corrected_search, settle, zone_if_any};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -30,8 +35,15 @@ type Answer = wire::app_query_response::Answer;
 /// The entity a photo is in the index (`centraid_search::DOMAINS`).
 const PHOTO_ENTITY: &str = "core.content_item";
 
-/// The photos one answer can carry: the loader's eight per domain, with room.
-const PHOTO_ASSETS: FanOutBound = FanOutBound::new(64, 1);
+/// The party entity a person is in the index (`centraid_search::DOMAINS`).
+const PARTY_ENTITY: &str = "core.party";
+
+/// The rows one answer can open: the loader's eight per domain, with room.
+const OPENABLE: FanOutBound = FanOutBound::new(64, 1);
+
+/// What a Home answer is made of: the hits that open something, and the media
+/// asset each photo opens by.
+type Opened = (Vec<Target>, BTreeMap<String, String>);
 
 pub(super) fn search(
     vault: &Vault,
@@ -40,30 +52,60 @@ pub(super) fn search(
 ) -> Result<Answer> {
     // ISOLATED PER DOMAIN, as the powerbox is (`notes::link_targets`): the
     // plain FTS door, so one domain's refusal drops its rows and not the answer.
+    //
+    // THE CORRECTION SPANS THE SEVEN DOMAINS (#1097, R4, R8) and runs only when
+    // the whole answer, after the rows that cannot be opened are dropped, is
+    // empty; the vocabulary it reads is every domain's.
     let loaded = vault.read(|connection| {
         let index =
             centraid_search::SqliteDoor::open(connection).map_err(|error| CoreError::Invariant {
                 context: format!("the search index will not open: {error}"),
             });
-        Ok(index
-            .map(|index| queries::load_link_targets(door, &index, &Principal::Owner, &asked.term)))
+        let entities: Vec<&str> = centraid_search::DOMAINS
+            .iter()
+            .map(|domain| domain.entity)
+            .collect();
+        Ok(index.map(|index| {
+            corrected_search(
+                &index,
+                &entities,
+                &asked.term,
+                |(targets, _): &Opened| targets.is_empty(),
+                |term| {
+                    let (data, denial) =
+                        queries::load_link_targets(door, &index, &Principal::Owner, term)?;
+                    if denial.is_some() {
+                        return Ok(((Vec::new(), BTreeMap::new()), denial));
+                    }
+                    let assets = photo_assets(door, &data.targets)?;
+                    let people = live_people(door, &data.targets)?;
+                    let targets = data
+                        .targets
+                        .into_iter()
+                        .filter(|target| match target.entity.as_str() {
+                            PHOTO_ENTITY => assets.contains_key(&target.id),
+                            PARTY_ENTITY => people.contains(&target.id),
+                            _ => true,
+                        })
+                        .collect();
+                    Ok(((targets, assets), None))
+                },
+            )
+        }))
     })??;
     let zone = zone_if_any(vault, &asked.tz)?;
-    let opened = loaded.and_then(|(data, denial)| {
-        let assets = photo_assets(door, &data.targets)?;
-        Ok(((data.targets, assets), denial))
-    });
-    settle(door, opened, |(targets, assets)| {
+    settle(door, loaded, |((targets, assets), corrected)| {
         Answer::VaultSearch(wire::VaultSearch {
+            corrected,
             hits: targets
                 .into_iter()
-                .filter_map(|target| {
+                .map(|target| {
                     let open_id = if target.entity == PHOTO_ENTITY {
-                        assets.get(&target.id)?.clone()
+                        assets.get(&target.id).cloned().unwrap_or_default()
                     } else {
                         String::new()
                     };
-                    Some(wire::VaultSearchHit {
+                    wire::VaultSearchHit {
                         subtitle_local_day: subtitle_day(zone.as_ref(), &target.subtitle),
                         entity: target.entity,
                         id: target.id,
@@ -72,7 +114,7 @@ pub(super) fn search(
                         app_id: target.app_id,
                         snippet: target.snippet,
                         open_id,
-                    })
+                    }
                 })
                 .collect(),
         })
@@ -103,11 +145,47 @@ fn photo_assets(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeMap<S
             &format!("{} AND deleted_at IS NULL", fragment.sql),
             fragment.bind,
         ),
-        PHOTO_ASSETS,
+        OPENABLE,
     )?;
     Ok(rows
         .iter()
         .filter_map(|row| Some((text_of(row, "content_id")?, text_of(row, "asset_id")?)))
+        .collect())
+}
+
+/// The party hits that have a LIVE People profile: the ones People can show.
+///
+/// `core.party` is every party in the vault — a Tally friend, a trashed person
+/// — and only a live `people_profile` makes one a person in People, whose own
+/// search drops the rest (`people_profile.deleted_at IS NULL`). A Home row opens
+/// People at that person, so one that cannot be shown is not a hit.
+fn live_people(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeSet<String>> {
+    let party_ids: Vec<String> = targets
+        .iter()
+        .filter(|target| target.entity == PARTY_ENTITY)
+        .map(|target| target.id.clone())
+        .collect();
+    if party_ids.is_empty() {
+        return Ok(BTreeSet::new());
+    }
+    let fragment = in_list("party_id", &party_ids)?;
+    let rows = read_pages(
+        door,
+        &PageQuery::new(
+            "vault.search.live_people",
+            "party_id",
+            "people_profile",
+            PageOrder::asc("party_id", "party_id"),
+        )
+        .filter(
+            &format!("{} AND deleted_at IS NULL", fragment.sql),
+            fragment.bind,
+        ),
+        OPENABLE,
+    )?;
+    Ok(rows
+        .iter()
+        .filter_map(|row| text_of(row, "party_id"))
         .collect())
 }
 
@@ -251,6 +329,92 @@ mod tests {
         assert!(
             scratch.search("   ").hits.is_empty(),
             "a blank term reads nothing"
+        );
+    }
+
+    /// THE CORRECTION SPANS THE SEVEN DOMAINS (#1097, R4, R8): a slip in a word
+    /// two apps hold finds both, once, and says what it searched; an exact term
+    /// is untouched.
+    #[test]
+    fn a_typo_is_corrected_across_every_domain_and_an_exact_term_is_not() {
+        let scratch = Scratch::founded();
+        scratch.run(
+            "knowledge.create_note",
+            serde_json::json!({ "title": "Cabin packing", "body_text": "bring the lantern" }),
+        );
+        scratch.run(
+            "schedule.add_task",
+            serde_json::json!({ "title": "Book the cabin" }),
+        );
+        let slipped = scratch.search("cabni");
+        let apps: Vec<&str> = slipped.hits.iter().map(|hit| hit.app_id.as_str()).collect();
+        assert!(
+            apps.contains(&"notes") && apps.contains(&"tasks"),
+            "{apps:?}"
+        );
+        assert_eq!(slipped.corrected, "cabin");
+        let exact = scratch.search("cabin");
+        assert_eq!(exact.hits.len(), slipped.hits.len());
+        assert!(exact.corrected.is_empty());
+        let nothing = scratch.search("zeppelin");
+        assert!(nothing.hits.is_empty() && nothing.corrected.is_empty());
+    }
+
+    /// A HOME ROW OPENS A PERSON PEOPLE CAN SHOW (#1097): a `core.party` with no
+    /// live People profile — a Tally friend, a trashed person — is in the index
+    /// and is not a hit.
+    #[test]
+    fn a_party_with_no_live_profile_is_no_home_hit() {
+        let scratch = Scratch::founded();
+        let person = scratch.run(
+            "people.add_person",
+            serde_json::json!({ "display_name": "Zelda Person", "cadence_days": 30 }),
+        )["party_id"]
+            .as_str()
+            .expect("a party id")
+            .to_owned();
+        let gone = scratch.run(
+            "people.add_person",
+            serde_json::json!({ "display_name": "Zelda Trashed", "cadence_days": 30 }),
+        )["party_id"]
+            .as_str()
+            .expect("a party id")
+            .to_owned();
+        scratch.run(
+            "people.trash_person",
+            serde_json::json!({ "party_id": gone }),
+        );
+        let friend = scratch.run(
+            "tally.add_friend",
+            serde_json::json!({ "name": "Zelda Friend" }),
+        )["party_id"]
+            .as_str()
+            .expect("a party id")
+            .to_owned();
+        let parties = |term: &str| -> Vec<String> {
+            scratch
+                .search(term)
+                .hits
+                .into_iter()
+                .filter(|hit| hit.entity == "core.party")
+                .map(|hit| hit.id)
+                .collect()
+        };
+        assert_eq!(parties("zelda"), std::slice::from_ref(&person));
+        assert!(!parties("zelda").contains(&gone) && !parties("zelda").contains(&friend));
+        // The answer is judged after the drop: a term only a Tally friend holds
+        // is an empty answer, and it is corrected like any other.
+        assert!(parties("zelda friend").is_empty());
+        let slipped = scratch.search("zleda");
+        assert_eq!(slipped.corrected, "zelda");
+        assert_eq!(
+            slipped
+                .hits
+                .iter()
+                .filter(|hit| hit.entity == "core.party")
+                .map(|hit| hit.id.clone())
+                .collect::<Vec<_>>(),
+            [person]
         );
     }
 

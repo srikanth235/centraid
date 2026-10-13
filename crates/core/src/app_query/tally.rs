@@ -295,6 +295,7 @@ pub(super) fn search(door: &VaultDoor<'_>, asked: &wire::TallySearchRequest) -> 
         Answer::TallySearch(wire::TallySearch {
             total_matches: count(data.total_matches),
             results: data.results.into_iter().map(entry).collect(),
+            corrected: data.corrected.unwrap_or_default(),
         })
     })
 }

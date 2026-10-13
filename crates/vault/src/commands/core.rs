@@ -3888,10 +3888,11 @@ fn primary_key_of(connection: &rusqlite::Connection, table: &str) -> Result<Vec<
 /// Every table in the file, excluding SQLite's own and the full-text indexes.
 ///
 /// **The `fts_*` tables are NOT swept**, and that is a decision rather than a
-/// gap: `fts_core_party` is an external-content FTS5 index whose rows are
-/// maintained by triggers on `core_party`, so a merge that hand-edited it would
-/// be a second writer of a derived table — and deleting the merged party fires
-/// the trigger that removes its row anyway.
+/// gap: `fts_core_party` is an FTS5 index that holds its own copy of the text
+/// (it is not an external-content table), kept current by triggers on
+/// `core_party` and on the child tables folded into it (rung 013, #1097), so a
+/// merge that hand-edited it would be a second writer of a derived table — and
+/// deleting the merged party fires the trigger that removes its row anyway.
 fn user_tables(connection: &rusqlite::Connection) -> Result<Vec<String>> {
     let mut prepared = connection.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table'

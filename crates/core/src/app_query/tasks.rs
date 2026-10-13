@@ -18,7 +18,7 @@ use centraid_apps_tasks::views::{self, GroupKind, Placed, View};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, settle, zone_of};
+use super::{RecordingSearch, VaultDoor, corrected_search, settle, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -222,18 +222,28 @@ pub(super) fn search(
             inner: &index,
             door,
         };
-        Ok(Ok(tasks::load_search_term(
-            door,
+        let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
+        Ok(Ok(corrected_search(
             &search,
-            &centraid_search::Principal::Owner,
+            &[centraid_apps_tasks::queries::TASK_TARGET_TYPE],
             &asked.term,
-            usize::try_from(asked.limit).unwrap_or(usize::MAX),
-            now,
-            &zone,
+            |data: &tasks::SearchData| data.tasks.is_empty(),
+            |term| {
+                tasks::load_search_term(
+                    door,
+                    &search,
+                    &centraid_search::Principal::Owner,
+                    term,
+                    limit,
+                    now,
+                    &zone,
+                )
+            },
         )))
     })??;
-    settle(door, loaded, |data| {
+    settle(door, loaded, |(data, corrected)| {
         Answer::TasksSearch(wire::TasksSearch {
+            corrected,
             today: today.day_text(),
             now_local: today.local_text(),
             tasks: data

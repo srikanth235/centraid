@@ -27,7 +27,7 @@ use centraid_apps_people::roster::{PeopleInput, RosterRow, SearchHit};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{VaultDoor, settle, zone_if_any, zone_of};
+use super::{RecordingSearch, VaultDoor, corrected_search, settle, zone_if_any, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -224,9 +224,9 @@ pub(super) fn trash(
 /// `people.search`: the `core.party` name index, ranked, folded to the live
 /// People profiles among the hits.
 ///
-/// v0 also asked a `people.profile` index (role) and a
-/// `knowledge.annotation` index (notes); `crates/search` registers neither
-/// domain, so the name index is the whole search here and
+/// v0 asked three indexes (name, role, notes). The one `core.party` index now
+/// folds the nickname, role, where the person was met, their channels and their
+/// memos (rung 013, #1097), so it is the whole search here and
 /// [`people::roster::rank_hits`] ranks one list.
 pub(super) fn search(
     vault: &Vault,
@@ -252,7 +252,10 @@ pub(super) fn search(
     let limit = usize::try_from(asked.limit)
         .unwrap_or(usize::MAX)
         .min(people::queries::SEARCH_LIMIT);
-    let hits = vault.read(|connection| {
+    // THE CORRECTION RUNS ON THE ANSWER THE MEMBER SEES (#1097, R4, R8): the
+    // live People profiles among the hits, not the raw hits — a party that is
+    // only a Tally friend is a hit of the index and no person here.
+    let loaded = vault.read(|connection| {
         let index = match centraid_search::SqliteDoor::open(connection) {
             Ok(index) => index,
             Err(error) => {
@@ -261,40 +264,57 @@ pub(super) fn search(
                 }));
             }
         };
-        let request =
-            centraid_search::SearchRequest::new(people::queries::PARTY_TARGET_TYPE, term, limit);
-        Ok(Ok(centraid_search::Search::query(
-            &index,
-            &centraid_search::Principal::Owner,
-            &request,
+        let search = RecordingSearch {
+            inner: &index,
+            door,
+        };
+        Ok(Ok(corrected_search(
+            &search,
+            &[people::queries::PARTY_TARGET_TYPE],
+            term,
+            |data: &people::roster::SearchData| data.people.is_empty(),
+            |term| {
+                let request = centraid_search::SearchRequest::new(
+                    people::queries::PARTY_TARGET_TYPE,
+                    term,
+                    limit,
+                );
+                let hits = match centraid_search::Search::query(
+                    &search,
+                    &centraid_search::Principal::Owner,
+                    &request,
+                ) {
+                    Ok(centraid_search::Answer::Data { page, .. }) => page
+                        .rows
+                        .into_iter()
+                        .map(|target| SearchHit {
+                            party_id: target.id,
+                            snippet: Some(target.snippet),
+                        })
+                        .collect::<Vec<_>>(),
+                    Ok(centraid_search::Answer::Denied(denial)) => {
+                        return Ok((
+                            people::roster::SearchData::default(),
+                            Some(centraid_apps_kit::Denial {
+                                code: denial.code,
+                                message: denial.message,
+                                revoked_at: denial.revoked_at,
+                            }),
+                        ));
+                    }
+                    // A term with no searchable word is an empty answer; any
+                    // other refusal was kept by the recorder and `settle`
+                    // reports it.
+                    Err(_) => Vec::new(),
+                };
+                let ranked = people::roster::rank_hits(&hits, &[], &[]);
+                people::roster::load_search(door, &ranked)
+            },
         )))
     })??;
-    let hits = match hits {
-        Ok(centraid_search::Answer::Data { page, .. }) => page
-            .rows
-            .into_iter()
-            .map(|target| SearchHit {
-                party_id: target.id,
-                snippet: Some(target.snippet),
-            })
-            .collect::<Vec<_>>(),
-        Ok(centraid_search::Answer::Denied(denial)) => {
-            return Ok(Answer::Denied(wire::AppQueryDenial {
-                code: denial.code,
-                message: denial.message,
-                revoked_at: denial.revoked_at,
-            }));
-        }
-        Err(centraid_search::SearchError::NoSearchableWords { .. }) => Vec::new(),
-        Err(error) => {
-            return Err(CoreError::Invariant {
-                context: format!("the search index refused: {error}"),
-            });
-        }
-    };
-    let ranked = people::roster::rank_hits(&hits, &[], &[]);
-    settle(door, people::roster::load_search(door, &ranked), |data| {
+    settle(door, loaded, |(data, corrected)| {
         Answer::PeopleSearch(wire::PeopleSearch {
+            corrected,
             people: data
                 .people
                 .into_iter()
@@ -745,6 +765,37 @@ mod tests {
         assert_eq!(shelf.people[0].party_id, gone);
         assert_eq!(shelf.people[0].name, "Maya Gone");
         assert!(shelf.people[0].purge_at.is_some());
+    }
+
+    /// A TYPO FINDS THE PERSON AND SAYS WHAT WAS SEARCHED (#1097, R4, R8), and
+    /// a party with no live profile is no person to find, corrected or not.
+    #[test]
+    fn a_typo_finds_the_person_and_says_what_it_searched() {
+        let scratch = Scratch::founded();
+        let ada = scratch.add("Ada Lovelace", 30);
+        let face = scratch.run(
+            "core.add_party",
+            serde_json::json!({ "display_name": "Lovelace from the photos", "kind": "person" }),
+        )["party_id"]
+            .as_str()
+            .expect("a party id")
+            .to_owned();
+        let ids = |found: &wire::PeopleSearch| -> Vec<String> {
+            found
+                .people
+                .iter()
+                .map(|row| row.party_id.clone())
+                .collect()
+        };
+        let slipped = scratch.search("Lovelcae");
+        assert_eq!(ids(&slipped), std::slice::from_ref(&ada));
+        assert_ne!(ids(&slipped), std::slice::from_ref(&face));
+        assert_eq!(slipped.corrected, "lovelace");
+        let exact = scratch.search("Lovelace");
+        assert_eq!(ids(&exact), [ada]);
+        assert!(exact.corrected.is_empty());
+        let nothing = scratch.search("zeppelin");
+        assert!(nothing.people.is_empty() && nothing.corrected.is_empty());
     }
 
     /// RECONNECT IS MOST OVERDUE FIRST: sixty days after everyone was added, a

@@ -860,6 +860,87 @@ fn a_memo_set_on_an_expense_is_answered_and_an_empty_one_clears_it() {
     assert_eq!(memo(&scratch), None, "an empty note clears it");
 }
 
+/// THE WIDENED WALK AND ITS CORRECTION (#1097, R4, R6): Tally's search also
+/// reads the category (never the default `general`), the group's name, a line
+/// item's description and the memo; a typo finds the row and says what was
+/// searched; an exact answer is unchanged.
+#[test]
+fn search_reads_category_group_line_items_and_memo_and_corrects_a_typo() {
+    let scratch = Scratch::founded();
+    let me = scratch.me();
+    let ana = scratch.friend("Ana");
+    let house = scratch.group("Lakeside cabin", "USD", &[&ana]);
+    let hardware = scratch.expense(json!({
+        "description": "Weekend supplies", "amount_minor": 3_000, "paid_by": me,
+        "group_id": house, "category": "groceries", "spent_on": "2099-06-20",
+        "split_method": "by_line",
+        "splits": splits(&[(&ana, 2_000), (&me, 1_000)]),
+        "line_items": [
+            { "kind": "item", "description": "Sunscreen", "amount_minor": 2_000,
+              "allocations": [{ "party_id": &ana, "share_minor": 2_000 }] },
+            { "kind": "item", "description": "Firewood", "amount_minor": 1_000,
+              "allocations": [{ "party_id": &me, "share_minor": 1_000 }] },
+        ],
+    }));
+    let plain = scratch.expense(json!({
+        "description": "Cinema", "amount_minor": 2_500, "paid_by": me,
+        "category": "general", "spent_on": "2099-06-21",
+        "splits": splits(&[(&me, 1_250), (&ana, 1_250)]),
+    }));
+    scratch.run(
+        "tally.set_expense_memo",
+        json!({ "expense_id": plain, "note": "popcorn was extra" }),
+    );
+    let search = |term: &str| -> wire::TallySearch {
+        match scratch
+            .ask(Q::TallySearch(wire::TallySearchRequest {
+                term: term.to_owned(),
+                limit: 10,
+            }))
+            .expect("search answers")
+        {
+            Answer::TallySearch(found) => found,
+            other => panic!("search answered as {other:?}"),
+        }
+    };
+    let ids = |found: &wire::TallySearch| -> Vec<String> {
+        found
+            .results
+            .iter()
+            .map(|row| row.expense_id.clone())
+            .collect()
+    };
+    // Every new field, exactly.
+    for (term, expected) in [
+        ("groceries", &hardware),
+        ("lakeside", &hardware),
+        ("firewood", &hardware),
+        ("popcorn", &plain),
+        ("cinema", &plain),
+    ] {
+        let found = search(term);
+        assert_eq!(ids(&found), std::slice::from_ref(expected), "{term}");
+        assert!(found.corrected.is_empty(), "{term} was exact");
+    }
+    // The default category is nothing a member typed.
+    assert!(search("general").results.is_empty());
+    // A typo is corrected and the rows are the corrected term's.
+    for (typed, words, expected) in [
+        ("sunscrene", "sunscreen", &hardware),
+        ("lakesdie", "lakeside", &hardware),
+        ("popcron", "popcorn", &plain),
+        ("grocereis", "groceries", &hardware),
+    ] {
+        let found = search(typed);
+        assert_eq!(found.corrected, words, "{typed}");
+        assert_eq!(ids(&found), std::slice::from_ref(expected), "{typed}");
+        assert_eq!(found.total_matches, 1);
+    }
+    // Nothing near it: nothing, and nothing is reported.
+    let nothing = search("zeppelins");
+    assert!(nothing.results.is_empty() && nothing.corrected.is_empty());
+}
+
 /// THE EXPORT IS A FILE THE CORE RENDERS (#1047): the group and `since`
 /// narrow it, `limit` cuts it with the "N of M" counts stated, and the CSV
 /// carries each amount as a plain decimal with its own currency column — a
