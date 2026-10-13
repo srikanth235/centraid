@@ -523,6 +523,13 @@ The room owns the header, the back control, search, the empty/loading/error stat
 | Band | two to four places, then More | Search, a filter |
 | More | Trash, Import, Export, alternate views, "What X may read" — machine rows | Search, Sort, a filter |
 
+**Search says what it searched for, and offers the assistant when it found nothing** ([#1097](https://github.com/srikanth235/centraid/issues/1097)):
+
+| Moment | Draws | Never |
+| --- | --- | --- |
+| The core corrected a typo (the exact answer was empty and a vocabulary word one slip away found rows) | one line directly under the open field, in the secondary text style — "Showing results for “sunscreen”" (`SEARCH_CORRECTED`, id `search-corrected`). It lives in the field component every search slot, Home's search page and Tally's search page share, so it is drawn once per platform; the machine puts `SearchField.corrected` in state and the view draws it | a banner, a toast, a second row of results, the line over an exact answer, the line over rows for a term since changed |
+| Home's search found nothing | the no-match sentence and its one action, "Ask about “zzqx”" (`SEARCH_ASK_ABOUT`, id `search-ask-about`): the shell's router switches to the Chat tab and sends "Find zzqx" (`SEARCH_ASK_QUESTION`, finished by the machine in `HomeSearchData.ask_question`). The action is drawn only where the shell has a Chat tab — iOS today | a second sentence, a button inside a row, an action in an app's own search empty state until that app's machine names one |
+
 `StageRoom` is the one room that takes none of those, and that is the point rather than an omission: one piece of media edge to edge has nothing to be empty of, nothing to search, and no list to select from, and a strip across the top of a photograph is a second ground. What it owes a member instead is a way out, so the room owns the swipe-down dismiss and hands the caller's chrome the same close act — a stage that brings no chrome gets the room's own close key, because a stage with no visible way out is a black screen.
 
 Six product rulings sit behind the rooms and are not re-decided per screen — trash, casing, editors, push-versus-sheet, the band under a selection, and where Settings is reachable from: [docs/decisions.md § Mobile UX consistency (#1015)](docs/decisions.md#mobile-ux-consistency-1015), D1–D6.

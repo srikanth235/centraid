@@ -963,6 +963,14 @@ public object ChatMachine {
     private fun ready(chat: Chat): Boolean =
         chat.phase == ChatState.Phase.PHASE_READY && chat.session != 0L && chat.opening.isEmpty()
 
+    /**
+     * Whether a question sent now would be asked and not dropped: a session is
+     * up (the model is ready and the core has started one), nothing is
+     * answering, and no thread is opening. A shell that asks on a member's
+     * behalf waits for this ([ChatFlow.askWhenReady]).
+     */
+    public fun canAsk(chat: Chat): Boolean = ready(chat) && !chat.running
+
     private fun Chat.withAnswer(change: (Msg) -> Msg): Chat {
         val last = messages.lastOrNull() ?: return this
         if (last.user) return this

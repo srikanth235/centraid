@@ -1,0 +1,76 @@
+# Search says what it searched for (#1097): a one-letter slip finds the row
+# and the line under the field names the word searched ("Showing results for
+# “circle”"); a term nothing matches offers the assistant.
+#
+# A VAULT-HOLDING INSTALL, as `home-search.yaml`: the onboarding starters are
+# enough — Tasks' "Tap the circle to finish me" holds the word "circle", and
+# "circel" is its two neighbours swapped. Re-runnable: the flow relaunches and
+# leaves nothing behind but a recent search.
+#
+# THE ASSISTANT NEEDS A MODEL. On a phone with no model file the Chat tab
+# opens on its download step and the question is not sent (nothing to answer
+# it); on a ready one (a DEBUG build launched with
+# `SIMCTL_CHILD_CENTRAID_DEV_MODEL=<path to the .gguf>`) the question lands in
+# the thread, and the last steps assert it. Android has no Chat tab, so the
+# no-match state draws without the action and the flow ends before it.
+appId: dev.centraid.Centraid
+name: search-correction
+---
+- launchApp
+- tapOn:
+    id: "home-search-open"
+- tapOn:
+    id: "home-search-field"
+- inputText: "circel"
+# The slip finds the row, and the field says what was searched for.
+- extendedWaitUntil:
+    visible:
+      id: "search-corrected"
+    timeout: 5000
+- assertVisible: "Showing results for “circle”"
+- assertVisible:
+    id: "home-search-group-tasks"
+- assertVisible: "Tap the circle to finish me"
+# An exact term says nothing: no line over rows it did not correct.
+- eraseText: 6
+- inputText: "circle"
+- extendedWaitUntil:
+    visible:
+      id: "home-search-group-tasks"
+    timeout: 5000
+- assertNotVisible:
+    id: "search-corrected"
+# Nothing matches: the sentence and the one action.
+- eraseText: 6
+- inputText: "zzqxv"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: "search-ask-about"
+          timeout: 5000
+      - assertVisible: "Ask about “zzqxv”"
+      - assertNotVisible:
+          id: "search-corrected"
+      # The shell's router: the Chat tab opens, and the question is sent when
+      # the chat is ready.
+      - tapOn:
+          id: "search-ask-about"
+      - assertVisible:
+          id: "chat"
+      - assertNotVisible:
+          id: "home-search-field"
+      - runFlow:
+          when:
+            notVisible:
+              id: "chat-download"
+          commands:
+            - runFlow:
+                when:
+                  notVisible: "Chat is not available here."
+                commands:
+                  - extendedWaitUntil:
+                      visible: "Find zzqxv"
+                      timeout: 15000

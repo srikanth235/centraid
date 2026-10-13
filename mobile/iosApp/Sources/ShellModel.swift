@@ -634,19 +634,30 @@ final class ShellModel: ObservableObject {
     /// THE CHAT TAB WAS PRESSED. It opens scoped to the app the member last
     /// had open — but only onto an empty thread: a conversation in progress is
     /// never re-scoped by a glance at an app.
-    func openChatTab() {
+    func openChatTab(asking question: String? = nil) {
         leaveBackupTab()
         tab = .chat
         if !lastVisitedApp.isEmpty, chat.state.messages.isEmpty {
             chatScope = lastVisitedApp
         }
         lastVisitedApp = ""
-        chat.open(app: chatScope, vaultName: foregroundVaultName)
+        chat.open(app: chatScope, vaultName: foregroundVaultName, asking: question)
     }
 
     /// The foreground vault's name, for the chat's header.
     var foregroundVaultName: String {
         (try? Centraid_Screen_V1_HomeState(serializedBytes: homeState))?.vault.vaultName ?? ""
+    }
+
+    /// ASK THE ASSISTANT, from a screen that found nothing (search's "Ask
+    /// about", #1097): back to Home's root, the Chat tab, and the question sent
+    /// when the chat is ready. The router's act and not a view's: the view only
+    /// reports the intent, and the words are the machine's.
+    func askChat(_ question: String) {
+        let line = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty else { return }
+        path.removeAll()
+        openChatTab(asking: line)
     }
 
     func openHomeTab() {

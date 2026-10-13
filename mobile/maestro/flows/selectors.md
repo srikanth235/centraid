@@ -18,6 +18,8 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-search-recent-<term>` | Home search | one of this session's recent searches, while the field is empty |
 | `home-search-group-<appId>` | Home search | one app's group head: hue dot, the app's name, its count |
 | `home-search-row-<entity>-<id>` | Home search | one hit (`entity` is the index's, e.g. `schedule.task`); a tap opens it in its app |
+| `search-corrected` | any open search field (every app's search slot, Home search, Tally's search page) | the line under the field, "Showing results for “…”", drawn only when the core corrected a typo in the term ([#1097](https://github.com/srikanth235/centraid/issues/1097)); absent for an exact answer |
+| `search-ask-about` | Home search | the no-match state's one action, "Ask about “…”": switches to the Chat tab and sends the question — **iOS only**; Android has no Chat tab, so its no-match state draws without it |
 | `home-band` | Home | the floating band plate |
 | `home-band-<placeId>` | Home | one band destination (`home`, `notifs`, `stats`, `data`) |
 | `home-band-backup` | Home | the band's Backup tab — opens the Backup screen |

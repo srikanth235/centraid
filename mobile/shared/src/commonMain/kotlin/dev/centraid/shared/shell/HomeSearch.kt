@@ -75,6 +75,9 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         event.term != null -> term(state, event.term.term)
         event.suggestion != null -> term(state, event.suggestion.term)
         event.row != null -> Step(record(state))
+        // THE ASK ACTION is the shell's to carry out (Chat is a tab, not a screen
+        // this machine can push); the term is a search the member made.
+        event.asked != null -> Step(record(state))
         event.submitted != null -> Step(record(state))
         // CLOSING CLEARS THE TERM (R-1046-6): the next open starts empty.
         event.cancelled != null -> Step(rest(state.copy(field_ = SearchField())))
@@ -120,14 +123,18 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         val field = state.field_ ?: return state
         if (!field.open_ || termOf(state).isEmpty() || termOf(state) != answered.trim()) return state
         val shown = if (data.groups.isEmpty()) {
+            // NOTHING MATCHED: one sentence and one action, which asks the
+            // assistant about the term (the shell sends `ask_question` to Chat).
             data.copy(
                 empty = EmptyState(
                     headline = SharedCopy.HOME_SEARCH_NO_MATCH_HEADLINE,
                     body = SharedCopy.HOME_SEARCH_NO_MATCH_BODY.replace("{term}", answered.trim()),
+                    action_label = SharedCopy.SEARCH_ASK_ABOUT.replace("{term}", answered.trim()),
                 ),
+                ask_question = SharedCopy.SEARCH_ASK_QUESTION.replace("{term}", answered.trim()),
             )
         } else {
-            data.copy(empty = null)
+            data.copy(empty = null, ask_question = "")
         }
         // The words the rows answer are kept by the law, for an answer still current.
         return SearchLaw.answered(Field, state, answered.trim(), corrected).copy(

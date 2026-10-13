@@ -150,7 +150,7 @@ final class ChatModel: ObservableObject {
     /// foreground vault's name. A tab appearing never changes a chat that has
     /// something in it; `scopeChosen` is the composer's menu, which starts a
     /// new chat when the scope differs.
-    func open(app: String, vaultName: String, scopeChosen: Bool = false) {
+    func open(app: String, vaultName: String, scopeChosen: Bool = false, asking question: String? = nil) {
         opened = true
         #if DEBUG
         if let preview = ChatPreview.mode {
@@ -159,12 +159,23 @@ final class ChatModel: ObservableObject {
         }
         #endif
         #if canImport(CentraidShared)
-        bridge.open(
-            app: app,
-            modelBytes: ChatModelStore.expectedBytes,
-            vaultName: vaultName,
-            scopeChosen: scopeChosen
-        )
+        if let question {
+            // Opened and then asked, in that order, on the bridge: the question
+            // is sent the moment the chat can take it, never before.
+            bridge.openAsking(
+                app: app,
+                modelBytes: ChatModelStore.expectedBytes,
+                vaultName: vaultName,
+                text: question
+            )
+        } else {
+            bridge.open(
+                app: app,
+                modelBytes: ChatModelStore.expectedBytes,
+                vaultName: vaultName,
+                scopeChosen: scopeChosen
+            )
+        }
         // A model that was mid-download when the app was killed is still
         // arriving: say so, so the tab draws its progress and not the offer.
         ChatModelDownloader.shared.reportRunning()

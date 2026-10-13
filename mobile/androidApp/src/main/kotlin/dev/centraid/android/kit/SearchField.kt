@@ -3,6 +3,7 @@ package dev.centraid.android.kit
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -63,60 +64,78 @@ public fun CentraidSearchField(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
-    Row(
-        modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
-            .heightIn(min = KitGeometry.ROW_MIN)
-            .clip(shape)
-            .background(centraidColor("bgSunken"))
-            .border(KitGeometry.HAIRLINE, centraidColor("line"), shape)
-            .padding(start = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        CentraidIcon(
-            iconKey = "Search",
-            tint = centraidColor("textFaint"),
-            size = 16.dp,
-            modifier = Modifier.clearAndSetSemantics { },
-        )
-        Box(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-            if (typed.isEmpty()) {
-                Text(
-                    placeholder,
-                    style = centraidType("body"),
-                    color = centraidColor("textFaint"),
-                    modifier = Modifier.clearAndSetSemantics { },
+    // THE LINE UNDER THE FIELD is where the correction is said (#1097): this
+    // field is the one every app's search slot, Home's search and Tally's
+    // search page draw, so "Showing results for ..." is drawn once, here.
+    // The caller's modifier sits on the column: a `weight` beside a Cancel
+    // belongs to the whole field, line included.
+    Column(modifier) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+                .heightIn(min = KitGeometry.ROW_MIN)
+                .clip(shape)
+                .background(centraidColor("bgSunken"))
+                .border(KitGeometry.HAIRLINE, centraidColor("line"), shape)
+                .padding(start = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CentraidIcon(
+                iconKey = "Search",
+                tint = centraidColor("textFaint"),
+                size = 16.dp,
+                modifier = Modifier.clearAndSetSemantics { },
+            )
+            Box(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                if (typed.isEmpty()) {
+                    Text(
+                        placeholder,
+                        style = centraidType("body"),
+                        color = centraidColor("textFaint"),
+                        modifier = Modifier.clearAndSetSemantics { },
+                    )
+                }
+                BasicTextField(
+                    value = typed,
+                    onValueChange = { next -> if (editor.edited(next)) onTerm(next) },
+                    singleLine = true,
+                    textStyle = centraidType("body").copy(color = centraidColor("text")),
+                    cursorBrush = SolidColor(centraidColor("text")),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                        imeAction = ImeAction.Search,
+                    ),
+                    keyboardActions = KeyboardActions(onSearch = { onSubmit?.invoke() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focus)
+                        .testTag("$testTag-field")
+                        .semantics { contentDescription = label },
                 )
             }
-            BasicTextField(
-                value = typed,
-                onValueChange = { next -> if (editor.edited(next)) onTerm(next) },
-                singleLine = true,
-                textStyle = centraidType("body").copy(color = centraidColor("text")),
-                cursorBrush = SolidColor(centraidColor("text")),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                    imeAction = ImeAction.Search,
-                ),
-                keyboardActions = KeyboardActions(onSearch = { onSubmit?.invoke() }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focus)
-                    .testTag("$testTag-field")
-                    .semantics { contentDescription = label },
-            )
+            if (scope.isNotEmpty() && typed.isEmpty()) {
+                Text(
+                    scope,
+                    style = centraidType("small"),
+                    color = centraidColor("textSoft"),
+                    maxLines = 1,
+                    modifier = Modifier.padding(end = 12.dp),
+                )
+            }
+            if (closes) IconKey("X", closeLabel, "$testTag-close", bordered = false, onPress = onClose)
         }
-        if (scope.isNotEmpty() && typed.isEmpty()) {
+        if (field.corrected.isNotEmpty()) {
             Text(
-                scope,
+                KitWords.searchCorrected(field.corrected),
                 style = centraidType("small"),
                 color = centraidColor("textSoft"),
-                maxLines = 1,
-                modifier = Modifier.padding(end = 12.dp),
+                maxLines = 2,
+                modifier = Modifier
+                    .padding(start = KitGeometry.GUTTER + 12.dp, end = KitGeometry.GUTTER, bottom = 4.dp)
+                    .testTag("search-corrected"),
             )
         }
-        if (closes) IconKey("X", closeLabel, "$testTag-close", bordered = false, onPress = onClose)
     }
 }

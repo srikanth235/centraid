@@ -1760,8 +1760,12 @@ message HomeSearchGroup {
 message HomeSearchData {
   // In Home's tile order (`SpringboardPolicy.SPRINGBOARD_ORDER`).
   repeated HomeSearchGroup groups = 1;
-  // Set when nothing matched the term: the one sentence, no action.
+  // Set when nothing matched the term: the one sentence, and one action that
+  // asks the assistant about the term (`empty.action_label`, #1097).
   EmptyState empty = 2;
+  // THE QUESTION the shell sends to Chat when that action is pressed; set with
+  // `empty`, EMPTY otherwise. Finished here so a shell sends the machine's words.
+  string ask_question = 3;
 }
 
 message HomeSearchState {
@@ -1801,10 +1805,15 @@ message HomeSearchEvent {
     // Another vault came to the front: its recent searches and results go
     // with the vault they were typed in.
     VaultChanged vault_changed = 12;
+    // INTENT: the empty state's "Ask about" action. The shell switches to the
+    // Chat tab and sends `data.ask_question`; the machine records the term as a
+    // recent search.
+    Asked asked = 13;
   }
 
   message Opened {}
   message VaultChanged {}
+  message Asked {}
 
   message TermChanged {
     string term = 1;

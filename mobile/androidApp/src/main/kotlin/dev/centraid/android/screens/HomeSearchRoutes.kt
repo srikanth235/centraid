@@ -174,6 +174,9 @@ internal fun HomeSearchScreen(
                 }
                 is HomeSearchData -> {
                     val empty = found.empty
+                    // NOTHING MATCHED: the empty state's one action asks the
+                    // assistant about the term, and the Chat tab is iOS's alone
+                    // (Android has no Chat), so it draws without it.
                     if (empty != null) EmptyStateView(empty, onAction = null) else Groups(found, onOpen)
                 }
             }

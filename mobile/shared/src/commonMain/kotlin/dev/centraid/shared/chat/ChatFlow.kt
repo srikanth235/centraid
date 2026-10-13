@@ -49,10 +49,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * THE CORE'S ASSISTANT PLANE, AS THE CHAT'S DOOR (`assist.proto`).
@@ -374,6 +376,35 @@ public class ChatFlow(
     }
 
     /**
+     * ASK A QUESTION ON THE MEMBER'S BEHALF (search's "Ask about" action).
+     *
+     * The Chat tab has just been opened, so the core has not started a session
+     * yet and a [ChatEvent.Sent] now would be dropped. This waits (at most
+     * [ASK_PATIENCE_MS]) until [ChatMachine.canAsk], starts a new chat when the
+     * open one already holds a thread (the question is about something else),
+     * and sends (the call returns once the question is on its way, not when it
+     * is answered). `false` when the chat did not become ready in time — no model
+     * yet, or the assistant is unavailable: the Chat tab says why, and the
+     * question is not queued behind a download.
+     */
+    public suspend fun askWhenReady(text: String, patienceMs: Long = ASK_PATIENCE_MS): Boolean {
+        val ready = withTimeoutOrNull(patienceMs) { model.first { ChatMachine.canAsk(it) } } ?: return false
+        // Launched, not awaited: `reduce` runs the turn's effects, and a send
+        // lasts as long as the answer. The two steps share one coroutine so the
+        // new chat is made before the question is put to it.
+        scope.launch {
+            if (ready.messages.isNotEmpty()) reduce(ChatInput.View(ChatEvent(new_chat = ChatEvent.NewChat())))
+            reduce(ChatInput.View(ChatEvent(sent = ChatEvent.Sent(text = text))))
+        }
+        return true
+    }
+
+    public companion object {
+        /** How long [askWhenReady] waits for the chat to take a question. */
+        public const val ASK_PATIENCE_MS: Long = 8_000
+    }
+
+    /**
      * STOP LISTENING, AND STOP FOR GOOD. Cancels the scope [attach]'s collector
      * and every in-flight effect run on, so a flow the shell has replaced (a
      * vault switch makes a new one) no longer reduces the old core's events.
@@ -570,6 +601,25 @@ public class ChatBridge {
 
     public fun send(text: String) {
         forward(ChatEvent(sent = ChatEvent.Sent(text = text)))
+    }
+
+    /**
+     * [open], and then a question asked on the member's behalf (search's "Ask
+     * about"). The two run in that order on one coroutine: [open] returns when
+     * its effects have (the status read, the session start), so the question is
+     * sent against the chat that [open] made and not against the one it
+     * replaced. Dropped, like any send, when the chat never becomes ready.
+     */
+    public fun openAsking(app: String, modelBytes: Long, vaultName: String = "", text: String) {
+        val flow = running ?: return
+        scope.launch {
+            flow.reduce(
+                ChatInput.View(
+                    ChatEvent(opened = ChatEvent.Opened(app = app, model_bytes = modelBytes, vault_name = vaultName)),
+                ),
+            )
+            flow.askWhenReady(text)
+        }
     }
 
     public fun stop() {

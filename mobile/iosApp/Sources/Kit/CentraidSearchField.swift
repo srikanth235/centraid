@@ -141,55 +141,68 @@ struct CentraidSearchField: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: 8) {
+        // THE LINE UNDER THE FIELD is where the correction is said (#1097): this
+        // field is the one every app's search slot, Home's search and Tally's
+        // search page draw, so "Showing results for ..." is drawn once, here.
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                CentraidIconView(iconKey: "Search", tint: Theme.color("textSoft", scheme), size: BandMetrics.searchGlyph)
-                    .frame(width: BandMetrics.searchGlyph, height: BandMetrics.searchGlyph)
-                BareSearchField(
-                    text: $typed,
-                    focused: $focused,
-                    placeholder: placeholder,
-                    font: Theme.uiFont("body", scheme),
-                    color: UIColor(Theme.color("text", scheme)),
-                    placeholderColor: UIColor(Theme.color("textFaint", scheme)),
-                    onSubmit: onSubmit
-                )
-                .accessibilityIdentifier("\(identifier)-field")
-                if !scope.isEmpty, typed.isEmpty {
-                    Text(scope)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                        .lineLimit(1)
-                        .fixedSize()
-                        .padding(.trailing, 8)
+                HStack(spacing: 8) {
+                    CentraidIconView(iconKey: "Search", tint: Theme.color("textSoft", scheme), size: BandMetrics.searchGlyph)
+                        .frame(width: BandMetrics.searchGlyph, height: BandMetrics.searchGlyph)
+                    BareSearchField(
+                        text: $typed,
+                        focused: $focused,
+                        placeholder: placeholder,
+                        font: Theme.uiFont("body", scheme),
+                        color: UIColor(Theme.color("text", scheme)),
+                        placeholderColor: UIColor(Theme.color("textFaint", scheme)),
+                        onSubmit: onSubmit
+                    )
+                    .accessibilityIdentifier("\(identifier)-field")
+                    if !scope.isEmpty, typed.isEmpty {
+                        Text(scope)
+                            .centraidType("small")
+                            .foregroundStyle(Theme.color("textSoft", scheme))
+                            .lineLimit(1)
+                            .fixedSize()
+                            .padding(.trailing, 8)
+                    }
+                    if !typed.isEmpty {
+                        Button {
+                            typed = ""
+                        } label: {
+                            CentraidIconView(iconKey: "XCircle", tint: Theme.color("textFaint", scheme), size: 18)
+                                .frame(minWidth: CentraidGeometry.targetMinFine, minHeight: CentraidGeometry.targetMinFine)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Clear search")
+                    }
                 }
-                if !typed.isEmpty {
-                    Button {
-                        typed = ""
-                    } label: {
-                        CentraidIconView(iconKey: "XCircle", tint: Theme.color("textFaint", scheme), size: 18)
-                            .frame(minWidth: CentraidGeometry.targetMinFine, minHeight: CentraidGeometry.targetMinFine)
+                .padding(.leading, BandMetrics.searchGlyphLead)
+                .padding(.trailing, 4)
+                .frame(height: 40)
+                .background(Capsule().fill(Theme.color("bgSunken", scheme)))
+                .contentShape(Capsule())
+                .onTapGesture { focused = true }
+                if closes {
+                    Button(action: onClose) {
+                        CentraidIconView(iconKey: "X", tint: Theme.color("textSoft", scheme), size: 16)
+                            .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Clear search")
+                    .accessibilityLabel(closeLabel)
+                    .accessibilityIdentifier("\(identifier)-close")
                 }
             }
-            .padding(.leading, BandMetrics.searchGlyphLead)
-            .padding(.trailing, 4)
-            .frame(height: 40)
-            .background(Capsule().fill(Theme.color("bgSunken", scheme)))
-            .contentShape(Capsule())
-            .onTapGesture { focused = true }
-            if closes {
-                Button(action: onClose) {
-                    CentraidIconView(iconKey: "X", tint: Theme.color("textSoft", scheme), size: 16)
-                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(closeLabel)
-                .accessibilityIdentifier("\(identifier)-close")
+            if !field.corrected.isEmpty {
+                Text(KitWords.shared.searchCorrected(corrected: field.corrected))
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .lineLimit(2)
+                    .padding(.leading, BandMetrics.searchGlyphLead)
+                    .accessibilityIdentifier("search-corrected")
             }
         }
         .onAppear {

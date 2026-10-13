@@ -70,6 +70,20 @@ class HomeSearchSpec : StringSpec({
         step(slipped, answered("sun", "sunscreen")).state.field_!!.corrected shouldBe ""
     }
 
+    "nothing matching offers one action, which asks the assistant about the term, and asking records the search (#1097)" {
+        val nothing = step(typed(opened, "zzqx").state, answer("zzqx")).state
+        val empty = nothing.data_!!.empty.shouldNotBeNull()
+        empty.headline shouldBe SharedCopy.HOME_SEARCH_NO_MATCH_HEADLINE
+        empty.action_label shouldBe "Ask about “zzqx”"
+        nothing.data_.ask_question shouldBe "Find zzqx"
+        // The shell carries the action out; the machine remembers the term.
+        step(nothing, HomeSearchEvent(asked = HomeSearchEvent.Asked())).state.recent shouldBe listOf("zzqx")
+        // Rows found: no empty state, no question.
+        val found = step(typed(opened, "cab").state, answer("cab", hit("notes", "knowledge.note", "n1", "Cabin"))).state
+        found.data_!!.empty.shouldBeNull()
+        found.data_.ask_question shouldBe ""
+    }
+
     "the hits are grouped by app in Home's tile order, each counted, each row named by its kind" {
         val data = HomeSearchMachine.fold(
             listOf(

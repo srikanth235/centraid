@@ -165,14 +165,18 @@ struct ScreenFailureView: View {
 struct EmptyStateView: View {
     let empty: Centraid_Screen_V1_EmptyState
     var onAction: (() -> Void)? = nil
+    /// The action's accessibility id; a screen whose action is its own thing
+    /// (search's "Ask about") names it.
+    var actionIdentifier: String = "kit-empty-action"
 
     @Environment(\.colorScheme) private var scheme
     /// The shell's doors for an app's day-one empty (docs/decisions.md,
     /// "Onboarding without sample data"); nil where the shell offers neither.
     @Environment(\.importFromPhone) private var importFromPhone
 
-    init(_ empty: Centraid_Screen_V1_EmptyState, onAction: (() -> Void)? = nil) {
+    init(_ empty: Centraid_Screen_V1_EmptyState, actionIdentifier: String = "kit-empty-action", onAction: (() -> Void)? = nil) {
         self.empty = empty
+        self.actionIdentifier = actionIdentifier
         self.onAction = onAction
     }
 
@@ -206,7 +210,7 @@ struct EmptyStateView: View {
                     .padding(.top, 4)
             } else if !empty.actionLabel.isEmpty, let onAction {
                 KitOutlineButton(label: empty.actionLabel, action: onAction)
-                    .accessibilityIdentifier("kit-empty-action")
+                    .accessibilityIdentifier(actionIdentifier)
                     .padding(.top, 4)
             }
         }

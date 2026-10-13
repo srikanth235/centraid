@@ -110,6 +110,7 @@ struct AgendaHomeView: View {
         var field = Centraid_Screen_V1_SearchField()
         field.open = state.searchOpen
         field.term = state.searchTerm
+        field.corrected = state.searchCorrected
         return field
     }
 

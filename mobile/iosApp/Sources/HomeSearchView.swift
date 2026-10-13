@@ -48,6 +48,7 @@ enum HomeSearchScreens {
                         guard let shell, let route = ChatRouting.route(for: target, among: among, parent: parent) else { return }
                         shell.path.append(route)
                     },
+                    ask: { [weak shell] question in shell?.askChat(question) },
                     onCancel: { [weak shell] in
                         guard let shell, !shell.path.isEmpty else { return }
                         shell.path.removeLast()
@@ -68,6 +69,8 @@ struct HomeSearchView: View {
     let send: (Data) -> Void
     /// Open a row's target through the one router a row reference has.
     let open: (Centraid_Screen_V1_ChatCard, [Centraid_Screen_V1_ChatCard], String) -> Void
+    /// Ask the assistant a question: the shell's router switches to Chat and sends it.
+    let ask: (String) -> Void
     let onCancel: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -95,7 +98,9 @@ struct HomeSearchView: View {
     var body: some View {
         let state = state
         VStack(spacing: 0) {
-            HStack(spacing: 4) {
+            // TOP-ALIGNED: the field can carry the corrected line under it, and
+            // Cancel stays beside the capsule and not beside the line.
+            HStack(alignment: .top, spacing: 4) {
                 CentraidSearchField(
                     field: state.field,
                     placeholder: state.chrome.placeholder,
@@ -111,6 +116,7 @@ struct HomeSearchView: View {
                     send(HomeSearchScreens.event { $0.cancelled = .init() })
                     onCancel()
                 }
+                .frame(height: 40)
             }
             .padding(.leading, CentraidGeometry.pageMargin)
             .padding(.trailing, CentraidGeometry.pageMargin - 4)
@@ -127,7 +133,12 @@ struct HomeSearchView: View {
                     }
                 case let .results(results):
                     if results.hasEmpty {
-                        EmptyStateView(results.empty)
+                        // NOTHING MATCHED: the one action asks the assistant
+                        // about the term. The words are the machine's.
+                        EmptyStateView(results.empty, actionIdentifier: "search-ask-about") {
+                            send(HomeSearchScreens.event { $0.asked = .init() })
+                            ask(results.askQuestion)
+                        }
                     } else {
                         groups(results, parent: state.chrome.title)
                     }
