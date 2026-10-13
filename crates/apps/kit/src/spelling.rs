@@ -18,7 +18,7 @@
 //! runs the exact search again with the corrected words and tells the member what
 //! it searched for ("Showing results for budget"). A query that found something is
 //! never touched, and a word the vault does not know is never invented — a
-//! correction is a prefix of a term of the vocabulary.
+//! correction is a whole term of the vocabulary.
 //!
 //! ## What a word is corrected to (R4, R4a)
 //!
@@ -31,7 +31,10 @@
 //!   `|w| - 1 ..= |w| + 1` within one edit of the word ([`near_prefix`]), so a
 //!   slip made mid-word as you type (`budeg`) still lands on `budget`. Among the
 //!   candidates the prefix with the most documents wins, then the shorter, then
-//!   the one that sorts first: deterministic, so the same vault answers the same.
+//!   the one that sorts first; the answer is then **the whole term** of that
+//!   prefix the most documents hold (R4b), by the same order: `sunscren` is
+//!   `sunscreen`, not the prefix `sunscree`. Deterministic, so the same vault
+//!   answers the same.
 //! * **A slip in the first letter is not corrected** (R4a), except a swap of the
 //!   first two (`ubdget`). The caller reads only the terms that start like the
 //!   word, which is what keeps the scan bounded; the rule here is what the caller
@@ -346,17 +349,35 @@ pub fn near_prefix(word: &str, term: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The prefix the most documents hold, then the shorter, then the one that sorts
-/// first.
-fn best_prefix(word: &str, candidates: Vec<(String, u64)>) -> Option<String> {
-    let mut documents: BTreeMap<String, u64> = BTreeMap::new();
+/// The whole term a typed word is corrected to (ruling R4b).
+///
+/// The prefixes the candidates offer ([`near_prefix`]) are groups; the group the
+/// most documents hold wins, then the shorter prefix, then the one that sorts
+/// first. The answer is **the whole vocabulary term** in that group that the most
+/// documents hold, then the shorter, then the one that sorts first, because that
+/// word is both what is searched again and what the member is told: `sunscren`
+/// reads "sunscreen", not the prefix `sunscree` the index would also match. A term
+/// offered more than once (one pair per domain) adds its documents.
+fn best_term(word: &str, candidates: Vec<(String, u64)>) -> Option<String> {
+    let mut groups: BTreeMap<String, (u64, BTreeMap<String, u64>)> = BTreeMap::new();
     for (term, docs) in candidates {
         if let Some(prefix) = near_prefix(word, &term) {
-            let held = documents.entry(prefix).or_default();
+            let (total, terms) = groups.entry(prefix).or_default();
+            *total = total.saturating_add(docs);
+            let held = terms.entry(term).or_default();
             *held = held.saturating_add(docs);
         }
     }
-    documents
+    let (_, (_, terms)) =
+        groups
+            .into_iter()
+            .min_by(|(left, (left_docs, _)), (right, (right_docs, _))| {
+                right_docs
+                    .cmp(left_docs)
+                    .then_with(|| left.chars().count().cmp(&right.chars().count()))
+                    .then_with(|| left.cmp(right))
+            })?;
+    terms
         .into_iter()
         .min_by(|(left, left_docs), (right, right_docs)| {
             right_docs
@@ -364,7 +385,7 @@ fn best_prefix(word: &str, candidates: Vec<(String, u64)>) -> Option<String> {
                 .then_with(|| left.chars().count().cmp(&right.chars().count()))
                 .then_with(|| left.cmp(right))
         })
-        .map(|(prefix, _)| prefix)
+        .map(|(term, _)| term)
 }
 
 /// A query with its mistyped words replaced by the words the vault holds, or
@@ -374,7 +395,8 @@ fn best_prefix(word: &str, candidates: Vec<(String, u64)>) -> Option<String> {
 /// [`eligible`], or that `known` says the vocabulary already holds, stays as
 /// typed. Any other word asks `candidates` for the `(term, documents)` pairs
 /// that start like it (the caller's bounded read of its vocabulary) and is
-/// replaced by the best [`near_prefix`] among them; with none, it stays.
+/// replaced by the best whole term among them ([`best_term`]); with none, it
+/// stays.
 /// The words are joined by single spaces, so a corrected query is not the typed
 /// one with a word patched but the words the index will be asked for.
 ///
@@ -399,10 +421,10 @@ pub fn correct_words(
             if !eligible(&folded) || known(&folded) {
                 return typed;
             }
-            match best_prefix(&folded, candidates(&folded)) {
-                Some(prefix) => {
+            match best_term(&folded, candidates(&folded)) {
+                Some(term) => {
                     changed = true;
-                    prefix
+                    term
                 }
                 None => typed,
             }
@@ -811,15 +833,49 @@ mod tests {
         // Most documents.
         let by_docs = Vocabulary(vec![("budget", 1), ("budgit", 4)]);
         assert_eq!(by_docs.correct("budgat").as_deref(), Some("budgit"));
-        // Documents add across the terms that share a prefix.
-        let added = Vocabulary(vec![("budgets", 2), ("budgeted", 2), ("budgit", 3)]);
-        assert_eq!(added.correct("budgat").as_deref(), Some("budget"));
+        // Documents add across the terms that share a prefix; the answer is then
+        // the whole term of that prefix with the most documents of its own.
+        let added = Vocabulary(vec![("budgets", 2), ("budgeted", 3), ("budgit", 4)]);
+        assert_eq!(added.correct("budgat").as_deref(), Some("budgeted"));
         // Equal documents: the shorter prefix.
         let shorter = Vocabulary(vec![("budgit", 2), ("budga", 2)]);
         assert_eq!(shorter.correct("budgat").as_deref(), Some("budga"));
         // Equal and equally long: the one that sorts first.
         let sorted = Vocabulary(vec![("budgit", 2), ("budget", 2)]);
         assert_eq!(sorted.correct("budgat").as_deref(), Some("budget"));
+    }
+
+    /// R4B: THE CORRECTION IS THE WHOLE TERM, not the prefix the index matched.
+    #[test]
+    fn a_correction_is_the_whole_term_of_the_winning_prefix() {
+        // `sunscren` is one edit from the prefix `sunscree` of `sunscreen`; the
+        // member is told, and the index asked for, `sunscreen`.
+        let vocabulary = Vocabulary(vec![("sunscreen", 2), ("sunday", 5)]);
+        assert_eq!(vocabulary.correct("sunscren").as_deref(), Some("sunscreen"));
+        // `recieve` is one edit from the prefix `receive`; the vault holds
+        // `received`, and that is the word.
+        let received = Vocabulary(vec![("received", 3), ("recipe", 9)]);
+        assert_eq!(received.correct("recieve").as_deref(), Some("received"));
+        // Within the winning prefix, the term the most documents hold; then the
+        // shorter; then the one that sorts first.
+        let by_docs = Vocabulary(vec![("budgets", 1), ("budgeted", 4)]);
+        assert_eq!(by_docs.correct("budegt").as_deref(), Some("budgeted"));
+        let shorter = Vocabulary(vec![("budgeted", 2), ("budgets", 2)]);
+        assert_eq!(shorter.correct("budegt").as_deref(), Some("budgets"));
+        let sorted = Vocabulary(vec![("budgetz", 2), ("budgetx", 2)]);
+        assert_eq!(sorted.correct("budegt").as_deref(), Some("budgetx"));
+        // The same term offered by two domains adds its documents.
+        let doubled = Vocabulary(vec![("budgets", 2), ("budgeted", 3), ("budgets", 2)]);
+        assert_eq!(doubled.correct("budegt").as_deref(), Some("budgets"));
+        // The winning prefix is chosen before the term: a term with more documents
+        // in a losing prefix does not win.
+        let losing = Vocabulary(vec![
+            ("budgit", 5),
+            ("budgets", 2),
+            ("budgeted", 2),
+            ("budgetary", 2),
+        ]);
+        assert_eq!(losing.correct("budgat").as_deref(), Some("budgets"));
     }
 
     #[test]
@@ -884,6 +940,10 @@ mod tests {
         walked.add_row(["Budget plan"]);
         assert_eq!(walked.correct("budegt").as_deref(), Some("budget"));
         assert_eq!(walked.correct("exmaple").as_deref(), Some("example"));
+        // The whole word the rows hold, not a prefix of it.
+        let mut longer = WalkedWords::new();
+        longer.add_row(["Sunscreen SPF 50"]);
+        assert_eq!(longer.correct("sunscren").as_deref(), Some("sunscreen"));
         // A word the rows hold, as a part of a longer one, is known.
         assert_eq!(walked.correct("budg"), None);
         // A word no walked row is near stays as typed.

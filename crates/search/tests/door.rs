@@ -1201,18 +1201,20 @@ fn a_slipped_word_is_corrected_to_the_word_the_vault_holds() {
             corrected(&door, &TASKS, "budgget").as_deref(),
             Some("budget")
         );
-        // A letter dropped: `receive` is a prefix of the `received` the vault holds.
+        // A letter dropped: the answer is the whole word the vault holds (R4b),
+        // `received`, not the prefix `receive` the index would also match.
         assert_eq!(
             corrected(&door, &TASKS, "recive").as_deref(),
-            Some("receive")
+            Some("received")
         );
         // The classic: `ie` and `ei`.
         assert_eq!(
             corrected(&door, &TASKS, "recieve").as_deref(),
-            Some("receive")
+            Some("received")
         );
-        // Mid-word as you type: the slip is in the letters typed so far.
-        assert_eq!(corrected(&door, &TASKS, "budeg").as_deref(), Some("budge"));
+        // Mid-word as you type: the slip is in the letters typed so far, and the
+        // word is the whole term (R4b), not the five letters the slip was read in.
+        assert_eq!(corrected(&door, &TASKS, "budeg").as_deref(), Some("budget"));
         // The case and the accent a member typed are the index's to forgive.
         assert_eq!(
             corrected(&door, &TASKS, "BUDEGT").as_deref(),
@@ -1224,6 +1226,39 @@ fn a_slipped_word_is_corrected_to_the_word_the_vault_holds() {
             Some("budget")
         );
     });
+}
+
+/// R4B: the correction is the WHOLE term the vault holds, and the member is told
+/// that word. `sunscren` is one edit from the prefix `sunscree`; the answer is
+/// `sunscreen`, and the re-search finds the row with it.
+#[test]
+fn a_correction_is_the_whole_word_the_vault_holds() {
+    on_both_vaults(
+        |connection, owner| {
+            seed_budget(connection, owner)?;
+            add_task(connection, owner, "task-sun", "Buy sunscreen for the trip")
+        },
+        |connection| {
+            let door = door(connection);
+            assert_eq!(
+                corrected(&door, &TASKS, "sunscren").as_deref(),
+                Some("sunscreen")
+            );
+            let answer = door
+                .query(
+                    &Principal::Owner,
+                    &SearchRequest::new("schedule.task", "sunscreen", 8),
+                )
+                .expect("the search answers");
+            assert_eq!(
+                targets(&answer)
+                    .into_iter()
+                    .map(|target| target.id)
+                    .collect::<Vec<String>>(),
+                ids(["task-sun"])
+            );
+        },
+    );
 }
 
 /// THE POINT OF IT: the typed query finds nothing, and the corrected one finds the
@@ -1247,7 +1282,7 @@ fn the_corrected_query_finds_the_row_the_typed_one_could_not() {
         assert!(ask("budegt").is_empty(), "the slip finds nothing");
         let query = corrected(&door, &TASKS, "budegt").expect("the slip is corrected");
         assert_eq!(ask(&query), ids(["task-budget"]));
-        // And `recieve` finds `received` through the prefix it was corrected to.
+        // And `recieve` finds `received` through the word it was corrected to.
         assert!(ask("recieve").is_empty());
         let query = corrected(&door, &TASKS, "recieve").expect("the slip is corrected");
         assert_eq!(ask(&query), ids(["task-parcel"]));
@@ -1265,7 +1300,7 @@ fn in_a_query_of_several_words_only_the_unknown_one_changes() {
         );
         assert_eq!(
             corrected(&door, &TASKS, "roof budegt recieve").as_deref(),
-            Some("roof budget receive")
+            Some("roof budget received")
         );
         // Nothing unknown, nothing to say.
         assert_eq!(corrected(&door, &TASKS, "Quarterly budget"), None);
