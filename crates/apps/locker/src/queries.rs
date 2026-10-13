@@ -466,6 +466,46 @@ mod tests {
         }
     }
 
+    /// THE WALKER LEVEL, where a planted plaintext sealed value is visible. A
+    /// row that carries all five sealed cells as readable words, read the way the
+    /// walker reads a row, must put none of them in the texts a search matches or
+    /// offers as a correction: `ItemRow::of` reads no sealed key into any field.
+    /// (The core test of the same property sees ciphertext after the relock, so
+    /// it cannot notice a sealed cell joining the walk; this one can.)
+    #[test]
+    fn a_planted_sealed_value_joins_no_searched_text() {
+        let planted: Vec<(String, String)> = SEALED_ITEM_COLUMNS
+            .iter()
+            .map(|column| ((*column).to_owned(), format!("plaintext-of-{column}")))
+            .collect();
+        let mut pairs: Vec<(&str, &str)> = vec![
+            ("item_id", "i1"),
+            ("type", "login"),
+            ("title", "Bank"),
+            ("username", "ada"),
+            ("url", "https://bank.example"),
+            ("notes", "a note"),
+            ("fullname", "Ada Lovelace"),
+            ("email", "ada@mail.test"),
+            ("phone", "555-0100"),
+            ("brand", "Visa"),
+        ];
+        pairs.extend(planted.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+        let item = ItemRow::of(&row(&pairs));
+        for (column, value) in &planted {
+            assert!(
+                item.searchable().all(|text| !text.contains(value.as_str())),
+                "the sealed {column} is in a text a search reads"
+            );
+            assert!(
+                !item.matches(&value.to_lowercase()),
+                "the sealed {column} is matched"
+            );
+        }
+        // The control: the typed texts of the same row are all read.
+        assert_eq!(item.searchable().count(), 8);
+    }
+
     #[test]
     fn nothing_searchable_is_a_sealed_column() {
         // The projection a search reads carries no sealed cell, so no sealed

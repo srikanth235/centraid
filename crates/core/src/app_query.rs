@@ -1418,4 +1418,94 @@ mod tests {
         assert!(!detail.today.is_empty() && !detail.now_local.is_empty());
         assert!(ask("no-such-event", "").event.is_none());
     }
+
+    /// A door that would correct anything, counting how often it is asked: the
+    /// test of "a correction never goes around a denial" needs a door that says
+    /// yes, so that the only thing that can stop it is the helper.
+    struct EagerDoor {
+        asked: std::cell::Cell<u32>,
+    }
+
+    impl centraid_search::Search for EagerDoor {
+        fn query(
+            &self,
+            _: &centraid_search::Principal,
+            _: &centraid_search::SearchRequest,
+        ) -> std::result::Result<centraid_search::Answer, centraid_search::SearchError> {
+            unreachable!("corrected_search asks the surface's own run, never the door's query")
+        }
+
+        fn correct(
+            &self,
+            _: &centraid_search::Principal,
+            _: &[&str],
+            _: &str,
+        ) -> std::result::Result<Option<String>, centraid_search::SearchError> {
+            self.asked.set(self.asked.get() + 1);
+            Ok(Some("cabin".to_owned()))
+        }
+    }
+
+    /// A CORRECTION NEVER GOES AROUND A DENIAL (#1097, R4). An empty answer that
+    /// carries a denial is a refusal, not a miss: the door is not asked to
+    /// correct, the surface does not run again at other words, and the denial is
+    /// the answer. The control is the same empty answer without a denial, which
+    /// is corrected, so the door in this test would have corrected the first.
+    #[test]
+    fn a_correction_never_goes_around_a_denial() {
+        let denial = centraid_apps_kit::Denial {
+            code: Some("consent_revoked".to_owned()),
+            message: Some("the app may not read".to_owned()),
+            revoked_at: None,
+        };
+        let door = EagerDoor {
+            asked: std::cell::Cell::new(0),
+        };
+        let runs = std::cell::RefCell::new(Vec::<String>::new());
+        let denied = corrected_search(
+            &door,
+            &["core.content_item"],
+            "cabn",
+            |found: &Vec<&str>| found.is_empty(),
+            |words| {
+                runs.borrow_mut().push(words.to_owned());
+                Ok((Vec::new(), Some(denial.clone())))
+            },
+        )
+        .expect("a denial is an answer");
+        assert_eq!(
+            door.asked.get(),
+            0,
+            "a denied search asked for a correction"
+        );
+        assert_eq!(*runs.borrow(), ["cabn"], "a denied search ran again");
+        assert_eq!(denied, ((Vec::new(), String::new()), Some(denial)));
+
+        // The control: no denial, an empty answer, and the second run finds a row.
+        let runs = std::cell::RefCell::new(Vec::<String>::new());
+        let ((found, corrected), refused) = corrected_search(
+            &door,
+            &["core.content_item"],
+            "cabn",
+            |found: &Vec<&str>| found.is_empty(),
+            |words| {
+                runs.borrow_mut().push(words.to_owned());
+                Ok((
+                    if words == "cabin" {
+                        vec!["row"]
+                    } else {
+                        Vec::new()
+                    },
+                    None,
+                ))
+            },
+        )
+        .expect("it answers");
+        assert_eq!(door.asked.get(), 1);
+        assert_eq!(*runs.borrow(), ["cabn", "cabin"]);
+        assert_eq!(
+            (found, corrected, refused),
+            (vec!["row"], "cabin".to_owned(), None)
+        );
+    }
 }
