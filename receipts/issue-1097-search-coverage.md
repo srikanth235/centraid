@@ -1,5 +1,35 @@
 # Issue #1097 — search: index every member-typed field, and forgive a typo
 
+<!-- governance:front-page start -->
+**Law** · window door · range `874fcd52..6016b31d` · law digest `b4ce8d9df2f4` → `b4ce8d9df2f4`
+
+| Rule | Door | Verdict | Findings |
+| --- | --- | --- | --- |
+| `amendment-pairing` | hook | ✓ pass | 0 |
+| `commit-message-format` | hook | ✓ pass | 0 |
+| `constitution-coverage` | window | ✓ pass | 0 |
+| `doc-integrity` | hook | ✓ pass | 0 |
+| `doctrine-citation` | window | ✓ pass | 0 |
+| `estate-separation` | hook | ✓ pass | 0 |
+| `managed-tree-integrity` | hook | ✓ pass | 0 |
+| `receipt-per-issue` | window | ✓ pass | 0 |
+| `registry-completeness` | window | ✓ pass | 0 |
+| `waiver-docket` | hook | ✓ pass | 0 |
+
+law estate: 11 paths, CODEOWNERS in sync
+
+### Registries
+
+- rulings recorded: #1097 in `docs/decisions.md`
+- changelog entries: #1097
+- no gates moved
+- no waivers used
+- proposal link unverified (offline)
+- token cost: not recorded
+<!-- governance:front-page end -->
+
+The page above is generated, over the umbrella's own range `874fcd521..HEAD` and the commit in flight (the four #1098 commits beneath that base, which this umbrella does not own, are Inherited red row 4). Read as a finished change, `receipt-per-issue` asks for the `## Audit` verdict below, which an independent reviewer owes.
+
 Umbrella receipt, worked by orchestration ([docs/multi-agent.md](../docs/multi-agent.md)). Each lane appends its own part under the sections below; the rulings are R1, R1a, R1b, R1c, R2, R2a and R3 of the proposal and the coordinator's lane brief, applied here as written in **Decisions**. Doctrine digest the lane worked under: law `b4ce8d9df2f4` (`node .governance/law/brief.mjs`).
 
 ## What changed
@@ -309,3 +339,78 @@ And the demonstrated reds the proposal asks of the correction itself:
 **Lane D.** The claim a reader would otherwise take on trust is that a shell shows what the core corrected only because the machine passes it through. The mutant was applied to the working tree, run, and restored from a copy; it was not committed.
 
 - **Tasks' pass-through dropped.** In `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tasks/TasksHome.kt` the call `SearchLaw.answered(Search, state, term, answer.search?.corrected ?: "")` was made `SearchLaw.answered(Search, state, term)`. `./gradlew -q :shared:jvmTest --tests 'dev.centraid.shared.TasksSpec'`: **1 failed of 34**, the new `search: the words the core corrected are on the field, a new term clears them, and an answer for a closed search draws none (#1097)`, with `expected:<sunscreen> but was:<<empty string>>`. The other 33 pass: nothing but the new spec notices the machine forgetting the words, which is why every machine has one. Restored: green.
+
+## Close pass
+
+The close pass of [docs/multi-agent.md](../docs/multi-agent.md#the-close-pass), run once after lane D, by a worker who wrote none of the lanes. Doctrine digest it worked under: law `b4ce8d9df2f4` (`node .governance/law/brief.mjs`).
+
+- **Doc pass.** The rulings moved to [docs/decisions.md](../docs/decisions.md#search-covers-what-a-member-typed-and-forgives-a-slip-1097) as R-1097-1 to 10 (R1 to R8, the lettered rulings, the Home people filter and `MAX_VOCAB_SCAN`), with the seven owner questions as Q-1097-1 to 7. `CHANGELOG.md` has the member-facing entry; `QUALITY.md` names the local gate's cost; ONT-39 links the kept-index list to Q-1097-1. The state docs the lanes updated (`crates/search/README.md`, `crates/apps/kit/README.md`, `crates/apps/locker/README.md`, `contracts/README.md`, `crates/vault/README.md`, `docs/vault-ontology.md`, `DESIGN.md`, `mobile/maestro/flows/selectors.md`) were searched for the retired index names, for the "prefix" and "title, username and address" wordings and for "seven domains"; the two stale spots that found are fixed below.
+- **Dead-code sweep.** `rg -n "fts_people_profile|fts_core_place|fts_schedule_project|fts_social_circle|fts_knowledge_annotation" --glob '!*.sql' --glob '!receipts/**'` finds the five retired names only in `crates/vault/tests/baseline.rs` and `search_coverage.rs` (tests that say they are gone) and in ONT-39. "Seven domains" is still right everywhere it appears (there are seven). Every `pub` item the lanes added to `crates/apps/kit/src/spelling.rs` has a caller: `eligible`, `fold_like_index` and `near_prefix` are called by `correct_words` (the door's and the walkers' one entry), the rest by the door, a walker or the assistant. Two comments were stale and are fixed (`e68f8e646`): `Search::correct`'s doc and the door's promises row said a replacement is "a prefix of a term" (R4b made it the whole term), and `locker.proto` said Locker's search reads title, username and address only (R6 widened it; comment only, no field moved).
+- **Owner hand-offs.** Seven questions, below. `docs/release/v1-handoffs.md` is for what a container with no phone, Xcode or rented host could not do, each row a command, evidence and destination; none of the seven is that, so none is added there. The one device-bound item, the Ask action's send on a phone that holds a model (this machine holds no `.gguf`, Verification item 31), is a spec-covered behaviour that no run has watched end to end: it belongs on the next on-device pass, and no row is invented for it here.
+
+| # | Command | Outcome |
+| --- | --- | --- |
+| 35 | (Close) `cargo test -p centraid-search -p centraid-vault --no-fail-fast`, after the comment edit in `crates/search/src/lib.rs` | **573 passed, 0 failed, 1 ignored** (the latency measurement of item 15), 4 min 06 s wall: the search crate's 23 unit and 34 door tests (33 run, 1 ignored) and the vault crate's suites, `search_coverage` 18 among them |
+| 36 | (Close) `bun run check:push:static` | **4/4 gates passed** (`format:check`, `lint`, `turbo:lint`, `typecheck:affected`) with the receipt and the registries of this pass. A first run failed `format:check` on the untracked notes file only, and passed once that file was formatted |
+| 37 | (Close) `node .governance/law/run.mjs`, default range `c46f889ed..HEAD` (the merge base with `main`) | Before the doc commits: `registry-completeness` found "docs/decisions.md carries no line citing #1097" and "CHANGELOG.md carries no line citing #1097"; both pass after `6016b31d2`. What remains is the three warn findings of #1098's `e050e8f55` (Inherited red, row 4) and the owed `## Audit` |
+| 38 | (Close) `node .governance/law/run.mjs --range 874fcd521..HEAD`, the umbrella's own range | Every rule passes except `receipt-per-issue`, which wants the `## Audit` verdict of an independent reviewer (below). The front page at the top is this run, over the commit in flight |
+| 39 | (Close) `rg -n "fts_people_profile\|fts_core_place\|fts_schedule_project\|fts_social_circle\|fts_knowledge_annotation" --glob '!*.sql' --glob '!receipts/**'`; the same over "prefix of a term", "title, username and address" and "seven domains" | The five retired names only in `baseline.rs`, `search_coverage.rs` and ONT-39; two stale comments found and fixed in `e68f8e646`; "seven domains" is correct wherever it appears |
+| 40 | (Close) `git log --oneline 98d31de29..HEAD`; `git status --short` | commits ending `(#1097)` with the hooks on: `e68f8e646` the two comments, `6016b31d2` the rulings, owner questions, changelog and quality entry, and this receipt commit. `git status --short` shows only the untracked `.close-notes.md` |
+
+## Done when
+
+The issue's four boxes, one by one.
+
+- [x] **Searching a nickname, an email, a location, a project, a category, a line item or a memo finds its row, in the app and on Home; a test proves each.** Met at the door, which is the one code path Home and the apps read, and not by one test per field per surface. `crates/search/tests/door.rs` has `a_person_is_found_by_nickname_role_where_they_met_email_phone_and_memo`, `an_event_is_found_by_its_place`, `a_task_is_found_by_its_project` and `an_expense_is_found_by_category_group_line_item_and_memo`; `crates/vault/tests/search_coverage.rs` proves the same fields on the index (18 tests: a rename moves the hit, a delete and a purge remove it, a trashed profile is not found, a merge moves the words). The surfaces prove their own half: Locker `search_finds_the_memo_the_note_the_identity_the_brand_and_an_alias` and Tally `search_reads_category_group_line_items_and_memo_and_corrects_a_typo` (the walkers are not the door), and each of Home, Notes, Docs, Tasks, Agenda and People has a typo test that runs the surface. No test types, say, a nickname into Home itself; a reviewer who wants that adds one.
+- [x] **A one-letter slip in a word of four letters or more finds the row and says what it searched for; a test proves it, and a demonstrated-red run shows the test failing without the correction.** `the_corrected_query_finds_the_row_the_typed_one_could_not` (door) and `a_typo_finds_the_{event,document,note,person,task}_and_says_what_it_searched` plus Home's `a_typo_is_corrected_across_every_domain_and_an_exact_term_is_not` (core) assert the row and `corrected`; each shell machine has a spec that the answer sets `corrected`. The reds are in Falsification: the candidate scan disabled fails 7 door tests, the swap branch of `within_one` removed fails 4 kit and 4 door tests, `RecordingSearch::correct` removed fails 6 core tests, the helper's correction off fails 7, and Tasks' pass-through dropped fails the one spec that notices.
+- [x] **No sealed column reaches an index or a vocabulary; the door's open-time check covers the new columns.** `domains::FOLDED` names every folded column with its source, `assert_no_sealed_column` holds the sources to the sealed registry, `SqliteDoor::open` refuses an unlisted index column (`an_index_that_grew_an_unlisted_column_fails_to_open_over_the_committed_model`; its mutant fails 3 tests), and `no_sealed_column_appears_in_any_fts_object_at_the_ladder_head` and `a_locker_memo_is_in_no_index_and_no_vocabulary` scan every index, vocabulary and shadow table. Locker's walker has `a_sealed_value_is_never_matched_and_never_offered_as_a_correction`, with a control that fails if a sealed value joins the walked words.
+- [ ] **`cargo xtask gate --profile local` is green; `jvmTest` and the iOS build pass; the receipt is complete.** **Not met as worded, in one part.** `jvmTest` passes (1,324 tests, 0 failed, item 28), `cargo xtask gate --profile mobile-jvm` is `PASS` (item 33), and the iOS app builds and the Maestro flow passes on the simulator (items 30 and 31). The local gate has every step green and its last line is `gate local: FAIL — over budget`: 1,591.0 s and 1,657.9 s alone against 120 s, which is inherited (below) and was not touched. The receipt is complete except `## Audit`, which waits on an independent reviewer.
+
+## Inherited red
+
+What was red when this umbrella did not cause it, and where each stands.
+
+| # | What | Seen | Cause | Status |
+| --- | --- | --- | --- | --- |
+| 1 | `cargo xtask gate --profile local`: `FAIL — over budget (every step was green)`, 1,337.8 s (shared machine), 1,591.0 s and 1,657.9 s (alone) against the 120 s warm budget | Verification items 8, 17, 24 | `QUALITY.md` recorded about 290 s at #1080 and the budget has not held since before it. This umbrella's own tests add about 15 s of the 1,522 to 1,558 s `test` step; the rest is in `centraid-assist`, `centraid-nativetools` and `centraid-core`, which it did not change, on a data volume at 98% | **Open, named in `QUALITY.md`, not fixed.** Either the budget or the suite's cost changes; no waiver was written and the budget was not touched |
+| 2 | `restore_edges::a_superseded_phone_that_pairs_again_is_refused` failed in `centraid-core` (336 passed, 1 failed) | Lane A, at its first base `3a99ac0bd`; it failed identically with the lane stashed | The plain-copy pass shortened `VaultMoved`'s sentence and dropped the 24 words the test pins | **Fixed upstream** by `874fcd521` `fix(core): the moved-vault sentence names the 24 words again (#1098)`; on that base `centraid-core` is 337 passed, 0 failed |
+| 3 | `bun run check:push:static`: `lint` and `format:check` failed on seven files of the chrome round | Lane A, before the reword | Files of #1098's chrome round that this umbrella did not touch | **Fixed upstream** by `0e1865f52` `chore(lint): format the chrome round's files, exempt its node:test temp dirs (#1098)`; 4/4 on `874fcd521` and at every head since |
+| 4 | `node .governance/law/run.mjs` over `c46f889ed..HEAD` (the merge base with `main`): 3 warn findings, `estate-separation` on `e050e8f55` (a commit that edits `scripts/ci/gate-classes.json` and 384 product files) and `doctrine-citation` for the design-tokens and PR-gate domains | The close pass | All three come from one #1098 commit, `e050e8f55`, which sits under `874fcd521` until #1098 merges | **Not ours.** Over `874fcd521..HEAD`, the umbrella's own range, every rule passes except the owed `## Audit` below |
+
+## Corrections to the plan
+
+Where the plan, the issue or a lane's first reading turned out wrong, and what shipped.
+
+1. **The reword.** The umbrella began on `3a99ac0bd`, where one core test was already red (inherited, row 2). It was reworded onto `874fcd521`, whose `crates/core/src/error.rs` names the 24 words again, so Verification item 5 holds two readings of `centraid-core`: 336 passed and 1 failed at the old base, 337 passed and 0 failed at the new. The count of lane A's own work did not move.
+2. **R1d — the weights are not in the rung.** The proposal said the rung rebuilds the indexes, and R1a first stored the 1.0 / 0.5 weights in each rebuilt index's `_config`. A row of data is not in `vault-ddl.sql`, so a replayed vault ranked differently from a founded one. The weights are `Domain::weights` and travel with every query (R-1097-1a, R-1097-1d).
+3. **R4b — the correction is the whole word.** The proposal said a candidate is a term with a prefix near the word, and lane B answered with the prefix, so `sunscren` showed `sunscree`. Lane D's D0 makes the answer the highest-document whole term in the winning prefix group (R-1097-4b).
+4. **The punctuation trim.** Lane B kept `budegt?` as typed and asked; the root ruled yes and lane C trims leading and trailing punctuation before the eligibility check and leaves it out of the replacement.
+5. **A Locker memo is now searched, by the walker.** R1c says no index holds a Locker memo, which read alone says a Locker memo is unsearchable. The proposal's R6 reads it in Locker's walk, and lane C's walker does, with the note, full name, email, phone, card brand and aliases; the memo is member-typed and unsealed. Lane A also corrected two comments in `crates/vault/src/commands/locker.rs` that said a memo is deliberately in an index. Locker is still not a search domain and has no index or vocabulary (R-1097-1c, R-1097-6).
+6. **Photos gains nothing.** The proposal's table said `fts_core_content_item` gains annotations on a photo's representations "if a census finds a writer". The census found `media.promote_caption` reading them and no member-facing writer, so the index is unchanged.
+7. **Added after the plan, by the lanes.** Home drops a `core.party` with no live People profile (R-1097-9); `RecordingSearch` forwards `correct`, because the trait default is a silent `Ok(None)`; the correction is judged on the answer the member sees, after the surface's own drops (`corrected_search`); and Agenda keeps `search_corrected` because its search is a mode of its home screen.
+
+## Owner questions
+
+Each is a question with options and a recommendation; none is ruled. They are recorded where decisions live, as Q-1097-1 to 7 in [docs/decisions.md](../docs/decisions.md#open-questions-for-the-owner-1097), and the owner's answers go there, not here.
+
+| Id | Question | Options and recommendation |
+| --- | --- | --- |
+| **Q-1097-1** | **The five kept, unread indexes.** `fts_core_collection` (read by `crates/vault/tests/collection_kind.rs` only), `fts_core_transaction`, `fts_social_thread`, `fts_social_message` (no reader) and `fts_locker_item` (read by one door test, to prove Locker is `NotADomain`) are written by triggers on every save and read by no feature. Each costs a write per save and its shadow tables in the vault file. They were kept in rung thirteen because [Q-1097-2](#open-questions-for-the-owner-1097)'s follow-ups would read three of them, which is a citation and not a justification. | (a) Keep all five until the follow-ups route them; (b) retire all five in a rung fourteen; (c) retire `fts_core_transaction` and `fts_locker_item` now and keep the three that Q-1097-2 would read. **Recommend (c)**: no consumer is proposed for either, Locker has its own walker (R-1097-6), and an index nothing reads is the thing this issue retired five of. The door test that uses `fts_locker_item` would plant its own fixture (#1097). |
+| **Q-1097-2** | **Containers and chat history as search domains.** A project, calendar, group, album or notebook cannot be found by name as a result of its own, and a chat thread or message cannot be found at all. Both need a result that opens the right place: a container needs each app's container view routed from Home and from the app's search, and a chat hit needs a route into a thread. | (a) Neither in v0; (b) containers as results of their own, as a follow-up proposal; (c) chat history too. **Recommend (b), then (c)**: a member who remembers a notebook's name is the likelier search, the indexes for them already exist (Q-1097-1), and neither needs more than routing (#1097). |
+| **Q-1097-3** | **Photos' in-app search.** `PhotosSearchReads.kt` filters with `LIKE` legs and forgives no typo, while Home searches the same photographs through `fts_core_content_item` and corrects one. A member who types `sunscren` finds a photo from Home and not from Photos. | (a) Leave it, as ruled out of scope (R-1097-7); (b) route Photos' search through the door over `core.content_item`, with the correction and `corrected`. **Recommend (b)** as a follow-up: it is the one app whose own search is behind Home's, and the door already searches its text (#1097). |
+| **Q-1097-4** | **A phone number typed without its country code.** `+442079460958` is indexed as one token (with its spaced groups, as typed), so `2079460958` or `020 7946 0958` finds nothing unless the member typed the number that way. The vault computes no national number. | (a) Leave it; (b) fold the national number when the vault knows the member's home country, as one more token of `channels`; (c) fold the last ten digits of every number. **Recommend (a) for now and (b) when the vault carries a home country**: (c) matches numbers that are not the member's, and a guess at a country splits numbers wrongly (#1097). |
+| **Q-1097-5** | **Interaction notes in no index.** A note logged on an interaction (`knowledge_annotation` with `target_type = 'core.activity'`, written by `people.log_interaction`) is member-typed and was in `fts_knowledge_annotation`, the only index that held it, retired unread. Searching "lunch at Rao's" no longer finds the person it was logged for. | (a) Leave it; (b) fold it into the party's `memo`, through the activity-to-party link, by a trigger on the annotation and one on the link; (c) fold it into its own party column weighed 0.5. **Recommend (b)** as a follow-up rung: it is what a member logs to remember, it needs no new column, and the activity's participants are the parties to re-index (#1097). |
+| **Q-1097-6** | **Ask on the apps' empty states, and on Android.** The "Ask about “x”" action is on Home's no-match state only, because each app builds its own `EmptyState` and event; Android has no Chat tab (`HomeScreen.kt` draws Home and Backup), so its Home draws the state without the action. | (a) Home on iOS only, as shipped; (b) one search empty state shared by the apps, carrying the action; (c) (b) plus an Android Chat tab. **Recommend (b)** as a follow-up for the apps that search; **(c) is a product decision about Android's shell** and not a search one, so it waits for that (#1097). |
+| **Q-1097-7** | **Should Ask continue the open chat thread?** It starts a new chat when the open one already holds a thread, so an unrelated conversation does not receive "Find zzqxv". | (a) Always a new chat, as shipped; (b) always continue the open thread; (c) continue it only when it is empty or the member has just left it. **Recommend (a)**: the on-device model reads an 8,192-token context ([R-1088-11](#one-assistant-plane-1088)) and a stray question in an unrelated thread spends it and misleads the next turn; revisit if members ask for the thread back (#1097). |
+
+## Audit
+
+**No verdict yet.** The receipt-per-issue directive requires an independent reviewer, who did not write the change or this receipt, to give a verdict with evidence for each claim. The lanes and the close pass that wrote this file cannot, so none is given and none is implied.
+
+What the reviewer is owed, and where to look:
+
+- **The boxes.** Done when, above: three held, one held in part (the local gate's budget). The second and third boxes' evidence is Falsification.
+- **Verification.** Items 1 to 34 and the close pass's commands. The slowest are the local gate (about 27 minutes alone) and the core and assistant suites (about 18 minutes); the figures to re-run are in items 8, 17 and 24.
+- **What changed.** Four lane sections list their files by full path; the close pass touched `crates/search/src/lib.rs` and `crates/api-proto/proto/centraid/core/v1/locker.proto` (comments), `docs/decisions.md`, `docs/vault-ontology.md`, `CHANGELOG.md`, `QUALITY.md` and this file.
+- **Decisions.** R-1097-1 to 10 against the receipt's Decisions section, which has the evidence each row summarises.
+- **Not run by anyone:** the Ask action's send to a model on a phone (this machine holds no `.gguf`), Android on an emulator, and any device. Those are the hand-offs in the Close pass section.
