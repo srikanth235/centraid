@@ -20,6 +20,7 @@
 //! | A denial is a VALUE | [`Answer`] is `Denied` or `Data`, never an `Err` (census §A seam 6) |
 //! | A bound reports the size it reaches | [`SearchRequest::limit`] is clamped by [`MAX_MATCH_ROWS`] and [`Answer::window`] says what it actually was (D-1020-D3-12) |
 //! | **A result can carry no secret** | [`Target`], and [`domains::assert_no_sealed_column`] — see below |
+//! | A correction is a bounded lookup (#1097) | [`Search::correct`] replaces a word by a prefix of a term the named domains' vocabularies hold, reads at most [`MAX_VOCAB_SCAN`] rows per word per domain, and refuses an entity that is not a domain exactly as `query` does |
 //!
 //! ## Secret-free BY CONSTRUCTION, not by filtering
 //!
@@ -67,7 +68,7 @@ pub mod sqlite;
 
 pub use domains::{DOMAINS, Domain, domain_of};
 pub use matching::{MAX_MATCH_TOKENS, match_expression};
-pub use sqlite::SqliteDoor;
+pub use sqlite::{MAX_VOCAB_SCAN, SqliteDoor};
 
 use centraid_apps_kit::page::{Page, PageRequest};
 
@@ -233,6 +234,41 @@ pub trait Search {
     /// domain, a query with no searchable word, a broken index. A **denial** is
     /// not one of those: it is [`Answer::Denied`], because a surface renders it.
     fn query(&self, principal: &Principal, request: &SearchRequest) -> Result<Answer, SearchError>;
+
+    /// The query with its mistyped words replaced by the words the vault holds,
+    /// or `None` when no word changed (#1097, R4, R4a).
+    ///
+    /// **A caller runs this only when its whole exact answer was empty**, then
+    /// runs [`Search::query`] again with the words it returned and says what it
+    /// searched for. It is a correction and never a wider match: a word the
+    /// vocabulary holds is kept, a word of fewer than four letters or with a digit
+    /// is kept, a slip in the first letter is not corrected (except a swap of the
+    /// first two), and the replacement is always a prefix of a term the named
+    /// domains' vocabularies hold. The rule is
+    /// [`centraid_apps_kit::spelling`]'s, which the assistant's name resolver
+    /// reads too.
+    ///
+    /// `entities` are the domains the caller is about to search again, and the
+    /// same refusal applies as in `query`: an entity that is not one of the seven
+    /// is [`SearchError::NotADomain`], so Locker has no vocabulary to ask.
+    ///
+    /// The default is `None`, so a door with no vocabulary (a test double, a
+    /// recorder around another door) is a door that corrects nothing and not one
+    /// that fails to compile; a door that wraps another has to forward this.
+    ///
+    /// # Errors
+    ///
+    /// The refusals `query` has for an unknown domain and a broken index. A
+    /// query with nothing to correct is `Ok(None)`.
+    fn correct(
+        &self,
+        principal: &Principal,
+        entities: &[&str],
+        query: &str,
+    ) -> Result<Option<String>, SearchError> {
+        let _ = (principal, entities, query);
+        Ok(None)
+    }
 }
 
 /// Everything this door refuses, and why each one is a refusal rather than an

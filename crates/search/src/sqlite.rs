@@ -46,7 +46,10 @@
 //! `crates/search/README.md` rather than stubbed here, because a stub that
 //! *looks* like a consent check is worse than an absence that is written down.
 
+use std::cell::RefCell;
+
 use centraid_apps_kit::page::{Page, PageCursor, page_of, probe_limit};
+use centraid_apps_kit::spelling::correct_words;
 use centraid_ontology::jsvalue::js_number_to_string;
 use centraid_ontology::registries::sealed_physical_columns;
 use rusqlite::Connection;
@@ -220,6 +223,152 @@ fn coalesce_columns(columns: &[&str]) -> String {
     format!("COALESCE({}, '')", terms.join(", "))
 }
 
+/// The most vocabulary rows a correction reads for ONE word from ONE domain
+/// (#1097, R4a).
+///
+/// A correction looks at the terms that start like the word typed, and the
+/// vocabulary of a long-kept vault has no upper bound — so the read has one. The
+/// terms come in term order and the read stops here: the swap of the first two
+/// letters first (a prefix of two letters, a few hundred terms at the most), then
+/// the word's first letter with what is left of the allowance. A word whose near
+/// term sorts past the bound is **not corrected**, which is the same answer as
+/// "no such word": a correction is an offer, never a promise.
+///
+/// The number is a measurement and not a guess. `tests/door.rs`
+/// (`correction_latency_on_fifty_thousand_terms`, `#[ignore]`d, the command is in
+/// its doc) puts p50 and max over a vault of about 50,000 distinct terms in the
+/// receipt; the biggest first-letter bucket of English text is a ninth of a
+/// vocabulary, so the bound holds a whole bucket of a vault of about 70,000 terms
+/// in one domain and a prefix of the alphabet's busiest letters in a bigger one.
+pub const MAX_VOCAB_SCAN: usize = 8_192;
+
+/// The vocabulary table of a domain's index (`fts_<index>_vocab`, rung thirteen).
+fn vocabulary_of(domain: &Domain) -> String {
+    format!("{}_vocab", domain.fts)
+}
+
+/// The smallest string greater than every string that starts with `prefix`: the
+/// exclusive end of a prefix range on `term`. `None` when there is none (a prefix
+/// of nothing but the last code point).
+///
+/// SQLite compares text byte by byte and UTF-8 keeps code point order, so the
+/// range `term >= prefix AND term < prefix_end(prefix)` is exactly the terms that
+/// start with it — and a range on `term` is a constraint the vocabulary table
+/// honours, where a `LIKE` or a `substr` would walk every term.
+fn prefix_end(prefix: &str) -> Option<String> {
+    let mut chars: Vec<char> = prefix.chars().collect();
+    while let Some(last) = chars.pop() {
+        // The surrogate gap is not a char: step over it.
+        let next = match u32::from(last) + 1 {
+            0xD800 => 0xE000,
+            next => next,
+        };
+        if let Some(next) = char::from_u32(next) {
+            chars.push(next);
+            return Some(chars.into_iter().collect());
+        }
+    }
+    None
+}
+
+impl SqliteDoor<'_> {
+    /// Whether any term of the domain starts with `word` — a prefix probe that
+    /// stops at the first.
+    fn holds(&self, domain: &Domain, word: &str) -> Result<bool, SearchError> {
+        let Some(end) = prefix_end(word) else {
+            return Ok(false);
+        };
+        let vocabulary = vocabulary_of(domain);
+        let mut statement = self
+            .connection
+            .prepare_cached(&format!(
+                "SELECT 1 FROM {vocabulary} WHERE term >= ?1 AND term < ?2 LIMIT 1"
+            ))
+            .map_err(|error| unusable_vocabulary(domain, &vocabulary, &error))?;
+        statement
+            .exists(rusqlite::params![word, end])
+            .map_err(|error| SearchError::Sqlite(error.to_string()))
+    }
+
+    /// Up to `limit` terms of the domain that start with `prefix`, in term order,
+    /// each with the number of documents it is in. A term more than one letter
+    /// shorter than the word cannot have a prefix one edit from it, so it is not
+    /// kept.
+    fn terms_under(
+        &self,
+        domain: &Domain,
+        prefix: &str,
+        shortest: usize,
+        limit: usize,
+        into: &mut Vec<(String, u64)>,
+    ) -> Result<usize, SearchError> {
+        let Some(end) = prefix_end(prefix) else {
+            return Ok(0);
+        };
+        let vocabulary = vocabulary_of(domain);
+        let mut statement = self
+            .connection
+            .prepare_cached(&format!(
+                "SELECT term, doc FROM {vocabulary}
+                  WHERE term >= ?1 AND term < ?2
+                  ORDER BY term LIMIT ?3"
+            ))
+            .map_err(|error| unusable_vocabulary(domain, &vocabulary, &error))?;
+        let rows = statement
+            .query_map(
+                rusqlite::params![prefix, end, i64::try_from(limit).unwrap_or(i64::MAX)],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .map_err(|error| SearchError::Sqlite(error.to_string()))?;
+        let mut read = 0;
+        for row in rows {
+            let (term, docs) = row.map_err(|error| SearchError::Sqlite(error.to_string()))?;
+            read += 1;
+            if term.chars().count() >= shortest {
+                into.push((term, u64::try_from(docs).unwrap_or(0)));
+            }
+        }
+        Ok(read)
+    }
+
+    /// The terms a correction of `word` may land on, from one domain: the terms
+    /// that start with the word's first letter, and those that start with its
+    /// first two letters swapped — **at most [`MAX_VOCAB_SCAN`] rows in all**.
+    fn neighbours(
+        &self,
+        domain: &Domain,
+        word: &str,
+        into: &mut Vec<(String, u64)>,
+    ) -> Result<(), SearchError> {
+        let mut letters = word.chars();
+        let (Some(first), Some(second)) = (letters.next(), letters.next()) else {
+            return Ok(());
+        };
+        // `|w| - 1`: the shortest term a prefix of length `|w| - 1` can come from.
+        let shortest = word.chars().count().saturating_sub(1);
+        let mut allowance = MAX_VOCAB_SCAN;
+        if second != first {
+            let swapped: String = [second, first].iter().collect();
+            allowance -= self.terms_under(domain, &swapped, shortest, allowance, into)?;
+        }
+        if allowance > 0 {
+            self.terms_under(domain, &first.to_string(), shortest, allowance, into)?;
+        }
+        Ok(())
+    }
+}
+
+/// A vocabulary table the file does not have, or cannot read: a vault older than
+/// rung thirteen, said as the unusable index it is.
+fn unusable_vocabulary(domain: &Domain, vocabulary: &str, error: &rusqlite::Error) -> SearchError {
+    SearchError::IndexUnusable {
+        entity: domain.entity.to_owned(),
+        detail: format!(
+            "`{vocabulary}` is not usable: {error} (rung thirteen creates the vocabulary of each domain)"
+        ),
+    }
+}
+
 impl Search for SqliteDoor<'_> {
     fn query(&self, principal: &Principal, request: &SearchRequest) -> Result<Answer, SearchError> {
         let domain = domain_of(&request.entity).ok_or_else(|| SearchError::NotADomain {
@@ -363,6 +512,72 @@ impl Search for SqliteDoor<'_> {
             window,
         })
     }
+
+    /// The correction (#1097, R4, R4a): the words of `query` the vocabularies of
+    /// `entities` do not hold, replaced by the words they do. `None` when no word
+    /// changed.
+    ///
+    /// Every entity must be one of the seven domains, exactly as in `query`: the
+    /// vocabulary of a domain is its index's, and Locker has an index and no
+    /// vocabulary, so a secret has no term a correction could offer.
+    fn correct(
+        &self,
+        principal: &Principal,
+        entities: &[&str],
+        query: &str,
+    ) -> Result<Option<String>, SearchError> {
+        let mut domains: Vec<&Domain> = Vec::new();
+        for entity in entities {
+            let domain = domain_of(entity).ok_or_else(|| SearchError::NotADomain {
+                entity: (*entity).to_owned(),
+                count: DOMAINS.len(),
+            })?;
+            if !domains.contains(&domain) {
+                domains.push(domain);
+            }
+        }
+        let _ = principal;
+
+        // `correct_words` takes closures that cannot fail; the first failure is
+        // kept, the word it concerned is left as typed, and it is returned after.
+        let failure: RefCell<Option<SearchError>> = RefCell::new(None);
+        let keep = |error: SearchError| {
+            failure.borrow_mut().get_or_insert(error);
+        };
+        let corrected = correct_words(
+            query,
+            |word| {
+                if failure.borrow().is_some() {
+                    return true;
+                }
+                for domain in &domains {
+                    match self.holds(domain, word) {
+                        Ok(true) => return true,
+                        Ok(false) => {}
+                        Err(error) => {
+                            keep(error);
+                            return true;
+                        }
+                    }
+                }
+                false
+            },
+            |word| {
+                let mut terms = Vec::new();
+                for domain in &domains {
+                    if let Err(error) = self.neighbours(domain, word, &mut terms) {
+                        keep(error);
+                        return Vec::new();
+                    }
+                }
+                terms
+            },
+        );
+        match failure.into_inner() {
+            Some(error) => Err(error),
+            None => Ok(corrected),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -473,6 +688,19 @@ mod tests {
                 .expect("an index is created");
         }
         connection
+    }
+
+    #[test]
+    fn a_prefix_ends_at_the_next_code_point() {
+        assert_eq!(prefix_end("budg").as_deref(), Some("budh"));
+        assert_eq!(prefix_end("a").as_deref(), Some("b"));
+        assert_eq!(prefix_end("łodz").as_deref(), Some("łod{"));
+        // The last code point has no successor: the one before it is stepped.
+        assert_eq!(prefix_end("ab\u{10FFFF}").as_deref(), Some("ac"));
+        // The surrogate gap is not a char, so the step skips it.
+        assert_eq!(prefix_end("\u{D7FF}").as_deref(), Some("\u{E000}"));
+        assert_eq!(prefix_end("\u{10FFFF}"), None);
+        assert_eq!(prefix_end(""), None);
     }
 
     #[test]

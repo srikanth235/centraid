@@ -50,7 +50,25 @@ One probe per domain answers, so Home stays at seven. An index holds the base ro
 
 **Folded columns weigh half, and the door says so with every query.** Each `Domain` carries `weights`, one per index column in the index's own order, the id first: 1.0 for what an index always had, 0.5 for a column rung thirteen folded in. The door passes them as FTS5's rank override, `AND <fts>.rank MATCH 'bm25(…)'`, so `ORDER BY <fts>.rank` and the `(rank, id)` keyset read the weighted score and a word in a title or a name outranks the same word in a project, a nickname or a memo. They are not stored in the index (`INSERT INTO fts(fts, rank) VALUES('rank', …)` is a row of data and `contracts/schema/vault-ddl.sql` carries none): a vault built by replaying the DDL and one the product founded rank alike, and `tests/door.rs` proves the order on both. `SqliteDoor::open` refuses an index whose column count is not its weights' length, because `bm25` takes them by position.
 
-**Vocabulary.** Each of the seven indexes has a persistent `fts5vocab` table, `fts_<index>_vocab` (`term`, `doc`, `cnt`), created in rung thirteen because the read connection is `query_only`. Locker has none. Nothing in this crate reads them yet.
+**Vocabulary.** Each of the seven indexes has a persistent `fts5vocab` table, `fts_<index>_vocab` (`term`, `doc`, `cnt`), created in rung thirteen because the read connection is `query_only`. Locker has none. The correction below is the one reader.
+
+## Correction: a typo is a lookup in the vault's own words
+
+```rust
+if exact_answer.is_empty() {
+    if let Some(words) = door.correct(&Principal::Owner, &["schedule.task"], "budegt")? {
+        // words == "budget": run `query` again with them, and say what was searched for
+    }
+}
+```
+
+`Search::correct(principal, entities, query) -> Result<Option<String>, SearchError>` ([#1097](https://github.com/srikanth235/centraid/issues/1097), R4) is **a correction and never a wider match**. The caller runs it only when its whole exact answer was empty, runs `query` again with the words it returns, and tells the member what it searched for. A query that found something is never touched, and the trait default is `None`, so a door with no vocabulary corrects nothing; a door that wraps another has to forward it.
+
+- **The rule is the kit's** (`centraid_apps_kit::spelling`, R5, shared with the assistant's name resolver). A word is read when it has four letters or more and nothing but letters; one the vocabulary already holds, as a term or the start of one (search is a prefix search), is kept as typed. Otherwise the candidates are vocabulary terms with a **prefix** of length `|w| - 1 ..= |w| + 1` within one edit (a letter more, fewer or different, or two neighbours swapped) of the word, so a slip made mid-word as you type (`budeg`) still lands on `budget`. The prefix with the most documents wins, then the shorter, then the one that sorts first. A correction is always a prefix of a term the named domains hold — never a word the vault has not got.
+- **A slip in the first letter is not corrected** (R4a), except a swap of the first two (`ubdget`). That is what bounds the scan: the door reads the terms that start with the word's first letter and, first, those that start with its first two letters swapped.
+- **The scan is bounded.** `MAX_VOCAB_SCAN` (8,192) is the most vocabulary rows read for one word from one domain, in term order, the swap's included. The vocabulary table honours a range on `term` and returns its rows in order, so `term >= 'q' AND term < 'r' ORDER BY term LIMIT n` walks `n` rows and sorts nothing (`tests/door.rs::the_vocabulary_scan_stops_at_its_bound` checks the plan and the virtual machine's step count). A word whose near term sorts past the bound is not corrected, the same answer as "no such word". The bound is a measurement: about 2.8 ms p50 and 10 ms at most for a word over four domains of a vault of 50,000 terms, 7 ms for a bucket that fills the bound (receipt, `correction_latency_on_fifty_thousand_terms`).
+- **Locker has no vocabulary.** Every entity must be one of the seven domains: `locker.item` is `NotADomain`, with or beside others, exactly as in `query`. A vault from before rung thirteen is `IndexUnusable`, naming the missing `fts_<index>_vocab`.
+- **The consent walls are the same hand-off as `query`'s** (below): the door corrects over the owner's vocabulary, so when the pipeline lands, `correct` walks the same walls for each entity it is given, or a correction would offer a word a grant cannot read.
 
 ## The seven domains
 

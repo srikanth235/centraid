@@ -302,6 +302,27 @@ fn leading(term: &str, count: usize) -> Option<&str> {
     (seen == count).then_some(term)
 }
 
+/// A necessary condition for [`within_one`], read without allocating: two texts
+/// one edit apart agree on everything but a letter (or two neighbours), so what
+/// they share at the start and at the end covers all but two of the shorter's
+/// letters. A correction asks it of every term in a bucket of thousands, and most
+/// terms fail it on their first letters; [`within_one`] is asked of the rest.
+fn plausibly_one_edit_apart(word: &str, have: &str) -> bool {
+    let shorter = word.chars().count().min(have.chars().count());
+    let head = word
+        .chars()
+        .zip(have.chars())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let tail = word
+        .chars()
+        .rev()
+        .zip(have.chars().rev())
+        .take_while(|(a, b)| a == b)
+        .count();
+    head + tail + 2 >= shorter
+}
+
 /// The prefix of `term` the word may have meant, when there is one.
 ///
 /// A prefix of `term` of length `|word|`, `|word| + 1` or `|word| - 1` that is
@@ -321,7 +342,7 @@ pub fn near_prefix(word: &str, term: &str) -> Option<String> {
         .into_iter()
         .filter(|&take| take >= PREFIX_MIN)
         .filter_map(|take| leading(term, take))
-        .find(|prefix| within_one(word, prefix))
+        .find(|prefix| plausibly_one_edit_apart(word, prefix) && within_one(word, prefix))
         .map(str::to_owned)
 }
 
@@ -597,6 +618,35 @@ mod tests {
             Some("receive")
         );
         assert_eq!(near_prefix("budgget", "budget").as_deref(), Some("budget"));
+    }
+
+    /// THE FILTER NEVER REJECTS WHAT `within_one` ACCEPTS: every pair of words of
+    /// up to five letters over a three-letter alphabet, which holds every shape of
+    /// insert, delete, substitute and swap at every position.
+    #[test]
+    fn the_cheap_filter_never_rejects_a_pair_within_one_edit() {
+        let mut words = vec![String::new()];
+        let mut frontier = vec![String::new()];
+        for _ in 0..5 {
+            frontier = frontier
+                .iter()
+                .flat_map(|word| ["a", "b", "c"].map(|letter| format!("{word}{letter}")))
+                .collect();
+            words.extend(frontier.iter().cloned());
+        }
+        let mut within = 0;
+        for left in &words {
+            for right in &words {
+                if within_one(left, right) {
+                    within += 1;
+                    assert!(
+                        plausibly_one_edit_apart(left, right),
+                        "`{left}` and `{right}`"
+                    );
+                }
+            }
+        }
+        assert!(within > 1_000, "only {within} pairs were one edit apart");
     }
 
     #[test]
