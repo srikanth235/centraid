@@ -530,6 +530,22 @@ pub fn memo_statement(expense_id: &str) -> PageQuery {
     )
 }
 
+/// `tally.search.memos` — every expense's memo, newest first, for a search to
+/// read beside the expense's own columns (#1097, R6). One bounded read of the
+/// ledger's window instead of one per expense.
+pub fn memos_statement() -> PageQuery {
+    query(
+        "tally.search.memos",
+        "annotation_id, target_id, body_text, updated_at",
+        "knowledge_annotation",
+        PageOrder::desc("updated_at", "annotation_id"),
+    )
+    .filter(
+        "target_type = ?",
+        vec![PageBindValue::from("tally.expense")],
+    )
+}
+
 /// How far apart two postings of one movement may sit, in whole days
 /// (`queries/matches.ts:31`).
 pub const MATCH_WINDOW_DAYS: i64 = 4;

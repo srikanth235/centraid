@@ -401,7 +401,7 @@ fn an_item_answers_its_secrets_as_presence_and_its_sidecars() {
 }
 
 #[test]
-fn search_is_title_username_and_address_and_never_a_note_or_a_secret() {
+fn search_is_the_typed_text_of_a_live_item_and_never_a_secret() {
     let scratch = stocked();
     let hits = |term: &str| -> Vec<String> {
         scratch
@@ -414,7 +414,8 @@ fn search_is_title_username_and_address_and_never_a_note_or_a_secret() {
     assert_eq!(hits("bank"), vec!["item-bank".to_owned()]);
     assert_eq!(hits("MAYA@"), vec!["item-bank".to_owned()]);
     assert_eq!(hits("forum.example"), vec!["item-forum".to_owned()]);
-    assert!(hits("recovery").is_empty(), "notes are not searched");
+    // The note is typed text and is searched since #1097 (R6).
+    assert_eq!(hits("recovery"), vec!["item-bank".to_owned()]);
     assert!(hits("battery").is_empty(), "a password is not searched");
     assert!(hits("gone").is_empty(), "the trash is not searched");
     assert_eq!(hits("old note"), vec!["item-archived".to_owned()]);

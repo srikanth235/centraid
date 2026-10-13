@@ -17,6 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::reads::{PageDoor, read_by_id, read_window};
 use centraid_apps_kit::row::{Cell, Row, text_of};
+use centraid_apps_kit::spelling::WalkedWords;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 
 use crate::queries::{
@@ -230,6 +231,23 @@ pub fn memo_statement(item_id: &str) -> PageQuery {
     )
 }
 
+/// Every item's memo, newest first: what a search reads beside the item's own
+/// columns (#1097, R6). Walked under [`DECORATION_ROWS`], like the tags and
+/// aliases, so a vault with more memos than that is searched over the newest.
+#[must_use]
+pub fn memos_statement() -> PageQuery {
+    PageQuery::new(
+        "locker.phone.memos",
+        "annotation_id, target_id, body_text, updated_at",
+        "knowledge_annotation",
+        PageOrder::desc("updated_at", "annotation_id"),
+    )
+    .filter(
+        "target_type = ?",
+        vec![PageBindValue::Text(ITEM_ENTITY_TYPE.to_owned())],
+    )
+}
+
 fn by_item(name: &str, select: &str, from: &str, pk: &str, item_id: &str) -> PageQuery {
     PageQuery::new(name, select, from, PageOrder::asc(pk, pk))
         .filter("item_id = ?", vec![PageBindValue::Text(item_id.to_owned())])
@@ -335,6 +353,10 @@ pub struct PhoneField {
 pub struct SearchData {
     pub items: Vec<Listed>,
     pub truncated: bool,
+    /// The words the rows answer, when the typed term found nothing and a
+    /// correction against the walked rows' own words did (#1097, R4, R6).
+    /// `None` for an exact answer, and when the correction found nothing.
+    pub corrected: Option<String>,
 }
 
 /// `locker.review`: the metadata verdicts.
@@ -478,9 +500,17 @@ pub fn load_item(door: &dyn PageDoor, item_id: &str) -> KitResult<Option<ItemDat
     }))
 }
 
-/// Title, username and address, case-insensitively, over every item not in
-/// the trash. Nothing sealed and no note is searched (L-search, the handoff's
-/// search note).
+/// The search: title, username and address (v0's three) and, since #1097 (R6),
+/// the note, full name, email, phone and card brand, the memo and the aliases —
+/// case-insensitively, over every item not in the trash. **Nothing sealed is
+/// read**: the walk projects [`ITEM_COLUMNS`], and the memo and aliases are
+/// plaintext rows of their own.
+///
+/// When the exact walk finds nothing, the typed words are corrected against the
+/// words of the very rows just walked ([`WalkedWords`]) and the walk is run
+/// again with the corrected words; `corrected` says so only if that run found
+/// something. Locker is not a search domain, so no index or vocabulary is
+/// asked.
 pub fn load_search(door: &dyn PageDoor, term: &str, limit: usize) -> KitResult<SearchData> {
     let limit = if limit == 0 {
         SEARCH_DEFAULT
@@ -492,24 +522,72 @@ pub fn load_search(door: &dyn PageDoor, term: &str, limit: usize) -> KitResult<S
         return Ok(SearchData {
             items: Vec::new(),
             truncated: false,
+            corrected: None,
         });
     }
     let walked = read_window(door, &shelves_statement(), SEARCH_ROWS)?;
-    let matched: Vec<ItemRow> = walked
-        .rows
-        .iter()
-        .map(ItemRow::of)
-        .filter(|row| row.matches(&needle))
-        .collect();
+    let rows: Vec<ItemRow> = walked.rows.iter().map(ItemRow::of).collect();
     let decorations = decorations(door)?;
+    let memos = memos(door)?;
+    let texts = |row: &ItemRow| -> Vec<String> {
+        let mut texts: Vec<String> = row.searchable().map(str::to_lowercase).collect();
+        texts.extend(
+            decorations
+                .aliases
+                .get(&row.item_id)
+                .into_iter()
+                .flatten()
+                .map(|alias| alias.to_lowercase()),
+        );
+        texts.extend(memos.get(&row.item_id).map(|memo| memo.to_lowercase()));
+        texts
+    };
+    let haystacks: Vec<Vec<String>> = rows.iter().map(texts).collect();
+    let find = |needle: &str| -> Vec<usize> {
+        haystacks
+            .iter()
+            .enumerate()
+            .filter(|(_, texts)| texts.iter().any(|text| text.contains(needle)))
+            .map(|(at, _)| at)
+            .collect()
+    };
+    let mut matched = find(&needle);
+    let mut corrected = None;
+    if matched.is_empty() {
+        let mut words = WalkedWords::new();
+        for texts in &haystacks {
+            words.add_row(texts.iter().map(String::as_str));
+        }
+        if let Some(words) = words.correct(term) {
+            let again = find(&words.to_lowercase());
+            if !again.is_empty() {
+                matched = again;
+                corrected = Some(words);
+            }
+        }
+    }
     Ok(SearchData {
         truncated: matched.len() > limit || walked.filled,
         items: matched
             .into_iter()
             .take(limit)
-            .map(|row| decorations.listed(row))
+            .map(|at| decorations.listed(rows[at].clone()))
             .collect(),
+        corrected,
     })
+}
+
+/// Each item's newest memo, by item id ([`memos_statement`]).
+fn memos(door: &dyn PageDoor) -> KitResult<BTreeMap<String, String>> {
+    let mut memos = BTreeMap::new();
+    for row in read_window(door, &memos_statement(), DECORATION_ROWS)?.rows {
+        if let (Some(item), Some(body)) = (text_of(&row, "target_id"), text_of(&row, "body_text"))
+            && !body.is_empty()
+        {
+            memos.entry(item).or_insert(body);
+        }
+    }
+    Ok(memos)
 }
 
 /// The metadata review, against `today` (`YYYY-MM-DD` in the member's zone).
@@ -761,6 +839,9 @@ pub struct PhoneDecorations {
     pub tags: BTreeMap<String, Vec<String>>,
     pub starred: BTreeSet<String>,
     pub alias: BTreeMap<String, String>,
+    /// Every alias of an item, for a search (`alias` keeps the one the item
+    /// page draws).
+    pub aliases: BTreeMap<String, Vec<String>>,
 }
 
 impl PhoneDecorations {
@@ -836,6 +917,11 @@ pub fn decorations(door: &dyn PageDoor) -> KitResult<PhoneDecorations> {
     }
     for row in read_window(door, &aliases_statement(), DECORATION_ROWS)?.rows {
         if let (Some(alias), Some(item)) = (text_of(&row, "alias"), text_of(&row, "item_id")) {
+            decorations
+                .aliases
+                .entry(item.clone())
+                .or_default()
+                .push(alias.clone());
             decorations.alias.insert(item, alias);
         }
     }

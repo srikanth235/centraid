@@ -177,14 +177,37 @@ impl ItemRow {
         }
     }
 
-    /// Whether the term matches this row, over the three columns v0 matches
-    /// over — title, username and url — case-insensitively.
+    /// The plain texts a search reads on this row: title, username and address
+    /// (v0's three) and, since #1097 (R6), the note, the full name, the email,
+    /// the phone and the card brand a member typed.
+    ///
+    /// **Never a sealed cell**: this reads the browsable half only, so
+    /// `password`, `otp_seed`, `card_number`, `cvv` and `content` cannot be
+    /// matched or offered as a correction — they are not on [`ITEM_COLUMNS`].
+    /// `cardholder`, `address`, `network` and `expiry` are not searched.
+    /// The memo and the aliases are other tables' rows and are the walker's.
+    pub fn searchable(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.title.as_str()).chain(
+            [
+                &self.username,
+                &self.url,
+                &self.notes,
+                &self.fullname,
+                &self.email,
+                &self.phone,
+                &self.brand,
+            ]
+            .into_iter()
+            .filter_map(|value| value.as_deref()),
+        )
+    }
+
+    /// Whether the term (already lowercased) matches this row's
+    /// [`searchable`](Self::searchable) texts, case-insensitively.
     #[must_use]
     pub fn matches(&self, term: &str) -> bool {
-        let hit = |value: &str| value.to_lowercase().contains(term);
-        hit(&self.title)
-            || self.username.as_deref().is_some_and(hit)
-            || self.url.as_deref().is_some_and(hit)
+        self.searchable()
+            .any(|value| value.to_lowercase().contains(term))
     }
 }
 
@@ -407,20 +430,54 @@ mod tests {
     }
 
     #[test]
-    fn the_search_fold_matches_title_username_and_url_only() {
+    fn the_search_fold_matches_what_a_member_typed_and_nothing_else() {
         let row = ItemRow {
             item_id: "i1".to_owned(),
             title: "Bank".to_owned(),
             username: Some("ada@example.com".to_owned()),
             url: Some("https://bank.example".to_owned()),
             notes: Some("a memorable note".to_owned()),
+            fullname: Some("Ada Lovelace".to_owned()),
+            email: Some("ada.l@mail.test".to_owned()),
+            phone: Some("555-0100".to_owned()),
+            brand: Some("Visa".to_owned()),
+            cardholder: Some("Cardholder Name".to_owned()),
+            address: Some("12 Analytical Way".to_owned()),
+            network: Some("HomeNet".to_owned()),
+            expiry: Some("04/27".to_owned()),
             ..ItemRow::default()
         };
-        assert!(row.matches("bank"));
-        assert!(row.matches("ada@"));
-        assert!(row.matches("bank.example"));
-        // `notes` is plaintext and is NOT matched, exactly as v0 does not.
-        assert!(!row.matches("memorable"));
+        // v0's three, and (#1097, R6) the note, name, email, phone and brand.
+        for found in [
+            "bank",
+            "ada@",
+            "bank.example",
+            "memorable",
+            "lovelace",
+            "mail.test",
+            "555-01",
+            "visa",
+        ] {
+            assert!(row.matches(found), "{found} is typed text of the item");
+        }
+        // The columns a search does not read.
+        for not in ["cardholder", "analytical", "homenet", "04/27"] {
+            assert!(!row.matches(not), "{not} is not searched");
+        }
+    }
+
+    #[test]
+    fn nothing_searchable_is_a_sealed_column() {
+        // The projection a search reads carries no sealed cell, so no sealed
+        // cell can be matched or offered as a correction.
+        for sealed in SEALED_ITEM_COLUMNS {
+            assert!(
+                !ITEM_COLUMNS
+                    .split(',')
+                    .any(|column| column.trim() == sealed),
+                "{sealed} is on the browsable projection"
+            );
+        }
     }
 
     #[test]
