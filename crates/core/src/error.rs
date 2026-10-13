@@ -292,7 +292,9 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
         // back: pairing again is refused the same way (`phone::pair`'s
         // "superseded"), so a restore starts from the gateway's head, never from
         // this phone's older copy.
-        C::VaultMoved => "This vault moved to another phone. Restore it here to keep writing.",
+        C::VaultMoved => {
+            "This vault moved to another phone. Restore it from your 24 words to keep writing here."
+        }
     }
 }
 
