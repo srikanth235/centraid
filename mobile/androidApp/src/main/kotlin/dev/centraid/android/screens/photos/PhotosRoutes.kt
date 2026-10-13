@@ -18,10 +18,20 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import centraid.screen.v1.CollectionsDoor
+import centraid.screen.v1.PhotosCollectionsEvent
+import centraid.screen.v1.PhotosCollectionsState
+import centraid.screen.v1.PhotosGridChrome
 import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.PhotosSearchEvent
+import centraid.screen.v1.SearchField
 import dev.centraid.android.kit.AppBand
+import dev.centraid.android.kit.AppBandTab
+import dev.centraid.android.kit.AppPlace
+import dev.centraid.android.kit.PushedPage
+import dev.centraid.android.kit.RoomAction
+import dev.centraid.android.kit.RoomChip
+import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.DuplicateReviewScreen
 import dev.centraid.android.screens.DuplicatesScreen
@@ -35,7 +45,6 @@ import dev.centraid.android.screens.PhotosCollectionsScreen
 import dev.centraid.android.screens.PhotosGridScreen
 import dev.centraid.android.screens.PhotosMemoriesScreen
 import dev.centraid.android.screens.PhotosPeopleScreen
-import dev.centraid.android.screens.PhotosSearchBar
 import dev.centraid.android.screens.PhotosSearchScreen
 import dev.centraid.android.screens.PhotosSelectionBar
 import dev.centraid.android.screens.PhotosSheets
@@ -43,7 +52,7 @@ import dev.centraid.android.screens.PlacesScreen
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.exportShelfCopies
 import dev.centraid.android.screens.installPhotoEditRenderer
-import dev.centraid.android.screens.photosBandTabs
+import dev.centraid.android.screens.photosSelectionTitle
 import dev.centraid.shared.apps.photos.DuplicateReviewBridge
 import dev.centraid.shared.apps.photos.DuplicatesBridge
 import dev.centraid.shared.apps.photos.FaceReviewBridge
@@ -134,6 +143,16 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
     }
 
     override fun opens(moveId: String): Destination? = if (moveId == "photos") Destination.PhotosHome() else null
+
+    /**
+     * A VAULT WAS JUST MADE and the system's photo prompt was answered
+     * (R-ONBOARD-8): read the grant and, when it allows, bring the camera roll
+     * in. The prompt itself is the activity's launcher (`PhotoAccessRemedy`).
+     */
+    public fun photosAnswered(scope: CoroutineScope) {
+        val runner = cameraRoll.value ?: return
+        scope.launch { runner.ask() }
+    }
 
     override fun attach(session: HomeSession, scope: CoroutineScope) {
         val opened = session
@@ -235,7 +254,7 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                 val gridState by photos.state.collectAsStateWithLifecycle()
                 val searchState by photosSearch.host.state.collectAsStateWithLifecycle()
                 val focusManager = LocalFocusManager.current
-                // WHERE THE SEARCH ROW'S WAY BACK GOES: the band the
+                // WHERE CLOSING SEARCH RETURNS TO: the band the
                 // member came to Search from. Remembered here because
                 // the state carries only the band on screen, and "the
                 // one before" is a fact about this visit, not the vault.
@@ -270,9 +289,178 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                         }
                     }
                 }
-                Column(Modifier.fillMaxSize()) {
-                    Box(Modifier.weight(1f).nestedScroll(dismissOnScroll)) {
+                // THE ROOT'S CHROME IS THE MACHINE'S (R-CHROME-1…5): the band's
+                // places then More, the filter chips, and every word around
+                // them ride `PhotosGridState`, so this route only draws them.
+                val chrome = gridState.chrome ?: PhotosGridChrome()
+                val openMore = {
+                    scope.launch {
+                        photos.send(
+                            PhotosGridEvent(
+                                sheet = PhotosGridEvent.SheetChanged(PhotosGridState.Sheet.SHEET_MORE),
+                            ),
+                        )
+                    }
+                }
+                run {
+                    val searching = band == PhotosGridState.Destination.DESTINATION_SEARCH
+                    val collections = band == PhotosGridState.Destination.DESTINATION_COLLECTIONS
+                    val selecting = !collections && gridState.selecting
+                    val hasCells = gridState.data_?.cells.orEmpty().isNotEmpty()
+                    val setSelecting: (Boolean) -> Unit = { on ->
+                        scope.launch {
+                            photos.send(
+                                PhotosGridEvent(
+                                    selection_mode = PhotosGridEvent.SelectionModeChanged(selecting = on),
+                                ),
+                            )
+                        }
+                    }
+                    // AN APP'S ROOT, LIKE EVERY OTHER APP'S (R-CHROME-1…5):
+                    // "Photos" with ONE trailing action — Select on the
+                    // library (the app with nothing to create), New album on
+                    // Collections — the search bar, the library's filter
+                    // chips, the body, and the band at the foot.
+                    AppPlace(
+                        app = "photos",
+                        title = if (selecting) photosSelectionTitle(gridState.selected.size) else chrome.title,
+                        trailing = when {
+                            searching -> null
+                            collections -> RoomAction("Plus", chrome.new_album_label, "collections-new-album") {
+                                scope.launch {
+                                    photosCollections.host.send(
+                                        PhotosCollectionsEvent(
+                                            sheet = PhotosCollectionsEvent.SheetChanged(
+                                                PhotosCollectionsState.Sheet.SHEET_NEW_ALBUM,
+                                            ),
+                                        ),
+                                    )
+                                }
+                            }
+                            selecting -> RoomAction("X", chrome.cancel_label, "photos-library-cancel") {
+                                setSelecting(false)
+                            }
+                            hasCells -> RoomAction("CheckCircle", chrome.select_label, "photos-library-select") {
+                                setSelecting(true)
+                            }
+                            else -> null
+                        },
+                        // SEARCH IS THE FIELD UNDER THE TITLE (R-CHROME-2):
+                        // the bar's press moves the grid to
+                        // `DESTINATION_SEARCH`, whose body is the hits, and
+                        // the field opens where the bar stood; closing clears
+                        // the query and returns to the place the member came
+                        // from. Not while selecting — the header is the
+                        // selection's then.
+                        search = if (selecting) {
+                            null
+                        } else {
+                            RoomSearch(
+                                field = SearchField(open_ = searching, term = if (searching) searchState.query else ""),
+                                placeholder = chrome.search_placeholder,
+                                onTerm = { query ->
+                                    scope.launch {
+                                        photosSearch.host.send(
+                                            PhotosSearchEvent(query = PhotosSearchEvent.QueryChanged(query = query)),
+                                        )
+                                    }
+                                },
+                                onClose = {
+                                    scope.launch {
+                                        photosSearch.host.send(
+                                            PhotosSearchEvent(query = PhotosSearchEvent.QueryChanged(query = "")),
+                                        )
+                                    }
+                                    movePhotos(beforeSearch)
+                                },
+                                onOpen = { movePhotos(PhotosGridState.Destination.DESTINATION_SEARCH) },
+                            )
+                        },
+                        chips = gridState.chips.map { chip ->
+                            RoomChip(
+                                testTag = "photos-filter-" + chip.filter.name.removePrefix("FILTER_").lowercase(),
+                                label = chip.label,
+                                selected = chip.selected,
+                                onPress = {
+                                    scope.launch {
+                                        photos.send(
+                                            PhotosGridEvent(filter = PhotosGridEvent.FilterChanged(filter = chip.filter)),
+                                        )
+                                    }
+                                },
+                            )
+                        },
+                        band = {
+                            if (selecting) {
+                                // A SELECTION TAKES THE BAND'S PLACE (Apple
+                                // Photos; v0's room), so a tap aimed at Trash
+                                // cannot land on a destination.
+                                val copyContext = androidx.compose.ui.platform.LocalContext.current
+                                PhotosSelectionBar(
+                                    state = gridState,
+                                    onEvent = { event -> scope.launch { photos.send(event) } },
+                                    // THE SHELF'S BATCH HAND-OFF, pointed at the
+                                    // library's pick (`PhotoShelfCopies.kt`).
+                                    onSendCopy = { assetIds, export ->
+                                        scope.launch { exportShelfCopies(copyContext, photosCopies, assetIds, export) }
+                                    },
+                                )
+                            } else {
+                                // PLACES, THEN MORE — an ordinary tab, whose
+                                // press opens the sheet (`more` is a sheet,
+                                // never a destination).
+                                AppBand(
+                                    app = "photos",
+                                    tabs = gridState.band.map { tab ->
+                                        AppBandTab(
+                                            key = tab.key,
+                                            label = tab.label,
+                                            iconKey = tab.icon_key,
+                                            selected = tab.current,
+                                        )
+                                    },
+                                    onSelect = { key ->
+                                        when (key) {
+                                            PhotosGridMachine.BAND_MORE -> openMore()
+                                            PhotosGridMachine.BAND_COLLECTIONS ->
+                                                movePhotos(PhotosGridState.Destination.DESTINATION_COLLECTIONS)
+                                            else -> movePhotos(PhotosGridState.Destination.DESTINATION_LIBRARY)
+                                        }
+                                    },
+                                    onHome = { stack = NavStack() },
+                                )
+                            }
+                        },
+                    ) {
                     when (destination.destination) {
+                        PhotosGridState.Destination.DESTINATION_SEARCH -> Box(Modifier.nestedScroll(dismissOnScroll)) {
+                            LaunchedEffect(destination.destination) { photosSearch.opened() }
+                            PhotosSearchScreen(
+                                state = searchState,
+                                onEvent = { event ->
+                                    scope.launch { photosSearch.host.send(event) }
+                                },
+                                onOpenAsset = { assetId ->
+                                    // THE HITS' OWN ORDER AS NEIGHBOURS, so a
+                                    // swipe in the lightbox needs no read and
+                                    // walks the results the member is looking
+                                    // at rather than the whole library.
+                                    stack = stack.push(
+                                        Destination.PhotoLightbox(
+                                            assetId = assetId,
+                                            neighbours = searchState.hits?.cells
+                                                ?.map { cell -> cell.asset_id }
+                                                .orEmpty(),
+                                        ),
+                                    )
+                                },
+                                // A PERSON, PLACE OR ALBUM THE QUERY NAMED:
+                                // the shelf arrives whole, built by the read.
+                                onOpenShelf = { shelf ->
+                                    stack = stack.push(Destination.PhotoShelfRoute(shelf))
+                                },
+                            )
+                        }
                         PhotosGridState.Destination.DESTINATION_COLLECTIONS -> {
                             // Keyed on the band and not on `destination`: the
                             // two differ only by the band, so this is the same
@@ -287,6 +475,8 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                                 onEvent = { event ->
                                     scope.launch { photosCollections.host.send(event) }
                                 },
+                                showAllLabel = chrome.show_all_label,
+                                collapseAllLabel = chrome.collapse_all_label,
                                 // COLLECTIONS IS THE HUB, and this is the whole
                                 // of it: the four standing shelves, every album
                                 // and the four doors all leave from here. The
@@ -321,36 +511,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                             )
                         }
 
-                        PhotosGridState.Destination.DESTINATION_SEARCH -> {
-                            LaunchedEffect(destination.destination) { photosSearch.opened() }
-                            val state by photosSearch.host.state.collectAsStateWithLifecycle()
-                            PhotosSearchScreen(
-                                state = state,
-                                onEvent = { event ->
-                                    scope.launch { photosSearch.host.send(event) }
-                                },
-                                onOpenAsset = { assetId ->
-                                    // THE HITS' OWN ORDER AS NEIGHBOURS, so a
-                                    // swipe in the lightbox needs no read and
-                                    // walks the results the member is looking
-                                    // at rather than the whole library.
-                                    stack = stack.push(
-                                        Destination.PhotoLightbox(
-                                            assetId = assetId,
-                                            neighbours = state.hits?.cells
-                                                ?.map { cell -> cell.asset_id }
-                                                .orEmpty(),
-                                        ),
-                                    )
-                                },
-                                // A PERSON, PLACE OR ALBUM THE QUERY NAMED:
-                                // the shelf arrives whole, built by the read.
-                                onOpenShelf = { shelf ->
-                                    stack = stack.push(Destination.PhotoShelfRoute(shelf))
-                                },
-                            )
-                        }
-
                         else -> {
                             // Re-read the OS grant before Opened (R-PHOTOS-1): a
                             // grant that landed after session attach must be on
@@ -364,15 +524,11 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                             PhotosGridScreen(
                                 state = state,
                                 onEvent = { event ->
-                                    // THE BAND ROW IS INSIDE THIS SCREEN, so
-                                    // the press arrives as an event and the
-                                    // route has to be moved from here. Both,
+                                    // A DESTINATION EVENT MOVES THE ROUTE TOO,
                                     // and in this order: the destination is on
                                     // `PhotosGridState` as well as on the
                                     // route, and forwarding only one would
-                                    // leave the two disagreeing. Tally's band
-                                    // does the same thing through a callback,
-                                    // which is the only difference.
+                                    // leave the two disagreeing.
                                     val band = event.destination
                                     if (band != null) {
                                         stack = stack.withPhotosDestination(band.destination)
@@ -395,76 +551,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                             )
                         }
                     }
-                    }
-                    // THE FOOT: Photos' band, or — on Search — the
-                    // search row in the band's place, as the system
-                    // Photos app replaces its tab bar rather than
-                    // stacking a field over it.
-                    if (band == PhotosGridState.Destination.DESTINATION_SEARCH) {
-                        val back = photosBandTabs(beforeSearch).first { it.selected }
-                        PhotosSearchBar(
-                            query = searchState.query,
-                            onQuery = { query ->
-                                scope.launch {
-                                    photosSearch.host.send(
-                                        PhotosSearchEvent(
-                                            query = PhotosSearchEvent.QueryChanged(query = query),
-                                        ),
-                                    )
-                                }
-                            },
-                            returnIconKey = back.iconKey,
-                            returnLabel = back.label,
-                            onReturn = { movePhotos(beforeSearch) },
-                            onClose = {
-                                scope.launch {
-                                    photosSearch.host.send(
-                                        PhotosSearchEvent(
-                                            query = PhotosSearchEvent.QueryChanged(query = ""),
-                                        ),
-                                    )
-                                }
-                                movePhotos(beforeSearch)
-                            },
-                        )
-                    } else if (
-                        gridState.selecting &&
-                        band != PhotosGridState.Destination.DESTINATION_COLLECTIONS
-                    ) {
-                        // A SELECTION TAKES THE BAND'S PLACE (Apple
-                        // Photos; v0's room), so a tap aimed at Trash
-                        // cannot land on a destination.
-                        val copyContext = androidx.compose.ui.platform.LocalContext.current
-                        PhotosSelectionBar(
-                            state = gridState,
-                            onEvent = { event -> scope.launch { photos.send(event) } },
-                            // THE SHELF'S BATCH HAND-OFF, pointed at the
-                            // library's pick (`PhotoShelfCopies.kt`).
-                            onSendCopy = { assetIds, export ->
-                                scope.launch { exportShelfCopies(copyContext, photosCopies, assetIds, export) }
-                            },
-                        )
-                    } else {
-                        AppBand(
-                            app = "photos",
-                            tabs = photosBandTabs(band),
-                            onSelect = { key ->
-                                movePhotos(PhotosGridState.Destination.valueOf(key))
-                            },
-                            onHome = { stack = NavStack() },
-                            // `more` IS A SHEET, NEVER A DESTINATION.
-                            onMore = {
-                                scope.launch {
-                                    photos.send(
-                                        PhotosGridEvent(
-                                            sheet = PhotosGridEvent.SheetChanged(
-                                                PhotosGridState.Sheet.SHEET_MORE,
-                                            ),
-                                        ),
-                                    )
-                                }
-                            },
-                        )
                     }
                 }
                 // WHICH SHEET IS OPEN IS STATE — read here, beside the
@@ -552,7 +638,7 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                         stack = stack.push(Destination.PhotoEditor(assetId, neighbours))
                     },
                 ) {
-                    PhotoLightboxScreen(
+                PhotoLightboxScreen(
                         state = state,
                         onEvent = { event ->
                             scope.launch { photoLightbox.host.send(event) }
@@ -629,90 +715,120 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                 // return still re-reads.
                 LaunchedEffect(Unit) { places.opened() }
                 val state by places.host.state.collectAsStateWithLifecycle()
-                PlacesScreen(
-                    state = state,
-                    onEvent = { event ->
-                        // The presentation lives on the route as well
-                        // as on the state, for the band's reason and
-                        // with the band's consequence if only one moves.
-                        val moved = event.presentation
-                        if (moved != null) {
-                            stack = stack.withPlacesPresentation(moved.presentation)
-                        }
-                        scope.launch { places.host.send(event) }
-                    },
-                    // THE MACHINE'S OWN VALUE, never a `PhotoShelf`
-                    // composed here: both shells need the same one, and
-                    // a second spelling of it is a second chance to send
-                    // a place id with no name.
-                    onOpenPlace = { row ->
-                        stack = stack.push(
-                            Destination.PhotoShelfRoute(PlacesMachine.shelfFor(row)),
-                        )
-                    },
-                    // THE PHOTOGRAPHS WITH NO PLACE, as the machine builds it.
-                    onOpenShelf = { shelf ->
-                        stack = stack.push(Destination.PhotoShelfRoute(shelf))
-                    },
-                )
+                PushedPage(
+                    title = "Places",
+                    parentTitle = "Collections",
+                    onBack = { stack = stack.pop() },
+                ) {
+                    PlacesScreen(
+                        state = state,
+                        onEvent = { event ->
+                            // The presentation lives on the route as well
+                            // as on the state, for the band's reason and
+                            // with the band's consequence if only one moves.
+                            val moved = event.presentation
+                            if (moved != null) {
+                                stack = stack.withPlacesPresentation(moved.presentation)
+                            }
+                            scope.launch { places.host.send(event) }
+                        },
+                        // THE MACHINE'S OWN VALUE, never a `PhotoShelf`
+                        // composed here: both shells need the same one, and
+                        // a second spelling of it is a second chance to send
+                        // a place id with no name.
+                        onOpenPlace = { row ->
+                            stack = stack.push(
+                                Destination.PhotoShelfRoute(PlacesMachine.shelfFor(row)),
+                            )
+                        },
+                        // THE PHOTOGRAPHS WITH NO PLACE, as the machine builds it.
+                        onOpenShelf = { shelf ->
+                            stack = stack.push(Destination.PhotoShelfRoute(shelf))
+                        },
+                    )
+                }
             }
 
             is Destination.PhotosPeople -> {
                 LaunchedEffect(destination) { photosPeople.opened() }
                 val state by photosPeople.host.state.collectAsStateWithLifecycle()
-                PhotosPeopleScreen(
-                    state = state,
-                    onEvent = { event -> scope.launch { photosPeople.host.send(event) } },
-                    onOpenPerson = { person ->
-                        stack = stack.push(
-                            Destination.PhotoShelfRoute(
-                                PhotosPeopleMachine.shelfFor(person),
-                            ),
-                        )
-                    },
-                    onOpenFaceReview = {
-                        stack = stack.push(Destination.PhotoFaceReview)
-                    },
-                )
+                PushedPage(
+                    title = "People",
+                    parentTitle = "Collections",
+                    onBack = { stack = stack.pop() },
+                ) {
+                    PhotosPeopleScreen(
+                        state = state,
+                        onEvent = { event -> scope.launch { photosPeople.host.send(event) } },
+                        onOpenPerson = { person ->
+                            stack = stack.push(
+                                Destination.PhotoShelfRoute(
+                                    PhotosPeopleMachine.shelfFor(person),
+                                ),
+                            )
+                        },
+                        onOpenFaceReview = {
+                            stack = stack.push(Destination.PhotoFaceReview)
+                        },
+                    )
+                }
             }
 
             is Destination.PhotoFaceReview -> {
                 LaunchedEffect(destination) { faceReview.opened() }
                 val state by faceReview.host.state.collectAsStateWithLifecycle()
-                FaceReviewScreen(
-                    state = state,
-                    onEvent = { event -> scope.launch { faceReview.host.send(event) } },
-                )
+                PushedPage(
+                    title = "Faces",
+                    parentTitle = "People",
+                    onBack = { stack = stack.pop() },
+                ) {
+                    FaceReviewScreen(
+                        state = state,
+                        onEvent = { event -> scope.launch { faceReview.host.send(event) } },
+                    )
+                }
             }
 
             is Destination.PhotosMemories -> {
                 LaunchedEffect(destination) { photosMemories.opened() }
                 val state by photosMemories.host.state.collectAsStateWithLifecycle()
-                PhotosMemoriesScreen(
-                    state = state,
-                    onEvent = { event ->
-                        scope.launch { photosMemories.host.send(event) }
-                    },
-                    onOpenMemory = { row ->
-                        stack = stack.push(
-                            Destination.PhotoShelfRoute(
-                                PhotosMemoriesMachine.shelfFor(row),
-                            ),
-                        )
-                    },
-                )
+                PushedPage(
+                    title = "Memories",
+                    parentTitle = "Collections",
+                    onBack = { stack = stack.pop() },
+                ) {
+                    PhotosMemoriesScreen(
+                        state = state,
+                        onEvent = { event ->
+                            scope.launch { photosMemories.host.send(event) }
+                        },
+                        onOpenMemory = { row ->
+                            stack = stack.push(
+                                Destination.PhotoShelfRoute(
+                                    PhotosMemoriesMachine.shelfFor(row),
+                                ),
+                            )
+                        },
+                    )
+                }
             }
 
             is Destination.PhotoDuplicates -> {
                 LaunchedEffect(destination) { duplicates.opened() }
                 val state by duplicates.host.state.collectAsStateWithLifecycle()
-                DuplicatesScreen(
-                    state = state,
-                    onEvent = { event -> scope.launch { duplicates.host.send(event) } },
-                    onOpenCluster = { clusterId ->
-                        stack = stack.push(Destination.PhotoDuplicateReview(clusterId))
-                    },
-                )
+                PushedPage(
+                    title = "Duplicates",
+                    parentTitle = "Collections",
+                    onBack = { stack = stack.pop() },
+                ) {
+                    DuplicatesScreen(
+                        state = state,
+                        onEvent = { event -> scope.launch { duplicates.host.send(event) } },
+                        onOpenCluster = { clusterId ->
+                            stack = stack.push(Destination.PhotoDuplicateReview(clusterId))
+                        },
+                    )
+                }
             }
 
             // THE CLUSTER'S ID RIDES ON THE EVENT, for the note
@@ -724,12 +840,18 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                     duplicateReview.opened(destination.clusterId)
                 }
                 val state by duplicateReview.host.state.collectAsStateWithLifecycle()
-                DuplicateReviewScreen(
-                    state = state,
-                    onEvent = { event ->
-                        scope.launch { duplicateReview.host.send(event) }
-                    },
-                )
+                PushedPage(
+                    title = "Duplicates",
+                    parentTitle = "Duplicates",
+                    onBack = { stack = stack.pop() },
+                ) {
+                    DuplicateReviewScreen(
+                        state = state,
+                        onEvent = { event ->
+                            scope.launch { duplicateReview.host.send(event) }
+                        },
+                    )
+                }
             }
 
             else -> Unit

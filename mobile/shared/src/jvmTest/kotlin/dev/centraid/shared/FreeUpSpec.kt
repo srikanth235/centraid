@@ -70,7 +70,7 @@ class FreeUpSpec : StringSpec({
         val offered = KeepOriginals.freeUp(census, both)
         offered.enabled shouldBe true
         offered.action_label shouldBe "Free up 2 GB"
-        offered.reason shouldBe "2 photos are safe on your gateways."
+        offered.reason shouldBe "2 photos are backed up."
         offered.releasable_count shouldBe 2
         offered.releasable_bytes shouldBe 2_000_000_000L
         offered.meta shouldBe "40 originals · 3 GB on this phone"
@@ -106,7 +106,7 @@ class FreeUpSpec : StringSpec({
             val after = FreeUpFlow(doors, { census }) { deleter }.free()
             deleter.handed shouldBe listOf(listOf(a, b))
             doors.released shouldBe listOf(listOf(a.hex, b.hex))
-            after.notice shouldBe "Freed 2 GB. Those photos stay in Centraid and come back from your gateways when you open one."
+            after.notice shouldBe "Freed 2 GB. Photos download again from your backup device when you open them."
             after.freeing shouldBe false
 
             // AN ASSET THE PLATFORM KEPT WHOLE is not reported.

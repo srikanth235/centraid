@@ -116,7 +116,15 @@ class EnrollmentSpec : StringSpec({
             phone.secrets.seed() shouldBe seedA
             phone.secrets.seedSettled() shouldBe true
             phone.enrollment.make().shouldBeInstanceOf<FoundResult.Made>()
+            // A VAULT ON THE MEMBER'S KEY files nothing.
             phone.log shouldBe listOf("found seed=true settled=true")
+            phone.secrets.pendingFilings() shouldBe emptyList()
+            // SHOWN AND KEPT counts as saved; kept unshown (the keychain held
+            // it) does not (R-ONBOARD-10).
+            phone.secrets.wordsSaved() shouldBe true
+            val quiet = Phone()
+            quiet.enrollment.keep(wordsA, shown = false).shouldBeNull()
+            quiet.secrets.wordsSaved() shouldBe false
         }
     }
 
@@ -401,6 +409,9 @@ class EnrollmentSpec : StringSpec({
             phone.secrets.words() shouldBe wordsA
             phone.enrollment.make(kept.id, "Family")
             phone.log.last() shouldBe "found seed=true settled=true own=bbbb name=Family"
+            // MADE, THEN RECORDED to be filed in the main vault's Locker on its
+            // next unlock, under the made vault's name (R-ONBOARD-10).
+            phone.secrets.pendingFilings() shouldBe listOf(kept.id to "My vault")
             phone.enrollment.heldKeys() shouldBe listOf("Family")
         }
     }

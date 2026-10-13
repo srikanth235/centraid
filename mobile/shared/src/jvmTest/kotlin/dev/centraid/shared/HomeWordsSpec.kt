@@ -11,7 +11,7 @@ class HomeWordsSpec : StringSpec({
     }
 
     "the Forget alert names the vault it is about to delete" {
-        HomeWords.forgetTitle("Tahoe") shouldBe "Forget Tahoe?"
-        HomeWords.forgetTitle(" ") shouldBe "Forget this vault?"
+        HomeWords.forgetTitle("Tahoe") shouldBe "Delete Tahoe?"
+        HomeWords.forgetTitle(" ") shouldBe "Delete this vault?"
     }
 })

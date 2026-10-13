@@ -124,34 +124,24 @@ struct TallySpendingView: View {
 
     private func stepper(_ state: Centraid_Screen_V1_TallySpendingState) -> some View {
         HStack(spacing: 8) {
-            step("ChevronLeft", state.chrome.previous, -1, enabled: state.previousEnabled, "tally-month-previous")
             Text(state.monthLabel)
                 .centraidType("title")
                 .foregroundStyle(Theme.color("text", scheme))
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
-            step("ChevronRight", state.chrome.next, 1, enabled: state.nextEnabled, "tally-month-next")
+            KitStepper(
+                previousLabel: state.chrome.previous,
+                nextLabel: state.chrome.next,
+                canPrevious: state.previousEnabled,
+                canNext: state.nextEnabled,
+                previousIdentifier: "tally-month-previous",
+                nextIdentifier: "tally-month-next",
+                onPrevious: { send(Self.event { $0.monthStepped = .with { $0.months = -1 } }) },
+                onNext: { send(Self.event { $0.monthStepped = .with { $0.months = 1 } }) }
+            )
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.vertical, 8)
-    }
-
-    private func step(_ icon: String, _ label: String, _ months: Int32, enabled: Bool, _ identifier: String) -> some View {
-        Button {
-            send(Self.event { $0.monthStepped = .with { $0.months = months } })
-        } label: {
-            CentraidIconView(iconKey: icon, tint: Theme.color(enabled ? "text" : "textFaint", scheme), size: 16)
-                .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
-                        .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .accessibilityLabel(label)
-        .accessibilityIdentifier(identifier)
     }
 
     @ViewBuilder

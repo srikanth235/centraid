@@ -121,7 +121,7 @@ struct PhotoShelfView: View {
 
                 switch state.content {
                 case .loading:
-                    ProgressView()
+                    RowSkeleton()
                 case let .denied(denied):
                     DeniedGate(denied)
                 case let .failure(sentence, remedy):
@@ -165,31 +165,46 @@ struct PhotoShelfView: View {
             // nothing on any of them.
             if case let .album(album) = shelf.of {
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
+                    ToolbarIcon(
+                        iconKey: "add",
+                        label: PhotosWords.photosAddPhotos,
+                        identifier: "photos.shelf.add"
+                    ) {
                         onAddPhotographs(album.collectionID, copy.title)
-                    } label: {
-                        CentraidIconView(iconKey: "add", tint: Theme.color("link", scheme), size: 20)
                     }
-                    .accessibilityLabel("Add photographs")
-                    .accessibilityIdentifier("photos.shelf.add")
                 }
                 // THE ALBUM'S OWN VERBS, behind one control: the system's
                 // album menu. Rename and Delete are about the grouping, never
                 // about a photograph in it.
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Button("Rename album") {
+                        Button(PhotosWords.photosRenameAlbum) {
                             draftName = copy.title
                             renaming = true
                         }
                         .accessibilityIdentifier("photos.shelf.rename")
-                        Button("Delete album", role: .destructive) { confirmingAlbumDelete = true }
+                        Button(PhotosWords.photosDeleteAlbum, role: .destructive) { confirmingAlbumDelete = true }
                             .accessibilityIdentifier("photos.shelf.deleteAlbum")
                     } label: {
-                        CentraidIconView(iconKey: "MoreHoriz", tint: Theme.color("link", scheme), size: 20)
+                        ToolbarIconFace(iconKey: "MoreHoriz")
                     }
-                    .accessibilityLabel("Album options")
+                    .accessibilityLabel(PhotosWords.photosAlbumOptions)
                     .accessibilityIdentifier("photos.shelf.albumMenu")
+                }
+            }
+            // THE WAY INTO AND OUT OF SELECTION, in the bar like the library's
+            // own Select / Cancel.
+            if state.selecting {
+                ToolbarItem(placement: .primaryAction) {
+                    ToolbarVerb(label: "Done", identifier: "photos.shelf.done") {
+                        send(state.selectionModeEvent(selecting: false))
+                    }
+                }
+            } else if state.hasCells {
+                ToolbarItem(placement: .primaryAction) {
+                    ToolbarVerb(label: "Select", identifier: "photos.shelf.select") {
+                        send(state.selectionModeEvent(selecting: true))
+                    }
                 }
             }
         }
@@ -201,69 +216,99 @@ struct PhotoShelfView: View {
         .safeAreaInset(edge: .bottom) {
             if state.selecting { selectionBar }
         }
-        .confirmationDialog(
+        .sheet(isPresented: $confirmingPurge) {
             // THE OWNER'S CONFIRMATION IS THE SCREEN'S, deliberately.
             // `media.purge_asset` is `confirm: false` in the registry and its
             // comment says why: a command-level confirm would ALSO park the
             // member's own act. So the safety is here, in front of the write.
-            purgeQuestion,
-            isPresented: $confirmingPurge,
-            titleVisibility: .visible
-        ) {
-            Button("Delete \(state.selected.count) forever", role: .destructive) {
-                send(state.deleteEvent(permanent: true))
-            }
-            Button("Keep them", role: .cancel) {}
-        } message: {
-            Text(
-                "This cannot be undone. They leave your library now — with their captions, "
-                    + "faces, tags and album membership — and the space they hold is freed "
-                    + "shortly afterwards. Restore will not bring them back."
+            ConfirmSheet(
+                Centraid_Screen_V1_Confirm.with {
+                    $0.title = purgeQuestion
+                    $0.body = PhotosWords.photosDeleteForeverBody
+                    $0.confirmLabel = PhotosWords.fill(
+                        PhotosWords.photosDeleteForeverConfirm, "count", "\(state.selected.count)")
+                    $0.destructive = true
+                },
+                cancelLabel: PhotosWords.photosKeepThem,
+                onConfirm: {
+                    confirmingPurge = false
+                    send(state.deleteEvent(permanent: true))
+                },
+                onDismiss: { confirmingPurge = false }
             )
         }
-        .confirmationDialog(
-            "Delete everything in the trash forever?",
-            isPresented: $confirmingEmptyTrash,
-            titleVisibility: .visible
-        ) {
-            Button("Empty trash", role: .destructive) { send(state.emptyTrashEvent) }
-            Button("Keep them", role: .cancel) {}
-        } message: {
-            Text(
-                "This cannot be undone. Every photograph in the trash leaves your library now — "
-                    + "with its captions, faces and tags — and the space it holds is freed shortly "
-                    + "afterwards."
+        .sheet(isPresented: $confirmingEmptyTrash) {
+            ConfirmSheet(
+                Centraid_Screen_V1_Confirm.with {
+                    $0.title = PhotosWords.photosEmptyTrashTitle
+                    $0.body = PhotosWords.photosEmptyTrashBody
+                    $0.confirmLabel = PhotosWords.photosEmptyTrash
+                    $0.destructive = true
+                },
+                cancelLabel: PhotosWords.photosKeepThem,
+                onConfirm: {
+                    confirmingEmptyTrash = false
+                    send(state.emptyTrashEvent)
+                },
+                onDismiss: { confirmingEmptyTrash = false }
             )
         }
-        .confirmationDialog(
-            "Delete this album?",
-            isPresented: $confirmingAlbumDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete album", role: .destructive) { send(state.albumDeleteEvent) }
-            Button("Keep it", role: .cancel) {}
-        } message: {
-            // v0's `ALBUM_DELETE_BODY`, the one thing a member deciding needs.
-            Text("Photos stay in the library.")
+        .sheet(isPresented: $confirmingAlbumDelete) {
+            ConfirmSheet(
+                Centraid_Screen_V1_Confirm.with {
+                    $0.title = PhotosWords.photosDeleteAlbumTitle
+                    // v0's `ALBUM_DELETE_BODY`, the one thing a member deciding needs.
+                    $0.body = PhotosWords.photosDeleteAlbumBody
+                    $0.confirmLabel = PhotosWords.photosDeleteAlbum
+                    $0.destructive = true
+                },
+                cancelLabel: PhotosWords.photosKeepIt,
+                onConfirm: {
+                    confirmingAlbumDelete = false
+                    send(state.albumDeleteEvent)
+                },
+                onDismiss: { confirmingAlbumDelete = false }
+            )
         }
         // HOW MUCH OF THE PLACE TRAVELS, asked every time (#816). Two answers
         // for a batch: a place NAME is one sentence per photograph, and a
         // batch has as many places as photographs.
-        .confirmationDialog(
-            "Send a copy — how much of the place?",
-            isPresented: $choosingPlace,
-            titleVisibility: .visible
-        ) {
-            Button("No location") { onExport(Array(state.selected), .send(keepLocation: false)) }
-            Button("Exact location") { onExport(Array(state.selected), .send(keepLocation: true)) }
-            Button("Cancel", role: .cancel) {}
+        .sheet(isPresented: $choosingPlace) {
+            OptionSheet(title: PhotosWords.photosSendPlaceTitle) {
+                SheetRow(label: PhotosWords.photosSendNoLocation) {
+                    choosingPlace = false
+                    onExport(Array(state.selected), .send(keepLocation: false))
+                }
+                SheetRow(label: PhotosWords.photosSendExactLocation) {
+                    choosingPlace = false
+                    onExport(Array(state.selected), .send(keepLocation: true))
+                }
+            }
+            .presentationDetents([.height(220)])
         }
-        .alert("Rename album", isPresented: $renaming) {
-            TextField("Album name", text: $draftName)
-                .accessibilityIdentifier("photos.shelf.albumName")
-            Button("Save") { send(state.renameEvent(draftName)) }
-                .disabled(draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Button("Cancel", role: .cancel) {}
+        .sheet(isPresented: $renaming) {
+            SheetRoom(
+                title: PhotosWords.photosRenameAlbum,
+                // AN EMPTY NAME IS NOT A WRITE (`media.rename_album`): Save is greyed.
+                primary: SheetPrimary(
+                    label: "Save",
+                    enabled: !draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) {
+                    renaming = false
+                    send(state.renameEvent(draftName))
+                }
+            ) {
+                TextField(PhotosWords.photosAlbumName, text: $draftName)
+                    .centraidType("body")
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                            .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                    )
+                    .accessibilityIdentifier("photos.shelf.albumName")
+            }
+            .presentationDetents([.height(260)])
         }
         // "ADD TO ALBUM" — the shared sheet. `isPresented` is the state's, so a
         // swipe-down reaches the reducer rather than leaving it saying "open".
@@ -314,19 +359,14 @@ struct PhotoShelfView: View {
                 .foregroundStyle(Theme.color("textSoft", scheme))
             Spacer()
             if state.selecting {
-                Button("Done") { send(state.selectionModeEvent(selecting: false)) }
-                    .accessibilityIdentifier("photos.shelf.done")
-            } else if state.hasCells {
-                // EMPTY TRASH, only on the trash, beside the way into
-                // selection. A text control and never a filled one: the
-                // safety is the confirm behind it.
-                if copy.isTrash {
-                    Button("Empty trash") { confirmingEmptyTrash = true }
-                        .foregroundStyle(Theme.color("danger", scheme))
-                        .accessibilityIdentifier("photos.shelf.emptyTrash")
-                }
-                Button("Select") { send(state.selectionModeEvent(selecting: true)) }
-                    .accessibilityIdentifier("photos.shelf.select")
+                Text(PhotosWords.fill(PhotosWords.photosChosen, "count", "\(state.selected.count)"))
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+            } else if state.hasCells, copy.isTrash {
+                // EMPTY TRASH, only on the trash. An outline in `net` and never
+                // a filled one: the safety is the confirm behind it.
+                KitOutlineButton(label: PhotosWords.photosEmptyTrash, tone: "net") { confirmingEmptyTrash = true }
+                    .accessibilityIdentifier("photos.shelf.emptyTrash")
             }
         }
     }
@@ -343,16 +383,16 @@ struct PhotoShelfView: View {
     /// archived photograph was never in the trash and the command's own
     /// precondition would refuse it.
     private var selectionBar: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: BandMetrics.groupGutter) {
             if copy.isTrash {
                 verb(icon: "restore", label: "Restore", identifier: "photos.shelf.restore") {
                     send(state.restoreEvent)
                 }
-                verb(icon: "trash", label: "Delete forever", identifier: "photos.shelf.purge") {
+                verb(icon: "trash", label: PhotosWords.photosDeleteForever, identifier: "photos.shelf.purge") {
                     confirmingPurge = true
                 }
             } else {
-                verb(icon: "share", label: "Send a copy", identifier: "photos.shelf.send") {
+                verb(icon: "share", label: PhotosWords.photosSendCopy, identifier: "photos.shelf.send") {
                     choosingPlace = true
                 }
                 // THE HEART STARS — and UNstars on the favourites shelf, where
@@ -360,10 +400,10 @@ struct PhotoShelfView: View {
                 // menu, because a cell does not carry its star.
                 verb(
                     icon: "heart",
-                    label: isFavorites ? "Unfavorite" : "Favorite",
+                    label: isFavorites ? PhotosWords.photosUnfavorite : PhotosWords.photosFavorite,
                     identifier: "photos.shelf.favorite"
                 ) { send(state.favoriteEvent(!isFavorites)) }
-                verb(icon: "album", label: "Add to album", identifier: "photos.shelf.addToAlbum") {
+                verb(icon: "album", label: PhotosWords.photosAddToAlbum, identifier: "photos.shelf.addToAlbum") {
                     send(state.albumChoiceOpenedEvent)
                 }
                 if copy.isArchive {
@@ -380,15 +420,20 @@ struct PhotoShelfView: View {
                 }
                 moreMenu
             }
-
-            Spacer()
-            Text("\(state.selected.count) chosen")
-                .centraidType("small")
-                .foregroundStyle(Theme.color("textSoft", scheme))
         }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .padding(.vertical, 10)
-        .background(.thinMaterial)
+        // THE LIBRARY'S SELECTION BAR, IN THE SHELF'S PLACE: one elevated
+        // plate on the pill rung with a hairline, a mark over a word per verb
+        // (`LibrarySelectionBar`). Opaque, so photographs do not show through.
+        .padding(BandMetrics.platePad)
+        .frame(maxWidth: .infinity)
+        .background(Theme.color("bgElev", scheme), in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, BandMetrics.inset)
+        .padding(.top, BandMetrics.topGap)
+        .padding(.bottom, BandMetrics.floorPadding)
+        .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom))
+        .accessibilityIdentifier("photos-selection-bar")
     }
 
     /// THE REST OF THE VERBS — the ones a member reaches for less, and the
@@ -396,27 +441,23 @@ struct PhotoShelfView: View {
     /// "Remove from album" takes the reference and never the photograph.
     private var moreMenu: some View {
         Menu {
-            Button("Download original") { onExport(Array(state.selected), .save) }
+            Button(PhotosWords.photosDownloadOriginal) { onExport(Array(state.selected), .save) }
                 .accessibilityIdentifier("photos.shelf.download")
             if !isFavorites {
-                Button("Unfavorite") { send(state.favoriteEvent(false)) }
+                Button(PhotosWords.photosUnfavorite) { send(state.favoriteEvent(false)) }
                     .accessibilityIdentifier("photos.shelf.unfavorite")
             }
             if isAlbum {
-                Button("Make key photo") {
+                Button(PhotosWords.photosMakeKey) {
                     if let only = state.selected.first { send(state.coverEvent(only)) }
                 }
                 .disabled(state.selected.count != 1)
                 .accessibilityIdentifier("photos.shelf.cover")
-                Button("Remove from album") { send(state.removeFromAlbumEvent) }
+                Button(PhotosWords.photosRemoveFromAlbum) { send(state.removeFromAlbumEvent) }
                     .accessibilityIdentifier("photos.shelf.removeFromAlbum")
             }
         } label: {
-            CentraidIconView(
-                iconKey: "MoreHoriz",
-                tint: Theme.color(state.selected.isEmpty ? "textDisabled" : "text", scheme),
-                size: 22
-            )
+            selectionFace(icon: "MoreHoriz", label: "More")
         }
         .disabled(state.selected.isEmpty)
         .accessibilityLabel("More")
@@ -438,22 +479,38 @@ struct PhotoShelfView: View {
             // which is what made the More tab render as a dash. SF Symbols are
             // deliberately not used here: a second icon set is a second
             // product.
-            CentraidIconView(
-                iconKey: icon,
-                tint: Theme.color(state.selected.isEmpty ? "textDisabled" : "text", scheme),
-                size: 22
-            )
+            selectionFace(icon: icon, label: label)
         }
+        .buttonStyle(.plain)
         .disabled(state.selected.isEmpty)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
 
+    /// A MARK OVER A WORD, in the band's metrics. DISABLED IS ITS OWN TOKEN ON
+    /// THE LEAF, never an opacity on the tab.
+    private func selectionFace(icon: String, label: String) -> some View {
+        let ink = Theme.color(state.selected.isEmpty ? "textDisabled" : "text", scheme)
+        return VStack(spacing: BandMetrics.labelGap) {
+            CentraidIconView(iconKey: icon, tint: ink, size: BandMetrics.iconSize)
+                .frame(width: BandMetrics.markSize, height: BandMetrics.markSize)
+            Text(label)
+                .centraidType("band")
+                .foregroundStyle(ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.top, BandMetrics.tabTop)
+        .padding(.bottom, BandMetrics.tabBottom)
+        .frame(maxWidth: .infinity, minHeight: BandMetrics.tabMinHeight)
+        .contentShape(Rectangle())
+    }
+
     private var purgeQuestion: String {
         let count = state.selected.count
         return count == 1
-            ? "Delete 1 photograph forever?"
-            : "Delete \(count) photographs forever?"
+            ? PhotosWords.photosDeleteForeverOne
+            : PhotosWords.fill(PhotosWords.photosDeleteForeverMany, "count", "\(count)")
     }
 }
 
@@ -473,8 +530,8 @@ struct PhotoShelfCopy {
 
     /// What a shelf opened without its parameter says, and what a preview uses.
     static let unknown = PhotoShelfCopy(
-        title: "Photographs",
-        empty: "This shelf was opened without saying which photographs it is.",
+        title: PhotosWords.photosShelfTitle,
+        empty: PhotosWords.photosShelfNothing,
         emptyRemedy: "",
         purgeWindow: "",
         isTrash: false,
@@ -547,7 +604,7 @@ struct PhotoShelfStateView {
     /// between a count and a claim.
     var countSentence: String {
         guard case let .data(cells, _) = content else { return "" }
-        let noun = cells.count == 1 ? "photograph" : "photographs"
+        let noun = cells.count == 1 ? PhotosWords.tileCountOne : PhotosWords.tileCountMany
         return state.data.hasNextCursor
             ? "At least \(cells.count) \(noun)"
             : "\(cells.count) \(noun)"
@@ -704,7 +761,7 @@ private struct KeepOriginalsRowView: View {
     var body: some View {
         Toggle(isOn: Binding(get: { row.keep }, set: { onToggle($0) })) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Keep originals on this phone")
+                Text(PhotosWords.photosKeepOriginalsTitle)
                     .centraidType("body")
                     .foregroundStyle(Theme.color("text", scheme))
                 Text(row.meta)
@@ -712,9 +769,9 @@ private struct KeepOriginalsRowView: View {
                     .foregroundStyle(Theme.color("textSoft", scheme))
             }
         }
-        .tint(Theme.color("accent", scheme))
+        .kitToggle()
         .disabled(!row.ready || row.saving)
-        .accessibilityLabel("Keep this album's originals on this phone")
+        .accessibilityLabel(PhotosWords.photosKeepOriginalsLabel)
         .accessibilityHint(row.meta)
         .accessibilityIdentifier("photos.shelf.keepOriginals")
     }

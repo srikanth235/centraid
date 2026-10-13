@@ -231,7 +231,7 @@ enum NotesScreens: AppScreens {
             shell.path.append(newNoteRoute())
         case let .notePicked(picked):
             shell.path.append(editorRoute(picked.noteID))
-        case .trashOpened:
+        case let .moreRow(row) where row.key == "trash":
             shell.path.append(.screen(trash, Data()))
         default:
             break

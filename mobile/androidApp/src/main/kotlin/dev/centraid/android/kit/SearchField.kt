@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,6 +51,12 @@ public fun CentraidSearchField(
     label: String = KitWords.SEARCH,
     closeLabel: String = KitWords.CLOSE_SEARCH,
     testTag: String = "kit-search",
+    /** A quiet scope at the field's end ("All apps"), drawn while it is empty. */
+    scope: String = "",
+    /** Whether the field carries its own close key; a page with its own Cancel leaves it off. */
+    closes: Boolean = true,
+    /** The keyboard's search key, or null when the query is simply live. */
+    onSubmit: (() -> Unit)? = null,
 ) {
     val editor = rememberFollowedText(field.term)
     val typed = editor.text.value
@@ -93,6 +100,7 @@ public fun CentraidSearchField(
                     autoCorrectEnabled = false,
                     imeAction = ImeAction.Search,
                 ),
+                keyboardActions = KeyboardActions(onSearch = { onSubmit?.invoke() }),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focus)
@@ -100,6 +108,15 @@ public fun CentraidSearchField(
                     .semantics { contentDescription = label },
             )
         }
-        IconKey("X", closeLabel, "$testTag-close", bordered = false, onPress = onClose)
+        if (scope.isNotEmpty() && typed.isEmpty()) {
+            Text(
+                scope,
+                style = centraidType("small"),
+                color = centraidColor("textSoft"),
+                maxLines = 1,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+        }
+        if (closes) IconKey("X", closeLabel, "$testTag-close", bordered = false, onPress = onClose)
     }
 }

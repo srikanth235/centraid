@@ -125,13 +125,15 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
     public const val BAND_PROJECTS: String = "projects"
     public const val BAND_MORE: String = "more"
 
-    /** More rows: all but `search` and `reads` are intents the shell routes. */
+    /**
+     * More rows: all but `reads` are intents the shell routes. Search is not
+     * one — the search bar under the title is its one way in (R-CHROME-2).
+     */
     public const val MORE_ANYTIME: String = "anytime"
     public const val MORE_ALL: String = "all"
     public const val MORE_LOGBOOK: String = "logbook"
     public const val MORE_REMINDERS: String = "reminders"
     public const val MORE_CATCH_UP: String = "catch_up"
-    public const val MORE_SEARCH: String = "search"
     public const val MORE_TRASH: String = "trash"
     public const val MORE_READS: String = "reads"
 
@@ -246,7 +248,6 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
                 Step(state.copy(screen = screen.copy(sheet = NONE, filing_task_id = "", new_project_name = "")))
 
             event.more_row != null -> when (event.more_row.key) {
-                MORE_SEARCH -> opened(state.copy(screen = screen.copy(sheet = NONE)))
                 MORE_READS -> Step(state.copy(screen = screen.copy(sheet = TasksHomeState.Sheet.SHEET_READS)))
                 // INTENTS: the sheet closes, and the shell routes the key.
                 else -> Step(state.copy(screen = screen.copy(sheet = NONE)))
@@ -583,11 +584,10 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
         }
         val empty = when {
             groups.isNotEmpty() -> EmptyState()
-            // DAY ONE, and only day one, offers "See an example".
-            // and the phone's reminders, where the shell can read them.
+            // DAY ONE, and only day one, offers the phone's reminders, where
+            // the shell can read them.
             dayOne -> EmptyState(
                 headline = TasksCopy.DAY_ONE,
-                offers_example = true,
                 import_source = ImportSource.IMPORT_SOURCE_REMINDERS,
             )
             screen.destination == TODAY ->
@@ -690,8 +690,11 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
                     title = title,
                     can_submit = title.isNotBlank(),
                     lands_label = "${TasksCopy.LANDS_IN} $lands",
-                    shown = !denied && screen.data_ != null && screen.destination != PROJECTS && activeTerm(screen) == null,
+                    // Hidden while search is open, term or not: the bar and its Plus
+                    // would be a second verb over a field that is looking.
+                    shown = !denied && screen.data_ != null && screen.destination != PROJECTS && screen.search?.open_ != true,
                     focused = screen.quick_add?.focused == true && title.isNotEmpty(),
+                    add_label = TasksCopy.ADD_TASK,
                 ),
                 file_choices = if (screen.sheet == TasksHomeState.Sheet.SHEET_FILE) fileChoices(state) else emptyList(),
                 more_rows = MORE_ROWS,
@@ -709,7 +712,7 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
             TasksRows.tab(BAND_UPCOMING, TasksCopy.BAND_UPCOMING, "Calendar", on(UPCOMING)),
             TasksRows.tab(BAND_INBOX, TasksCopy.BAND_INBOX, "Inbox", on(INBOX)),
             TasksRows.tab(BAND_PROJECTS, TasksCopy.BAND_PROJECTS, "Folder", on(PROJECTS)),
-            TasksRows.tab(BAND_MORE, TasksCopy.BAND_MORE, "more", sheetUp),
+            TasksRows.tab(BAND_MORE, TasksCopy.BAND_MORE, "MoreHoriz", sheetUp),
         )
     }
 
@@ -719,7 +722,6 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
         TasksChoice(key = MORE_LOGBOOK, label = TasksCopy.VIEW_LOGBOOK, meta = TasksCopy.MORE_LOGBOOK_META, enabled = true, icon_key = "Book"),
         TasksChoice(key = MORE_REMINDERS, label = TasksCopy.VIEW_REMINDERS, meta = TasksCopy.MORE_REMINDERS_META, enabled = true, icon_key = "Bell"),
         TasksChoice(key = MORE_CATCH_UP, label = TasksCopy.CATCH_UP, meta = TasksCopy.MORE_CATCH_UP_META, enabled = true, icon_key = "History"),
-        TasksChoice(key = MORE_SEARCH, label = TasksCopy.SEARCH, enabled = true, icon_key = "Search"),
         TasksChoice(key = MORE_TRASH, label = TasksCopy.TRASH, meta = TasksCopy.MORE_TRASH_META, enabled = true, icon_key = "Trash"),
         TasksChoice(key = MORE_READS, label = TasksCopy.READS_TITLE, enabled = true, icon_key = "Info"),
     )

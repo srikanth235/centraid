@@ -24,9 +24,11 @@ import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.screen.Step
 
 /**
- * LOCKER'S HOME (#1047): Items · Review · Generate · Search, and More as a
- * sheet (the handoff's phone band). One screen, the surface a parameter
- * (law 2). Generate reads nothing: its slot draws the generator screen.
+ * LOCKER'S HOME (#1047): Items · Review · Generate, and More as a sheet. One
+ * screen, the surface a parameter (law 2). Generate reads nothing: its slot
+ * draws the generator screen. SEARCH IS THE ROOM'S BAR, never a tab
+ * (R-CHROME-2/5): `SearchOpened` lands on the search surface, which no tab
+ * names, and `SearchClosed` goes back to Items.
  */
 public object LockerHomeMachine :
     LockerQueryMachine<LockerHomeState, LockerHomeEvent, LockerHomeData>("locker.home", LOCKER_TABLES) {
@@ -96,7 +98,6 @@ public object LockerHomeMachine :
         "items" -> LockerHomeState.Destination.DESTINATION_ITEMS
         "review" -> LockerHomeState.Destination.DESTINATION_REVIEW
         "generate" -> LockerHomeState.Destination.DESTINATION_GENERATE
-        "search" -> LockerHomeState.Destination.DESTINATION_SEARCH
         else -> null
     }
 
@@ -272,7 +273,6 @@ public object LockerHomeMachine :
         LockerBandTab(key = "items", label = LockerCopy.BAND_ITEMS, icon_key = "Key", current = current == LockerHomeState.Destination.DESTINATION_ITEMS),
         LockerBandTab(key = "review", label = LockerCopy.BAND_REVIEW, icon_key = "Shield", current = current == LockerHomeState.Destination.DESTINATION_REVIEW),
         LockerBandTab(key = "generate", label = LockerCopy.BAND_GENERATE, icon_key = "Sparkle", current = current == LockerHomeState.Destination.DESTINATION_GENERATE),
-        LockerBandTab(key = "search", label = LockerCopy.BAND_SEARCH, icon_key = "Search", current = current == LockerHomeState.Destination.DESTINATION_SEARCH),
         LockerBandTab(key = "more", label = LockerCopy.BAND_MORE, icon_key = "MoreHoriz", current = false),
     )
 

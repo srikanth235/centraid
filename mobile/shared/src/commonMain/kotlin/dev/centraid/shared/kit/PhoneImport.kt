@@ -6,6 +6,9 @@ import centraid.core.v1.Envelope
 import centraid.core.v1.Request
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
+import dev.centraid.design.copy.AgendaCopy
+import dev.centraid.design.copy.PeopleCopy
+import dev.centraid.design.copy.TasksCopy
 import okio.ByteString.Companion.encodeUtf8
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -56,6 +59,25 @@ public object PhoneImport {
         val outcome = (answer as? CoreOutcome.Answered)?.value?.response?.command ?: return null
         return outcome.output.utf8().takeIf { outcome.status == CommandStatus.COMMAND_STATUS_EXECUTED }
     }
+
+    /**
+     * WHAT A MADE VAULT'S IMPORTS SAY, AS ONE LINE (R-ONBOARD-8): making a
+     * vault brings in the photos, the contacts, the calendar and the reminders
+     * one after another, and the banner says what came in — "6 people
+     * imported, 12 events imported". An import with nothing to bring
+     * ([quiet], the apps' `…_NONE` lines) says nothing, and a shell passes no
+     * refusal at all: the member just said no, and a Settings line would
+     * argue with them. Empty when nothing came in.
+     */
+    public fun madeSummary(outcomes: List<String>): String = outcomes
+        .filter { it.isNotBlank() && it !in quiet }
+        .joinToString(", ") { it.trimEnd('.') }
+
+    private val quiet: Set<String> = setOf(
+        PeopleCopy.IMPORT_CONTACTS_NONE,
+        AgendaCopy.IMPORT_CALENDAR_NONE,
+        TasksCopy.IMPORT_REMINDERS_NONE,
+    )
 
     /** A JSON string literal. `commonMain` carries no JSON dependency. */
     public fun quote(value: String): String = buildString {

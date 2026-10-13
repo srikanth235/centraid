@@ -24,10 +24,8 @@
 //! `Item 1, Item 2`.
 //!
 //! **SEVEN OF THE EIGHT ARE THE LIBRARY'S.** The scenario lives in
-//! `centraid_core::example`, which is also what the phone's ephemeral "See an
-//! example" core is founded with, so a fixture and the example a member opens
-//! are one set of rows. This binary is
-//! the thin caller: the command line, the guard below, the byte store, the
+//! `centraid_core::example`, which the chat's tests seed too, so a fixture and
+//! the rows those tests read are one set. This binary is the thin caller: the command line, the guard below, the byte store, the
 //! count it prints — and Locker, which is the one app that stays here because
 //! it is sealed under the public demo words and must never reach a product
 //! vault.

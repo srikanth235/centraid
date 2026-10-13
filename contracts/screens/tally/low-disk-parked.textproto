@@ -9,6 +9,6 @@ seat {
 destination: DESTINATION_ACTIVITY
 failure {
   kind: READ_FAILURE_KIND_LOW_DISK_PARKED
-  sentence: "This device is out of space, so Centraid has paused."
-  remedy: "Free up space and Centraid picks up where it stopped."
+  sentence: "This phone is out of space."
+  remedy: "Free up space to resume."
 }

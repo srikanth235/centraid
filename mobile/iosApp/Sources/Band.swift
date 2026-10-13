@@ -45,27 +45,17 @@ struct HomeBand: View {
                     onPress: { onSelect(place.id) }
                 )
             }
-            // More is NOT a place — three dots in a bordered square, outside
-            // the loop, because it opens a sheet and a destination mark would
-            // promise a destination. The SQUARE carries that argument, not the
-            // mark inside it, which is why `bordered` is its own flag and not
-            // an absent icon: More draws the catalog's `more` silhouette
-            // through the very same `CentraidIconView` the places use, at the
-            // same size, stroke and ink.
-            //
-            // It was a literal "···" until Instrument Sans was bundled: the
-            // face sets MIDDLE DOT with sidebearings tight enough that three
-            // of them fuse into one dash at the band's 11pt rung. A glyph
-            // whose shape depends on which face happens to be loaded is not a
-            // mark; the catalog path is.
+            // BACKUP, the band's last place: a tab like Chat, drawn in place of
+            // the springboard — where the backup stands, the backup devices
+            // and the 24 words — so a member never hunts for the one thing
+            // that brings the vault back. Every app is a tile on Home.
             BandTab(
-                iconKey: "more",
-                bordered: true,
-                label: ShellWords.bandMore,
-                spoken: ShellWords.bandMoreSpoken,
-                selected: false,
-                identifier: "home-band-more",
-                onPress: { onSelect("more") }
+                iconKey: "Backup",
+                label: ShellWords.bandBackup,
+                spoken: ShellWords.bandBackupSpoken + (active == "backup" ? ", current place" : ""),
+                selected: active == "backup",
+                identifier: "home-band-backup",
+                onPress: { onSelect("backup") }
             )
         }
         .padding(BandMetrics.platePad)
@@ -94,9 +84,6 @@ struct HomeBand: View {
 
 private struct BandTab: View {
     let iconKey: String
-    /// The bordered square is More's alone — it says "this opens a sheet", so
-    /// giving one to a place would promise a sheet the place does not open.
-    var bordered: Bool = false
     let label: String
     let spoken: String
     let selected: Bool
@@ -117,16 +104,6 @@ private struct BandTab: View {
                         size: BandMetrics.iconSize,
                         strokeWidth: CentraidGeometry.appMarkStroke
                     )
-                    .frame(width: bordered ? BandMetrics.markSize : nil, height: bordered ? BandMetrics.markSize : nil)
-                    .overlay {
-                        if bordered {
-                            RoundedRectangle(cornerRadius: 7)
-                                .strokeBorder(
-                                    Theme.color("lineStrong", scheme),
-                                    lineWidth: CentraidGeometry.hairline
-                                )
-                        }
-                    }
                 }
                 .frame(width: BandMetrics.markSize, height: BandMetrics.markSize)
                 Text(label)
@@ -246,7 +223,7 @@ struct AppBand: View {
                 }
                 if let onMore {
                     AppBandTab(
-                        iconKey: "MoreVert",
+                        iconKey: "MoreHoriz",
                         label: ShellWords.bandMore,
                         selected: false,
                         rule: rule,
@@ -502,14 +479,13 @@ enum ShellWords {
     #if canImport(CentraidShared)
     static var bandHome: String { HomeWords.shared.BAND_HOME }
     static var bandMore: String { HomeWords.shared.BAND_MORE }
-    static var bandMoreSpoken: String { HomeWords.shared.BAND_MORE_SPOKEN }
+    static var bandBackup: String { HomeWords.shared.BAND_BACKUP }
+    static var bandBackupSpoken: String { HomeWords.shared.BAND_BACKUP_SPOKEN }
     static var bandChat: String { ChatCopy.shared.TAB_LABEL }
-    static var allApps: String { HomeWords.shared.ALL_APPS }
     static var loading: String { HomeWords.shared.LOADING }
     static var photosAbsent: String { HomeWords.shared.PHOTOS_ABSENT }
     static var dayOneTitle: String { HomeWords.shared.DAY_ONE_TITLE }
     static var dayOneBody: String { HomeWords.shared.DAY_ONE_BODY }
-    static var firstMoves: String { HomeWords.shared.FIRST_MOVES }
     static var vaultsTitle: String { HomeWords.shared.VAULTS_TITLE }
     static var vaultsOne: String { HomeWords.shared.VAULTS_ONE }
     /// THE FIRST-LAUNCH GATE's sentence and two actions (`FirstLaunchView`).
@@ -526,20 +502,24 @@ enum ShellWords {
     static var firstLaunchRestore: String { HomeWords.shared.FIRST_LAUNCH_RESTORE }
     /// "Restore my vaults" — words.enter's door on the vault sheets (#1047 E2).
     static var wordsRestore: String { WordsCopy.shared.RESTORE_FIRST_ACTION }
-    /// The More sheet's custody rows (#1047 E5): "Show my 24 words", and
-    /// "Pair with your laptop".
-    static var showWords: String { WordsCopy.shared.SHOW_AGAIN_ROW }
-    static var pairLaptop: String { CustodyCopy.shared.PAIR_TITLE }
+    /// The vault switcher's "Make a vault" (R-ONBOARD-11).
+    static var vaultsMake: String { HomeWords.shared.VAULTS_MAKE }
+    /// The lockup's status line, spoken as a door.
+    static var backupStatusOpen: String { SharedCopy.shared.BACKUP_STATUS_OPEN }
+    /// The Backup tab's heading over its backup devices.
+    static var backupDevices: String { SharedCopy.shared.BACKUP_DEVICES_HEADING }
     static var vaultsCurrent: String { HomeWords.shared.VAULTS_CURRENT }
     static var vaultsForget: String { HomeWords.shared.VAULTS_FORGET }
     static var vaultsForgetBody: String { HomeWords.shared.VAULTS_FORGET_BODY }
+    /// The switcher's Rename: its swipe, its alert, its field and its save.
+    static var vaultsRename: String { HomeWords.shared.VAULTS_RENAME }
+    static var vaultsRenameTitle: String { HomeWords.shared.VAULTS_RENAME_TITLE }
+    static var vaultsRenameField: String { HomeWords.shared.VAULTS_RENAME_FIELD }
+    static var vaultsRenameSave: String { HomeWords.shared.VAULTS_RENAME_SAVE }
+    static var vaultsRenameFailed: String { HomeWords.shared.VAULTS_RENAME_FAILED }
     static var cancel: String { KitWords.shared.CANCEL }
-    /// "SEE AN EXAMPLE": the link under a day-one empty state, the banner
-    /// over the preview and its one exit, and a preview that would not open.
-    static var seeExample: String { HomeWords.shared.SEE_EXAMPLE }
-    static var exampleBanner: String { HomeWords.shared.EXAMPLE_BANNER }
-    static var exampleDone: String { HomeWords.shared.EXAMPLE_DONE }
-    static var exampleFailed: String { HomeWords.shared.EXAMPLE_FAILED }
+    /// The import banner's one exit.
+    static var done: String { KitWords.shared.DONE }
     /// CONTACTS → PEOPLE, the one importer a day-one empty state offers today.
     static var importContacts: String { PeopleCopy.shared.IMPORT_CONTACTS }
     static var importContactsRunning: String { PeopleCopy.shared.IMPORT_CONTACTS_RUNNING }
@@ -562,14 +542,15 @@ enum ShellWords {
     static func vaultName(_ name: String) -> String { HomeWords.shared.vaultName(name: name) }
     static func forgetTitle(_ name: String) -> String { HomeWords.shared.forgetTitle(name: name) }
     #else
-    static let bandHome = "", bandMore = "", bandMoreSpoken = "", bandChat = "", allApps = "", loading = ""
-    static let photosAbsent = "", dayOneTitle = "", dayOneBody = "", firstMoves = ""
+    static let bandHome = "", bandMore = "", bandBackup = "", bandBackupSpoken = "", bandChat = "", loading = ""
+    static let photosAbsent = "", dayOneTitle = "", dayOneBody = ""
     static let vaultsTitle = "", vaultsOne = ""
     static let firstLaunchBody = "", firstLaunchMake = "", firstLaunchRestore = ""
     static let firstLaunchHouseTitle = "", firstLaunchHouseBody = "", firstLaunchAssistantTitle = "", firstLaunchAssistantBody = "", firstLaunchBackupTitle = "", firstLaunchBackupBody = "", firstLaunchNext = "", firstLaunchSkip = ""
-    static let wordsRestore = "", showWords = "", pairLaptop = ""
+    static let wordsRestore = "", backupDevices = "", vaultsMake = "", backupStatusOpen = ""
     static let vaultsCurrent = "", vaultsForget = "", vaultsForgetBody = "", cancel = ""
-    static let seeExample = "", exampleBanner = "", exampleDone = "", exampleFailed = ""
+    static let vaultsRename = "", vaultsRenameTitle = "", vaultsRenameField = "", vaultsRenameSave = "", vaultsRenameFailed = ""
+    static let done = ""
     static let importContacts = "", importContactsRunning = "", importContactsDenied = ""
     static let importCalendar = "", importCalendarRunning = "", importCalendarDenied = ""
     static let importReminders = "", importRemindersRunning = "", importRemindersDenied = ""

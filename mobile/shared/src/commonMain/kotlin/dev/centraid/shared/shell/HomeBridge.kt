@@ -108,40 +108,6 @@ public class HomeBridge {
     }
 
     /**
-     * WHETHER "SEE AN EXAMPLE" IS OPEN, as it changes ([Shelf.previewing]).
-     * Fires once with the current answer and again on every change, on the
-     * main dispatcher. The banner's text and its one exit are drawn while true.
-     */
-    public fun observePreviewing(onChange: (Boolean) -> Unit) {
-        onSession { opened ->
-            scope.launch { opened.shelf.previewing.collect { onChange(it) } }
-        }
-    }
-
-    /**
-     * "SEE AN EXAMPLE": [HomeSession.seeExample]. [onDone] says whether the
-     * preview opened; the shell re-opens the app the member asked from, so it
-     * reads the example.
-     */
-    public fun seeExample(onDone: (Boolean) -> Unit = {}) {
-        val session = this.session ?: return onDone(false)
-        scope.launch { onDone(session.seeExample()) }
-    }
-
-    /**
-     * THE EXAMPLE BANNER'S ONE EXIT: [HomeSession.leaveExample]. [onDone]
-     * fires once the member's own vault is bound again, so the shell re-opens
-     * the app onto its empty state.
-     */
-    public fun leaveExample(onDone: () -> Unit = {}) {
-        val session = this.session ?: return onDone()
-        scope.launch {
-            session.leaveExample()
-            onDone()
-        }
-    }
-
-    /**
      * OPEN THIS DEVICE'S VAULTS, AND START PUBLISHING.
      *
      * Not in the constructor: opening a core is I/O that asserts it is not on
@@ -345,6 +311,12 @@ public class HomeBridge {
             session.forget(vaultId)
             onDone()
         }
+    }
+
+    /** Rename a vault; [onDone] says whether the name took. */
+    public fun renameVault(vaultId: String, name: String, onDone: (Boolean) -> Unit) {
+        val session = this.session ?: return onDone(false)
+        scope.launch { onDone(session.renameVault(vaultId, name)) }
     }
 
     /**

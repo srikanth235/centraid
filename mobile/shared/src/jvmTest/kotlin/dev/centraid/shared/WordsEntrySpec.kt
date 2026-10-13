@@ -107,7 +107,7 @@ class WordsEntrySpec : StringSpec({
             some.model,
             EntryInput.Checked(1L, PhraseVerdict(emptyList(), PhraseVerdict.Verdict.INCOMPLETE, 0)),
         ).model.state
-        counted.notice shouldBe "Centraid needs 24 words. There are 2 here."
+        counted.notice shouldBe "Your recovery key is 24 words. There are 2 here."
 
         val unknown = filled(WordsEntryState.Purpose.PURPOSE_RESTORE, PhraseVerdict.Verdict.UNKNOWN_WORD)
         unknown.state.primary_enabled shouldBe false
@@ -119,7 +119,7 @@ class WordsEntrySpec : StringSpec({
             step.model,
             EntryInput.Checked(1L, verdict(PhraseVerdict.Verdict.UNKNOWN_WORD, firstUnknown = 5, suggestions = listOf("abandon"))),
         ).model.state
-        judged.notice shouldBe "Word 5 is not on the list of words Centraid uses. Check its spelling."
+        judged.notice shouldBe "Word 5 isn't a recovery key word. Check the spelling."
         judged.cells[4].mark shouldBe WordEntry.Mark.MARK_UNKNOWN
         judged.cells[4].suggestions shouldBe listOf("abandon")
         judged.cells[0].mark shouldBe WordEntry.Mark.MARK_KNOWN

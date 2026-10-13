@@ -80,11 +80,47 @@ public class VaultSecrets(
         return synchronised
     }
 
+    /**
+     * WHETHER THE SYNCHRONISED STORE HOLDS THIS PHONE'S SEED right now (R-ONBOARD-10):
+     * what the Backup tab says about where the recovery key is, read rather
+     * than remembered, so a keychain the member turned off is said as off.
+     */
+    public suspend fun seedSynced(): Boolean {
+        val held = seed() ?: return false
+        return runCatching { synced.seed() }.getOrNull() == held
+    }
+
+    /**
+     * MOVE THE SEED INTO OR OUT OF THE SYNCHRONISED STORE (R-ONBOARD-10): the
+     * Backup tab's "Keep my key off iCloud" and its way back. Answers whether
+     * it is synchronised afterwards; a phone holding no seed answers false and
+     * changes nothing. [wordsSaved] is untouched: a copy the member saved
+     * elsewhere is still saved, and only the keychain copy moved.
+     */
+    public suspend fun setSeedSync(on: Boolean): Boolean {
+        val held = seed() ?: return false
+        return rememberSeed(held, sync = on)
+    }
+
+    /**
+     * THE MEMBER SAID THEY SAVED A COPY OF THEIR RECOVERY KEY (R-ONBOARD-10):
+     * on the shown key's "I've saved it", or by typing it in for a restore or
+     * a re-key. Device-only, and a claim rather than a proof — it only quiets
+     * the Backup tab's warning for a key that is on this phone alone.
+     */
+    public suspend fun wordsSaved(): Boolean = store.read(WORDS_SAVED) == SETTLED
+
+    /** Record [wordsSaved]. */
+    public suspend fun markWordsSaved() {
+        store.write(WORDS_SAVED, SETTLED)
+    }
+
     /** Forget the seed everywhere this object put it, and the words with it. */
     public suspend fun forgetSeed() {
         synced.forgetSeed()
         store.write(LOCAL_SEED, "")
         store.write(LOCAL_WORDS, "")
+        store.write(WORDS_SAVED, "")
     }
 
     /**
@@ -324,6 +360,26 @@ public class VaultSecrets(
         store.write(LOCAL_OWN_SEED_PREFIX + id, "")
         store.write(LOCAL_OWN_WORDS_PREFIX + id, "")
         store.write(LOCAL_OWN_INDEX, writeIndex(localIndex().filter { it.first != id }))
+        clearPendingFiling(id)
+    }
+
+    /**
+     * A VAULT'S OWN KEY STILL TO BE FILED IN THE MAIN VAULT'S LOCKER
+     * (R-ONBOARD-10): `<id>\t<vault name>` per line, device-only. The core
+     * seals a Locker secret only while that vault's Locker is unlocked, which
+     * it never is when a vault is made, so the filing waits for the member's
+     * next unlock of the main vault ([dev.centraid.shared.custody.OwnKeyFiling]).
+     */
+    public suspend fun pendingFilings(): List<Pair<String, String>> = readIndex(store.read(PENDING_FILINGS))
+
+    /** Record entry [id], made as [name], as still to be filed. */
+    public suspend fun addPendingFiling(id: String, name: String) {
+        store.write(PENDING_FILINGS, writeIndex(pendingFilings().filter { it.first != id } + (id to name.cleanLabel())))
+    }
+
+    /** Entry [id] was filed, or forgotten: nothing left to file for it. */
+    public suspend fun clearPendingFiling(id: String) {
+        store.write(PENDING_FILINGS, writeIndex(pendingFilings().filter { it.first != id }))
     }
 
     /** Entry [id]'s 24 words, device-only, so Settings can show them again — as [rememberWords]. */
@@ -399,6 +455,12 @@ public class VaultSecrets(
 
         /** How many words a phrase is. */
         public const val WORDS: Int = 24
+
+        /** Device-only: vaults' own keys still to be filed in Locker. See [pendingFilings]. */
+        public const val PENDING_FILINGS: String = "vault-seeds.to-file"
+
+        /** Device-only: the member saved a copy of their key. See [wordsSaved]. */
+        public const val WORDS_SAVED: String = "recovery-words-saved"
 
         /** Device-only: this phone's seed is settled. See [seedSettled]. */
         public const val SEED_SETTLED: String = "seed-settled"

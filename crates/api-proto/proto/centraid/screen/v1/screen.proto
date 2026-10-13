@@ -404,10 +404,24 @@ message PhotosGridState {
   // library's own run of fields so the two never collide mid-edit.
   FreeUpSpace free_up = 40;
 
+  // THE ROOT'S CHROME (R-CHROME-1…5), decorated on every step so both shells
+  // draw one arrangement and spell nothing: the band's places then More, the
+  // library's filter chips, and the header's words. Search is not a band
+  // place — the bar under the title opens `DESTINATION_SEARCH`.
+  repeated PhotosBandTab band = 41;
+  // Empty off the library and while selecting. Photos has no sort.
+  repeated PhotosFilterChip chips = 42;
+  PhotosGridChrome chrome = 43;
+  // THE CAMERA-ROLL BANNER over the library, decided here and only drawn by
+  // the shells. Unset when there is nothing to say or do: an import that is
+  // done or idle over a library with photographs draws no line at all.
+  PhotosImportBanner import_banner = 44;
+
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
     DESTINATION_LIBRARY = 1;
     DESTINATION_COLLECTIONS = 2;
+    // Search's own page, opened from the search bar and never from the band.
     DESTINATION_SEARCH = 3;
   }
 
@@ -418,6 +432,9 @@ message PhotosGridState {
     SHEET_BACKUP_DETAIL = 3;
     // "Move these to the trash?" over the selection. A confirm is a sheet (D4).
     SHEET_CONFIRM_TRASH = 4;
+    // The tile sizes, a choice opened from More's "Tile size" row. A choice
+    // is a sheet (D4); picking one closes it.
+    SHEET_TILE_SIZE = 5;
   }
 
   // v0's three zooms, widest first (`timeline-grains.ts`). A VIEW, NOT A
@@ -447,6 +464,86 @@ message PhotosGridState {
     READ_MODE_MORE = 2;
     // The pages already read, re-read into `restage`.
     READ_MODE_REFRESH = 3;
+  }
+}
+
+// One tab of Photos' band (R-CHROME-4/5): a place, then `more` last.
+message PhotosBandTab {
+  // `library`, `collections`, `more` — the tab's identifier on both shells.
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  // The place on screen; More is lit while its sheet is up.
+  bool current = 4;
+}
+
+// One filter chip in the library's chip row (R-CHROME-3).
+message PhotosFilterChip {
+  PhotosGridState.Filter filter = 1;
+  string label = 2;
+  bool selected = 3;
+}
+
+// The words around the library and Collections roots, so neither shell
+// spells them.
+message PhotosGridChrome {
+  // "Photos" — the header on every root band.
+  string title = 1;
+  // The search bar's placeholder, and what it says to a screen reader.
+  string search_placeholder = 2;
+  // Search is the field under the title, not a page with a title of its own.
+  reserved 3;
+  reserved "search_title";
+  // The library's one trailing action (`CheckCircle`), and the way out of
+  // the selection it starts (`X`).
+  string select_label = 4;
+  string cancel_label = 5;
+  // Collections' one trailing action (`Plus`).
+  string new_album_label = 6;
+  // More's "Tile size" row and the choice's title; offered only on the
+  // library at All, where a size acts on something on screen.
+  string tile_size_label = 7;
+  bool tile_size_offered = 8;
+  // The four sizes, XS to L, indexed by `rung`.
+  repeated string tile_sizes = 9;
+  // Collections' bulk fold, one link: "Show all" / "Collapse all".
+  string show_all_label = 10;
+  string collapse_all_label = 11;
+}
+
+// The camera-roll banner at the top of the library (#1025 S6): set only when
+// there is something to say or do — a grant's remedy, an import moving, or a
+// wait or pause. "Import now" is offered only over an EMPTY library the grant
+// allows importing into; over photographs, More's camera-roll sheet is the
+// deliberate place to run one again.
+message PhotosImportBanner {
+  // What the import is doing — its progress, a wait or a pause. Empty when
+  // nothing is moving.
+  string sentence = 1;
+  // Why: the grant's own sentence beside its remedy, or the wait's reason.
+  string reason = 2;
+  Remedy remedy = 3;
+  // The remedies' words. `allow_label` is the system prompt (REMEDY_ASK, and
+  // on Android beside REMEDY_SETTINGS, where a denial and a grant nobody asked
+  // for read alike); `settings_label` this app's page in Settings;
+  // `manage_label` the member's own selection (REMEDY_MANAGE_SELECTION).
+  string allow_label = 4;
+  string settings_label = 5;
+  string manage_label = 6;
+  // "Import now": only over an empty library, with a grant, and no pass
+  // already running.
+  bool import_now = 7;
+  string import_now_label = 8;
+
+  enum Remedy {
+    // No remedy: granted, restricted, or not yet known.
+    REMEDY_UNSPECIFIED = 0;
+    // Not asked: the system's prompt.
+    REMEDY_ASK = 1;
+    // Denied: this app's own page in Settings.
+    REMEDY_SETTINGS = 2;
+    // A limited selection: the member edits it.
+    REMEDY_MANAGE_SELECTION = 3;
   }
 }
 
@@ -1056,8 +1153,8 @@ enum TileSize {
 // design, and a `0` there would be a lie about how many secrets a member has.
 message TileCount {
   uint32 value = 1;
-  // The read hit its ceiling, so the true number is at least `value` — which is
-  // why the status line says "at least" when anything is capped.
+  // The read hit its ceiling, so the true number is at least `value`, and the
+  // honest phrasing is "at least".
   bool capped = 2;
 }
 
@@ -1191,15 +1288,14 @@ message HomeTile {
   TileSize size = 5;
   // `MEDIUM`, and `LARGE` flattened: full width on the two-column phone grid.
   bool wide = 6;
-  // What to DO, never what is missing. Rendered only in the one case grading
-  // leaves: a tile that earned the grid while loading and settled with nothing.
+  // What to DO, never what is missing: the line an app with nothing in it
+  // draws in its tile.
   string empty_copy = 7;
   TileBody body = 8;
-  // This tile earned a place in the grid. `CONTENT` and `LOADING` earn it —
-  // a read in flight holds its slot at full geometry, because demoting and
-  // re-promoting a beat later is a relayout the member watches. Locker always
-  // earns it. `EMPTY` and `UNKNOWN` do not, and fall to first moves.
-  bool earns_grid = 9;
+  // 9 was `earns_grid`: whether the tile earned a place on the grid. Every app
+  // has a tile now, empty or not (R-ONBOARD-11), so nothing is graded out.
+  reserved 9;
+  reserved "earns_grid";
   // WHAT A SCREEN READER SAYS FOR THE TILE: "Open People, 5 people" — the
   // app's name and the count's words, the withheld glyph never spoken.
   // `open_label` alone ("Open People") is the All apps row's.
@@ -1215,29 +1311,6 @@ enum Springboard {
   // which an unsettled read has not earned.
   SPRINGBOARD_FIRST_RUN = 2;
   SPRINGBOARD_CONTENT = 3;
-}
-
-// An app that failed `earns_grid`, offered as something to do.
-message FirstMove {
-  // An app id, or `connectors` — the one move that is not an app.
-  string id = 1;
-  // Verb first, and it must land somewhere that can TAKE content.
-  string label = 2;
-  string hint = 3;
-  string icon_key = 4;
-  // Absent on the non-app move.
-  optional string color = 5;
-}
-
-// The one number describing the whole vault, assembled from numbers each true.
-message ThingCount {
-  // Sums ONLY counts a read returned. A withheld count is omitted, never
-  // treated as zero.
-  uint32 total = 1;
-  // Something contributed its ceiling, so the honest phrasing is "at least".
-  bool capped = 2;
-  // Every tile has settled. False means the total is still moving.
-  bool settled = 3;
 }
 
 // Home's health ribbon: the vault at a glance, and whether the gateway holding
@@ -1278,9 +1351,10 @@ message HomeState {
     ReadFailure failure = 3;
     HomeData data = 4;
   }
-  // The all-apps listing is a SHEET and never a destination — the same law the
-  // Photos grid's `more` follows.
-  bool all_apps_sheet_open = 5;
+  // 5 was `all_apps_sheet_open`, the All apps sheet. It is gone
+  // (R-ONBOARD-11): every app is a tile on Home.
+  reserved 5;
+  reserved "all_apps_sheet_open";
   // The vault lockup, true on every route — see `VaultLockup`.
   VaultLockup vault = 6;
   // EVERY VAULT THIS DEVICE HOLDS, the active one included.
@@ -1313,9 +1387,15 @@ message HomeData {
   // catalogue's order. Freshness decides what is IN a tile; it must never
   // decide where the tile sits.
   repeated HomeTile tiles = 2;
-  // At most three. A nudge as tall as its grid is no nudge.
-  repeated FirstMove first_moves = 3;
-  ThingCount things = 4;
+  // `first_moves`, Home's "Fill this out" nudges: retired, because an empty
+  // app is a tile of its own and offers its own import or add, and the
+  // camera roll comes in on its own (docs/decisions.md, R-ONBOARD-8).
+  reserved 3;
+  reserved "first_moves";
+  // 4 was `things`, Home's "11 things" foot. It is gone (R-ONBOARD-11): it
+  // summed the counts every tile already shows.
+  reserved 4;
+  reserved "things";
   HomeStatus status = 5;
   // EVERY tile is `UNKNOWN` — no replica, no grant, or every read failed. The
   // whole springboard's verdict and not one app's, because demoting one
@@ -1342,6 +1422,10 @@ message HomeData {
   // the slot is the backup line's alone.
   reserved 9;
   reserved "sample_notice";
+  // 10 was `idle_app_ids`, the apps the grid did not draw. Every app has a
+  // tile (R-ONBOARD-11), so there are none.
+  reserved 10;
+  reserved "idle_app_ids";
 }
 
 // One drawn row of the springboard: the app ids in it, left to right.
@@ -1432,18 +1516,13 @@ message VaultLockup {
   // belongs to.
   string frozen_line = 9;
 
-  // THIS IS THE EXAMPLE PREVIEW, never a vault the member holds: an ephemeral
-  // core over a temporary directory, seeded with the example scenario for "See
-  // an example" and deleted when the member leaves it (`ExamplePreview`). Not
-  // on the roster, never keyed, never backed up and refusing every write. A
-  // shell draws "Example — not your data" and its one exit while it is set.
-  bool example = 12;
-
   // `sample`, the separate sample vault's mark, and `founded_at`, which only
   // settled the sample line's claim on Home's notice slot; both retired with
   // the sample vault (docs/decisions.md, "Onboarding without sample data").
-  reserved 10, 11;
-  reserved "sample", "founded_at";
+  // `example`, which marked the "See an example" preview's lockup, retired
+  // with the preview (R-ONBOARD-12).
+  reserved 10, 11, 12;
+  reserved "sample", "founded_at", "example";
 
   // `gateway_name`, which no layer could ever write; `offline`, which only
   // meant something beside it; and `link`, whose enum made pairing a STATE of
@@ -1511,7 +1590,6 @@ message HomeEvent {
     TileArrived tile = 3;
     TileRefused tile_refused = 4;
     StatusChanged status = 5;
-    AllAppsSheetToggled all_apps = 6;
     SeatChanged seat_changed = 7;
     MovePicked move_picked = 8;
     VaultChanged vault_changed = 9;
@@ -1526,6 +1604,10 @@ message HomeEvent {
   message BackupLineChanged {
     BackupLine line = 1;
   }
+
+  // 6 was `all_apps`, the All apps sheet's toggle; gone with the sheet.
+  reserved 6;
+  reserved "all_apps";
 
   // `FoundingDayKnown`, which told Home whether the vault in front was founded
   // today for the sample line; retired with the sample vault.
@@ -1599,10 +1681,6 @@ message HomeEvent {
     HomeStatus status = 1;
   }
 
-  message AllAppsSheetToggled {
-    bool open = 1;
-  }
-
   message SeatChanged {
     SeatState seat = 1;
   }
@@ -1610,6 +1688,156 @@ message HomeEvent {
   message MovePicked {
     string move_id = 1;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Home's search (R-CHROME-6)
+// ---------------------------------------------------------------------------
+//
+// `home.search`: the full screen Home's search bar pushes. One field over
+// every app but Locker (`vault_search`, the powerbox's loader asked from
+// Home), the answer GROUPED BY THE APP each row opens in, the groups in
+// Home's tile order. A tap opens the row in its own app, through the router a
+// chat card already uses (`target`); Cancel pops back to Home and clears.
+//
+// VIEWS DECIDE NOTHING (R-1047-K1): every word, the group order, the counts,
+// the kind column and where a row opens arrive here finished.
+
+message HomeSearchChrome {
+  // The field's placeholder, which the bar on Home reads too.
+  string placeholder = 1;
+  // The quiet scope beside the field: "All apps".
+  string scope_label = 2;
+  // The text button that pops back to Home.
+  string cancel = 3;
+  // The field's close key, spoken.
+  string close_label = 4;
+  string loading = 5;
+  string retry = 6;
+  // The page's name, which a page pushed from it says on its back control.
+  string title = 7;
+}
+
+// THE FIELD IS EMPTY: what search reaches, and this session's searches.
+message HomeSearchResting {
+  // One line: what a search reaches.
+  string note = 1;
+  // "Recent", over `suggestions`; empty when there are none.
+  string suggestions_label = 2;
+  // THIS SESSION'S searches, newest first, a handful at most. Never
+  // persisted and never read from the vault: a suggestion the member did not
+  // type is the vault talking about itself.
+  repeated string suggestions = 3;
+}
+
+message HomeSearchRow {
+  // The index's entity (`knowledge.note`) and the row's own id.
+  string entity = 1;
+  string id = 2;
+  string app_id = 3;
+  // What the row IS, in the soft fixed column: "Note", "Event".
+  string kind_label = 4;
+  string title = 5;
+  // "Note, Cabin packing".
+  string accessibility_label = 6;
+  // WHERE A TAP GOES: the reference a chat card carries (`ChatCard`), so the
+  // shell's one router for a row reference opens it — never a second router.
+  ChatCard target = 7;
+}
+
+// One app's rows, headed by its hue dot, its name and its count.
+message HomeSearchGroup {
+  // The app's id: the hue a shell draws the dot in, as a Home tile's.
+  string app_id = 1;
+  // The app's name, as the catalogue spells it.
+  string label = 2;
+  uint32 count = 3;
+  // "Notes, 2 results".
+  string accessibility_label = 4;
+  repeated HomeSearchRow rows = 5;
+}
+
+message HomeSearchData {
+  // In Home's tile order (`SpringboardPolicy.SPRINGBOARD_ORDER`).
+  repeated HomeSearchGroup groups = 1;
+  // Set when nothing matched the term: the one sentence, no action.
+  EmptyState empty = 2;
+}
+
+message HomeSearchState {
+  SeatState seat = 1;
+  // The kit's field. `answered_term` is the term the rows on screen answer.
+  SearchField field = 2;
+  HomeSearchChrome chrome = 3;
+  oneof content {
+    HomeSearchResting resting = 4;
+    Loading loading = 5;
+    ReadFailure failure = 6;
+    Denied denied = 7;
+    HomeSearchData data = 8;
+  }
+  // This session's searches, newest first — kept across Cancel, drawn only
+  // by `resting`.
+  repeated string recent = 9;
+}
+
+message HomeSearchEvent {
+  oneof kind {
+    Opened opened = 1;
+    TermChanged term = 2;
+    SuggestionPicked suggestion = 3;
+    // INTENT: the shell opens `row.target` in its app; the machine records the
+    // term as a recent search.
+    RowPicked row = 4;
+    // The keyboard's search key: the term is recorded as a recent search.
+    Submitted submitted = 5;
+    // Pops back to Home; the field clears (a closed search keeps no term).
+    Cancelled cancelled = 6;
+    DataArrived data = 7;
+    ReadRefused refused = 8;
+    Denied denied = 9;
+    SeatChanged seat_changed = 10;
+    Refreshed refreshed = 11;
+    // Another vault came to the front: its recent searches and results go
+    // with the vault they were typed in.
+    VaultChanged vault_changed = 12;
+  }
+
+  message Opened {}
+  message VaultChanged {}
+
+  message TermChanged {
+    string term = 1;
+  }
+
+  message SuggestionPicked {
+    string term = 1;
+  }
+
+  message RowPicked {
+    HomeSearchRow row = 1;
+  }
+
+  message Submitted {}
+
+  message Cancelled {}
+
+  // The answer, and the term it answers: an answer for a term the member has
+  // since changed is dropped (latest wins).
+  message DataArrived {
+    HomeSearchData data = 1;
+    string term = 2;
+  }
+
+  message ReadRefused {
+    ReadFailure failure = 1;
+  }
+
+  message SeatChanged {
+    SeatState seat = 1;
+  }
+
+  message Refreshed {}
 }
 
 // ---------------------------------------------------------------------------
@@ -3883,6 +4111,8 @@ message AgendaHomeState {
   // THE DAY THE SURFACE IS ANCHORED ON, civil `YYYY-MM-DD`, and EMPTY until
   // the first answer says which day today is — never a device-clock guess.
   string anchor_day = 3;
+  // SEARCH IS THE BAR UNDER THE TITLE (R-CHROME-2): closed, a field-shaped
+  // bar whose tap sends `SearchOpened`; open, the field. Never a band tab.
   bool search_open = 4;
   // What the member typed. Closing search CLEARS it (a v0 defect not carried).
   string search_term = 5;
@@ -3897,8 +4127,10 @@ message AgendaHomeState {
     AgendaHomeData data = 10;
   }
   Sheet sheet = 11;
-  // THE BAND, five tabs in order, computed. EMPTY while denied: the gate has
-  // no band.
+  // THE BAND, computed: Day, Schedule, Waiting, then More — places only
+  // (R-CHROME-5). The destination's tab stays lit while search is open,
+  // because search is a mode over it. EMPTY while denied: the gate has no
+  // band.
   repeated AgendaBandTab band = 12;
   // The day bar. On the state and not on `data`, so stepping a day keeps the
   // bar standing (and its buttons pressable) while the new day reads.
@@ -3912,6 +4144,11 @@ message AgendaHomeState {
   repeated string cancel_asked_event_ids = 16;
   // Days whose due shelf is open, `YYYY-MM-DD`.
   repeated string due_open_days = 17;
+  // THE MORE SHEET, as rows, in order (R-1046-5, R-CHROME-4): each calendar
+  // as a show/hide toggle under the Calendars heading, then "What Agenda may
+  // read". Computed, so both platforms draw the same list; no calendar rows
+  // until an answer has named the calendars.
+  repeated AgendaMoreRow more_rows = 18;
 
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
@@ -3958,8 +4195,12 @@ message AgendaChrome {
   // The skeleton's accessibility label.
   string loading = 10;
   string more_title = 11;
-  string calendars_heading = 12;
-  // The More sheet's row to `SHEET_READS`, and that sheet's title.
+  // 12 was `calendars_heading`, the More sheet's Calendars heading. The sheet
+  // is rows on the state now, and the heading rides on its first calendar row
+  // (`AgendaMoreRow.section`).
+  reserved 12;
+  reserved "calendars_heading";
+  // "What Agenda may read" — `SHEET_READS`' title.
   string reads_title = 13;
   repeated AgendaFact reads_facts = 14;
   // The band's home capsule.
@@ -3974,7 +4215,7 @@ message AgendaFact {
 }
 
 message AgendaBandTab {
-  // `day`, `schedule`, `waiting`, `search`, `more` — what `BandPicked` sends.
+  // `day`, `schedule`, `waiting`, `more` — what `BandPicked` sends.
   string key = 1;
   string label = 2;
   // A `design/native-catalog.json` icon key.
@@ -4109,6 +4350,27 @@ message AgendaCalendarChoice {
   string state_label = 5;
 }
 
+// ONE ROW OF AGENDA'S MORE SHEET. A view draws `label` (with the `hue_key` dot
+// and `meta` on a calendar), a heading above it when `section` is set, and
+// sends `MoreRowPicked` with `key` on a tap; the machine decides what the key
+// does.
+message AgendaMoreRow {
+  // `calendar-<calendar_id>` or `reads`.
+  string key = 1;
+  string label = 2;
+  // "Shown" / "Hidden" on a calendar row; empty on an action row.
+  string meta = 3;
+  // A calendar's colour role (`cTeal`); empty on an action row.
+  string hue_key = 4;
+  // A calendar row is a TOGGLE, and `on` is "shown". An action row is neither.
+  bool toggle = 5;
+  bool on = 6;
+  // The heading drawn ABOVE this row ("Calendars"); empty for none.
+  string section = 7;
+  // What a screen reader says for the row: "Work, Hidden".
+  string spoken = 8;
+}
+
 enum AgendaEmpty {
   AGENDA_EMPTY_UNSPECIFIED = 0;
   AGENDA_EMPTY_NONE = 1;
@@ -4146,6 +4408,8 @@ message AgendaHomeEvent {
     // to `agenda.event`.
     NewEventRequested new_event = 17;
     EventPicked event_picked = 18;
+    // A More sheet row, by `AgendaMoreRow.key`.
+    MoreRowPicked more_row = 19;
   }
 
   // The screen is on screen. Lands on `destination` (Day when unspecified) at
@@ -4168,6 +4432,7 @@ message AgendaHomeEvent {
 
   message TodayRequested {}
 
+  // The search bar under the title was tapped: the field opens.
   message SearchOpened {}
 
   message SearchTermChanged {
@@ -4182,6 +4447,10 @@ message AgendaHomeEvent {
 
   // A band tab, by `AgendaBandTab.key`.
   message BandPicked {
+    string key = 1;
+  }
+
+  message MoreRowPicked {
     string key = 1;
   }
 
@@ -4762,13 +5031,10 @@ message EmptyState {
   string headline = 1;
   string body = 2;
   string action_label = 3;
-  // THIS IS AN APP'S DAY-ONE EMPTY STATE, and the shell may offer "See an
-  // example" beside it: a read-only preview of a full app rendered from an
-  // ephemeral example core, which leaves nothing behind. Set by a machine only
-  // on the state an app shows when it holds nothing at all — never on a
-  // filtered, searched or sub-list empty — and the words are the shell's
-  // (`SharedCopy.SEE_EXAMPLE`), never the app's.
-  bool offers_example = 4;
+  // `offers_example`, which put "See an example" under an app's day-one
+  // empty state, retired with the preview (R-ONBOARD-12).
+  reserved 4;
+  reserved "offers_example";
   // WHERE THE PHONE ALREADY HOLDS THIS APP'S DATA, on an app's day-one empty
   // state only. A shell that can read that source draws its import as the
   // empty state's action in place of `action_label` — asked here, at the point
@@ -5097,6 +5363,31 @@ message NotesTagChip {
   bool selected = 3;
 }
 
+// ONE CHIP IN THE LIBRARY'S ROW (R-CHROME-3), finished: a filter, or — last —
+// the sort. `key` is what `ChipPicked` sends back: `notebook` (the notebook or
+// Unfiled the library was opened on; a tap widens to every note), `pinned`,
+// `tag-<concept_id>`, `sort` (opens SHEET_SORT).
+message NotesChip {
+  string key = 1;
+  // A filter's name, or the sort's CURRENT order ("Last edited").
+  string label = 2;
+  // The filter narrows the list now.
+  bool selected = 3;
+  // The sort chip: a tap opens a sheet of choices.
+  bool chevron = 4;
+  // What a screen reader says when it is not the label: "Sort, Last edited".
+  string spoken = 5;
+}
+
+// One row of SHEET_MORE: a secondary place or action (Trash). `MoreRowPicked`
+// sends `key`; never search, sort or a filter (R-CHROME-4).
+message NotesMoreRow {
+  string key = 1;
+  string label = 2;
+  // A `design/native-catalog.json` icon key.
+  string icon_key = 3;
+}
+
 // One option in a choices sheet (file into notebook, sort).
 message NotesChoice {
   string id = 1;
@@ -5133,19 +5424,17 @@ message NotesLibraryChrome {
   string retry = 6;
   string loading = 7;
   string more_title = 8;
-  // The More sheet's rows.
-  string trash_label = 9;
-  string sort_label = 10;
-  string pinned_only_label = 11;
+  // 9, 10, 11 and 16 were the More sheet's Trash, Sort and "Pinned only" rows
+  // and the filter line's Clear verb, composed by the views. More's rows are
+  // `NotesLibraryState.more_rows` now, and sort and the filters are chips
+  // (R-CHROME-3/4).
+  reserved 9, 10, 11, 16;
+  reserved "trash_label", "sort_label", "pinned_only_label", "filter_clear_label";
   string file_title = 12;
   string sort_title = 13;
   string home = 14;
   // The row menu's accessibility label.
   string row_menu_label = 15;
-  // The verb beside `filter_label` ("Clear"). Not `clear_…`: SwiftProtobuf
-  // suffixes a field that begins with `clear` (it would shadow a generated
-  // `clear…()`), and a view should not have to spell `clearFilter_p`.
-  string filter_clear_label = 16;
 }
 
 message NotesLibraryData {
@@ -5193,8 +5482,10 @@ message NotesLibraryState {
   uint32 window = 13;
   // The heading: "Notes", a notebook's name, or "Unfiled".
   string heading = 14;
-  // "Pinned only · Recipes", empty with no filter; `ClearFilter` clears it.
-  string filter_label = 15;
+  // 15 was `filter_label`, "Pinned only · Recipes" over a Clear verb. Every
+  // filter is a chip of its own now, selected while it narrows (`chips`).
+  reserved 15;
+  reserved "filter_label";
   Sheet sheet = 16;
   // The row a menu or the file-into sheet is about.
   NotesRowMenu menu = 17;
@@ -5212,6 +5503,12 @@ message NotesLibraryState {
   // The library's parameters moved, or its rows did, while search was
   // answering: closing search reads the library again.
   bool library_stale = 26;
+  // THE CHIP ROW (R-CHROME-3), in draw order: the notebook the library was
+  // opened on, Pinned, the tags the window saw, then the sort, last. Empty
+  // while denied. A tap sends `ChipPicked` with the chip's key.
+  repeated NotesChip chips = 27;
+  // SHEET_MORE's rows: Trash. `MoreRowPicked` sends the key.
+  repeated NotesMoreRow more_rows = 28;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -5235,8 +5532,8 @@ message NotesLibraryEvent {
     PinnedOnlyToggled pinned_only = 8;
     TagToggled tag = 9;
     WindowWidened window_widened = 10;
-    // Clear every filter (`filter_label`'s verb).
-    FilterCleared filter_cleared = 11;
+    // 11 was `filter_cleared`, the filter line's Clear verb. Each filter is a
+    // chip that clears itself now.
     SheetOpened sheet_opened = 12;
     SheetClosed sheet_closed = 13;
     RowMenuOpened row_menu = 14;
@@ -5256,7 +5553,23 @@ message NotesLibraryEvent {
     // INTENTS. The machine changes nothing on them; the shell routes them.
     NewNoteRequested new_note = 28;
     NotePicked note_picked = 29;
-    TrashOpened trash_opened = 30;
+    // 30 was `trash_opened`, the More sheet's Trash row as a view-composed
+    // intent. It is `MoreRowPicked{key: "trash"}` now, which the shell routes.
+    // A chip by `NotesChip.key` (R-CHROME-3).
+    ChipPicked chip = 31;
+    // A More row by `NotesMoreRow.key`: the machine closes the sheet, and the
+    // shell routes `trash`.
+    MoreRowPicked more_row = 32;
+  }
+  reserved 11, 30;
+  reserved "filter_cleared", "trash_opened";
+
+  message ChipPicked {
+    string key = 1;
+  }
+
+  message MoreRowPicked {
+    string key = 1;
   }
 
   // Opened on the whole library, one notebook, or the unfiled notes.
@@ -5291,8 +5604,6 @@ message NotesLibraryEvent {
   }
 
   message WindowWidened {}
-
-  message FilterCleared {}
 
   message SheetOpened {
     NotesLibraryState.Sheet sheet = 1;
@@ -5352,8 +5663,6 @@ message NotesLibraryEvent {
     string note_id = 1;
     string title = 2;
   }
-
-  message TrashOpened {}
 }
 
 // --- Notebooks ---
@@ -5837,7 +6146,8 @@ enum PeopleChannelIntent {
   PEOPLE_CHANNEL_INTENT_COPY = 4;
 }
 
-// One tab of People's band: `people`, `touch`, `more`.
+// One tab of People's band: `people`, `touch`, `more` (an ordinary tab,
+// last, whose tap opens SHEET_MORE).
 message PeopleBandTab {
   string key = 1;
   string label = 2;
@@ -5984,11 +6294,29 @@ message PeopleSearchData {
   optional EmptyState empty = 3;
 }
 
-// A choice on More's sort section.
+// A choice on SHEET_ORDER, the sort chip's sheet.
 message PeopleOrderChoice {
   PeopleOrder order = 1;
   string label = 2;
   bool selected = 3;
+}
+
+// THE SORT CHIP, last in the chip row (R-CHROME-3): the current order's name;
+// a tap opens SHEET_ORDER.
+message PeopleSortChip {
+  // "Recently added", "Name".
+  string label = 1;
+  // "Sort, Recently added".
+  string spoken = 2;
+}
+
+// One row of SHEET_MORE: a secondary place or action (Trash). `MoreRowPicked`
+// sends `key`; never search, sort or a filter (R-CHROME-4).
+message PeopleMoreRow {
+  string key = 1;
+  string label = 2;
+  // A `design/native-catalog.json` icon key.
+  string icon_key = 3;
 }
 
 message PeopleHomeChrome {
@@ -6000,9 +6328,12 @@ message PeopleHomeChrome {
   string retry = 6;
   string loading = 7;
   string more_title = 8;
+  // SHEET_ORDER's title.
   string sort_heading = 9;
-  // More's row to the trash.
-  string trash_label = 10;
+  // 10 was `trash_label`, More's Trash row as the views composed it; More's
+  // rows are `PeopleHomeState.more_rows` now (R-CHROME-4).
+  reserved 10;
+  reserved "trash_label";
   string home = 11;
 }
 
@@ -6041,7 +6372,17 @@ message PeopleHomeState {
   bool read_queued = 17;
   // The status line: the last write's outcome or refusal, one sentence.
   string status = 18;
+  // SHEET_ORDER's choices.
   repeated PeopleOrderChoice order_choices = 19;
+  // THE CHIP ROW'S FILTERS (R-CHROME-3): the roster's chips (All, Starred,
+  // Overdue) with their counts, the current one selected. Held over a re-read
+  // so the row does not blink; empty on Touch, which has no filter, and while
+  // denied. `ChipPicked` sends a chip's key.
+  repeated PeopleChip chips = 20;
+  // The row's last chip, the sort; absent exactly when `chips` is empty.
+  optional PeopleSortChip sort_chip = 21;
+  // SHEET_MORE's rows: Trash. `MoreRowPicked` sends the key.
+  repeated PeopleMoreRow more_rows = 22;
 
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
@@ -6052,8 +6393,10 @@ message PeopleHomeState {
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
     SHEET_NONE = 1;
-    // Sort, and the row to the trash.
+    // `more_rows`: the row to the trash.
     SHEET_MORE = 2;
+    // The sort chip's sheet: `order_choices`.
+    SHEET_ORDER = 3;
   }
 }
 
@@ -6080,12 +6423,22 @@ message PeopleHomeEvent {
     // INTENTS. The machine changes nothing on them; the shell routes them.
     PersonPicked person = 19;
     AddPersonRequested add_person = 20;
-    TrashRequested trash = 21;
+    // 21 was `trash`, More's Trash row as a view-composed intent. It is
+    // `MoreRowPicked{key: "trash"}` now, which the shell routes.
     LogTouchRequested log_touch = 22;
+    // A More row by `PeopleMoreRow.key`: the machine closes the sheet, and the
+    // shell routes `trash`.
+    MoreRowPicked more_row = 23;
   }
+  reserved 21;
+  reserved "trash";
 
   message Opened {
     PeopleHomeState.Destination destination = 1;
+  }
+
+  message MoreRowPicked {
+    string key = 1;
   }
 
   message Refreshed {}
@@ -6150,8 +6503,6 @@ message PeopleHomeEvent {
   }
 
   message AddPersonRequested {}
-
-  message TrashRequested {}
 
   message LogTouchRequested {
     string party_id = 1;
@@ -6843,6 +7194,10 @@ message TasksQuickAdd {
   // The field takes the keyboard when drawn: the bar was opened with words
   // already in it (Notes' "Send to Tasks").
   bool focused = 5;
+  // The header's Plus (R-CHROME-1), drawn while the bar is `shown`: what a
+  // screen reader says for it, "Add task". A tap puts the keyboard in the
+  // bar's field; the bar stays where it is. Empty on a pushed page.
+  string add_label = 6;
 }
 
 // ---------------------------------------------------------------------------
@@ -6870,8 +7225,9 @@ message TasksHomeState {
   // SHEET_FILE: the task being filed, and where it can go.
   string filing_task_id = 13;
   repeated TasksChoice file_choices = 14;
-  // SHEET_MORE's rows: Anytime, All, Logbook, Reminders, Catch up, Search,
-  // Trash, What Tasks may read. `MoreRowPicked` sends the key.
+  // SHEET_MORE's rows: Anytime, All, Logbook, Reminders, Catch up, Trash,
+  // What Tasks may read. `MoreRowPicked` sends the key. Never Search: the
+  // search bar under the title is the one way in (R-CHROME-2).
   repeated TasksChoice more_rows = 15;
   // SHEET_NEW_PROJECT's name field.
   string new_project_name = 16;
@@ -6910,7 +7266,7 @@ message TasksHomeData {
   optional TasksNotice notice = 5;
   // "7 tasks", "3 projects", "4 hits".
   string count_label = 6;
-  // "500 tasks · this is a window, not everything open"; empty when whole.
+  // "500 tasks · more not shown"; empty when whole.
   string window_label = 7;
   // The rows are search hits.
   bool searching = 8;  // "Show more" is live: the window can widen (`NextPageRequested`).
@@ -6978,8 +7334,8 @@ message TasksHomeEvent {
   message SheetClosed {}
 
   // A More row, by `TasksChoice.key`. `anytime`, `all`, `logbook`,
-  // `reminders`, `catch_up` and `trash` are intents the shell routes; `search`
-  // opens the field and `reads` the facts sheet.
+  // `reminders`, `catch_up` and `trash` are intents the shell routes; `reads`
+  // opens the facts sheet.
   message MoreRowPicked {
     string key = 1;
   }
@@ -7641,10 +7997,11 @@ message DocsDriveState {
   optional DocsRename rename = 20;
   // THE BAND, computed. EMPTY while denied.
   repeated DocsBandTab band = 21;
-  // The filter and sort pills over the list, computed. EMPTY in search, on
-  // Recently changed (a window, not a filter) and while denied.
+  // The room's chip row (R-CHROME-3), computed: filters, "Clear filters"
+  // while one is set, the sort last. EMPTY in search, on Recently changed (a
+  // window, not a filter) and while denied.
   repeated DocsPill pills = 22;
-  // Whether any filter is set, and so whether "Clear filters" shows.
+  // Whether any filter is set, and so whether the "Clear filters" chip shows.
   bool filters_active = 23;
   DocsDriveChrome chrome = 24;
   // OS grants, as STATE (law 4): what the Add sheet's rows can promise.
@@ -7748,13 +8105,21 @@ message DocsBandTab {
   bool current = 4;
 }
 
-// A pill over the list. `key` is what `SheetOpened` asks for; `label` is the
-// choice when one is set ("PDF") and the filter's name when none is ("Type").
+// A CHIP IN THE ROOM'S FILTER ROW (R-CHROME-3): Type, Modified, Label, then
+// "Clear filters" while a filter is set, then the sort LAST. `key` is what
+// `SheetOpened` asks for; `label` is the choice when one is set ("PDF") and
+// the filter's name when none is ("Type"); the sort's is the current order
+// ("Name · A to Z").
 message DocsPill {
   DocsSheet.Kind key = 1;
   string label = 2;
   bool active = 3;
   string accessibility_label = 4;
+  // Opens a sheet of choices (every filter and the sort): drawn with a chevron.
+  bool chevron = 5;
+  // The "Clear filters" chip: a tap sends `FiltersCleared`, not `SheetOpened`
+  // (its `key` is KIND_NONE).
+  bool clears = 6;
 }
 
 // OS grants the Add sheet's rows depend on.
@@ -8871,7 +9236,8 @@ message TallyHomeState {
 
 message TallyHomeChrome {
   string title = 1;
-  // The app bar's primary verb on every tab.
+  // The app bar's one trailing action on every tab, the Plus glyph's spoken
+  // words (R-CHROME-1).
   string add_expense = 2;
   string settle_up = 3;
   string retry = 4;
@@ -8883,10 +9249,14 @@ message TallyHomeChrome {
   repeated TallyFact reads_facts = 9;
   string home = 10;
   string show_more = 11;
+  // The search bar under the title (R-CHROME-2), "Search expense
+  // descriptions". It never opens in place: a tap sends `SearchOpened` and
+  // the shell pushes `tally.search`.
+  string search_placeholder = 12;
 }
 
 message TallyMoreRow {
-  // `settle`, `recurring`, `spending`, `search`, `export`, `trash`, `reads`.
+  // `settle`, `recurring`, `spending`, `export`, `trash`, `reads`.
   string key = 1;
   string label = 2;
   string meta = 3;
@@ -8968,6 +9338,8 @@ message TallyHomeEvent {
     ExpensePicked expense = 11;
     MorePicked more = 12;
     SettleUp settle_up = 13;
+    // The search bar: the shell pushes `tally.search`.
+    SearchOpened search_opened = 14;
   }
 
   // Lands on `destination` (Balances when unspecified).
@@ -9012,6 +9384,8 @@ message TallyHomeEvent {
   }
 
   message SettleUp {}
+
+  message SearchOpened {}
 }
 
 // --- tally.group ------------------------------------------------------------
@@ -9896,7 +10270,7 @@ message TallyExportState {
   // "Tally" (#1047).
   string parent = 9;
   Save save = 10;
-  // "Ledger exported", or the platform's refusal. EMPTY otherwise.
+  // "Expenses exported", or the platform's refusal. EMPTY otherwise.
   string status_label = 11;
   // THE CHOICE SHEET UP, if any (#1015 D4: choices sheet), as the editor's
   // `sheet`: the group's or the range's. A pick closes it.
@@ -10048,8 +10422,10 @@ message LockerLockState {
   // "Unlock with Face ID", "Unlock with fingerprint", "Unlock with passcode",
   // "Try again". Empty while UNLOCKING or UNAVAILABLE: no control to draw.
   string unlock_label = 5;
-  // What a session is (the handoff's facts table), in order.
-  repeated LockerFact facts = 6;
+  // 6 was `facts`, a table of how a session works drawn under the wall. The
+  // wall is a title, a sentence and a button; nobody reads a table to unlock.
+  reserved 6;
+  reserved "facts";
   // The sentence a FAILED or UNAVAILABLE phase says; empty otherwise.
   string notice = 7;
   // PRESENT EXACTLY WHEN THE OS PROMPT MUST BE RAISED NOW. A shell raises it
@@ -10149,6 +10525,10 @@ message LockerLockEvent {
     // can succeed.
     bool available = 1;
     LockerBiometry biometry = 2;
+    // The member just opened Locker (its tile), not a return to the
+    // foreground: a LOCKED wall raises the prompt at once, so opening Locker
+    // IS the ask. A cancel leaves the wall and its button.
+    bool entered = 3;
   }
 
   message UnlockTapped {}
@@ -10190,7 +10570,7 @@ message LockerLockEvent {
 // --- The shared parts -------------------------------------------------------
 
 message LockerBandTab {
-  // `items`, `review`, `generate`, `search`, `more` — what `BandPicked` sends.
+  // `items`, `review`, `generate`, `more` — what `BandPicked` sends.
   string key = 1;
   string label = 2;
   string icon_key = 3;
@@ -10234,7 +10614,7 @@ message LockerClipboard {
   bool sensitive = 4;
 }
 
-// --- locker.home: Items · Review · Generate · Search, More as a sheet -------
+// --- locker.home: Items · Review · Generate, More as a sheet; search the bar -
 
 message LockerHomeState {
   SeatState seat = 1;
@@ -10248,7 +10628,8 @@ message LockerHomeState {
     LockerHomeData data = 6;
   }
   Sheet sheet = 7;
-  // Five tabs in order; EMPTY while locked or denied.
+  // Four tabs in order — Items · Review · Generate · More (R-CHROME-5);
+  // EMPTY while locked or denied.
   repeated LockerBandTab band = 8;
   LockerHomeChrome chrome = 9;
   SearchField search = 10;
@@ -10260,6 +10641,8 @@ message LockerHomeState {
     DESTINATION_ITEMS = 1;
     DESTINATION_REVIEW = 2;
     DESTINATION_GENERATE = 3;
+    // Not a tab: the search bar's `SearchOpened` lands here, `SearchClosed`
+    // goes back to Items (R-CHROME-2).
     DESTINATION_SEARCH = 4;
   }
 
@@ -11147,12 +11530,12 @@ message VaultWordsState {
   // nothing back, so the machine never learns whether a copy was made. Empty
   // in every other phase.
   string save_label = 15;
-  // SHOW, on a platform that syncs: the checkbox that keeps the key in the
-  // platform's synced store ("Save my key in iCloud Keychain", "Back up my key
-  // with Google"), and whether it is ticked. Ticked by default; unticked keeps
-  // the key on this phone only. Empty label: draw no checkbox.
-  string sync_label = 16;
-  bool sync_on = 17;
+  // 16 and 17 were `sync_label` and `sync_on`, the checkbox that kept the key
+  // in the platform's synced store. It is gone (R-ONBOARD-10): the key goes to
+  // the synced store without asking, the words are shown only where it will
+  // not, and keeping it off the keychain is the Backup tab's.
+  reserved 16, 17;
+  reserved "sync_label", "sync_on";
   // CHOOSE: the checkbox that keeps this vault on its own 24 words
   // (R-1047-E18), sending `OwnToggled`; `own_on` is whether it is ticked.
   // Empty hides it.
@@ -11211,8 +11594,6 @@ message VaultWordsEvent {
     Dismissed dismissed = 5;
     // INTENT: the shell opens words.enter for PURPOSE_RESTORE.
     RestoreTapped restore = 6;
-    // The sync checkbox was tapped. SHOW only.
-    SyncToggled sync = 7;
     // The own-words checkbox was tapped. CHOOSE only.
     OwnToggled own = 8;
     // The name field changed. CHOOSE only.
@@ -11221,6 +11602,9 @@ message VaultWordsEvent {
 
   // 4 was `typed`, a word typed into the three-word check, which is gone.
   reserved 4;
+  // 7 was `sync`, the sync checkbox, which is gone (R-ONBOARD-10).
+  reserved 7;
+  reserved "sync";
 
   message Opened {}
 
@@ -11231,10 +11615,6 @@ message VaultWordsEvent {
   message Dismissed {}
 
   message RestoreTapped {}
-
-  message SyncToggled {
-    bool on = 1;
-  }
 
   message OwnToggled {
     bool on = 1;
@@ -11426,11 +11806,21 @@ message WordsShowState {
   string accessibility_label = 9;
   // ASK: the reason the owner check shows ("Show your 24 words").
   string verify_reason = 10;
+  // SHOW: "Save to a password manager", performed by the shell exactly as
+  // `VaultWordsState.save_label` is (the platform's share sheet, the words as
+  // one line). Empty in every other phase.
+  string save_label = 11;
+  // ASK, just opened: the shell runs the owner check NOW, with
+  // `verify_reason`, and presents nothing until it answers — the Backup tab's
+  // "Show recovery key" was already the ask, so there is no screen before
+  // the check. Every label is empty while this is set. False after a failed
+  // check, when ASK is drawn with its notice and a primary to try again.
+  bool check_now = 12;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
-    // "Your phone will check it's you." Primary runs the owner check (the
-    // view's), which answers `Verified` or `VerifyFailed`.
+    // The owner check, which the view runs and answers with `Verified` or
+    // `VerifyFailed`: at once while `check_now`, else from ASK's primary.
     PHASE_ASK = 1;
     // The words are being read from the store.
     PHASE_LOADING = 2;
@@ -11464,7 +11854,12 @@ message WordsShowEvent {
 
   message Verified {}
 
-  message VerifyFailed {}
+  // `cancelled`: the member dismissed the check themself, which closes the
+  // flow. Any other failure (no passcode set, too many tries) keeps ASK up
+  // and says why.
+  message VerifyFailed {
+    bool cancelled = 1;
+  }
 
   message Dismissed {}
 }
@@ -11495,7 +11890,8 @@ message PairLaptopState {
   // WAITING: what is in the paste field.
   string payload = 4;
   string payload_label = 5;
-  // WAITING: the scan control's label; empty when this phone has no camera.
+  // WAITING: "Scan the square", on every phone. `scan_camera` says what it
+  // opens: the camera, or — on a phone with none — the photo picker.
   string scan_label = 6;
   // 7 was `fingerprint`, the laptop's hex endpoint id in groups of eight:
   // a hex id is not what a member compares (W15-D5; R-1047-E12's grouped
@@ -11517,6 +11913,15 @@ message PairLaptopState {
   // words" — the intent `WordsTapped`, which the shell routes to words.enter
   // for PURPOSE_REKEY (Locker's wall's door). Empty otherwise.
   string words_label = 15;
+  // WAITING, on a phone with a camera: "Choose a photo", drawn on the
+  // camera screen for a screenshot of the square — the intent `PhotoTapped`.
+  // Empty without a camera, where Scan opens the photo picker itself. What
+  // the shell reads from a photo comes back as `Scanned`; a photo with no
+  // square in it as `PhotoUnread`.
+  string photo_label = 16;
+  // WAITING: true when Scan opens the camera, false when this phone has none
+  // and Scan opens the photo picker.
+  bool scan_camera = 17;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -11536,8 +11941,8 @@ message PairLaptopEvent {
   oneof kind {
     Opened opened = 1;
     PayloadTyped typed = 2;
-    // INTENT: the shell opens its camera; what it reads comes back as
-    // `Scanned`.
+    // INTENT: the shell opens its camera, or its photo picker when
+    // `scan_camera` is false; what it reads comes back as `Scanned`.
     ScanTapped scan = 3;
     Scanned scanned = 4;
     Primary primary = 5;
@@ -11546,11 +11951,16 @@ message PairLaptopEvent {
     // INTENT: the shell opens words.enter for PURPOSE_REKEY. The machine
     // closes the pairing screen; pairing is opened again after the words.
     WordsTapped words = 8;
+    // INTENT, from the camera screen: the shell opens its photo picker and
+    // reads the square out of the photo chosen; a code comes back as
+    // `Scanned`, none as `PhotoUnread`.
+    PhotoTapped photo = 9;
+    PhotoUnread unread = 10;
   }
 
   // `camera`: whether this phone has a camera the shell can scan with — a
-  // platform fact only the shell can read. Without one, `scan_label` is empty
-  // and the screen is paste-only.
+  // platform fact only the shell can read. Without one, Scan reads a photo
+  // (`scan_camera` false).
   message Opened {
     bool camera = 1;
   }
@@ -11573,6 +11983,12 @@ message PairLaptopEvent {
   message Dismissed {}
 
   message WordsTapped {}
+
+  message PhotoTapped {}
+
+  // The photo chosen held no square the shell could read. A member who
+  // backed out of the picker sends nothing.
+  message PhotoUnread {}
 }
 
 // ---------------------------------------------------------------------------
@@ -11637,6 +12053,10 @@ message BackupLine {
   string detail = 8;
   Tone tone = 9;
   string accessibility_label = 10;
+  // THE LINE IN A FEW WORDS, for the vault lockup's second line, where Home
+  // draws it (R-ONBOARD-11): "Backed up 2 minutes ago", "Not backed up".
+  // `sentence` is the Backup screen's.
+  string status = 11;
 
   enum Tone {
     TONE_UNSPECIFIED = 0;
@@ -11697,6 +12117,24 @@ message BackupScreenState {
   string background_notice = 20;
   Phase phase = 21;
 
+  // THE RECOVERY KEY (R-ONBOARD-10): where it is, in one sentence, under
+  // `key_heading`. Empty heading: this phone holds no key, and the section is
+  // not drawn.
+  string key_heading = 22;
+  string key_line = 23;
+  // The key is on this phone alone and the member has not said they saved a
+  // copy: `key_line` is a warning, drawn as one, and "Show recovery key" is
+  // the section's primary control.
+  bool key_warning = 24;
+  // "Show recovery key": the shell opens `words.show` on `ShowKey`. Empty when
+  // this phone has no words to show (its key came through the keychain).
+  string key_show_label = 25;
+  // "Keep my key off iCloud Keychain" while `key_synced`, "Save my key in
+  // iCloud Keychain" while not; the shell sends `SetKeySync{on: !key_synced}`.
+  // Empty where the platform will not synchronise.
+  string key_sync_label = 26;
+  bool key_synced = 27;
+
   enum Phase {
     PHASE_UNSPECIFIED = 0;
     PHASE_LOADING = 1;
@@ -11714,11 +12152,21 @@ message BackupScreenEvent {
     // holds, and pairing again undoes it.
     ForgetDestination forget_destination = 4;
     Dismissed dismissed = 5;
+    // INTENT: the shell opens `words.show`.
+    ShowKey show_key = 6;
+    // Move the recovery key into the keychain, or out of it.
+    SetKeySync set_key_sync = 7;
   }
 
   message Opened {}
 
   message BackUpNow {}
+
+  message ShowKey {}
+
+  message SetKeySync {
+    bool on = 1;
+  }
 
   message SetIncludeVideos {
     bool include = 1;
@@ -11735,7 +12183,7 @@ message BackupScreenEvent {
 // --- Chat: the on-device assistant ---
 // ---------------------------------------------------------------------------
 //
-// `chat`. A tab on the bottom bar (Home · Chat · More), not an app: it has no
+// `chat`. A tab on the bottom bar (Home · Chat · Backup), not an app: it has no
 // tile and no route of its own, and a chat opened from an app is the same
 // screen with `scope_app` set. The model runs ON THIS PHONE over the core's
 // `Request::Assist` (`assist.proto`). It reads; and a write it proposes is a

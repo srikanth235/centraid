@@ -98,7 +98,7 @@ public object NotesReads :
     override fun arrived(rows: List<Row>, nextCursor: String?): NotesEditorEvent {
         val row = rows.firstOrNull()
             ?: return refused(
-                Reads.refused("Centraid could not find this note on this device."),
+                Reads.refused("This note isn't on this phone."),
             )
         val (body, bodyUnavailable) = row.noteBody()
         return NotesEditorEvent(

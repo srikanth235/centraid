@@ -64,6 +64,10 @@ public object PairLaptopMachine {
                 PairStep(render(model.copy(phase = PairLaptopState.Phase.PHASE_WAITING, payload = event.typed.text, notice = "")))
             // A SCAN IS A DELIBERATE ACT: it pairs at once.
             event.scanned != null && waiting -> pair(model.copy(payload = event.scanned.payload))
+            // A PHOTO WITH NO SQUARE spends nothing: the field keeps what was
+            // typed and the sentence says what to do instead.
+            event.unread != null && waiting ->
+                PairStep(render(model.copy(phase = PairLaptopState.Phase.PHASE_WAITING, notice = CustodyCopy.PAIR_PHOTO_UNREAD)))
             event.primary != null -> when (model.phase) {
                 PairLaptopState.Phase.PHASE_WAITING, PairLaptopState.Phase.PHASE_FAILED -> pair(model)
                 PairLaptopState.Phase.PHASE_PAIRED,
@@ -77,7 +81,8 @@ public object PairLaptopMachine {
             // heard only where the door was drawn.
             event.words != null && model.phase == PairLaptopState.Phase.PHASE_NEEDS_WORDS && model.rekey ->
                 PairStep(closed())
-            // `scan` IS AN INTENT: the shell opens its camera.
+            // `scan` and `photo` ARE INTENTS: the shell opens its camera or
+            // its photo picker.
             else -> PairStep(model)
         }
     }
@@ -191,8 +196,12 @@ public object PairLaptopMachine {
                 body = body,
                 payload = if (entering) model.payload else "",
                 payload_label = if (entering) CustodyCopy.PAIR_PASTE_LABEL else "",
-                // NO CAMERA, NO SCAN CONTROL: the shell said so on Opened.
-                scan_label = if (entering && model.camera) CustodyCopy.PAIR_SCAN else "",
+                // ONE SCAN, ON EVERY PHONE: with a camera it opens the camera,
+                // which offers a photo too; without one (the simulator), the
+                // photo picker — a screenshot of the square is still a scan.
+                scan_label = if (entering) CustodyCopy.PAIR_SCAN else "",
+                scan_camera = entering && model.camera,
+                photo_label = if (entering && model.camera) CustodyCopy.PAIR_PHOTO else "",
                 safety_number = if (phase == PairLaptopState.Phase.PHASE_PAIRED && answer != null) {
                     answer.safetyNumber
                 } else {
@@ -317,10 +326,13 @@ public class PairLaptopFlow(
  * A shell presents it from the More sheet's pairing row and:
  *
  * 1. calls [attach] with the session, then [open] with whether the phone has
- *    a camera (without one `scan_label` is empty and the screen is paste-only);
+ *    a camera (without one, Scan opens the photo picker);
  * 2. draws every state: `payload` in a paste field (`PayloadTyped` on every
- *    change), `scan_label` as a camera control (`ScanTapped` is an intent;
- *    the shell's camera sends `Scanned` with what it read), `safety_number`
+ *    change), `scan_label` as the scan control (`ScanTapped` is an intent:
+ *    the shell opens its camera, or its photo picker when `scan_camera` is
+ *    false, and sends `Scanned` with what it read), `photo_label` on the
+ *    camera screen (`PhotoTapped` is an intent; a photo read sends `Scanned`,
+ *    or `PhotoUnread` when it holds no square), `safety_number`
  *    in a monospaced face in its groups, `progress` with a spinner, and
  *    `words_label` as a control;
  * 3. forwards `Primary`, `Secondary`, `Dismissed` and `WordsTapped` — the last
@@ -343,9 +355,7 @@ public class PairLaptopBridge {
             },
             door = {
                 val open = session
-                // THE HOLDING'S OWN CORE, never `Shelf.core()`: that answers the
-                // example while a preview is open, and a pairing is the member's.
-                if (open?.shelf?.foregroundHolding() == null) null else CorePairDoor({ open.shelf.memberCore() })
+                if (open?.shelf?.foregroundHolding() == null) null else CorePairDoor({ open.shelf.core() })
             },
             after = { session?.backupStatus?.refreshForeground() },
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),

@@ -1,110 +1,102 @@
 # Onboarding without sample data (docs/decisions.md, "Onboarding without sample
 # data"): a fresh install makes ONE vault — the member's, with its teaching
-# starter rows — and every empty app offers "See an example", a read-only
-# preview that leaves nothing behind.
+# starter rows — and every empty app is a tile that opens on its own day one.
 #
-# THE POINT OF THIS FLOW is what the shared specs cannot see: that the switcher
-# lists one vault and no "Sample", that Notes opens on the starter rows, that
-# an empty app's "See an example" draws a full app under the banner and its one
-# exit lands back on the empty state, and that People offers the phone's
-# contacts at the point of use (the OS prompt itself is not tapped here).
+# THE POINT OF THIS FLOW is what the shared specs cannot see: that Get started
+# lands on Home with one vault, that Notes and Tasks open on the starter rows,
+# that an empty app opens on its own empty state with nothing borrowed, and
+# that People offers the phone's contacts at the point of use (the OS prompt
+# itself is not tapped here).
 #
-# A FRESH INSTALL WITH NO WORDS HELD. `clearState` does not clear the
-# simulator keychain, and a phone that already holds a seed skips the words
-# and the check (it makes the next vault from the seed it has). Reset it first:
+# THE RECOVERY KEY (R-1047-E15, R-ONBOARD-10). Where the keychain synchronises,
+# Get started keeps the key without showing it and goes straight to Home.
+# Elsewhere — the simulator, signed out of iCloud — the key shows once and
+# "I've saved it" founds the vault. There is no framing screen and no word
+# check, so the flow answers the one screen when it appears and nothing else.
+#
+# A FRESH INSTALL WITH NO KEY HELD. `clearState` does not clear the simulator
+# keychain, and a phone that already holds a seed makes the next vault from it
+# without showing anything. Reset it first:
 #   xcrun simctl keychain <udid> reset
-# The check asks for three random positions, so the flow reads all 24 words
-# off the screen and answers from them.
 appId: dev.centraid.Centraid
 name: onboarding
 ---
+# EVERY GRANT DENIED. Maestro grants all by default, and a made vault asks for
+# what the phone holds — the camera roll, contacts, the calendar (R-ONBOARD-8)
+# — and imports what it is given: People would not be empty and the flow
+# would test a returning phone. Denied, nothing is asked and nothing comes in.
 - launchApp:
     clearState: true
+    permissions:
+      all: deny
 - assertVisible:
     id: "first-launch"
 - tapOn:
     id: "first-launch-skip"
 - tapOn:
     id: "first-launch-primary"
-# "Before your words" -> the 24 words.
-- tapOn:
-    id: "words-make-primary"
-- assertVisible: "Your 24 words"
-# READ THE WORDS. Each cell's text is "Word <n>, <word>".
-- evalScript: ${output.words = {}; output.i = 0}
-- repeat:
-    times: 24
+
+# THE KEY, SHOWN ONCE where it stays on this phone alone.
+- runFlow:
+    when:
+      visible:
+        id: "words-shown"
     commands:
-      - copyTextFrom:
-          id: "words-shown"
-          index: ${output.i}
-      - evalScript: ${var m = maestro.copiedText.match(/Word (\d+), (\S+)/); output.words[m[1]] = m[2]; output.i = output.i + 1}
-- tapOn:
-    id: "words-make-primary"
-# THE CHECK: "Type words 6, 12, 15 from what you wrote down."
-- copyTextFrom: "Type words.*"
-- evalScript: ${var p = maestro.copiedText.match(/\d+/g); output.p1 = p[0]; output.p2 = p[1]; output.p3 = p[2]}
-- tapOn:
-    id: "words-ask-${output.p1}"
-- inputText: ${output.words[output.p1]}
-- tapOn:
-    id: "words-ask-${output.p2}"
-- inputText: ${output.words[output.p2]}
-- tapOn:
-    id: "words-ask-${output.p3}"
-- inputText: ${output.words[output.p3]}
-- tapOn:
-    id: "words-make-primary"
-- extendedWaitUntil:
-    visible: "Your vault is ready"
-    timeout: 30000
-- tapOn:
-    id: "words-make-primary"
+      - assertVisible:
+          id: "words-save-copy"
+      - tapOn:
+          id: "words-make-primary"
 
-# ONE VAULT, THE MEMBER'S. No sample beside it, so the switcher has one row.
-- extendedWaitUntil:
-    visible: "My vault"
-    timeout: 30000
-- assertVisible:
-    id: "home-backup-line"
-
-# THE TEACHING STARTERS are the member's own notes and tasks, on Home.
-- assertVisible: "Link with [["
-- assertVisible: "Tap the circle to.*"
-
-# AN EMPTY APP OFFERS THE EXAMPLE, and the example is a full app. An empty
-# app earns no tile, so Docs is reached through its first move.
-- tapOn: "File a document"
-- extendedWaitUntil:
-    visible: "See an example"
-    timeout: 10000
-- tapOn: "See an example"
+# ONE VAULT, THE MEMBER'S. No sample beside it. (The lockup reads as one
+# element, "My vault, Not backed up", so it is selected by id.)
 - extendedWaitUntil:
     visible:
-      id: "example-banner"
+      id: "home-grid"
     timeout: 30000
-- assertVisible: "Example — not your data"
-- extendedWaitUntil:
-    visible: "Tahoe packing list"
-    timeout: 10000
+- assertVisible:
+    id: "home-vault-switch"
+# THE LOCKUP'S SECOND LINE IS THE BACKUP'S STATUS (R-ONBOARD-11).
+- assertVisible:
+    id: "home-backup-status"
 
-# ITS ONE EXIT lands back on the member's empty Docs: nothing came with it.
+# THE TEACHING STARTERS are the member's own notes and tasks, on Home
+# (`crates/core/src/starters.rs`).
+- assertVisible: "Link with \\[\\[.*"
+- assertVisible: "Tap the circle to.*"
+
+# AN EMPTY APP IS STILL A TILE, one tap from Home, and opens on its own day
+# one: its add, and no example (R-ONBOARD-12).
+- scrollUntilVisible:
+    element:
+      id: "home-tile-docs"
+    direction: UP
 - tapOn:
-    id: "example-done"
+    id: "home-tile-docs"
 - extendedWaitUntil:
-    notVisible:
-      id: "example-banner"
+    visible:
+      id: "kit-empty"
     timeout: 10000
-- extendedWaitUntil:
-    visible: "See an example"
-    timeout: 10000
-- assertNotVisible: "Tahoe packing list"
-- back
+- assertNotVisible: "See an example"
+# Back: the navigation bar's on iOS (`back` is Android's system key only).
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          id: "BackButton"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
 
 # PEOPLE OFFERS THE PHONE'S CONTACTS in place of its add, at the point of use.
-- tapOn: "All apps"
-- tapOn: "People"
+- scrollUntilVisible:
+    element:
+      id: "home-tile-people"
+- tapOn:
+    id: "home-tile-people"
 - extendedWaitUntil:
-    visible: "Import contacts"
+    visible:
+      id: "kit-empty-import"
     timeout: 10000
-- assertVisible: "See an example"

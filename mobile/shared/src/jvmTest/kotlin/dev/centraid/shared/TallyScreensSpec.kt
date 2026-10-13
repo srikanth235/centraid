@@ -131,8 +131,20 @@ class TallyScreensSpec : StringSpec({
         val more = TallyHomeMachine.reduce(groups.state, view(TallyHomeEvent(band = TallyHomeEvent.BandPicked(key = "more"))))
         more.state.screen.sheet shouldBe TallyHomeState.Sheet.SHEET_MORE
         more.state.screen.band.single { it.current }.key shouldBe "more"
+        // SEARCH IS THE BAR UNDER THE TITLE, never a More row (R-CHROME-2).
         more.state.screen.chrome?.more_rows?.map { it.key } shouldBe
-            listOf("settle", "recurring", "spending", "search", "export", "trash", "reads")
+            listOf("settle", "recurring", "spending", "export", "trash", "reads")
+        more.state.screen.band.last().icon_key shouldBe "MoreHoriz"
+    }
+
+    "the search bar is a door: it reads Tally's placeholder and its tap changes nothing here" {
+        val home = answered(TallyHomeMachine, open(TallyHomeMachine, TallyHomeEvent(opened = TallyHomeEvent.Opened())), dashboard())
+        home.screen.chrome?.search_placeholder shouldBe "Search expense descriptions"
+        home.screen.chrome?.add_expense shouldBe "Add expense"
+        // The shell pushes `tally.search`; the machine neither reads nor moves.
+        val opened = TallyHomeMachine.reduce(home, view(TallyHomeEvent(search_opened = TallyHomeEvent.SearchOpened())))
+        opened.state shouldBe home
+        opened.effects.shouldBeEmpty()
     }
 
     "Activity draws a window, and Show more widens it without a read" {

@@ -29,12 +29,12 @@ public sealed interface CoreFailure {
      * than carrying on over state nobody can vouch for.
      */
     public data class Poisoned(val diagnosticId: String) : CoreFailure {
-        override val sentence: String = "Centraid hit a problem and restarted."
+        override val sentence: String = "Something went wrong. Centraid restarted."
     }
 
     /** The binding handed the ABI something impossible. Always a shell bug. */
     public data class BadArgument(val detail: String) : CoreFailure {
-        override val sentence: String = "Centraid could not read its own request."
+        override val sentence: String = "Something went wrong. Restart Centraid."
 
         public companion object {
             /**
@@ -58,7 +58,7 @@ public sealed interface CoreFailure {
 
     /** The bytes were not a decodable envelope, in either direction. */
     public data class Malformed(val detail: String) : CoreFailure {
-        override val sentence: String = "Centraid could not read the answer."
+        override val sentence: String = "Couldn't read the answer. Try again."
     }
 
     /**
@@ -91,7 +91,7 @@ public sealed interface CoreFailure {
         val reportedDigest: String,
         val detail: String,
     ) : CoreFailure {
-        override val sentence: String = "This copy of Centraid is out of step with itself."
+        override val sentence: String = "Centraid is out of step with itself. Update it."
     }
 
     /**
@@ -100,12 +100,12 @@ public sealed interface CoreFailure {
      * as "the core is closed" would send a developer looking at lifecycles.
      */
     public data class LibraryMissing(val detail: String) : CoreFailure {
-        override val sentence: String = "Centraid's engine is missing from this build."
+        override val sentence: String = "Centraid's engine is missing. Reinstall it."
     }
 
     /** A status code this build does not define. See [CoreStatus.of]. */
     public data class UnknownStatus(val code: Int) : CoreFailure {
-        override val sentence: String = "Centraid answered in a way this version does not know."
+        override val sentence: String = "Unrecognized reply. Update Centraid."
     }
 }
 

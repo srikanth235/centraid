@@ -87,20 +87,6 @@ pub enum CoreError {
         moved_at_ms: i64,
     },
 
-    /// THIS IS AN EXAMPLE, AND AN EXAMPLE ONLY SHOWS.
-    ///
-    /// A core opened as an example (`CoreConfig::example`) is an ephemeral,
-    /// unkeyed copy of the Tahoe scenario the shell deletes when the member
-    /// leaves it (`crate::example`). It answers reads and its one found; a
-    /// write would be a row the member believes they kept, a backup door would
-    /// put the scenario behind their gateway, and the chat would index rows
-    /// that are not theirs — so the core refuses all of them, and the shell's
-    /// hidden doors are not the only guard. `INVALID_REQUEST`, because asking
-    /// is the mistake: nothing about the example's state would make the same
-    /// request right later.
-    #[error("this is an example, and an example does not {what}")]
-    Example { what: &'static str },
-
     /// The request itself is wrong: a zero limit, a cursor with a non-decimal
     /// seq, a page query with no order column. Not the state.
     #[error("invalid request: {detail}")]
@@ -181,10 +167,9 @@ impl CoreError {
             Self::VaultMoved { .. } => ErrorCode::VaultMoved,
             Self::Unpaired => ErrorCode::RebootstrapRequired,
             Self::VaultAlreadyHeld { .. } => ErrorCode::VaultAlreadyHeld,
-            Self::InvalidRequest { .. }
-            | Self::NotCancellable { .. }
-            | Self::Decode(_)
-            | Self::Example { .. } => ErrorCode::InvalidRequest,
+            Self::InvalidRequest { .. } | Self::NotCancellable { .. } | Self::Decode(_) => {
+                ErrorCode::InvalidRequest
+            }
             Self::Unsupported { .. } => ErrorCode::UnsupportedMessage,
             Self::ReadBoundReached { .. } => ErrorCode::ReadBoundReached,
             Self::NotYetAvailable { .. } => ErrorCode::NotYetAvailable,
@@ -265,95 +250,49 @@ impl CoreError {
 pub fn sentence_for_code(code: ErrorCode) -> &'static str {
     use ErrorCode as C;
     match code {
-        C::Unspecified => "Something went wrong and this build could not say what.",
-        C::Unauthorized => {
-            "This device is not enrolled on that vault, or its access was withdrawn."
-        }
-        C::VersionWindow => {
-            "This app and that gateway are too far apart in version to talk. Update the one the \
-             diagnostics screen names."
-        }
-        C::MalformedFrame => {
-            "The connection carried something this build could not read, so it was closed."
-        }
-        C::UnsupportedMessage => "That is something this build does not know how to do.",
-        C::NoRelayReachable => {
-            "No route to the gateway was found. Check the network at either end."
-        }
-        C::PeerUnreachable => "The gateway did not answer.",
-        C::Timeout => "That took too long and was given up on rather than left hanging.",
+        C::Unspecified => "Something went wrong. Try again.",
+        C::Unauthorized => "This phone no longer has access.",
+        C::VersionWindow => "Centraid and the backup device are out of step. Update the older one.",
+        C::MalformedFrame => "The connection sent something unreadable and was closed.",
+        C::UnsupportedMessage => "This version of Centraid can't do that.",
+        C::NoRelayReachable => "Can't reach your backup device. Check the network.",
+        C::PeerUnreachable => "Your backup device didn't answer.",
+        C::Timeout => "Timed out. Try again.",
         C::Cancelled => "Cancelled.",
-        C::RebootstrapRequired => {
-            "This device has to take a fresh copy of the vault before it can catch up."
-        }
-        C::InvalidRequest => {
-            "That request does not make sense to this build, and nothing was changed."
-        }
-        C::SnapshotUnavailable => "The gateway has nowhere to build a copy of the vault right now.",
-        // NOTHING WAS LOST AND NOTHING IS BROKEN, and the sentence says the
-        // true reason no part of the answer is shown: a part would read as the
-        // whole (#1046, D-1020-D3-12).
-        C::ReadBoundReached => {
-            "There is more here than one look can gather, so none of it was shown rather than \
-             part of it. Try a shorter range."
-        }
-        // THE VAULT ALREADY HERE IS THE ONE THIS PROTECTS, and the sentence
-        // says so rather than naming a file: the member's vault is intact,
-        // which is the fact they need. Mobile rarely renders it — `Shelf.found`
-        // founds into a fresh file every time — so this is the sentence for the
-        // caller that got there another way (#1025 S7-9, #1029 W5).
-        C::VaultAlreadyHeld => {
-            "There is already a vault in that file, so it was left alone. Make a new one."
-        }
-        C::IntentHashMismatch => {
-            "That request does not match what was submitted with it, so it was not run."
-        }
-        C::IntentIdReused => {
-            "That request was already answered once, with different contents. Start it again."
-        }
-        C::IntentOutcomeExpired => {
-            "The answer to that request is too old to reuse. Send it again as a new one."
-        }
-        C::ReadSetIncomplete => {
-            "That change did not declare everything it reads, so it was refused rather than run \
-             on a guess."
-        }
-        C::Denied => "That is not allowed for this app.",
-        // RETRYABLE, and the sentence says the device is still working rather
-        // than that anything went wrong: the write is in the queue, its bytes
-        // are on this phone, and the next window carries them (#1025 S3).
-        C::BytesNotYetHeld => "That file has not finished sending yet.",
-        C::DowngradeRefused => {
-            "This vault was written by a newer version of Centraid. Update this one rather than \
-             risk the file."
-        }
-        C::UpgradeRequired => "This vault needs an upgrade this version does not carry.",
-        C::NotYetAvailable => "That part is not built yet.",
-        C::Internal => {
-            "Centraid hit a problem of its own and stopped rather than carry on. Restarting it is \
-             safe."
-        }
+        C::RebootstrapRequired => "This phone needs a fresh copy of the vault to catch up.",
+        C::InvalidRequest => "That request wasn't valid.",
+        C::SnapshotUnavailable => "The backup device can't copy the vault right now.",
+        // The sentence says the true reason no part of the answer is shown: a
+        // part would read as the whole (#1046, D-1020-D3-12).
+        C::ReadBoundReached => "Too much to show at once. Try a shorter range.",
+        // The member's vault is intact, which is the fact they need. Mobile
+        // rarely renders it — `Shelf.found` founds into a fresh file every
+        // time (#1025 S7-9, #1029 W5).
+        C::VaultAlreadyHeld => "That file already holds a vault. Make a new one.",
+        C::IntentHashMismatch => "That request didn't match what was sent, so it didn't run.",
+        C::IntentIdReused => "That request was already answered differently. Start it again.",
+        C::IntentOutcomeExpired => "That answer is too old to reuse. Send the request again.",
+        C::ReadSetIncomplete => "That change didn't list everything it reads, so it didn't run.",
+        C::Denied => "This app isn't allowed to do that.",
+        // RETRYABLE: the write is queued and its bytes are on this phone; the
+        // next window carries them (#1025 S3).
+        C::BytesNotYetHeld => "That file hasn't finished sending.",
+        C::DowngradeRefused => "A newer Centraid wrote this vault. Update Centraid.",
+        C::UpgradeRequired => "This vault needs a newer Centraid.",
+        C::NotYetAvailable => "Not available yet.",
+        C::Internal => "Something went wrong. Restart Centraid.",
 
         // --- the gateway (#1029 §3) ---
         //
-        // Every sentence here is written for somebody whose backup did not go
-        // through, and none of them names a key, a hash or an object: those are
-        // 64 hex characters and mean nothing to a member. Several say the
-        // reassuring thing FIRST, because the true fact in most of these is
-        // that nothing was lost.
+        // Written for somebody whose backup did not go through, and none of
+        // them names a key, a hash or an object: those mean nothing to a member.
 
         // THE ONE WITH A BEHAVIOUR ATTACHED. The phone freezes this vault
-        // read-only and keeps its unacked spool, so the sentence has to make
-        // the freeze make sense — and it has to say the changes are still
-        // there, because they are and they are the only thing at stake. And
-        // it names the way back, since pairing again is refused the same way
-        // (`phone::pair`'s "superseded"): a restore starts from the gateway's
-        // head, never from this phone's older copy.
-        C::VaultMoved => {
-            "This vault has moved to another phone. It is read-only here, and any changes made on \
-             this phone since then are still on it. To make this phone its writer again, restore \
-             the vault from your 24 words."
-        }
+        // read-only and keeps its unacked spool, and the sentence names the way
+        // back: pairing again is refused the same way (`phone::pair`'s
+        // "superseded"), so a restore starts from the gateway's head, never from
+        // this phone's older copy.
+        C::VaultMoved => "This vault moved to another phone. Restore it here to keep writing.",
     }
 }
 

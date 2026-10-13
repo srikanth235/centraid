@@ -110,9 +110,8 @@ public object VaultRoster {
         /**
          * What the core fills the new vault with (`vault.proto`'s
          * `FoundContent`): nothing beyond what founding always writes (the
-         * default, `FOUND_CONTENT_UNSPECIFIED`), the teaching starter rows in a
-         * member's first vault, or — only on a core opened as an example
-         * ([ExamplePreview]) — the example scenario.
+         * default, `FOUND_CONTENT_UNSPECIFIED`) or the teaching starter rows in
+         * a member's first vault.
          */
         content: FoundContent = FoundContent.FOUND_CONTENT_UNSPECIFIED,
         /**

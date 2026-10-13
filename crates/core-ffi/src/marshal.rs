@@ -154,14 +154,6 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         // is bounded by its free space and 2 GiB, and a smaller ceiling is a
         // drill's (`CoreConfig::with_spool_ceiling`).
         spool_ceiling: None,
-        // AN EXAMPLE CORE, for "See an example" (`CoreConfig::example`).
-        // Absent — or anything but `true` — is a member's core: the one flag
-        // that narrows a core to reads must be asked for by name, never
-        // inferred. `Core::open` refuses it beside a `vault` seed.
-        example: parsed
-            .get("example")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false),
     };
     // DEFAULTS TO CREATING, because a shell that named a path and said nothing
     // else is founding a vault there — which is what the phone does now
@@ -325,29 +317,6 @@ mod tests {
                 .create,
             "a shell waiting on a restore must not be handed an empty vault"
         );
-    }
-
-    /// `example` CROSSES THE ABI, and only a literal `true` opens an example
-    /// (`CoreConfig::example`). Absent, `false` or a non-boolean is a member's
-    /// core: the flag that narrows a core to reads is asked for by name.
-    #[test]
-    fn an_example_is_opened_only_when_the_shell_says_so() {
-        let member = config_from_json(br#"{"path":"/tmp/v.db"}"#).expect("parses");
-        assert!(!member.example, "absent is a member's core");
-        let example = config_from_json(br#"{"path":"/tmp/e.db","example":true}"#).expect("parses");
-        assert!(example.example);
-        assert!(example.seed.is_none());
-        for not_an_example in [
-            br#"{"path":"/tmp/v.db","example":false}"#.as_slice(),
-            br#"{"path":"/tmp/v.db","example":"true"}"#.as_slice(),
-            br#"{"path":"/tmp/v.db","example":1}"#.as_slice(),
-        ] {
-            assert!(
-                !config_from_json(not_an_example).expect("parses").example,
-                "{}",
-                String::from_utf8_lossy(not_an_example)
-            );
-        }
     }
 
     /// A `role` A SHELL STILL SENDS IS IGNORED, NOT REFUSED (#1029 §1).

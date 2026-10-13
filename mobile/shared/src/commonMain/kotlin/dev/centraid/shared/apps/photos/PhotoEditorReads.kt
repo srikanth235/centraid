@@ -107,7 +107,7 @@ public object PhotoEditorReads {
 
     /** AN EMPTY PAGE IS A PHOTOGRAPH THAT IS NOT HERE, never an empty editor. */
     public fun missing(): PhotoEditorEvent =
-        refused(Reads.refused("Centraid could not find this photograph on this device."))
+        refused(Reads.refused("Centraid could not find this photo on this phone."))
 
     public fun refused(failure: ReadFailure): PhotoEditorEvent =
         PhotoEditorEvent(refused = PhotoEditorEvent.ReadRefused(failure = failure))

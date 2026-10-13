@@ -62,9 +62,8 @@ message FoundRequest {
 //
 // Onboarding's goal is time to the member's OWN data, so nothing a found
 // writes is fake data the member has to clean up later: a member's first vault
-// gets a few teaching starter rows that are ordinary rows of theirs, and the
-// example scenario lands only in an EPHEMERAL core opened as an example
-// (`CoreConfig::example`), never on the shelf, never keyed and never backed up.
+// gets a few teaching starter rows that are ordinary rows of theirs, and no
+// found writes a sample scenario.
 enum FoundContent {
   // A found that names no content: it gets what founding always writes and
   // nothing else — the vault row, the owner, the relation vocabulary and the
@@ -76,17 +75,15 @@ enum FoundContent {
   // doing it. Ordinary member rows with no mark. Best-effort: a refused
   // starter row leaves the vault founded rather than refusing it.
   FOUND_CONTENT_STARTERS = 1;
-  // THE EXAMPLE: the Tahoe scenario across seven apps (agenda, docs, notes,
-  // people, photos, tally, tasks) and no Locker, for "See an example". Answered
-  // ONLY by a core opened as an example, which is unkeyed and refuses every
-  // write and every backup door after the found; any other core refuses it, so
-  // the scenario can never land in a member's vault. Any refusal fails the
-  // found, and the shell deletes the ephemeral directory.
-  FOUND_CONTENT_EXAMPLE = 3;
   // `FOUND_CONTENT_SAMPLE`, the separate sample vault on the member's shelf,
   // retired with it (docs/decisions.md, "Onboarding without sample data").
   reserved 2;
   reserved "FOUND_CONTENT_SAMPLE";
+  // `FOUND_CONTENT_EXAMPLE`, the Tahoe scenario founded into an ephemeral
+  // example core for "See an example", retired with that preview. A core that
+  // receives 3 refuses it as a content this build does not know.
+  reserved 3;
+  reserved "FOUND_CONTENT_EXAMPLE";
 }
 
 // The vault that now exists in this file.

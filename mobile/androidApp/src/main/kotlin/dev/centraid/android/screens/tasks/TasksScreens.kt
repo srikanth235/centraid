@@ -8,7 +8,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.SearchField
 import centraid.screen.v1.SectionHead
@@ -56,18 +58,21 @@ internal fun TasksHomeScreen(
 ) {
     val chrome = state.chrome
     val data = state.data_
-    val tabs = state.band.filter { it.key != "more" }
-    val hasMore = state.band.any { it.key == "more" }
+    val tabs = state.band
+    // THE PLUS PUTS THE KEYBOARD IN THE QUICK ADD (R-CHROME-1): the bar at the
+    // foot stays the one place a task is typed; the header's Plus is its door.
+    val quickAddFocus = remember { FocusRequester() }
+    val quickAdd = state.quick_add
     AppPlace(
         app = "tasks",
         title = chrome?.title.orEmpty(),
         meta = data?.count_label.orEmpty(),
-        trailing = if (state.denied == null && chrome != null) {
-            RoomAction("Search", chrome.search_label, "tasks-search") { onEvent(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened())) }
+        trailing = if (quickAdd != null && quickAdd.shown && quickAdd.add_label.isNotEmpty()) {
+            RoomAction("Plus", quickAdd.add_label, "tasks-add") { runCatching { quickAddFocus.requestFocus() } }
         } else {
             null
         },
-        search = if (chrome != null) {
+        search = if (state.denied == null && chrome != null) {
             RoomSearch(
                 field = state.search ?: SearchField(),
                 placeholder = chrome.search_placeholder,
@@ -75,6 +80,7 @@ internal fun TasksHomeScreen(
                 onClose = { onEvent(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())) },
                 label = chrome.search_label,
                 closeLabel = chrome.search_close,
+                onOpen = { onEvent(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened())) },
             )
         } else {
             null
@@ -88,7 +94,6 @@ internal fun TasksHomeScreen(
                     tabs = tabs.map { AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current) },
                     onSelect = { key -> onEvent(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = key))) },
                     onHome = onHome,
-                    onMore = if (hasMore) ({ onEvent(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = "more"))) }) else null,
                 )
             }
         },
@@ -155,6 +160,7 @@ internal fun TasksHomeScreen(
                 verb = chrome?.quick_add_verb.orEmpty(),
                 onChange = { onEvent(TasksHomeEvent(quick_add_changed = TasksHomeEvent.QuickAddChanged(title = it))) },
                 onSubmit = { onEvent(TasksHomeEvent(quick_add_submitted = TasksHomeEvent.QuickAddSubmitted())) },
+                focus = quickAddFocus,
             )
         }
     }
@@ -183,10 +189,8 @@ private fun TasksHomeSheets(state: TasksHomeState, onEvent: (TasksHomeEvent) -> 
         TasksHomeState.Sheet.SHEET_NEW_PROJECT -> SheetRoom(
             title = chrome.new_project_title,
             onDismiss = close,
-            primary = if (state.new_project_can_submit) {
-                SheetPrimary(chrome.new_project_verb) { onEvent(TasksHomeEvent(new_project_submitted = TasksHomeEvent.NewProjectSubmitted())) }
-            } else {
-                null
+            primary = SheetPrimary(chrome.new_project_verb, enabled = state.new_project_can_submit) {
+                onEvent(TasksHomeEvent(new_project_submitted = TasksHomeEvent.NewProjectSubmitted()))
             },
         ) {
             EditableFieldRow(
@@ -308,10 +312,8 @@ internal fun TasksProjectScreen(state: TasksProjectState, onEvent: (TasksProject
         SheetRoom(
             title = chrome.add_section_title,
             onDismiss = { onEvent(TasksProjectEvent(sheet_closed = TasksProjectEvent.SheetClosed())) },
-            primary = if (state.new_section_can_submit) {
-                SheetPrimary(chrome.add_section_verb) { onEvent(TasksProjectEvent(section_submitted = TasksProjectEvent.SectionSubmitted())) }
-            } else {
-                null
+            primary = SheetPrimary(chrome.add_section_verb, enabled = state.new_section_can_submit) {
+                onEvent(TasksProjectEvent(section_submitted = TasksProjectEvent.SectionSubmitted()))
             },
         ) {
             EditableFieldRow(

@@ -138,7 +138,7 @@ public object ContactsImport {
 /**
  * WHAT SWIFTUI HOLDS FOR THE IMPORT: the shell reads the address book and
  * hands the contacts here; Android calls [ContactsImport] from its own scope.
- * Writes go to the member's foreground vault, never to a preview's example.
+ * Writes go to the member's foreground vault.
  */
 public class ContactsImportBridge {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -150,7 +150,7 @@ public class ContactsImportBridge {
 
     /** Import [contacts]; [onDone] is handed the sentence to show. */
     public fun run(contacts: List<PhoneContact>, onDone: (String) -> Unit) {
-        val core = session?.shelf?.memberCore() ?: return onDone(PeopleCopy.IMPORT_CONTACTS_NO_VAULT)
+        val core = session?.shelf?.core() ?: return onDone(PeopleCopy.IMPORT_CONTACTS_NO_VAULT)
         scope.launch { onDone(ContactsImport.sentence(ContactsImport.run(core, contacts))) }
     }
 }

@@ -1243,3 +1243,30 @@ fn empty_document_trash_states_that_it_destroys() {
     assert!(description.contains("destroyed"), "{description}");
     assert!(!description.contains("not yet"), "{description}");
 }
+
+/// THE SWITCHER'S RENAME: `core.rename_vault` writes the one row a vault's
+/// name lives in, trims what surrounds it, and refuses a name that is nothing
+/// but space (or past sixty characters) by predicate, leaving the name alone.
+#[test]
+fn a_vault_is_renamed_in_its_own_row_and_a_blank_name_is_refused() {
+    let drive = Drive::open("rename-vault");
+    let output = drive.run(
+        "core.rename_vault",
+        json!({ "display_name": "  Household  " }),
+    );
+    assert_eq!(output["display_name"], "Household");
+    assert_eq!(
+        drive.vault().display_name().expect("read").as_deref(),
+        Some("Household")
+    );
+
+    for name in ["   ".to_owned(), "x".repeat(61)] {
+        let refused = drive.try_run("core.rename_vault", json!({ "display_name": name }));
+        assert_eq!(refused.status, CommandStatus::Failed, "{name:?}");
+    }
+    assert_eq!(
+        drive.vault().display_name().expect("read").as_deref(),
+        Some("Household"),
+        "a refused rename leaves the name alone"
+    );
+}

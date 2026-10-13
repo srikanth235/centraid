@@ -68,7 +68,7 @@ struct PhotosMemoriesView: View {
             VStack(alignment: .leading, spacing: 16) {
                 switch state.content {
                 case .loading:
-                    ProgressView()
+                    RowSkeleton()
                 case let .denied(denied):
                     DeniedGate(denied)
                 case let .failure(sentence, remedy):
@@ -111,13 +111,13 @@ struct PhotosMemoriesView: View {
     private func emptyShelf(computed: Bool) -> some View {
         if computed {
             ScreenEmptyView(
-                sentence: "No memories yet.",
-                remedy: "Your own photographs, noticed — a year behind a day, a trip, a burst."
+                sentence: PhotosWords.photosMemoriesEmpty,
+                remedy: PhotosWords.photosMemoriesEmptyCaption
             )
         } else {
             ScreenEmptyView(
-                sentence: "Centraid has not looked for memories yet.",
-                remedy: "They appear here once it has."
+                sentence: PhotosWords.photosMemoriesNotLooked,
+                remedy: PhotosWords.photosMemoriesNotLookedCaption
             )
         }
     }
@@ -174,7 +174,7 @@ private struct MemoryCard: View {
                             Theme.color("bgSunken", scheme)
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Self.title(of: row))
                         .centraidType("smallStrong")
@@ -223,8 +223,8 @@ private struct MemoryCard: View {
             return row.placeName.isEmpty ? "Away from home" : row.placeName
         case .similar:
             return row.memberCount > 0
-                ? "\(row.memberCount) similar photographs"
-                : "Similar photographs"
+                ? "\(row.memberCount) similar photos"
+                : PhotosWords.photosMemorySimilar
         case .unspecified, .UNRECOGNIZED:
             return "A memory"
         }
@@ -292,7 +292,7 @@ private struct RouteSketch: View {
             }
         }
         .frame(width: Self.width, height: Self.height)
-        .background(Theme.color("bgSunken", scheme), in: RoundedRectangle(cornerRadius: 4))
+        .background(Theme.color("bgSunken", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)))
         .accessibilityElement()
         .accessibilityLabel(route.count == 1 ? "A sketch of one stop" : "A sketch of \(route.count) stops")
     }

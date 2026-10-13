@@ -145,14 +145,14 @@ class DrainPassSpec : StringSpec({
         val deadline = DrainCopy.stoppedSentence(
             DrainAnswer(3_200_000, DrainAnswer.Stopped.DEADLINE),
         )
-        deadline shouldBe "Still backing up — 3 MB to go. It will finish on its own."
+        deadline shouldBe "Still backing up. 3 MB to go."
         DrainCopy.stoppedSentence(DrainAnswer(0, DrainAnswer.Stopped.EMPTY)) shouldBe
-            "Your backup device has everything this phone had ready to send."
+            "Your backup device has everything that was ready."
         DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNREACHABLE)) shouldBe
-            "Your backup device didn't answer. Nothing was lost; we'll pick up where we left off."
+            "Backup device didn't answer. Will try again."
         // A MACHINE THAT IS NOT THE GATEWAY (#1080): it was sent nothing.
         DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNTRUSTED)) shouldBe
-            "The machine that answered is not your backup device, so this phone sent it nothing. Nothing was lost."
+            "That isn't your backup device. Nothing was sent."
         listOf(
             DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.DEADLINE)),
             DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNREACHABLE)),
@@ -166,7 +166,7 @@ class DrainPassSpec : StringSpec({
         // #1080 ruling 2 hands sealed parts to the OS, which uploads them while
         // the app is suspended; a force-quit cancels them and Low Power Mode
         // pauses them, and the copy says all three.
-        DrainCopy.POSTURE_SENTENCE shouldContain "goes on uploading"
+        DrainCopy.POSTURE_SENTENCE shouldContain "keeps uploading"
         DrainCopy.FORCE_QUIT_SENTENCE shouldContain "swipe Centraid away"
         DrainCopy.FORCE_QUIT_SENTENCE shouldContain "cancels those uploads until you open it again"
         DrainCopy.FORCE_QUIT_SENTENCE shouldContain "Low Power Mode pauses them"

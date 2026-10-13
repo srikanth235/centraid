@@ -10,7 +10,8 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
- * NOTES' BAND: Notes · Notebooks · Journal, and More as a sheet (#1029 port).
+ * NOTES' BAND: Notes · Notebooks · Journal, then More — an ordinary tab, last,
+ * whose tap opens the place's More sheet (#1029 port, R-CHROME-4/5).
  *
  * Each place is its own screen id; the band is computed here once so the
  * three screens draw one band. A tap on another place is an intent the shell
@@ -27,7 +28,7 @@ public object NotesBand {
         NotesBandTab(key = NOTES, label = NotesCopy.BAND_NOTES, icon_key = "FileText", current = current == NOTES),
         NotesBandTab(key = NOTEBOOKS, label = NotesCopy.BAND_NOTEBOOKS, icon_key = "Folder", current = current == NOTEBOOKS),
         NotesBandTab(key = JOURNAL, label = NotesCopy.BAND_JOURNAL, icon_key = "Journal", current = current == JOURNAL),
-        NotesBandTab(key = MORE, label = NotesCopy.BAND_MORE, icon_key = "more", current = false),
+        NotesBandTab(key = MORE, label = NotesCopy.BAND_MORE, icon_key = "MoreHoriz", current = false),
     )
 
     /** The gate Notes draws when the vault will not let it read. */

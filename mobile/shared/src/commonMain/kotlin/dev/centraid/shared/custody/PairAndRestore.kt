@@ -226,14 +226,19 @@ public object CustodyCopy {
     public const val PAIR_TITLE: String = "Pair with your backup device"
 
     public const val PAIR_ASK: String =
-        "Run “centraid-gateway pair” on your backup device and scan the square it prints. " +
-            "You can paste the text underneath it instead."
+        "Run “centraid-gateway pair” on your backup device, then scan the QR code or paste the pairing code."
 
-    public const val PAIR_EMPTY: String = "Scan the square your backup device printed, or paste its text."
+    public const val PAIR_EMPTY: String = "Scan the QR code, or paste the pairing code."
 
     public const val PAIR_PASTE_LABEL: String = "Pairing code"
 
-    public const val PAIR_SCAN: String = "Scan the square"
+    public const val PAIR_SCAN: String = "Scan QR code"
+
+    /** The camera screen's way to a photo or screenshot of the QR code. */
+    public const val PAIR_PHOTO: String = "Choose a photo"
+
+    public const val PAIR_PHOTO_UNREAD: String =
+        "No readable QR code in that photo. Choose a sharper one, or paste the pairing code."
 
     public const val PAIR_PRIMARY: String = "Pair"
 
@@ -243,12 +248,11 @@ public object CustodyCopy {
 
     public const val PAIR_FAILED_TITLE: String = "Not paired"
 
-    public const val PAIR_NEEDS_WORDS_TITLE: String = "Your words come first"
+    public const val PAIR_NEEDS_WORDS_TITLE: String = "Enter your recovery key first"
 
     /** A vault opened without its words has no identity to pair with. */
     public const val PAIR_NEEDS_WORDS: String =
-        "This vault is open without your 24 words, so it cannot prove to your backup device whose it is. " +
-            "Enter your words first, then pair."
+        "This vault is open without your recovery key. Enter it, then pair."
 
     public const val PAIR_NO_VAULT: String = "Make a vault on this phone first, then pair it with your backup device."
 
@@ -259,10 +263,10 @@ public object CustodyCopy {
     public const val TRY_AGAIN: String = "Try again"
 
     public const val PAIR_UNREACHABLE: String =
-        "Your backup device did not answer. Check it is awake and on the same network, then try again."
+        "No answer from your backup device. Check it's awake and on the same network."
 
     public const val PAIR_NOTHING_TO_COMPARE: String =
-        "Centraid could not check who answered, so it did not pair. Try again."
+        "Couldn't verify your backup device, so it didn't pair. Try again."
 
     /**
      * **THE COMPARISON IS THE MEMBER'S** (#1029 §5, #1080 A7).
@@ -275,9 +279,8 @@ public object CustodyCopy {
     public fun pairedLine(answer: PairAnswer): String {
         val who = answer.destinationLabel.ifBlank { "your backup device" }
         val where = if (answer.destinationAddress.isBlank()) "" else " at ${answer.destinationAddress}"
-        return "Paired with $who$where. Check every group of the number below matches the safety number " +
-            "centraid-gateway printed on $who. If it does not match, do not carry on — " +
-            "pair again on a network you trust."
+        return "Paired with $who$where. Check the number below matches the safety number " +
+            "centraid-gateway printed on $who. If it doesn't, pair again on a network you trust."
     }
 
     /** Thousands separated, so a six-figure row count is readable at a glance. */

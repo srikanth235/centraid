@@ -1,30 +1,19 @@
-//! THE EXAMPLE SCENARIO: one weekend at Tahoe, across seven apps.
+//! THE DEMO SCENARIO: one weekend at Tahoe, across seven apps.
 //!
-//! An app full of empty states teaches nobody what it is for, and a member who
-//! taps "See an example" wants to see it lived in before their own rows are.
-//! So the shell opens a SEPARATE, EPHEMERAL core over a temporary directory
-//! with [`crate::CoreConfig::example`] set, founds it with
-//! `FOUND_CONTENT_EXAMPLE` ([`crate::api::found`]), renders the apps from it,
-//! then closes it and deletes the directory. This module is what that found
-//! writes: Maya, Jake, Grandpa Ray and Chris, notes and a packing list, a week
-//! on the calendar, a camera roll with real bytes, and an uneven expense
-//! ledger (docs/decisions.md, "Onboarding without sample data",
-//! `#onboarding-without-sample-data`).
+//! Maya, Jake, Grandpa Ray and Chris, notes and a packing list, a week on the
+//! calendar, a camera roll with real bytes, and an uneven expense ledger — a
+//! corpus that reads like somebody's life rather than like `Item 1, Item 2`.
 //!
-//! **AN EXAMPLE IS NEVER THE MEMBER'S VAULT.** It is never on the shelf, never
-//! keyed (`Core::open` refuses an example config that carries a seed), never
-//! backed up (the handle refuses every backup door), never indexed for chat
-//! (the handle refuses `Assist`), and refuses every write after its one found
-//! (`CoreError::Example`). Onboarding's goal is time to the member's OWN data,
-//! so no row of this scenario may ever land in a vault the member keeps: a
-//! core that is not an example refuses `FOUND_CONTENT_EXAMPLE` outright.
-//!
-//! **One scenario, two callers.** The example core reaches it through
-//! [`found`]; the dev binary `seed-demo-vault` (`crates/centraid`) seeds the
-//! same rows through [`seed`] into a fixture vault and adds its own Locker on
-//! top. Keeping one copy is what keeps a screenshot of a demo fixture and the
-//! example a member opens the same product. There is NO LOCKER here: Locker's
-//! secrets are sealed under a vault's keys, and an example has none.
+//! **One scenario, two kinds of caller, and neither is a member's found.** The
+//! dev binary `seed-demo-vault` (`crates/centraid`) seeds these rows through
+//! [`seed`] into a fixture vault and adds its own Locker on top; the chat's
+//! integration tests (`crates/core/tests/common/chat.rs`, `assist_door.rs`,
+//! `crates/core-ffi/tests/assist.rs`) seed them into a vault founded with no
+//! content, so they read the rows a phone holds. No `FoundContent` writes this
+//! scenario: onboarding's goal is time to the member's OWN data, and a vault the
+//! member keeps gets only [`crate::starters`] (docs/decisions.md, "Onboarding
+//! without sample data"). There is NO LOCKER here: Locker's secrets are sealed
+//! under a vault's keys, and the scenario carries none.
 //!
 //! **THROUGH THE REAL COMMAND PLANE, never SQL.** Every row is a
 //! `Vault::execute` of a registered command, so it carries the `core_entity`
@@ -33,8 +22,8 @@
 //! read — the calendar Agenda files events under — is a page through
 //! [`crate::api::page`], the same door a shell reads through.
 //!
-//! **Dates are relative to now.** An agenda seeded around a fixed instant is an
-//! example that is empty by next month, so every date is the wall clock plus or
+//! **Dates are relative to now.** An agenda seeded around a fixed instant is a
+//! fixture that is empty by next month, so every date is the wall clock plus or
 //! minus whole days.
 //!
 //! **The bytes ship with the library.** Eighteen PNG frames, 672 KB, every one
@@ -44,12 +33,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_vault::bootstrap::Founded;
 use centraid_vault::commands::{Command, CommandStatus, Registry};
 use centraid_vault::{Principal, Vault};
 use serde_json::{Value, json};
 
-use crate::error::{CoreError, Result};
+use crate::error::Result;
 
 /// The apps the scenario seeds through [`seed`], in the order it seeds them.
 /// Locker is not one of them, and never will be: see the module header.
@@ -60,10 +48,10 @@ pub const APPS: [&str; 7] = [
 /// What a seeding pass did not do.
 ///
 /// A refusal is LOUD and the pass continues: one app's schema drifting is not
-/// a reason to leave the other six empty, and a silent skip would be an example
+/// a reason to leave the other six empty, and a silent skip would be a fixture
 /// whose gaps nobody can see. The caller decides what a refusal costs — the
-/// example's found fails whole, the dev binary exits non-zero, and a starter
-/// row ([`crate::starters`]) is only a warning.
+/// dev binary exits non-zero, a test asserts the pass whole, and a starter row
+/// ([`crate::starters`]) is only a warning.
 #[derive(Debug, Default)]
 pub struct Report {
     /// `"<command>: <reason>"`, one per refused command.
@@ -87,49 +75,6 @@ pub fn now_ms() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|since| i64::try_from(since.as_millis()).unwrap_or(i64::MAX))
         .unwrap_or_default()
-}
-
-/// FOUND THE EXAMPLE in an open, empty file, and seed every app.
-///
-/// A plain found — no mark: what makes this file an example is the core it was
-/// opened in ([`crate::CoreConfig::example`]) and the temporary directory the
-/// shell deletes, never a cell in the file. A pass that is not whole fails
-/// here, and the shell deletes the directory rather than drawing half a
-/// scenario.
-///
-/// # Errors
-///
-/// [`CoreError::VaultAlreadyHeld`] over a file that is already a vault, and
-/// [`CoreError::Invariant`] naming every refusal when the scenario did not
-/// land whole.
-pub fn found(
-    vault: &Vault,
-    registry: &Registry,
-    principal: &Principal,
-    display_name: &str,
-    owner_name: &str,
-    now_ms: i64,
-) -> Result<Founded> {
-    if let Some(vault_id) = vault.vault_id()? {
-        return Err(CoreError::VaultAlreadyHeld { vault_id });
-    }
-    let founded = vault.found(display_name, owner_name)?;
-    let report = seed(
-        vault,
-        registry,
-        principal,
-        &founded.owner_party_id,
-        &|_| true,
-        now_ms,
-    )?;
-    if !report.is_whole() {
-        let mut why = report.refused;
-        why.extend(report.gaps.into_iter().map(|gap| format!("{gap}: no body")));
-        return Err(CoreError::Invariant {
-            context: format!("the example did not seed whole: {}", why.join("; ")),
-        });
-    }
-    Ok(founded)
 }
 
 /// SEED THE SCENARIO into a founded vault, one app at a time.
@@ -289,7 +234,7 @@ impl Seeder<'_> {
             Ok(outcome) if outcome.status == CommandStatus::Executed => Some(outcome.output),
             Ok(outcome) => {
                 let why = outcome.reason.unwrap_or_else(|| "no reason".to_owned());
-                tracing::warn!(command = name, %why, "an example command was refused");
+                tracing::warn!(command = name, %why, "a scenario command was refused");
                 self.report.refused.push(format!("{name}: {why}"));
                 None
             }
@@ -301,7 +246,7 @@ impl Seeder<'_> {
                 None
             }
             Err(error) => {
-                tracing::warn!(command = name, %error, "an example command errored");
+                tracing::warn!(command = name, %error, "a scenario command errored");
                 self.report.refused.push(format!("{name}: {error}"));
                 None
             }

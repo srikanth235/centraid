@@ -46,7 +46,9 @@ struct TasksDetailView: View {
             onDeparted: onDeparted
         ) {
             if mine, case let .data(detail)? = state.content {
-                TasksCheckBox(check: detail.check, label: detail.checkLabel) { send(event { $0.check = .init() }) }
+                KitCheckBox(state: detail.check.kitState, label: detail.checkLabel) {
+                    send(event { $0.check = .init() })
+                }
             }
         } content: {
             if mine, case let .gone(gone)? = state.content {
@@ -110,20 +112,10 @@ struct TasksDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if !detail.parentTaskID.isEmpty {
-                    Button {
+                    KitLink(label: detail.parentTitle, dense: true, identifier: "tasks-parent") {
                         send(event { $0.parentPicked = .init() })
-                    } label: {
-                        HStack(spacing: 4) {
-                            CentraidIconView(iconKey: "ChevronLeft", tint: Theme.color("link", scheme), size: 12)
-                            Text(detail.parentTitle)
-                                .centraidType("annotLabelOn")
-                                .foregroundStyle(Theme.color("link", scheme))
-                        }
-                        .frame(minHeight: CentraidGeometry.targetMinFine)
                     }
-                    .buttonStyle(.plain)
                     .padding(.horizontal, CentraidGeometry.pageMargin)
-                    .accessibilityIdentifier("tasks-parent")
                 }
                 if !detail.statusLabel.isEmpty {
                     Text(detail.statusLabel)
@@ -197,17 +189,16 @@ struct TasksDetailView: View {
                 send(event { $0.fieldOpened = .with { $0.field = field.key } })
             }
             .disabled(!field.enabled)
-            .opacity(field.enabled ? 1 : 0.5)
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(field.label)
                         .centraidType("body")
-                        .foregroundStyle(Theme.color("text", scheme))
+                        .foregroundStyle(Theme.color(field.enabled ? "text" : "textDisabled", scheme))
                     Spacer(minLength: 8)
                     Text(field.value)
                         .centraidType("body")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .foregroundStyle(Theme.color(field.enabled ? "textSoft" : "textDisabled", scheme))
                         .lineLimit(1)
                 }
                 if !field.choices.isEmpty {
@@ -242,7 +233,6 @@ struct TasksDetailView: View {
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
             .overlay(alignment: .bottom) { KitHairline() }
             .disabled(!field.enabled)
-            .opacity(field.enabled ? 1 : 0.5)
             .accessibilityIdentifier("tasks-field-\(field.key)")
         }
     }
@@ -288,29 +278,14 @@ struct TasksDetailView: View {
     }
 
     private func chip(_ choice: Centraid_Screen_V1_TasksChoice, field: Centraid_Screen_V1_TasksField) -> some View {
-        Button {
+        KitChip(
+            label: choice.label,
+            selected: choice.selected,
+            identifier: "tasks-chip-\(field.key)-\(choice.key)"
+        ) {
             send(event { $0.fieldChoice = .with { $0.field = field.key; $0.key = choice.key } })
-        } label: {
-            Text(choice.label)
-                .centraidType("annotLabelOn")
-                .foregroundStyle(Theme.color(choice.selected ? "onAccent" : "text", scheme))
-                .padding(.horizontal, 10)
-                .frame(minHeight: 32)
-                .background {
-                    if choice.selected { Capsule().fill(Theme.color("accent", scheme)) }
-                }
-                .overlay {
-                    if !choice.selected {
-                        Capsule().strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
-                    }
-                }
-                .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
         .disabled(!choice.enabled)
-        .opacity(choice.enabled ? 1 : 0.4)
-        .accessibilityAddTraits(choice.selected ? .isSelected : [])
-        .accessibilityIdentifier("tasks-chip-\(field.key)-\(choice.key)")
     }
 
     @ViewBuilder
@@ -360,16 +335,8 @@ private struct TasksEntryVerb: View {
 
     var body: some View {
         if !label.isEmpty {
-            Button(action: action) {
-                Text(label)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color(enabled ? "link" : "textFaint", scheme))
-                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!enabled)
-            .accessibilityIdentifier(identifier)
+            KitLink(label: label, identifier: identifier, action: action)
+                .disabled(!enabled)
         }
     }
 }

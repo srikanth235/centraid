@@ -61,7 +61,7 @@ impl Opened {
         }
         // A MEMBER'S VAULT WITH THE SCENARIO IN IT, founded through the ABI
         // and seeded through the command plane, so it stays writable: these
-        // tests write through the chat, which an example core refuses.
+        // tests write through the chat.
         let found = opened.call(wire::request::Kind::Found(wire::FoundRequest {
             display_name: "Sample".to_owned(),
             owner_name: "Me".to_owned(),

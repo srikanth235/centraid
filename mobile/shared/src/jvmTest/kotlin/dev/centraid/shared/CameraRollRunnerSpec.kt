@@ -84,7 +84,7 @@ class CameraRollRunnerSpec : StringSpec({
             yield()
             host.state.value.permission shouldBe MediaPermission.MEDIA_PERMISSION_NOT_ASKED
             host.state.value.backup!!.paused_reason shouldBe
-                "Centraid needs access to your photos to back them up."
+                "Centraid needs access to your photos to import them."
 
             // Settings (or a launch prompt the attach seed raced): grant lands,
             // cover opens, syncPermission runs before Opened.

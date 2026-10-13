@@ -17,8 +17,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * SHOW THE 24 WORDS AGAIN, FROM SETTINGS (#1047 E4, Q-1047-19) — as a pure
- * machine.
+ * SHOW THE RECOVERY KEY AGAIN, FROM THE BACKUP TAB (#1047 E4, Q-1047-19) — as
+ * a pure machine.
  *
  * `words.show`. The words are kept in this phone's device-only store beside
  * the seed ([VaultSecrets.rememberWords]); this screen reads them only after
@@ -40,6 +40,7 @@ public object WordsShowMachine {
         return when (input) {
             is ShowInput.View -> view(model, input.event)
             is ShowInput.Loaded -> loaded(model, input)
+            ShowInput.Recorded -> ShowStep(closed())
         }
     }
 
@@ -51,7 +52,17 @@ public object WordsShowMachine {
             // THE WORDS ARE READ ONLY AFTER THE PHONE SAID IT IS ITS OWNER.
             event.verified != null && asking ->
                 ShowStep(render(model.copy(phase = WordsShowState.Phase.PHASE_LOADING, notice = "")), listOf(ShowEffect.Load))
+            // A CANCELLED CHECK IS A NO: there was no screen before it, so
+            // there is none to go back to. Any other failure draws ASK with
+            // why, and a primary to try again.
+            event.verify_failed != null && asking && event.verify_failed.cancelled -> ShowStep(closed())
             event.verify_failed != null && asking -> ShowStep(render(model.copy(notice = WordsCopy.SHOW_AGAIN_VERIFY_FAILED)))
+            // "I'VE SAVED IT" ON THE MEMBER'S OWN KEY quiets the Backup tab's
+            // warning (R-ONBOARD-10); a vault's own key is filed in Locker.
+            // The words are dropped at once; the screen closes once the claim
+            // is recorded, so the Backup tab's re-read on close sees it.
+            event.primary != null && model.phase == WordsShowState.Phase.PHASE_SHOW && model.ownName == null ->
+                ShowStep(render(model.copy(phase = WordsShowState.Phase.PHASE_LOADING, words = emptyList())), listOf(ShowEffect.Saved))
             // ASK's primary is the view's intent (it runs the owner check).
             event.primary != null && !asking && model.phase != WordsShowState.Phase.PHASE_LOADING -> ShowStep(closed())
             event.secondary != null -> ShowStep(closed())
@@ -74,16 +85,19 @@ public object WordsShowMachine {
     internal fun render(model: Shown): Shown {
         val phase = model.phase
         val show = phase == WordsShowState.Phase.PHASE_SHOW
+        // ASK BEFORE ANY FAILURE IS NOT A SCREEN: the shell runs the check at
+        // once and draws nothing until it answers.
+        val checkNow = phase == WordsShowState.Phase.PHASE_ASK && model.notice.isEmpty()
         // THE VAULT IN FRONT IS ON ITS OWN WORDS (R-1047-E18): its words, by its name.
         val own = model.ownName
         val title = when {
             phase == WordsShowState.Phase.PHASE_NONE_HERE -> WordsCopy.SHOW_AGAIN_NONE_TITLE
-            phase == WordsShowState.Phase.PHASE_CLOSED -> ""
+            phase == WordsShowState.Phase.PHASE_CLOSED || checkNow -> ""
             own != null && phase == WordsShowState.Phase.PHASE_SHOW -> WordsCopy.SHOW_OWN_TITLE.replace("{name}", own)
             else -> WordsCopy.SHOW_AGAIN_TITLE
         }
         val body = when (phase) {
-            WordsShowState.Phase.PHASE_ASK -> WordsCopy.SHOW_AGAIN_ASK_BODY
+            WordsShowState.Phase.PHASE_ASK -> if (checkNow) "" else WordsCopy.SHOW_AGAIN_ASK_BODY
             WordsShowState.Phase.PHASE_SHOW ->
                 if (own != null) WordsCopy.SHOW_AGAIN_OWN_BODY.replace("{name}", own) else WordsCopy.SHOW_AGAIN_BODY
             WordsShowState.Phase.PHASE_NONE_HERE -> when {
@@ -94,8 +108,9 @@ public object WordsShowMachine {
             else -> ""
         }
         val primary = when (phase) {
-            WordsShowState.Phase.PHASE_ASK -> WordsCopy.SHOW_AGAIN_PRIMARY
-            WordsShowState.Phase.PHASE_SHOW, WordsShowState.Phase.PHASE_NONE_HERE -> WordsCopy.DONE
+            WordsShowState.Phase.PHASE_ASK -> if (checkNow) "" else WordsCopy.SHOW_AGAIN_PRIMARY
+            WordsShowState.Phase.PHASE_SHOW -> if (own == null) WordsCopy.SHOW_AGAIN_SAVED else WordsCopy.DONE
+            WordsShowState.Phase.PHASE_NONE_HERE -> WordsCopy.DONE
             else -> ""
         }
         return model.copy(
@@ -116,7 +131,7 @@ public object WordsShowMachine {
                     emptyList()
                 },
                 primary_label = primary,
-                secondary_label = if (phase == WordsShowState.Phase.PHASE_ASK) WordsCopy.CANCEL else "",
+                secondary_label = if (phase == WordsShowState.Phase.PHASE_ASK && !checkNow) WordsCopy.CANCEL else "",
                 notice = model.notice,
                 accessibility_label = if (show) {
                     WordsCopy.SHOW_A11Y
@@ -124,6 +139,8 @@ public object WordsShowMachine {
                     listOf(title, model.notice).filter { it.isNotEmpty() }.joinToString(". ")
                 },
                 verify_reason = if (phase == WordsShowState.Phase.PHASE_ASK) WordsCopy.SHOW_AGAIN_REASON else "",
+                save_label = if (show) WordsCopy.SAVE_LABEL else "",
+                check_now = checkNow,
             ),
         )
     }
@@ -147,6 +164,9 @@ public data class Shown(
 }
 
 public sealed interface ShowInput {
+    /** [ShowEffect.Saved] was recorded. */
+    public data object Recorded : ShowInput
+
     public data class View(public val event: WordsShowEvent) : ShowInput {
         override fun toString(): String = "View(<redacted>)"
     }
@@ -166,6 +186,9 @@ public sealed interface ShowInput {
 
 public sealed interface ShowEffect {
     public data object Load : ShowEffect
+
+    /** The member said they saved a copy ([VaultSecrets.markWordsSaved]). */
+    public data object Saved : ShowEffect
 }
 
 public data class ShowStep(public val model: Shown, public val effects: List<ShowEffect> = emptyList())
@@ -202,6 +225,10 @@ public class WordsShowFlow(
 
     private suspend fun run(effect: ShowEffect) {
         val next: ShowInput = when (effect) {
+            ShowEffect.Saved -> {
+                runCatching { secrets().markWordsSaved() }
+                ShowInput.Recorded
+            }
             ShowEffect.Load -> {
                 val store = secrets()
                 val front = runCatching { foreground() }.getOrNull()
@@ -227,8 +254,8 @@ public class WordsShowFlow(
 /**
  * `words.show`'s BRIDGE — Swift holds bytes, Compose the `StateFlow`.
  *
- * A shell presents it from the More sheet's "Show my 24 words" row
- * (`WordsCopy.SHOW_AGAIN_ROW`) and:
+ * A shell presents it from the Backup tab's "Show recovery key"
+ * (`BackupScreenState.key_show_label`) and:
  *
  * 1. calls [open];
  * 2. in PHASE_ASK, on the primary control, runs the owner check with

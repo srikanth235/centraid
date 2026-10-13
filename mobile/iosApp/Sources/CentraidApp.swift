@@ -54,7 +54,17 @@ struct CentraidApp: App {
         case .some(true):
             FirstLaunchView(shell: shell)
         case .some(false):
-            HomeView(shell: shell)
+            // BARE PAPER UNTIL THE LOCKUP LANDS. The shelf says it holds a
+            // vault a moment before the session publishes that vault's
+            // lockup, and Home drawn in that moment said "No vault yet" for a
+            // frame between first launch and the springboard. A shelf that
+            // holds a vault always has one in front, so an empty lockup is
+            // only ever that moment.
+            if shell.homeVaultID.isEmpty {
+                BarePaper()
+            } else {
+                HomeView(shell: shell)
+            }
         case .none:
             BarePaper()
         }
@@ -233,15 +243,11 @@ struct CentraidApp: App {
                         // sat on its skeleton for ever. `id: route` makes the
                         // swap a new task (`NavigationAndMountSpec`).
                         .task(id: route) { shell.opened(route) }
-                        // THE DAY-ONE DOORS (docs/decisions.md, "Onboarding
+                        // THE DAY-ONE DOOR (docs/decisions.md, "Onboarding
                         // without sample data"): an app's empty state offers
-                        // the example and the phone's own data — and nothing
-                        // while a preview is open.
-                        .environment(\.seeExample, shell.previewing ? nil : { shell.seeExample() })
-                        .environment(\.importFromPhone, shell.previewing ? nil : { shell.importFromPhone($0) })
-                        // "EXAMPLE — NOT YOUR DATA" over every route while a
-                        // preview is open, with its one exit; else the import's
-                        // line. ON EACH DESTINATION and not on the stack: an
+                        // the phone's own data.
+                        .environment(\.importFromPhone, { shell.importFromPhone($0) })
+                        // THE IMPORT'S LINE over every route. ON EACH DESTINATION and not on the stack: an
                         // app hides the navigation bar and draws its own header
                         // at the top of its safe area, and an inset on the
                         // stack did not reach a pushed cover — the banner drew
@@ -249,10 +255,15 @@ struct CentraidApp: App {
                         .safeAreaInset(edge: .top, spacing: 0) { ShellBanner(shell: shell) }
                     }
             }
+            // THE ROOT'S TINT (DESIGN.md "The controls (mobile)"): `link`
+            // ink on every platform control, not system blue.
+            .kitRootTint()
 
             // EVERY APP'S ROOT WATCHER (#1047): Docs' filed-document push and
             // its picker, Locker's prompt and lifecycle, Tally's save sheet.
             .background { AppGlobals(shell: shell) }
+            // IOS'S CONTACT PICKER, for an import over limited access.
+            .modifier(ContactAccessPickerHost(shell: shell))
             // THE 24 WORDS (#1047 E2): `words.make` and `words.enter`, one
             // sheet at the root so Locker's wall can raise it from any depth.
             // A swipe is allowed only where the machine has a way out to hear.
@@ -273,15 +284,6 @@ struct CentraidApp: App {
                 case .pair:
                     PairLaptopView(data: shell.pairLaptopState, send: { shell.sendPairLaptop($0) })
                         .interactiveDismissDisabled(!shell.pairLaptopSwipeable)
-                // THE BACKUP SCREEN (#1080), opened from Home's backup line.
-                // A swipe is its Dismissed, always heard.
-                case .backup:
-                    BackupView(
-                        data: shell.backupState,
-                        shell: shell,
-                        send: { shell.sendBackup($0) },
-                        onAddDestination: { shell.addBackupDestination() }
-                    )
                 }
             }
             // THE SWITCHER MASK. Leaving the foreground paints an opaque mask

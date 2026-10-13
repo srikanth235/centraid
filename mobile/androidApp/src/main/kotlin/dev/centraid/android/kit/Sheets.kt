@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
@@ -34,6 +35,7 @@ public fun ConfirmSheet(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     cancelLabel: String = KitWords.CANCEL,
+    confirmTag: String = "confirm-primary",
 ) {
     SheetRoom(
         title = confirm.title,
@@ -41,7 +43,7 @@ public fun ConfirmSheet(
         primary = SheetPrimary(
             label = confirm.confirm_label,
             destructive = confirm.destructive,
-            testTag = "confirm-primary",
+            testTag = confirmTag,
             onPress = onConfirm,
         ),
     ) {
@@ -86,18 +88,26 @@ public fun SheetRow(
     destructive: Boolean = false,
     selected: Boolean = false,
     testTag: String = "sheet-row",
+    enabled: Boolean = true,
 ) {
-    val ink = centraidColor(if (destructive) "net" else "text")
+    val ink = centraidColor(
+        when {
+            !enabled -> "textDisabled"
+            destructive -> "net"
+            else -> "text"
+        },
+    )
     Row(
         modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clickable(onClick = onTap)
+            .clickable(enabled = enabled, onClick = onTap)
             .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
             .testTag(testTag)
             .clearAndSetSemantics {
                 contentDescription = if (detail.isEmpty()) label else "$label, $detail"
                 role = Role.Button
+                if (!enabled) disabled()
                 this.selected = selected
             },
         verticalAlignment = Alignment.CenterVertically,
@@ -105,7 +115,7 @@ public fun SheetRow(
         if (iconKey != null) {
             CentraidIcon(
                 iconKey = iconKey,
-                tint = if (destructive) ink else centraidColor("textSoft"),
+                tint = if (destructive || !enabled) ink else centraidColor("textSoft"),
                 size = 18.dp,
                 modifier = Modifier.padding(end = 12.dp),
             )
@@ -113,7 +123,7 @@ public fun SheetRow(
         Column(Modifier.weight(1f)) {
             Text(label, style = centraidType("body"), color = ink)
             if (detail.isNotEmpty()) {
-                Text(detail, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
+                Text(detail, style = centraidType("annotLabel"), color = centraidColor(if (enabled) "textSoft" else "textDisabled"))
             }
         }
         if (selected) CentraidIcon(iconKey = "Check", tint = centraidColor("text"), size = 16.dp)

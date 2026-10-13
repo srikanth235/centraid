@@ -201,8 +201,7 @@ class ScreenQueryRuntimeSpec : StringSpec({
         // part of the range as if it were all of it. Its sentence is the
         // core's `sentence_for_code`, carried on `Error.sentence`; `detail`
         // names the statement and is for a log.
-        val sentence = "There is more here than one look can gather, so none of it was " +
-            "shown rather than part of it. Try a shorter range."
+        val sentence = "Too much to show at once. Try a shorter range."
         val core = CentraidCore.answering(Dispatchers.Default) {
             Envelope(
                 request_id = 0,
@@ -246,17 +245,17 @@ class ScreenQueryRuntimeSpec : StringSpec({
         }
         readOnce(null, queries { now -> listOf(upcoming(now.zone)) })
             .shouldBeInstanceOf<Probe.Refused>().failure.sentence shouldBe
-            "No vault is open on this device."
+            "No vault is open."
         readOnce(core, queries { null })
             .shouldBeInstanceOf<Probe.Refused>().failure.sentence shouldBe
-            "Centraid does not know what to read here."
+            "Nothing to read here."
         readOnce(core, queries { emptyList() })
             .shouldBeInstanceOf<Probe.Refused>()
         // A ZONE THE PLATFORM COULD NOT NAME is refused here, in words a
         // member can read — the core would say `INVALID_REQUEST`.
         readOnce(core, queries { now -> listOf(upcoming(now.zone)) }, clock = FakeDeviceClock(zone = ""))
             .shouldBeInstanceOf<Probe.Refused>().failure.sentence shouldBe
-            "This device did not say which time zone it is in."
+            "This phone did not report its time zone."
         asked.toList().shouldBeEmpty()
         core.close()
     }
@@ -376,7 +375,7 @@ class ScreenQueryRuntimeSpec : StringSpec({
         ).forEach { make ->
             readOnce(core, queries { now -> listOf(make(now.zone)) }, clock = blank)
                 .shouldBeInstanceOf<Probe.Refused>().failure.sentence shouldBe
-                "This device did not say which time zone it is in."
+                "This phone did not report its time zone."
         }
         asked.toList().shouldBeEmpty()
         core.close()

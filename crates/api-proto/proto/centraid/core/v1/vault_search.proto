@@ -1,0 +1,66 @@
+// HOME'S SEARCH: EVERY APP BUT LOCKER, IN ONE ANSWER (R-CHROME-6).
+//
+// Home's search bar asks the vault once and draws the answer grouped by the app
+// each row opens in. It is the SAME search Notes' powerbox runs
+// (`notes.link_targets`, D-1020-N1): one isolated FTS probe per
+// `centraid_search::DOMAINS` domain — notes, people, agenda, tasks, tally,
+// photos and docs — at most eight rows each, under the owner, with People's
+// journal notes left out. There is no second search engine behind it
+// (R-1046-1, D-1020-S1); this arm is that loader asked from Home.
+//
+// **LOCKER IS NEVER A DOMAIN.** Its items sit behind the owner check, and the
+// absence is structural: `crates/search` refuses `locker.item` as a typed
+// error rather than answering nothing, so no probe added here could reach one.
+//
+// A probe that refuses drops its own app's rows and never the answer, so a
+// shell cannot tell "no Docs matched" from "Docs could not be searched" — the
+// powerbox's ruling, kept.
+//
+// It rides `app_query.proto` at number 80, Home's own: Home is not an app,
+// so it takes a number after the apps' blocks.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// `vault.search`: every searchable app's rows for one term.
+message VaultSearchRequest {
+  // The words. Blank answers no hits, never every row.
+  string term = 1;
+  // The zone `VaultSearchHit.subtitle_local_day` is read in. A DECORATION's
+  // zone, as `NotesLinkTargetsRequest.tz`: none stated on a vault that names
+  // none leaves the days EMPTY rather than refusing the search; an unknown
+  // name is refused.
+  string tz = 2;
+}
+
+message VaultSearch {
+  // In the domains' order (`centraid_search::DOMAINS`), each domain's rows in
+  // the index's rank order. A shell groups and orders them as it draws.
+  repeated VaultSearchHit hits = 1;
+}
+
+// One row a member can open, from the index — five strings and the readings
+// the core adds, never a column the index does not carry.
+message VaultSearchHit {
+  // The logical entity: `knowledge.note`, `core.party`, `core.event`,
+  // `schedule.task`, `tally.expense`, `core.content_item`, `core.document`.
+  string entity = 1;
+  // The row's own primary key.
+  string id = 2;
+  string title = 3;
+  // The index's subtitle column — a when, a body excerpt — or the app's id
+  // when the row has none.
+  string subtitle = 4;
+  // The app the row opens in.
+  string app_id = 5;
+  // The index's highlight of the match, or empty.
+  string snippet = 6;
+  // As `NotesLinkTarget.subtitle_local_day`.
+  string subtitle_local_day = 7;
+  // WHAT THE ROW OPENS BY in its app, when that is not `id`. A photo is a
+  // content item in the index and a media asset in Photos, so its hit carries
+  // the asset's id here; every other hit leaves it empty. A photo whose asset
+  // is gone or in the trash is not a hit at all.
+  string open_id = 8;
+}

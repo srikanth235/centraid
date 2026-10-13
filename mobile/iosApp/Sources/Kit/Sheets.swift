@@ -71,24 +71,26 @@ struct SheetRow: View {
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var enabled
 
     var body: some View {
+        let ink = enabled ? (destructive ? "net" : "text") : "textDisabled"
         Button(action: onTap) {
             HStack(spacing: 12) {
                 if !iconKey.isEmpty {
                     CentraidIconView(
                         iconKey: iconKey,
-                        tint: Theme.color(destructive ? "net" : "text", scheme),
+                        tint: Theme.color(ink, scheme),
                         size: 18
                     )
                     .frame(width: 24, height: 24)
                 }
                 Text(label)
                     .centraidType("body")
-                    .foregroundStyle(Theme.color(destructive ? "net" : "text", scheme))
+                    .foregroundStyle(Theme.color(ink, scheme))
                 Spacer(minLength: 0)
                 if selected {
-                    CentraidIconView(iconKey: "Check", tint: Theme.color("text", scheme), size: 16)
+                    CentraidIconView(iconKey: "Check", tint: Theme.color(enabled ? "text" : "textDisabled", scheme), size: 16)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)

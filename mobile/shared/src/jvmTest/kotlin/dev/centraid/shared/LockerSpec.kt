@@ -148,6 +148,44 @@ class LockerSpec : StringSpec({
         effects.shouldBeEmpty()
     }
 
+    "opening Locker asks at once: no wall before the prompt, and a cancel leaves the wall to try again" {
+        val entered = lock(
+            LockerLockEvent(
+                attached = LockerLockEvent.Attached(available = true, biometry = LockerBiometry.LOCKER_BIOMETRY_FACE, entered = true),
+            ),
+        )
+        val (asking, effects) = gate(entered)
+        asking.state.phase shouldBe LockerLockState.Phase.PHASE_UNLOCKING
+        asking.state.cover.shouldBeTrue()
+        val prompt = asking.state.prompt.shouldNotBeNull()
+        prompt.reason shouldBe LockerCopy.PROMPT_REASON
+        effects.shouldBeEmpty()
+
+        // A CANCEL IS NOT A FAILURE: the wall, with its one button.
+        val (cancelled, _) = gate(entered, answered(prompt.token, LockerLockEvent.PromptAnswered.Outcome.OUTCOME_CANCELLED))
+        cancelled.state.phase shouldBe LockerLockState.Phase.PHASE_LOCKED
+        cancelled.state.prompt.shouldBeNull()
+        cancelled.state.unlock_label shouldBe "${LockerCopy.UNLOCK_WITH} ${LockerCopy.METHOD_FACE}"
+
+        // A RETURN TO THE FOREGROUND re-reads the phone's lock and asks nothing.
+        val (returned, _) = gate(entered, answered(prompt.token, LockerLockEvent.PromptAnswered.Outcome.OUTCOME_CANCELLED), attached)
+        returned.state.phase shouldBe LockerLockState.Phase.PHASE_LOCKED
+        returned.state.prompt.shouldBeNull()
+
+        // NOTHING TO STAND ON, NOTHING ASKED: a phone with no passcode.
+        val bare = lock(LockerLockEvent(attached = LockerLockEvent.Attached(available = false, entered = true)))
+        gate(bare).first.state.prompt.shouldBeNull()
+        gate(bare).first.state.phase shouldBe LockerLockState.Phase.PHASE_UNAVAILABLE
+    }
+
+    "the wall is short: a title, one sentence and one button (`facts` is reserved)" {
+        val (locked, _) = gate(attached)
+        locked.state.title shouldBe LockerCopy.LOCK_TITLE
+        locked.state.body shouldContain LockerCopy.METHOD_FACE
+        locked.state.unlock_label shouldBe "${LockerCopy.UNLOCK_WITH} ${LockerCopy.METHOD_FACE}"
+        locked.state.notice shouldBe ""
+    }
+
     "the OS saying yes is not the Locker opening: only the core's answer is" {
         val (asking, _) = gate(attached, tap)
         asking.state.phase shouldBe LockerLockState.Phase.PHASE_UNLOCKING
@@ -193,11 +231,9 @@ class LockerSpec : StringSpec({
         LockerLockMachine.reduce(locked, lock(LockerLockEvent(lock = LockerLockEvent.LockTapped()))).gate.state.clipboard_clear shouldBe
             before + 2
         // A COPY EXISTS TO BE PASTED INTO ANOTHER APP: the background relock
-        // keeps it, and the wall says it clears itself.
+        // keeps it, and it clears itself.
         LockerLockMachine.reduce(open, lock(LockerLockEvent(backgrounded = LockerLockEvent.Backgrounded()))).gate.state.clipboard_clear shouldBe
             before
-        val leaving = locked.state.facts.single { it.label == LockerCopy.FACT_LEAVING }.detail
-        leaving shouldBe "Locks at once · revealed values are cleared, and a copied secret clears itself within 30 seconds"
     }
 
     "a cancelled prompt is not a failure, and a stale token is nobody's answer" {
@@ -348,7 +384,7 @@ class LockerSpec : StringSpec({
         val data = home.reduce(open, LockerInput.Answered(listOf(answer))).state.screen.data_!!
         data.filters.map { it.key } shouldBe listOf("all", "starred", "login", "card")
         data.filters.first().detail shouldBe "312"
-        data.window shouldBe "3 of 312 · the window is 300 by default and 2,000 at most."
+        data.window shouldBe "Showing 3 of 312"
         data.status_line shouldBe LockerCopy.ITEMS_STATUS
         val forum = data.rows.first { it.item_id == "b" }
         forum.chips.map { it.label } shouldBe listOf(LockerCopy.CHIP_COMPROMISED)
@@ -393,12 +429,37 @@ class LockerSpec : StringSpec({
         data.review_note shouldBe "Checked 4 items today"
     }
 
-    "the band is five tabs while open, and More is a sheet, never a destination" {
+    "the band is places then More (R-CHROME-5): no Search tab, and More is a sheet, never a destination" {
         val (open, _) = home.run(openHome, LockerInput.Lock(open = true))
-        open.screen.band.map { it.key } shouldBe listOf("items", "review", "generate", "search", "more")
+        open.screen.band.map { it.key } shouldBe listOf("items", "review", "generate", "more")
+        open.screen.band.last().icon_key shouldBe "MoreHoriz"
         val more = home.reduce(open, homeView(LockerHomeEvent(band = LockerHomeEvent.BandPicked(key = "more")))).state
         more.screen.sheet shouldBe LockerHomeState.Sheet.SHEET_MORE
         more.screen.destination shouldBe LockerHomeState.Destination.DESTINATION_ITEMS
+        // More holds places and actions only: never Search, Sort or a filter (R-CHROME-4).
+        more.screen.chrome!!.more_rows.none { it.key == "search" || it.key == "sort" } shouldBe true
+        // A stale "search" tab key is nothing.
+        home.reduce(open, homeView(LockerHomeEvent(band = LockerHomeEvent.BandPicked(key = "search")))).state.screen.destination shouldBe
+            LockerHomeState.Destination.DESTINATION_ITEMS
+    }
+
+    "search is the room's bar: opening lands on search, no tab is lit, closing goes back to Items" {
+        val (open, _) = home.run(openHome, LockerInput.Lock(open = true), LockerInput.Answered(listOf(items(row("a", "Bank")))))
+        open.screen.search!!.open_ shouldBe false
+        open.screen.chrome!!.search_placeholder shouldBe LockerCopy.SEARCH_PLACEHOLDER
+        val opened = home.reduce(open, homeView(LockerHomeEvent(search_opened = LockerHomeEvent.SearchOpened()))).state
+        opened.screen.destination shouldBe LockerHomeState.Destination.DESTINATION_SEARCH
+        opened.screen.search!!.open_ shouldBe true
+        opened.screen.band.none { it.current } shouldBe true
+        val typed = home.reduce(opened, homeView(LockerHomeEvent(search_typed = LockerHomeEvent.SearchTyped(term = "bank"))))
+        typed.effects.filterIsInstance<ScreenEffect.ReadPage>().map { it.screenId } shouldBe listOf(LockerHomeMachine.SCREEN_ID)
+        val closed = home.reduce(typed.state, homeView(LockerHomeEvent(search_closed = LockerHomeEvent.SearchClosed()))).state
+        closed.screen.destination shouldBe LockerHomeState.Destination.DESTINATION_ITEMS
+        closed.screen.search!!.open_ shouldBe false
+        closed.screen.search.term shouldBe ""
+        // The Items filters are the room's chip row, and only Items carries them.
+        closed.screen.data_!!.filters.map { it.key } shouldContain LockerHomeMachine.ALL
+        opened.screen.data_?.filters.orEmpty().shouldBeEmpty()
     }
 
     // --- one item -----------------------------------------------------------
@@ -486,7 +547,7 @@ class LockerSpec : StringSpec({
         clipboard.sensitive.shouldBeTrue()
         clipboard.expires_in_ms shouldBe 30_000L
         copied.shown.shouldBeNull()
-        copied.screen.status!!.sentence shouldBe "Password copied · the clipboard clears itself in 30 seconds"
+        copied.screen.status!!.sentence shouldBe "Password copied. Clears in 30 seconds."
         val done = item.reduce(copied, itemView(LockerItemEvent(clipboard_done = LockerItemEvent.ClipboardDone(token = clipboard.token)))).state
         done.screen.clipboard.shouldBeNull()
         done.screen.encode().decodeToString() shouldNotContain password

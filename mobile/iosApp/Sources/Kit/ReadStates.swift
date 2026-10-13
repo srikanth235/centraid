@@ -209,11 +209,13 @@ struct EmptyStateView: View {
                     .accessibilityIdentifier("kit-empty-action")
                     .padding(.top, 4)
             }
-            if empty.offersExample { SeeExampleLink() }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 32)
         .padding(.horizontal, CentraidGeometry.pageMargin)
+        // A CONTAINER, OR THE ID LEAKS: on a plain stack SwiftUI hands
+        // `kit-empty` down to the import and action buttons, over their own.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("kit-empty")
     }
 }
@@ -277,25 +279,36 @@ struct DeniedGate: View {
 struct KitOutlineButton: View {
     let label: String
     var tone: String = "text"
+    /// Stretches to the column's width, label centred.
+    var fullWidth: Bool = false
+    /// A 16 glyph before the label, in the tone's ink.
+    var iconKey: String = ""
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var enabled
 
     var body: some View {
+        let ink = enabled ? tone : "textDisabled"
         Button(action: action) {
-            Text(label)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color(tone, scheme))
-                .padding(.horizontal, 16)
-                .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                        .strokeBorder(
-                            Theme.color(tone == "text" ? "lineStrong" : tone, scheme),
-                            lineWidth: CentraidGeometry.hairline
-                        )
-                )
-                .contentShape(Rectangle())
+            HStack(spacing: 6) {
+                if !iconKey.isEmpty {
+                    CentraidIconView(iconKey: iconKey, tint: Theme.color(ink, scheme), size: 16)
+                }
+                Text(label)
+                    .centraidType("smallStrong")
+                    .foregroundStyle(Theme.color(ink, scheme))
+            }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                    .strokeBorder(
+                        Theme.color(enabled ? (tone == "text" ? "lineStrong" : tone) : "textDisabled", scheme),
+                        lineWidth: CentraidGeometry.hairline
+                    )
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

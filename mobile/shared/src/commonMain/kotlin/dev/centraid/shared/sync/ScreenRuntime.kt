@@ -312,7 +312,7 @@ public class ScreenRuntime<S, E>(
             // on its loading state for ever, which is the exact defect this
             // file exists to close — so a screen that cannot say what to read
             // is told so, and draws a sentence.
-            host.send(reads.refused(Reads.refused("Centraid does not know what to read here.")))
+            host.send(reads.refused(Reads.refused("Nothing to read here.")))
             return
         }
         val handle = core()
@@ -350,7 +350,7 @@ public class ScreenRuntime<S, E>(
                     // finding 2). The code chooses the sentence.
                     error != null -> reads.refused(sentenceFor(error.code))
                     else -> reads.refused(
-                        Reads.refused("The vault answered with neither a page nor a reason."),
+                        Reads.refused("No page came back. Try again."),
                     )
                 }
             }

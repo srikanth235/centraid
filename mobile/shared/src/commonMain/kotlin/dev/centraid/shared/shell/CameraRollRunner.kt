@@ -125,11 +125,14 @@ public class CameraRollRunner(
      * photo access", grants it, and then has to find a second button to start
      * the backup has been asked the same question twice.
      */
-    public suspend fun ask() {
+    public suspend fun ask(answered: () -> Unit = {}) {
         val answer = services.mediaLibrary.requestPermission()
         host.send(
             PhotosGridEvent(permission = PhotosGridEvent.PermissionChanged(permission = answer)),
         )
+        // The prompt is gone once the platform answers, so a caller with more
+        // to ask (a made vault's other imports) asks now, not after the walk.
+        answered()
         if (answer == MediaPermission.MEDIA_PERMISSION_GRANTED ||
             // LIMITED COUNTS, and it is the state this whole path exists to
             // handle honestly: a selection is a real library the member chose,

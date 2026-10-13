@@ -30,18 +30,17 @@ struct AlbumChoiceSheet: View {
     @FocusState private var nameFocused: Bool
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    newAlbumRow
-                }
-                Section {
+        SheetRoom(title: PhotosWords.photosAddToAlbum) {
+            newAlbumRow
+            ScrollView {
+                VStack(spacing: 0) {
                     if choices.isEmpty {
                         // ONE SENTENCE, NEVER AN EMPTY SHEET. The row above is
                         // the action; this only says why the list is short.
-                        Text("No albums yet.")
+                        Text(PhotosWords.photosAlbumChoiceNone)
                             .centraidType("small")
                             .foregroundStyle(Theme.color("textFaint", scheme))
+                            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
                             .accessibilityIdentifier("photos.album-choice.empty")
                     } else {
                         ForEach(choices, id: \.albumID) { choice in
@@ -50,17 +49,9 @@ struct AlbumChoiceSheet: View {
                     }
                 }
             }
-            .navigationTitle("Add to album")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: onCancel)
-                        .accessibilityIdentifier("photos.album-choice.cancel")
-                }
-            }
+            KitLink(label: "Cancel", identifier: "photos.album-choice.cancel", action: onCancel)
+                .frame(maxWidth: .infinity)
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
     }
 
     /// "NEW ALBUM…", AND THE FIELD IT BECOMES.
@@ -71,43 +62,28 @@ struct AlbumChoiceSheet: View {
     private var newAlbumRow: some View {
         if naming {
             HStack(spacing: 12) {
-                TextField("Album name", text: $name)
+                TextField(PhotosWords.photosAlbumName, text: $name)
+                    .centraidType("body")
                     .focused($nameFocused)
                     .submitLabel(.done)
                     .onSubmit(create)
+                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
                     .accessibilityIdentifier("photos.album-choice.name")
-                Button("Create", action: create)
+                KitLink(label: "Create", identifier: "photos.album-choice.create", action: create)
                     // AN EMPTY NAME IS NOT A WRITE: `media.create_album`'s
                     // `title` is `minLength: 1`.
                     .disabled(trimmed.isEmpty)
-                    .accessibilityIdentifier("photos.album-choice.create")
             }
         } else {
-            Button {
+            SheetRow(iconKey: "add", label: PhotosWords.photosAlbumChoiceNew, identifier: "photos.album-choice.new") {
                 naming = true
                 nameFocused = true
-            } label: {
-                HStack(spacing: 12) {
-                    CentraidIconView(iconKey: "add", tint: Theme.color("link", scheme), size: 22)
-                        .frame(width: coverSide, height: coverSide)
-                        .background(
-                            RoundedRectangle(cornerRadius: coverRadius)
-                                .fill(Theme.color("bgElev", scheme))
-                        )
-                    Text("New album…")
-                        .centraidType("body")
-                        .foregroundStyle(Theme.color("link", scheme))
-                }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("New album")
-            .accessibilityIdentifier("photos.album-choice.new")
         }
     }
 
     private func row(_ choice: Centraid_Screen_V1_AlbumChoiceEntry) -> some View {
-        let title = choice.title.isEmpty ? "Untitled album" : choice.title
+        let title = choice.title.isEmpty ? PhotosWords.photosUntitledAlbum : choice.title
         let count = Self.count(choice)
         return Button {
             onChoose(choice.albumID)
@@ -122,7 +98,7 @@ struct AlbumChoiceSheet: View {
                     }
                 }
                 .frame(width: coverSide, height: coverSide)
-                .clipShape(RoundedRectangle(cornerRadius: coverRadius))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
                 VStack(alignment: .leading, spacing: 0) {
                     Text(title)
                         .centraidType("body")
@@ -134,9 +110,10 @@ struct AlbumChoiceSheet: View {
                 }
                 Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KitRowPress())
         .accessibilityLabel("\(title), \(count.spoken)")
         .accessibilityIdentifier("photos.album-choice.album")
     }
@@ -153,7 +130,7 @@ struct AlbumChoiceSheet: View {
     /// A CAPPED COUNT SAYS `N+` AND NEVER A BARE NUMBER — Collections' rule,
     /// spelled the same way, with "at least" for a screen reader.
     static func count(_ choice: Centraid_Screen_V1_AlbumChoiceEntry) -> (shown: String, spoken: String) {
-        let noun = choice.count == 1 ? "photograph" : "photographs"
+        let noun = choice.count == 1 ? PhotosWords.tileCountOne : PhotosWords.tileCountMany
         if choice.countCapped {
             return ("\(choice.count)+ \(noun)", "at least \(choice.count) \(noun)")
         }
@@ -164,5 +141,3 @@ struct AlbumChoiceSheet: View {
 
 /// A cover thumbnail's side in the list — the system's album-picker row.
 private let coverSide: CGFloat = 44
-/// The CONTROL rung: a thumbnail in a row is content held by a control.
-private let coverRadius: CGFloat = 7

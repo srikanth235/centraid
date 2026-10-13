@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -32,6 +33,7 @@ import centraid.screen.v1.EmptyState
 import centraid.screen.v1.Loading
 import centraid.screen.v1.ReadFailure
 import dev.centraid.android.theme.centraidColor
+import dev.centraid.design.CentraidTokens
 import dev.centraid.android.theme.centraidType
 import dev.centraid.shared.shell.HomeWords
 
@@ -175,18 +177,14 @@ public fun FailureView(
  * (DESIGN.md copy table). The strings are finished; the action is the
  * screen's own event.
  *
- * AN APP'S DAY ONE adds two things the machine asks for and the shell
- * answers, both through CompositionLocals so no screen threads them:
+ * AN APP'S DAY ONE can ask for one thing the shell answers, through a
+ * CompositionLocal so no screen threads it:
  *
  * - **An import in place of the action** (`import_source`), when the shell
  *   provides the import door ([LocalPhoneImport]) and can read that source
  *   ([importLabel] is not empty — Android has no system reminders). The app's
  *   own add stays in its header, so the one action here is the faster way to
  *   the member's own data. Without an importer the action is drawn as before.
- * - **"See an example"** (`offers_example`) under it, a quiet link, when the
- *   shell provides [LocalExampleOffer].
- *
- * Inside a preview both handlers are null, and neither is drawn.
  */
 @Composable
 public fun EmptyStateView(
@@ -201,7 +199,6 @@ public fun EmptyStateView(
     } else {
         null
     }
-    val example = if (empty.offers_example) LocalExampleOffer.current else null
     Column(
         modifier.fillMaxSize().padding(24.dp).testTag("kit-empty"),
         verticalArrangement = Arrangement.Center,
@@ -228,22 +225,6 @@ public fun EmptyStateView(
                 testTag = "kit-empty-action",
                 modifier = Modifier.padding(top = 16.dp),
                 onPress = onAction,
-            )
-        }
-        if (example != null) {
-            // A QUIET LINK, NOT A SECOND BUTTON: the empty state keeps its one
-            // action, and the example is the look before the first step.
-            Text(
-                HomeWords.SEE_EXAMPLE,
-                style = centraidType("control"),
-                color = centraidColor("link"),
-                modifier = Modifier
-                    .padding(top = 12.dp)
-                    .heightIn(min = KitGeometry.ROW_MIN)
-                    .clip(RoundedCornerShape(KitGeometry.RADIUS))
-                    .clickable(role = Role.Button, onClick = example)
-                    .padding(vertical = 12.dp)
-                    .testTag("kit-empty-example"),
             )
         }
     }
@@ -291,21 +272,30 @@ public fun QuietButton(
     modifier: Modifier = Modifier,
     testTag: String = "kit-button",
     ink: String = "text",
+    enabled: Boolean = true,
     onPress: () -> Unit,
 ) {
+    val edge = when {
+        !enabled -> "textDisabled"
+        ink == "text" -> "lineStrong"
+        else -> ink
+    }
     Text(
         label,
         style = centraidType("annotLabelOn"),
-        color = centraidColor(ink),
+        color = centraidColor(if (enabled) ink else "textDisabled"),
         modifier = modifier
             .heightIn(min = 36.dp)
             .widthIn(min = 44.dp)
             .clip(RoundedCornerShape(KitGeometry.RADIUS))
-            .border(KitGeometry.HAIRLINE, centraidColor(if (ink == "text") "line" else ink), RoundedCornerShape(KitGeometry.RADIUS))
-            .clickable(onClick = onPress)
+            .border(KitGeometry.HAIRLINE, centraidColor(edge), RoundedCornerShape(KitGeometry.RADIUS))
+            .clickable(enabled = enabled, onClick = onPress)
             .padding(horizontal = 12.dp, vertical = 9.dp)
             .testTag(testTag)
-            .semantics { role = Role.Button },
+            .semantics {
+                role = Role.Button
+                if (!enabled) disabled()
+            },
     )
 }
 
@@ -317,8 +307,8 @@ public object KitGeometry {
     /** A thumb's press: every row and key is at least this tall. */
     public val ROW_MIN: Dp = 44.dp
 
-    /** The control radius. */
-    public val RADIUS: Dp = 8.dp
+    /** The control radius: the token scale's `radii.md`, read, never typed. */
+    public val RADIUS: Dp = (CentraidTokens.light.radii["md"] ?: 0).dp
 
     public val HAIRLINE: Dp = 1.dp
 }

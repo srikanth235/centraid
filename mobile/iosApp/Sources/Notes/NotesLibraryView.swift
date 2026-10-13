@@ -2,11 +2,12 @@ import SwiftUI
 
 /// Notes' library — the Notes place of the band — on the kit (#1029 app port).
 ///
-/// **THE VIEW DECIDES NOTHING.** Pinned-first sections, the heading and filter
-/// line, the tag chips, the window's end, the row menu, the file-into and sort
-/// choices, the confirm and every word are on `NotesLibraryState`, folded by
-/// `NotesLibraryMachine`. The intents (`NewNoteRequested`, `NotePicked`,
-/// `TrashOpened`, a band tap on another place) are routed by `NotesScreens`.
+/// **THE VIEW DECIDES NOTHING.** Pinned-first sections, the heading, the chip
+/// row (the notebook, Pinned, the tags, the sort last), More's rows, the
+/// window's end, the row menu, the file-into and sort choices, the confirm and
+/// every word are on `NotesLibraryState`, folded by `NotesLibraryMachine`. The
+/// intents (`NewNoteRequested`, `NotePicked`, `MoreRowPicked`, a band tap on
+/// another place) are routed by `NotesScreens`.
 struct NotesLibraryView: View {
     let data: Data
     let send: (Data) -> Void
@@ -34,40 +35,40 @@ struct NotesLibraryView: View {
         let chrome = state.chrome
         AppPlace(
             app: "notes",
-            title: chrome.title,
+            // THE HEADING IS THE TITLE — "Notes", a notebook's name, or
+            // "Unfiled" — as on Android; drawn again under the bar it said
+            // "Notes" twice.
+            title: state.heading.isEmpty ? chrome.title : state.heading,
+            trailing: content.isDenied || chrome.newNote.isEmpty ? nil : RoomAction(
+                iconKey: "Plus",
+                label: chrome.newNote,
+                identifier: "notes-new-note",
+                action: { send(NotesEvents.library { $0.newNote = .init() }) }
+            ),
             search: SearchSlot(
                 field: state.search,
                 placeholder: chrome.searchPlaceholder,
                 closeLabel: chrome.searchClose,
+                onOpen: { send(NotesEvents.library { $0.searchOpened = .init() }) },
                 onTerm: { term in send(NotesEvents.library { $0.searchTerm = .with { $0.term = term } }) },
                 onClose: { send(NotesEvents.library { $0.searchClosed = .init() }) }
             ),
+            // ONE CHIP ROW, the machine's: filters first, the sort last.
+            chips: state.chips.map { chip in
+                RoomChip(
+                    identifier: "notes-chip-\(chip.key)",
+                    label: chip.label,
+                    selected: chip.selected,
+                    chevron: chip.chevron,
+                    spoken: chip.spoken,
+                    action: { send(NotesEvents.library { $0.chip = .with { $0.key = chip.key } }) }
+                )
+            },
             showsBand: !content.isDenied
         ) {
-            if !content.isDenied, !chrome.newNote.isEmpty {
-                Button {
-                    send(NotesEvents.library { $0.newNote = .init() })
-                } label: {
-                    CentraidIconView(iconKey: "FileEdit", tint: Theme.color("text", scheme), size: 18)
-                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(chrome.newNote)
-                .accessibilityIdentifier("notes-new-note")
-            }
-        } band: {
             NotesBandView(tabs: state.band, event: { key in NotesEvents.library { $0.band = .with { $0.key = key } } }, send: send, onHome: onHome)
         } content: {
             VStack(spacing: 0) {
-                if !state.heading.isEmpty || !state.filterLabel.isEmpty {
-                    NotesFilterBar(
-                        heading: state.heading,
-                        filter: state.filterLabel,
-                        clearLabel: chrome.filterClearLabel,
-                        onClear: { send(NotesEvents.library { $0.filterCleared = .init() }) }
-                    )
-                }
                 if state.search.open {
                     NotesSearchResultsView(results: state.results, loading: chrome.loading, send: send)
                 } else {
@@ -146,9 +147,9 @@ enum NotesEvents {
     }
 }
 
-/// NOTES' BAND, as the three places share it (`NotesBand.tabs`). More is a
-/// tab in the plate because the machine lists it; its tap opens that place's
-/// More sheet.
+/// NOTES' BAND, as the three places share it (`NotesBand.tabs`). More is an
+/// ordinary tab, last, because the machine lists it; its tap opens that
+/// place's More sheet (R-CHROME-4).
 struct NotesBandView: View {
     let tabs: [Centraid_Screen_V1_NotesBandTab]
     let event: (String) -> Data
@@ -178,18 +179,6 @@ private struct NotesLibraryList: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !library.tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(library.tags, id: \.conceptID) { tag in
-                            NotesChipButton(label: tag.label, selected: tag.selected, identifier: "notes-tag-\(tag.conceptID)") {
-                                send(NotesEvents.library { $0.tag = .with { $0.conceptID = tag.conceptID } })
-                            }
-                        }
-                    }
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                }
-            }
             if library.sections.allSatisfy({ $0.rows.isEmpty }) {
                 EmptyStateView(library.empty, onAction: { send(NotesEvents.library { $0.newNote = .init() }) })
                 Spacer(minLength: 0)
@@ -293,14 +282,13 @@ struct NotesRowView: View {
             .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.title : row.accessibilityLabel)
             .accessibilityIdentifier("notes-row-\(row.noteID)")
             if let onMenu {
-                Button(action: onMenu) {
-                    CentraidIconView(iconKey: "MoreHoriz", tint: Theme.color("textSoft", scheme), size: 16)
-                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(menuLabel)
-                .accessibilityIdentifier("notes-row-menu-\(row.noteID)")
+                KitIconKey(
+                    iconKey: "MoreHoriz",
+                    label: menuLabel,
+                    tint: "textSoft",
+                    identifier: "notes-row-menu-\(row.noteID)",
+                    action: onMenu
+                )
                 .padding(.trailing, 4)
             }
         }
@@ -315,78 +303,6 @@ struct NotesRowView: View {
                 ? Text(run.text).bold().foregroundColor(Theme.color("text", scheme))
                 : Text(run.text))
         }
-    }
-}
-
-/// A set choice as a capsule — a tag, a kind.
-struct NotesChipButton: View {
-    let label: String
-    let selected: Bool
-    let identifier: String
-    let action: () -> Void
-
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        Button(action: action) {
-            Text(label)
-                .centraidType(selected ? "smallStrong" : "small")
-                .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
-                .padding(.horizontal, 12)
-                .frame(minHeight: 32)
-                .background(Capsule().fill(Theme.color(selected ? "bgSunken" : "bg", scheme)))
-                .overlay(
-                    Capsule().strokeBorder(Theme.color(selected ? "lineStrong" : "line", scheme), lineWidth: CentraidGeometry.hairline)
-                )
-                .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier(identifier)
-    }
-}
-
-/// The heading of a filtered library and its Clear verb.
-private struct NotesFilterBar: View {
-    let heading: String
-    let filter: String
-    let clearLabel: String
-    let onClear: () -> Void
-
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                if !heading.isEmpty {
-                    Text(heading)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                }
-                if !filter.isEmpty {
-                    Text(filter)
-                        .centraidType("annotLabel")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                }
-            }
-            Spacer(minLength: 0)
-            // THE CLEAR VERB IS `filter_label`'s: with no filter on, there is
-            // nothing to clear.
-            if !clearLabel.isEmpty, !filter.isEmpty {
-                Button(action: onClear) {
-                    Text(clearLabel)
-                        .centraidType("annotLabelOn")
-                        .foregroundStyle(Theme.color("link", scheme))
-                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("notes-clear-filter")
-            }
-        }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .padding(.bottom, 4)
     }
 }
 
@@ -426,20 +342,12 @@ private struct NotesLibrarySheet: View {
         let chrome = state.chrome
         switch state.sheet {
         case .more:
+            // MORE IS THE MACHINE'S ROWS (Trash): never search, sort or a filter.
             OptionSheet(title: chrome.moreTitle) {
-                SheetRow(iconKey: "Search", label: chrome.searchLabel, identifier: "notes-more-search") {
-                    send(NotesEvents.library { $0.sheetClosed = .init() })
-                    send(NotesEvents.library { $0.searchOpened = .init() })
-                }
-                SheetRow(iconKey: "SwitchVert", label: chrome.sortLabel, identifier: "notes-more-sort") {
-                    send(NotesEvents.library { $0.sheetOpened = .with { $0.sheet = .sort } })
-                }
-                SheetRow(iconKey: "Pin", label: chrome.pinnedOnlyLabel, selected: state.pinnedOnly, identifier: "notes-more-pinned") {
-                    send(NotesEvents.library { $0.pinnedOnly = .init() })
-                }
-                SheetRow(iconKey: "Trash", label: chrome.trashLabel, identifier: "notes-more-trash") {
-                    send(NotesEvents.library { $0.sheetClosed = .init() })
-                    send(NotesEvents.library { $0.trashOpened = .init() })
+                ForEach(state.moreRows, id: \.key) { row in
+                    SheetRow(iconKey: row.iconKey, label: row.label, identifier: "notes-more-\(row.key)") {
+                        send(NotesEvents.library { $0.moreRow = .with { $0.key = row.key } })
+                    }
                 }
             }
         case .rowMenu:

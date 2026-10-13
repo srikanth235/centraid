@@ -246,7 +246,7 @@ pub(super) fn link_targets(
 /// `dtstart`) or a floating wall clock is already civil, so its date part IS
 /// the day; an instant — a `Z` or an offset after the date — is read in the
 /// zone, and with no zone it has no day. Anything else is not a when: EMPTY.
-fn subtitle_day(zone: Option<&FireZone>, subtitle: &str) -> String {
+pub(super) fn subtitle_day(zone: Option<&FireZone>, subtitle: &str) -> String {
     let text = subtitle.trim();
     let bytes = text.as_bytes();
     let dated = bytes.len() >= 10

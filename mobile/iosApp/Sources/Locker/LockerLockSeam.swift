@@ -102,8 +102,10 @@ struct LockerLockSeam: View {
 
     /// WHAT THIS PHONE CAN DO, told to the gate: a passcode is set, and which
     /// biometric stands in front of it.
+    /// `entered`: the member just opened Locker, so a locked wall raises the
+    /// prompt at once — opening Locker is the ask.
     @MainActor
-    static func attached(_ shell: ShellModel) {
+    static func attached(_ shell: ShellModel, entered: Bool = false) {
         let context = LAContext()
         var error: NSError?
         let available = context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
@@ -115,7 +117,7 @@ struct LockerLockSeam: View {
         default: biometry = .passcode
         }
         shell.send(screen: LockerScreens.lock, event: event {
-            $0.attached = .with { $0.available = available; $0.biometry = biometry }
+            $0.attached = .with { $0.available = available; $0.biometry = biometry; $0.entered = entered }
         })
     }
 

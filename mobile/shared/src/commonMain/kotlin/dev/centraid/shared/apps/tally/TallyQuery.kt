@@ -228,7 +228,7 @@ public abstract class TallyQueryMachine<S, E, D>(
         /** The gate's words (the handoff's denied state, less the sharing line). */
         public fun denied(): Denied = Denied(
             title = TallyCopy.DENIED_TITLE,
-            body = "${TallyCopy.DENIED_BODY} ${TallyCopy.DENIED_REGRANT}",
+            body = TallyCopy.DENIED_REGRANT,
             receipt = TallyCopy.DENIED_SCOPE,
         )
 

@@ -14,6 +14,8 @@ struct TasksHomeView: View {
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    /// The header's Plus asks the quick add for the keyboard (R-CHROME-1).
+    @State private var quickAddFocus = false
 
     private var state: Centraid_Screen_V1_TasksHomeState {
         (try? Centraid_Screen_V1_TasksHomeState(serializedBytes: data)) ?? .init()
@@ -30,28 +32,21 @@ struct TasksHomeView: View {
         AppPlace(
             app: "tasks",
             title: chrome.title,
-            search: SearchSlot(
+            // THE PLUS IS THE QUICK ADD'S DOOR: the bar at the foot stays the
+            // one place a task is typed, and the Plus puts the keyboard in it.
+            trailing: state.quickAdd.shown && !state.quickAdd.addLabel.isEmpty
+                ? RoomAction(iconKey: "Plus", label: state.quickAdd.addLabel, identifier: "tasks-add", action: { quickAddFocus = true })
+                : nil,
+            search: content.isDenied ? nil : SearchSlot(
                 field: state.search,
                 placeholder: chrome.searchPlaceholder,
                 closeLabel: chrome.searchClose,
+                onOpen: { send(event { $0.searchOpened = .init() }) },
                 onTerm: { term in send(event { $0.searchTerm = .with { $0.term = term } }) },
                 onClose: { send(event { $0.searchClosed = .init() }) }
             ),
             showsBand: !content.isDenied && !state.band.isEmpty
         ) {
-            if !content.isDenied, !state.search.open {
-                Button {
-                    send(event { $0.searchOpened = .init() })
-                } label: {
-                    CentraidIconView(iconKey: "Search", tint: Theme.color("textSoft", scheme), size: 18)
-                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(chrome.searchLabel)
-                .accessibilityIdentifier("tasks-search-open")
-            }
-        } band: {
             AppBand(
                 app: "tasks",
                 tabs: state.band.map { tab in
@@ -80,6 +75,7 @@ struct TasksHomeView: View {
                         quickAdd: state.quickAdd,
                         placeholder: chrome.quickAddPlaceholder,
                         verb: chrome.quickAddVerb,
+                        focusRequested: $quickAddFocus,
                         onChange: { title in send(event { $0.quickAddChanged = .with { $0.title = title } }) },
                         onSubmit: { send(event { $0.quickAddSubmitted = .init() }) }
                     )

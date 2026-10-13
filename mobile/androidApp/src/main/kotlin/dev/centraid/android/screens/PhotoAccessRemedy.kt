@@ -7,20 +7,15 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import centraid.screen.v1.MediaPermission
-import dev.centraid.android.theme.centraidColor
-import dev.centraid.android.theme.centraidType
+import centraid.screen.v1.PhotosImportBanner
+import dev.centraid.android.kit.KitLink
 
 /**
  * THE ONE THING THAT CHANGES A PHOTO GRANT, FOR EACH GRANT (D-1025-S7-75).
@@ -39,6 +34,9 @@ import dev.centraid.android.theme.centraidType
  *   edit the selection they granted.
  * * **restricted, granted** — nothing: there is no next move.
  *
+ * WHICH REMEDY, AND ITS WORDS, ARE THE MACHINE'S (`PhotosImportBanner`); this
+ * file only launches what the platform needs for it.
+ *
  * **THE PROMPT BELONGS TO THE ACTIVITY**, which is why it is launched here and
  * not by the shared runner: `MediaLibrary.requestPermission` on Android reads
  * the grant and cannot ask (`PlatformServices.android.kt`). So the system's
@@ -48,42 +46,48 @@ import dev.centraid.android.theme.centraidType
  * which is what brings a member back from Settings to a banner that knows.
  */
 @Composable
-internal fun PhotoAccessRemedy(permission: MediaPermission, onAnswered: () -> Unit) {
+internal fun PhotoAccessRemedy(banner: PhotosImportBanner, onAnswered: () -> Unit) {
     val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { onAnswered() }
 
-    LifecycleResumeEffect(permission) {
-        if (permission != MediaPermission.MEDIA_PERMISSION_GRANTED) onAnswered()
-        onPauseOrDispose {}
-    }
+    when (banner.remedy) {
+        PhotosImportBanner.Remedy.REMEDY_ASK ->
+            KitLink(banner.allow_label, onClick = { launcher.launch(mediaPermissions()) })
 
-    when (permission) {
-        MediaPermission.MEDIA_PERMISSION_NOT_ASKED ->
-            BannerLink("Allow photo access") { launcher.launch(mediaPermissions()) }
-
-        MediaPermission.MEDIA_PERMISSION_DENIED -> Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            BannerLink("Open Settings") {
+        PhotosImportBanner.Remedy.REMEDY_SETTINGS -> Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            KitLink(banner.settings_label, onClick = {
                 context.startActivity(
                     Intent(
                         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.fromParts("package", context.packageName, null),
                     ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
-            }
-            BannerLink("Allow photo access") { launcher.launch(mediaPermissions()) }
+            })
+            KitLink(banner.allow_label, onClick = { launcher.launch(mediaPermissions()) })
         }
 
-        MediaPermission.MEDIA_PERMISSION_LIMITED ->
+        PhotosImportBanner.Remedy.REMEDY_MANAGE_SELECTION ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                BannerLink("Select more photos") { launcher.launch(mediaPermissions()) }
+                KitLink(banner.manage_label, onClick = { launcher.launch(mediaPermissions()) })
             }
 
-        MediaPermission.MEDIA_PERMISSION_GRANTED,
-        MediaPermission.MEDIA_PERMISSION_RESTRICTED,
-        MediaPermission.MEDIA_PERMISSION_UNSPECIFIED,
-        -> Unit
+        PhotosImportBanner.Remedy.REMEDY_UNSPECIFIED -> Unit
+    }
+}
+
+/**
+ * RE-READ THE GRANT WHENEVER THE SCREEN RESUMES WITHOUT A FULL ONE — what
+ * brings a member back from Settings to a banner that knows. Composed whether
+ * or not the banner draws, so a grant that changed while the banner had
+ * nothing to say still reaches the state.
+ */
+@Composable
+internal fun PhotoAccessRefresh(permission: MediaPermission, onAnswered: () -> Unit) {
+    LifecycleResumeEffect(permission) {
+        if (permission != MediaPermission.MEDIA_PERMISSION_GRANTED) onAnswered()
+        onPauseOrDispose {}
     }
 }
 
@@ -100,7 +104,7 @@ internal fun PhotoAccessRemedy(permission: MediaPermission, onAnswered: () -> Un
  * asked once; whether the system words it as a step of its own is a device
  * hand-off, not a claim made here.
  */
-private fun mediaPermissions(): Array<String> = when {
+internal fun mediaPermissions(): Array<String> = when {
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> arrayOf(
         Manifest.permission.READ_MEDIA_IMAGES,
         Manifest.permission.READ_MEDIA_VIDEO,
@@ -117,22 +121,4 @@ private fun mediaPermissions(): Array<String> = when {
         Manifest.permission.ACCESS_MEDIA_LOCATION,
     )
     else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-}
-
-/**
- * A BANNER'S VERB IS HOME'S LINK: `link` in the `control` role, the way "All
- * apps" is drawn, and never a Material `Button`, whose container takes the
- * scheme's primary — ink on ink here, a black pill with its words invisible.
- * The SwiftUI banner draws the same verbs the same way.
- */
-@Composable
-internal fun BannerLink(text: String, onClick: () -> Unit) {
-    Text(
-        text = text,
-        style = centraidType("control"),
-        color = centraidColor("link"),
-        modifier = Modifier
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(vertical = 8.dp),
-    )
 }

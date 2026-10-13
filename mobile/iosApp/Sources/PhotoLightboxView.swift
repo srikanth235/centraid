@@ -2,6 +2,10 @@ import Foundation
 import SwiftProtobuf
 import SwiftUI
 
+#if canImport(CentraidShared)
+import CentraidShared
+#endif
+
 /// ONE PHOTOGRAPH, FULL BLEED (#1029, photos port).
 ///
 /// The screen a member spends most of their time in, and the one v0 reasoned
@@ -70,7 +74,11 @@ struct PhotoLightboxView: View {
                 // the strip frame of the photograph a member swiped to — and a
                 // ring only over a stage with nothing at all.
                 stage(state).ignoresSafeArea()
-                if state.framePath(state.assetID) == nil { ProgressView() }
+                if state.framePath(state.assetID) == nil {
+                    Text(KitWords.shared.OPENING)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("onStageSoft", scheme))
+                }
             case let .denied(denied):
                 DeniedGate(denied)
             case let .failure(sentence, remedy):
@@ -156,11 +164,17 @@ struct PhotoLightboxView: View {
                 Spacer()
                 if state.slideshow {
                     // THE ONE WAY OUT OF THE SLIDESHOW, named for what it does.
-                    Button("Leave") { send(state.slideshowEvent(false)) }
-                        .centraidType("control")
-                        .foregroundStyle(Theme.color("onStage", scheme))
-                        .frame(minWidth: 44, minHeight: 44)
-                        .accessibilityIdentifier("photos.lightbox.leaveSlideshow")
+                    Button {
+                        send(state.slideshowEvent(false))
+                    } label: {
+                        Text("Leave")
+                            .centraidType("control")
+                            .foregroundStyle(Theme.color("onStage", scheme))
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("photos.lightbox.leaveSlideshow")
                 } else {
                     chip(icon: "more", label: "More") { send(state.sheetEvent(.more)) }
                 }
@@ -220,9 +234,10 @@ struct PhotoLightboxView: View {
                 // with no number.
                 if !state.slideshow, state.isFetching {
                     if let fraction = state.fetchFraction {
-                        ProgressView(value: fraction).frame(width: 44)
+                        KitProgressBar(fraction: fraction, onStage: true)
+                            .frame(width: 44)
                     } else {
-                        ProgressView()
+                        StageSpinner()
                     }
                 }
                 Text(line)
@@ -230,10 +245,17 @@ struct PhotoLightboxView: View {
                     .foregroundStyle(Theme.color("onStageSoft", scheme))
                     .accessibilityIdentifier("photos.lightbox.status")
                 if !state.slideshow, state.notice.isEmpty, state.offersFetch {
-                    Button("Load the original") { send(state.fetchEvent) }
-                        .centraidType("control")
-                        .foregroundStyle(Theme.color("onStage", scheme))
-                        .accessibilityIdentifier("photos.lightbox.fetch")
+                    Button {
+                        send(state.fetchEvent)
+                    } label: {
+                        Text(PhotosWords.photosLoadOriginal)
+                            .centraidType("control")
+                            .foregroundStyle(Theme.color("onStage", scheme))
+                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("photos.lightbox.fetch")
                 }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -250,9 +272,9 @@ struct PhotoLightboxView: View {
     private func pager(_ state: PhotoLightboxStateView) -> some View {
         if state.neighbours.count > 1 {
             HStack {
-                pagerButton(icon: "ChevronLeft", label: "Previous photograph", target: state.previous, state)
+                pagerButton(icon: "ChevronLeft", label: PhotosWords.photosPrevious, target: state.previous, state)
                 Spacer()
-                pagerButton(icon: "ChevronRight", label: "Next photograph", target: state.next, state)
+                pagerButton(icon: "ChevronRight", label: PhotosWords.photosNext, target: state.next, state)
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
         }
@@ -273,7 +295,9 @@ struct PhotoLightboxView: View {
                 size: 20
             )
             .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .disabled(target == nil)
         .accessibilityLabel(label)
     }
@@ -287,7 +311,8 @@ struct PhotoLightboxView: View {
         _ detail: Centraid_Screen_V1_PhotoDetail
     ) -> some View {
         VStack(spacing: 4) {
-            HStack(spacing: 20) {
+            // 44 TARGETS, so the six sit 8 apart: 6 x 44 + 5 x 20 would not fit.
+            HStack(spacing: 8) {
                 verb(.share, state)
                 verb(.favorite, state, on: detail.favorite)
                 verb(.info, state)
@@ -327,7 +352,10 @@ struct PhotoLightboxView: View {
                 tint: Theme.color(enabled ? "onStage" : "onStageSoft", scheme),
                 size: 24
             )
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .disabled(!enabled)
         .accessibilityLabel(verb.label(on: on))
         .accessibilityHint(enabled ? "" : (state.refusal ?? ""))
@@ -343,6 +371,7 @@ struct PhotoLightboxView: View {
                 .frame(width: 44, height: 44)
                 .background(Theme.color("stageSunken", scheme), in: Circle())
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(label)
     }
 
@@ -405,8 +434,7 @@ struct PhotoLightboxView: View {
     /// mirrored here rather than called across the Kotlin boundary, the same
     /// way `PhotoCells.swift` mirrors `kit/PhotoCells.kt`.
     private func shareSheet(_ state: PhotoLightboxStateView) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Send a copy — how much of the place?").centraidType("title")
+        SheetRoom(title: PhotosWords.photosSendPlaceTitle) {
             ForEach(state.shareChoices, id: \.precision) { choice in
                 Button {
                     send(state.closeSheetEvent)
@@ -416,7 +444,9 @@ struct PhotoLightboxView: View {
                     }
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(choice.label).centraidType("control")
+                        Text(choice.label)
+                            .centraidType("control")
+                            .foregroundStyle(Theme.color("text", scheme))
                         Text(choice.detail)
                             .centraidType("small")
                             .foregroundStyle(Theme.color("textSoft", scheme))
@@ -424,11 +454,10 @@ struct PhotoLightboxView: View {
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(KitRowPress())
                 .accessibilityIdentifier("photos.lightbox.share.\(choice.precision.rawValue)")
             }
         }
-        .padding(CentraidGeometry.pageMargin)
         .presentationDetents([.medium])
     }
 
@@ -443,46 +472,47 @@ struct PhotoLightboxView: View {
     /// nothing is placed under a destructive row, and the safety is the trash
     /// behind it, never the row being hard to find.
     private func moreSheet(_ state: PhotoLightboxStateView) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                moreRow(icon: "Archive", label: state.archiveVerb, refusal: state.refusal) {
-                    send(state.closeSheetEvent)
-                    send(state.event(for: .archive, on: state.isArchived))
-                }
-                if state.neighbours.count > 1 {
-                    moreRow(icon: "Play", label: "Slideshow", refusal: nil) {
-                        send(state.slideshowEvent(true))
-                    }
-                }
-                moreRow(icon: "FolderPlus", label: "Add to album", refusal: state.refusal) {
-                    send(PhotoLightboxStateView.albumChoiceOpenedEvent)
-                }
-                if !state.albumID.isEmpty {
-                    moreRow(icon: "Star", label: "Make key photo", refusal: state.refusal) {
+        OptionSheet(title: "More") {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    moreRow(icon: "Archive", label: state.archiveVerb, refusal: state.refusal) {
                         send(state.closeSheetEvent)
-                        send(PhotoLightboxStateView.keyPhotoEvent)
+                        send(state.event(for: .archive, on: state.isArchived))
                     }
-                }
-                moreRow(icon: "MapPin", label: "Adjust location", refusal: state.refusal) {
-                    send(state.sheetEvent(.place))
-                }
-                moreRow(icon: "Download", label: "Download", refusal: nil) {
-                    send(state.closeSheetEvent)
-                    guard let detail = state.detail else { return }
-                    Task {
-                        let outcome = await PhotoHandOff.saveToPhotos(detail)
-                        send(PhotoLightboxStateView.handOffEvent(outcome))
+                    if state.neighbours.count > 1 {
+                        moreRow(icon: "Play", label: "Slideshow", refusal: nil) {
+                            send(state.slideshowEvent(true))
+                        }
                     }
-                }
-                moreRow(icon: "Send", label: "Send a copy", refusal: nil) {
-                    send(state.sheetEvent(.share))
-                }
-                moreRow(icon: "trash", label: "Delete", refusal: state.refusal, destructive: true) {
-                    send(state.closeSheetEvent)
-                    send(state.event(for: .trash, on: false))
+                    moreRow(icon: "FolderPlus", label: PhotosWords.photosAddToAlbum, refusal: state.refusal) {
+                        send(PhotoLightboxStateView.albumChoiceOpenedEvent)
+                    }
+                    if !state.albumID.isEmpty {
+                        moreRow(icon: "Star", label: PhotosWords.photosMakeKey, refusal: state.refusal) {
+                            send(state.closeSheetEvent)
+                            send(PhotoLightboxStateView.keyPhotoEvent)
+                        }
+                    }
+                    moreRow(icon: "MapPin", label: PhotosWords.photosAdjustLocation, refusal: state.refusal) {
+                        send(state.sheetEvent(.place))
+                    }
+                    moreRow(icon: "Download", label: "Download", refusal: nil) {
+                        send(state.closeSheetEvent)
+                        guard let detail = state.detail else { return }
+                        Task {
+                            let outcome = await PhotoHandOff.saveToPhotos(detail)
+                            send(PhotoLightboxStateView.handOffEvent(outcome))
+                        }
+                    }
+                    moreRow(icon: "Send", label: PhotosWords.photosSendCopy, refusal: nil) {
+                        send(state.sheetEvent(.share))
+                    }
+                    moreRow(icon: "trash", label: "Delete", refusal: state.refusal, destructive: true) {
+                        send(state.closeSheetEvent)
+                        send(state.event(for: .trash, on: false))
+                    }
                 }
             }
-            .padding(CentraidGeometry.pageMargin)
         }
         .presentationDetents([.medium, .large])
     }
@@ -498,7 +528,7 @@ struct PhotoLightboxView: View {
         action: @escaping () -> Void
     ) -> some View {
         let enabled = refusal == nil
-        let ink = Theme.color(!enabled ? "textSoft" : (destructive ? "net" : "text"), scheme)
+        let ink = Theme.color(!enabled ? "textDisabled" : (destructive ? "net" : "text"), scheme)
         return Button {
             guard enabled else { return }
             action()
@@ -510,10 +540,10 @@ struct PhotoLightboxView: View {
                     .foregroundStyle(ink)
                 Spacer(minLength: 0)
             }
-            .frame(minHeight: 48)
+            .frame(maxWidth: .infinity, minHeight: 48)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KitRowPress())
         .disabled(!enabled)
     }
 
@@ -524,31 +554,31 @@ struct PhotoLightboxView: View {
     /// mints one, so a free-text field would be a promise the vault cannot
     /// keep. Naming a place is the Places screen's.
     private func placeSheet(_ state: PhotoLightboxStateView) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Adjust location").centraidType("title")
-                if let refused = state.writeFailure {
-                    Text(refused).centraidType("small").foregroundStyle(Theme.color("net", scheme))
-                }
-                if !state.placeID.isEmpty {
-                    placeRow("No place", detail: "Clear where this was taken.") {
-                        send(PhotoLightboxStateView.placeChosenEvent(""))
+        SheetRoom(title: PhotosWords.photosAdjustLocation) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let refused = state.writeFailure {
+                        Text(refused).centraidType("small").foregroundStyle(Theme.color("net", scheme))
+                    }
+                    if !state.placeID.isEmpty {
+                        placeRow("No place", detail: PhotosWords.photosClearPlaceDetail) {
+                            send(PhotoLightboxStateView.placeChosenEvent(""))
+                        }
+                    }
+                    ForEach(state.placeChoices, id: \.placeID) { place in
+                        let here = place.placeID == state.placeID
+                        placeRow(place.name, detail: here ? PhotosWords.photosPlaceHere : "") {
+                            if !here { send(PhotoLightboxStateView.placeChosenEvent(place.placeID)) }
+                        }
+                    }
+                    if state.placeChoices.isEmpty {
+                        Text(PhotosWords.photosNoPlaces)
+                            .centraidType("small")
+                            .foregroundStyle(Theme.color("textSoft", scheme))
                     }
                 }
-                ForEach(state.placeChoices, id: \.placeID) { place in
-                    let here = place.placeID == state.placeID
-                    placeRow(place.name, detail: here ? "Where this was taken" : "") {
-                        if !here { send(PhotoLightboxStateView.placeChosenEvent(place.placeID)) }
-                    }
-                }
-                if state.placeChoices.isEmpty {
-                    Text("No places in this vault yet.")
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(CentraidGeometry.pageMargin)
         }
         .presentationDetents([.medium, .large])
     }
@@ -556,7 +586,9 @@ struct PhotoLightboxView: View {
     private func placeRow(_ label: String, detail: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(label).centraidType("control")
+                Text(label)
+                    .centraidType("control")
+                    .foregroundStyle(Theme.color("text", scheme))
                 if !detail.isEmpty {
                     Text(detail)
                         .centraidType("small")
@@ -566,7 +598,7 @@ struct PhotoLightboxView: View {
             .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KitRowPress())
     }
 }
 
@@ -611,7 +643,7 @@ private struct PhotoInfoSheetView: View {
                 }
 
                 label("Caption")
-                TextField("Say what this is", text: $caption)
+                TextField(PhotosWords.photosCaptionPlaceholder, text: $caption)
                     .centraidType("body")
                     .focused($captionFocused)
                     .submitLabel(.done)
@@ -634,12 +666,12 @@ private struct PhotoInfoSheetView: View {
                 place
 
                 section(
-                    title: "Who is in it",
+                    title: PhotosWords.photosWhoInIt,
                     icon: "person",
                     values: state.people,
                     unread: state.isUnread(.people),
-                    unreadSentence: "Centraid could not read who is in this photograph.",
-                    emptySentence: "Nobody is named in this photograph."
+                    unreadSentence: PhotosWords.photosPeopleUnreadable,
+                    emptySentence: PhotosWords.photosPeopleNone
                 )
 
                 labels
@@ -692,14 +724,14 @@ private struct PhotoInfoSheetView: View {
             label("Place")
             Text(state.placeLine).centraidType("body")
             HStack(spacing: 16) {
-                textAction(state.placeID.isEmpty ? "Add place" : "Change") {
+                textAction(state.placeID.isEmpty ? PhotosWords.photosAddPlace : "Change") {
                     send(state.sheetEvent(.place))
                 }
                 if !state.placeID.isEmpty {
                     textAction("Remove") { send(PhotoLightboxStateView.placeChosenEvent("")) }
                 }
                 if state.placeHasCoordinate, let detail = state.detail {
-                    textAction("Copy exact location") {
+                    textAction(PhotosWords.photosCopyExactLocation) {
                         send(PhotoLightboxStateView.handOffEvent(PhotoHandOff.copyLocation(detail)))
                     }
                 }
@@ -722,8 +754,8 @@ private struct PhotoInfoSheetView: View {
             if chips.isEmpty {
                 Text(
                     state.isUnread(.labels)
-                        ? "Centraid could not read this photograph's labels."
-                        : "No labels on this photograph."
+                        ? PhotosWords.photosLabelsUnreadable
+                        : PhotosWords.photosLabelsNone
                 )
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
@@ -745,13 +777,13 @@ private struct PhotoInfoSheetView: View {
                 .padding(.leading, 10)
                 .background(
                     Theme.color("bgSunken", scheme),
-                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme), style: .continuous)
                 )
             }
-            TextField("Add a label", text: $tag)
+            TextField(PhotosWords.photosAddLabel, text: $tag)
                 .centraidType("body")
                 .submitLabel(.done)
-                .accessibilityLabel("Add a label")
+                .accessibilityLabel(PhotosWords.photosAddLabel)
                 .onSubmit {
                     let label = tag.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !label.isEmpty else { return }
@@ -768,10 +800,7 @@ private struct PhotoInfoSheetView: View {
     }
 
     private func textAction(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .centraidType("control")
-            .foregroundStyle(Theme.color("text", scheme))
-            .frame(minHeight: 44)
+        KitLink(label: title, action: action)
     }
 
     /// ONE SECTION, AND THREE THINGS IT CAN SAY.
@@ -836,8 +865,8 @@ enum PhotoLightboxVerb: String {
     /// says what the NEXT press does rather than what is currently true.
     func label(on: Bool) -> String {
         switch self {
-        case .share: return "Send a copy"
-        case .favorite: return on ? "Remove from favourites" : "Favourite"
+        case .share: return PhotosWords.photosSendCopy
+        case .favorite: return on ? PhotosWords.photosUnfavorite : PhotosWords.photosFavorite
         case .info: return "Info"
         case .archive: return on ? "Unarchive" : "Archive"
         case .trash: return "Delete"
@@ -926,7 +955,7 @@ struct PhotoLightboxStateView {
     var sheet: Centraid_Screen_V1_PhotoLightboxState.Sheet { state.sheet }
     var neighbours: [String] { state.neighbourAssetIds }
     var isArchived: Bool { detail?.archived ?? false }
-    var title: String { detail.map(Self.title) ?? "This photograph" }
+    var title: String { detail.map(Self.title) ?? PhotosWords.photosThisPhoto }
     var caption: String { detail?.title ?? "" }
     var camera: String { detail?.camera ?? "" }
     var placeID: String { detail?.placeID ?? "" }
@@ -1006,11 +1035,11 @@ struct PhotoLightboxStateView {
     /// An image-only stage carries a description even when there is no image
     /// — which is when it matters most.
     var stageLabel: String {
-        guard let detail else { return "Photograph" }
+        guard let detail else { return PhotosWords.photograph }
         if drawablePath != nil { return Self.title(detail) }
         switch detail.held {
-        case .absent: return "This photograph is not on this device yet."
-        default: return "Preview no longer on this device"
+        case .absent: return PhotosWords.photosNotOnPhone
+        default: return PhotosWords.photosPreviewGone
         }
     }
 
@@ -1039,12 +1068,12 @@ struct PhotoLightboxStateView {
     static let slideshowSeconds = 4
 
     /// v0's slideshow status line.
-    static let slideshowLine = "Leaving the slideshow keeps the photograph you stopped on"
+    static let slideshowLine = PhotosWords.photosSlideshowLine
 
     /// `12 of 184 · 4 seconds a photograph` — `PhotoLightboxMachine.slideshowMeta`.
     var slideshowMeta: String {
         guard let at = neighbours.firstIndex(of: assetID) else { return "" }
-        return "\(at + 1) of \(neighbours.count) · \(Self.slideshowSeconds) seconds a photograph"
+        return "\(at + 1) of \(neighbours.count) · \(Self.slideshowSeconds) seconds a photo"
     }
 
     // MARK: - The stamp
@@ -1089,18 +1118,18 @@ struct PhotoLightboxStateView {
         guard let detail else { return "" }
         switch detail.held {
         case .withheldByRule:
-            return "Original not fetched — your transfer rule is holding it back."
+            return PhotosWords.photosOriginalHeldBack
         case .fetching:
             // A PERCENTAGE ONLY WHEN THERE IS ONE: "0%" would read as
             // "nothing has crossed".
             return detail.fetchPercent > 0
-                ? "Fetching the original — \(detail.fetchPercent)%"
-                : "Fetching the original…"
+                ? PhotosWords.fill(PhotosWords.photosOriginalDownloadingPercent, "percent", "\(detail.fetchPercent)")
+                : PhotosWords.photosOriginalDownloading
         case .absent:
-            return "Nothing of this photograph has reached this device yet."
+            return PhotosWords.photosNothingOnPhone
         default:
             return detail.kind == .video && !playing
-                ? "This video's file is not on this device — showing a still from it."
+                ? PhotosWords.photosVideoStillOnly
                 : ""
         }
     }
@@ -1125,16 +1154,15 @@ struct PhotoLightboxStateView {
         guard let detail else { return "" }
         switch detail.held {
         case .original:
-            return "The original is on this device."
+            return PhotosWords.photosOriginalOnPhone
         case .withheldByRule:
-            return "The original has not been fetched — your transfer rule is holding it, "
-                + "and fetching it is your choice."
+            return PhotosWords.photosOriginalYourChoice
         case .fetching:
-            return "Centraid is fetching the original now."
+            return PhotosWords.photosOriginalDownloadingNow
         case .absent:
-            return "Nothing of this photograph is on this device yet."
+            return PhotosWords.photosNothingOnPhone
         default:
-            return "This device holds a smaller copy; the original has not been fetched."
+            return PhotosWords.photosSmallerCopyOnly
         }
     }
 
@@ -1171,7 +1199,7 @@ struct PhotoLightboxStateView {
         } else if isUnread(.content) {
             // A FACT THAT COULD NOT BE READ IS STILL A ROW.
             rows.append(
-                PhotoLightboxFact(label: "File", value: "Centraid could not read this file's size.")
+                PhotoLightboxFact(label: "File", value: PhotosWords.photosFileSizeUnreadable)
             )
         }
         // THE CAMERA, from the original's header (`PhotoHandOff.camera`) —
@@ -1187,8 +1215,8 @@ struct PhotoLightboxStateView {
     var placeLine: String {
         guard let detail else { return "" }
         if !detail.placeName.isEmpty { return detail.placeName }
-        if isUnread(.place) { return "Centraid could not read where this was taken." }
-        return detail.placeID.isEmpty ? "No place" : "A place with no name yet"
+        if isUnread(.place) { return PhotosWords.photosPlaceUnreadable }
+        return detail.placeID.isEmpty ? "No place" : PhotosWords.placeUnnamed
     }
 
     /// CONFIRMED FACES ONLY, and only the ones with a NAME.
@@ -1232,7 +1260,7 @@ struct PhotoLightboxStateView {
     /// every write is live. `PhotoLightboxMachine.writeRefusal` is the tested
     /// statement of this and is what actually GATES the command.
     var refusal: String? {
-        detail == nil || assetID.isEmpty ? "This photograph is not in a vault yet." : nil
+        detail == nil || assetID.isEmpty ? PhotosWords.photosNotInVault : nil
     }
 
     func isEnabled(_ verb: PhotoLightboxVerb) -> Bool {
@@ -1248,8 +1276,8 @@ struct PhotoLightboxStateView {
         var rows = [
             PhotoLightboxShareRow(
                 precision: .none,
-                label: "No place",
-                detail: "The copy leaves with no location in it."
+                label: PhotosWords.photosSendNoLocation,
+                detail: PhotosWords.photosSendNoneDetail
             )
         ]
         let place = detail?.placeName ?? ""
@@ -1257,19 +1285,18 @@ struct PhotoLightboxStateView {
             rows.append(
                 PhotoLightboxShareRow(
                     precision: .name,
-                    label: "Place name only",
-                    detail: "\(place) travels as words; "
-                        + "the location still comes out of the file."
+                    label: PhotosWords.photosSendPlaceNameOnly,
+                    detail: PhotosWords.fill(PhotosWords.photosSendNameDetail, "place", place)
                 )
             )
         }
         rows.append(
             PhotoLightboxShareRow(
                 precision: .exact,
-                label: "Exact location",
+                label: PhotosWords.photosSendExactLocation,
                 detail: placeHasCoordinate
-                    ? "The original file, with the spot it was taken."
-                    : "The original file, with whatever the camera recorded."
+                    ? PhotosWords.photosSendExactDetailLocated
+                    : PhotosWords.photosSendExactDetailUnlocated
             )
         )
         return rows
@@ -1425,7 +1452,7 @@ struct PhotoLightboxStateView {
     /// last-resort fallback and never a caption.
     private static func title(_ detail: Centraid_Screen_V1_PhotoDetail) -> String {
         let trimmed = detail.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Photograph" : trimmed
+        return trimmed.isEmpty ? PhotosWords.photograph : trimmed
     }
 
     /// The vault writes `%Y-%m-%dT%H:%M:%fZ` and nothing else, so anything else

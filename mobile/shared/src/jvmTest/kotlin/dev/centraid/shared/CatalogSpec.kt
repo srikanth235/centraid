@@ -3,7 +3,6 @@ package dev.centraid.shared
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.shared.shell.BandPolicy
-import dev.centraid.shared.shell.FirstMoves
 import dev.centraid.shared.shell.SpringboardPolicy
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
@@ -23,7 +22,7 @@ import io.kotest.matchers.shouldNotBe
  * cannot see is a CALLER naming an icon the set does not contain — a missing key
  * is a silently blank mark on both shells, not a failure.
  *
- * Two keys were exactly that when this file was written: `FirstMoves` named
+ * Two keys were exactly that when this file was written: Home's first moves named
  * `Notebook` and `CheckSquare`, neither of which exists in the design set,
  * because the port invented a second icon table instead of reading the app's own
  * mark the way v0 does. The Swift half of this claim is
@@ -75,9 +74,8 @@ class CatalogSpec : StringSpec({
         val named = buildSet {
             addAll(CentraidCatalog.apps.map { it.iconKey })
             addAll(BandPolicy.PLACES.map { it.iconKey })
-            // First moves take the app's own mark, plus the one move that is
-            // not an app.
-            addAll(FirstMoves.forIdle(SpringboardPolicy.SPRINGBOARD_ORDER).map { it.icon_key })
+            // The band's Backup tab, drawn beside the places (R-ONBOARD-9).
+            add("Backup")
             // The lockup's two verbs and the title row's one control.
             add("Search")
             add("NewChat")
@@ -89,16 +87,6 @@ class CatalogSpec : StringSpec({
                 CentraidCatalog.icons.getValue(key).isNotEmpty().shouldBeTrue()
             }
         }
-    }
-
-    "a first move wears the mark of the app it leads to" {
-        // A nudge toward Photos wearing a glyph the Photos tile does not wear is
-        // two marks for one destination.
-        val moves = FirstMoves.forIdle(listOf("photos", "docs")).associateBy { it.id }
-        moves.getValue("photos").icon_key shouldBe
-            CentraidCatalog.byId.getValue("photos").iconKey
-        moves.getValue("docs").icon_key shouldBe
-            CentraidCatalog.byId.getValue("docs").iconKey
     }
 
     // --- the band -----------------------------------------------------------

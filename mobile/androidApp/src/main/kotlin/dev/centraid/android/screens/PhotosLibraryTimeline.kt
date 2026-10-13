@@ -61,9 +61,11 @@ import dev.centraid.android.kit.JustifiedTile
 import dev.centraid.android.kit.PhotoTile
 import dev.centraid.android.kit.bandPress
 import dev.centraid.android.kit.justify
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PhotosTimeline
 import dev.centraid.shared.shell.BandPolicy
 import kotlinx.coroutines.launch
@@ -304,7 +306,7 @@ private fun MoreSentinel(complete: Boolean, cellCount: Int, onMore: () -> Unit) 
             .fillMaxWidth()
             .height(PhotosTimeline.RUNG_HEIGHTS[0].dp)
             .background(centraidColor("skel"))
-            .semantics { contentDescription = "Loading more photographs" },
+            .semantics { contentDescription = PhotosCopy.PHOTOS_LIBRARY_LOADING_MORE },
     )
 }
 
@@ -569,7 +571,7 @@ internal fun LibraryGrains(
                     // A QUIET LINE, NOT A CARD: undated photographs live in All,
                     // and a card for them would be a fake period.
                     Text(
-                        text = "These photographs carry no capture date, so they are all in All.",
+                        text = PhotosCopy.PHOTOS_LIBRARY_UNDATED_NOTE,
                         style = centraidType("small"),
                         color = centraidColor("textSoft"),
                         modifier = Modifier.padding(CentraidGeometry.PAGE_MARGIN.dp),
@@ -784,7 +786,7 @@ internal fun GrainControl(grain: PhotosGridState.Grain, onGrain: (PhotosGridStat
                                 .align(Alignment.TopCenter)
                                 .padding(top = CentraidGeometry.HAIRLINE.dp)
                                 .size(BandPolicy.BAND_MARK_SIZE.dp, 2.dp)
-                                .clip(RoundedCornerShape(999.dp))
+                                .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["pill"] ?: 0).dp))
                                 .background(centraidColor("text")),
                         )
                     }
@@ -800,15 +802,17 @@ internal fun GrainControl(grain: PhotosGridState.Grain, onGrain: (PhotosGridStat
     }
 }
 
-/** `3 photographs · 1 video` — v0's `describeCounts`, one wording on every grain. */
+/** `3 photos · 1 video` — v0's `describeCounts`, one wording on every grain. */
 private fun describeCounts(cells: List<PhotoCell>): String {
     val videos = cells.count { it.kind == PhotoCell.Kind.KIND_VIDEO }
     val photographs = cells.size - videos
     val parts = buildList {
-        if (photographs > 0) add("$photographs photograph" + if (photographs == 1) "" else "s")
+        if (photographs > 0) {
+            add("$photographs " + if (photographs == 1) PhotosCopy.TILE_COUNT_ONE else PhotosCopy.TILE_COUNT_MANY)
+        }
         if (videos > 0) add("$videos video" + if (videos == 1) "" else "s")
     }
-    return parts.joinToString(" · ").ifEmpty { "0 photographs" }
+    return parts.joinToString(" · ").ifEmpty { "0 ${PhotosCopy.TILE_COUNT_MANY}" }
 }
 
 /**

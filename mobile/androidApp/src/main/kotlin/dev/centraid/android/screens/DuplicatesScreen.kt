@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
+import dev.centraid.android.kit.RowSkeleton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -27,6 +27,7 @@ import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.design.copy.PhotosCopy
 
 /**
  * The shelf of near-duplicate clusters (#1029, photos port).
@@ -86,7 +87,7 @@ public fun DuplicatesScreen(
         val failure = state.failure
         val data = state.data_
         when {
-            loading != null -> CircularProgressIndicator()
+            loading != null -> RowSkeleton()
 
             failure != null -> ScreenFailure(failure.sentence, failure.remedy)
 
@@ -104,15 +105,13 @@ public fun DuplicatesScreen(
                     // member who reads it stops looking.
                     if (data.scan_complete) {
                         ScreenEmpty(
-                            sentence = "No near-identical photographs in your library.",
-                            remedy = "Centraid has looked through everything on this device.",
+                            sentence = PhotosCopy.PHOTOS_EMPTY_DUPLICATES,
+                            remedy = PhotosCopy.PHOTOS_DUPLICATES_NONE_CAPTION,
                         )
                     } else {
                         ScreenEmpty(
-                            sentence = "Centraid has not finished looking for near-identical " +
-                                "photographs.",
-                            remedy = "That is not the same as there being none — nothing " +
-                                "here has been ruled out yet.",
+                            sentence = PhotosCopy.PHOTOS_DUPLICATES_LOOKING,
+                            remedy = PhotosCopy.PHOTOS_DUPLICATES_LOOKING_CAPTION,
                         )
                     }
                 } else {
@@ -151,7 +150,7 @@ public fun DuplicatesScreen(
                     // their duplicates, and a screen that went quiet once it had
                     // something to show would only be honest while it was empty.
                     if (!data.scan_complete) {
-                        NoteLine("Centraid is still looking; more sets may appear.")
+                        NoteLine(PhotosCopy.PHOTOS_DUPLICATES_STILL_LOOKING)
                     }
                     data.clusters.forEach { cluster ->
                         DuplicateClusterRow(cluster) { onOpenCluster(cluster.cluster_id) }
@@ -179,8 +178,8 @@ private fun DuplicateClusterRow(cluster: DuplicateCluster, onOpen: () -> Unit) {
     // THE COUNT, AND "AT LEAST" WHENEVER IT IS A FLOOR.
     //
     // The door has no `COUNT(*)`, so a count off a page that filled is a floor
-    // — which `HomeState.ThingCount.capped` says the same way, and `HomeScreen`
-    // spells as "at least N things". This view honours the FLAG and does not
+    // — which `HomeTile.count.capped` says the same way, and Home's tiles
+    // say the same way. This view honours the FLAG and does not
     // assume: `DuplicatesReads` happens to avoid the cap rather than report it
     // — a cluster the page edge cut is dropped whole rather than counted short
     // — so today the flag is false and this says "4 copies" and means four. A
@@ -205,7 +204,7 @@ private fun DuplicateClusterRow(cluster: DuplicateCluster, onOpen: () -> Unit) {
     // arithmetic and in the same rows.
     val phrase = cluster.reclaimable_phrase
     val subhead = when {
-        phrase.isEmpty() -> "Pick the one to keep."
+        phrase.isEmpty() -> PhotosCopy.PHOTOS_DUPLICATES_PICK_ONE
         cluster.member_count_capped -> "At least $phrase to reclaim."
         else -> "$phrase to reclaim."
     }
@@ -277,7 +276,7 @@ internal fun NoteLine(sentence: String) {
  * one of.
  */
 private fun lede(clusters: Int): String = if (clusters == 1) {
-    "1 set of near-identical photographs."
+    PhotosCopy.PHOTOS_DUPLICATES_SET_ONE
 } else {
-    "$clusters sets of near-identical photographs."
+    PhotosCopy.PHOTOS_DUPLICATES_SET_MANY.replace("{count}", "$clusters")
 }

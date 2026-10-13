@@ -41,8 +41,7 @@ import java.util.TimeZone
  * including the one the system returns at once after "don't ask again" — is
  * [AgendaCopy.IMPORT_CALENDAR_DENIED], which names Settings.
  *
- * **INTO THE MEMBER'S VAULT, NEVER A PREVIEW'S**: `Shelf.memberCore`, and the
- * shell provides no import door while a preview is open at all. Agenda
+ * **INTO THE MEMBER'S FOREGROUND VAULT** (`Shelf.core`). Agenda
  * re-reads by itself — every event lands through the change stream.
  *
  * [onStatus] is handed each sentence: [AgendaCopy.IMPORT_CALENDAR_RUNNING]
@@ -53,7 +52,7 @@ import java.util.TimeZone
 public fun rememberCalendarImport(
     session: HomeSession?,
     onStatus: (sentence: String, holds: Boolean) -> Unit,
-): () -> Unit {
+): (after: ((String?) -> Unit)?) -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val currentSession by rememberUpdatedState(session)
@@ -61,12 +60,22 @@ public fun rememberCalendarImport(
     // ONE IMPORT AT A TIME: a second tap while the first writes would propose
     // every event twice, and the second copy would land as a free duplicate.
     var running by remember { mutableStateOf(false) }
+    // A MADE VAULT'S CHAIN waits on this import (R-ONBOARD-8): its outcome
+    // goes to [after] instead of the banner, and a refusal is null.
+    var pending by remember { mutableStateOf<((String?) -> Unit)?>(null) }
 
-    fun run() {
-        if (running) return
-        val core = currentSession?.shelf?.memberCore()
+    fun finish(after: ((String?) -> Unit)?, sentence: String) {
+        if (after != null) after(sentence) else currentStatus(sentence, false)
+    }
+
+    fun run(after: ((String?) -> Unit)?) {
+        if (running) {
+            after?.invoke(null)
+            return
+        }
+        val core = currentSession?.shelf?.core()
         if (core == null) {
-            currentStatus(AgendaCopy.IMPORT_CALENDAR_NO_VAULT, false)
+            finish(after, AgendaCopy.IMPORT_CALENDAR_NO_VAULT)
             return
         }
         running = true
@@ -80,16 +89,27 @@ public fun rememberCalendarImport(
                 CalendarImport.sentence(CalendarImport.run(core, events, TimeZone.getDefault().id, now))
             }
             running = false
-            currentStatus(sentence, false)
+            finish(after, sentence)
         }
     }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) run() else currentStatus(AgendaCopy.IMPORT_CALENDAR_DENIED, false)
+        val after = pending
+        pending = null
+        when {
+            granted -> run(after)
+            after != null -> after(null)
+            else -> currentStatus(AgendaCopy.IMPORT_CALENDAR_DENIED, false)
+        }
     }
     return remember(launcher) {
-        {
-            if (granted(context)) run() else launcher.launch(Manifest.permission.READ_CALENDAR)
+        { after ->
+            if (granted(context)) {
+                run(after)
+            } else {
+                pending = after
+                launcher.launch(Manifest.permission.READ_CALENDAR)
+            }
         }
     }
 }

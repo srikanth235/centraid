@@ -44,6 +44,7 @@ import "centraid/core/v1/notes.proto";
 import "centraid/core/v1/people.proto";
 import "centraid/core/v1/tally.proto";
 import "centraid/core/v1/tasks.proto";
+import "centraid/core/v1/vault_search.proto";
 
 message AppQueryRequest {
   oneof query {
@@ -95,6 +96,8 @@ message AppQueryRequest {
     ChatThreadsRequest chat_threads = 70;
     ChatThreadRequest chat_thread = 71;
     ChatCardRequest chat_card = 72;
+    // Home (R-CHROME-6): 80. Every app's search domain but Locker's.
+    VaultSearchRequest vault_search = 80;
   }
 }
 
@@ -147,6 +150,7 @@ message AppQueryResponse {
     ChatThreads chat_threads = 70;
     ChatThread chat_thread = 71;
     ChatCardLive chat_card = 72;
+    VaultSearch vault_search = 80;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

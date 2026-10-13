@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -41,7 +40,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -72,6 +70,7 @@ import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidRow
+import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
@@ -86,6 +85,9 @@ import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
+import dev.centraid.android.kit.RoomChip
+import dev.centraid.android.kit.RoomChipRow
+import dev.centraid.android.kit.RoomSearchOpener
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
@@ -189,8 +191,13 @@ internal fun DocsSheetView(sheet: DocsSheet?, actions: DocsSheetActions) {
         folder != null -> SheetRoom(
             title = sheet.title,
             onDismiss = actions.onClose,
-            primary = if (folder.can_create && folder.create_label.isNotEmpty()) {
-                SheetPrimary(label = folder.create_label, testTag = "docs-folder-create", onPress = actions.onFolderCreated)
+            primary = if (folder.create_label.isNotEmpty()) {
+                SheetPrimary(
+                    label = folder.create_label,
+                    testTag = "docs-folder-create",
+                    enabled = folder.can_create,
+                    onPress = actions.onFolderCreated,
+                )
             } else {
                 null
             },
@@ -276,8 +283,57 @@ internal fun DocsDriveScreen(
     val add = chrome?.add?.takeIf { it.isNotEmpty() }?.let { label ->
         RoomAction("Plus", label, "docs-add") { onEvent(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = DocsSheet.Kind.KIND_ADD))) }
     }
-    val body: @Composable () -> Unit = { DriveBody(state, onEvent) }
+    // THE CHIP ROW (R-CHROME-3), the machine's pills as they come: the
+    // filters, Clear while one is set, the sort last.
+    val chips = if (state.denied != null) {
+        emptyList<RoomChip>()
+    } else {
+        state.pills.map { pill ->
+            RoomChip(
+                testTag = if (pill.clears) "docs-clear-filters" else "docs-pill-${pill.key.value}",
+                label = pill.label,
+                selected = pill.active,
+                chevron = pill.chevron,
+                spoken = pill.accessibility_label,
+            ) {
+                if (pill.clears) {
+                    onEvent(DocsDriveEvent(filters_cleared = DocsDriveEvent.FiltersCleared()))
+                } else {
+                    onEvent(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = pill.key)))
+                }
+            }
+        }
+    }
+    val search = RoomSearch(
+        field = state.search ?: centraid.screen.v1.SearchField(),
+        placeholder = chrome?.search_placeholder.orEmpty(),
+        onTerm = { onEvent(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = it))) },
+        onClose = { onEvent(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed())) },
+        label = chrome?.search_label.orEmpty().ifEmpty { KitWords.SEARCH },
+        closeLabel = chrome?.search_close.orEmpty().ifEmpty { KitWords.CLOSE_SEARCH },
+        onOpen = { onEvent(DocsDriveEvent(search_opened = DocsDriveEvent.SearchOpened())) },
+    )
     if (folderPage) {
+        // A FOLDER PAGE IS NOT A ROOM, so it draws the room's search bar and
+        // chip row itself, in the room's order.
+        val body: @Composable () -> Unit = {
+            Column(Modifier.fillMaxSize()) {
+                if (search.field.open_) {
+                    CentraidSearchField(
+                        field = search.field,
+                        placeholder = search.placeholder,
+                        onTerm = search.onTerm,
+                        onClose = search.onClose,
+                        label = search.label,
+                        closeLabel = search.closeLabel,
+                    )
+                } else if (state.denied == null) {
+                    RoomSearchOpener(search.placeholder, testTag = "docs-search-open", onOpen = search.onOpen)
+                }
+                if (chips.isNotEmpty()) RoomChipRow("docs", chips)
+                Box(Modifier.weight(1f)) { DriveBody(state, onEvent) }
+            }
+        }
         PushedPage(
             title = state.folder_name,
             // THE MACHINE NAMES THE PARENT (`chrome.back`, #1047).
@@ -294,32 +350,23 @@ internal fun DocsDriveScreen(
             title = chrome?.title.orEmpty(),
             meta = state.head_meta,
             trailing = add,
-            search = RoomSearch(
-                field = state.search ?: centraid.screen.v1.SearchField(),
-                placeholder = chrome?.search_placeholder.orEmpty(),
-                onTerm = { onEvent(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = it))) },
-                onClose = { onEvent(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed())) },
-                label = chrome?.search_label.orEmpty().ifEmpty { KitWords.SEARCH },
-                closeLabel = chrome?.search_close.orEmpty().ifEmpty { KitWords.CLOSE_SEARCH },
-            ),
+            search = search,
+            chips = chips,
             status = refusal(state.write),
             statusLine = adding,
             band = {
+                // MORE IS ONE OF THE MACHINE'S TABS (R-CHROME-4), drawn as a
+                // tab and not as the kit's More.
                 AppBand(
                     app = "docs",
-                    tabs = state.band.filter { it.key != "more" }.map {
+                    tabs = state.band.map {
                         AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current)
                     },
                     onSelect = { key -> onEvent(DocsDriveEvent(band = DocsDriveEvent.BandPicked(key = key))) },
                     onHome = onHome,
-                    onMore = if (state.band.any { it.key == "more" }) {
-                        { onEvent(DocsDriveEvent(band = DocsDriveEvent.BandPicked(key = "more"))) }
-                    } else {
-                        null
-                    },
                 )
             },
-            content = body,
+            content = { DriveBody(state, onEvent) },
         )
     }
     DocsSheetView(
@@ -349,33 +396,10 @@ internal fun DocsDriveScreen(
 private fun DriveBody(state: DocsDriveState, onEvent: (DocsDriveEvent) -> Unit) {
     val chrome = state.chrome
     Column(Modifier.fillMaxSize()) {
-        // THE TOOLBAR: filter pills from state, clear, search, layout.
-        Row(
-            Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                state.pills.forEach { pill ->
-                    Pill(pill.label, pill.active, pill.accessibility_label, "docs-pill-${pill.key.value}") {
-                        onEvent(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = pill.key)))
-                    }
-                }
-                if (state.filters_active && chrome?.filters_clear_label.orEmpty().isNotEmpty()) {
-                    QuietButton(label = chrome!!.filters_clear_label, testTag = "docs-clear-filters") {
-                        onEvent(DocsDriveEvent(filters_cleared = DocsDriveEvent.FiltersCleared()))
-                    }
-                }
-            }
-            if (state.search?.open_ != true && chrome?.search_label.orEmpty().isNotEmpty()) {
-                IconKey("Search", chrome!!.search_label, "docs-search", bordered = false) {
-                    onEvent(DocsDriveEvent(search_opened = DocsDriveEvent.SearchOpened()))
-                }
-            }
-            if (chrome?.layout_toggle.orEmpty().isNotEmpty()) {
+        // THE LAYOUT TOGGLE, at the list's head. Search and the chips are
+        // the room's (R-CHROME-2/3), drawn above.
+        if (state.denied == null && chrome?.layout_toggle.orEmpty().isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().padding(end = 4.dp), horizontalArrangement = Arrangement.End) {
                 IconKey(chrome!!.layout_icon_key.ifEmpty { "Grid" }, chrome.layout_toggle, "docs-layout", bordered = false) {
                     onEvent(DocsDriveEvent(layout_toggled = DocsDriveEvent.LayoutToggled()))
                 }
@@ -557,29 +581,6 @@ private fun Tile(
             if (meta.isNotEmpty()) Text(meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 1)
         }
     }
-}
-
-@Composable
-private fun Pill(label: String, active: Boolean, a11y: String, tag: String, onTap: () -> Unit) {
-    val shape = RoundedCornerShape(50)
-    Text(
-        label,
-        style = centraidType("annotLabelOn"),
-        color = centraidColor(if (active) "text" else "textSoft"),
-        maxLines = 1,
-        modifier = Modifier
-            .heightIn(min = 32.dp)
-            .clip(shape)
-            .border(KitGeometry.HAIRLINE, centraidColor(if (active) "lineStrong" else "line"), shape)
-            .clickable(onClick = onTap)
-            .padding(horizontal = 12.dp, vertical = 7.dp)
-            .testTag(tag)
-            .clearAndSetSemantics {
-                contentDescription = a11y.ifEmpty { label }
-                role = Role.Button
-                selected = active
-            },
-    )
 }
 
 // ---------------------------------------------------------------------------

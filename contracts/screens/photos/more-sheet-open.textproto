@@ -12,3 +12,8 @@ permission: MEDIA_PERMISSION_GRANTED
 data { cells { asset_id: "ast-0004" captured_at: "2026-09-09T12:00:00Z" kind: KIND_PHOTO } }
 backup { phase: PHASE_DONE }
 sheet: SHEET_MORE
+# THE BAND IS PLACES, THEN MORE (R-CHROME-4/5): no Search tab, and More is the
+# lit tab while its sheet is up — the destination underneath stays the library.
+band { key: "library" label: "Library" icon_key: "Image" }
+band { key: "collections" label: "Collections" icon_key: "Layers" }
+band { key: "more" label: "More" icon_key: "MoreHoriz" current: true }

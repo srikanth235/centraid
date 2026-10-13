@@ -230,8 +230,7 @@ public class HomeSession private constructor(
 
     /**
      * Bind the iOS mover's loop to this session's vaults (`HomeBridge`). A
-     * frozen vault hands nothing off: the gateway would refuse its writes. Nor
-     * does the example, which is never a holding at all.
+     * frozen vault hands nothing off: the gateway would refuse its writes.
      */
     public fun attachUploads(loop: UploadLoop) {
         uploads = loop
@@ -279,8 +278,7 @@ public class HomeSession private constructor(
      * the core knew no such destination, null when there was no core to ask.
      */
     public suspend fun forgetDestination(gatewayId: String): ForgetAnswer? {
-        // THE MEMBER'S CORE: `shelf.core()` answers the example in a preview.
-        val forgotten = CoreBackupDoors { shelf.memberCore() }.forget(gatewayId)
+        val forgotten = CoreBackupDoors { shelf.core() }.forget(gatewayId)
         backupStatus.refreshForeground()
         return forgotten
     }
@@ -518,8 +516,6 @@ public class HomeSession private constructor(
     ): FoundResult {
         val first = shelf.all().isEmpty()
         val outcome = shelf.found(name = name, ownerName = ownerName, starters = first, own = own)
-        // REBOUND EITHER WAY: a found ends a preview whether or not it lands,
-        // and nothing may stay bound to the example's closed core.
         rebind()
         return when (outcome) {
             is Shelf.FoundOutcome.Founded -> {
@@ -528,7 +524,7 @@ public class HomeSession private constructor(
             is Shelf.FoundOutcome.Refused -> FoundResult.Refused(
                 when (outcome.because) {
                     Shelf.FoundRefusal.NO_CORE ->
-                        "Centraid could not make a vault on this device."
+                        "Couldn't make a vault on this phone."
                     // THE SENTENCE NO LONGER NAMES A MISSING DOOR (#1029 W5).
                     // It said "this build cannot make a new vault yet", which
                     // was true while nothing over the ABI wrote `core_vault`
@@ -537,37 +533,12 @@ public class HomeSession private constructor(
                     // remedy a member has is to try again — the shelf picks a
                     // different fresh file each time.
                     Shelf.FoundRefusal.NOT_FOUNDED ->
-                        "Centraid made the file and could not make it a vault. Try again."
+                        "Couldn't make the vault. Try again."
                     Shelf.FoundRefusal.ALREADY_HELD ->
-                        "This device already holds that vault."
+                        "This phone already holds that vault."
                 },
             )
         }
-    }
-
-    /**
-     * "SEE AN EXAMPLE" (docs/decisions.md, "Onboarding without sample data").
-     *
-     * Opens an ephemeral, read-only example core ([Shelf.openExample]) and
-     * rebinds onto it, so Home and every app screen read the example until
-     * [leaveExample]. The member's foreground vault does not move and nothing
-     * of it is opened, written or backed up. Answers whether the preview opened.
-     */
-    public suspend fun seeExample(): Boolean {
-        val opened = shelf.openExample()
-        rebind()
-        return opened
-    }
-
-    /**
-     * LEAVE THE EXAMPLE: its core closes, its directory is deleted, and the
-     * session rebinds onto the member's own vault. A session with no preview
-     * open is left as it is.
-     */
-    public suspend fun leaveExample() {
-        if (!shelf.previewing.value) return
-        shelf.closeExample()
-        rebind()
     }
 
     /**
@@ -649,6 +620,17 @@ public class HomeSession private constructor(
     public suspend fun forget(vaultId: String) {
         shelf.forget(vaultId)
         rebind()
+    }
+
+    /**
+     * RENAME A VAULT (the switcher's Rename): written into the vault's own
+     * file by [Shelf.renameVault], then the header and the roster redrawn from
+     * the shelf. False when the name was blank or refused.
+     */
+    public suspend fun renameVault(vaultId: String, name: String): Boolean {
+        val renamed = shelf.renameVault(vaultId, name)
+        if (renamed) rebind()
+        return renamed
     }
 
     /**
@@ -815,9 +797,7 @@ public class HomeSession private constructor(
      * `synced` costs nothing and does not throw away a tile.
      */
     private suspend fun publishLockup() {
-        // THE EXAMPLE'S OWN LOCKUP WHILE A PREVIEW IS OPEN, `example` set: the
-        // header and the banner say whose rows these are on every route.
-        val lockup = shelf.exampleLockup() ?: shelf.foregroundHolding()?.lockup() ?: VaultLockup()
+        val lockup = shelf.foregroundHolding()?.lockup() ?: VaultLockup()
         host.send(HomeEvent(vault_changed = HomeEvent.VaultChanged(vault = lockup)))
     }
 
@@ -873,9 +853,6 @@ public class HomeSession private constructor(
      * something real.
      */
     private suspend fun switchTo(vaultId: String) {
-        // REBOUND EVEN WHEN THE SWITCH IS REFUSED: the shelf ends a preview
-        // before it tries, and a session left bound to the closed example core
-        // would read nothing.
         shelf.bringToFront(vaultId)
         // THE LOCKUP IS WHAT STARTS THE RELOAD: the machine sees a vault whose
         // id differs from the one it is holding, throws away every tile it read
@@ -942,10 +919,7 @@ public class HomeSession private constructor(
             // rather than awaited: the listener runs on the one consumer of the
             // core's bounded, drop-nothing event queue, and a listener that
             // waited for a network there would stall it.
-            // A preview's own found is not a commit of the member's.
-            session.changes.onCommit = {
-                if (!shelf.previewing.value) scope.launch { session.drain.afterCommit() }
-            }
+            session.changes.onCommit = { scope.launch { session.drain.afterCommit() } }
             // THE RADIO MOVED: a link that came back, or Wi-Fi after cellular,
             // is when withheld originals can go. Debounced on its own clock.
             services.networkStatus.onChange { reading -> scope.launch { session.drain.onConnectivity(reading) } }

@@ -122,7 +122,7 @@ enum LockerScreens: AppScreens {
             home,
             open: { [weak shell] parameter in
                 guard let shell else { return }
-                LockerLockSeam.attached(shell)
+                LockerLockSeam.attached(shell, entered: true)
                 let held = (try? Centraid_Screen_V1_LockerHomeState(serializedBytes: shell.state(home))) ?? .init()
                 var event = (try? Centraid_Screen_V1_LockerHomeEvent(serializedBytes: parameter)) ?? .init()
                 if held.destination != .unspecified { event.opened.destination = held.destination }

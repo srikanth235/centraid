@@ -50,7 +50,7 @@ internal object LockerSeam {
      * credential allowed), and which biometric the phone has ENROLLED — FACE or
      * FINGERPRINT by its sensor, PASSCODE when there is none enrolled.
      */
-    fun attached(context: Context): LockerLockEvent {
+    fun attached(context: Context, entered: Boolean = false): LockerLockEvent {
         val manager = BiometricManager.from(context)
         val available = manager.canAuthenticate(authenticators()) == BiometricManager.BIOMETRIC_SUCCESS
         val enrolled = manager.canAuthenticate(
@@ -64,7 +64,7 @@ internal object LockerSeam {
                 LockerBiometry.LOCKER_BIOMETRY_FACE
             else -> LockerBiometry.LOCKER_BIOMETRY_FINGERPRINT
         }
-        return LockerLockEvent(attached = LockerLockEvent.Attached(available = available, biometry = biometry))
+        return LockerLockEvent(attached = LockerLockEvent.Attached(available = available, biometry = biometry, entered = entered))
     }
 
     /**

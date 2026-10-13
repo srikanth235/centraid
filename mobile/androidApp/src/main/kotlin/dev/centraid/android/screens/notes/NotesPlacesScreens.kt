@@ -53,7 +53,7 @@ public fun NotesNotebooksScreen(
         app = "notes",
         title = chrome?.title.orEmpty(),
         trailing = chrome?.let {
-            RoomAction("FolderPlus", it.new_notebook, "notes-new-notebook") {
+            RoomAction("Plus", it.new_notebook, "notes-new-notebook") {
                 onEvent(NotesNotebooksEvent(create_opened = NotesNotebooksEvent.CreateOpened()))
             }
         },
@@ -86,12 +86,8 @@ public fun NotesNotebooksScreen(
             title = chrome.new_notebook,
             onDismiss = { onEvent(NotesNotebooksEvent(create_dismissed = NotesNotebooksEvent.CreateDismissed())) },
             status = if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "",
-            primary = if (state.create_enabled) {
-                SheetPrimary(chrome.create, testTag = "notes-notebook-create") {
-                    onEvent(NotesNotebooksEvent(create_confirmed = NotesNotebooksEvent.CreateConfirmed()))
-                }
-            } else {
-                null
+            primary = SheetPrimary(chrome.create, testTag = "notes-notebook-create", enabled = state.create_enabled) {
+                onEvent(NotesNotebooksEvent(create_confirmed = NotesNotebooksEvent.CreateConfirmed()))
             },
         ) {
             EditableFieldRow(
@@ -194,12 +190,8 @@ public fun NotesJournalScreen(
         SheetRoom(
             title = compose.title,
             onDismiss = { onEvent(NotesJournalEvent(compose_closed = NotesJournalEvent.ComposeClosed())) },
-            primary = if (compose.can_save) {
-                SheetPrimary(label = compose.save, testTag = "notes-journal-save") {
-                    onEvent(NotesJournalEvent(compose_saved = NotesJournalEvent.ComposeSaved()))
-                }
-            } else {
-                null
+            primary = SheetPrimary(label = compose.save, testTag = "notes-journal-save", enabled = compose.can_save) {
+                onEvent(NotesJournalEvent(compose_saved = NotesJournalEvent.ComposeSaved()))
             },
             status = compose.status_label,
         ) {

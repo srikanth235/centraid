@@ -5,9 +5,9 @@
 //! "Onboarding without sample data", `#onboarding-without-sample-data`), so
 //! these are ORDINARY ROWS OF THE MEMBER'S, with no mark and nothing to clean
 //! up: a vault they just made is not a blank wall, and every row here is one
-//! they edit, complete or delete like any other. The scenario a member can look
-//! around in lives elsewhere, in an ephemeral example core ([`crate::example`]),
-//! and never lands here.
+//! they edit, complete or delete like any other. There is no sample data: the
+//! Tahoe scenario ([`crate::example`]) seeds dev fixtures and tests only, and no
+//! found writes it.
 //!
 //! **EACH ROW TEACHES ONE REAL GESTURE, AND IS FINISHED BY DOING IT** (R-ONBOARD-5):
 //! a note that is trashed from the list's … menu (the one place a note is

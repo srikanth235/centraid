@@ -65,18 +65,10 @@ struct AgendaEditorView: View {
             onBack: { send(event { $0.leave = .init() }) }
         ) {
             if let editorData {
-                Button {
+                ToolbarVerb(label: chrome.save, identifier: "agenda-editor-save") {
                     send(event { $0.save = .init() })
-                } label: {
-                    Text(chrome.save)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color(editorData.canSave ? "link" : "textFaint", scheme))
-                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
                 .disabled(!editorData.canSave || state.write.phase == .inFlight)
-                .accessibilityIdentifier("agenda-editor-save")
             }
         } content: {
             if mine, case let .gone(gone)? = state.content {
@@ -148,7 +140,7 @@ struct AgendaEditorView: View {
                         .centraidType("body")
                         .foregroundStyle(Theme.color("text", scheme))
                 }
-                .tint(Theme.color("accent", scheme))
+                .kitToggle()
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
                 .overlay(alignment: .bottom) { KitHairline() }
@@ -195,7 +187,6 @@ struct AgendaEditorView: View {
                     send(event { $0.sheetOpened = .with { $0.sheet = .repeat } })
                 }
                 .disabled(!editor.repeatEnabled)
-                .opacity(editor.repeatEnabled ? 1 : 0.5)
                 if !editor.repeatNote.isEmpty {
                     note(editor.repeatNote)
                 }
@@ -298,17 +289,9 @@ struct AgendaEditorView: View {
 
     /// The machine's words as the tap that opens a picker.
     private func pickerFace(_ words: String, hint: String, identifier: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(words)
-                .centraidType("body")
-                .monospacedDigit()
-                .foregroundStyle(Theme.color("link", scheme))
-                .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint(hint)
-        .accessibilityIdentifier(identifier)
+        KitLink(label: words, identifier: identifier, action: action)
+            .monospacedDigit()
+            .accessibilityHint(hint)
     }
 
     private func note(_ text: String) -> some View {

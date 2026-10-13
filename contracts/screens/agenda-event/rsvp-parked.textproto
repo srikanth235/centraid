@@ -37,7 +37,7 @@ write {
 sheet: SHEET_NONE
 parked {
   title: "Your reply was not saved"
-  body: "The vault could not be reached. Nothing was changed."
+  body: "Couldn't load your calendar. Try again, or dismiss it."
   retry_label: "Try again"
   dismiss_label: "Dismiss"
 }
@@ -45,7 +45,7 @@ chrome {
   title: "Event"
   back: "Agenda"
   loading: "Opening your calendar"
-  retry: "Retry"
+  retry: "Try again"
   scope_title: "Cancel a repeating event"
   scope_body: "Pick which occurrences to cancel."
   scope_commit: "Cancel event"

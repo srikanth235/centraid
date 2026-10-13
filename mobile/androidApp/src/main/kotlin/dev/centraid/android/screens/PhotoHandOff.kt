@@ -16,6 +16,7 @@ import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import centraid.screen.v1.PhotoCell
 import centraid.screen.v1.PhotoDetail
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.EXACT_LOCATION_COPIED
 import dev.centraid.shared.apps.photos.EXPORT_FAILED
 import dev.centraid.shared.apps.photos.EXPORT_SAVED
@@ -86,7 +87,7 @@ internal object PhotoHandOff {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(
-            Intent.createChooser(intent, "Send a copy").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            Intent.createChooser(intent, PhotosCopy.PHOTOS_SEND_COPY).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         // STATED EVERY TIME, `none` included: silence reads as safety.
         return Outcome(true, sharePlaceReceipt(precision, detail.place_name))
@@ -105,7 +106,7 @@ internal object PhotoHandOff {
         // needs a storage grant this app never asks for, and asking for one to
         // save one photograph would be the wrong trade.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return Outcome(false, "Saving to this device's photos needs Android 10 or later.")
+            return Outcome(false, "Saving to your photos needs Android 10 or later.")
         }
         val video = detail.kind == PhotoCell.Kind.KIND_VIDEO
         val mediaType = detail.original_media_type.ifEmpty { if (video) "video/mp4" else "image/jpeg" }
@@ -148,7 +149,7 @@ internal object PhotoHandOff {
             ?: return Outcome(false, EXPORT_FAILED)
         clipboard.setPrimaryClip(
             ClipData.newPlainText(
-                "Exact location",
+                PhotosCopy.PHOTOS_SEND_EXACT_LOCATION,
                 exactLocation(detail.place_latitude, detail.place_longitude),
             ),
         )

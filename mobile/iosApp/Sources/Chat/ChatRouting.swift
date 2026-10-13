@@ -27,12 +27,17 @@ import CentraidShared
 ///
 /// An entity this table has no row for opens the app's home instead
 /// ([appHome]); a tap that reached nothing would read as a broken card.
+///
+/// HOME'S SEARCH ROUTES THROUGH HERE TOO (R-CHROME-6): its rows carry the same
+/// reference (`HomeSearchRow.target`), so a hit opens exactly where a card does,
+/// with `parent` naming the page a pushed page's back returns to.
 enum ChatRouting {
     static func route(
         for card: Centraid_Screen_V1_ChatCard,
-        among cards: [Centraid_Screen_V1_ChatCard]
+        among cards: [Centraid_Screen_V1_ChatCard],
+        parent: String? = nil
     ) -> ShellModel.Route? {
-        let parent = chatTitle
+        let parent = parent ?? chatTitle
         switch (card.app, card.entity) {
         case ("tally", "expense"):
             return TallyScreens.expenseRoute(card.id, parent: parent)

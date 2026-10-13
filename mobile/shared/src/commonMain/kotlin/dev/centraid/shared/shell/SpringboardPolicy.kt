@@ -2,7 +2,6 @@ package dev.centraid.shared.shell
 
 import centraid.screen.v1.HomeTile
 import centraid.screen.v1.Springboard
-import centraid.screen.v1.ThingCount
 import centraid.screen.v1.TileBody
 import centraid.screen.v1.TileSize
 import centraid.screen.v1.TileStatus
@@ -130,8 +129,7 @@ public object SpringboardPolicy {
     }
 
     /**
-     * The defensive body for the one case grading leaves: a tile that earned the
-     * grid while loading and settled with nothing.
+     * The line an app with nothing in it draws in its tile.
      *
      * Every line is what-to-DO, never what-is-missing ("no photos") — a quiet
      * tile is an invitation, not a failure.
@@ -171,76 +169,13 @@ public object SpringboardPolicy {
     }
 
     /**
-     * Three different kinds of yes:
-     *
-     *  - `CONTENT` — it has something.
-     *  - `LOADING` — it may, and a read in flight holds its slot at full
-     *    geometry: demoting and re-promoting a beat later is a relayout the
-     *    member watches.
-     *  - Locker — its body is a STATE and not a query result, so it always has
-     *    something true to say and is never an invitation to fill it.
-     *
-     * `EMPTY` and `UNKNOWN` do not earn it.
-     */
-    public fun earnsGrid(status: TileStatus, body: TileBody?): Boolean {
-        if (body?.locker != null) return true
-        return status == TileStatus.TILE_STATUS_CONTENT ||
-            status == TileStatus.TILE_STATUS_LOADING
-    }
-
-    /**
      * Every tile `UNKNOWN` — no replica session, no grant, or every read failed.
      *
-     * The whole springboard's verdict and not one app's, which is why it is a
-     * separate question from [earnsGrid]: demoting ONE unreadable tile beside
-     * readable neighbours is right, demoting them ALL leaves a launcher with no
-     * tiles at all.
+     * The whole springboard's verdict and not one app's: it keeps the screen
+     * from claiming the vault is empty when it simply could not look.
      */
     public fun everyTileUnreadable(tiles: List<HomeTile>): Boolean =
         tiles.isNotEmpty() && tiles.all { it.status == TileStatus.TILE_STATUS_UNKNOWN }
-
-    /**
-     * Which apps the grid shows, and which fall to first moves.
-     *
-     * This lived inline in v0's `Home.tsx` until `#905` — which is exactly why
-     * the defect it contained had no test at any tier, a renderer being the only
-     * way to reach it.
-     */
-    public fun gridMembership(tiles: List<HomeTile>): Membership {
-        val unreadable = everyTileUnreadable(tiles)
-        val earned = mutableListOf<HomeTile>()
-        val idle = mutableListOf<String>()
-        for (tile in tiles) {
-            if (unreadable || tile.earns_grid) earned += tile else idle += tile.app_id
-        }
-        return Membership(earned = earned, idleAppIds = idle)
-    }
-
-    public data class Membership(
-        val earned: List<HomeTile>,
-        val idleAppIds: List<String>,
-    )
-
-    /**
-     * Sums ONLY counts a read actually returned.
-     *
-     * A withheld count (Locker) is OMITTED and never treated as zero, and a
-     * capped count contributes its ceiling — which is why the status line says
-     * "at least" when anything is capped. The one number describing the whole
-     * vault is assembled from numbers each of which is true.
-     */
-    public fun countThings(tiles: List<HomeTile>): ThingCount {
-        var total = 0
-        var capped = false
-        var settled = true
-        for (tile in tiles) {
-            if (tile.status == TileStatus.TILE_STATUS_LOADING) settled = false
-            val count = tile.count ?: continue
-            total += count.value_
-            if (count.capped) capped = true
-        }
-        return ThingCount(total = total, capped = capped, settled = settled)
-    }
 
     /**
      * Which of the three Homes this is.

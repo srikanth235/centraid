@@ -49,6 +49,9 @@ struct BareSearchField: UIViewRepresentable {
     let font: UIFont
     let color: UIColor
     let placeholderColor: UIColor
+    /// The Search key, after it puts the keyboard away; nil for a field whose
+    /// query is simply live.
+    var onSubmit: (() -> Void)? = nil
 
     func makeUIView(context: Context) -> UITextField {
         let field = UITextField()
@@ -105,6 +108,7 @@ struct BareSearchField: UIViewRepresentable {
         /// keyboard away and lets the member look at what it found.
         func textFieldShouldReturn(_ field: UITextField) -> Bool {
             field.resignFirstResponder()
+            parent.onSubmit?()
             return false
         }
     }
@@ -122,6 +126,13 @@ struct CentraidSearchField: View {
     let placeholder: String
     var closeLabel: String = KitWords.shared.CLOSE_SEARCH
     var identifier: String = "kit-search"
+    /// A quiet scope at the field's end ("All apps"), or none.
+    var scope: String = ""
+    /// Whether the field carries its own close key. A page whose header has a
+    /// Cancel of its own (Home's search) leaves it off.
+    var closes: Bool = true
+    /// The keyboard's Search key, or nil when the query is simply live.
+    var onSubmit: (() -> Void)? = nil
     let onTerm: (String) -> Void
     let onClose: () -> Void
 
@@ -140,9 +151,18 @@ struct CentraidSearchField: View {
                     placeholder: placeholder,
                     font: Theme.uiFont("body", scheme),
                     color: UIColor(Theme.color("text", scheme)),
-                    placeholderColor: UIColor(Theme.color("textFaint", scheme))
+                    placeholderColor: UIColor(Theme.color("textFaint", scheme)),
+                    onSubmit: onSubmit
                 )
                 .accessibilityIdentifier("\(identifier)-field")
+                if !scope.isEmpty, typed.isEmpty {
+                    Text(scope)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.trailing, 8)
+                }
                 if !typed.isEmpty {
                     Button {
                         typed = ""
@@ -161,18 +181,26 @@ struct CentraidSearchField: View {
             .background(Capsule().fill(Theme.color("bgSunken", scheme)))
             .contentShape(Capsule())
             .onTapGesture { focused = true }
-            Button(action: onClose) {
-                CentraidIconView(iconKey: "X", tint: Theme.color("textSoft", scheme), size: 16)
-                    .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
+            if closes {
+                Button(action: onClose) {
+                    CentraidIconView(iconKey: "X", tint: Theme.color("textSoft", scheme), size: 16)
+                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(closeLabel)
+                .accessibilityIdentifier("\(identifier)-close")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(closeLabel)
-            .accessibilityIdentifier("\(identifier)-close")
         }
         .onAppear {
             typed = field.term
             focused = true
+        }
+        // A TERM THE MACHINE SET (a recent search picked) reaches the field —
+        // only while the field still shows the term it replaced, so a reducer
+        // a keystroke behind never takes typed letters back.
+        .onChange(of: field.term) { old, new in
+            if typed == old, typed != new { typed = new }
         }
         .onChange(of: typed) { _, term in
             guard term != field.term else { return }

@@ -21,7 +21,9 @@ import dev.centraid.shared.screen.Step
  * The hardest single screen in the product, and the one every other screen is
  * reached through. v0's is 376 lines of `Home.tsx` over ~9,400 lines of parts;
  * what ports is the part that decides things, which v0 had already pulled into
- * two pure modules after `#905` (see [SpringboardPolicy] and [FirstMoves]).
+ * a pure module after `#905` (see [SpringboardPolicy]).
+ * Home offers no "Fill this out" nudges: an app with nothing in it is a tile
+ * that says what to do, and its own empty screen offers its import or add.
  *
  * ## Home fans out; it does not wait
  *
@@ -46,8 +48,7 @@ import dev.centraid.shared.screen.Step
  *
  * ## Where the derived verdicts live
  *
- * `earns_grid`, `springboard`, `things`, `every_tile_unreadable` and the
- * first moves are computed HERE and written onto the state. The views own nothing: SwiftUI and Compose
+ * `springboard`, `every_tile_unreadable` and `grid_rows` are computed HERE and written onto the state. The views own nothing: SwiftUI and Compose
  * render a finished message, and two shells cannot disagree about which Home
  * they are drawing because neither of them decides.
  */
@@ -116,12 +117,6 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
             event.status != null -> Step(
                 state.copy(data_ = state.data_?.copy(status = event.status.status)),
             )
-
-            // THE ALL-APPS LISTING IS A SHEET, NEVER A DESTINATION. It is not a
-            // second Home, it does not get a route, and it survives no
-            // navigation — the same law the Photos grid's `more` follows.
-            event.all_apps != null ->
-                Step(state.copy(all_apps_sheet_open = event.all_apps.open_))
 
             event.seat_changed != null -> Step(state.copy(seat = event.seat_changed.seat))
 
@@ -226,15 +221,12 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
         val noVault = seat?.availability == SeatState.Availability.AVAILABILITY_WAITING_FOR_MOUNT
         val fresh = if (noVault) Step(HomeState(failure = Reads.noVault())) else firstLoad()
         return Step(
-            noticed(
-                fresh.state.copy(
-                    seat = seat,
-                    vault = vault,
-                    vaults = vaults,
-                    all_apps_sheet_open = all_apps_sheet_open,
-                    vault_sheet_open = vault_sheet_open,
-                    backup_line = backup_line,
-                ),
+            fresh.state.copy(
+                seat = seat,
+                vault = vault,
+                vaults = vaults,
+                vault_sheet_open = vault_sheet_open,
+                backup_line = backup_line,
             ),
             fresh.effects,
         )
@@ -294,21 +286,7 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
         edit: (List<HomeTile>) -> List<HomeTile>,
     ): HomeState {
         val data = state.data_ ?: return state
-        return noticed(state.copy(data_ = regraded(data.copy(tiles = edit(data.tiles)))))
-    }
-
-    /**
-     * THE FIRST MOVES, written onto the data from the idle apps. Not part of
-     * [regraded] because it is recomputed wherever the data is replaced.
-     *
-     * Home's one line above the grid is the backup line's alone
-     * (`HomeState.backup_line`, #1080): the sample line that shared it is
-     * retired (docs/decisions.md, "Onboarding without sample data").
-     */
-    private fun noticed(state: HomeState): HomeState {
-        val data = state.data_ ?: return state
-        val idle = SpringboardPolicy.gridMembership(data.tiles).idleAppIds
-        return state.copy(data_ = data.copy(first_moves = FirstMoves.forIdle(idle)))
+        return state.copy(data_ = regraded(data.copy(tiles = edit(data.tiles))))
     }
 
     /**
@@ -324,27 +302,22 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
         val graded = data.tiles.map { tile ->
             val spoken = HomeTileWords.spoken(tile)
             tile.copy(
-                earns_grid = SpringboardPolicy.earnsGrid(tile.status, tile.body),
                 open_label = spoken.first,
                 accessibility_label = spoken.second,
             )
         }
-        val membership = SpringboardPolicy.gridMembership(graded)
         val unreadable = SpringboardPolicy.everyTileUnreadable(graded)
-        // WHICH TILES ARE DRAWN, AND IN WHICH ROWS, IS ALSO A DECISION. Every
-        // tile unreadable shows them all — demoting one unreadable tile beside
-        // readable neighbours is right, demoting them ALL leaves a launcher with
-        // no tiles — and the packer then closes the holes a small-before-wide
-        // leaves. Both answers are written here, so neither renderer has to
-        // reach one, and the two cannot reach different ones.
-        val shown = if (unreadable) graded else membership.earned
+        // WHICH ROWS THE TILES SIT IN IS ALSO A DECISION, and EVERY APP HAS A
+        // TILE (R-ONBOARD-11): one with nothing in it draws what to do, so the
+        // member always sees Docs, Agenda, People and Tally and the packer only
+        // closes the holes a small-before-wide leaves. It is written here, so
+        // neither renderer has to reach one, and the two cannot reach different
+        // ones.
         return data.copy(
             tiles = graded,
             springboard = SpringboardPolicy.springboardState(graded),
-            things = SpringboardPolicy.countThings(graded),
             every_tile_unreadable = unreadable,
-            first_moves = FirstMoves.forIdle(membership.idleAppIds),
-            grid_rows = SpringboardPolicy.rows(shown).map { row ->
+            grid_rows = SpringboardPolicy.rows(graded).map { row ->
                 TileRow(app_ids = row.map { it.app_id })
             },
         )
@@ -360,7 +333,7 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
      *
      * **Every tile re-reads, not the one whose table moved**, and that is a
      * decision rather than laziness. Home is not seven independent cards: the
-     * springboard's grading — `earns_grid`, `things`, `every_tile_unreadable`
+     * springboard's grading — `springboard`, `every_tile_unreadable`
      * and the grid packing — is computed ACROSS all seven in [tilesArrived], so
      * recomputing it from one fresh tile and six stale ones would draw a
      * springboard that is a mixture of two moments. Seven reads is the price of

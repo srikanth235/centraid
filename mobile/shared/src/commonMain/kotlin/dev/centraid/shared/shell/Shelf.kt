@@ -5,9 +5,9 @@ import centraid.screen.v1.VaultLockup
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
 import dev.centraid.core.CoreOutcome
-import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.custody.DevSeed
 import dev.centraid.shared.custody.VaultSecrets
+import dev.centraid.shared.kit.PhoneImport
 import dev.centraid.shared.platform.PlatformServices
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -119,17 +119,6 @@ import okio.Path.Companion.toPath
  * through [openCore]. A vault with no seed on this phone, or no index
  * recorded for it, opens UNKEYED — reads and writes as before — and Locker
  * draws its no-words wall rather than a failure.
- *
- * ## THE EXAMPLE IS NEVER A HOLDING
- *
- * "See an example" ([openExample]) puts an EPHEMERAL core in front of every
- * screen — [core] answers it while a preview is open — and it is never a
- * [Holding]: its directory is under the OS's temporary directory and never the
- * vault directory, it is never keyed and never on the roster, and no pass ever
- * walks it ([ExamplePreview] has the whole account). A preview ends when the
- * member leaves it ([closeExample]) and whenever the shelf itself changes — a
- * found, a forget, a switch, a restore, a re-key — so a member's own vault is
- * never behind an example they did not ask to keep looking at.
  */
 public class Shelf(
     /** Where every vault this device holds lives. */
@@ -147,11 +136,6 @@ public class Shelf(
             is CoreOutcome.Failed -> null
         }
     },
-    /**
-     * Where "See an example" puts its ephemeral directories: under the OS's
-     * temporary directory, never under [vaultDir]. A spec names its own.
-     */
-    exampleDir: String = ExamplePreview.defaultRoot(),
 ) {
     /** Where the seed and each vault's index are kept. */
     private val secrets = VaultSecrets(services.secureStore, services.syncedSecrets)
@@ -404,77 +388,23 @@ public class Shelf(
     }
 
     /**
-     * The core every screen reads through: the EXAMPLE's while a preview is
-     * open ([openExample]), else the one the foreground holding is open on, or
-     * null.
-     *
-     * One door for both, because every bridge reads the core here: a preview
-     * that had to be threaded through each of them would be a preview one of
-     * them forgot, reading the member's vault under an "Example" banner.
+     * The core every screen reads through: the one the foreground holding is
+     * open on, or null.
      *
      * It does **not** wake a resting holding — waking is a suspending act and
      * this is read from a property on the session's hot path; [bringToFront] and
      * [awaken] are what wake. Null is a device holding no vault, which is a
      * state of the device and shows the empty shelf rather than an error.
      */
-    public fun core(): CentraidCore? = example.core ?: foregroundHolding()?.core
+    public fun core(): CentraidCore? = foregroundHolding()?.core
 
     /**
-     * THE MEMBER'S OWN FOREGROUND CORE, whether or not a preview is open: what
-     * pairing, a backup destination and the chat read, because each is about
-     * the member's vault and never the example's.
+     * WHY A WRITE IS REFUSED ON WHAT [core] ANSWERS, or null: the moved
+     * sentence on a frozen vault. Read at the moment of each write, so a
+     * screen opened before the freeze still refuses the save pressed after.
      */
-    public fun memberCore(): CentraidCore? = foregroundHolding()?.core
-
-    // -----------------------------------------------------------------------
-    // "See an example" — never a holding (see the class header)
-    // -----------------------------------------------------------------------
-
-    private val example = ExamplePreview(
-        root = exampleDir,
-        freshName = { "example-" + hex(services.secureRandom.bytes(NAME_BYTES)) },
-        opener = opener,
-    )
-
-    private val previewingFlow = MutableStateFlow(false)
-
-    /** WHETHER A PREVIEW IS OPEN, as it changes. */
-    public val previewing: StateFlow<Boolean> get() = previewingFlow.asStateFlow()
-
-    /** The example's lockup while a preview is open, else null. */
-    public fun exampleLockup(): VaultLockup? = example.lockup
-
-    /**
-     * OPEN "SEE AN EXAMPLE" ([ExamplePreview.open]): every screen reads the
-     * example until [closeExample]. Answers whether a preview is open after.
-     * The foreground holding does not move and nothing of it is touched.
-     */
-    public suspend fun openExample(): Boolean = gate.withLock {
-        val opened = example.open() != null
-        previewingFlow.value = opened
-        opened
-    }
-
-    /** LEAVE THE PREVIEW: its core closes and its directory is deleted. */
-    public suspend fun closeExample(): Unit = gate.withLock { endExample() }
-
-    /**
-     * WHY A WRITE IS REFUSED ON WHAT [core] ANSWERS, or null: the example's
-     * sentence while a preview is open, the moved sentence on a frozen vault.
-     * Read at the moment of each write, so a screen opened before either still
-     * refuses the save pressed after.
-     */
-    public fun readOnlySentence(): String? = when {
-        example.core != null -> EXAMPLE_SENTENCE
-        foregroundHolding()?.readOnly == true -> MOVED_SENTENCE
-        else -> null
-    }
-
-    /** Close a preview, under [gate]: what every structural change does first. */
-    private fun endExample() {
-        example.close()
-        previewingFlow.value = false
-    }
+    public fun readOnlySentence(): String? =
+        if (foregroundHolding()?.readOnly == true) MOVED_SENTENCE else null
 
     // -----------------------------------------------------------------------
     // Launch
@@ -492,8 +422,6 @@ public class Shelf(
      * Then the FOREGROUND is chosen: the vault the member last had in front.
      */
     public suspend fun load(dev: DevSeed? = null): Unit = gate.withLock {
-        // WHAT A PROCESS KILLED MID-PREVIEW LEFT, gone before anything opens.
-        example.sweep()
         // A DEV SEED IS STORED FIRST, exactly as a restore would leave it, so
         // every open below takes the ordinary keyed path. See [DevSeed].
         if (dev != null) runCatching { secrets.rememberSeed(dev.seedHex) }
@@ -584,7 +512,6 @@ public class Shelf(
          */
         own: String? = null,
     ): FoundOutcome = gate.withLock {
-        endExample()
         val path = freshVaultFile()
         // THE INDEX IS SPENT BEFORE THE OPEN (#1047 E4, the crash window), and
         // it can be, because it does not depend on the vault id: a keyed core
@@ -672,7 +599,6 @@ public class Shelf(
      * holding zero vaults is a state of the device and shows the empty shelf.
      */
     public suspend fun forget(vaultId: String): Unit = gate.withLock {
-        endExample()
         val going = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return@withLock
         going.core?.close()
         holdings.value = holdings.value.filter { it.vaultId != vaultId }
@@ -712,7 +638,6 @@ public class Shelf(
      * showing something real.
      */
     public suspend fun bringToFront(vaultId: String): CentraidCore? = gate.withLock {
-        endExample()
         val next = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return@withLock null
         val core = wake(vaultId) ?: return@withLock null
         if (foregroundId != next.vaultId) {
@@ -734,7 +659,6 @@ public class Shelf(
      * closed app still holds its vaults.
      */
     public suspend fun closeAll(): Unit = gate.withLock {
-        endExample()
         holdings.value.forEach { it.core?.close() }
         holdings.value = holdings.value.map { it.copy(core = null) }
         custody?.close()
@@ -784,7 +708,6 @@ public class Shelf(
      * many vaults were added.
      */
     public suspend fun adoptRestored(restored: List<Restored>): Int = gate.withLock {
-        endExample()
         var added = 0
         for (vault in restored) {
             val (probe, _) = openCore(vault.path, create = false, key = null) ?: continue
@@ -830,7 +753,6 @@ public class Shelf(
      * Answers how many holdings are keyed afterwards.
      */
     public suspend fun rekey(): Int = gate.withLock {
-        endExample()
         var changed = false
         holdings.value = holdings.value.map { holding ->
             val key = keyOf(holding.vaultId)
@@ -907,6 +829,25 @@ public class Shelf(
      */
     public fun freeze(vaultId: String, atIso: String, unacked: Long) {
         update(vaultId) { it.copy(moved = Moved(atIso = atIso, unacked = unacked)) }
+    }
+
+    /**
+     * RENAME A VAULT, IN ITS OWN FILE: `core.rename_vault` writes
+     * `core_vault.display_name`, the one place a vault's name lives
+     * ([VaultRoster]), and the holding takes the name the core answered. A
+     * resting holding is woken to be written; a vault that moved is read-only
+     * and is not renamed. False when the name is blank or the core refused it.
+     */
+    public suspend fun renameVault(vaultId: String, name: String): Boolean {
+        val wanted = name.trim()
+        if (wanted.isEmpty()) return false
+        val holding = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return false
+        if (holding.readOnly) return false
+        val core = awaken(vaultId) ?: return false
+        val input = "{\"display_name\":${PhoneImport.quote(wanted)}}"
+        if (!PhoneImport.write(core, "core.rename_vault", input)) return false
+        rename(vaultId, wanted, holding.color)
+        return true
     }
 
     /** Re-read a holding's identity from its own file. */
@@ -1195,7 +1136,7 @@ public class Shelf(
          * describing one that is not there.
          */
         public const val MOVED_SENTENCE: String =
-            "This vault moved to your other phone. Everything here is still readable."
+            "Moved to your other phone. Still readable here."
 
         /**
          * WHAT A VAULT IS CALLED WHEN NOBODY NAMED IT (#1029 W5).
@@ -1221,11 +1162,5 @@ public class Shelf(
          * vault by its id and a phone by a token (`docs/gateway.md`).
          */
         public const val DEFAULT_OWNER_NAME: String = "Me"
-
-        /**
-         * WHAT A WRITE IS ANSWERED WITH WHILE "SEE AN EXAMPLE" IS OPEN: the
-         * example is not the member's, and nothing they do in it is kept.
-         */
-        public const val EXAMPLE_SENTENCE: String = SharedCopy.EXAMPLE_READ_ONLY
     }
 }

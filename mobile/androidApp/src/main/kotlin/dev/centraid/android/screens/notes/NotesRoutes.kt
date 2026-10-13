@@ -22,6 +22,7 @@ import dev.centraid.shared.apps.notes.NotesBridge
 import dev.centraid.shared.apps.notes.NotesHistoryBridge
 import dev.centraid.shared.apps.notes.NotesJournalBridge
 import dev.centraid.shared.apps.notes.NotesLibraryBridge
+import dev.centraid.shared.apps.notes.NotesLibraryMachine
 import dev.centraid.shared.apps.notes.NotesLinkPickerBridge
 import dev.centraid.shared.apps.notes.NotesNotebooksBridge
 import dev.centraid.shared.apps.notes.NotesNotebooksMachine
@@ -205,7 +206,7 @@ public class NotesRoutes : AppRoutes {
                 event.band?.let { place(nav, it.key) }
                 if (event.new_note != null) newNote(nav)
                 event.note_picked?.let { nav.go(nav.stack.push(Destination.NotesEditor(it.note_id, it.title))) }
-                if (event.trash_opened != null) nav.go(nav.stack.push(Destination.NotesTrash))
+                if (event.more_row?.key == NotesLibraryMachine.MORE_TRASH) nav.go(nav.stack.push(Destination.NotesTrash))
             },
             onHome = { nav.home() },
         )

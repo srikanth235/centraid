@@ -1,4 +1,5 @@
 import Contacts
+import ContactsUI
 import EventKit
 import SwiftUI
 
@@ -7,28 +8,16 @@ import CentraidShared
 #endif
 
 // ONBOARDING WITHOUT SAMPLE DATA (docs/decisions.md, "Onboarding without sample
-// data"): an app's day-one empty state offers "See an example" — a read-only
-// preview over an ephemeral example core — and, where the phone already holds
-// the data, a one-tap import asked at the point of use. These are the shell's
-// halves: the two environment doors the kit's `EmptyStateView` reads, the one
-// banner the preview and the import draw, and the address-book read.
-
-private struct SeeExampleKey: EnvironmentKey {
-    static let defaultValue: (() -> Void)? = nil
-}
+// data"): where the phone already holds an app's data, its day-one empty state
+// offers a one-tap import asked at the point of use. These are the shell's
+// halves: the environment door the kit's `EmptyStateView` reads, the banner the
+// import draws, and the address-book read.
 
 private struct ImportFromPhoneKey: EnvironmentKey {
     static let defaultValue: ((Centraid_Screen_V1_ImportSource) -> Void)? = nil
 }
 
 extension EnvironmentValues {
-    /// "See an example", or nil — and nil while a preview is open, so an empty
-    /// state inside the example offers nothing.
-    var seeExample: (() -> Void)? {
-        get { self[SeeExampleKey.self] }
-        set { self[SeeExampleKey.self] = newValue }
-    }
-
     /// An import from where the phone already holds the data, or nil.
     var importFromPhone: ((Centraid_Screen_V1_ImportSource) -> Void)? {
         get { self[ImportFromPhoneKey.self] }
@@ -36,45 +25,17 @@ extension EnvironmentValues {
     }
 }
 
-/// "SEE AN EXAMPLE": a quiet link under an app's day-one empty state — never a
-/// second button, so the empty state keeps its one action. Draws nothing where
-/// the shell offers no example (and inside one).
-struct SeeExampleLink: View {
-    @Environment(\.seeExample) private var seeExample
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        if let seeExample {
-            Button(action: seeExample) {
-                Text(ShellWords.seeExample)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("link", scheme))
-                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("kit-empty-example")
-        }
-    }
-}
-
 /// THE SHELL'S BANNER (DESIGN.md's Banner recipe: one sentence, plus one
-/// action): "Example — not your data" with its one exit while a preview is
-/// open, else the contacts import's progress and outcome. Never both — the
-/// preview has no empty state to import from.
+/// action): an import's progress and outcome.
 struct ShellBanner: View {
     @ObservedObject var shell: ShellModel
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if shell.previewing {
-            line(ShellWords.exampleBanner, action: ShellWords.exampleDone, identifier: "example") {
-                shell.leaveExample()
-            }
-        } else if !shell.importNotice.isEmpty {
+        if !shell.importNotice.isEmpty {
             line(
                 shell.importNotice,
-                action: shell.importing ? "" : ShellWords.exampleDone,
+                action: shell.importing ? "" : ShellWords.done,
                 identifier: "import"
             ) { shell.dismissImportNotice() }
         }
@@ -122,7 +83,27 @@ enum PhoneContacts {
         return await Task.detached(priority: .userInitiated) { .read(enumerate(store)) }.value
     }
 
-    private static func enumerate(_ store: CNContactStore) -> [PhoneContact] {
+    /// LIMITED ACCESS (iOS 18): the member shared only the contacts they
+    /// picked, so asking again draws no prompt and reads only those. The
+    /// import then offers iOS's own picker (`ContactAccessPicker`) to share
+    /// more, and imports what it hands back ([read(identifiers:)]).
+    static var limited: Bool {
+        if #available(iOS 18.0, *) {
+            return CNContactStore.authorizationStatus(for: .contacts) == .limited
+        }
+        return false
+    }
+
+    /// The contacts the picker just shared, by identifier.
+    static func read(identifiers: [String]) async -> [PhoneContact] {
+        guard !identifiers.isEmpty else { return [] }
+        let store = CNContactStore()
+        return await Task.detached(priority: .userInitiated) {
+            enumerate(store, predicate: CNContact.predicateForContacts(withIdentifiers: identifiers))
+        }.value
+    }
+
+    private static func enumerate(_ store: CNContactStore, predicate: NSPredicate? = nil) -> [PhoneContact] {
         let keys: [CNKeyDescriptor] = [
             CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
             CNContactOrganizationNameKey as CNKeyDescriptor,
@@ -132,6 +113,7 @@ enum PhoneContacts {
         ]
         var found: [PhoneContact] = []
         let request = CNContactFetchRequest(keysToFetch: keys)
+        request.predicate = predicate
         try? store.enumerateContacts(with: request) { contact, _ in
             let name = CNContactFormatter.string(from: contact, style: .fullName) ?? contact.organizationName
             found.append(
@@ -361,3 +343,21 @@ enum PhoneReminders {
     }
 }
 #endif
+
+/// IOS'S OWN CONTACT PICKER (`ContactAccessPicker`, iOS 18), raised when People's
+/// import meets limited access: the member shares more contacts in the
+/// system's sheet, and the identifiers it hands back are imported. Before
+/// iOS 18 there is no limited access, so there is nothing to raise.
+struct ContactAccessPickerHost: ViewModifier {
+    @ObservedObject var shell: ShellModel
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.contactAccessPicker(isPresented: $shell.contactAccessPickerShown) { identifiers in
+                shell.contactsShared(identifiers)
+            }
+        } else {
+            content
+        }
+    }
+}

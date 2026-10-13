@@ -3,7 +3,6 @@ package dev.centraid.android.screens.people
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -40,17 +38,19 @@ import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
-import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
+import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.RoomAction
+import dev.centraid.android.kit.RoomChip
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
+import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.hueColor
@@ -60,11 +60,12 @@ import dev.centraid.android.theme.centraidType
 
 /**
  * PEOPLE'S HOME (#1029 app port): People (the roster) and Touch (the rails)
- * under one band, search a field over the current surface, More a sheet.
+ * under one band — Add person top right, the search bar, ONE chip row (the
+ * roster's chips, the sort last), More (Trash) an ordinary band tab.
  *
  * The view decides nothing: every word, chip, count and empty sentence is on
  * [PeopleHomeState], and every tap is a [PeopleHomeEvent]. The intents
- * (`PersonPicked`, `AddPersonRequested`, `TrashRequested`,
+ * (`PersonPicked`, `AddPersonRequested`, `MoreRowPicked`,
  * `LogTouchRequested`) are forwarded like any event; the route reads them
  * off the way and moves the stack.
  */
@@ -86,7 +87,7 @@ public fun PeopleHomeScreen(
         app = "people",
         title = chrome?.title.orEmpty(),
         trailing = chrome?.let {
-            RoomAction("UserPlus", it.add_person, "people-add") {
+            RoomAction("Plus", it.add_person, "people-add") {
                 onEvent(PeopleHomeEvent(add_person = PeopleHomeEvent.AddPersonRequested()))
             }
         },
@@ -98,24 +99,35 @@ public fun PeopleHomeScreen(
                 closeLabel = chrome?.search_close.orEmpty(),
                 onTerm = { term -> onEvent(PeopleHomeEvent(search_term = PeopleHomeEvent.SearchTermChanged(term))) },
                 onClose = { onEvent(PeopleHomeEvent(search_closed = PeopleHomeEvent.SearchClosed())) },
+                onOpen = { onEvent(PeopleHomeEvent(search_opened = PeopleHomeEvent.SearchOpened())) },
             )
         } else {
             null
         },
+        // ONE CHIP ROW: the machine's filters, then its sort chip, last.
+        chips = state.chips.map { chip ->
+            RoomChip(
+                testTag = "people-chip-${chip.key.name}",
+                label = chip.label,
+                count = if (chip.count > 0) chip.count.toString() else "",
+                selected = chip.selected,
+                spoken = chip.accessibility_label,
+            ) { onEvent(PeopleHomeEvent(chip = PeopleHomeEvent.ChipPicked(chip.key))) }
+        } + listOfNotNull(
+            state.sort_chip?.let { sort ->
+                RoomChip(testTag = "people-chip-sort", label = sort.label, chevron = true, spoken = sort.spoken) {
+                    onEvent(PeopleHomeEvent(sheet_opened = PeopleHomeEvent.SheetOpened(PeopleHomeState.Sheet.SHEET_ORDER)))
+                }
+            },
+        ),
         status = status,
+        // More is an ordinary tab, last, as the machine lists it (R-CHROME-4).
         band = {
             AppBand(
                 app = "people",
-                tabs = state.band.filter { it.key != "more" }.map {
-                    AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current)
-                },
+                tabs = state.band.map { AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current) },
                 onSelect = { key -> onEvent(PeopleHomeEvent(band = PeopleHomeEvent.BandPicked(key))) },
                 onHome = onHome,
-                onMore = if (state.band.any { it.key == "more" }) {
-                    { onEvent(PeopleHomeEvent(band = PeopleHomeEvent.BandPicked("more"))) }
-                } else {
-                    null
-                },
             )
         },
     ) {
@@ -141,11 +153,6 @@ public fun PeopleHomeScreen(
                 val roster = data.roster
                 val touch = data.touch
                 LazyColumn(Modifier.testTag("people-list")) {
-                    item(key = "search-open") {
-                        SearchOpener(chrome?.search_placeholder.orEmpty()) {
-                            onEvent(PeopleHomeEvent(search_opened = PeopleHomeEvent.SearchOpened()))
-                        }
-                    }
                     if (roster != null) roster(roster, onEvent)
                     if (touch != null) touch(touch, onEvent)
                 }
@@ -153,89 +160,36 @@ public fun PeopleHomeScreen(
         }
     }
 
+    val dismiss = { onEvent(PeopleHomeEvent(sheet_closed = PeopleHomeEvent.SheetClosed())) }
+    // MORE IS THE MACHINE'S ROWS (Trash): never search, sort or a filter.
     if (state.sheet == PeopleHomeState.Sheet.SHEET_MORE && chrome != null) {
-        SheetRoom(
-            title = chrome.more_title,
-            onDismiss = { onEvent(PeopleHomeEvent(sheet_closed = PeopleHomeEvent.SheetClosed())) },
-        ) {
-            if (state.order_choices.isNotEmpty()) {
-                Text(
-                    chrome.sort_heading,
-                    style = centraidType("eyebrow"),
-                    color = centraidColor("textSoft"),
-                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
+        SheetRoom(title = chrome.more_title, onDismiss = dismiss) {
+            state.more_rows.forEach { row ->
+                SheetRow(
+                    label = row.label,
+                    iconKey = row.icon_key,
+                    testTag = "people-more-${row.key}",
+                    onTap = { onEvent(PeopleHomeEvent(more_row = PeopleHomeEvent.MoreRowPicked(row.key))) },
                 )
-                state.order_choices.forEach { choice ->
-                    SheetRow(
-                        label = choice.label,
-                        selected = choice.selected,
-                        testTag = "people-order-${choice.order.name}",
-                        onTap = { onEvent(PeopleHomeEvent(order = PeopleHomeEvent.OrderPicked(choice.order))) },
-                    )
-                }
             }
-            SheetRow(
-                label = chrome.trash_label,
-                iconKey = "Trash",
-                testTag = "people-more-trash",
-                onTap = { onEvent(PeopleHomeEvent(trash = PeopleHomeEvent.TrashRequested())) },
-            )
         }
     }
-}
-
-/** A quiet field-shaped key under the header: tapping it opens search. */
-@Composable
-internal fun SearchOpener(placeholder: String, onOpen: () -> Unit) {
-    val shape = RoundedCornerShape(KitGeometry.RADIUS)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
-            .heightIn(min = KitGeometry.ROW_MIN)
-            .clip(shape)
-            .background(centraidColor("bgSunken"))
-            .border(KitGeometry.HAIRLINE, centraidColor("line"), shape)
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 12.dp)
-            .testTag("search-opener")
-            .clearAndSetSemantics {
-                contentDescription = placeholder
-                role = Role.Button
+    // THE SORT CHIP'S SHEET: the orders, the current one marked.
+    if (state.sheet == PeopleHomeState.Sheet.SHEET_ORDER && chrome != null) {
+        OptionSheet(
+            title = chrome.sort_heading,
+            options = state.order_choices.map { SheetOption(key = it.order.name, label = it.label, selected = it.selected) },
+            onPick = { key ->
+                state.order_choices.firstOrNull { it.order.name == key }?.let {
+                    onEvent(PeopleHomeEvent(order = PeopleHomeEvent.OrderPicked(it.order)))
+                }
             },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        CentraidIcon(iconKey = "Search", tint = centraidColor("textFaint"), size = 16.dp)
-        Text(
-            placeholder,
-            style = centraidType("body"),
-            color = centraidColor("textFaint"),
-            modifier = Modifier.padding(start = 8.dp),
+            onDismiss = dismiss,
         )
     }
 }
 
 private fun LazyListScope.roster(roster: PeopleRosterData, onEvent: (PeopleHomeEvent) -> Unit) {
-    if (roster.chips.isNotEmpty()) {
-        item(key = "chips") {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                roster.chips.forEach { chip ->
-                    FilterChip(
-                        label = if (chip.count > 0) "${chip.label} ${chip.count}" else chip.label,
-                        spoken = chip.accessibility_label.ifEmpty { chip.label },
-                        selected = chip.selected,
-                        testTag = "people-chip-${chip.key.name}",
-                    ) { onEvent(PeopleHomeEvent(chip = PeopleHomeEvent.ChipPicked(chip.key))) }
-                }
-            }
-        }
-    }
     val empty = roster.empty
     if (roster.rows.isEmpty() && empty != null) {
         item(key = "empty") {
@@ -396,27 +350,4 @@ internal fun Avatar(avatar: PeopleAvatar?, size: Int = 32) {
     ) {
         Text(avatar?.initials.orEmpty(), style = centraidType("smallStrong"), color = centraidColor("onAccent"))
     }
-}
-
-/** A filter chip: hairline, the selected one in full ink with a check-free weight step. */
-@Composable
-internal fun FilterChip(label: String, spoken: String, selected: Boolean, testTag: String, onTap: () -> Unit) {
-    val shape = RoundedCornerShape(KitGeometry.RADIUS)
-    Text(
-        label,
-        style = centraidType(if (selected) "control" else "annotLabelOn"),
-        color = centraidColor(if (selected) "text" else "textSoft"),
-        modifier = Modifier
-            .heightIn(min = 36.dp)
-            .clip(shape)
-            .border(KitGeometry.HAIRLINE, centraidColor(if (selected) "lineStrong" else "line"), shape)
-            .clickable(onClick = onTap)
-            .padding(horizontal = 12.dp, vertical = 9.dp)
-            .testTag(testTag)
-            .clearAndSetSemantics {
-                contentDescription = spoken
-                role = Role.Button
-                this.selected = selected
-            },
-    )
 }

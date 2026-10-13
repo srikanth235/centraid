@@ -101,13 +101,6 @@
       "binary": "contracts/screens/agenda-event/rsvp-parked.bin"
     },
     {
-      "case": "all-apps-open",
-      "screen": "home",
-      "type": "centraid.screen.v1.HomeState",
-      "textproto": "contracts/screens/home/all-apps-open.textproto",
-      "binary": "contracts/screens/home/all-apps-open.bin"
-    },
-    {
       "case": "content",
       "screen": "home",
       "type": "centraid.screen.v1.HomeState",

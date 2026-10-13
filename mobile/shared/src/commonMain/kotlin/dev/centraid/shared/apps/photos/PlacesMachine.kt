@@ -7,6 +7,7 @@ import centraid.screen.v1.PlacesData
 import centraid.screen.v1.PlacesEvent
 import centraid.screen.v1.PlacesState
 import centraid.screen.v1.SeatState
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -83,7 +84,7 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
      * coordinate: `find_or_create_place`'s third rung mints a place whose stored
      * `name` IS its coordinates, and printing those would look like an answer.
      */
-    public const val NO_NAME: String = "A place with no name yet"
+    public const val NO_NAME: String = PhotosCopy.PLACE_UNNAMED
 
     /**
      * WHEN THE CORE REFUSED AND SAID NOTHING.
@@ -363,7 +364,7 @@ public object PlacesMachine : ScreenMachine<PlacesState, PlacesEvent> {
     )
 
     /** v0's `PLACE_NO_LOCATION`, the shelf's name. */
-    public const val NO_LOCATION_NAME: String = "No location yet"
+    public const val NO_LOCATION_NAME: String = PhotosCopy.PLACE_NO_LOCATION
 
     /**
      * THE PLOT, IN A UNIT SQUARE — the whole of what a "map" is here.

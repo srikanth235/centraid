@@ -498,7 +498,9 @@ struct LightboxTransport: View {
                     size: 20
                 )
                 .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .accessibilityLabel(player.playing ? "Pause" : "Play")
             GeometryReader { geometry in
                 let fraction = player.duration > 0 ? player.position / player.duration : 0
@@ -603,7 +605,7 @@ struct LightboxFilmstrip: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Show photograph \(number) of \(state.neighbours.count)")
+        .accessibilityLabel("Show photo \(number) of \(state.neighbours.count)")
         .accessibilityAddTraits(here ? .isSelected : [])
     }
 }

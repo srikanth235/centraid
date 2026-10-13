@@ -52,7 +52,7 @@ write {
   phase: PHASE_REFUSED
   failure {
     kind: READ_FAILURE_KIND_UNAVAILABLE
-    sentence: "The vault could not be reached."
+    sentence: "Couldn't load your calendar."
     remedy: "Refresh"
   }
   invoke_key: "agenda.update.event-0002.0001"
@@ -78,7 +78,7 @@ chrome {
   done: "Done"
   keep_editing: "Keep editing"
   loading: "Opening your calendar"
-  retry: "Retry"
+  retry: "Try again"
   scope_title: "This event repeats"
   scope_question: "Which occurrences does this change?"
   pick_date: "Pick a date"

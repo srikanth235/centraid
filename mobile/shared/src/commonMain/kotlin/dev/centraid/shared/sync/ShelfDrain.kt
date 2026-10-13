@@ -48,9 +48,6 @@ import kotlinx.coroutines.withTimeoutOrNull
  * waking one opens SQLite inside a background window, and the gateway refuses
  * the other's writes.
  *
- * The **example** ("See an example") is never a holding, so it is never
- * walked at all; its core would refuse the pass anyway (`CoreError::Example`).
- *
  * ## A PASS MAY TAKE MORE THAN ONE ROUND
  *
  * When the core's spool is empty but it names items whose bytes only the OS

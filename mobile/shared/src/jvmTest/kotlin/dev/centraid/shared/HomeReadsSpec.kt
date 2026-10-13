@@ -197,34 +197,30 @@ class HomeReadsSpec : StringSpec({
             .title shouldBe "Untitled event"
     }
 
-    "nothing upcoming is EMPTY with a zero count, and Home offers the move" {
+    "nothing upcoming is EMPTY with a zero count, and says what to do" {
         val arrived = tile(timed("evt-early", "School run", "2026-06-15T07:30", "2026-06-15T08:00"))
         arrived.status shouldBe TileStatus.TILE_STATUS_EMPTY
         arrived.count.shouldNotBeNull().value_ shouldBe 0
         arrived.body.shouldBeNull()
 
-        // THROUGH THE MACHINE: an empty agenda does not earn the grid, draws
-        // its empty copy, and is offered as a first move.
+        // THROUGH THE MACHINE: an empty agenda is still a tile and draws its
+        // empty copy.
         var state: HomeState =
             HomeMachine.reduce(HomeMachine.initial(), HomeEvent(opened = HomeEvent.Opened())).state
         state = HomeMachine.reduce(state, HomeEvent(tile = arrived)).state
         val agenda = state.data_.shouldNotBeNull().tiles.single { it.app_id == "agenda" }
         agenda.status shouldBe TileStatus.TILE_STATUS_EMPTY
-        agenda.earns_grid shouldBe false
         agenda.empty_copy shouldBe "Put something on the calendar"
-        state.data_.shouldNotBeNull().first_moves.map { it.id } shouldContain "agenda"
     }
 
-    "a tile with a next occurrence earns the grid through the machine" {
+    "a tile with a next occurrence carries its body through the machine" {
         var state: HomeState =
             HomeMachine.reduce(HomeMachine.initial(), HomeEvent(opened = HomeEvent.Opened())).state
         val arrived = tile(timed("evt-survey", "Survey walk-through", "2026-06-17T08:15"))
         state = HomeMachine.reduce(state, HomeEvent(tile = arrived)).state
         val agenda = state.data_.shouldNotBeNull().tiles.single { it.app_id == "agenda" }
         agenda.status shouldBe TileStatus.TILE_STATUS_CONTENT
-        agenda.earns_grid shouldBe true
         agenda.body.shouldNotBeNull().agenda.shouldNotBeNull().at shouldBe "Wed 17 · 08:15"
-        state.data_.shouldNotBeNull().first_moves.map { it.id } shouldNotContain "agenda"
     }
 
     "the ordinal a day of the month is said with" {
@@ -334,7 +330,7 @@ class HomeReadsSpec : StringSpec({
     "every tile's count noun is singular at one row and plural otherwise — \"1 group\", never \"1 groups\"" {
         fun row() = centraid.core.v1.Row(values = listOf(centraid.core.v1.Value(text = "id")))
         val singular = mapOf(
-            "photos" to "photograph",
+            "photos" to "photo",
             "docs" to "document",
             "notes" to "note",
             "tasks" to "task",
@@ -343,7 +339,7 @@ class HomeReadsSpec : StringSpec({
             "locker" to "item",
         )
         val plural = mapOf(
-            "photos" to "photographs",
+            "photos" to "photos",
             "docs" to "documents",
             "notes" to "notes",
             "tasks" to "tasks",

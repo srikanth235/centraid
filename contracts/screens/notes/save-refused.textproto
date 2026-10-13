@@ -16,8 +16,8 @@ draft {
   base_revision_id: "rev-0007"
   save_failure {
     kind: READ_FAILURE_KIND_UNAVAILABLE
-    sentence: "Centraid could not reach your gateway."
-    remedy: "Centraid tries again when it can reach your gateway."
+    sentence: "Can't reach your backup device."
+    remedy: "Will retry when your backup device is reachable."
   }
 }
 save: SAVE_STATE_REFUSED
@@ -27,7 +27,7 @@ autosave {
   base_revision_id: "rev-0007"
   failure {
     kind: READ_FAILURE_KIND_UNAVAILABLE
-    sentence: "Centraid could not reach your gateway."
-    remedy: "Centraid tries again when it can reach your gateway."
+    sentence: "Can't reach your backup device."
+    remedy: "Will retry when your backup device is reachable."
   }
 }

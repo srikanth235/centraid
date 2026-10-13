@@ -28,6 +28,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -122,31 +123,33 @@ class VaultWordsSpec : StringSpec({
         val made = reduce(kept.model, WordsInput.Made(FoundResult.Made("My vault"))).model
         // NO "READY" SCREEN: the sheet closes, the sentence rides along for Home.
         made.state.phase shouldBe VaultWordsState.Phase.PHASE_CLOSED
-        made.state.body shouldBe "My vault is on this phone, and your 24 words bring it back."
+        made.state.body shouldBe "My vault is on this phone, and your recovery key brings it back."
     }
 
-    "the sync checkbox is ticked by default, unticking it changes the footnote, and the keep carries the choice" {
+    "a keychain that will hold the key keeps it WITHOUT showing the words (R-ONBOARD-10)" {
         val open = reduce(VaultWordsMachine.initial(), opened).model
-        val assessed = reduce(
-            open,
-            WordsInput.Standing(Enrollment.Standing.NO_SEED, "Saved in iCloud Keychain.", "Save my key in iCloud Keychain"),
-        ).model
-        val shown = reduce(assessed, WordsInput.Minted(minted)).model
-        shown.state.sync_label shouldBe "Save my key in iCloud Keychain"
-        shown.state.sync_on shouldBe true
-        shown.state.custody shouldBe "Saved in iCloud Keychain."
-        reduce(shown, primary).effects.single().let { (it as WordsEffect.Keep).sync shouldBe true }
-
-        val off = reduce(shown, view(VaultWordsEvent(sync = VaultWordsEvent.SyncToggled(on = false)))).model
-        off.state.sync_on shouldBe false
-        off.state.custody shouldBe WordsCopy.CUSTODY_THIS_PHONE
-        reduce(off, primary).effects.single().let { (it as WordsEffect.Keep).sync shouldBe false }
+        val assessed = reduce(open, WordsInput.Standing(Enrollment.Standing.NO_SEED, "Saved in iCloud Keychain.", synchronizing = true))
+        assessed.effects shouldBe listOf(WordsEffect.Mint)
+        val quiet = reduce(assessed.model, WordsInput.Minted(minted))
+        quiet.model.state.phase shouldBe VaultWordsState.Phase.PHASE_MAKING
+        quiet.model.state.words.shouldBeEmpty()
+        quiet.model.state.secure shouldBe false
+        val keep = quiet.effects.single() as WordsEffect.Keep
+        keep.sync shouldBe true
+        // NOT SHOWN, SO NOT SAVED: the Backup tab still offers the key.
+        keep.shown shouldBe false
+        val kept = reduce(quiet.model, WordsInput.Kept(null))
+        kept.effects shouldBe listOf(WordsEffect.Make())
+        kept.model.holdsWords shouldBe false
     }
 
-    "a platform that does not sync draws no checkbox" {
-        val show = shown().state
-        show.sync_label shouldBe ""
-        show.sync_on shouldBe false
+    "a phone whose key would stay on it alone shows the words, with no checkbox, and the keep counts as saved" {
+        val show = shown()
+        show.state.phase shouldBe VaultWordsState.Phase.PHASE_SHOW
+        show.state.custody shouldBe "Only on this iPhone."
+        val keep = reduce(show, primary).effects.single() as WordsEffect.Keep
+        keep.sync shouldBe true
+        keep.shown shouldBe true
     }
 
     "cancelling or dismissing drops the words and keeps nothing" {
@@ -208,6 +211,13 @@ class VaultWordsSpec : StringSpec({
     "running: mint, show, keep, then the seed is stored and settled BEFORE the vault is founded" {
         runTest {
             val services = FakePlatformServices()
+            // NO KEYCHAIN: the words are shown, and "I've saved it" is recorded.
+            (services.syncedSecrets as dev.centraid.shared.platform.FakeSyncedSecrets).availability =
+                dev.centraid.shared.platform.SyncedSecrets.Availability(
+                    synchronizing = false,
+                    sentence = "Only on this iPhone.",
+                    restoresAfterSetup = true,
+                )
             val secrets = VaultSecrets(services.secureStore, services.syncedSecrets)
             val order = mutableListOf<String>()
             val enrollment = Enrollment(
@@ -237,19 +247,67 @@ class VaultWordsSpec : StringSpec({
                 },
             )
             val flow = VaultWordsFlow({ enrollment }, services, CoroutineScope(Dispatchers.Unconfined))
+            // THE MADE SIGNAL, once per make: what the shells' status line and
+            // the camera-roll ask take (R-ONBOARD-8).
+            val made = mutableListOf<String>()
+            val watching = CoroutineScope(Dispatchers.Unconfined).launch { flow.made.collect { made += it } }
             flow.reduce(opened)
             // THE WORDS COME STRAIGHT AWAY: there is no framing step to continue past.
             flow.state.value.phase shouldBe VaultWordsState.Phase.PHASE_SHOW
             flow.reduce(primary)
             withClue(flow.state.value.notice) { flow.state.value.phase shouldBe VaultWordsState.Phase.PHASE_CLOSED }
+            made.size shouldBe 1
+            watching.cancel()
             order shouldBe listOf("mint", "seed", "found stored=true")
             secrets.seedSettled() shouldBe true
+            secrets.wordsSaved() shouldBe true
+            secrets.seedSynced() shouldBe false
             flow.current.holdsWords shouldBe false
+        }
+    }
+
+    "running with a keychain: mint, keep, found — no words shown, the key synchronised, nothing claimed saved" {
+        runTest {
+            val services = FakePlatformServices()
+            val secrets = VaultSecrets(services.secureStore, services.syncedSecrets)
+            val enrollment = Enrollment(
+                secrets = secrets,
+                phrase = object : PhraseDoor {
+                    override suspend fun mint(): List<String> = minted
+                    override suspend fun check(words: List<String>): PhraseVerdict? = null
+                    override suspend fun seed(words: List<String>): String = "ab".repeat(64)
+                },
+                restoreDoor = object : RestoreDoor {
+                    override suspend fun restore(words: List<String>, payload: String?): RestoreResult =
+                        RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
+                    override suspend fun restoreSeed(seedHex: String, payload: String?): RestoreResult =
+                        RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
+                    override suspend fun restoreStayed(seedHex: String, payload: String?, indices: List<Int>): RestoreResult =
+                        RestoreResult.Refused(RestoreRefusal.UNREACHABLE)
+                },
+                keeper = object : Enrollment.Keeper {
+                    override suspend fun found(own: String?, name: String?): FoundResult = FoundResult.Made("My vault")
+                    override suspend fun adoptRestored(restored: List<Shelf.Restored>) = 0
+                    override suspend fun rekey() = 0
+                    override suspend fun indexedHoldings() = 0
+                },
+            )
+            val flow = VaultWordsFlow({ enrollment }, services, CoroutineScope(Dispatchers.Unconfined))
+            val phases = mutableListOf<VaultWordsState.Phase>()
+            val watching = CoroutineScope(Dispatchers.Unconfined).launch { flow.state.collect { phases += it.phase } }
+            flow.reduce(opened)
+            flow.state.value.phase shouldBe VaultWordsState.Phase.PHASE_CLOSED
+            (VaultWordsState.Phase.PHASE_SHOW in phases) shouldBe false
+            watching.cancel()
+            secrets.seedSynced() shouldBe true
+            secrets.wordsSaved() shouldBe false
+            // THE WORDS ARE STILL KEPT ON THIS PHONE, so the Backup tab can show them.
+            secrets.words() shouldBe minted
         }
     }
     "a vault on its own words: named, minted, shown as its own, kept under its entry and made on it" {
         val open = reduce(VaultWordsMachine.initial(), opened).model
-        val choose = reduce(open, WordsInput.Standing(Enrollment.Standing.SETTLED, "Saved in iCloud.", "Save my key")).model
+        val choose = reduce(open, WordsInput.Standing(Enrollment.Standing.SETTLED, "Saved in iCloud.", synchronizing = true)).model
         choose.state.own_label shouldBe WordsCopy.OWN_LABEL
         choose.state.name_label shouldBe WordsCopy.NAME_LABEL
         val ticked = reduce(choose, view(VaultWordsEvent(own = VaultWordsEvent.OwnToggled(on = true)))).model
@@ -264,8 +322,10 @@ class VaultWordsSpec : StringSpec({
         val minting = reduce(named, primary)
         minting.effects shouldBe listOf(WordsEffect.Mint)
         val show = reduce(minting.model, WordsInput.Minted(minted)).model
+        // A VAULT ON ITS OWN KEY IS ALWAYS SHOWN, keychain or not.
+        show.state.phase shouldBe VaultWordsState.Phase.PHASE_SHOW
         show.state.title shouldBe WordsCopy.SHOW_OWN_TITLE.replace("{name}", "Family")
-        show.state.sync_label shouldBe "Save my key"
+        show.state.custody shouldBe ""
 
         val keep = reduce(show, primary)
         keep.effects.single().shouldBeInstanceOf<WordsEffect.KeepOwn>().name shouldBe "Family"

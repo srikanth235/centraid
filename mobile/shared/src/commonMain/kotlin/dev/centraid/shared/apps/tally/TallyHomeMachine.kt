@@ -53,10 +53,14 @@ public object TallyHomeMachine :
     public const val BAND_GROUPS: String = "groups"
     public const val BAND_MORE: String = "more"
 
+    /**
+     * More rows. Search is not one: the search bar under the title is its one
+     * way in, and its tap (`SearchOpened`) is an intent the shell turns into a
+     * push of `tally.search` — the field never opens here (R-CHROME-2).
+     */
     public const val MORE_SETTLE: String = "settle"
     public const val MORE_RECURRING: String = "recurring"
     public const val MORE_SPENDING: String = "spending"
-    public const val MORE_SEARCH: String = "search"
     public const val MORE_EXPORT: String = "export"
     public const val MORE_TRASH: String = "trash"
     public const val MORE_READS: String = "reads"
@@ -186,8 +190,6 @@ public object TallyHomeMachine :
                 headline = TallyCopy.DAY_ONE,
                 body = TallyCopy.DAY_ONE_SUB,
                 action_label = TallyCopy.DAY_ONE_ACT,
-                // Drawn only while `day_one`, so "See an example" is too.
-                offers_example = true,
             ),
             status_line = if (dashboard.ledger_window_filled) TallyCopy.WINDOW_FILLED else TallyCopy.BALANCES_STATUS,
             hero = hero(dashboard, dayOne),
@@ -246,7 +248,7 @@ public object TallyHomeMachine :
         return TallyHero(lines = lines, label = label, sub = sub, tone = tone)
     }
 
-    /** "Derived from 194 expenses and 22 settlements — no balance is stored, and none is ever sent." */
+    /** "From 194 expenses and 22 settlements." */
     private fun derivedFrom(expenses: Int, settlements: Int): String =
         "${TallyCopy.DERIVED_FROM} ${TallyFold.count(expenses, TallyCopy.EXPENSE_ONE, TallyCopy.EXPENSE_MANY)} " +
             "${TallyCopy.AND_WORD} ${TallyFold.count(settlements, TallyCopy.SETTLEMENT_ONE, TallyCopy.SETTLEMENT_MANY)}" +
@@ -300,7 +302,7 @@ public object TallyHomeMachine :
             tab(BAND_BALANCES, TallyCopy.BAND_BALANCES, "Coin", TallyHomeState.Destination.DESTINATION_BALANCES),
             tab(BAND_ACTIVITY, TallyCopy.BAND_ACTIVITY, "List", TallyHomeState.Destination.DESTINATION_ACTIVITY),
             tab(BAND_GROUPS, TallyCopy.BAND_GROUPS, TallyFold.GROUP_ICON, TallyHomeState.Destination.DESTINATION_GROUPS),
-            TallyBandTab(key = BAND_MORE, label = TallyCopy.BAND_MORE, icon_key = "more", current = sheetUp),
+            TallyBandTab(key = BAND_MORE, label = TallyCopy.BAND_MORE, icon_key = "MoreHoriz", current = sheetUp),
         )
     }
 
@@ -315,7 +317,6 @@ public object TallyHomeMachine :
             TallyMoreRow(key = MORE_SETTLE, label = TallyCopy.SETTLE_HEAD, meta = TallyCopy.MORE_SETTLE_META, icon_key = "Coin"),
             TallyMoreRow(key = MORE_RECURRING, label = TallyCopy.RECURRING_TITLE, meta = TallyCopy.MORE_RECURRING_META, icon_key = "Repeat"),
             TallyMoreRow(key = MORE_SPENDING, label = TallyCopy.SPENDING_TITLE, meta = TallyCopy.MORE_SPENDING_META, icon_key = "BarChart2"),
-            TallyMoreRow(key = MORE_SEARCH, label = TallyCopy.SEARCH_TITLE, meta = TallyCopy.SEARCH_SCOPE, icon_key = "Search"),
             TallyMoreRow(key = MORE_EXPORT, label = TallyCopy.EXPORT_HEAD, meta = TallyCopy.EXPORT_FOOT, icon_key = "Share"),
             TallyMoreRow(key = MORE_TRASH, label = TallyCopy.TRASH_HEAD, meta = TallyCopy.MORE_TRASH_META, icon_key = "Trash"),
             TallyMoreRow(key = MORE_READS, label = TallyCopy.READS_TITLE, meta = "", icon_key = "Info"),
@@ -328,6 +329,7 @@ public object TallyHomeMachine :
         ),
         home = TallyCopy.BAND_HOME,
         show_more = TallyCopy.SHOW_MORE,
+        search_placeholder = TallyCopy.SEARCH_PLACEHOLDER,
     )
 
     internal object Lens : ContentLens<TallyHomeState, TallyHomeData> {

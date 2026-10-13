@@ -83,27 +83,6 @@ pub struct CoreConfig {
     /// needs a spool of one part, not gigabytes of test data. A shell passes
     /// nothing, and the C ABI cannot set it.
     pub spool_ceiling: Option<u64>,
-    /// THIS CORE IS AN EXAMPLE: an ephemeral, read-only core over a temporary
-    /// directory, for "See an example" (docs/decisions.md, "Onboarding without
-    /// sample data", `#onboarding-without-sample-data`).
-    ///
-    /// The shell opens one beside the member's own core, founds it with
-    /// `FOUND_CONTENT_EXAMPLE` ([`crate::example`]), renders the apps from it,
-    /// closes it and deletes the directory. So:
-    ///
-    /// - **AN EXAMPLE IS NEVER KEYED.** [`crate::Core::open`] refuses a config
-    ///   that sets this and carries a [`CoreConfig::seed`]: an example with the
-    ///   member's keys could seal, name or claim under them, and nothing it
-    ///   shows needs them.
-    /// - **IT ANSWERS READS AND ONE FOUND.** Every write, every backup door and
-    ///   the chat are refused with [`crate::CoreError::Example`]
-    ///   (`Handle::dispatch` holds the one allowlist).
-    /// - **ONLY AN EXAMPLE FOUNDS THE EXAMPLE.** A core with this unset refuses
-    ///   `FOUND_CONTENT_EXAMPLE`, so the scenario can never land in a vault the
-    ///   member keeps.
-    ///
-    /// `false` — every member's core — by default.
-    pub example: bool,
 }
 
 impl CoreConfig {
@@ -118,7 +97,6 @@ impl CoreConfig {
             expected_digest: None,
             seed: None,
             spool_ceiling: None,
-            example: false,
         }
     }
 
@@ -167,14 +145,6 @@ impl CoreConfig {
         self
     }
 
-    /// Open this core as an EXAMPLE: ephemeral, unkeyed and read-only after
-    /// its one found. See [`CoreConfig::example`].
-    #[must_use]
-    pub fn as_example(mut self) -> Self {
-        self.example = true;
-        self
-    }
-
     /// Hold the spool under `bytes`, whatever the free space. For a drill;
     /// see [`CoreConfig::spool_ceiling`].
     #[must_use]
@@ -192,11 +162,5 @@ mod tests {
     fn a_core_creates_its_file_unless_the_caller_says_otherwise() {
         assert!(CoreConfig::new("/tmp/v.db").create);
         assert!(!CoreConfig::new("/tmp/v.db").opening_existing().create);
-    }
-
-    #[test]
-    fn a_core_is_a_member_core_unless_opened_as_an_example() {
-        assert!(!CoreConfig::new("/tmp/v.db").example);
-        assert!(CoreConfig::new("/tmp/v.db").as_example().example);
     }
 }

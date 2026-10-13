@@ -97,8 +97,8 @@ class BackupStatusSpec : StringSpec({
             BackupWaitingRow.Reason.REASON_UNTRUSTED,
         )
         line.waiting.map { it.sentence } shouldBe listOf(
-            "4 waiting for you to tap Back up now",
-            "2 waiting: the machine that answered is not your backup device",
+            "4 waiting. Tap Back up now.",
+            "2 waiting. Wrong device answered.",
         )
         // THE SCREEN'S NUMBERS ARE THE CORE'S (`WAIT_REASON_ASK = 7`,
         // `WAIT_REASON_UNTRUSTED = 8`), so a shell reading either sees one value.

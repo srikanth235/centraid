@@ -163,6 +163,24 @@ public class PhotosBridge {
         scope.launch { cameraRoll?.pass() }
     }
 
+    /**
+     * A VAULT WAS JUST MADE: ask for the camera roll and bring it in
+     * (R-ONBOARD-8). Home offers no "Bring in photos" row, so the grant is
+     * asked here, once, and a grant starts the walk. A grant already answered
+     * draws no prompt and simply walks.
+     *
+     * [answered] runs once the platform has answered — before the walk, which
+     * can take minutes — so the shell can ask for the next store
+     * ([dev.centraid.shared.kit.PhoneImport.madeSummary]) without stacking
+     * two system prompts.
+     */
+    public fun askForPhotos(answered: () -> Unit) {
+        scope.launch {
+            val runner = cameraRoll
+            if (runner == null) answered() else runner.ask(answered)
+        }
+    }
+
     /** Publish every state to [onState], starting with the current one. */
     public fun observe(onState: (ByteArray) -> Unit) {
         this.onState = onState

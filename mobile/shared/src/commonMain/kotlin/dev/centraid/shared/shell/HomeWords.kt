@@ -10,12 +10,10 @@ import dev.centraid.design.copy.SharedCopy
  * that fill a slot are composed here, once for both shells.
  */
 public object HomeWords {
-    public const val ALL_APPS: String = SharedCopy.HOME_ALL_APPS
     public const val LOADING: String = SharedCopy.HOME_LOADING
     public const val PHOTOS_ABSENT: String = SharedCopy.HOME_PHOTOS_ABSENT
     public const val DAY_ONE_TITLE: String = SharedCopy.HOME_DAY_ONE_TITLE
     public const val DAY_ONE_BODY: String = SharedCopy.HOME_DAY_ONE_BODY
-    public const val FIRST_MOVES: String = SharedCopy.HOME_FIRST_MOVES
 
     /** THE FIRST-LAUNCH GATE (a device that holds no vault): one sentence, two actions. */
     public const val FIRST_LAUNCH_BODY: String = SharedCopy.FIRST_LAUNCH_BODY
@@ -30,20 +28,10 @@ public object HomeWords {
     public const val FIRST_LAUNCH_MAKE: String = SharedCopy.FIRST_LAUNCH_MAKE
     public const val FIRST_LAUNCH_RESTORE: String = SharedCopy.FIRST_LAUNCH_RESTORE
 
-    /**
-     * "SEE AN EXAMPLE"'S WORDS: the link under an app's day-one empty state,
-     * the banner over the preview and its one exit, the sentence a write in
-     * the preview is refused with, and what a preview that would not open says.
-     */
-    public const val SEE_EXAMPLE: String = SharedCopy.SEE_EXAMPLE
-    public const val EXAMPLE_BANNER: String = SharedCopy.EXAMPLE_BANNER
-    public const val EXAMPLE_DONE: String = SharedCopy.EXAMPLE_DONE
-    public const val EXAMPLE_READ_ONLY: String = SharedCopy.EXAMPLE_READ_ONLY
-    public const val EXAMPLE_FAILED: String = SharedCopy.EXAMPLE_FAILED
-
     public const val BAND_HOME: String = SharedCopy.BAND_HOME
     public const val BAND_MORE: String = SharedCopy.BAND_MORE
-    public const val BAND_MORE_SPOKEN: String = SharedCopy.BAND_MORE_SPOKEN
+    public const val BAND_BACKUP: String = SharedCopy.BAND_BACKUP
+    public const val BAND_BACKUP_SPOKEN: String = SharedCopy.BAND_BACKUP_SPOKEN
 
     public const val VAULTS_TITLE: String = SharedCopy.VAULTS_TITLE
     public const val VAULTS_ONE: String = SharedCopy.VAULTS_ONE
@@ -53,6 +41,11 @@ public object HomeWords {
     public const val VAULTS_CURRENT: String = SharedCopy.VAULTS_CURRENT
     public const val VAULTS_FORGET: String = SharedCopy.VAULTS_FORGET
     public const val VAULTS_FORGET_BODY: String = SharedCopy.VAULTS_FORGET_BODY
+    public const val VAULTS_RENAME: String = SharedCopy.VAULTS_RENAME
+    public const val VAULTS_RENAME_FAILED: String = SharedCopy.VAULTS_RENAME_FAILED
+    public const val VAULTS_RENAME_FIELD: String = SharedCopy.VAULTS_RENAME_FIELD
+    public const val VAULTS_RENAME_SAVE: String = SharedCopy.VAULTS_RENAME_SAVE
+    public const val VAULTS_RENAME_TITLE: String = SharedCopy.VAULTS_RENAME_TITLE
 
     /** A switcher row's name: the vault's own, or "Unnamed vault". */
     public fun vaultName(name: String): String = name.ifBlank { SharedCopy.VAULTS_UNNAMED }

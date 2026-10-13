@@ -460,23 +460,13 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
 /// `FoundContent`). `UNSPECIFIED` — a found that names no content — is the
 /// found and nothing else. `STARTERS` adds the teaching rows of
 /// [`crate::starters`] to the member's own vault through the command plane, and
-/// a refused starter leaves the vault founded rather than failing it.
-/// `EXAMPLE` founds the Tahoe scenario across seven apps
-/// ([`crate::example::found`]), and any refusal fails the whole found, so the
-/// shell deletes the ephemeral directory rather than drawing half a scenario.
-///
-/// **ONLY AN EXAMPLE CORE FOUNDS THE EXAMPLE, AND IT FOUNDS NOTHING ELSE.**
-/// `example` is whether the open core is one (`CoreConfig::example`). A member's
-/// core refuses `EXAMPLE` before anything is written, so the scenario can never
-/// land in a vault the member keeps (docs/decisions.md, "Onboarding without
-/// sample data"); an example core refuses every other content, so its one
-/// found is always the scenario.
+/// a refused starter leaves the vault founded rather than failing it. A
+/// content this build does not know is refused before the file is read.
 pub fn found(
     vault: &Vault,
     registry: &Registry,
     principal: &Principal,
     request: &wire::FoundRequest,
-    example: bool,
 ) -> Result<wire::FoundResponse> {
     let content =
         wire::FoundContent::try_from(request.content).map_err(|_| CoreError::InvalidRequest {
@@ -485,50 +475,17 @@ pub fn found(
                 request.content
             ),
         })?;
-    // REFUSED BEFORE THE FILE IS READ OR WRITTEN: whichever way the content
-    // and the core disagree, the file is left exactly as it was.
-    match (example, content) {
-        (false, wire::FoundContent::Example) => {
-            return Err(CoreError::InvalidRequest {
-                detail: "the example is founded only in a core opened as an example".to_owned(),
-            });
-        }
-        (true, wire::FoundContent::Unspecified | wire::FoundContent::Starters) => {
-            return Err(CoreError::Example {
-                what: "found anything but the example",
-            });
-        }
-        _ => {}
-    }
     if let Some(vault_id) = vault.vault_id()? {
-        if example {
-            return Err(CoreError::Example {
-                what: "found twice",
-            });
-        }
         return Err(CoreError::VaultAlreadyHeld { vault_id });
     }
-    let founded = match content {
-        wire::FoundContent::Example => crate::example::found(
-            vault,
-            registry,
-            principal,
-            &request.display_name,
-            &request.owner_name,
-            crate::example::now_ms(),
-        )?,
-        wire::FoundContent::Unspecified | wire::FoundContent::Starters => {
-            let founded = vault.found(&request.display_name, &request.owner_name)?;
-            if content == wire::FoundContent::Starters {
-                let today = crate::starters::local_today(&request.tz, crate::example::now_ms());
-                let report = crate::starters::write(vault, registry, principal, &today);
-                if !report.is_whole() {
-                    tracing::warn!(refused = ?report.refused, "a starter row was refused");
-                }
-            }
-            founded
+    let founded = vault.found(&request.display_name, &request.owner_name)?;
+    if content == wire::FoundContent::Starters {
+        let today = crate::starters::local_today(&request.tz, crate::example::now_ms());
+        let report = crate::starters::write(vault, registry, principal, &today);
+        if !report.is_whole() {
+            tracing::warn!(refused = ?report.refused, "a starter row was refused");
         }
-    };
+    }
     Ok(wire::FoundResponse {
         vault_id: founded.vault_id,
         owner_party_id: founded.owner_party_id,
@@ -550,13 +507,7 @@ mod tests {
     /// [`found`] with the registry and the owner a handle would pass.
     fn found_here(vault: &Vault, request: &wire::FoundRequest) -> Result<wire::FoundResponse> {
         let registry = Registry::with_system_commands().expect("the registry builds");
-        found(
-            vault,
-            &registry,
-            &Principal::owner("test-device"),
-            request,
-            false,
-        )
+        found(vault, &registry, &Principal::owner("test-device"), request)
     }
 
     fn query(select: &[&str], sort: &str, pk: &str) -> wire::PageQuery {

@@ -8,6 +8,7 @@ import centraid.screen.v1.PhotosMemoriesData
 import centraid.screen.v1.PhotosMemoriesEvent
 import centraid.screen.v1.PhotosMemoriesState
 import centraid.screen.v1.SeatState
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -158,7 +159,7 @@ public object PhotosMemoriesMachine :
             MemoryRow.Kind.KIND_ON_THIS_DAY -> ON_THIS_DAY
             MemoryRow.Kind.KIND_TRIP -> row.place_name.ifEmpty { AWAY_FROM_HOME }
             MemoryRow.Kind.KIND_SIMILAR ->
-                if (row.member_count > 0) "${row.member_count} similar photographs" else SIMILAR
+                if (row.member_count > 0) "${row.member_count} similar photos" else SIMILAR
             MemoryRow.Kind.KIND_UNSPECIFIED -> UNKNOWN_KIND
         }
     }
@@ -264,7 +265,7 @@ public object PhotosMemoriesMachine :
 
     internal const val ON_THIS_DAY: String = "On this day"
     internal const val AWAY_FROM_HOME: String = "Away from home"
-    internal const val SIMILAR: String = "Similar photographs"
+    internal const val SIMILAR: String = PhotosCopy.PHOTOS_MEMORY_SIMILAR
 
     /**
      * A KIND THIS BUILD DOES NOT KNOW IS STILL A MEMORY.

@@ -36,6 +36,7 @@ import dev.centraid.android.kit.hueColor
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.android.theme.formatMoney
+import dev.centraid.android.theme.LocalCentraidTokens
 
 /*
  * TALLY'S SHARED DRAWING PARTS (#1046). Every word here is the state's; the
@@ -183,7 +184,7 @@ internal fun ShareBar(permille: Int) {
             .fillMaxWidth()
             .padding(horizontal = KitGeometry.GUTTER)
             .height(4.dp)
-            .clip(RoundedCornerShape(2.dp))
+            .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp))
             .background(centraidColor("bgSunken"))
             .clearAndSetSemantics { },
     ) {

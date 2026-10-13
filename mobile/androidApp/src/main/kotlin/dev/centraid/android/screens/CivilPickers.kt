@@ -4,7 +4,6 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
@@ -16,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.shared.kit.time.civilDayOf
@@ -41,12 +41,12 @@ internal fun CivilDateDialog(
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = {
+            KitLink(label = KitWords.DONE, onClick = {
                 val millis = picker.selectedDateMillis
                 if (millis != null) onPicked(dayOfMillis(millis)) else onDismiss()
-            }) { Text(KitWords.DONE) }
+            })
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(KitWords.CANCEL) } },
+        dismissButton = { KitLink(label = KitWords.CANCEL, onClick = onDismiss) },
     ) {
         DatePicker(state = picker)
     }
@@ -69,8 +69,8 @@ internal fun CivilTimeDialog(
         Column(Modifier.background(centraidColor("bg")).padding(16.dp)) {
             TimePicker(state = picker)
             Row {
-                TextButton(onClick = onDismiss) { Text(KitWords.CANCEL) }
-                TextButton(onClick = { onPicked(clock(picker.hour, picker.minute)) }) { Text(KitWords.DONE) }
+                KitLink(label = KitWords.CANCEL, onClick = onDismiss)
+                KitLink(label = KitWords.DONE, onClick = { onPicked(clock(picker.hour, picker.minute)) })
             }
         }
     }

@@ -40,32 +40,117 @@ struct PhotosGridView: View {
         }
     }
 
-    /// The band tab the member came to Search from — its mark rides the search
-    /// row's leading circle, so the way back looks like the place it goes.
-    private var returnBand: BandView? {
-        state.bands.first { $0.event == PhotosGridStateView.destinationEvent(beforeSearch) }
-    }
-
     var body: some View {
-        // A SCROLLVIEW, LIKE EVERY OTHER COVER (R-PHOTOS-2, #1025).
-        //
-        // This was a bare `VStack`, and a `NavigationStack` destination that
-        // does not scroll is laid out under the bar rather than below it: the
-        // band row, "Camera roll import is off." and "Import now" all drew
-        // ON TOP of the back chevron and the "Photos" title, and the grid's
-        // last row was cut off at the tab bar with no way to reach it. Nineteen
-        // photographs in a view that cannot scroll is the same defect twice.
-        //
-        // The scroll view is also what makes the inset correct, which is why
-        // the hand-rolled `.safeAreaPadding(.top)` + 44pt that stood here is
-        // gone rather than moved: SwiftUI insets scrollable content below the
-        // bar itself, and a screen that adds its own offset on top of that is
-        // the compensation R-PHOTOS-2 set out to delete, not keep.
         let grid = self.grid
         let cells = grid.data.cells
         let rows = isLibrary && grid.grain == .all && width > 0
             ? LibraryLayout.rows(cells, width: width, rung: Int(grid.rung))
             : []
+        // AN APP'S ROOT, LIKE EVERY OTHER APP'S (R-CHROME-1…5): "Photos" with
+        // ONE trailing action — Select on the library (the app with nothing to
+        // create), New album on Collections — the search bar under it, the
+        // library's filter chips, the body, and the band at the foot. Every
+        // word and every chip is the machine's (`grid.chrome`, `grid.chips`,
+        // `grid.band`).
+        AppPlace(
+            app: "photos",
+            title: isLibrary && grid.selecting ? selectionTitle(grid.selected.count) : grid.chrome.title,
+            trailing: trailingAction(grid: grid, hasCells: !cells.isEmpty),
+            search: searchSlot(grid: grid),
+            chips: filterChips(grid: grid),
+            band: { foot(grid: grid, cells: cells) },
+            content: { scroller(grid: grid, rows: rows, cells: cells) }
+        )
+        // WHERE THE SEARCH BAR'S CLOSE RETURNS TO. Held here because the state
+        // carries only the destination on screen, and "the one before" is the
+        // back-of-the-hand memory a close control needs — a fact about this
+        // visit, not about the vault, so nothing reads it but the close.
+        .onChange(of: state.destination) { previous, next in
+            guard next == .search, previous != .search else { return }
+            beforeSearch = previous == .unspecified ? .library : previous
+        }
+        // LAND WHERE THE MACHINE SAYS THE MEMBER IS — a grain switch or a card
+        // names a day, and the list moves to it once.
+        .onChange(of: grid.placeDay) { _, day in land(on: day, grid: grid, rows: rows) }
+        .onChange(of: grid.grain) { _, _ in land(on: grid.placeDay, grid: grid, rows: rows) }
+        // THE SELECTION'S TWO SHEETS: the album choice (one sheet for every
+        // "Add to album") and the trash confirm.
+        .sheet(isPresented: albumBinding(grid)) {
+            AlbumChoiceSheet(
+                choices: grid.albumChoices,
+                onChoose: { shell.send(screen: "photos.grid", event: LibraryEvents.albumChosen($0)) },
+                onNewAlbum: { shell.send(screen: "photos.grid", event: LibraryEvents.albumCreated($0)) },
+                onCancel: { shell.send(screen: "photos.grid", event: LibraryEvents.albumDismissed()) }
+            )
+        }
+        .sheet(isPresented: sheetBinding(.confirmTrash)) {
+            ConfirmSheet(
+                Centraid_Screen_V1_Confirm.with {
+                    $0.title = LibraryTrashCopy.question(grid.selected.count)
+                    $0.body = LibraryTrashCopy.body
+                    $0.confirmLabel = PhotosWords.photosGridTrashConfirm
+                    $0.destructive = true
+                },
+                cancelLabel: PhotosWords.photosKeepThem,
+                onConfirm: { shell.send(screen: "photos.grid", event: LibraryEvents.trashConfirmed()) },
+                onDismiss: { shell.send(screen: "photos.grid", event: state.sheetEvent(.none)) }
+            )
+        }
+        // HOW MUCH OF THE PLACE TRAVELS, asked every time (#816) — the shelf's
+        // two answers, for the shelf's reason: a place NAME is one sentence per
+        // photograph, and a batch has as many places as photographs.
+        .sheet(isPresented: $choosingPlace) {
+            OptionSheet(title: PhotosWords.photosSendPlaceTitle) {
+                SheetRow(label: PhotosWords.photosSendNoLocation) {
+                    choosingPlace = false
+                    shell.exportLibrary(grid.selected, keepLocation: false)
+                }
+                SheetRow(label: PhotosWords.photosSendExactLocation) {
+                    choosingPlace = false
+                    shell.exportLibrary(grid.selected, keepLocation: true)
+                }
+            }
+            .presentationDetents([.height(220)])
+        }
+        // WHICH SHEET IS OPEN IS STATE, and this is what reads it. The `···`
+        // moved `state.sheet` and nothing drew anything, so the control
+        // reduced correctly and did nothing a member could see. `isPresented`
+        // is derived from the state rather than held here, because a sheet
+        // that had its own `@State` would be a second place the answer lives.
+        .sheet(isPresented: sheetBinding(.more)) {
+            PhotosMoreSheet(shell: shell, state: state)
+        }
+        .sheet(isPresented: sheetBinding(.backupDetail)) {
+            PhotosBackupDetailSheet(shell: shell, state: state)
+        }
+        // THE TILE SIZES, a choice opened from More's "Tile size" row — the
+        // header lost its menu (R-CHROME-3). Picking one closes it (the
+        // machine's `RungChanged`).
+        .sheet(isPresented: sheetBinding(.tileSize)) {
+            OptionSheet(title: grid.chrome.tileSizeLabel) {
+                ForEach(Array(grid.chrome.tileSizes.enumerated()), id: \.offset) { rung, label in
+                    SheetRow(
+                        label: label,
+                        selected: rung == Int(grid.rung),
+                        identifier: "photos.tileSize.\(rung)"
+                    ) { shell.send(screen: "photos.grid", event: LibraryEvents.rung(rung)) }
+                }
+            }
+            .presentationDetents([.medium])
+        }
+    }
+
+    /// THE BODY, IN ITS SCROLL VIEW (R-PHOTOS-2, #1025).
+    ///
+    /// The scroll view is what makes the inset correct: SwiftUI insets
+    /// scrollable content below the bar itself, and a screen that adds its own
+    /// offset on top of that is the compensation R-PHOTOS-2 set out to delete.
+    @ViewBuilder
+    private func scroller(
+        grid: Centraid_Screen_V1_PhotosGridState,
+        rows: [LibraryRow],
+        cells: [Centraid_Screen_V1_PhotoCell]
+    ) -> some View {
         ScrollView {
             // WHICH BAND IS SHOWING IS A PARAMETER, SO THE BODY SWITCHES HERE
             // (law 2). Collections and Search are not routes — a push per band
@@ -76,6 +161,8 @@ struct PhotosGridView: View {
                 VStack(alignment: .leading) {
                     PhotosCollectionsView(
                         data: shell.photosCollectionsState,
+                        showAllLabel: grid.chrome.showAllLabel,
+                        collapseAllLabel: grid.chrome.collapseAllLabel,
                         send: { shell.send(screen: "photos.collections", event: $0) },
                         onOpenShelf: { shelf in
                             shell.path.append(
@@ -133,139 +220,52 @@ struct PhotosGridView: View {
             MagnifyGesture().onEnded { value in pinched(grid: grid, scale: value.magnification) },
             including: isLibrary && !cells.isEmpty ? .all : .subviews
         )
+        // A SCROLL THROUGH THE HITS PUTS THE KEYBOARD AWAY, as the system's
+        // search does: the member has stopped typing and started looking.
+        .scrollDismissesKeyboard(.immediately)
         // A BAND BODY READS BECAUSE IT WAS OPENED, and `.task(id:)` is what
         // tells it: the id is the destination, so switching bands re-runs and
         // an ordinary recomposition does not. The library needs none — its
         // `Opened` comes with the route, through `ShellModel.opened`.
-        // A SCROLL THROUGH THE HITS PUTS THE KEYBOARD AWAY, as the system's
-        // search does: the member has stopped typing and started looking, and
-        // the row then settles into the band's slot.
-        .scrollDismissesKeyboard(.immediately)
         .task(id: state.destination) { shell.openedPhotosBand(state.destination) }
-        // THE BAND IS AT THE FOOT, and the content ends above it BY LAYOUT
-        // (v0's rule): a safe-area inset rather than padding on the scroll
-        // content, so the last row of photographs scrolls clear of the band
-        // instead of sitting underneath it.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Group {
-                // ON SEARCH THE FIELD TAKES THE BAND'S PLACE — the system
-                // Photos app's search, which replaces its tab bar rather than
-                // stacking a field over it. Closing puts the band back on the
-                // destination the member came from, and clears the query, so
-                // the next Search opens on an empty field as the system's does.
-                if state.destination == .search {
-                    PhotosSearchBar(
-                        query: PhotosSearchStateView(data: shell.photosSearchState).query,
-                        returnIconKey: returnBand?.iconKey ?? "Image",
-                        returnLabel: returnBand?.label ?? "Library",
-                        send: { shell.send(screen: "photos.search", event: $0) },
-                        onReturn: {
-                            shell.send(
-                                screen: "photos.grid",
-                                event: PhotosGridStateView.destinationEvent(beforeSearch)
-                            )
-                        },
-                        onClose: {
-                            shell.send(screen: "photos.search", event: PhotosSearchStateView.queryEvent(""))
-                            shell.send(
-                                screen: "photos.grid",
-                                event: PhotosGridStateView.destinationEvent(beforeSearch)
-                            )
-                        }
-                    )
-                } else if isLibrary, grid.selecting {
-                    // A SELECTION TAKES THE BAND'S PLACE (Apple Photos; v0's
-                    // room), so a tap aimed at Trash cannot land on a
-                    // destination.
-                    LibrarySelectionBar(
-                        grid: grid,
-                        send: { shell.send(screen: "photos.grid", event: $0) },
-                        onSendCopy: { choosingPlace = true }
-                    )
-                } else {
-                    VStack(spacing: 0) {
-                        // YEARS · MONTHS · ALL, PERMANENT while the library has
-                        // photographs (v0) — above the band, never on a timer.
-                        if isLibrary, !cells.isEmpty {
-                            LibraryGrainControl(grain: grid.grain) { next in
-                                shell.send(
-                                    screen: "photos.grid",
-                                    event: LibraryEvents.grain(next, at: LibraryLayout.day(forID: scrolledID, cells: cells))
-                                )
-                            }
-                        }
-                        AppBand(
-                            app: "photos",
-                            tabs: state.bands,
-                            onSelect: { shell.send(screen: "photos.grid", event: $0) },
-                            // `more` IS A SHEET, NEVER A DESTINATION. It sends a
-                            // sheet event; there is no band value it could send.
-                            onMore: { shell.send(screen: "photos.grid", event: state.moreSheetEvent) },
-                            onHome: { shell.path.removeAll() }
+    }
+
+    /// THE FOOT, in `AppPlace`'s band slot: the band, or what stands in its
+    /// place. The content ends above it BY LAYOUT (v0's rule), so the last row
+    /// of photographs scrolls clear of it instead of sitting underneath.
+    @ViewBuilder
+    private func foot(grid: Centraid_Screen_V1_PhotosGridState, cells: [Centraid_Screen_V1_PhotoCell]) -> some View {
+        // SEARCH IS THE FIELD UNDER THE TITLE (R-CHROME-2), so the band
+        // stays: the member can leave for another place without closing it.
+        if isLibrary, grid.selecting {
+            // A SELECTION TAKES THE BAND'S PLACE (Apple Photos; v0's room), so
+            // a tap aimed at Trash cannot land on a destination.
+            LibrarySelectionBar(
+                grid: grid,
+                send: { shell.send(screen: "photos.grid", event: $0) },
+                onSendCopy: { choosingPlace = true }
+            )
+        } else {
+            VStack(spacing: 0) {
+                // YEARS · MONTHS · ALL, PERMANENT while the library has
+                // photographs (v0) — above the band, never on a timer.
+                if isLibrary, !cells.isEmpty {
+                    LibraryGrainControl(grain: grid.grain) { next in
+                        shell.send(
+                            screen: "photos.grid",
+                            event: LibraryEvents.grain(next, at: LibraryLayout.day(forID: scrolledID, cells: cells))
                         )
                     }
                 }
+                // PLACES, THEN MORE — an ordinary tab of the band, whose event
+                // opens the sheet (`more` is a sheet, never a destination).
+                AppBand(
+                    app: "photos",
+                    tabs: state.bands,
+                    onSelect: { shell.send(screen: "photos.grid", event: $0) },
+                    onHome: { shell.path.removeAll() }
+                )
             }
-            .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom))
-        }
-        // WHERE THE SEARCH BAR'S CLOSE RETURNS TO. Held here because the state
-        // carries only the destination on screen, and "the one before" is the
-        // back-of-the-hand memory a close control needs — a fact about this
-        // visit, not about the vault, so nothing reads it but the close.
-        .onChange(of: state.destination) { previous, next in
-            guard next == .search, previous != .search else { return }
-            beforeSearch = previous == .unspecified ? .library : previous
-        }
-        .navigationTitle(isLibrary && grid.selecting ? selectionTitle(grid.selected.count) : "Photos")
-        .toolbar { libraryToolbar(grid: grid, hasCells: !cells.isEmpty) }
-        // LAND WHERE THE MACHINE SAYS THE MEMBER IS — a grain switch or a card
-        // names a day, and the list moves to it once.
-        .onChange(of: grid.placeDay) { _, day in land(on: day, grid: grid, rows: rows) }
-        .onChange(of: grid.grain) { _, _ in land(on: grid.placeDay, grid: grid, rows: rows) }
-        // THE SELECTION'S TWO SHEETS: the album choice (one sheet for every
-        // "Add to album") and the trash confirm.
-        .sheet(isPresented: albumBinding(grid)) {
-            AlbumChoiceSheet(
-                choices: grid.albumChoices,
-                onChoose: { shell.send(screen: "photos.grid", event: LibraryEvents.albumChosen($0)) },
-                onNewAlbum: { shell.send(screen: "photos.grid", event: LibraryEvents.albumCreated($0)) },
-                onCancel: { shell.send(screen: "photos.grid", event: LibraryEvents.albumDismissed()) }
-            )
-        }
-        .confirmationDialog(
-            LibraryTrashCopy.question(grid.selected.count),
-            isPresented: sheetBinding(.confirmTrash),
-            titleVisibility: .visible
-        ) {
-            Button("Move to trash", role: .destructive) {
-                shell.send(screen: "photos.grid", event: LibraryEvents.trashConfirmed())
-            }
-            Button("Keep them", role: .cancel) {}
-        } message: {
-            Text(LibraryTrashCopy.body)
-        }
-        // HOW MUCH OF THE PLACE TRAVELS, asked every time (#816) — the shelf's
-        // two answers, for the shelf's reason: a place NAME is one sentence per
-        // photograph, and a batch has as many places as photographs.
-        .confirmationDialog(
-            "Send a copy — how much of the place?",
-            isPresented: $choosingPlace,
-            titleVisibility: .visible
-        ) {
-            Button("No location") { shell.exportLibrary(grid.selected, keepLocation: false) }
-            Button("Exact location") { shell.exportLibrary(grid.selected, keepLocation: true) }
-            Button("Cancel", role: .cancel) {}
-        }
-        // WHICH SHEET IS OPEN IS STATE, and this is what reads it. The `···`
-        // moved `state.sheet` and nothing drew anything, so the control
-        // reduced correctly and did nothing a member could see. `isPresented`
-        // is derived from the state rather than held here, because a sheet
-        // that had its own `@State` would be a second place the answer lives.
-        .sheet(isPresented: sheetBinding(.more)) {
-            PhotosMoreSheet(shell: shell, state: state)
-        }
-        .sheet(isPresented: sheetBinding(.backupDetail)) {
-            PhotosBackupDetailSheet(shell: shell, state: state)
         }
     }
 
@@ -323,19 +323,14 @@ struct PhotosGridView: View {
                     // sentence, never the empty-library copy.
                     if grid.filter == .favorites {
                         ScreenEmptyView(
-                            sentence: "No favorites yet",
-                            remedy: "Photographs you mark as a favorite appear here."
+                            sentence: PhotosWords.photosGridNoFavorites,
+                            remedy: PhotosWords.photosGridNoFavoritesCaption
                         )
                     } else {
-                        VStack(spacing: 0) {
-                            ScreenEmptyView(
-                                sentence: "No photographs on this device yet.",
-                                remedy: "Import your camera roll and they appear here."
-                            )
-                            // THE LIBRARY IS EMPTY, NOT A FILTER: day one, so
-                            // "See an example" beside the camera roll's import.
-                            SeeExampleLink()
-                        }
+                        ScreenEmptyView(
+                            sentence: PhotosWords.photosGridEmpty,
+                            remedy: PhotosWords.photosGridEmptyCaption
+                        )
                     }
                 } else if grid.grain == .years || grid.grain == .months {
                     LibraryGrainCards(
@@ -376,73 +371,78 @@ struct PhotosGridView: View {
     /// The header while selecting: the count, as v0's room swapped it in place.
     private func selectionTitle(_ count: Int) -> String {
         switch count {
-        case 0: return "Select photographs"
-        case 1: return "1 photograph selected"
-        default: return "\(count) photographs selected"
+        case 0: return PhotosWords.photosGridSelect
+        case 1: return PhotosWords.photosGridSelectedOne
+        default: return PhotosWords.fill(PhotosWords.photosGridSelectedMany, "count", "\(count)")
         }
     }
 
-    /// THE LIBRARY'S HEADER CONTROLS: the menu and Select, or — selecting —
-    /// Cancel.
-    ///
-    /// The menu is v0's `libraryMenuGroups`: the filter at every grain, the
-    /// tile size only at All — Years and Months draw one cover per period at
-    /// an aspect the grain fixes, so a size there would act on nothing on
-    /// screen.
-    ///
-    /// v0's third group, "Prioritise faces", is NOT here: the enrichment ask
-    /// behind it went with #1029, so all that row could do is open People — a
-    /// place, not a view option, and one Collections already has a door to
-    /// (Apple Photos' view menu carries none either).
-    @ToolbarContentBuilder
-    private func libraryToolbar(grid: Centraid_Screen_V1_PhotosGridState, hasCells: Bool) -> some ToolbarContent {
-        if isLibrary {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                if grid.selecting {
-                    Button("Cancel") { shell.send(screen: "photos.grid", event: LibraryEvents.selecting(false)) }
-                        .accessibilityIdentifier("photos.library.cancel")
-                } else {
-                    Menu {
-                        Picker(
-                            selection: Binding(
-                                get: { grid.filter == .favorites ? Centraid_Screen_V1_PhotosGridState.Filter.favorites : .all },
-                                set: { shell.send(screen: "photos.grid", event: LibraryEvents.filter($0)) }
-                            )
-                        ) {
-                            Text("All photos").tag(Centraid_Screen_V1_PhotosGridState.Filter.all)
-                            Text("Favorites").tag(Centraid_Screen_V1_PhotosGridState.Filter.favorites)
-                        } label: {
-                            Text("Filter")
-                        }
-                        .pickerStyle(.inline)
-                        if grid.grain == .all || grid.grain == .unspecified {
-                            Picker(
-                                selection: Binding(
-                                    get: { Int(grid.rung) },
-                                    set: { shell.send(screen: "photos.grid", event: LibraryEvents.rung($0)) }
-                                )
-                            ) {
-                                ForEach(PhotoTileMetrics.rungLabels.indices, id: \.self) { rung in
-                                    Text(PhotoTileMetrics.rungLabels[rung]).tag(rung)
-                                }
-                            } label: {
-                                Text("Tile size")
-                            }
-                            .pickerStyle(.inline)
-                        }
-                    } label: {
-                        CentraidIconView(iconKey: "Sliders", tint: Theme.color("text", scheme), size: 20)
-                            .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                            .contentShape(Rectangle())
-                    }
-                    .accessibilityLabel("View options")
-                    .accessibilityIdentifier("photos.library.menu")
-                    if hasCells {
-                        Button("Select") { shell.send(screen: "photos.grid", event: LibraryEvents.selecting(true)) }
-                            .accessibilityIdentifier("photos.library.select")
-                    }
+    /// THE HEADER'S ONE TRAILING ACTION (R-CHROME-1), a glyph and its words:
+    /// New album's `Plus` on Collections; on the library Select
+    /// (`CheckCircle`) — the app with nothing to create — or, selecting, the
+    /// way out (`X`). Nothing on Search's page.
+    private func trailingAction(grid: Centraid_Screen_V1_PhotosGridState, hasCells: Bool) -> RoomAction? {
+        let chrome = grid.chrome
+        switch state.destination {
+        case .collections:
+            return RoomAction(
+                iconKey: "Plus",
+                label: chrome.newAlbumLabel,
+                identifier: "photos.collections.new-album"
+            ) {
+                shell.send(
+                    screen: "photos.collections",
+                    event: PhotosCollectionsStateView(data: shell.photosCollectionsState).sheetEvent(.newAlbum)
+                )
+            }
+        case .search:
+            return nil
+        case .library, .unspecified, .UNRECOGNIZED:
+            if grid.selecting {
+                return RoomAction(iconKey: "X", label: chrome.cancelLabel, identifier: "photos.library.cancel") {
+                    shell.send(screen: "photos.grid", event: LibraryEvents.selecting(false))
                 }
             }
+            guard hasCells else { return nil }
+            return RoomAction(iconKey: "CheckCircle", label: chrome.selectLabel, identifier: "photos.library.select") {
+                shell.send(screen: "photos.grid", event: LibraryEvents.selecting(true))
+            }
+        }
+    }
+
+    /// THE SEARCH BAR (R-CHROME-2), under the title on the library and on
+    /// Collections, and THE FIELD in the same place once it is pressed — the
+    /// same slot every app's search stands in. Pressing it moves the grid to
+    /// `DESTINATION_SEARCH`, whose body is the hits; closing clears the query
+    /// and returns to the place the member came from. None while selecting:
+    /// the header is the selection's then.
+    private func searchSlot(grid: Centraid_Screen_V1_PhotosGridState) -> SearchSlot? {
+        guard !(isLibrary && grid.selecting) else { return nil }
+        let searching = state.destination == .search
+        return SearchSlot(
+            field: Centraid_Screen_V1_SearchField.with {
+                $0.open = searching
+                $0.term = searching ? PhotosSearchStateView(data: shell.photosSearchState).query : ""
+            },
+            placeholder: grid.chrome.searchPlaceholder,
+            onOpen: { shell.send(screen: "photos.grid", event: PhotosGridStateView.destinationEvent(.search)) },
+            onTerm: { shell.send(screen: "photos.search", event: PhotosSearchStateView.queryEvent($0)) },
+            onClose: {
+                shell.send(screen: "photos.search", event: PhotosSearchStateView.queryEvent(""))
+                shell.send(screen: "photos.grid", event: PhotosGridStateView.destinationEvent(beforeSearch))
+            }
+        )
+    }
+
+    /// THE FILTER, AS CHIPS (R-CHROME-3): All photos · Favorites, which the
+    /// machine offers on the library and nowhere else. Photos has no sort.
+    private func filterChips(grid: Centraid_Screen_V1_PhotosGridState) -> [RoomChip] {
+        grid.chips.map { chip in
+            RoomChip(
+                identifier: chip.filter == .favorites ? "photos-filter-favorites" : "photos-filter-all",
+                label: chip.label,
+                selected: chip.selected
+            ) { shell.send(screen: "photos.grid", event: LibraryEvents.filter(chip.filter)) }
         }
     }
 

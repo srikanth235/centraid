@@ -44,15 +44,10 @@ struct TallyGroupView: View {
         }()
         PushedPage(title: title, parentTitle: state.chrome.back, onBack: onBack) {
             if case let .data(group) = content, !group.hasGone, !state.chrome.addExpense.isEmpty {
-                Button {
+                ToolbarVerb(label: state.chrome.addExpense, identifier: "tally-group-add") {
                     send(Self.event { $0.addExpense = .init() })
                     push(TallyScreens.addRoute(groupID: state.groupID))
-                } label: {
-                    Text(state.chrome.addExpense)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
                 }
-                .accessibilityIdentifier("tally-group-add")
             }
         } content: {
             ReadStateView(
@@ -133,6 +128,7 @@ struct TallyGroupView: View {
                     }
                 }
             }
+            .kitToggle()
             .disabled(!simplify.toggleEnabled)
             .accessibilityIdentifier("tally-simplify-toggle")
             if !simplify.summary.isEmpty {
@@ -199,15 +195,10 @@ struct TallyFriendView: View {
         }()
         PushedPage(title: title, parentTitle: state.chrome.back, onBack: onBack) {
             if case let .data(friend) = content, !friend.hasGone, !state.chrome.addExpense.isEmpty {
-                Button {
+                ToolbarVerb(label: state.chrome.addExpense, identifier: "tally-friend-add") {
                     send(Self.event { $0.addExpense = .init() })
                     push(TallyScreens.addRoute(partyID: state.partyID))
-                } label: {
-                    Text(state.chrome.addExpense)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
                 }
-                .accessibilityIdentifier("tally-friend-add")
             }
         } content: {
             ReadStateView(
@@ -301,15 +292,10 @@ struct TallyExpenseView: View {
         }()
         PushedPage(title: expense?.title ?? "", parentTitle: state.chrome.back, onBack: onBack) {
             if let expense, !expense.trashed, !expense.editLabel.isEmpty {
-                Button {
+                ToolbarVerb(label: expense.editLabel, identifier: "tally-expense-edit") {
                     send(Self.event { $0.edit = .init() })
                     push(TallyScreens.editRoute(state.expenseID))
-                } label: {
-                    Text(expense.editLabel)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
                 }
-                .accessibilityIdentifier("tally-expense-edit")
             }
         } content: {
             ReadStateView(
@@ -476,18 +462,10 @@ struct TallyExpenseView: View {
                     .foregroundStyle(Theme.color("textSoft", scheme))
             }
             if !revision.undoLabel.isEmpty {
-                Button {
+                KitLink(label: revision.undoLabel, dense: true, identifier: "tally-undo-\(revision.revisionID)") {
                     send(Self.event { $0.undo = .with { $0.revisionID = revision.revisionID } })
-                } label: {
-                    Text(revision.undoLabel)
-                        .centraidType("annotLabelOn")
-                        .foregroundStyle(Theme.color("link", scheme))
-                        .frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
                 .disabled(state.write.phase == .inFlight)
-                .accessibilityIdentifier("tally-undo-\(revision.revisionID)")
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)

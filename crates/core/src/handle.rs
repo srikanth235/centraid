@@ -165,9 +165,6 @@ pub struct Handle {
     /// only; see [`crate::assist`]. `pub(crate)` because that module is where
     /// `Request::Assist` is answered.
     pub(crate) assist: crate::assist::Hub,
-    /// THIS CORE IS AN EXAMPLE (`CoreConfig::example`): unkeyed, and answering
-    /// only the requests [`Handle::dispatch`]'s allowlist names.
-    example: bool,
 }
 
 /// THE CLOCK AND ID SOURCE A CORE WAS OPENED WITH, kept for the life of the
@@ -203,17 +200,7 @@ impl Core {
             expected_digest,
             seed,
             spool_ceiling,
-            example,
         } = config;
-        // AN EXAMPLE IS NEVER KEYED (`CoreConfig::example`). Refused before the
-        // file is touched, so a shell that handed the member's seed to an
-        // example core gets a refusal and no file, never an example that could
-        // seal, name or claim under the member's keys.
-        if example && seed.is_some() {
-            return Err(CoreError::InvalidRequest {
-                detail: "an example core is never keyed; open it without a seed".to_owned(),
-            });
-        }
         // BEFORE THE FILE IS TOUCHED. A stale core that opened the vault and
         // then refused would have already run whatever migration its own
         // `head_version` carries, which is the half that cannot be undone
@@ -295,7 +282,6 @@ impl Core {
             owned_bytes: Mutex::new(None),
             locker: Mutex::new(None),
             assist: crate::assist::Hub::new(),
-            example,
         })
     }
 
@@ -413,18 +399,6 @@ impl Handle {
                 discarded = adopted.discarded,
                 "the byte store adopted the layout it had before #1080"
             );
-        }
-        // AN EXAMPLE OPENS NO LEDGER: `Ledger::open` creates the file it does
-        // not find, and an example core has no backup plane to read — every
-        // byte it shows is one its own found wrote into this store. So its
-        // directory never holds a `<stem>.backup.db`.
-        if self.example {
-            let door = centraid_blobs::ContentBytes::new(store);
-            if let Ok(mut owned) = self.owned_bytes.lock() {
-                *owned = Some(door.clone());
-            }
-            self.attach_bytes(door);
-            return Ok(());
         }
         let ledger_path = centraid_vault::backup::ledger::Ledger::path_for(&self.path);
         let door = match centraid_vault::backup::ledger::Ledger::open(&ledger_path) {
@@ -822,52 +796,7 @@ impl Handle {
         )
     }
 
-    /// WHETHER THIS CORE WAS OPENED AS AN EXAMPLE (`CoreConfig::example`).
-    #[must_use]
-    pub const fn is_example(&self) -> bool {
-        self.example
-    }
-
     // ------------------------------------------------------------ internals --
-
-    /// THE EXAMPLE'S ALLOWLIST, written once (`CoreConfig::example`).
-    ///
-    /// An example core answers reads, the pure phrase judge and its one found
-    /// (`crate::api::found` refuses any content but the example, and a second
-    /// found). Everything else writes, seals, dials a gateway or indexes rows
-    /// for the chat, and is refused here — by naming the ALLOWED arms, so a
-    /// request kind added later is refused on an example until someone decides
-    /// otherwise, rather than allowed because nobody remembered this list.
-    fn refuse_on_an_example(&self, kind: &wire::request::Kind) -> Result<()> {
-        use wire::request::Kind as K;
-        if !self.example {
-            return Ok(());
-        }
-        let what = match kind {
-            K::Hello(_)
-            | K::Page(_)
-            | K::ContentUrls(_)
-            | K::AppQuery(_)
-            | K::Phrase(_)
-            | K::Found(_) => return Ok(()),
-            K::Command(_) => "write",
-            K::Locker(_) => "open a Locker",
-            K::Stage(_) => "stage bytes",
-            K::Originals(_) => "keep originals",
-            K::Assist(_) => "chat",
-            K::Drain(_)
-            | K::Handoff(_)
-            | K::Settle(_)
-            | K::BackupStatus(_)
-            | K::Pins(_)
-            | K::Reconcile(_)
-            | K::Releasable(_)
-            | K::Released(_) => "back up",
-            K::PairPhone(_) | K::ForgetDestination(_) => "pair",
-            K::Restore(_) | K::FetchOriginal(_) => "restore",
-        };
-        Err(CoreError::Example { what })
-    }
 
     fn check_open(&self) -> Result<()> {
         if let Some(diagnostic_id) = self.poisoned_as() {
@@ -932,10 +861,6 @@ impl Handle {
             panic!("debug-fault: a deliberate panic for a shell's clause-9 test");
         }
 
-        // AN EXAMPLE ANSWERS ONLY ITS ALLOWLIST, asked before any arm runs, so
-        // a refusal costs nothing and touches nothing.
-        self.refuse_on_an_example(kind)?;
-
         match kind {
             K::Hello(hello) => Ok(response(wire::response::Kind::Hello(self.hello(hello)))),
             K::Page(page_request) => Ok(response(wire::response::Kind::Page(
@@ -950,13 +875,8 @@ impl Handle {
             // `CoreError::Unpaired` when there is no file at all, which is the
             // correct refusal: founding needs a file, and a path that opened is
             // what `create` produced.
-            //
-            // AN EXAMPLE CORE FOUNDS ONLY THE EXAMPLE, AND ONLY AN EXAMPLE CORE
-            // FOUNDS IT (`crate::api::found`).
             K::Found(request) => Ok(response(wire::response::Kind::Found(self.with_vault(
-                |vault| {
-                    crate::api::found(vault, &self.registry, &self.owner(), request, self.example)
-                },
+                |vault| crate::api::found(vault, &self.registry, &self.owner(), request),
             )?))),
             K::Command(command) => {
                 let changes = crate::events::ChangeFeed::new(self.events());

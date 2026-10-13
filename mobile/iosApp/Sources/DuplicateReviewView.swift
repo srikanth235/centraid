@@ -35,7 +35,7 @@ struct DuplicateReviewView: View {
             VStack(alignment: .leading, spacing: 12) {
                 switch state.content {
                 case .loading:
-                    ProgressView()
+                    RowSkeleton()
                 case let .denied(denied):
                     DeniedGate(denied)
                 case let .failure(sentence, remedy):
@@ -46,8 +46,8 @@ struct DuplicateReviewView: View {
                         // the copies were trashed here or somewhere else — and
                         // the read that says so was refused by nobody.
                         ScreenEmptyView(
-                            sentence: "There are no copies left in this set.",
-                            remedy: "Anything trashed here is still in the trash."
+                            sentence: PhotosWords.photosReviewNone,
+                            remedy: PhotosWords.photosReviewNoneCaption
                         )
                     } else {
                         header(cluster)
@@ -100,8 +100,8 @@ struct DuplicateReviewView: View {
     @ViewBuilder
     private func header(_ cluster: Centraid_Screen_V1_DuplicateReviewData) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Pick the copy to keep.").centraidType("body")
-            Text("The others go to the trash, where you can still get them back.")
+            Text(PhotosWords.photosReviewPick).centraidType("body")
+            Text(PhotosWords.photosReviewPickCaption)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
             // WHAT WAS CHECKED, AND WHAT WAS NOT — SAID OUT LOUD EITHER WAY.
@@ -123,10 +123,8 @@ struct DuplicateReviewView: View {
             Label {
                 Text(
                     cluster.placementsChecked
-                        ? "Centraid checked which of these are in an album. "
-                            + "Favourites are not checked here."
-                        : "Centraid has not been able to check whether these are in an "
-                            + "album or favourited."
+                        ? PhotosWords.photosReviewChecked
+                        : PhotosWords.photosReviewUnchecked
                 )
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
@@ -150,19 +148,20 @@ struct DuplicateReviewView: View {
         // number the member has not produced yet.
         let doomed = kept.isEmpty ? 0 : cluster.members.count - 1
         VStack(alignment: .leading, spacing: 4) {
-            Button {
+            // DISABLED IS THE DISABLED INK ON THE LEAF, so the outline's tone
+            // goes `textDisabled` until a copy is picked.
+            KitOutlineButton(
+                label: resolveLabel(doomed: doomed, picked: !kept.isEmpty),
+                tone: kept.isEmpty ? "textDisabled" : "net",
+                fullWidth: true,
+                iconKey: "trash"
+            ) {
                 send(state.resolveEvent)
-            } label: {
-                Label {
-                    Text(resolveLabel(doomed: doomed, picked: !kept.isEmpty))
-                } icon: {
-                    CentraidIconView(iconKey: "trash", tint: Theme.color("danger", scheme))
-                }
             }
             .disabled(kept.isEmpty)
             .accessibilityIdentifier("photos.duplicate.resolve")
             if kept.isEmpty {
-                Text("Choose the copy to keep first — nothing is trashed until you do.")
+                Text(PhotosWords.photosReviewChooseFirst)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
             }
@@ -176,8 +175,8 @@ struct DuplicateReviewView: View {
     /// number — "Trash the other 0 copies" is a sentence about a figure the
     /// member has not produced.
     private func resolveLabel(doomed: Int, picked: Bool) -> String {
-        guard picked else { return "Trash the other copies" }
-        return doomed == 1 ? "Trash the other copy" : "Trash the other \(doomed) copies"
+        guard picked else { return PhotosWords.photosReviewTrashOthers }
+        return doomed == 1 ? PhotosWords.photosReviewTrashOther : PhotosWords.fill(PhotosWords.photosReviewTrashMany, "count", "\(doomed)")
     }
 }
 
@@ -198,6 +197,22 @@ private struct DuplicateMemberRow: View {
     let onPick: () -> Void
 
     var body: some View {
+        Button(action: onPick) { row }
+            .buttonStyle(KitRowPress())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                [
+                    dimensions,
+                    captured,
+                    member.memberPlaced ? PhotosWords.photosReviewInAlbum : "",
+                    suggestionReason,
+                    isKept ? PhotosWords.photosReviewKeeping : "",
+                ].filter { !$0.isEmpty }.joined(separator: ". ")
+            )
+            .accessibilityIdentifier("photos.duplicate.member.\(member.assetID)")
+    }
+
+    private var row: some View {
         HStack(alignment: .top, spacing: 10) {
             // ONE CELL RENDERER, SHARED WITH EVERY OTHER PHOTOS SURFACE
             // (`PhotoCells.swift`). It takes a `PhotoCell`, so the member is
@@ -228,7 +243,7 @@ private struct DuplicateMemberRow: View {
                 // it may not have asked.
                 if member.memberPlaced {
                     Label {
-                        Text("In an album")
+                        Text(PhotosWords.photosReviewInAlbum)
                             .centraidType("small")
                             .foregroundStyle(Theme.color("textSoft", scheme))
                     } icon: {
@@ -253,19 +268,8 @@ private struct DuplicateMemberRow: View {
             }
             Spacer(minLength: 8)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .onTapGesture(perform: onPick)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            [
-                dimensions,
-                captured,
-                member.memberPlaced ? "In an album" : "",
-                suggestionReason,
-                isKept ? "Keeping this copy" : "",
-            ].filter { !$0.isEmpty }.joined(separator: ". ")
-        )
-        .accessibilityIdentifier("photos.duplicate.member.\(member.assetID)")
     }
 
     /// The square this screen draws, out of the member it was given.
@@ -307,11 +311,11 @@ private struct DuplicateMemberRow: View {
         // `byte_size`, because a size is the vault's to spell.
         let size = member.bytePhrase
         return [pixels, size].filter { !$0.isEmpty }.joined(separator: " · ")
-            .ifEmptyUse("This copy")
+            .ifEmptyUse(PhotosWords.photosReviewThisCopy)
     }
 
     private var captured: String {
-        member.capturedAt.isEmpty ? "No capture time on this copy" : member.capturedAt
+        member.capturedAt.isEmpty ? PhotosWords.photosReviewNoCaptureTime : member.capturedAt
     }
 }
 

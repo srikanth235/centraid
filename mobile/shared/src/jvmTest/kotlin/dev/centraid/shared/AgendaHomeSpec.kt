@@ -79,9 +79,10 @@ class AgendaHomeSpec : StringSpec({
         toolbar.range_label shouldBe "Today"
         toolbar.month_label shouldBe "June 2026"
         toolbar.at_today shouldBe true
-        // THE BAND, computed: five tabs in v0's order, Day current.
-        landed.screen.band.map { it.key } shouldBe listOf("day", "schedule", "waiting", "search", "more")
-        landed.screen.band.map { it.icon_key } shouldBe listOf("Clock", "List", "Inbox", "Search", "more")
+        // THE BAND, computed: places only, then More (R-CHROME-5) — no Search
+        // tab, because search is the bar under the title.
+        landed.screen.band.map { it.key } shouldBe listOf("day", "schedule", "waiting", "more")
+        landed.screen.band.map { it.icon_key } shouldBe listOf("Clock", "List", "Inbox", "MoreHoriz")
         landed.screen.band.filter { it.current }.map { it.key } shouldBe listOf("day")
         landed.screen.chrome.shouldNotBeNull().new_event shouldBe "New event"
     }
@@ -387,12 +388,60 @@ class AgendaHomeSpec : StringSpec({
         drive(hidden.state, view(opened())).state.screen.hidden_calendar_ids shouldBe listOf("cal-2")
     }
 
+    "More is rows on the state — Calendars and What Agenda may read, never Search — and a row's key does the rest" {
+        val home = landed(
+            schedule,
+            upcoming(
+                timed("a", "Personal thing", "2026-06-16T09:00", calendar = "cal-1"),
+                timed("b", "Work thing", "2026-06-16T10:00", calendar = "cal-2"),
+            ),
+        )
+        val more = drive(home, band("more")).state
+        more.screen.sheet shouldBe AgendaHomeState.Sheet.SHEET_MORE
+        more.screen.band.single { it.key == "more" }.current shouldBe true
+        more.screen.more_rows.map { it.key } shouldBe listOf("calendar-cal-1", "calendar-cal-2", "reads")
+        more.screen.more_rows.map { it.label } shouldBe listOf("Personal", "Work", "What Agenda may read")
+        // THE HEADING RIDES ON THE FIRST CALENDAR ROW, and only there.
+        more.screen.more_rows.map { it.section } shouldBe listOf("Calendars", "", "")
+        more.screen.more_rows.map { it.toggle } shouldBe listOf(true, true, false)
+        more.screen.more_rows.first().let {
+            it.on shouldBe true
+            it.meta shouldBe "Shown"
+            it.hue_key shouldBe "cTeal"
+            it.spoken shouldBe "Personal, Shown"
+        }
+        more.screen.more_rows.none { it.label == "Search" || it.key == "search" } shouldBe true
+
+        // A CALENDAR ROW TOGGLES, re-folding without a read; the sheet stays up.
+        val hidden = drive(more, moreRow("calendar-cal-2"))
+        hidden.effects.shouldBeEmpty()
+        hidden.state.screen.hidden_calendar_ids shouldBe listOf("cal-2")
+        hidden.state.screen.sheet shouldBe AgendaHomeState.Sheet.SHEET_MORE
+        hidden.state.screen.more_rows[1].let {
+            it.on shouldBe false
+            it.meta shouldBe "Hidden"
+            it.spoken shouldBe "Work, Hidden"
+        }
+        rows(hidden.state.screen.data_.shouldNotBeNull().days.single()).map { it.event_id } shouldBe listOf("a")
+
+        // THE READS ROW opens the facts sheet; a key the sheet does not hold does nothing.
+        drive(more, moreRow("reads")).state.screen.sheet shouldBe AgendaHomeState.Sheet.SHEET_READS
+        drive(more, moreRow("calendar-gone")).state shouldBe more
+
+        // BEFORE AN ANSWER NAMES A CALENDAR, the sheet is the reads row alone.
+        AgendaHomeMachine.reduce(AgendaHomeMachine.initial(), view(opened())).state.screen.more_rows
+            .map { it.key } shouldBe listOf("reads")
+    }
+
     "search: opening reads nothing, a term reads over the rows, closing CLEARS it and re-reads nothing" {
         val home = landed(schedule, upcoming(timed("a", "Stand-up", "2026-06-16T09:00")))
-        val opened = drive(home, band("search"))
+        val opened = drive(home, searchOpened())
         opened.effects.shouldBeEmpty()
         opened.state.screen.search_open shouldBe true
-        opened.state.screen.band.single { it.current }.key shouldBe "search"
+        // SEARCH IS A MODE OVER THE PLACE: the place's tab stays lit.
+        opened.state.screen.band.single { it.current }.key shouldBe "schedule"
+        // A BAND KEY THAT IS NO LONGER A TAB opens nothing.
+        drive(home, band("search")).state.screen.search_open shouldBe false
 
         val typed = drive(opened.state, term("dentist"))
         typed.effects shouldBe listOf(ScreenEffect.ReadPage(AgendaHomeMachine.SCREEN_ID, null))
@@ -434,7 +483,7 @@ class AgendaHomeSpec : StringSpec({
         val invite = timed("w", "Offsite", "2026-06-16T09:00").copy(attendees = listOf(you("needs-action")))
         val home = landed(waiting, upcoming(invite, timed("a", "Stand-up", "2026-06-16T10:00")))
         home.screen.data_.shouldNotBeNull().days.flatMap { rows(it) }.map { it.title } shouldBe listOf("Offsite")
-        val typed = drive(home, band("search"), term("dentist")).state
+        val typed = drive(home, searchOpened(), term("dentist")).state
         typed.screen.destination shouldBe waiting
         // WHILE THE HITS READ, the tab's own rows stay.
         typed.screen.data_.shouldNotBeNull().days.flatMap { rows(it) }.map { it.title } shouldBe listOf("Offsite")
@@ -486,12 +535,13 @@ class AgendaHomeSpec : StringSpec({
         ).state
         denied.screen.denied.shouldNotBeNull().let {
             it.title shouldBe "Agenda cannot read your calendar"
-            it.body shouldBe "The owner has not granted it core.event. Nothing was read, and nothing was written."
+            it.body shouldBe "Ask the owner of this vault for access."
             // The kit's gate: the refusal's code is the receipt.
             it.receipt shouldBe "revoked"
         }
         denied.screen.data_.shouldBeNull()
         denied.screen.band.shouldBeEmpty()
+        denied.screen.more_rows.shouldBeEmpty()
         denied.screen.toolbar.shouldNotBeNull().shown shouldBe false
         // THE READS OBJECT MAKES A DENIAL THE GATE, not the default refusal.
         AgendaReads.denied(AppQueryDenial()) shouldBe AgendaInput.Denied(AppQueryDenial())
@@ -506,7 +556,7 @@ class AgendaHomeSpec : StringSpec({
         refused.effects.shouldBeEmpty()
         refused.state.screen.failure shouldBe failure
         refused.state.screen.data_.shouldBeNull()
-        refused.state.screen.chrome.shouldNotBeNull().retry shouldBe "Retry"
+        refused.state.screen.chrome.shouldNotBeNull().retry shouldBe "Try again"
         val retried = drive(refused.state, view(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())))
         retried.effects shouldBe listOf(ScreenEffect.ReadPage(AgendaHomeMachine.SCREEN_ID, null))
         retried.state.screen.loading.shouldNotBeNull().first_load shouldBe true
@@ -611,6 +661,8 @@ class AgendaHomeSpec : StringSpec({
         fun band(key: String): AgendaInput = view(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = key)))
 
         fun searchOpened(): AgendaInput = view(AgendaHomeEvent(search_opened = AgendaHomeEvent.SearchOpened()))
+
+        fun moreRow(key: String): AgendaInput = view(AgendaHomeEvent(more_row = AgendaHomeEvent.MoreRowPicked(key = key)))
 
         fun term(text: String): AgendaInput =
             view(AgendaHomeEvent(search_term = AgendaHomeEvent.SearchTermChanged(term = text)))

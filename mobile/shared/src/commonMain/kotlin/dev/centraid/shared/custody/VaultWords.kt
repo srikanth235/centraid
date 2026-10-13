@@ -12,8 +12,11 @@ import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -23,10 +26,17 @@ import kotlinx.coroutines.sync.withLock
  * MAKE A VAULT, AND ITS 24 WORDS (#1047 E1, R-1047-E1/E2) — as a pure machine.
  *
  * `words.make`. The order is [Enrollment]'s: what this phone already holds is
- * read first; a phone with no seed MINTS the words (the core's CSPRNG), SHOWS
- * them once on a secure screen, and on the member's say-so has the core
- * turn them into the seed that is stored and settled; the vault is founded
- * after that, keyed from its first commit. A phone whose seed is its own makes
+ * read first; a phone with no seed MINTS the words (the core's CSPRNG) and
+ * has the core turn them into the seed that is stored and settled; the vault
+ * is founded after that, keyed from its first commit.
+ *
+ * **THE KEY IS SHOWN ONLY WHERE NOTHING ELSE WILL HOLD IT (R-ONBOARD-10).** A
+ * phone whose synchronised store takes the seed (iCloud Keychain, Google's
+ * Block Store) keeps it there without a word to the member: the vault comes
+ * back on their next phone the way their passwords do, and the Backup tab
+ * says where the key is and offers to keep it off the keychain. Only a phone
+ * whose key would stay on it alone SHOWS the words once on a secure screen
+ * and waits for "I've saved it" — and a vault on its own key always does. A phone whose seed is its own makes
  * the vault at the next index with no words at all. A phone holding a seed
  * that arrived from elsewhere is sent to restore first.
  *
@@ -68,8 +78,6 @@ public object VaultWordsMachine {
         return when {
             event.opened != null -> WordsStep(render(Words(phase = VaultWordsState.Phase.PHASE_CHECKING)), listOf(WordsEffect.Assess))
             event.dismissed != null -> leave(model)
-            event.sync != null && phase == VaultWordsState.Phase.PHASE_SHOW && model.syncLabel.isNotEmpty() ->
-                WordsStep(render(model.copy(sync = event.sync.on)))
             event.own != null && phase == VaultWordsState.Phase.PHASE_CHOOSE ->
                 WordsStep(render(model.copy(own = event.own.on)))
             event.name != null && phase == VaultWordsState.Phase.PHASE_CHOOSE ->
@@ -118,7 +126,7 @@ public object VaultWordsMachine {
 
     /** Keep the shown words: as the member's seed, or as this vault's own. */
     private fun keep(model: Words): WordsEffect =
-        if (model.own) WordsEffect.KeepOwn(model.phrase, model.name.trim(), model.sync) else WordsEffect.Keep(model.phrase, model.sync)
+        if (model.own) WordsEffect.KeepOwn(model.phrase, model.name.trim()) else WordsEffect.Keep(model.phrase)
 
     private fun make(model: Words): WordsEffect.Make =
         WordsEffect.Make(own = model.ownId, name = model.name.trim().takeIf { it.isNotEmpty() })
@@ -138,7 +146,7 @@ public object VaultWordsMachine {
             // NO WORDS YET: mint them now, and keep the custody sentence for
             // the show that follows. `minted` answers in CHECKING.
             Enrollment.Standing.NO_SEED ->
-                WordsStep(render(model.copy(custody = input.custody, syncLabel = input.syncLabel)), listOf(WordsEffect.Mint))
+                WordsStep(render(model.copy(custody = input.custody, quiet = input.synchronizing)), listOf(WordsEffect.Mint))
             // THE WORDS ALREADY ROOT THIS PHONE'S VAULTS: a name, and the
             // choice to keep this one on its own words (R-1047-E18); not
             // ticked, the next index with no words.
@@ -148,7 +156,7 @@ public object VaultWordsMachine {
                         model.copy(
                             phase = VaultWordsState.Phase.PHASE_CHOOSE,
                             custody = input.custody,
-                            syncLabel = input.syncLabel,
+                            quiet = input.synchronizing,
                         ),
                     ),
                 )
@@ -162,6 +170,13 @@ public object VaultWordsMachine {
         val words = input.words
         if (words == null || words.size != PhraseMachine.WORDS) {
             return WordsStep(failed(model, WordsCopy.MINT_FAILED, Retry.MINT))
+        }
+        // THE KEYCHAIN WILL HOLD IT: kept without being shown (R-ONBOARD-10).
+        // A vault on its own key is always shown — its key is filed in the
+        // main vault's Locker too, but that is a copy the member should know of.
+        if (model.quiet && !model.own) {
+            val next = model.copy(phase = VaultWordsState.Phase.PHASE_MAKING, phrase = words)
+            return WordsStep(render(next), listOf(WordsEffect.Keep(words, sync = true, shown = false)))
         }
         return WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_SHOW, phrase = words)))
     }
@@ -269,16 +284,12 @@ public object VaultWordsMachine {
                 primary_enabled = enabled,
                 secondary_label = secondary,
                 notice = model.notice,
-                custody = when {
-                    phase != VaultWordsState.Phase.PHASE_SHOW -> ""
-                    // UNTICKED: the platform's sentence would describe a copy
-                    // that will not be made.
-                    model.syncLabel.isNotEmpty() && !model.sync -> WordsCopy.CUSTODY_THIS_PHONE
-                    else -> model.custody
-                },
+                // NO CHECKBOX (R-ONBOARD-10): the words are shown only where
+                // the keychain will not hold the key, and the platform's
+                // sentence says so; keeping it off the keychain is the Backup
+                // tab's, after the vault exists.
+                custody = if (phase == VaultWordsState.Phase.PHASE_SHOW && !model.own) model.custody else "",
                 save_label = if (phase == VaultWordsState.Phase.PHASE_SHOW) WordsCopy.SAVE_LABEL else "",
-                sync_label = if (phase == VaultWordsState.Phase.PHASE_SHOW) model.syncLabel else "",
-                sync_on = phase == VaultWordsState.Phase.PHASE_SHOW && model.syncLabel.isNotEmpty() && model.sync,
                 own_label = if (phase == VaultWordsState.Phase.PHASE_CHOOSE) WordsCopy.OWN_LABEL else "",
                 own_on = phase == VaultWordsState.Phase.PHASE_CHOOSE && model.own,
                 name_label = if (phase == VaultWordsState.Phase.PHASE_CHOOSE) WordsCopy.NAME_LABEL else "",
@@ -310,10 +321,11 @@ public data class Words(
     public val state: VaultWordsState = VaultWordsState(),
     internal val phrase: List<String> = emptyList(),
     public val custody: String = "",
-    /** The platform's sync checkbox; empty where nothing syncs. */
-    public val syncLabel: String = "",
-    /** Whether the seed goes to the synced store. Ticked by default. */
-    public val sync: Boolean = true,
+    /**
+     * The synchronised store will take the key, so it is kept without being
+     * shown (R-ONBOARD-10).
+     */
+    public val quiet: Boolean = false,
     public val notice: String = "",
     public val retry: Retry = Retry.NONE,
     public val vaultName: String = "",
@@ -337,12 +349,12 @@ public sealed interface WordsInput {
 
     /**
      * What this phone holds; [custody] is the platform's sentence about its
-     * key, and [syncLabel] its opt-out checkbox (empty where nothing syncs).
+     * key, and [synchronizing] whether its synchronised store will take it.
      */
     public data class Standing(
         public val standing: Enrollment.Standing,
         public val custody: String,
-        public val syncLabel: String = "",
+        public val synchronizing: Boolean = false,
     ) : WordsInput
 
     /** The core's words; null is a refused mint. */
@@ -363,13 +375,16 @@ public sealed interface WordsEffect {
     /** Mint the words through the core. */
     public data object Mint : WordsEffect
 
-    /** Have the core seed [words], and store and settle the seed — synced when [sync]. */
-    public class Keep(internal val words: List<String>, public val sync: Boolean = true) : WordsEffect {
+    /**
+     * Have the core seed [words], and store and settle the seed — synced when
+     * [sync]; [shown] when the member saw them and said they saved them.
+     */
+    public class Keep(internal val words: List<String>, public val sync: Boolean = true, public val shown: Boolean = true) : WordsEffect {
         override fun toString(): String = "Keep(<redacted>)"
     }
 
     /** Have the core seed [words] and keep the seed for one vault alone, labelled [name] (R-1047-E18). */
-    public class KeepOwn(internal val words: List<String>, public val name: String, public val sync: Boolean = true) : WordsEffect {
+    public class KeepOwn(internal val words: List<String>, public val name: String) : WordsEffect {
         override fun toString(): String = "KeepOwn(<redacted>)"
     }
 
@@ -397,6 +412,17 @@ public class VaultWordsFlow(
 
     public val state: StateFlow<VaultWordsState> get() = published.asStateFlow()
 
+    private val madeSignal = MutableSharedFlow<String>(extraBufferCapacity = 1)
+
+    /**
+     * A VAULT WAS MADE, once per make, carrying the sentence the closed state
+     * also carries. Its own signal and not a reading of [state]: the closed
+     * state is followed at once by the sheet's own dismissal, and a collector
+     * that is conflated to the last state would never see the made one. The
+     * shells' status line and the camera-roll ask (R-ONBOARD-8) take this.
+     */
+    public val made: SharedFlow<String> get() = madeSignal.asSharedFlow()
+
     /** The model, for specs. */
     public val current: Words get() = model.value
 
@@ -407,9 +433,17 @@ public class VaultWordsFlow(
     /** Reduce now and serve what it asks; suspends until every effect has answered. */
     public suspend fun reduce(input: WordsInput) {
         val effects = lock.withLock {
+            val before = model.value.phase
             val step = VaultWordsMachine.reduce(model.value, input)
             model.value = step.model
             published.value = step.model.state
+            val after = step.model.state
+            if (before == VaultWordsState.Phase.PHASE_MAKING &&
+                after.phase == VaultWordsState.Phase.PHASE_CLOSED &&
+                after.body.isNotEmpty()
+            ) {
+                madeSignal.tryEmit(after.body)
+            }
             step.effects
         }
         effects.forEach { run(it) }
@@ -423,16 +457,16 @@ public class VaultWordsFlow(
                 WordsInput.Standing(
                     standing = enrolled?.standing() ?: Enrollment.Standing.NO_SEED,
                     custody = availability?.let { PhraseMachine.custodySentence(it) }.orEmpty(),
-                    syncLabel = availability?.optInLabel.orEmpty(),
+                    synchronizing = availability?.synchronizing == true,
                 )
             }
             WordsEffect.Mint -> WordsInput.Minted(words = enrolled?.mint())
             // NULL IS "KEPT", so no enrollment at all is its own refusal
             // rather than an elvis that would read a success as one.
             is WordsEffect.Keep -> WordsInput.Kept(
-                if (enrolled == null) Enrollment.Refusal.STORE_REFUSED else enrolled.keep(effect.words, effect.sync),
+                if (enrolled == null) Enrollment.Refusal.STORE_REFUSED else enrolled.keep(effect.words, effect.sync, effect.shown),
             )
-            is WordsEffect.KeepOwn -> when (val kept = enrolled?.keepOwn(effect.words, effect.name, effect.sync)) {
+            is WordsEffect.KeepOwn -> when (val kept = enrolled?.keepOwn(effect.words, effect.name)) {
                 null -> WordsInput.Kept(Enrollment.Refusal.STORE_REFUSED)
                 is Enrollment.OwnKept.Kept -> WordsInput.Kept(null, kept.id)
                 is Enrollment.OwnKept.Refused -> WordsInput.Kept(kept.because)
@@ -478,6 +512,7 @@ public class VaultWordsBridge {
     public fun attach(session: HomeSession) {
         this.session = session
         scope.launch { flow.state.collect { onState?.invoke(it.encode()) } }
+        scope.launch { flow.made.collect { onMade?.invoke(it) } }
     }
 
     public fun observe(onState: (ByteArray) -> Unit) {
@@ -489,6 +524,16 @@ public class VaultWordsBridge {
     public val screen: VaultWordsState get() = flow.state.value
 
     public val states: StateFlow<VaultWordsState> get() = flow.state
+
+    /** A vault was made: its sentence, once per make ([VaultWordsFlow.made]). */
+    public val made: SharedFlow<String> get() = flow.made
+
+    private var onMade: ((String) -> Unit)? = null
+
+    /** Swift's door to [made]: called on the main thread, once per make. */
+    public fun observeMade(onMade: (String) -> Unit) {
+        this.onMade = onMade
+    }
 
     public fun open() {
         forward(VaultWordsEvent(opened = VaultWordsEvent.Opened()))

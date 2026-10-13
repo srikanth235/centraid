@@ -56,7 +56,7 @@ import dev.centraid.shared.sync.ScreenWrites
  * A page that filled has more behind it, so the count read off it is "at
  * least", and `ShelfRow.item_count_capped` / `CollectionsDoor.count_capped`
  * are what say so. A bare number over a full page would be a total nobody
- * counted, which is the defect `HomeState.ThingCount.capped` exists to
+ * counted, which is the defect `HomeTile.count.capped` exists to
  * prevent. Nothing here rounds, estimates or extrapolates: it counts what it
  * was handed and says whether that was all of it.
  *

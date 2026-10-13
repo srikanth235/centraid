@@ -229,8 +229,9 @@ public class LockerRoutes(
     override fun Routes(destination: Destination, nav: RouteNav) {
         val context = LocalContext.current
         // ON ENTERING LOCKER: the phone's lock, read now (a passcode may have
-        // been set since the last look).
-        LaunchedEffect(Unit) { lock.forward(LockerSeam.attached(context)) }
+        // been set since the last look) — and, locked, the prompt at once:
+        // opening Locker is the ask (`Attached.entered`).
+        LaunchedEffect(Unit) { lock.forward(LockerSeam.attached(context, entered = true)) }
         val state by wall.collectAsStateWithLifecycle()
         // THE CAPTURE SHIELD (#1047): a Locker page is on screen while this
         // composes; `shield` adds the gate's `secure`, and leaving drops it.

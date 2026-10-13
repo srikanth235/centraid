@@ -463,9 +463,8 @@ public class ChatFlow(
  * The shell:
  *
  * 1. builds one bridge for the app's session and calls [attach] with the
- *    member's own core's supplier (`{ session.shelf.memberCore() }` — never
- *    the example a preview opens), where the model
- *    file lives, the device's zone, and the two platform acts;
+ *    member's own core's supplier (`{ session.shelf.core() }`), where the
+ *    model file lives, the device's zone, and the two platform acts;
  * 2. calls [open] each time the Chat tab appears (with the app it was opened
  *    from, or empty) — repeating the same scope keeps the thread;
  * 3. in `PHASE_NEEDS_MODEL`, runs its download when [attach]'s `startDownload`

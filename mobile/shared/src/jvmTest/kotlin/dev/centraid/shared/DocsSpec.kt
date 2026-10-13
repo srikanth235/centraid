@@ -137,8 +137,14 @@ class DocsSpec : StringSpec({
             it.ascending shouldBe true
         }
         s.filters_active shouldBe true
-        s.pills.map { it.label } shouldBe listOf("PDFs", "Last 7 days", "Label", "Name · A to Z")
-        s.pills.map { it.active } shouldBe listOf(true, true, false, false)
+        // THE ROOM'S CHIP ROW (R-CHROME-3): the filters, Clear while one is
+        // set, and the sort LAST, named for the order in force.
+        s.pills.map { it.label } shouldBe listOf("PDFs", "Last 7 days", "Label", "Clear filters", "Name · A to Z")
+        s.pills.map { it.active } shouldBe listOf(true, true, false, false, false)
+        s.pills.map { it.chevron } shouldBe listOf(true, true, true, false, true)
+        s.pills.map { it.clears } shouldBe listOf(false, false, false, true, false)
+        s.pills.last().key shouldBe DocsSheet.Kind.KIND_SORT
+        s.pills.last().accessibility_label shouldBe "Sort, Name, A to Z"
 
         // Clear filters keeps the order.
         val cleared = drive(DocsDriveEvent(filters_cleared = DocsDriveEvent.FiltersCleared()), s)
@@ -148,6 +154,18 @@ class DocsSpec : StringSpec({
             it.sort shouldBe DocsSort.DOCS_SORT_NAME
         }
         cleared.state.filters_active shouldBe false
+        // No filter set: no Clear chip; the sort is still last.
+        cleared.state.pills.none { it.clears } shouldBe true
+        cleared.state.pills.map { it.key }.last() shouldBe DocsSheet.Kind.KIND_SORT
+    }
+
+    "the sort chip is named for the order in force and follows it" {
+        var s = onScreen(driveAnswer())
+        s.pills.map { it.label } shouldBe listOf("Type", "Modified", "Date changed · Newest first")
+        s = drive(DocsDriveEvent(sheet_opened = DocsDriveEvent.SheetOpened(kind = DocsSheet.Kind.KIND_SORT)), s).state
+        s = drive(DocsDriveEvent(choice = DocsDriveEvent.ChoicePicked(key = DocsDriveMachine.SORT_SIZE_DESC)), s).state
+        s.pills.last().label shouldBe "Size · Largest first"
+        s.pills.last().accessibility_label shouldBe "Sort, Size, Largest first"
     }
 
     "Recently added is a window from More: no filters, no pills, and its rule said once" {
@@ -156,6 +174,8 @@ class DocsSpec : StringSpec({
         s.sheet!!.kind shouldBe DocsSheet.Kind.KIND_MORE
         s.sheet.actions!!.actions.map { it.key } shouldBe listOf(DocsWrites.KEY_RECENT, DocsWrites.KEY_TRASH_SHELF)
         s.sheet.actions.actions.map { it.label } shouldBe listOf("Recently added", "Trash")
+        // More holds places and actions only: never Search, Sort or a filter (R-CHROME-4).
+        s.sheet.actions.actions.none { it.key.contains("search") || it.key.contains("sort") } shouldBe true
         val recent = drive(DocsDriveEvent(action = DocsDriveEvent.ActionPicked(key = DocsWrites.KEY_RECENT)), s)
         recent.state.destination shouldBe DocsDriveState.Destination.DESTINATION_RECENT
         reads(recent).size shouldBe 1
@@ -175,6 +195,7 @@ class DocsSpec : StringSpec({
         val s = onScreen()
         s.band.map { it.key } shouldBe listOf("all", "folders", "starred", "more")
         s.band.map { it.label } shouldBe listOf("All", "Folders", "Starred", "More")
+        s.band.last().icon_key shouldBe "MoreHoriz"
         drive(DocsDriveEvent(band = DocsDriveEvent.BandPicked(key = "all")), s).effects.shouldBeEmpty()
         val starred = drive(DocsDriveEvent(band = DocsDriveEvent.BandPicked(key = "starred")), s)
         starred.state.destination shouldBe DocsDriveState.Destination.DESTINATION_STARRED

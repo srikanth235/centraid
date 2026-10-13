@@ -78,6 +78,8 @@ mod people;
 mod tally;
 // Tasks' arm (#1046): its conversions and tests, beside this one.
 mod tasks;
+// Home's arm (R-CHROME-6): every app's search domain but Locker's.
+mod vault;
 
 /// Answer one app query against the open vault.
 ///
@@ -215,6 +217,7 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::ChatThreads(asked) => chat::threads(vault, asked)?,
         Q::ChatThread(asked) => chat::thread(vault, asked)?,
         Q::ChatCard(asked) => chat::card(vault, asked)?,
+        Q::VaultSearch(asked) => vault::search(vault, &door, asked)?,
     };
     Ok(wire::AppQueryResponse {
         answer: Some(answer),

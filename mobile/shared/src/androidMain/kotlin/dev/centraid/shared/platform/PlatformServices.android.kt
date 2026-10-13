@@ -211,7 +211,7 @@ public class AndroidSyncedSecrets(private val context: Context) : SyncedSecrets 
             // API does, and a build that discovered otherwise would be reading
             // a different API.
             restoresAfterSetup = false,
-            optInLabel = if (cloud) SyncedSecrets.ANDROID_SYNC_LABEL else "",
+            place = if (cloud) SyncedSecrets.ANDROID_PLACE else "",
         )
     } catch (error: Exception) {
         SyncedSecrets.Availability(

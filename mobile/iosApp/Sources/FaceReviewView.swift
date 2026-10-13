@@ -29,7 +29,7 @@ struct FaceReviewView: View {
             VStack(alignment: .leading, spacing: 16) {
                 switch state.content {
                 case .loading:
-                    ProgressView()
+                    RowSkeleton()
 
                 case let .denied(denied):
                     DeniedGate(denied)
@@ -43,8 +43,8 @@ struct FaceReviewView: View {
                         // THE QUEUE IS WORKED THROUGH. A real screen, and the
                         // outcome this queue exists to reach.
                         ScreenEmptyView(
-                            sentence: "No faces waiting.",
-                            remedy: "Centraid asks again when it finds someone new."
+                            sentence: PhotosWords.photosFacesNone,
+                            remedy: PhotosWords.photosFacesNoneCaption
                         )
                     } else {
                         // A DIFFERENT EMPTY SCREEN WITH A DIFFERENT NEXT MOVE.
@@ -54,8 +54,8 @@ struct FaceReviewView: View {
                         // exists to prevent next door. The flag is only ever
                         // read after the policy leg answered — see the bridge.
                         ScreenEmptyView(
-                            sentence: "Face recognition is off.",
-                            remedy: "Turn it on in Settings and Centraid starts finding faces."
+                            sentence: PhotosWords.photosPeopleOff,
+                            remedy: PhotosWords.photosFacesOffCaption
                         )
                     }
                 }
@@ -94,7 +94,7 @@ struct FaceReviewView: View {
         if let sentence = state.writeFailure {
             Text(sentence)
                 .centraidType("small")
-                .foregroundStyle(Theme.color("danger", scheme))
+                .foregroundStyle(Theme.color("net", scheme))
                 .accessibilityIdentifier("photos.faces.write-failure")
         }
 
@@ -120,66 +120,47 @@ struct FaceReviewView: View {
     private func answers(_ candidate: Centraid_Screen_V1_FaceCandidate) -> some View {
         // THE PROPOSAL IS A ONE-TAP YES ONLY WHEN THERE IS ONE. A model with no
         // guess offers no shortcut rather than a button that means nothing.
-        if !candidate.proposedPartyID.isEmpty, !candidate.proposedName.isEmpty {
-            Button {
+        //
+        // THE ONE INK BUTTON is the obvious next move: the proposal's yes when
+        // there is one, saying who it is when there is not.
+        let proposed = !candidate.proposedPartyID.isEmpty && !candidate.proposedName.isEmpty
+        if proposed {
+            KitInkButton(label: "Yes, this is \(candidate.proposedName)") {
                 onEvent(
                     FaceReviewStateView.confirmEvent(
                         region: candidate.regionID,
                         party: candidate.proposedPartyID
                     )
                 )
-            } label: {
-                Label {
-                    Text("Yes, this is \(candidate.proposedName)")
-                } icon: {
-                    CentraidIconView(iconKey: "CheckCircle", tint: Theme.color("text", scheme))
-                }
             }
             .accessibilityIdentifier("photos.faces.confirm")
         }
 
-        Button {
+        let nameLabel = candidate.proposedName.isEmpty ? PhotosWords.photosFacesSayWho : PhotosWords.photosFacesSomeoneElse
+        let nameAction = {
             typedName = ""
             onEvent(FaceReviewStateView.namingEvent(true))
-        } label: {
-            Label {
-                Text(candidate.proposedName.isEmpty ? "Say who this is" : "Someone else")
-            } icon: {
-                CentraidIconView(iconKey: "UserPlus", tint: Theme.color("text", scheme))
-            }
         }
-        .accessibilityIdentifier("photos.faces.name")
+        if proposed {
+            KitOutlineButton(label: nameLabel, fullWidth: true, iconKey: "UserPlus", action: nameAction)
+                .accessibilityIdentifier("photos.faces.name")
+        } else {
+            KitInkButton(label: nameLabel, action: nameAction)
+                .accessibilityIdentifier("photos.faces.name")
+        }
 
-        Button {
+        KitOutlineButton(label: PhotosWords.photosFacesNotThis, fullWidth: true, iconKey: "XCircle") {
             onEvent(FaceReviewStateView.rejectEvent(region: candidate.regionID))
-        } label: {
-            Label {
-                Text("Not this person")
-            } icon: {
-                CentraidIconView(iconKey: "XCircle", tint: Theme.color("text", scheme))
-            }
         }
         .accessibilityIdentifier("photos.faces.reject")
 
-        Button {
+        KitOutlineButton(label: PhotosWords.photosFacesKeepUnnamed, fullWidth: true, iconKey: "EyeOff") {
             onEvent(FaceReviewStateView.dismissEvent(region: candidate.regionID))
-        } label: {
-            Label {
-                Text("Keep unnamed")
-            } icon: {
-                CentraidIconView(iconKey: "EyeOff", tint: Theme.color("text", scheme))
-            }
         }
         .accessibilityIdentifier("photos.faces.dismiss")
 
-        Button {
+        KitOutlineButton(label: PhotosWords.photosFacesSkipForNow, fullWidth: true, iconKey: "Skip") {
             onEvent(FaceReviewStateView.skipEvent(region: candidate.regionID))
-        } label: {
-            Label {
-                Text("Skip for now")
-            } icon: {
-                CentraidIconView(iconKey: "Skip", tint: Theme.color("text", scheme))
-            }
         }
         .accessibilityIdentifier("photos.faces.skip")
     }
@@ -197,16 +178,24 @@ struct FaceReviewView: View {
         _ candidate: Centraid_Screen_V1_FaceCandidate,
         screen: Centraid_Screen_V1_FaceReviewData
     ) -> some View {
-        HStack {
-            TextField("New name", text: $typedName)
+        HStack(spacing: 8) {
+            TextField(PhotosWords.photosFacesNewName, text: $typedName)
+                .centraidType("body")
+                .padding(.horizontal, 12)
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                        .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                )
                 .accessibilityIdentifier("photos.faces.new-name")
-            Button("Add") {
+            KitLink(label: "Add") {
                 let trimmed = typedName.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { return }
                 onEvent(
                     FaceReviewStateView.confirmEvent(region: candidate.regionID, newName: trimmed)
                 )
             }
+            .disabled(typedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
 
         ForEach(screen.knownPeople, id: \.partyID) { person in
@@ -220,15 +209,21 @@ struct FaceReviewView: View {
             } label: {
                 HStack(spacing: 8) {
                     CentraidIconView(iconKey: "person", tint: Theme.color("text", scheme))
-                    Text(person.displayName).centraidType("body")
+                    Text(person.displayName)
+                        .centraidType("body")
+                        .foregroundStyle(Theme.color("text", scheme))
                     Spacer()
                 }
+                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(KitRowPress())
             .accessibilityIdentifier("photos.faces.person.\(person.partyID)")
         }
 
-        Button("Cancel") { onEvent(FaceReviewStateView.namingEvent(false)) }
+        KitOutlineButton(label: "Cancel", fullWidth: true) {
+            onEvent(FaceReviewStateView.namingEvent(false))
+        }
     }
 }
 
@@ -269,7 +264,7 @@ private struct FaceCrop: View {
                 if let path {
                     ContentImage(path: path)
                 } else {
-                    Text("This photograph is not on this device.")
+                    Text(PhotosWords.photosNotOnPhoneShort)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                         .padding(8)
@@ -297,7 +292,7 @@ private struct FaceCrop: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .frame(maxWidth: .infinity)
-        .accessibilityLabel("A face in one of your photographs")
+        .accessibilityLabel(PhotosWords.photosFacesAFace)
     }
 }
 
@@ -363,7 +358,7 @@ struct FaceReviewStateView {
     /// did not say how sure it was (`confidence` is NULL-able), and the prompt
     /// then simply asks.
     func prompt(for candidate: Centraid_Screen_V1_FaceCandidate) -> String {
-        guard !candidate.proposedName.isEmpty else { return "Who is this?" }
+        guard !candidate.proposedName.isEmpty else { return PhotosWords.photosFacesWho }
         let word = confidenceWord(candidate.confidence)
         return word.isEmpty
             ? "Is this \(candidate.proposedName)?"

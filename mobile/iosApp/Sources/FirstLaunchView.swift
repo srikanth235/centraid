@@ -51,21 +51,17 @@ struct FirstLaunchView: View {
         VStack(spacing: 0) {
             HStack {
                 Spacer(minLength: 0)
-                Button {
-                    page = Self.last
-                } label: {
-                    Text(ShellWords.firstLaunchSkip)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                        .frame(minWidth: CentraidGeometry.targetMinCoarse,
-                               minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
+                // SKIP LEAVES ON THE LAST PAGE, which has nowhere further to
+                // skip to; its place is kept so the header never reflows.
+                if page < Self.last {
+                    KitLink(label: ShellWords.firstLaunchSkip, identifier: "first-launch-skip") {
+                        page = Self.last
+                    }
+                } else {
+                    Color.clear
+                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                        .accessibilityHidden(true)
                 }
-                .buttonStyle(.plain)
-                .opacity(page < Self.last ? 1 : 0)
-                .disabled(page == Self.last)
-                .accessibilityHidden(page == Self.last)
-                .accessibilityIdentifier("first-launch-skip")
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
 
@@ -276,7 +272,7 @@ private struct CopyScene: View {
     var body: some View {
         HStack(spacing: 0) {
             ZStack {
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
                     .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: 1.5)
                     .frame(width: 62, height: 110)
                 AppMark(appID: "locker", size: 32)

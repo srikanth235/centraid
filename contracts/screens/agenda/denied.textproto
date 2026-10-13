@@ -10,9 +10,9 @@ destination: DESTINATION_DAY
 anchor_day: ""
 denied {
   title: "Agenda cannot read your calendar"
-  body: "The owner has not granted it core.event. Nothing was read, and nothing was written."
+  body: "Ask the owner of this vault for access."
   receipt: "grant.missing"
 }
 sheet: SHEET_NONE
 toolbar { shown: false }
-chrome { title: "Agenda" retry: "Retry" }
+chrome { title: "Agenda" retry: "Try again" }

@@ -8,8 +8,12 @@
 appId: dev.centraid.Centraid
 name: first-launch
 ---
+# Every grant denied: Maestro grants all by default, and a made vault would
+# then import the phone's photos, contacts and calendar on the way to Home.
 - launchApp:
     clearState: true
+    permissions:
+      all: deny
 - assertVisible:
     id: "first-launch"
 - assertNotVisible:
@@ -20,19 +24,35 @@ name: first-launch
 # its verb and Skip goes away.
 - tapOn:
     id: "first-launch-primary"
-- assertVisible: "An assistant on this device"
+- assertVisible: "An assistant on this phone"
 - tapOn:
     id: "first-launch-skip"
 - assertVisible: "Get started"
 - assertNotVisible:
     id: "first-launch-skip"
-# Getting started opens the words screens over the deck, and the words show at
-# once with Save a copy; Cancel returns to the deck.
+# GET STARTED (R-ONBOARD-10). Where the keychain synchronises — the simulator
+# counts — the key is kept without being shown and Home comes up with no sheet
+# in between. Where it stays on this phone alone, the key shows once with Save
+# a copy, and Cancel returns to the deck.
 - tapOn:
     id: "first-launch-primary"
-- assertVisible: "Your 24 words"
-- assertVisible:
-    id: "words-save-copy"
-- tapOn: "Cancel"
-- assertVisible:
-    id: "first-launch"
+- runFlow:
+    when:
+      visible:
+        id: "words-shown"
+    commands:
+      - assertVisible: "Your recovery key"
+      - assertVisible:
+          id: "words-save-copy"
+      - tapOn: "Cancel"
+      - assertVisible:
+          id: "first-launch"
+- runFlow:
+    when:
+      notVisible:
+        id: "first-launch"
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: "home-grid"
+          timeout: 30000

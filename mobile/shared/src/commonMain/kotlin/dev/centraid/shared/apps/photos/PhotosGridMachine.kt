@@ -5,9 +5,14 @@ import centraid.screen.v1.BackupState
 import centraid.screen.v1.Loading
 import centraid.screen.v1.MediaPermission
 import centraid.screen.v1.PhotoCell
+import centraid.screen.v1.PhotosBandTab
+import centraid.screen.v1.PhotosFilterChip
+import centraid.screen.v1.PhotosGridChrome
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.PhotosGridState
+import centraid.screen.v1.PhotosImportBanner
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -55,18 +60,187 @@ import dev.centraid.shared.screen.Step
 public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent> {
     public const val SCREEN_ID: String = "photos.grid"
 
-    override fun initial(): PhotosGridState = PhotosGridState(
-        destination = PhotosGridState.Destination.DESTINATION_LIBRARY,
-        permission = MediaPermission.MEDIA_PERMISSION_NOT_ASKED,
-        loading = Loading(first_load = true),
-        sheet = PhotosGridState.Sheet.SHEET_NONE,
-        backup = BackupState(phase = BackupState.Phase.PHASE_IDLE),
-        grain = PhotosGridState.Grain.GRAIN_ALL,
-        filter = PhotosGridState.Filter.FILTER_ALL,
-        rung = PhotosTimeline.DEFAULT_RUNG,
+    override fun initial(): PhotosGridState = decorate(
+        PhotosGridState(
+            destination = PhotosGridState.Destination.DESTINATION_LIBRARY,
+            permission = MediaPermission.MEDIA_PERMISSION_NOT_ASKED,
+            loading = Loading(first_load = true),
+            sheet = PhotosGridState.Sheet.SHEET_NONE,
+            backup = BackupState(phase = BackupState.Phase.PHASE_IDLE),
+            grain = PhotosGridState.Grain.GRAIN_ALL,
+            filter = PhotosGridState.Filter.FILTER_ALL,
+            rung = PhotosTimeline.DEFAULT_RUNG,
+        ),
     )
 
+    /**
+     * EVERY STEP LEAVES WITH ITS CHROME (R-CHROME-1…5): the band, the chips
+     * and the header's words are derived from the state the step produced, so
+     * no arm can forget them and neither shell composes them.
+     */
     override fun reduce(state: PhotosGridState, event: PhotosGridEvent): Step<PhotosGridState> =
+        step(state, event).let { it.copy(state = decorate(it.state)) }
+
+    /**
+     * THE ROOT'S CHROME, AS DATA (R-CHROME-1…5).
+     *
+     * * **Band:** places only — Library, Collections — then More, an ordinary
+     *   tab lit while its sheet (or the tile-size choice it opened) is up.
+     *   Search is not a place: the bar under the title opens it.
+     * * **Chips:** the library's filter, All photos · Favorites, under the
+     *   search bar. None off the library and none while selecting — the
+     *   header is then the selection's. Photos has no sort.
+     * * **Words:** the title, the search bar, Select / Cancel, Collections'
+     *   New album, and More's "Tile size", offered only on the library at
+     *   All, where Years and Months draw a cover per period at an aspect the
+     *   grain fixes, so a size there would act on nothing on screen.
+     */
+    internal fun decorate(state: PhotosGridState): PhotosGridState {
+        val library = state.destination == PhotosGridState.Destination.DESTINATION_LIBRARY ||
+            state.destination == PhotosGridState.Destination.DESTINATION_UNSPECIFIED
+        val moreUp = state.sheet == PhotosGridState.Sheet.SHEET_MORE ||
+            state.sheet == PhotosGridState.Sheet.SHEET_TILE_SIZE
+        val atAll = state.grain == PhotosGridState.Grain.GRAIN_ALL ||
+            state.grain == PhotosGridState.Grain.GRAIN_UNSPECIFIED
+        val favorites = state.filter == PhotosGridState.Filter.FILTER_FAVORITES
+        return state.copy(
+            band = listOf(
+                PhotosBandTab(
+                    key = BAND_LIBRARY,
+                    label = PhotosCopy.PHOTOS_BAND_LIBRARY,
+                    icon_key = "Image",
+                    current = library && !moreUp,
+                ),
+                PhotosBandTab(
+                    key = BAND_COLLECTIONS,
+                    label = PhotosCopy.PHOTOS_BAND_COLLECTIONS,
+                    icon_key = "Layers",
+                    current = state.destination == PhotosGridState.Destination.DESTINATION_COLLECTIONS && !moreUp,
+                ),
+                PhotosBandTab(key = BAND_MORE, label = PhotosCopy.PHOTOS_BAND_MORE, icon_key = "MoreHoriz", current = moreUp),
+            ),
+            chips = if (library && !state.selecting) {
+                listOf(
+                    PhotosFilterChip(
+                        filter = PhotosGridState.Filter.FILTER_ALL,
+                        label = PhotosCopy.PHOTOS_FILTER_ALL,
+                        selected = !favorites,
+                    ),
+                    PhotosFilterChip(
+                        filter = PhotosGridState.Filter.FILTER_FAVORITES,
+                        label = PhotosCopy.PHOTOS_FILTER_FAVORITES,
+                        selected = favorites,
+                    ),
+                )
+            } else {
+                emptyList()
+            },
+            chrome = CHROME.copy(tile_size_offered = library && atAll),
+            import_banner = importBanner(state),
+        )
+    }
+
+    /**
+     * THE CAMERA-ROLL BANNER, OR NONE (#1025 S6). It speaks only when there is
+     * something to say or do:
+     *
+     * * **a grant's remedy** — not asked: the prompt; denied: Settings; a
+     *   limited selection: edit it — each beside the grant's own sentence;
+     * * **an import moving** — its progress line;
+     * * **a wait or a pause** — a charger, Wi-Fi, a full phone — and why;
+     * * **"Import now" over an EMPTY library** the grant can fill, when no pass
+     *   is already running. Never over photographs: a library that has them
+     *   was imported, and More's camera-roll sheet is the deliberate place to
+     *   run one again.
+     *
+     * Done or idle over a library with photographs is nothing to say, so the
+     * banner is unset and neither shell draws a line.
+     */
+    internal fun importBanner(state: PhotosGridState): PhotosImportBanner? {
+        val backup = state.backup ?: BackupState()
+        val phase = backup.phase
+        val running = phase == BackupState.Phase.PHASE_TRANSFERRING ||
+            phase == BackupState.Phase.PHASE_ENUMERATING
+        val waiting = phase == BackupState.Phase.PHASE_WAITING_FOR_POWER ||
+            phase == BackupState.Phase.PHASE_WAITING_FOR_UNMETERED ||
+            phase == BackupState.Phase.PHASE_PARKED_LOW_DISK
+        val remedy = when (state.permission) {
+            MediaPermission.MEDIA_PERMISSION_NOT_ASKED -> PhotosImportBanner.Remedy.REMEDY_ASK
+            MediaPermission.MEDIA_PERMISSION_DENIED -> PhotosImportBanner.Remedy.REMEDY_SETTINGS
+            MediaPermission.MEDIA_PERMISSION_LIMITED -> PhotosImportBanner.Remedy.REMEDY_MANAGE_SELECTION
+            else -> PhotosImportBanner.Remedy.REMEDY_UNSPECIFIED
+        }
+        val data = state.data_
+        // EMPTY IS KNOWN, NOT GUESSED: both walks ended with no photograph,
+        // under All — Favorites emptied by its filter is not an empty library.
+        val emptyLibrary = data != null && data.complete && data.cells.isEmpty() &&
+            state.filter != PhotosGridState.Filter.FILTER_FAVORITES
+        val importNow = emptyLibrary && canEnumerate(state.permission) && !running
+        val sentence = if (running || waiting) importSentence(backup) else ""
+        val reason = when {
+            remedy != PhotosImportBanner.Remedy.REMEDY_UNSPECIFIED -> pausedReason(state.permission)
+            waiting -> backup.paused_reason
+            // A RESTRICTED PHONE has no remedy; over an empty library the
+            // sentence is why it stays empty.
+            emptyLibrary -> pausedReason(state.permission)
+            else -> ""
+        }
+        if (sentence.isEmpty() && reason.isEmpty() && !importNow &&
+            remedy == PhotosImportBanner.Remedy.REMEDY_UNSPECIFIED
+        ) {
+            return null
+        }
+        return PhotosImportBanner(
+            sentence = sentence,
+            reason = reason,
+            remedy = remedy,
+            allow_label = PhotosCopy.PHOTOS_ALLOW_ACCESS,
+            settings_label = PhotosCopy.PHOTOS_OPEN_SETTINGS,
+            manage_label = PhotosCopy.PHOTOS_MANAGE_SELECTION,
+            import_now = importNow,
+            import_now_label = PhotosCopy.PHOTOS_IMPORT_NOW,
+        )
+    }
+
+    /**
+     * What a moving or held import is doing, in a member's words — both
+     * numbers while it moves (`docs/mobile-offline.md:374`), and a wait still
+     * says what it has already carried.
+     */
+    private fun importSentence(backup: BackupState): String {
+        val done = backup.assets_transferred_this_session
+        val left = backup.assets_remaining
+        val counts = PhotosCopy.PHOTOS_IMPORT_WAIT_COUNTS.replace("{done}", "$done").replace("{left}", "$left")
+        fun waiting(sentence: String) = if (done == 0) sentence else "$sentence $counts"
+        return when (backup.phase) {
+            BackupState.Phase.PHASE_TRANSFERRING ->
+                PhotosCopy.PHOTOS_IMPORT_PROGRESS.replace("{done}", "$done").replace("{left}", "$left")
+            BackupState.Phase.PHASE_ENUMERATING -> PhotosCopy.PHOTOS_IMPORT_LOOKING
+            BackupState.Phase.PHASE_WAITING_FOR_POWER -> waiting(PhotosCopy.PHOTOS_IMPORT_WAIT_POWER)
+            BackupState.Phase.PHASE_WAITING_FOR_UNMETERED -> waiting(PhotosCopy.PHOTOS_IMPORT_WAIT_WIFI)
+            BackupState.Phase.PHASE_PARKED_LOW_DISK -> PhotosCopy.PHOTOS_IMPORT_PAUSED_DISK
+            else -> ""
+        }
+    }
+
+    /** The band's keys — each tab's identifier on both shells (`photos-band-<key>`). */
+    public const val BAND_LIBRARY: String = "library"
+    public const val BAND_COLLECTIONS: String = "collections"
+    public const val BAND_MORE: String = "more"
+
+    private val CHROME: PhotosGridChrome = PhotosGridChrome(
+        title = PhotosCopy.PHOTOS_TITLE,
+        search_placeholder = PhotosCopy.PHOTOS_SEARCH_PLACEHOLDER,
+        select_label = PhotosCopy.PHOTOS_SELECT,
+        cancel_label = PhotosCopy.PHOTOS_GRID_CANCEL,
+        new_album_label = PhotosCopy.PHOTOS_NEW_ALBUM,
+        tile_size_label = PhotosCopy.PHOTOS_TILE_SIZE,
+        tile_sizes = PhotosTimeline.RUNG_LABELS,
+        show_all_label = PhotosCopy.PHOTOS_SHOW_ALL,
+        collapse_all_label = PhotosCopy.PHOTOS_COLLAPSE_ALL,
+    )
+
+    private fun step(state: PhotosGridState, event: PhotosGridEvent): Step<PhotosGridState> =
         when {
             // OPENING A LIBRARY THAT IS ALREADY DRAWN RE-READS IT IN PLACE. The
             // shells send `Opened` every time the library band comes back —
@@ -276,7 +450,18 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
                 ),
             )
 
-            event.rung != null -> Step(state.copy(rung = PhotosTimeline.clampRung(event.rung.rung)))
+            // A SIZE PICKED FROM MORE'S CHOICE CLOSES IT (a choice is a sheet,
+            // and picking is its answer); a pinch steps the size under no sheet.
+            event.rung != null -> Step(
+                state.copy(
+                    rung = PhotosTimeline.clampRung(event.rung.rung),
+                    sheet = if (state.sheet == PhotosGridState.Sheet.SHEET_TILE_SIZE) {
+                        PhotosGridState.Sheet.SHEET_NONE
+                    } else {
+                        state.sheet
+                    },
+                ),
+            )
 
             // THE FILTER NARROWS THE READ, NOT THE DRAWING. Favorites is a
             // different statement (`PhotosReads`' `STARRED`), so the library is
@@ -443,13 +628,13 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
     private fun pausedReason(permission: MediaPermission): String = when (permission) {
         MediaPermission.MEDIA_PERMISSION_GRANTED -> ""
         MediaPermission.MEDIA_PERMISSION_LIMITED ->
-            "Centraid imports the photos you selected."
+            PhotosCopy.PHOTOS_PERMISSION_LIMITED
         MediaPermission.MEDIA_PERMISSION_NOT_ASKED ->
-            "Centraid needs access to your photos to back them up."
+            PhotosCopy.PHOTOS_PERMISSION_NOT_ASKED
         MediaPermission.MEDIA_PERMISSION_DENIED ->
-            "Photo access is off. Turn it on in Settings to import your camera roll."
+            PhotosCopy.PHOTOS_PERMISSION_DENIED
         MediaPermission.MEDIA_PERMISSION_RESTRICTED ->
-            "This device does not allow photo access."
+            PhotosCopy.PHOTOS_PERMISSION_RESTRICTED
         MediaPermission.MEDIA_PERMISSION_UNSPECIFIED -> ""
     }
 

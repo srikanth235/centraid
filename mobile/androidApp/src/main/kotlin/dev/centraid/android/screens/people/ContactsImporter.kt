@@ -35,8 +35,7 @@ import kotlinx.coroutines.withContext
  * refusal — including the one the system returns at once after "don't ask
  * again" — is [PeopleCopy.IMPORT_CONTACTS_DENIED], which names Settings.
  *
- * **INTO THE MEMBER'S VAULT, NEVER A PREVIEW'S**: `Shelf.memberCore`, and the
- * shell provides no importer while a preview is open at all. The People screen
+ * **INTO THE MEMBER'S FOREGROUND VAULT** (`Shelf.core`). The People screen
  * re-reads by itself — every row lands through the change stream.
  *
  * [onStatus] is handed each sentence: [PeopleCopy.IMPORT_CONTACTS_RUNNING]
@@ -47,7 +46,7 @@ import kotlinx.coroutines.withContext
 public fun rememberContactsImport(
     session: HomeSession?,
     onStatus: (sentence: String, holds: Boolean) -> Unit,
-): () -> Unit {
+): (after: ((String?) -> Unit)?) -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val currentSession by rememberUpdatedState(session)
@@ -55,12 +54,22 @@ public fun rememberContactsImport(
     // ONE IMPORT AT A TIME: a second tap while the first writes would add every
     // contact twice, and the day-one roster has nothing to fold them into.
     var running by remember { mutableStateOf(false) }
+    // A MADE VAULT'S CHAIN waits on this import (R-ONBOARD-8): its outcome
+    // goes to [after] instead of the banner, and a refusal is null.
+    var pending by remember { mutableStateOf<((String?) -> Unit)?>(null) }
 
-    fun run() {
-        if (running) return
-        val core = currentSession?.shelf?.memberCore()
+    fun finish(after: ((String?) -> Unit)?, sentence: String) {
+        if (after != null) after(sentence) else currentStatus(sentence, false)
+    }
+
+    fun run(after: ((String?) -> Unit)?) {
+        if (running) {
+            after?.invoke(null)
+            return
+        }
+        val core = currentSession?.shelf?.core()
         if (core == null) {
-            currentStatus(PeopleCopy.IMPORT_CONTACTS_NO_VAULT, false)
+            finish(after, PeopleCopy.IMPORT_CONTACTS_NO_VAULT)
             return
         }
         running = true
@@ -73,16 +82,27 @@ public fun rememberContactsImport(
                 ContactsImport.sentence(ContactsImport.run(core, contacts))
             }
             running = false
-            currentStatus(sentence, false)
+            finish(after, sentence)
         }
     }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) run() else currentStatus(PeopleCopy.IMPORT_CONTACTS_DENIED, false)
+        val after = pending
+        pending = null
+        when {
+            granted -> run(after)
+            after != null -> after(null)
+            else -> currentStatus(PeopleCopy.IMPORT_CONTACTS_DENIED, false)
+        }
     }
     return remember(launcher) {
-        {
-            if (granted(context)) run() else launcher.launch(Manifest.permission.READ_CONTACTS)
+        { after ->
+            if (granted(context)) {
+                run(after)
+            } else {
+                pending = after
+                launcher.launch(Manifest.permission.READ_CONTACTS)
+            }
         }
     }
 }

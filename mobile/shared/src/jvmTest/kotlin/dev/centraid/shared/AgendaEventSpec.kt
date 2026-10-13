@@ -136,7 +136,7 @@ class AgendaEventSpec : StringSpec({
     "an occurrence the answer does not have is gone, not an error" {
         val state = answer(drive(AgendaEventMachine.initial(), open("missing")).state, upcoming(timed("e1", "A", "2026-06-15T08:00")))
         state.screen.data_.shouldBeNull()
-        state.screen.gone.shouldNotBeNull().title shouldBe "This event is no longer on your calendar."
+        state.screen.gone.shouldNotBeNull().title shouldBe "This event was removed."
         state.screen.gone.shouldNotBeNull().action_label shouldBe "Back to Agenda"
     }
 

@@ -1,7 +1,6 @@
 # NO REPLICA, NO GRANT, OR EVERY READ FAILED.
 #
-# The grid is shown ANYWAY — demoting one unreadable tile beside readable
-# neighbours is right, demoting them ALL leaves a launcher with no tiles. The
+# The grid is shown ANYWAY, every app a tile. The
 # springboard reports CONTENT precisely so the screen does not claim the vault
 # is empty, and every count is absent because no read stands behind one.
 data {
@@ -15,8 +14,7 @@ data {
   tiles { app_id: "people" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_SMALL empty_copy: "Add someone you know" }
   tiles { app_id: "tally" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_SMALL empty_copy: "Log your first expense" }
   tiles { app_id: "locker" status: TILE_STATUS_UNKNOWN size: TILE_SIZE_SMALL empty_copy: "Unlock to see your items" }
-  things { total: 0 settled: true }
-  status { tone: TONE_ATTENTION copy: "This device has not copied anything yet" action: "Check the connection" destination: DESTINATION_PHONE }
+  status { tone: TONE_ATTENTION copy: "Not on this phone yet" action: "Check the connection" destination: DESTINATION_PHONE }
   # THE PACKED GRID, decided by the machine so the two shells cannot pack it
   # differently. A wide tile takes a whole line; smalls pair. A lone small at
   # the end is not a hole.

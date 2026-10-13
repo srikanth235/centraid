@@ -1,0 +1,47 @@
+# Home's search (R-CHROME-6): one field over every app but Locker, grouped by
+# app, a row opening in its own app.
+#
+# A VAULT-HOLDING INSTALL, as `home.yaml`: the onboarding starters are enough —
+# Tasks' "Tap the circle to finish me" is what "circle" finds.
+appId: dev.centraid.Centraid
+name: home-search
+---
+- launchApp
+- tapOn:
+    id: "home-search-open"
+- tapOn:
+    id: "home-search-field"
+- inputText: "circle"
+# Grouped by app: the Tasks group heads the one hit.
+- extendedWaitUntil:
+    visible:
+      id: "home-search-group-tasks"
+    timeout: 5000
+- assertVisible: "Tap the circle to finish me"
+# A row opens in its own app; back lands on the results it left.
+- tapOn: "Tap the circle to finish me"
+- assertNotVisible:
+    id: "home-search-field"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: "Done"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+- assertVisible:
+    id: "home-search-group-tasks"
+# Cancel goes home; the picked term comes back as a recent search.
+- tapOn:
+    id: "home-search-cancel"
+- assertVisible:
+    id: "home-grid"
+- tapOn:
+    id: "home-search-open"
+- assertVisible:
+    id: "home-search-recent-circle"
+- tapOn:
+    id: "home-search-cancel"

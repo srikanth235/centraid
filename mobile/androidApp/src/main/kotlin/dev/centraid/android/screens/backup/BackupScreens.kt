@@ -7,24 +7,25 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.RadioButton
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -37,13 +38,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -60,6 +60,7 @@ import dev.centraid.android.screens.words.WordsPage
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.shell.TransferRuleChoice
@@ -68,6 +69,7 @@ import dev.centraid.shared.sync.TransferRule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import dev.centraid.android.kit.KitSpinner
 
 // THE BACKUP SCREEN AND THE HOME LINE (#1080, the shells; seam contract A11).
 //
@@ -83,8 +85,8 @@ import kotlinx.coroutines.launch
 // "Back up now" (`HomeSession.backUpNow` through `SyncPass.installBacklog`,
 // installed by `CentraidApplication`), never by this sheet.
 //
-// **EVERY PROTO NAME THIS FILE READS IS IN [BackupScreenModel.of],
-// [BackupLineRow] AND [BackupEvents]**, so a change to `screen.proto`'s
+// **EVERY PROTO NAME THIS FILE READS IS IN [BackupScreenModel.of] AND
+// [BackupEvents]** (Home draws `BackupLine.status` in `VaultHeader`), so a change to `screen.proto`'s
 // `// --- Backup ---` block is an edit to those places. The iOS twin is
 // `mobile/iosApp/Sources/BackupViews.swift`; the two read the same names.
 //
@@ -116,6 +118,14 @@ internal data class BackupScreenModel(
     /** Non-empty when the machine judges a backlog has stood for a day. */
     val batterySentence: String = "",
     val batteryLabel: String = "",
+    /** THE RECOVERY KEY (R-ONBOARD-10): an empty heading draws no section. */
+    val keyHeading: String = "",
+    val keyLine: String = "",
+    /** On this phone alone and no copy saved: drawn as a warning, first. */
+    val keyWarning: Boolean = false,
+    val keyShowLabel: String = "",
+    val keySyncLabel: String = "",
+    val keySynced: Boolean = false,
 ) {
     internal data class Destination(
         val id: String,
@@ -145,6 +155,12 @@ internal data class BackupScreenModel(
             progress = state.progress,
             batterySentence = state.battery_sentence,
             batteryLabel = state.battery_label,
+            keyHeading = state.key_heading,
+            keyLine = state.key_line,
+            keyWarning = state.key_warning,
+            keyShowLabel = state.key_show_label,
+            keySyncLabel = state.key_sync_label,
+            keySynced = state.key_synced,
         )
     }
 }
@@ -168,6 +184,10 @@ internal object BackupEvents {
         BackupScreenEvent(forget_destination = BackupScreenEvent.ForgetDestination(gateway_id = gateway))
 
     fun dismissed(): BackupScreenEvent = BackupScreenEvent(dismissed = BackupScreenEvent.Dismissed())
+
+    /** Move the recovery key into the keychain, or out of it. */
+    fun setKeySync(on: Boolean): BackupScreenEvent =
+        BackupScreenEvent(set_key_sync = BackupScreenEvent.SetKeySync(on = on))
 }
 
 /**
@@ -182,56 +202,6 @@ internal suspend fun writeTransferRule(session: HomeSession?, picked: String): S
     TransferRule.write(platformServices().secureStore, settled)
     session?.ruleChanged()
     return settled.stored
-}
-
-/**
- * THE HOME LINE: one sentence under the vault, its second clause, and the
- * door to the screen. Empty draws nothing.
- *
- * The tone is drawn the way Home's status ribbon draws its own: a quiet line
- * is ignorable and earns no rule; one that wants the member gets one rule in
- * the tone's colour, never a filled plate.
- */
-@Composable
-internal fun BackupLineRow(line: BackupLine?, onOpen: () -> Unit) {
-    val sentence = line?.sentence.orEmpty()
-    if (line == null || sentence.isEmpty()) return
-    val loud = line.tone == BackupLine.Tone.TONE_ATTENTION || line.tone == BackupLine.Tone.TONE_URGENT
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .clickable(onClick = onOpen)
-            .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 8.dp)
-            .testTag("home-backup-line")
-            .semantics {
-                role = Role.Button
-                // THE LINE READ ALOUD is the machine's: sentence, detail, then what waits.
-                contentDescription = line.accessibility_label.ifEmpty { sentence }
-            },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (loud) {
-            Box(
-                Modifier
-                    .width(2.dp)
-                    .height(24.dp)
-                    .background(centraidColor(if (line.tone == BackupLine.Tone.TONE_URGENT) "danger" else "attention")),
-            )
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                sentence,
-                style = centraidType(if (loud) "small" else "mono"),
-                color = centraidColor(if (loud) "text" else "textFaint"),
-                maxLines = 2,
-            )
-            if (line.detail.isNotEmpty()) {
-                Text(line.detail, style = centraidType("mono"), color = centraidColor("textFaint"), maxLines = 1)
-            }
-        }
-    }
 }
 
 /**
@@ -264,16 +234,23 @@ public class BackupSheets {
         }
     }
 
-    /** Home's backup line. */
+    /** The band's Backup tab, or Home's backup line: the tab is shown. */
     public fun open() {
         if (session == null) return
         bridge.open()
         showing = true
     }
 
-    private fun close() {
+    /** The tab was left: its machine is told the screen is gone. */
+    public fun close() {
+        if (!showing) return
         showing = false
         bridge.forward(BackupEvents.dismissed())
+    }
+
+    /** Read again while shown — a pairing that closed over the tab. */
+    public fun reread() {
+        if (showing) bridge.open()
     }
 
     /**
@@ -297,32 +274,40 @@ public class BackupSheets {
         CoroutineScope(Dispatchers.IO).launch { session.backUpNow() }
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
+    private var notifications: ManagedActivityResultLauncher<String, Boolean>? = null
+
+    /**
+     * "BACK UP NOW" IS THE MACHINE'S: the event starts the session's run, and
+     * the session starts and stops the job around it. The shell's part is the
+     * notification grant, asked for at the tap and never before; the event
+     * goes once the grant is answered ([answered]), so the job is started
+     * from a visible app.
+     *
+     * REGISTERED WHETHER OR NOT THE TAB IS SHOWN (#1080, the Android emulator
+     * smoke): the activity draws this at its root. A rotation while the
+     * system's dialog is up recreates the activity; the answer is delivered
+     * to the launcher registered under the same key, and a launcher that only
+     * existed inside the Backup screen was never registered again, so the
+     * member's tap was dropped without a word.
+     */
     @Composable
-    public fun Sheet(onAddDestination: () -> Unit) {
-        // "BACK UP NOW" IS THE MACHINE'S: the event starts the session's run,
-        // and the session starts and stops the job around it. The shell's part
-        // is the notification grant, asked for here, at the tap and never
-        // before; the event goes once the grant is answered ([answered]), so
-        // the job is started from a visible app.
-        //
-        // REGISTERED WHETHER OR NOT THE SHEET IS UP (#1080, the Android
-        // emulator smoke). A rotation while the system's dialog is up
-        // recreates the activity with the sheet down; the answer is delivered
-        // to the launcher registered under the same key, and a launcher that
-        // only existed inside an open sheet was never registered again, so
-        // the member's tap was dropped without a word.
-        val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+    public fun Registered() {
+        notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
             answered()
         }
+    }
+
+    @Composable
+    public fun Tab(onAddDestination: () -> Unit, onShowWords: () -> Unit) {
         if (!showing) return
         val state by bridge.states.collectAsStateWithLifecycle()
         val model = BackupScreenModel.of(state)
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
         val backUpNow: () -> Unit = {
-            if (needsNotificationGrant(context)) {
-                notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            val ask = notifications
+            if (ask != null && needsNotificationGrant(context)) {
+                ask.launch(Manifest.permission.POST_NOTIFICATIONS)
             } else {
                 bridge.forward(BackupEvents.backUpNow())
             }
@@ -335,22 +320,21 @@ public class BackupSheets {
         val pickRule: (String) -> Unit = { picked ->
             scope.launch { rule = writeTransferRule(session, picked) }
         }
-        ModalBottomSheet(onDismissRequest = ::close, containerColor = centraidColor("bg")) {
-            BackupScreen(
-                model = model,
-                choices = choices,
-                rule = rule,
-                onPickRule = pickRule,
-                batteryHeld = model.batterySentence.isNotEmpty() && !ignoresBatteryOptimizations(context),
-                onBattery = { openBatterySettings(context) },
-                onEvent = bridge::forward,
-                onBackUpNow = backUpNow,
-                onAddDestination = {
-                    close()
-                    onAddDestination()
-                },
-            )
-        }
+        // A TAB LIKE CHAT, drawn in place of Home's springboard under the
+        // band (R-ONBOARD-9): adding a backup device and showing the words
+        // open their own sheets over it, and it stays.
+        BackupScreen(
+            model = model,
+            choices = choices,
+            rule = rule,
+            onPickRule = pickRule,
+            batteryHeld = model.batterySentence.isNotEmpty() && !ignoresBatteryOptimizations(context),
+            onBattery = { openBatterySettings(context) },
+            onEvent = bridge::forward,
+            onBackUpNow = backUpNow,
+            onAddDestination = onAddDestination,
+            onShowWords = onShowWords,
+        )
     }
 
     private fun needsNotificationGrant(context: Context): Boolean =
@@ -391,13 +375,17 @@ private fun BackupScreen(
     onEvent: (BackupScreenEvent) -> Unit,
     onBackUpNow: () -> Unit,
     onAddDestination: () -> Unit,
+    onShowWords: () -> Unit,
 ) {
+    val paired = model.destinations.isNotEmpty()
     WordsPage(testTag = "backup-screen", description = "") {
+        // WHERE THE BACKUP STANDS, and the one act that moves it: with nothing
+        // paired that act is adding a backup device, drawn as the page's
+        // primary; once one is paired it is "Back up now" (iOS `BackupView`).
         WordsHead(model.title, model.line)
         if (model.lineDetail.isNotEmpty()) Sentence(model.lineDetail)
         model.waiting.forEach { reason -> Sentence(reason) }
-        // WHY THE PHONE WILL NOT WAKE CENTRAID, when it will not: a reason the
-        // backup waits for the app to be opened.
+        // WHY THE PHONE WILL NOT WAKE CENTRAID, when it will not.
         if (model.backgroundNotice.isNotEmpty()) Sentence(model.backgroundNotice, "backup-background-notice")
         if (batteryHeld) {
             Sentence(model.batterySentence)
@@ -405,18 +393,19 @@ private fun BackupScreen(
                 QuietButton(label = model.batteryLabel, testTag = "backup-battery", onPress = onBattery)
             }
         }
-        // BACK UP NOW, pressable when the machine says so — the shared primary
-        // control's dimmed form otherwise (`WordsControls`). While a run goes,
-        // its progress sentence stands beside it.
+        if (!paired && model.addLabel.isNotEmpty()) {
+            InkButton(label = model.addLabel, testTag = "backup-add-destination", onPress = onAddDestination)
+        }
+        // BACK UP NOW, only once there is somewhere to back up to (the machine
+        // draws no label before). Pressable when the machine says so; while a
+        // run goes, its progress sentence stands beside it.
         if (model.backUpNowLabel.isNotEmpty()) {
             val enabled = model.backUpNowEnabled
             InkButton(
                 label = model.backUpNowLabel,
                 testTag = "backup-now",
-                modifier = Modifier
-                    .alpha(if (enabled) 1f else 0.4f)
-                    .semantics { if (!enabled) disabled() },
-                onPress = { if (enabled) onBackUpNow() },
+                enabled = enabled,
+                onPress = onBackUpNow,
             )
         }
         if (model.progress.isNotEmpty()) {
@@ -425,58 +414,156 @@ private fun BackupScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CircularProgressIndicator(color = centraidColor("textSoft"), modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                Text(model.progress, style = centraidType("small"), color = centraidColor("textSoft"))
+                KitSpinner(model.progress)
             }
         }
         // WHAT THE LAST ACT DID, in place: one clause, never a toast.
         if (model.notice.isNotEmpty()) Sentence(model.notice, "backup-notice")
-        Destinations(model, onEvent, onAddDestination)
-        if (model.ruleLabel.isNotEmpty()) {
-            Text(model.ruleLabel, style = centraidType("smallStrong"), color = centraidColor("text"))
+        // A KEY ON THIS PHONE ALONE IS THE PAGE'S FIRST CONCERN: a lost phone
+        // takes every vault with it, whatever is backed up.
+        if (model.keyWarning) RecoveryKey(model, onEvent, onShowWords)
+        if (paired) {
+            Section(SharedCopy.BACKUP_DEVICES_HEADING) { Destinations(model, onEvent, onAddDestination) }
         }
-        choices.forEach { choice ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 44.dp)
-                    .clickable { onPickRule(choice.stored) }
-                    .testTag("backup-rule-" + choice.stored)
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = choice.sentence
-                        if (choice.stored == rule) this.selected = true
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                // THE SELECTION IS THE STORE'S ANSWER, not the tap.
-                RadioButton(selected = choice.stored == rule, onClick = { onPickRule(choice.stored) })
-                Text(choice.sentence, style = centraidType("small"), color = centraidColor("text"))
+        if (choices.isNotEmpty()) {
+            Section(model.ruleLabel) {
+                choices.forEach { choice ->
+                    val picked = choice.stored == rule
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 44.dp)
+                            .clickable { onPickRule(choice.stored) }
+                            .padding(vertical = 8.dp)
+                            .testTag("backup-rule-" + choice.stored)
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = choice.sentence
+                                if (picked) this.selected = true
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        // THE SELECTION IS THE STORE'S ANSWER, not the tap.
+                        RuleMark(picked)
+                        Text(
+                            choice.sentence,
+                            style = centraidType("small"),
+                            color = centraidColor(if (picked) "text" else "textSoft"),
+                        )
+                    }
+                }
             }
         }
         if (model.videosLabel.isNotEmpty()) {
+            Rule()
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 44.dp)
+                    .heightIn(min = 48.dp)
                     .testTag("backup-include-videos"),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
                     model.videosLabel,
-                    style = centraidType("small"),
+                    style = centraidType("body"),
                     color = centraidColor("text"),
                     modifier = Modifier.weight(1f),
                 )
                 Switch(
                     checked = model.includeVideos,
                     onCheckedChange = { onEvent(BackupEvents.setIncludeVideos(it)) },
-                    colors = SwitchDefaults.colors(checkedTrackColor = centraidColor("link")),
+                    colors = SwitchDefaults.colors(checkedTrackColor = centraidColor("accent")),
                     modifier = Modifier.semantics { contentDescription = model.videosLabel },
                 )
             }
         }
+        // THE RECOVERY KEY BELONGS HERE: it is the other half of getting a
+        // vault back, beside the backup device that holds the copy.
+        if (!model.keyWarning) RecoveryKey(model, onEvent, onShowWords)
+    }
+}
+
+/**
+ * WHERE THE RECOVERY KEY IS, and what can be done about it (iOS
+ * `BackupView.recoveryKey`). A warning carries the attention mark Home's line
+ * uses and makes "Show recovery key" the primary; otherwise it is one quiet
+ * sentence. Moving the key into or out of the keychain is a plain link: a
+ * choice made once, not a thing to do.
+ */
+@Composable
+private fun RecoveryKey(model: BackupScreenModel, onEvent: (BackupScreenEvent) -> Unit, onShowKey: () -> Unit) {
+    if (model.keyHeading.isEmpty()) return
+    Section(model.keyHeading) {
+        if (model.keyWarning) {
+            Row(
+                Modifier.height(IntrinsicSize.Min).testTag("backup-key-line").semantics(mergeDescendants = true) { },
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(Modifier.width(2.dp).fillMaxHeight().background(centraidColor("attention")))
+                Text(model.keyLine, style = centraidType("body"), color = centraidColor("text"))
+            }
+            if (model.keyShowLabel.isNotEmpty()) {
+                InkButton(label = model.keyShowLabel, testTag = "backup-show-key", onPress = onShowKey)
+            }
+        } else {
+            Sentence(model.keyLine, "backup-key-line")
+            if (model.keyShowLabel.isNotEmpty()) {
+                QuietButton(label = model.keyShowLabel, testTag = "backup-show-key", onPress = onShowKey)
+            }
+        }
+        if (model.keySyncLabel.isNotEmpty()) {
+            Box(
+                Modifier
+                    .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                    .clickable(role = Role.Button) { onEvent(BackupEvents.setKeySync(!model.keySynced)) }
+                    .testTag("backup-key-sync"),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(model.keySyncLabel, style = centraidType("small"), color = centraidColor("link"))
+            }
+        }
+    }
+}
+
+/** A hairline between groups: the page is already inset. */
+@Composable
+private fun Rule() {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(CentraidGeometry.HAIRLINE.dp)
+            .background(centraidColor("line")),
+    )
+}
+
+/** ONE GROUP: a rule above, its name in sentence case, then its rows. */
+@Composable
+private fun Section(heading: String, content: @Composable () -> Unit) {
+    Rule()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (heading.isNotEmpty()) {
+            Text(
+                heading,
+                style = centraidType("smallStrong"),
+                color = centraidColor("text"),
+                modifier = Modifier.semantics { heading() },
+            )
+        }
+        content()
+    }
+}
+
+/** THE RULE'S CHOICE MARK in the theme's ink: a ring, filled when picked. */
+@Composable
+private fun RuleMark(picked: Boolean) {
+    Box(
+        Modifier
+            .size(20.dp)
+            .border(1.5.dp, centraidColor(if (picked) "text" else "lineStrong"), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (picked) Box(Modifier.size(10.dp).background(centraidColor("text"), CircleShape))
     }
 }
 

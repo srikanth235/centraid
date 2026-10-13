@@ -176,12 +176,65 @@ class NotesAppSpec : StringSpec({
         ask.pinned_only shouldBe true
         ask.tag_concept_ids shouldBe listOf("c-1")
         ask.window shouldBe 400
-        pinned.filter_label shouldBe "${NotesCopy.PINNED_ONLY} · work"
         pinned.data_!!.tags.single().selected shouldBe true
+        // EVERY FILTER IS A CHIP, selected while it narrows.
+        pinned.chips.filter { it.selected }.map { it.key } shouldBe listOf("pinned", "tag-c-1")
 
-        val cleared = NotesLibraryMachine.reduce(pinned, NotesLibraryEvent(filter_cleared = NotesLibraryEvent.FilterCleared())).state
-        cleared.filter_label shouldBe ""
+        // A selected chip clears itself.
+        val cleared = NotesLibraryMachine.run(
+            pinned,
+            NotesLibraryEvent(chip = NotesLibraryEvent.ChipPicked(key = "pinned")),
+            NotesLibraryEvent(chip = NotesLibraryEvent.ChipPicked(key = "tag-c-1")),
+        ).state
+        cleared.chips.none { it.selected } shouldBe true
         NotesLibraryReads.requests(cleared, now)[0].notes_library!!.pinned_only shouldBe false
+        NotesLibraryReads.requests(cleared, now)[0].notes_library!!.tag_concept_ids.shouldBeEmpty()
+    }
+
+    "library: ONE chip row — Pinned, the tags, then the sort, last, wearing the current order" {
+        val loaded = loadedLibrary(row("n-1", "A"))
+        loaded.chips.map { it.key } shouldBe listOf("pinned", "tag-c-1", "sort")
+        loaded.chips.map { it.label } shouldBe listOf(NotesCopy.CHIP_PINNED, "work", NotesCopy.SORT_UPDATED)
+        val sort = loaded.chips.last()
+        sort.chevron shouldBe true
+        sort.spoken shouldBe "Sort, ${NotesCopy.SORT_UPDATED}"
+        loaded.chips.dropLast(1).none { it.chevron } shouldBe true
+
+        // The sort chip opens the sort sheet; a choice re-reads and renames the chip.
+        val sheet = NotesLibraryMachine.reduce(loaded, NotesLibraryEvent(chip = NotesLibraryEvent.ChipPicked(key = "sort")))
+        sheet.effects.shouldBeEmpty()
+        sheet.state.sheet shouldBe NotesLibraryState.Sheet.SHEET_SORT
+        sheet.state.choices.single { it.selected }.sort shouldBe NotesLibrarySort.NOTES_LIBRARY_SORT_UPDATED
+        val byTitle = NotesLibraryMachine.reduce(
+            sheet.state,
+            NotesLibraryEvent(sort = NotesLibraryEvent.SortPicked(sort = NotesLibrarySort.NOTES_LIBRARY_SORT_TITLE)),
+        ).state
+        byTitle.sheet shouldBe NotesLibraryState.Sheet.SHEET_NONE
+        byTitle.chips.last().label shouldBe NotesCopy.SORT_TITLE_AZ
+        byTitle.chips.last().spoken shouldBe "Sort, ${NotesCopy.SORT_TITLE_AZ}"
+
+        // No chip row over search: no filter narrows its results.
+        NotesLibraryMachine.reduce(loaded, NotesLibraryEvent(search_opened = NotesLibraryEvent.SearchOpened())).state.chips.shouldBeEmpty()
+        // An unknown key is nothing.
+        NotesLibraryMachine.reduce(loaded, NotesLibraryEvent(chip = NotesLibraryEvent.ChipPicked(key = "nope"))).state shouldBe loaded
+    }
+
+    "library: opened on a notebook, its chip leads, selected, and a tap widens to every note" {
+        val opened = NotesLibraryMachine.reduce(
+            NotesLibraryMachine.initial(),
+            NotesLibraryEvent(opened = NotesLibraryEvent.Opened(notebook_id = "nb-1", notebook_name = "Recipes")),
+        ).state
+        val loaded = NotesLibraryMachine.reduce(opened, NotesLibraryReads.arrived(libraryAnswer(row("n-1", "A")))).state
+        loaded.chips.first().let {
+            it.key shouldBe "notebook"
+            it.label shouldBe "Recipes"
+            it.selected shouldBe true
+        }
+        val widened = NotesLibraryMachine.reduce(loaded, NotesLibraryEvent(chip = NotesLibraryEvent.ChipPicked(key = "notebook")))
+        widened.effects.single().shouldBeInstanceOf<ScreenEffect.ReadPage>()
+        widened.state.heading shouldBe NotesCopy.TITLE
+        widened.state.chips.map { it.key } shouldBe listOf("pinned", "tag-c-1", "sort")
+        NotesLibraryReads.requests(widened.state, now)[0].notes_library!!.notebook_id shouldBe ""
     }
 
     "library: opened on a notebook reads it, heads with its name" {
@@ -308,13 +361,26 @@ class NotesAppSpec : StringSpec({
         val state = NotesLibraryMachine.reduce(openedLibrary(), NotesLibraryReads.denied(AppQueryDenial(message = "revoked"))).state
         state.denied!!.title shouldBe NotesCopy.DENIED_TITLE
         state.band.shouldBeEmpty()
+        state.chips.shouldBeEmpty()
+        state.more_rows.shouldBeEmpty()
         state.data_.shouldBeNull()
     }
 
     "library: More is a sheet, the same tab is nothing, another tab is the shell's" {
         val state = loadedLibrary(row("n-1", "A"))
-        NotesLibraryMachine.reduce(state, NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = "more"))).state.sheet shouldBe
-            NotesLibraryState.Sheet.SHEET_MORE
+        val more = NotesLibraryMachine.reduce(state, NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = "more"))).state
+        more.sheet shouldBe NotesLibraryState.Sheet.SHEET_MORE
+        // MORE HOLDS TRASH ALONE: never search, sort or a filter (R-CHROME-4).
+        more.more_rows.map { it.key to it.label } shouldBe listOf(NotesLibraryMachine.MORE_TRASH to NotesCopy.TRASH_LABEL)
+        // A row closes the sheet; where it leads is the shell's.
+        val picked = NotesLibraryMachine.reduce(more, NotesLibraryEvent(more_row = NotesLibraryEvent.MoreRowPicked(key = "trash")))
+        picked.effects.shouldBeEmpty()
+        picked.state.sheet shouldBe NotesLibraryState.Sheet.SHEET_NONE
+        // More is an ordinary band tab, last, on the catalog's glyph.
+        state.band.last().let {
+            it.key shouldBe NotesBand.MORE
+            it.icon_key shouldBe "MoreHoriz"
+        }
         val same = NotesLibraryMachine.reduce(state, NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = "notes")))
         same.effects.shouldBeEmpty()
         same.state shouldBe state

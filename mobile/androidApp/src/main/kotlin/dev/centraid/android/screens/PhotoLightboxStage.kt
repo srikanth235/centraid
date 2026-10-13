@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,8 +31,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -76,6 +75,8 @@ import centraid.screen.v1.PhotoDetail
 import centraid.screen.v1.PhotoLightboxEvent
 import centraid.screen.v1.PhotoLightboxState
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.StageKey
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -493,16 +494,11 @@ internal fun LightboxTransport(player: LightboxPlayer) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        IconButton(onClick = { player.toggle() }, modifier = Modifier.size(44.dp)) {
-            CentraidIcon(
-                iconKey = if (player.playing) "Pause" else "Play",
-                tint = ink,
-                size = 20.dp,
-                modifier = Modifier.semantics {
-                    contentDescription = if (player.playing) "Pause" else "Play"
-                },
-            )
-        }
+        StageKey(
+            iconKey = if (player.playing) "Pause" else "Play",
+            label = if (player.playing) "Pause" else "Play",
+            onClick = { player.toggle() },
+        )
         // The strip's width is the pointer scope's `size`; nothing reads the
         // layout's constraints.
         Box(
@@ -579,7 +575,6 @@ internal fun LightboxFilmstrip(state: PhotoLightboxState, onEvent: (PhotoLightbo
             Box(
                 Modifier
                     .size(side.dp)
-                    .clip(RoundedCornerShape(0.dp))
                     .background(centraidColor("skel"))
                     .then(
                         if (here) Modifier.border(2.dp, centraidColor("onStage")) else Modifier,
@@ -587,7 +582,7 @@ internal fun LightboxFilmstrip(state: PhotoLightboxState, onEvent: (PhotoLightbo
                     .semantics {
                         role = Role.Button
                         selected = here
-                        contentDescription = "Show photograph ${offset + index + 1} of $total"
+                        contentDescription = "Show photo ${offset + index + 1} of $total"
                     }
                     .clickable {
                         if (!here) onEvent(PhotoLightboxEvent(moved = PhotoLightboxEvent.Moved(id)))
@@ -620,7 +615,7 @@ internal fun LiveChip(live: LightboxPlayer) {
     Row(
         modifier = Modifier
             .height(28.dp)
-            .clip(RoundedCornerShape(999.dp))
+            .clip(tokenShape("pill"))
             .background(centraidColor("stageSunken"))
             .clickable { live.playFromStart() }
             .padding(horizontal = 10.dp)
@@ -670,3 +665,8 @@ private val FADE = tween<Float>(
     durationMillis = CentraidGeometry.DURATION_ONE,
     easing = CubicBezierEasing(0.3f, 0f, 0.4f, 1f),
 )
+
+/** A corner off the token scale (`md`, `pill`, ...). A literal radius is a finding. */
+@Composable
+internal fun tokenShape(name: String) =
+    androidx.compose.foundation.shape.RoundedCornerShape((LocalCentraidTokens.current.radii[name] ?: 0).dp)

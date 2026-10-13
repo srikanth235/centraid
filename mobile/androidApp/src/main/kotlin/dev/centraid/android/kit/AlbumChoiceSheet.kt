@@ -15,11 +15,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,7 +28,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -40,7 +36,7 @@ import androidx.compose.ui.unit.dp
 import centraid.screen.v1.AlbumChoiceEntry
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
-import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.PhotosCopy
 
 /**
  * "ADD TO ALBUM", AS ONE SHEET FOR EVERY SCREEN THAT OFFERS IT (#1029, the
@@ -62,7 +58,6 @@ import dev.centraid.design.CentraidGeometry
  * so the new album joins this list when the create commits and the member's
  * next tap finishes the job. The SwiftUI twin is `AlbumChoiceSheet.swift`.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 public fun AlbumChoiceSheet(
     choices: List<AlbumChoiceEntry>,
@@ -70,42 +65,31 @@ public fun AlbumChoiceSheet(
     onNewAlbum: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
-                .padding(bottom = 24.dp)
-                .testTag("album-choice-sheet"),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Add to album",
-                    style = centraidType("title"),
-                    color = centraidColor("text"),
-                    modifier = Modifier.weight(1f).semantics { heading() },
-                )
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = centraidColor("link"))
-                }
-            }
+    SheetRoom(title = PhotosCopy.PHOTOS_ADD_TO_ALBUM, onDismiss = onDismiss) {
+        Column(Modifier.fillMaxWidth().weight(1f, fill = false).testTag("album-choice-sheet")) {
             NewAlbumRow(onNewAlbum)
             if (choices.isEmpty()) {
                 // ONE SENTENCE, NEVER AN EMPTY SHEET. The row above is the
                 // action; this only says why the list is short.
                 Text(
-                    "No albums yet.",
+                    PhotosCopy.PHOTOS_ALBUM_CHOICE_NONE,
                     style = centraidType("small"),
                     color = centraidColor("textFaint"),
+                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
                 )
             } else {
-                LazyColumn(Modifier.fillMaxWidth()) {
+                LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
                     items(choices, key = { it.album_id }) { choice ->
                         ChoiceRow(choice) { onChoose(choice.album_id) }
                     }
                 }
             }
+            QuietButton(
+                label = "Cancel",
+                testTag = "album-choice-cancel",
+                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                onPress = onDismiss,
+            )
         }
     }
 }
@@ -129,47 +113,35 @@ private fun NewAlbumRow(onNewAlbum: (String) -> Unit) {
         }
     }
     if (naming) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.padding(horizontal = KitGeometry.GUTTER),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Album name") },
+                label = { Text(PhotosCopy.PHOTOS_ALBUM_NAME) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { create() }),
                 modifier = Modifier.weight(1f).testTag("album-choice-name"),
             )
-            TextButton(onClick = create, enabled = name.isNotBlank()) {
-                Text("Create", color = centraidColor(if (name.isNotBlank()) "link" else "textDisabled"))
-            }
+            KitLink(label = "Create", onClick = create, dense = true, enabled = name.isNotBlank())
         }
     } else {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .clickable { naming = true }
-                .semantics(mergeDescendants = true) {
-                    contentDescription = "New album"
-                    role = Role.Button
-                },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
-                Modifier.size(COVER_SIDE).clip(RoundedCornerShape(COVER_RADIUS)).background(centraidColor("bgElev")),
-                contentAlignment = Alignment.Center,
-            ) {
-                CentraidIcon(iconKey = "add", tint = centraidColor("link"), size = 22.dp)
-            }
-            Text("New album…", style = centraidType("body"), color = centraidColor("link"))
-        }
+        SheetRow(
+            label = "New album\u2026",
+            iconKey = "add",
+            testTag = "album-choice-new",
+            onTap = { naming = true },
+        )
     }
 }
 
 @Composable
 private fun ChoiceRow(choice: AlbumChoiceEntry, onClick: () -> Unit) {
-    val title = choice.title.ifEmpty { "Untitled album" }
+    val title = choice.title.ifEmpty { PhotosCopy.PHOTOS_UNTITLED_ALBUM }
     val (shown, spoken) = choiceCount(choice)
     Row(
         Modifier
@@ -180,7 +152,7 @@ private fun ChoiceRow(choice: AlbumChoiceEntry, onClick: () -> Unit) {
                 contentDescription = "$title, $spoken"
                 role = Role.Button
             }
-            .padding(vertical = 6.dp),
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -210,7 +182,7 @@ private fun ChoiceRow(choice: AlbumChoiceEntry, onClick: () -> Unit) {
 
 /** A capped count says `N+` and never a bare number — Collections' rule. */
 private fun choiceCount(choice: AlbumChoiceEntry): Pair<String, String> {
-    val noun = if (choice.count == 1L) "photograph" else "photographs"
+    val noun = if (choice.count == 1L) PhotosCopy.TILE_COUNT_ONE else PhotosCopy.TILE_COUNT_MANY
     return when {
         choice.count_capped -> "${choice.count}+ $noun" to "at least ${choice.count} $noun"
         choice.count == 0L -> "Empty" to "empty"

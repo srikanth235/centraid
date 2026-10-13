@@ -154,7 +154,7 @@ class LockerTransferSpec : StringSpec({
             LockerInput.Revealed(copying.asking.token, LockerDoorAnswer.Session(open = true, revealed = LockerDoorAnswer.Revealed("item-bank", "value_sealed", secret, "rcp-2", 30_000))),
         ).state
         copied.screen.clipboard.shouldNotBeNull().sensitive.shouldBeTrue()
-        copied.screen.status!!.sentence shouldBe "Recovery code copied · the clipboard clears itself in 30 seconds"
+        copied.screen.status!!.sentence shouldBe "Recovery code copied. Clears in 30 seconds."
         copied.shown.shouldBeNull()
         // A plain field is copied as itself, never receipted.
         val plain = rowsOf(opened, "Recovery").first { it.key == "field:field-branch" }
@@ -315,8 +315,8 @@ class LockerTransferSpec : StringSpec({
 
     "export says what leaves, in the handoff's words, before anything is written" {
         val data = openExport().screen.data_.shouldNotBeNull()
-        data.lede shouldBe "This writes every title, username, address, note and password to a plaintext file on this device. Anything that reads the file reads your secrets. There is no encrypted export today."
-        data.what_value shouldBe "7 items · every field, in the clear"
+        data.lede shouldBe "This saves every item, including passwords, to an unencrypted file. Anything that opens it can read your secrets."
+        data.what_value shouldBe "7 items, unencrypted"
         data.formats.map { it.key } shouldBe listOf("csv", "json")
         data.formats.first { it.selected }.key shouldBe "csv"
         data.leaves_out shouldBe LockerCopy.EXPORT_LEAVES_OUT
@@ -419,7 +419,7 @@ class LockerTransferSpec : StringSpec({
         val idleData = idle.data_.shouldNotBeNull()
         idleData.choose_label shouldBe LockerCopy.IMPORT_CHOOSE
         idleData.verdicts.map { it.label } shouldBe listOf("NEW", "FILLS", "HELD", "SKIPPED")
-        idleData.verdicts.first { it.label == "HELD" }.detail shouldBe "a vault secret already exists — the vault wins"
+        idleData.verdicts.first { it.label == "HELD" }.detail shouldBe "already in Locker, kept as is"
         val reading = import.reduce(openImport(), LockerInput.Picked("passwords.csv", file)).state
         reading.screen.phase shouldBe LockerImportState.Phase.PHASE_READING
         val job = reading.job.shouldBeInstanceOf<LockerJob.Import>()
@@ -451,7 +451,7 @@ class LockerTransferSpec : StringSpec({
         ).state
         published.screen.phase shouldBe LockerImportState.Phase.PHASE_PUBLISHED
         published.file.shouldBeNull()
-        published.screen.status!!.sentence shouldBe "Added 1 · filled 0 · the vault kept 1"
+        published.screen.status!!.sentence shouldBe "Added 1, filled 0, kept 1"
         published.screen.data_!!.publish_label shouldBe ""
         val discarded = import.reduce(planned, importView(LockerImportEvent(discard = LockerImportEvent.DiscardTapped()))).state
         discarded.file.shouldBeNull()

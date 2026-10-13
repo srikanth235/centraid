@@ -9,6 +9,7 @@ import centraid.screen.v1.PhotoLightboxState
 import centraid.screen.v1.PhotoPerson
 import centraid.screen.v1.PhotoPlaceChoice
 import centraid.screen.v1.SeatState
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -159,12 +160,12 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
         val at = state.neighbour_asset_ids.indexOf(state.asset_id)
         if (at < 0) return ""
         val seconds = SLIDESHOW_INTERVAL_MS / 1_000L
-        return "${at + 1} of ${state.neighbour_asset_ids.size} · $seconds seconds a photograph"
+        return "${at + 1} of ${state.neighbour_asset_ids.size} · $seconds seconds a photo"
     }
 
     /** v0's slideshow status line, unchanged. */
     public const val SLIDESHOW_LINE: String =
-        "Leaving the slideshow keeps the photograph you stopped on"
+        PhotosCopy.PHOTOS_SLIDESHOW_LINE
 
     /**
      * THE LIGHTBOX OPENS WITH ITS CHROME DRAWN (v0's `CHROME_VISIBLE_ON_OPEN`).
@@ -546,7 +547,7 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      * sentence under a control that looks armed reads as a control that works.
      */
     public const val WRITE_REFUSED_WITHOUT_A_REASON: String =
-        "Centraid could not make that change, and did not say why."
+        "Centraid could not make that change."
 
     /**
      * `media.set_favorite` AND NOT `media.update_asset`.
@@ -730,7 +731,7 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
 
     /** v0's `NOT_IN_A_VAULT_YET_REASON`, unchanged. */
     public const val NOT_IN_A_VAULT_YET_REASON: String =
-        "This photograph is not in a vault yet."
+        PhotosCopy.PHOTOS_NOT_IN_VAULT
 
     /** The five verbs the bottom row carries, in the desktop bar's own order. */
     public enum class Verb { COPY, FAVORITE, INFO, EDIT, TRASH }
@@ -751,7 +752,7 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      * Three verbs move from v0:
      *
      * - **COPY** was "save this commons item to my vault", and v0 refused it
-     *   with "This photograph is already yours". There is no commons and no
+     *   with "This photo is already yours". There is no commons and no
      *   second vault to copy from in v0 of this shell, so every photograph is
      *   already the member's and the refusal is the permanent answer. It is
      *   kept refused-with-a-reason rather than deleted, because a bar of four
@@ -769,7 +770,7 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
     public fun toolbar(state: PhotoLightboxState): Map<Verb, ToolbarState> {
         val refusal = writeRefusal(state)
         return mapOf(
-            Verb.COPY to ToolbarState(false, "This photograph is already yours"),
+            Verb.COPY to ToolbarState(false, PhotosCopy.PHOTOS_ALREADY_YOURS),
             Verb.FAVORITE to gate(refusal),
             Verb.INFO to ToolbarState(true),
             Verb.EDIT to gate(PhotoEditorMachine.editRefusal(state.detail)),
@@ -806,7 +807,7 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
             // A REFUSAL IS ABOUT THE PHOTOGRAPH IT WAS TRIED ON. Carrying it to
             // the next one would tell a member their swipe had been refused.
             write_failure = null,
-            // AND SO IS A RECEIPT: "Sent with no location." under the next
+            // AND SO IS A RECEIPT: "Sent without location." under the next
             // photograph would be a claim about a copy of it nobody sent.
             notice = "",
             album_choice_open = false,

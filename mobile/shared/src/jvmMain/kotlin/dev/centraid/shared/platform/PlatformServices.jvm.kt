@@ -124,7 +124,7 @@ public class FakeSyncedSecrets(
         synchronizing = true,
         sentence = SyncedSecrets.IOS_SENTENCE,
         restoresAfterSetup = true,
-        optInLabel = SyncedSecrets.IOS_SYNC_LABEL,
+        place = SyncedSecrets.IOS_PLACE,
     ),
 ) : SyncedSecrets {
     private var held: String? = null

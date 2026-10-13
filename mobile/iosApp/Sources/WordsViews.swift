@@ -72,18 +72,13 @@ struct VaultWordsView: View {
                         }
                     }
                     if !state.ownLabel.isEmpty {
-                        WordsSyncCheckbox(label: state.ownLabel, on: state.ownOn, identifier: "words-make-own") { on in
+                        WordsCheckbox(label: state.ownLabel, on: state.ownOn, identifier: "words-make-own") { on in
                             send(Self.event { $0.own = .with { $0.on = on } })
                         }
                     }
 
                     if !state.words.isEmpty {
                         ShownWords(cells: state.words)
-                    }
-                    if !state.syncLabel.isEmpty {
-                        WordsSyncCheckbox(label: state.syncLabel, on: state.syncOn) { on in
-                            send(Self.event { $0.sync = .with { $0.on = on } })
-                        }
                     }
                     if !state.custody.isEmpty {
                         Text(state.custody)
@@ -98,7 +93,7 @@ struct VaultWordsView: View {
                     WordsNotice(notice: state.notice)
 
                     if state.phase == .checking || state.phase == .making {
-                        ProgressView()
+                        KitSpinner()
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("words-making")
                     }
@@ -112,11 +107,20 @@ struct VaultWordsView: View {
                         onSecondary: { send(Self.event { $0.secondary = .init() }) }
                     )
 
+                    // ONE INK BUTTON: with the primary drawn, restoring is the
+                    // outline.
                     if !state.restoreLabel.isEmpty {
-                        KitInkButton(label: state.restoreLabel) {
-                            send(Self.event { $0.restore = .init() })
+                        if state.primaryLabel.isEmpty {
+                            KitInkButton(label: state.restoreLabel) {
+                                send(Self.event { $0.restore = .init() })
+                            }
+                            .accessibilityIdentifier("words-make-restore")
+                        } else {
+                            KitOutlineButton(label: state.restoreLabel, fullWidth: true) {
+                                send(Self.event { $0.restore = .init() })
+                            }
+                            .accessibilityIdentifier("words-make-restore")
                         }
-                        .accessibilityIdentifier("words-make-restore")
                     }
                 }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -233,14 +237,8 @@ struct WordsEntryView: View {
                     WordsNotice(notice: state.notice)
 
                     if !state.progress.isEmpty {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                            Text(state.progress)
-                                .centraidType("small")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier("words-progress")
+                        KitSpinner(label: state.progress)
+                            .accessibilityIdentifier("words-progress")
                     }
 
                     ForEach(Array(state.restored.enumerated()), id: \.offset) { _, line in
@@ -334,17 +332,11 @@ private struct EntryCell: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(cell.suggestions, id: \.self) { word in
-                            Button { onPick(word) } label: {
-                                Text(word)
-                                    .centraidType("small")
-                                    .foregroundStyle(Theme.color("text", scheme))
-                                    .padding(.horizontal, 12)
-                                    .frame(minHeight: CentraidGeometry.targetMinFine)
-                                    .background(Capsule().fill(Theme.color("bgSunken", scheme)))
-                                    .contentShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("words-suggestion-\(cell.position)-\(word)")
+                            KitChip(
+                                label: word,
+                                selected: false,
+                                identifier: "words-suggestion-\(cell.position)-\(word)"
+                            ) { onPick(word) }
                         }
                     }
                     .padding(.leading, 34)
@@ -421,29 +413,23 @@ private struct StayedRetry: View {
     let label: String
     var identifier = "words-retry"
     let action: () -> Void
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        Button(action: action) {
-            Text(label)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color("link", scheme))
-                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(identifier)
+        KitLink(label: label, identifier: identifier, action: action)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 // MARK: - words.show
 
-/// SHOW THE 24 WORDS AGAIN (`WordsShowState`, #1047 E5), from the More sheet.
+/// SHOW THE RECOVERY KEY AGAIN (`WordsShowState`, #1047 E5), from the Backup
+/// tab.
 ///
-/// ASK's primary is this view's one duty beyond drawing: it runs the phone's
-/// owner check (`LAContext` `.deviceOwnerAuthentication` — Face ID, Touch ID
-/// or the passcode) with the state's `verify_reason`, and answers `Verified`
-/// or `VerifyFailed`. It never sends `Primary` from ASK. The words reach the
+/// The owner check (`LAContext` `.deviceOwnerAuthentication` — Face ID,
+/// Touch ID or the passcode) is this flow's one duty beyond drawing. While
+/// `check_now` the shell runs it before this sheet is presented
+/// (`ShellModel.wordsShowChanged`); after a failed check, ASK is drawn and
+/// its primary runs it again. It never sends `Primary` from ASK. The words reach the
 /// state only in SHOW, behind the same shield words.make draws; a swipe and
 /// leaving the foreground both send `Dismissed` (the shell's).
 struct WordsShowView: View {
@@ -466,11 +452,14 @@ struct WordsShowView: View {
                     if !state.words.isEmpty {
                         ShownWords(cells: state.words)
                     }
+                    if !state.saveLabel.isEmpty, !state.words.isEmpty {
+                        WordsSaveCopyButton(label: state.saveLabel, words: state.words.map(\.word))
+                    }
 
                     WordsNotice(notice: state.notice)
 
                     if state.phase == .loading {
-                        ProgressView()
+                        KitSpinner()
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("words-show-loading")
                     }
@@ -501,13 +490,25 @@ struct WordsShowView: View {
         }
     }
 
-    /// THE OWNER CHECK. A phone with no passcode cannot evaluate the policy,
-    /// and that is a failed check, never a pass.
     private func verify(reason: String) {
-        LAContext().evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { ok, _ in
+        Self.ownerCheck(reason: reason, send: send)
+    }
+
+    /// THE OWNER CHECK. A phone with no passcode cannot evaluate the policy,
+    /// and that is a failed check, never a pass. The member dismissing the
+    /// prompt is `cancelled`, which closes the flow; any other failure keeps
+    /// ASK up with why.
+    static func ownerCheck(reason: String, send: @escaping (Data) -> Void) {
+        LAContext().evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { ok, error in
+            let code = (error as? LAError)?.code
+            let cancelled = code == .userCancel || code == .systemCancel || code == .appCancel
             DispatchQueue.main.async {
-                send(Self.event { event in
-                    if ok { event.verified = .init() } else { event.verifyFailed = .init() }
+                send(event { event in
+                    if ok {
+                        event.verified = .init()
+                    } else {
+                        event.verifyFailed = .with { $0.cancelled = cancelled }
+                    }
                 })
             }
         }
@@ -575,58 +576,49 @@ struct WordsControls: View {
             if !primary.isEmpty {
                 KitInkButton(label: primary, action: onPrimary)
                     .disabled(!primaryEnabled)
-                    .opacity(primaryEnabled ? 1 : 0.4)
                     .accessibilityIdentifier("\(prefix)-primary")
             }
             if !secondary.isEmpty {
-                Button(action: onSecondary) {
-                    Text(secondary)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("link", scheme))
-                        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("\(prefix)-secondary")
+                KitLink(label: secondary, identifier: "\(prefix)-secondary", action: onSecondary)
+                    .frame(maxWidth: .infinity)
             }
         }
         .padding(.top, 8)
     }
 }
 
-/// THE SYNC CHECKBOX (`VaultWordsState.sync_label`): ticked keeps the key in
-/// iCloud Keychain, unticked keeps it on this phone only.
-private struct WordsSyncCheckbox: View {
+/// A CHECKBOX on the words screens: the make flow's "Give this vault its own
+/// recovery key" (`VaultWordsState.own_label`).
+private struct WordsCheckbox: View {
     let label: String
     let on: Bool
-    var identifier = "words-sync"
+    var identifier = "words-check"
     let toggle: (Bool) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            KitCheckBox(checked: on, label: label, identifier: identifier) { toggle(!on) }
+            // The words beside the box are a target too; the box speaks them.
+            Button { toggle(!on) } label: {
+                WordsCheckboxLabel(label: label)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+private struct WordsCheckboxLabel: View {
+    let label: String
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        Button { toggle(!on) } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(on ? Theme.color("text", scheme) : Color.clear)
-                    RoundedRectangle(cornerRadius: 5)
-                        .strokeBorder(Theme.color(on ? "text" : "lineStrong", scheme), lineWidth: 1.5)
-                    if on {
-                        CentraidIconView(iconKey: "Check", tint: Theme.color("textInv", scheme), size: 13)
-                    }
-                }
-                .frame(width: 22, height: 22)
-                Text(label)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
-                Spacer(minLength: 0)
-            }
-            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+        Text(label)
+            .centraidType("body")
+            .foregroundStyle(Theme.color("text", scheme))
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
             .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? [.isSelected] : [])
-        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -644,18 +636,10 @@ private struct WordsSyncCheckbox: View {
 private struct WordsSaveCopyButton: View {
     let label: String
     let words: [String]
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        Button(action: present) {
-            Text(label)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color("link", scheme))
-                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("words-save-copy")
+        KitLink(label: label, identifier: "words-save-copy", action: present)
+            .frame(maxWidth: .infinity)
     }
 
     private func present() {

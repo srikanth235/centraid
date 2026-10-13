@@ -16,16 +16,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,11 +28,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -47,8 +39,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.expand
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.AgendaBandTab
@@ -59,19 +49,28 @@ import centraid.screen.v1.AgendaEventRow
 import centraid.screen.v1.AgendaHomeData
 import centraid.screen.v1.AgendaHomeEvent
 import centraid.screen.v1.AgendaHomeState
+import centraid.screen.v1.AgendaMoreRow
 import centraid.screen.v1.AgendaNowLine
 import centraid.screen.v1.AgendaRowStatus
 import centraid.screen.v1.AgendaToolbar
+import centraid.screen.v1.SearchField
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
-import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.DeniedGate
 import dev.centraid.android.kit.LocalPhoneImport
 import dev.centraid.android.kit.hueColor
+import dev.centraid.android.kit.KitStepper
+import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.RoomAction
+import dev.centraid.android.kit.RoomSearch
+import dev.centraid.android.kit.SheetRoom
+import dev.centraid.android.kit.SheetRow
+import dev.centraid.android.kit.SkeletonBar
 import dev.centraid.android.kit.importLabel
-import dev.centraid.android.kit.rememberFollowedText
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.android.theme.LocalCentraidTokens
 
 /**
  * AGENDA'S HOME (#1046, wave 3): Day, Schedule and Waiting over one list of
@@ -95,42 +94,77 @@ public fun AgendaHomeScreen(
     val chrome = state.chrome ?: AgendaChrome()
     val denied = state.denied
     if (denied != null) {
-        // THE DENIED GATE HAS NO BAND: there is no Agenda to move around in.
-        DeniedGate(denied, Modifier.testTag("agenda-denied"))
+        // THE DENIED GATE KEEPS THE HEADER AND HAS NO BAND, iOS's shape: there
+        // is no Agenda to move around in, search or add to.
+        Box(Modifier.fillMaxSize().testTag("agenda-home")) {
+            AppPlace(app = "agenda", title = chrome.title) {
+                DeniedGate(denied, Modifier.testTag("agenda-denied"))
+            }
+        }
         return
     }
 
-    Column(Modifier.fillMaxSize().testTag("agenda-home")) {
-        AgendaHeader(state, chrome, onEvent)
-        if (state.search_open) AgendaSearchField(state, chrome, onEvent)
-        val toolbar = state.toolbar
-        if (toolbar != null && toolbar.shown) AgendaToolbarRow(toolbar, chrome, onEvent)
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            val loading = state.loading
-            val failure = state.failure
-            val data = state.data_
-            when {
-                loading != null -> AgendaSkeleton(chrome)
-                failure != null -> Column(Modifier.padding(16.dp).testTag("agenda-failure")) {
-                    Text(failure.sentence, style = centraidType("body"), color = centraidColor("text"))
-                    if (failure.remedy.isNotEmpty()) {
-                        Text(failure.remedy, style = centraidType("small"), color = centraidColor("textSoft"))
+    val meta = listOfNotNull(
+        state.toolbar?.month_label?.takeIf { it.isNotEmpty() },
+        state.data_?.event_count_label?.takeIf { it.isNotEmpty() },
+    ).joinToString(" · ")
+    Box(Modifier.fillMaxSize().testTag("agenda-home")) {
+        AppPlace(
+            app = "agenda",
+            title = chrome.title,
+            meta = meta,
+            trailing = chrome.new_event.takeIf { it.isNotEmpty() }?.let { label ->
+                RoomAction(
+                    iconKey = "Plus",
+                    label = label,
+                    testTag = "agenda-new-event",
+                ) { onEvent(AgendaHomeEvent(new_event = AgendaHomeEvent.NewEventRequested())) }
+            },
+            // SEARCH IS THE BAR UNDER THE TITLE (R-CHROME-2), above the day
+            // bar; a tap opens the field through the machine.
+            search = RoomSearch(
+                field = SearchField(open_ = state.search_open, term = state.search_term),
+                placeholder = chrome.search_placeholder,
+                onTerm = { onEvent(AgendaHomeEvent(search_term = AgendaHomeEvent.SearchTermChanged(term = it))) },
+                onClose = { onEvent(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed())) },
+                label = chrome.search_label,
+                closeLabel = chrome.search_close,
+                onOpen = { onEvent(AgendaHomeEvent(search_opened = AgendaHomeEvent.SearchOpened())) },
+            ),
+            band = {
+                AppBand(
+                    app = "agenda",
+                    tabs = state.band.map { it.toTab() },
+                    onSelect = { key -> onEvent(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = key))) },
+                    onHome = onHome,
+                )
+            },
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                val toolbar = state.toolbar
+                if (toolbar != null && toolbar.shown) AgendaToolbarRow(toolbar, chrome, onEvent)
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    val loading = state.loading
+                    val failure = state.failure
+                    val data = state.data_
+                    when {
+                        loading != null -> AgendaSkeleton(chrome)
+                        failure != null -> Column(Modifier.padding(16.dp).testTag("agenda-failure")) {
+                            Text(failure.sentence, style = centraidType("body"), color = centraidColor("text"))
+                            if (failure.remedy.isNotEmpty()) {
+                                Text(failure.remedy, style = centraidType("small"), color = centraidColor("textSoft"))
+                            }
+                            QuietButton(
+                                label = chrome.retry,
+                                testTag = "agenda-retry",
+                                modifier = Modifier.padding(top = 12.dp),
+                            ) { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) }
+                        }
+                        data != null -> AgendaList(state, data, onEvent)
                     }
-                    QuietButton(
-                        label = chrome.retry,
-                        testTag = "agenda-retry",
-                        modifier = Modifier.padding(top = 12.dp),
-                    ) { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) }
                 }
-                data != null -> AgendaList(state, data, onEvent)
             }
         }
-        AppBand(
-            app = "agenda",
-            tabs = state.band.map { it.toTab() },
-            onSelect = { key -> onEvent(AgendaHomeEvent(band = AgendaHomeEvent.BandPicked(key = key))) },
-            onHome = onHome,
-        )
     }
 
     when (state.sheet) {
@@ -142,108 +176,6 @@ public fun AgendaHomeScreen(
 
 private fun AgendaBandTab.toTab(): AppBandTab =
     AppBandTab(key = key, label = label, iconKey = icon_key, selected = current)
-
-@Composable
-private fun AgendaHeader(
-    state: AgendaHomeState,
-    chrome: AgendaChrome,
-    onEvent: (AgendaHomeEvent) -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                chrome.title,
-                style = centraidType("title"),
-                color = centraidColor("text"),
-                modifier = Modifier.semantics { heading() },
-            )
-            val meta = listOfNotNull(
-                state.toolbar?.month_label?.takeIf { it.isNotEmpty() },
-                state.data_?.event_count_label?.takeIf { it.isNotEmpty() },
-            ).joinToString(" · ")
-            if (meta.isNotEmpty()) {
-                Text(meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
-            }
-        }
-        IconSquare(
-            iconKey = "Plus",
-            label = chrome.new_event,
-            testTag = "agenda-new-event",
-        ) { onEvent(AgendaHomeEvent(new_event = AgendaHomeEvent.NewEventRequested())) }
-    }
-}
-
-@Composable
-private fun AgendaSearchField(
-    state: AgendaHomeState,
-    chrome: AgendaChrome,
-    onEvent: (AgendaHomeEvent) -> Unit,
-) {
-    // The machine can clear the term (search closed and reopened); follow it,
-    // and never a late echo of the typing.
-    val editor = rememberFollowedText(state.search_term)
-    val typed = editor.text.value
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .heightIn(min = 44.dp)
-            .clip8()
-            .background(centraidColor("bgSunken"))
-            .border(1.dp, centraidColor("line"), RoundedCornerShape(8.dp))
-            .padding(start = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        CentraidIcon(
-            iconKey = "Search",
-            tint = centraidColor("textFaint"),
-            size = 16.dp,
-            modifier = Modifier.clearAndSetSemantics { },
-        )
-        Box(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-            if (typed.isEmpty()) {
-                Text(
-                    chrome.search_placeholder,
-                    style = centraidType("body"),
-                    color = centraidColor("textFaint"),
-                    modifier = Modifier.clearAndSetSemantics { },
-                )
-            }
-            BasicTextField(
-                value = typed,
-                onValueChange = { next ->
-                    if (editor.edited(next)) {
-                        onEvent(AgendaHomeEvent(search_term = AgendaHomeEvent.SearchTermChanged(term = next)))
-                    }
-                },
-                singleLine = true,
-                textStyle = centraidType("body").copy(color = centraidColor("text")),
-                cursorBrush = SolidColor(centraidColor("text")),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
-                    imeAction = ImeAction.Search,
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focus)
-                    .testTag("agenda-search-field")
-                    .semantics { contentDescription = chrome.search_label },
-            )
-        }
-        IconSquare(
-            iconKey = "X",
-            label = chrome.search_close,
-            testTag = "agenda-search-close",
-            bordered = false,
-        ) { onEvent(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed())) }
-    }
-}
 
 @Composable
 private fun AgendaToolbarRow(
@@ -269,12 +201,14 @@ private fun AgendaToolbarRow(
                 onEvent(AgendaHomeEvent(today = AgendaHomeEvent.TodayRequested()))
             }
         }
-        IconSquare("ChevronLeft", chrome.previous_day, "agenda-previous-day") {
-            onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = -1)))
-        }
-        IconSquare("ChevronRight", chrome.next_day, "agenda-next-day") {
-            onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = 1)))
-        }
+        KitStepper(
+            previousLabel = chrome.previous_day,
+            nextLabel = chrome.next_day,
+            onPrevious = { onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = -1))) },
+            onNext = { onEvent(AgendaHomeEvent(day_stepped = AgendaHomeEvent.DayStepped(days = 1))) },
+            previousTag = "agenda-previous-day",
+            nextTag = "agenda-next-day",
+        )
     }
 }
 
@@ -302,17 +236,6 @@ private fun AgendaSkeleton(chrome: AgendaChrome) {
             }
         }
     }
-}
-
-@Composable
-private fun SkeletonBar(width: androidx.compose.ui.unit.Dp) {
-    Box(
-        Modifier
-            .width(width)
-            .height(12.dp)
-            .clip8()
-            .background(centraidColor("skel")),
-    )
 }
 
 @Composable
@@ -590,7 +513,7 @@ private fun EventRow(row: AgendaEventRow, onEvent: (AgendaHomeEvent) -> Unit) {
             Modifier
                 .width(2.dp)
                 .height(28.dp)
-                .clip(RoundedCornerShape(1.dp))
+                .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["xs"] ?: 0).dp))
                 .background(hueColor(row.calendar_hue_key)),
         )
         Text(
@@ -628,7 +551,7 @@ private fun StatusChip(row: AgendaEventRow) {
         maxLines = 1,
         modifier = Modifier
             .padding(start = 8.dp)
-            .border(1.dp, ink, RoundedCornerShape(4.dp))
+            .border(1.dp, ink, RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp))
             .padding(horizontal = 6.dp, vertical = 1.dp),
     )
 }
@@ -656,114 +579,80 @@ private fun NowLine(now: AgendaNowLine) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AgendaMoreSheet(
     state: AgendaHomeState,
     chrome: AgendaChrome,
     onEvent: (AgendaHomeEvent) -> Unit,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = { onEvent(AgendaHomeEvent(sheet_closed = AgendaHomeEvent.SheetClosed())) },
-        containerColor = centraidColor("bg"),
+    SheetRoom(
+        title = chrome.more_title,
+        onDismiss = { onEvent(AgendaHomeEvent(sheet_closed = AgendaHomeEvent.SheetClosed())) },
     ) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp).testTag("agenda-more-sheet")) {
-            SheetTitle(chrome.more_title)
-            Text(
-                chrome.calendars_heading,
-                style = centraidType("smallStrong"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).semantics { heading() },
-            )
-            state.data_?.calendars.orEmpty().forEach { calendar ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .clickable {
-                            onEvent(
-                                AgendaHomeEvent(
-                                    calendar_toggled = AgendaHomeEvent.CalendarToggled(
-                                        calendar_id = calendar.calendar_id,
-                                    ),
-                                ),
-                            )
-                        }
-                        .padding(horizontal = 16.dp)
-                        .testTag("agenda-calendar-${calendar.calendar_id}")
-                        .clearAndSetSemantics {
-                            contentDescription = "${calendar.name}, ${calendar.state_label}"
-                            role = Role.Switch
-                        },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val hue = hueColor(calendar.hue_key)
-                    Box(
-                        Modifier
-                            .size(12.dp)
-                            .clip(CircleShape)
-                            .then(
-                                if (calendar.hidden) {
-                                    Modifier.border(1.5.dp, hue, CircleShape)
-                                } else {
-                                    Modifier.background(hue)
-                                },
-                            ),
-                    )
+        // THE ROWS ARE THE MACHINE'S (`more_rows`), the same list iOS draws: a
+        // calendar row is a toggle with its hue dot, an action row a
+        // `SheetRow`, and every tap sends the row's key.
+        Column(Modifier.fillMaxWidth().testTag("agenda-more-sheet")) {
+            state.more_rows.forEach { row ->
+                if (row.section.isNotEmpty()) {
                     Text(
-                        calendar.name,
-                        style = centraidType("body"),
-                        color = if (calendar.hidden) centraidColor("textFaint") else centraidColor("text"),
-                        modifier = Modifier.weight(1f).padding(start = 12.dp),
+                        row.section,
+                        style = centraidType("smallStrong"),
+                        color = centraidColor("textSoft"),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).semantics { heading() },
                     )
-                    Text(calendar.state_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
                 }
-            }
-            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(centraidColor("line")))
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .clickable {
-                        onEvent(
-                            AgendaHomeEvent(
-                                sheet_opened = AgendaHomeEvent.SheetOpened(
-                                    sheet = AgendaHomeState.Sheet.SHEET_READS,
-                                ),
-                            ),
-                        )
-                    }
-                    .padding(horizontal = 16.dp)
-                    .testTag("agenda-open-reads")
-                    .semantics { role = Role.Button },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    chrome.reads_title,
-                    style = centraidType("body"),
-                    color = centraidColor("text"),
-                    modifier = Modifier.weight(1f),
-                )
-                CentraidIcon(
-                    iconKey = "ChevronRight",
-                    tint = centraidColor("textFaint"),
-                    size = 16.dp,
-                    modifier = Modifier.clearAndSetSemantics { },
-                )
+                val pick = { onEvent(AgendaHomeEvent(more_row = AgendaHomeEvent.MoreRowPicked(key = row.key))) }
+                if (row.toggle) {
+                    AgendaToggleRow(row, pick)
+                } else {
+                    SheetRow(label = row.label, testTag = "agenda-more-${row.key}", onTap = pick)
+                }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** A calendar's show/hide row: the hue dot, filled while shown, and its state word. */
+@Composable
+private fun AgendaToggleRow(row: AgendaMoreRow, onPick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onPick)
+            .padding(horizontal = 16.dp)
+            .testTag("agenda-more-${row.key}")
+            .clearAndSetSemantics {
+                contentDescription = row.spoken.ifEmpty { row.label }
+                role = Role.Switch
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val hue = hueColor(row.hue_key)
+        Box(
+            Modifier
+                .size(12.dp)
+                .clip(CircleShape)
+                .then(if (row.on) Modifier.background(hue) else Modifier.border(1.5.dp, hue, CircleShape)),
+        )
+        Text(
+            row.label,
+            style = centraidType("body"),
+            color = if (row.on) centraidColor("text") else centraidColor("textFaint"),
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+        )
+        Text(row.meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"))
+    }
+}
+
 @Composable
 private fun AgendaReadsSheet(chrome: AgendaChrome, onEvent: (AgendaHomeEvent) -> Unit) {
-    ModalBottomSheet(
-        onDismissRequest = { onEvent(AgendaHomeEvent(sheet_closed = AgendaHomeEvent.SheetClosed())) },
-        containerColor = centraidColor("bg"),
+    SheetRoom(
+        title = chrome.reads_title,
+        onDismiss = { onEvent(AgendaHomeEvent(sheet_closed = AgendaHomeEvent.SheetClosed())) },
     ) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp).testTag("agenda-reads-sheet")) {
-            SheetTitle(chrome.reads_title)
+        Column(Modifier.fillMaxWidth().testTag("agenda-reads-sheet")) {
             chrome.reads_facts.forEach { fact ->
                 Column(
                     Modifier
@@ -778,76 +667,3 @@ private fun AgendaReadsSheet(chrome: AgendaChrome, onEvent: (AgendaHomeEvent) ->
         }
     }
 }
-
-@Composable
-private fun SheetTitle(title: String) {
-    Text(
-        title,
-        style = centraidType("title"),
-        color = centraidColor("text"),
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).semantics { heading() },
-    )
-}
-
-/** A 36dp square, `line` border, one catalog mark, described by its label. */
-@Composable
-private fun IconSquare(
-    iconKey: String,
-    label: String,
-    testTag: String,
-    bordered: Boolean = true,
-    onPress: () -> Unit,
-) {
-    Box(
-        Modifier
-            .size(44.dp)
-            .clickable(onClick = onPress)
-            .testTag(testTag)
-            .clearAndSetSemantics {
-                contentDescription = label
-                role = Role.Button
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier
-                .size(36.dp)
-                .then(
-                    if (bordered) {
-                        Modifier.border(1.dp, centraidColor("line"), RoundedCornerShape(8.dp))
-                    } else {
-                        Modifier
-                    },
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            CentraidIcon(iconKey = iconKey, tint = centraidColor("textSoft"), size = 18.dp)
-        }
-    }
-}
-
-/** A small quiet button: words on a hairline, no fill. */
-@Composable
-private fun QuietButton(
-    label: String,
-    testTag: String,
-    modifier: Modifier = Modifier,
-    onPress: () -> Unit,
-) {
-    Text(
-        label,
-        style = centraidType("annotLabelOn"),
-        color = centraidColor("text"),
-        modifier = modifier
-            .heightIn(min = 36.dp)
-            .widthIn(min = 44.dp)
-            .clip8()
-            .border(1.dp, centraidColor("line"), RoundedCornerShape(8.dp))
-            .clickable(onClick = onPress)
-            .padding(horizontal = 12.dp, vertical = 9.dp)
-            .testTag(testTag)
-            .semantics { role = Role.Button },
-    )
-}
-
-private fun Modifier.clip8(): Modifier = this.then(Modifier.clip(RoundedCornerShape(8.dp)))

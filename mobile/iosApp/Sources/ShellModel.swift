@@ -84,11 +84,7 @@ final class ShellModel: ObservableObject {
         case photoEditor(String, [String])
     }
 
-    @Published var path: [Route] = [] {
-        // LEAVING THE APP THE EXAMPLE WAS OPENED FROM ENDS IT: the banner's
-        // Done is the one exit, and backing out of the app is the same act.
-        didSet { endExampleIfLeft() }
-    }
+    @Published var path: [Route] = []
     @Published var masked = false
 
     /// WHICH PLACE THE BAND'S ROOT IS SHOWING: Home's springboard, or the Chat
@@ -96,7 +92,7 @@ final class ShellModel: ObservableObject {
     /// never part of `path`. Chat is a band place and not an app: it has no
     /// tile, no route and no catalogue row.
     enum Tab: Hashable {
-        case home, chat
+        case home, chat, backup
     }
 
     @Published var tab: Tab = .home
@@ -189,21 +185,15 @@ final class ShellModel: ObservableObject {
     /// answer is the shared shelf's (`Shelf.holdsNoVault`), and this is only
     /// where SwiftUI hears it.
     @Published var holdsNoVault: Bool?
-    /// "SEE AN EXAMPLE" IS OPEN (`Shelf.previewing`): every screen reads the
-    /// ephemeral example core, and the banner with its one exit is drawn over
-    /// every route. False until the shelf says.
-    @Published var previewing = false
-    /// The app route the example was opened from: what Done re-opens, and what
-    /// leaving ends the preview.
-    private var exampleRoute: Route?
-    /// THE SHELL'S ONE BANNER LINE that is not the example's: the contacts
-    /// import's progress and outcome (DESIGN.md: a banner, never a toast).
+    /// The vault Home's lockup names, or empty before the first lockup lands.
+    var homeVaultID: String {
+        ((try? Centraid_Screen_V1_HomeState(serializedBytes: homeState)) ?? .init()).vault.vaultID
+    }
+    /// THE SHELL'S ONE BANNER LINE: an import's progress and outcome (DESIGN.md: a banner, never a toast).
     /// Empty draws nothing.
     @Published var importNotice = ""
     /// The contacts import is running: its banner has no exit until it ends.
     @Published var importing = false
-    /// Whether the vault sheet is up.
-    @Published var vaultSheetOpen = false
     /// Whether the transfer-rules sheet is up (#1025 S4).
     @Published var transferRulesOpen = false
     /// THE MEMBER'S TRANSFER RULE, as the STORE's own word.
@@ -233,6 +223,8 @@ final class ShellModel: ObservableObject {
     @Published var wordsEntryState = Data()
     /// `words.show`'s and `pair.laptop`'s last states (#1047 E5), as bytes.
     @Published var wordsShowState = Data()
+    /// Bumped on each open of the Backup tab: `BackupView` scrolls to its top.
+    @Published var backupScrollTop = 0
     @Published var pairLaptopState = Data()
     /// The Backup screen's last state, as bytes (#1080).
     @Published var backupState = Data()
@@ -243,7 +235,7 @@ final class ShellModel: ObservableObject {
     /// `backup` is the Backup screen (#1080): one sheet at the root like the
     /// custody screens, so "Add a gateway" can swap it for `pair` in place.
     enum WordsSheet: String, Identifiable {
-        case make, enter, show, pair, backup
+        case make, enter, show, pair
         var id: String { rawValue }
     }
 
@@ -313,6 +305,11 @@ final class ShellModel: ObservableObject {
     private let wordsEntry = WordsEntryBridge()
     /// `words.show` and `pair.laptop` (#1047 E5), held for the same reason.
     private let wordsShow = WordsShowBridge()
+    /// words.show was opened from the Backup tab and has not closed: its
+    /// sheet goes up once the owner check has answered.
+    private var showWordsRequested = false
+    /// The owner check is on screen, so a second `check_now` waits for it.
+    private var ownerChecking = false
     private let pairLaptop = PairLaptopBridge()
     /// THE BACKUP SCREEN'S BRIDGE (#1080, seam contract A11), held for the
     /// same reason. Its shape — `observe`, `open`, `send`, `attach` — is every
@@ -350,14 +347,30 @@ final class ShellModel: ObservableObject {
         }
         photos.observe { [weak self] bytes in self?.photosState = bytes.data }
         home.observeHoldsNoVault { [weak self] none in self?.holdsNoVaultChanged(none.boolValue) }
-        home.observePreviewing { [weak self] open in self?.previewing = open.boolValue }
         vaultWords.observe { [weak self] bytes in self?.vaultWordsChanged(bytes.data) }
+        // A VAULT WAS MADE (`VaultWordsBridge.made`, once per make): its
+        // sentence stays on the vault sheet, as `found`'s did, and what the
+        // phone already holds is asked for once and brought in (R-ONBOARD-8):
+        // the photos, then the contacts, the calendar and the reminders, each
+        // prompt after the last one was answered — nobody is sent to an empty
+        // app to find its import.
+        vaultWords.observeMade { [weak self] sentence in
+            guard let self else { return }
+            self.gatewayStatus = sentence
+            #if canImport(CentraidShared)
+            self.photos.askForPhotos { [weak self] in
+                DispatchQueue.main.async { self?.importEverythingFromPhone() }
+            }
+            #endif
+        }
         wordsEntry.observe { [weak self] bytes in self?.wordsEntryChanged(bytes.data) }
         wordsShow.observe { [weak self] bytes in self?.wordsShowChanged(bytes.data) }
         pairLaptop.observe { [weak self] bytes in self?.pairLaptopChanged(bytes.data) }
         backup.observe { [weak self] bytes in self?.backupChanged(bytes.data) }
         // ONE LINE PER APP lives in `AppRegistry.apps`, not here.
         for app in AppRegistry.apps { app.register(into: self) }
+        // HOME'S SEARCH (R-CHROME-6): Home's own screen, not an app's.
+        HomeSearchScreens.register(into: self)
         photoShelf.observe { [weak self] bytes in
             guard let self else { return }
             self.photoShelfState = bytes.data
@@ -601,7 +614,6 @@ final class ShellModel: ObservableObject {
         if none {
             path = []
             tab = .home
-            vaultSheetOpen = false
             transferRulesOpen = false
             // A DISMISSAL, as the switcher's own swipe sends it: shut the
             // machine's sheet flag, change no vault.
@@ -616,6 +628,7 @@ final class ShellModel: ObservableObject {
     /// had open — but only onto an empty thread: a conversation in progress is
     /// never re-scoped by a glance at an app.
     func openChatTab() {
+        leaveBackupTab()
         tab = .chat
         if !lastVisitedApp.isEmpty, chat.state.messages.isEmpty {
             chatScope = lastVisitedApp
@@ -630,6 +643,7 @@ final class ShellModel: ObservableObject {
     }
 
     func openHomeTab() {
+        leaveBackupTab()
         tab = .home
         // Chat keeps its thread, but not an open drawer: coming back to a
         // drawer left open would read as the app having forgotten the chat.
@@ -650,6 +664,8 @@ final class ShellModel: ObservableObject {
         let hadChat = chat.opened
         chat.vaultChanged(to: id)
         if hadChat, !chat.opened, tab == .chat { chat.open(app: chatScope, vaultName: foregroundVaultName) }
+        // THE BACKUP TAB IS THE VAULT IN FRONT'S: another vault, another read.
+        if tab == .backup { readBackup() }
     }
 
     /// A RESULT CARD WAS TAPPED: push the real row's route over the thread.
@@ -669,27 +685,72 @@ final class ShellModel: ObservableObject {
 
     // MARK: The 24 words (#1047 E2)
 
+    /// SHUT THE VAULT SWITCHER, changing no vault: its make and restore rows
+    /// open sheets of their own (R-ONBOARD-11), and iOS drops a sheet asked
+    /// for over one still up. A pick with no id is the machine's "shut".
+    /// Answers how long to wait before presenting: the switcher's own
+    /// dismissal has to finish first, or the next sheet is dropped.
+    @discardableResult
+    private func closeVaultSwitcher() -> Double {
+        let state = (try? Centraid_Screen_V1_HomeState(serializedBytes: homeState)) ?? .init()
+        guard state.vaultSheetOpen else { return 0 }
+        send(screen: "home", event: HomeEvents.vaultPicked(""))
+        return 0.45
+    }
+
     /// MAKE A VAULT, THROUGH ITS WORDS. What the make-vault control does now:
     /// `words.make` decides whether this phone mints words, makes the next
     /// vault from a seed it already holds, or must restore first. The vault
-    /// sheet goes first — one sheet at a time.
+    /// switcher goes first — one sheet at a time.
+    ///
+    /// THE SHEET RISES ONLY WHEN THE MEMBER HAS SOMETHING TO DO. A first
+    /// vault on a synced keychain is minted, kept unshown and made with no
+    /// question (R-ONBOARD-10), so a sheet raised at the tap drew "Making your
+    /// vault" for a moment and fell again before Home — a flicker. The sheet
+    /// waits for a phase that asks the member (`asksMember`); a make that
+    /// never asks lands on Home with no sheet at all.
     func makeVault() {
-        vaultSheetOpen = false
+        let wait = closeVaultSwitcher()
+        makePending = true
+        makeReadyAt = Date().addingTimeInterval(wait)
         #if canImport(CentraidShared)
         vaultWords.open()
         #endif
-        DispatchQueue.main.async { self.wordsSheet = .make }
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.presentMakeIfAsked() }
+    }
+
+    /// A make is under way and its sheet is not up yet.
+    private var makePending = false
+    /// Not before the switcher has gone: one sheet at a time.
+    private var makeReadyAt = Date.distantPast
+
+    private func presentMakeIfAsked() {
+        guard makePending, Date() >= makeReadyAt, wordsSheet == nil else { return }
+        let state = (try? Centraid_Screen_V1_VaultWordsState(serializedBytes: vaultWordsState)) ?? .init()
+        if Self.asksMember(state.phase) {
+            makePending = false
+            wordsSheet = .make
+        }
+    }
+
+    /// The phases of words.make that need the member: a name to choose, the
+    /// key to see, a failure to retry or close, a restore to start.
+    private static func asksMember(_ phase: Centraid_Screen_V1_VaultWordsState.Phase) -> Bool {
+        switch phase {
+        case .choose, .show, .failed, .restoreFirst: return true
+        default: return false
+        }
     }
 
     /// RESTORE ONTO THIS PHONE from the 24 words (`words.enter`,
     /// PURPOSE_RESTORE): the make-vault sheet's second door, the empty
     /// shelf's, and words.make's RESTORE_FIRST intent.
     func openRestore() {
-        vaultSheetOpen = false
+        let wait = closeVaultSwitcher()
         #if canImport(CentraidShared)
         wordsEntry.openRestore()
         #endif
-        DispatchQueue.main.async { self.wordsSheet = .enter }
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.wordsSheet = .enter }
     }
 
     /// HAND THE WORDS BACK to this phone's vaults (`words.enter`,
@@ -752,31 +813,30 @@ final class ShellModel: ObservableObject {
             sendWordsShow(WordsShowView.event { $0.dismissed = .init() })
         case .pair:
             sendPairLaptop(PairLaptopView.event { $0.dismissed = .init() })
-        case .backup:
-            sendBackup(BackupEvents.dismissed())
         case nil:
             break
         }
         wordsSheet = nil
     }
 
-    // MARK: The More sheet's custody rows (#1047 E5)
+    // MARK: The Backup tab's custody controls (#1047 E5, R-ONBOARD-10)
 
-    /// SHOW THE 24 WORDS AGAIN (`words.show`): the More sheet's
-    /// `WordsCopy.SHOW_AGAIN_ROW`. The More sheet goes first — one sheet at a
-    /// time.
+    /// SHOW THE RECOVERY KEY AGAIN (`words.show`): the Backup tab's
+    /// `key_show_label`. Any other sheet goes first — one sheet at a time.
+    ///
+    /// NO SHEET BEFORE THE CHECK: the machine opens in ASK with `check_now`,
+    /// `wordsShowChanged` runs the owner check, and the sheet is presented
+    /// only once the machine has something to draw.
     func openShowWords() {
-        send(screen: "home", event: HomeEvents.allApps(open: false))
         #if canImport(CentraidShared)
+        showWordsRequested = true
         wordsShow.open()
         #endif
-        DispatchQueue.main.async { self.wordsSheet = .show }
     }
 
-    /// PAIR WITH THE LAPTOP (`pair.laptop`): the More sheet's pairing row.
+    /// PAIR WITH THE LAPTOP (`pair.laptop`): the Backup screen's "Add".
     /// Whether this phone has a camera is the one fact the machine is told.
     func openPairLaptop() {
-        send(screen: "home", event: HomeEvents.allApps(open: false))
         #if canImport(CentraidShared)
         pairLaptop.open(camera: PairScanner.available)
         #endif
@@ -789,7 +849,18 @@ final class ShellModel: ObservableObject {
     /// as it opens — the store is the authority, and the screen draws the same
     /// three sentences the Home header's sheet does.
     func openBackup() {
-        send(screen: "home", event: HomeEvents.allApps(open: false))
+        // EVERY OPEN STARTS AT THE TOP, and the tab pressed again scrolls
+        // back there: the title is never left under the vault's lockup.
+        backupScrollTop += 1
+        guard tab != .backup else { return }
+        chat.toggleDrawer(false)
+        tab = .backup
+        readBackup()
+    }
+
+    /// THE BACKUP TAB'S READ: the rule's three sentences from the store, and
+    /// the screen's `Opened`, which reads the line and the destinations.
+    private func readBackup() {
         #if canImport(CentraidShared)
         transferRuleChoices = home.transferRuleChoices().map {
             (stored: $0.stored, sentence: $0.sentence)
@@ -797,7 +868,12 @@ final class ShellModel: ObservableObject {
         home.transferRule { [weak self] stored in self?.transferRule = stored }
         backup.open()
         #endif
-        DispatchQueue.main.async { self.wordsSheet = .backup }
+    }
+
+    /// LEAVING THE BACKUP TAB tells its machine the screen is gone, as a
+    /// swipe told the sheet it was.
+    private func leaveBackupTab() {
+        if tab == .backup { sendBackup(BackupEvents.dismissed()) }
     }
 
     func sendBackup(_ event: Data) {
@@ -806,13 +882,16 @@ final class ShellModel: ObservableObject {
         #endif
     }
 
-    /// "ADD A GATEWAY" IS PAIRING: the Backup screen closes and `pair.laptop`
-    /// opens in its place, with its scan and its paste field. The new
-    /// gateway's row arrives with the screen's next read; its pin with
-    /// `pairLaptopChanged`.
+    /// "ADD A BACKUP DEVICE" IS PAIRING: `pair.laptop` opens over the Backup
+    /// tab, with its scan and its paste field. The tab reads again when the
+    /// pairing closes (`pairLaptopChanged`), so the new device's row is there.
     func addBackupDestination() {
-        sendBackup(BackupEvents.dismissed())
         openPairLaptop()
+    }
+
+    /// "Show my 24 words" on the Backup tab: `words.show` opens over it.
+    func backupShowWords() {
+        openShowWords()
     }
 
     /// The Backup screen's state arrived.
@@ -869,7 +948,23 @@ final class ShellModel: ObservableObject {
     private func wordsShowChanged(_ data: Data) {
         wordsShowState = data
         let state = (try? Centraid_Screen_V1_WordsShowState(serializedBytes: data)) ?? .init()
-        if state.phase == .closed, wordsSheet == .show { wordsSheet = nil }
+        if state.checkNow, showWordsRequested, !ownerChecking {
+            ownerChecking = true
+            WordsShowView.ownerCheck(reason: state.verifyReason) { [weak self] event in
+                self?.ownerChecking = false
+                self?.sendWordsShow(event)
+            }
+        }
+        if showWordsRequested, !state.checkNow, state.phase != .closed, state.phase != .unspecified,
+           wordsSheet == nil {
+            wordsSheet = .show
+        }
+        if state.phase == .closed { showWordsRequested = false }
+        if state.phase == .closed, wordsSheet == .show {
+            wordsSheet = nil
+            // "I'VE SAVED IT" quiets the recovery key's warning (R-ONBOARD-10).
+            if tab == .backup { readBackup() }
+        }
     }
 
     private func pairLaptopChanged(_ data: Data) {
@@ -882,7 +977,10 @@ final class ShellModel: ObservableObject {
         #if canImport(CentraidShared)
         if state.phase == .paired, before != .paired { refreshUploadPins() }
         #endif
-        if state.phase == .closed, wordsSheet == .pair { wordsSheet = nil }
+        if state.phase == .closed, wordsSheet == .pair {
+            wordsSheet = nil
+            if tab == .backup { readBackup() }
+        }
     }
 
     /// A swipe is a way out only where the machine hears one: not while the
@@ -899,9 +997,12 @@ final class ShellModel: ObservableObject {
     private func vaultWordsChanged(_ data: Data) {
         vaultWordsState = data
         let state = (try? Centraid_Screen_V1_VaultWordsState(serializedBytes: data)) ?? .init()
-        // THE MADE VAULT'S SENTENCE stays on the vault sheet, as `found`'s did.
-        if state.phase == .made { gatewayStatus = state.body }
-        if state.phase == .closed, wordsSheet == .make { wordsSheet = nil }
+        if state.phase == .closed {
+            makePending = false
+            if wordsSheet == .make { wordsSheet = nil }
+        } else {
+            presentMakeIfAsked()
+        }
     }
 
     private func wordsEntryChanged(_ data: Data) {
@@ -938,54 +1039,17 @@ final class ShellModel: ObservableObject {
         #endif
     }
 
-    // MARK: "See an example" (docs/decisions.md, "Onboarding without sample data")
-
-    /// OPEN THE EXAMPLE from the app on top: the session rebinds every screen
-    /// onto an ephemeral example core, and the app is told it opened again so
-    /// it reads the example's full rows. The member's vault is not touched.
-    func seeExample() {
+    /// RENAME A VAULT from the switcher: written into the vault's own file
+    /// (`core.rename_vault`), and the header and the roster follow the shelf.
+    /// A name that did not take says so on the switcher's status line.
+    func renameVault(vaultID: String, name: String) {
         #if canImport(CentraidShared)
-        guard !previewing, let route = path.last else { return }
-        exampleRoute = route
-        home.seeExample { [weak self] opened in
-            guard let self else { return }
-            if opened.boolValue {
-                self.reopen(route)
-            } else {
-                self.exampleRoute = nil
-                self.importNotice = ShellWords.exampleFailed
+        home.renameVault(vaultId: vaultID, name: name) { [weak self] renamed in
+            DispatchQueue.main.async {
+                self?.gatewayStatus = renamed.boolValue ? "" : ShellWords.vaultsRenameFailed
             }
         }
         #endif
-    }
-
-    /// THE BANNER'S ONE EXIT: close the example, and land on the app it was
-    /// opened from, which reads the member's own vault — its empty state.
-    func leaveExample() {
-        #if canImport(CentraidShared)
-        let route = exampleRoute
-        exampleRoute = nil
-        home.leaveExample { [weak self] in
-            guard let self, let route else { return }
-            self.reopen(route)
-        }
-        #endif
-    }
-
-    /// The member backed out of the app the example was opened from.
-    private func endExampleIfLeft() {
-        guard let route = exampleRoute, !path.contains(route) else { return }
-        exampleRoute = nil
-        #if canImport(CentraidShared)
-        home.leaveExample {}
-        #endif
-    }
-
-    /// Put [route] alone on the stack and tell its screen it opened, so it
-    /// re-reads from whichever core the session is bound to now.
-    private func reopen(_ route: Route) {
-        if path != [route] { path = [route] }
-        opened(route)
     }
 
     // MARK: One-tap imports (docs/decisions.md, "Onboarding without sample data")
@@ -995,40 +1059,107 @@ final class ShellModel: ObservableObject {
     /// Contacts → People, Calendar → Agenda, Reminders → Tasks.
     func importFromPhone(_ source: Centraid_Screen_V1_ImportSource) {
         #if canImport(CentraidShared)
-        guard !importing else { return }
-        let words: (running: String, denied: String)
-        switch source {
-        case .contacts: words = (ShellWords.importContactsRunning, ShellWords.importContactsDenied)
-        case .calendar: words = (ShellWords.importCalendarRunning, ShellWords.importCalendarDenied)
-        case .reminders: words = (ShellWords.importRemindersRunning, ShellWords.importRemindersDenied)
-        default: return
+        guard !importing, let words = Self.importWords(source) else { return }
+        // CONTACTS SHARED IN PART (iOS 18's limited access): a second ask
+        // draws no prompt and reads only what was already shared, so the tap
+        // opens iOS's picker to share more, and what it hands back is
+        // imported (`contactsShared`).
+        if source == .contacts, PhoneContacts.limited {
+            contactAccessPickerShown = true
+            return
         }
         importing = true
         importNotice = words.running
-        let finish: (String) -> Void = { [weak self] sentence in
-            self?.importing = false
-            self?.importNotice = sentence
-        }
         Task { @MainActor in
-            switch source {
-            case .contacts:
-                switch await PhoneContacts.read() {
-                case .denied: finish(words.denied)
-                case let .read(found): self.contacts.run(contacts: found, onDone: finish)
-                }
-            case .calendar:
-                switch await PhoneCalendar.read() {
-                case .denied: finish(words.denied)
-                case let .read(found, now):
-                    self.calendar.run(events: found, deviceTz: TimeZone.current.identifier, now: now, onDone: finish)
-                }
-            case .reminders:
-                switch await PhoneReminders.read() {
-                case .denied: finish(words.denied)
-                case let .read(found): self.reminders.run(reminders: found, onDone: finish)
-                }
-            default: finish("")
+            let sentence = await self.imported(source)
+            self.importing = false
+            self.importNotice = sentence ?? words.denied
+        }
+        #endif
+    }
+
+    /// A VAULT WAS JUST MADE: contacts, calendar and reminders, one after
+    /// another, after the photos (R-ONBOARD-8). One banner says what came in
+    /// (`PhoneImport.madeSummary`); a store the member refused, or one with
+    /// nothing in it, says nothing.
+    private func importEverythingFromPhone() {
+        #if canImport(CentraidShared)
+        guard !importing else { return }
+        importing = true
+        Task { @MainActor in
+            var outcomes: [String] = []
+            for source in [Centraid_Screen_V1_ImportSource.contacts, .calendar, .reminders] {
+                self.importNotice = Self.importWords(source)?.running ?? ""
+                if let sentence = await self.imported(source) { outcomes.append(sentence) }
             }
+            self.importing = false
+            self.importNotice = PhoneImport.shared.madeSummary(outcomes: outcomes)
+        }
+        #endif
+    }
+
+    #if canImport(CentraidShared)
+    private static func importWords(_ source: Centraid_Screen_V1_ImportSource) -> (running: String, denied: String)? {
+        switch source {
+        case .contacts: return (ShellWords.importContactsRunning, ShellWords.importContactsDenied)
+        case .calendar: return (ShellWords.importCalendarRunning, ShellWords.importCalendarDenied)
+        case .reminders: return (ShellWords.importRemindersRunning, ShellWords.importRemindersDenied)
+        default: return nil
+        }
+    }
+
+    /// ONE IMPORT, AWAITED: the OS asks its permission, then the shared
+    /// importer writes. The outcome's sentence, or nil when the OS said no.
+    private func imported(_ source: Centraid_Screen_V1_ImportSource) async -> String? {
+        switch source {
+        case .contacts:
+            switch await PhoneContacts.read() {
+            case .denied: return nil
+            case let .read(found):
+                return await withCheckedContinuation { done in
+                    contacts.run(contacts: found) { done.resume(returning: $0) }
+                }
+            }
+        case .calendar:
+            switch await PhoneCalendar.read() {
+            case .denied: return nil
+            case let .read(found, now):
+                return await withCheckedContinuation { done in
+                    calendar.run(events: found, deviceTz: TimeZone.current.identifier, now: now) {
+                        done.resume(returning: $0)
+                    }
+                }
+            }
+        case .reminders:
+            switch await PhoneReminders.read() {
+            case .denied: return nil
+            case let .read(found):
+                return await withCheckedContinuation { done in
+                    reminders.run(reminders: found) { done.resume(returning: $0) }
+                }
+            }
+        default: return ""
+        }
+    }
+    #endif
+
+    /// iOS's contact picker is up (limited access, iOS 18).
+    @Published var contactAccessPickerShown = false
+
+    /// THE PICKER CLOSED: import the contacts it newly shared. Nothing shared
+    /// is nothing to say.
+    func contactsShared(_ identifiers: [String]) {
+        #if canImport(CentraidShared)
+        guard !importing, !identifiers.isEmpty else { return }
+        importing = true
+        importNotice = ShellWords.importContactsRunning
+        Task { @MainActor in
+            let found = await PhoneContacts.read(identifiers: identifiers)
+            let sentence: String = await withCheckedContinuation { done in
+                contacts.run(contacts: found) { done.resume(returning: $0) }
+            }
+            self.importing = false
+            self.importNotice = sentence
         }
         #endif
     }
@@ -1246,11 +1377,6 @@ final class ShellModel: ObservableObject {
             self?.transferRule = stored
         }
         #endif
-        // ONE SHEET AT A TIME. The gateway sheet is one of the two doors into
-        // this one, and iOS will not present a second sheet over a sheet that
-        // is still up — it drops the request silently, which reads as a button
-        // that does nothing.
-        vaultSheetOpen = false
         transferRulesOpen = true
     }
 

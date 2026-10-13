@@ -10,8 +10,10 @@ package dev.centraid.shared.platform
  *
  * **The seed is the exception, and it is the only one.** It is the thing a
  * member restores FROM, so a seed that could not follow them to a new phone
- * would make the 24 words the only path — and the 24 words are the fallback,
- * not the plan.
+ * would make the recovery key — the 24 words — the only path, and the words
+ * are the fallback, not the plan. **So it goes here without asking**
+ * (R-ONBOARD-10): a member is shown their words only where nothing here will
+ * hold the key, and keeping it off the keychain is the Backup tab's choice.
  *
  * ## THE TWO PLATFORMS ARE NOT SYMMETRIC, AND THE COPY MUST NOT PRETEND THEY ARE
  *
@@ -21,8 +23,10 @@ package dev.centraid.shared.platform
  * * **Android**: Block Store restores **only during the device-setup flow** —
  *   the new-phone wizard, before the app has ever run. A member who set the
  *   phone up first and installed Centraid afterwards gets nothing back, and
- *   there is no API that changes this. So on Android **the written phrase is
- *   the common path**, and [ANDROID_SENTENCE] says so.
+ *   there is no API that changes this, and Auto Backup restores on the same
+ *   terms (from the backup picked during setup), so it would add nothing but a
+ *   second copy. [ANDROID_SENTENCE] says where the key comes back, and the
+ *   Backup tab offers the recovery key for a member who skips that step.
  *
  * Copy that implied parity would be copy that loses somebody their vault, which
  * is why the sentences are here, beside the seam, and not in a per-shell screen.
@@ -84,11 +88,12 @@ public interface SyncedSecrets {
          */
         public val restoresAfterSetup: Boolean,
         /**
-         * The checkbox a member unticks to keep the key on this phone only
-         * ([IOS_SYNC_LABEL], [ANDROID_SYNC_LABEL]). Empty when [synchronizing]
-         * is false: there is nothing to opt out of.
+         * Where the key goes, in the member's words ([IOS_PLACE],
+         * [ANDROID_PLACE]) — what the Backup tab names when it says where the
+         * key is and offers to keep it off. Empty when [synchronizing] is
+         * false: there is nowhere to name.
          */
-        public val optInLabel: String = "",
+        public val place: String = "",
     )
 
     public companion object {
@@ -97,36 +102,32 @@ public interface SyncedSecrets {
 
         /** iOS, with iCloud Keychain on. */
         public const val IOS_SENTENCE: String =
-            "Your key is saved in your iCloud Keychain. Sign in to iCloud on a new iPhone and " +
-                "your vaults come back."
+            "Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vaults."
 
-        /** iOS: the checkbox that keeps the key in iCloud Keychain. */
-        public const val IOS_SYNC_LABEL: String = "Save my key in iCloud Keychain"
+        /** iOS: where the key goes. */
+        public const val IOS_PLACE: String = "iCloud Keychain"
 
-        /** Android: the checkbox that keeps the key in Block Store. */
-        public const val ANDROID_SYNC_LABEL: String = "Back up my key with Google"
+        /** Android: where the key goes (Block Store, end-to-end encrypted). */
+        public const val ANDROID_PLACE: String = "Google"
 
         /** iOS, with iCloud Keychain off. */
         public const val IOS_OFF_SENTENCE: String =
-            "iCloud Keychain is off, so your key is only on this iPhone. Write down your " +
-                "24 words — they are the only way back."
+            "iCloud Keychain is off, so your recovery key is only on this iPhone. Save a copy."
 
         /**
          * **ANDROID, AND IT SAYS THE UNCOMFORTABLE THING.**
          *
          * Block Store hands the key back during the new-phone setup wizard and
-         * at no other time. A member who has already finished setting a phone up
-         * needs the words, and finding that out on the day they need it is the
+         * at no other time. A member who skips the restore there needs the
+         * recovery key, and finding that out on the day they need it is the
          * failure this sentence exists to prevent.
          */
         public const val ANDROID_SENTENCE: String =
-            "Android can hand your key to a new phone during its setup, before you install " +
-                "anything. If you set the phone up first, you will need your 24 words. " +
-                "Write them down."
+            "Backed up with Google. It returns when you restore this phone's backup while " +
+                "setting up a new one. If you skip that step, you'll need your recovery key."
 
         /** When the platform will not say. */
         public const val UNKNOWN_SENTENCE: String =
-            "This phone would not say whether your key is saved anywhere else. " +
-                "Write down your 24 words."
+            "Can't tell whether your recovery key is saved elsewhere. Save a copy."
     }
 }

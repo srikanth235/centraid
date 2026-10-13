@@ -401,8 +401,8 @@ public class PhotoEditorBridge {
         const val TZ_LIMIT: Int = 1080
 
         const val NO_RENDERER: String = "This phone cannot draw the edit."
-        const val NO_VAULT: String = "No vault is open on this device."
-        const val NO_FILE: String = "Centraid could not read the edited photograph."
+        const val NO_VAULT: String = "No vault is open on this phone."
+        const val NO_FILE: String = "Centraid could not read the edited photo."
 
         /**
          * `media.add_asset`'s input, HAND-SPELLED for `CameraRoll.inputFor`'s

@@ -365,7 +365,7 @@ class PhotosCollectionsSpec : StringSpec({
         // THE DOOR HAS NO `COUNT(*)`, so every number on this screen is rows
         // read and counted — and a page that filled has more behind it. A bare
         // number over a full page would be a total nobody counted, which is
-        // what `HomeState.ThingCount.capped` exists to prevent and what the
+        // what `HomeTile.count.capped` exists to prevent and what the
         // views render as "at least N".
         val data = fold(
             albums = Scan(rows = listOf(albumRow("col-1", "Portugal"))),

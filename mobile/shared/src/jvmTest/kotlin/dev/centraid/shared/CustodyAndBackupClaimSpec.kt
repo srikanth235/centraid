@@ -46,7 +46,7 @@ class CustodyAndBackupClaimSpec : StringSpec({
 
     "an acknowledgement with changes behind it leads with what is NOT backed up" {
         val line = BackupClaim.line(lastAckedAtMs = 1_770_000_000_000, unacked = 3, "2 minutes ago")
-        line shouldBe "3 changes not backed up. Records last backed up 2 minutes ago."
+        line shouldBe "3 changes not backed up. Last backup 2 minutes ago."
         // The member would be wrong about the unsent half, so the unsent half
         // is what the sentence opens with.
         line.startsWith("3 changes not backed up").shouldBeTrue()
@@ -55,7 +55,7 @@ class CustodyAndBackupClaimSpec : StringSpec({
 
     "one change reads as one, because a member counts" {
         BackupClaim.line(1, 1, "an hour ago") shouldBe
-            "1 change not backed up. Records last backed up an hour ago."
+            "1 change not backed up. Last backup an hour ago."
     }
 
     "an acknowledgement with an empty spool is the only thing that says backed up" {
@@ -68,24 +68,24 @@ class CustodyAndBackupClaimSpec : StringSpec({
         // F1 is freeze and show, never wipe. The sentence a member reads has to
         // match what the phone actually did with their rows.
         val line = BackupClaim.frozen(unacked = 4, since = "12 March")
-        line shouldContain "moved to another phone"
+        line shouldContain "Moved to another phone"
         line shouldContain "4 changes since 12 March are only here"
         withClue("nothing here may suggest the changes were discarded") {
             line shouldNotContain "lost"
             line shouldNotContain "deleted"
         }
-        BackupClaim.frozen(0, "12 March") shouldContain "Nothing is waiting here"
+        BackupClaim.frozen(0, "12 March") shouldContain "Nothing unsent here"
     }
 
     // ---------------------------------------------------------------- custody --
 
     "iOS and Android are told different things about their key, and Android is told the truth" {
         // THE ASYMMETRY IS THE POINT. Block Store restores only in the
-        // device-setup flow, so on Android the written phrase is the common
-        // path — and a member who learns that on the day they need it has
-        // already lost.
-        SyncedSecrets.ANDROID_SENTENCE shouldContain "during its setup"
-        SyncedSecrets.ANDROID_SENTENCE shouldContain "you will need your 24 words"
+        // device-setup flow, so the Android sentence says when the key comes
+        // back and what a member who skips that step needs — learning it on
+        // the day they need it is having already lost.
+        SyncedSecrets.ANDROID_SENTENCE shouldContain "while setting up a new one"
+        SyncedSecrets.ANDROID_SENTENCE shouldContain "you'll need your recovery key"
         SyncedSecrets.IOS_SENTENCE shouldContain "iCloud Keychain"
 
         withClue("no custody sentence may promise a restore Android cannot do") {
@@ -112,7 +112,7 @@ class CustodyAndBackupClaimSpec : StringSpec({
         )
         secrets.putSeed("00".repeat(64)).shouldBeFalse()
         secrets.seed().shouldBeNull()
-        secrets.availability().sentence shouldContain "Write down your 24 words"
+        secrets.availability().sentence shouldContain "Save a copy"
     }
 
     "the seed round-trips on a platform that does synchronise, and forgetting is complete" {

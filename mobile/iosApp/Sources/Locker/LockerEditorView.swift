@@ -121,37 +121,17 @@ struct LockerEditorView: View {
             .navigationBarBackButtonHidden(true)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { send(Self.event { $0.cancel = .init() }) } label: {
-                        Text(chrome.cancelLabel)
-                            .centraidType("smallStrong")
-                            .lineLimit(1)
-                            .fixedSize()
-                            .foregroundStyle(Theme.color("text", scheme))
-                            .padding(.horizontal, 8)
-                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                            .contentShape(Rectangle())
+                    ToolbarVerb(label: chrome.cancelLabel, identifier: "locker-editor-cancel") {
+                        send(Self.event { $0.cancel = .init() })
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("locker-editor-cancel")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     let canSave = state.data.canSave
-                    Button {
+                    ToolbarVerb(label: chrome.saveLabel, identifier: "locker-editor-save") {
                         concealing = true
                         send(Self.event { $0.save = .init() })
-                    } label: {
-                        Text(chrome.saveLabel)
-                            .centraidType("smallStrong")
-                            .lineLimit(1)
-                            .fixedSize()
-                            .foregroundStyle(Theme.color(canSave ? "text" : "textFaint", scheme))
-                            .padding(.horizontal, 8)
-                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
                     .disabled(!canSave)
-                    .accessibilityIdentifier("locker-editor-save")
                 }
             }
         }
@@ -193,7 +173,7 @@ struct LockerCompromisedRow: View {
                     .centraidType("body")
                     .foregroundStyle(Theme.color("text", scheme))
             }
-            .tint(Theme.color("accent", scheme))
+            .kitToggle()
             .frame(minHeight: CentraidGeometry.targetMinCoarse)
             .accessibilityIdentifier("locker-editor-compromised")
             if !note.isEmpty {
@@ -260,15 +240,12 @@ struct LockerInputRowView: View {
                     .accessibilityIdentifier("locker-input-\(input.key)")
                     .id(identity)
                 if !input.generateLabel.isEmpty {
-                    Button(action: onGenerate) {
-                        Text(input.generateLabel)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color("text", scheme))
-                            .frame(minHeight: CentraidGeometry.targetMinFine)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("locker-input-\(input.key)-generate")
+                    KitLink(
+                        label: input.generateLabel,
+                        dense: true,
+                        identifier: "locker-input-\(input.key)-generate",
+                        action: onGenerate
+                    )
                 }
             }
             if !input.note.isEmpty {

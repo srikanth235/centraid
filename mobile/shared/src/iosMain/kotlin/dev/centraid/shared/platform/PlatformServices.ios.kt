@@ -460,7 +460,7 @@ public class IosSyncedSecrets : SyncedSecrets {
             // Keychain item comes back whenever the member signs in, not only
             // during a setup wizard.
             restoresAfterSetup = true,
-            optInLabel = if (synchronizing) SyncedSecrets.IOS_SYNC_LABEL else "",
+            place = if (synchronizing) SyncedSecrets.IOS_PLACE else "",
         )
     }
 

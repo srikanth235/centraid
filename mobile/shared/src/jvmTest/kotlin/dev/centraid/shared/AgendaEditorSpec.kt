@@ -350,7 +350,7 @@ class AgendaEditorSpec : StringSpec({
         val opened = drive(AgendaEditorMachine.initial(), openNew("")).state
         drive(opened, AgendaEditorInput.Denied(AppQueryDenial())).state.screen.denied.shouldNotBeNull()
         val gone = answered(drive(AgendaEditorMachine.initial(), openEdit(timed("x", "X", "2026-06-15T08:00"))).state)
-        gone.screen.gone.shouldNotBeNull().title shouldBe "This event is no longer on your calendar."
+        gone.screen.gone.shouldNotBeNull().title shouldBe "This event was removed."
         // AN EDIT WITH NO EVENT does not read.
         AgendaEditorReads().requests(
             drive(AgendaEditorMachine.initial(), edit(AgendaEditorEvent(opened = AgendaEditorEvent.Opened(mode = AgendaEditorState.Mode.MODE_EDIT)))).state,

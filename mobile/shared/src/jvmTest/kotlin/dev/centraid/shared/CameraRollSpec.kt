@@ -58,11 +58,11 @@ class CameraRollSpec : StringSpec({
         roll.permissionSentence(MediaPermission.MEDIA_PERMISSION_LIMITED) shouldBe
             "Centraid imports the photos you selected."
         roll.permissionSentence(MediaPermission.MEDIA_PERMISSION_NOT_ASKED) shouldBe
-            "Centraid needs access to your photos to back them up."
+            "Centraid needs access to your photos to import them."
         roll.permissionSentence(MediaPermission.MEDIA_PERMISSION_DENIED) shouldBe
             "Photo access is off. Turn it on in Settings to import your camera roll."
         roll.permissionSentence(MediaPermission.MEDIA_PERMISSION_RESTRICTED) shouldBe
-            "This device does not allow photo access."
+            "This phone does not allow photo access."
     }
 
     "no sentence about a permission blames the member" {

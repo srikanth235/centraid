@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
+import dev.centraid.android.kit.RowSkeleton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,8 +30,10 @@ import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PhotosMemoriesMachine
 
 /**
@@ -63,7 +65,7 @@ public fun PhotosMemoriesScreen(
         val failure = state.failure
         val data = state.data_
         when {
-            loading != null -> CircularProgressIndicator()
+            loading != null -> RowSkeleton()
 
             failure != null -> ScreenFailure(failure.sentence, failure.remedy)
 
@@ -78,14 +80,13 @@ public fun PhotosMemoriesScreen(
                     // writes the memories projection.
                     if (data.computed) {
                         ScreenEmpty(
-                            sentence = "No memories yet.",
-                            remedy = "Your own photographs, noticed — a year behind a day, " +
-                                "a trip, a burst.",
+                            sentence = PhotosCopy.PHOTOS_MEMORIES_EMPTY,
+                            remedy = PhotosCopy.PHOTOS_MEMORIES_EMPTY_CAPTION,
                         )
                     } else {
                         ScreenEmpty(
-                            sentence = "Centraid has not looked for memories yet.",
-                            remedy = "They appear here once it has.",
+                            sentence = PhotosCopy.PHOTOS_MEMORIES_NOT_LOOKED,
+                            remedy = PhotosCopy.PHOTOS_MEMORIES_NOT_LOOKED_CAPTION,
                         )
                     }
                 } else {
@@ -174,7 +175,7 @@ private fun MemoryCard(row: MemoryRow, onOpen: (MemoryRow) -> Unit) {
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .clip(RoundedCornerShape(5.dp))
+                .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp))
                 // THE GROUND, when there are no bytes. The cover needs a
                 // `media_asset` row this read never asks for, so it is empty
                 // here rather than fetched by a second trip per card.
@@ -220,7 +221,7 @@ private fun RouteSketch(row: MemoryRow) {
     Canvas(
         modifier = Modifier
             .size(width = SKETCH_WIDTH, height = SKETCH_HEIGHT)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp))
             .background(centraidColor("bgSunken"))
             .semantics {
                 contentDescription = if (stops == 1) "A sketch of one stop" else "A sketch of $stops stops"

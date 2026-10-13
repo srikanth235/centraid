@@ -425,8 +425,7 @@ public object CalendarImport {
 
 /**
  * WHAT SWIFTUI HOLDS FOR THE CALENDAR IMPORT: the shell reads the calendar and
- * hands the events here. Writes go to the member's foreground vault, never to a
- * preview's example.
+ * hands the events here. Writes go to the member's foreground vault.
  */
 public class CalendarImportBridge {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -441,7 +440,7 @@ public class CalendarImportBridge {
      * a zone in [deviceTz]; [onDone] is handed the sentence.
      */
     public fun run(events: List<PhoneEvent>, deviceTz: String, now: Long, onDone: (String) -> Unit) {
-        val core = session?.shelf?.memberCore() ?: return onDone(AgendaCopy.IMPORT_CALENDAR_NO_VAULT)
+        val core = session?.shelf?.core() ?: return onDone(AgendaCopy.IMPORT_CALENDAR_NO_VAULT)
         scope.launch { onDone(CalendarImport.sentence(CalendarImport.run(core, events, deviceTz, now))) }
     }
 }

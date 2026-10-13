@@ -79,7 +79,7 @@ public object RemindersImport {
 
 /**
  * WHAT SWIFTUI HOLDS FOR THE REMINDERS IMPORT. Writes go to the member's
- * foreground vault, never to a preview's example.
+ * foreground vault.
  */
 public class RemindersImportBridge {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -91,7 +91,7 @@ public class RemindersImportBridge {
 
     /** Import [reminders]; [onDone] is handed the sentence to show. */
     public fun run(reminders: List<PhoneReminder>, onDone: (String) -> Unit) {
-        val core = session?.shelf?.memberCore() ?: return onDone(TasksCopy.IMPORT_REMINDERS_NO_VAULT)
+        val core = session?.shelf?.core() ?: return onDone(TasksCopy.IMPORT_REMINDERS_NO_VAULT)
         scope.launch { onDone(RemindersImport.sentence(RemindersImport.run(core, reminders))) }
     }
 }

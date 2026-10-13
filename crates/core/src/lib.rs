@@ -56,10 +56,9 @@ pub mod config;
 pub mod convert;
 pub mod error;
 pub mod events;
-/// THE EXAMPLE SCENARIO: one weekend at Tahoe across seven apps, seeded through
-/// the command plane into an EPHEMERAL, unkeyed core opened as an example
-/// (`CoreConfig::example`) for "See an example" — never on the shelf, never
-/// backed up, never a member's vault. No Locker.
+/// THE DEMO SCENARIO: one weekend at Tahoe across seven apps, seeded through
+/// the command plane into a dev fixture vault (`seed-demo-vault`) or a test's
+/// vault — never by a found, never into a member's vault. No Locker.
 pub mod example;
 pub mod handle;
 pub mod identity;

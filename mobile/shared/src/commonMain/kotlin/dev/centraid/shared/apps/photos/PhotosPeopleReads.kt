@@ -318,7 +318,7 @@ public object PhotosPeopleReads : ScreenWrites<PhotosPeopleState, PhotosPeopleEv
                     // a cursor behind it has more rows this person may be in.
                     // The flag is what makes the view say "at least 84"; a bare
                     // number over a full page would state a total nobody
-                    // counted (`HomeState.ThingCount.capped`).
+                    // counted (`HomeTile.count.capped`).
                     photo_count_capped = nextCursor != null,
                 )
             }
@@ -440,7 +440,7 @@ internal suspend fun CentraidCore?.photosPage(
     val handle = this
         // NO VAULT IS NOT A CRASH, and not an empty list either: a device
         // before its first pairing has not learned that it holds nothing.
-        ?: return PhotosPage.Refused(Reads.refused("No vault is open on this device."))
+        ?: return PhotosPage.Refused(Reads.refused("No vault is open on this phone."))
     val outcome = handle.call(
         Envelope(
             request_id = 0,
@@ -459,7 +459,7 @@ internal suspend fun CentraidCore?.photosPage(
                 )
                 error != null -> PhotosPage.Refused(sentenceFor(error.code))
                 else -> PhotosPage.Refused(
-                    Reads.refused("The vault answered with neither a page nor a reason."),
+                    Reads.refused("Centraid got no answer. Try again."),
                 )
             }
         }

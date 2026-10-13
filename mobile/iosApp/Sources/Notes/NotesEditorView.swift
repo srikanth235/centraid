@@ -65,7 +65,7 @@ struct NotesEditorView: View {
             onClose: onClose,
             onDeparted: onDeparted
         ) {
-            if let draft {
+            if draft != nil {
                 Menu {
                     Button(chrome.pinLabel) { send(NotesEditorEvents.make { $0.pin = .init() }) }
                     if state.bodyEditable {
@@ -86,13 +86,7 @@ struct NotesEditorView: View {
                         }
                     }
                 } label: {
-                    CentraidIconView(
-                        iconKey: "MoreHoriz",
-                        tint: Theme.color(draft.pinned ? "text" : "textSoft", scheme),
-                        size: 18
-                    )
-                    .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
+                    ToolbarIconFace(iconKey: "MoreHoriz")
                 }
                 .accessibilityLabel(chrome.menuLabel)
                 .accessibilityIdentifier("note-editor-menu")

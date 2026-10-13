@@ -185,7 +185,7 @@ public class HomeRuntime(
                     // bundle would read.
                     error != null -> Read.Refused(sentenceFor(error.code))
                     else -> Read.Refused(
-                        Reads.refused("The vault answered with neither a page nor a reason."),
+                        Reads.refused("Couldn't read this vault. Try again."),
                     )
                 }
             }
@@ -194,6 +194,6 @@ public class HomeRuntime(
 
     private companion object {
         /** An answer at another query's arm: a core bug, said as a refusal. */
-        const val WRONG_ANSWER: String = "The vault answered a different question."
+        const val WRONG_ANSWER: String = "Couldn't read this vault. Try again."
     }
 }

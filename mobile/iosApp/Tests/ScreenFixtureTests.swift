@@ -236,12 +236,11 @@ final class ScreenFixtureTests: XCTestCase {
 
     /// Locker's body is a STATE and not a query result, so it always has
     /// something true to say and is never an invitation to fill it.
-    func testLockerEarnsTheGridWhileEmpty() throws {
-        let locker = try XCTUnwrap(
-            try home("first-run").data.tiles.first { $0.appID == "locker" }
-        )
+    func testEveryAppIsOnTheGridOnDayOne() throws {
+        let data = try home("first-run").data
+        let locker = try XCTUnwrap(data.tiles.first { $0.appID == "locker" })
         XCTAssertEqual(locker.status, .empty)
-        XCTAssertTrue(locker.earnsGrid)
+        XCTAssertEqual(Set(data.gridRows.flatMap { $0.appIds }), Set(data.tiles.map { $0.appID }))
     }
 
     func testLoadingSpringboardReportsItsTotalUnsettled() throws {
@@ -249,7 +248,7 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertEqual(loading.springboard, .loading)
         XCTAssertFalse(loading.things.settled)
         // A read in flight holds its slot at full geometry.
-        XCTAssertTrue(loading.tiles.allSatisfy { $0.earnsGrid })
+        XCTAssertEqual(Set(loading.gridRows.flatMap { $0.appIds }), Set(loading.tiles.map { $0.appID }))
     }
 
     /// Distinct from every tile being unreadable: that Home loaded and could not
@@ -919,7 +918,7 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertTrue(loading.loading.firstLoad)
         XCTAssertEqual(loading.anchorDay, "")
         XCTAssertFalse(loading.toolbar.shown)
-        XCTAssertEqual(loading.band.map(\.key), ["day", "schedule", "waiting", "search", "more"])
+        XCTAssertEqual(loading.band.map(\.key), ["day", "schedule", "waiting", "more"])
     }
 
     /// The now line is a row among the events; a pending write is a row status.
@@ -939,6 +938,15 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertTrue(state.data.landing.nowLine)
     }
 
+    /// More is rows on the state: Calendars as toggles, then the reads row; never Search.
+    func testAgendaMoreIsRowsOnTheState() throws {
+        let state = try agenda("today-with-now-line")
+        XCTAssertEqual(state.moreRows.map(\.key), ["calendar-calendar-home", "calendar-calendar-health", "reads"])
+        XCTAssertEqual(state.moreRows.map(\.section), ["Calendars", "", ""])
+        XCTAssertEqual(state.moreRows.map(\.toggle), [true, true, false])
+        XCTAssertFalse(state.moreRows.contains { $0.label == "Search" })
+    }
+
     /// An empty day is not an empty calendar.
     func testAnEmptyDayIsNotAnEmptyCalendar() throws {
         let day = try agenda("nothing-on-this-day").data
@@ -956,7 +964,8 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertTrue(state.searchOpen)
         XCTAssertFalse(state.toolbar.shown)
         XCTAssertEqual(state.data.empty, .noMatch)
-        XCTAssertEqual(state.band.filter(\.current).map(\.key), ["search"])
+        // Search is a mode over the place, not a tab: the place stays lit.
+        XCTAssertEqual(state.band.filter(\.current).map(\.key), ["day"])
     }
 
     /// A one-off asks once; a series' confirm IS the scope sheet, none pre-chosen.

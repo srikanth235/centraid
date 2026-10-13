@@ -98,13 +98,28 @@ public class Enrollment(
      * STORE [words]' SEED AND SETTLE IT — after the check, before the found.
      * Null when kept.
      */
-    public suspend fun keep(words: List<String>, sync: Boolean = true): Refusal? {
+    public suspend fun keep(words: List<String>, sync: Boolean = true, shown: Boolean = true): Refusal? {
         val seed = phrase.seed(words) ?: return Refusal.NOT_A_PHRASE
-        return store(seed, words, sync)
+        return store(seed, words, sync, saved = shown)
     }
 
-    /** Found a vault at the next index — or on entry [own]'s seed; the seed is already stored. */
-    public suspend fun make(own: String? = null, name: String? = null): FoundResult = keeper.found(own, name)
+    /**
+     * Found a vault at the next index — or on entry [own]'s seed; the seed is
+     * already stored. A vault on its own key is recorded as STILL TO BE FILED
+     * in the main vault's Locker (R-ONBOARD-10): the core seals a Locker
+     * secret only while that Locker is unlocked, so [OwnKeyFiling] files it on
+     * the member's next unlock there.
+     */
+    public suspend fun make(own: String? = null, name: String? = null): FoundResult {
+        val result = keeper.found(own, name)
+        if (own != null && result is FoundResult.Made) {
+            runCatching { secrets.addPendingFiling(own, result.vaultName) }
+        }
+        return result
+    }
+
+    /** Whether this phone's recovery key is in the synchronised store (R-ONBOARD-10). */
+    public suspend fun seedSynced(): Boolean = secrets.seedSynced()
 
     /** What [keepOwn] answered: the entry the seed is kept under, or why not. */
     public sealed interface OwnKept {
@@ -189,7 +204,7 @@ public class Enrollment(
             val added = keeper.adoptRestored(tagged.vaults.map { Shelf.Restored(path = it.path, index = it.index, own = id) })
             return Restored.Done(tagged, added)
         }
-        store(seed, words)?.let { return Restored.Refused(it) }
+        store(seed, words, saved = true)?.let { return Restored.Refused(it) }
         val added = keeper.adoptRestored(answer.vaults.map { Shelf.Restored(path = it.path, index = it.index) })
         return Restored.Done(answer, added)
     }
@@ -306,7 +321,7 @@ public class Enrollment(
         // recorded index was never sealed under any index this phone knows,
         // and a guessed one could be the laptop's copy of another vault.
         if (keeper.indexedHoldings() == 0) return Rekeyed.NoneToKey
-        store(seed, words)?.let { return Rekeyed.Refused(it) }
+        store(seed, words, saved = true)?.let { return Rekeyed.Refused(it) }
         return Rekeyed.Done(keeper.rekey())
     }
 
@@ -326,7 +341,12 @@ public class Enrollment(
         return held != seed && secrets.anyVaultIndex()
     }
 
-    private suspend fun store(seed: String, words: List<String>, sync: Boolean = true): Refusal? {
+    /**
+     * [saved]: the member saw or typed the key, so a copy outside this phone
+     * is theirs ([VaultSecrets.markWordsSaved]). A key kept without being
+     * shown (R-ONBOARD-10) is not.
+     */
+    private suspend fun store(seed: String, words: List<String>, sync: Boolean = true, saved: Boolean = false): Refusal? {
         runCatching { secrets.rememberSeed(seed, sync) }.onFailure { return Refusal.STORE_REFUSED }
         // `rememberSeed` answers whether the platform SYNCHRONISES, not
         // whether it stored; the read-back is what says it is there.
@@ -337,6 +357,7 @@ public class Enrollment(
         // A refused write costs only the settings screen, so it refuses
         // nothing here.
         runCatching { secrets.rememberWords(words.map { it.trim().lowercase() }) }
+        if (saved) runCatching { secrets.markWordsSaved() }
         secrets.settleSeed()
         return null
     }

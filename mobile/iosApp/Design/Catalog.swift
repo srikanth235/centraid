@@ -38,14 +38,14 @@ public enum CentraidCatalog {
     /// The eight first-party apps, in CATALOGUE order — the all-apps
     /// listing's order, which says nothing about the grid.
     public static let apps: [CentraidAppMeta] = [
-        CentraidAppMeta(id: "notes", name: "Notes", desc: "Write and revisit durable notes.", iconKey: "Book", colorKey: "slate"),
-        CentraidAppMeta(id: "people", name: "People", desc: "Keep people and relationships close.", iconKey: "AddressBook", colorKey: "violet"),
-        CentraidAppMeta(id: "photos", name: "Photos", desc: "Browse and protect your photos.", iconKey: "Camera", colorKey: "amber"),
-        CentraidAppMeta(id: "locker", name: "Locker", desc: "Keep private secrets behind a lock.", iconKey: "Lock", colorKey: "rose"),
-        CentraidAppMeta(id: "tally", name: "Tally", desc: "See balances and simple trends.", iconKey: "Receipt", colorKey: "indigo"),
+        CentraidAppMeta(id: "notes", name: "Notes", desc: "Notes, notebooks and a journal.", iconKey: "Book", colorKey: "slate"),
+        CentraidAppMeta(id: "people", name: "People", desc: "Contacts and relationships.", iconKey: "AddressBook", colorKey: "violet"),
+        CentraidAppMeta(id: "photos", name: "Photos", desc: "Browse and back up your photos.", iconKey: "Camera", colorKey: "amber"),
+        CentraidAppMeta(id: "locker", name: "Locker", desc: "Private items behind a lock.", iconKey: "Lock", colorKey: "rose"),
+        CentraidAppMeta(id: "tally", name: "Tally", desc: "Log expenses and see balances.", iconKey: "Receipt", colorKey: "indigo"),
         CentraidAppMeta(id: "tasks", name: "Tasks", desc: "Capture the next thing to do.", iconKey: "Check", colorKey: "ochre"),
         CentraidAppMeta(id: "docs", name: "Docs", desc: "Read and organize your documents.", iconKey: "Folder", colorKey: "teal"),
-        CentraidAppMeta(id: "agenda", name: "Agenda", desc: "Keep dates, events, and plans together.", iconKey: "Calendar", colorKey: "forest"),
+        CentraidAppMeta(id: "agenda", name: "Agenda", desc: "Your calendar, events and plans.", iconKey: "Calendar", colorKey: "forest"),
     ]
 
     /// By id, for the header that names one app.
@@ -103,6 +103,12 @@ public enum CentraidCatalog {
         ],
         "ArrowRight": [
             CentraidIconPath(d: "M5 12h14M12 5l7 7-7 7", filled: false, evenOdd: false),
+        ],
+        "Backup": [
+            CentraidIconPath(d: "M21 12a9 9 0 1 1-2.64-6.36L21 8", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M21 3v5h-5", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M9 11.5h6V16H9z", filled: false, evenOdd: false),
+            CentraidIconPath(d: "M10.5 11.5V10a1.5 1.5 0 0 1 3 0v1.5", filled: false, evenOdd: false),
         ],
         "BarChart2": [
             CentraidIconPath(d: "M4 20V10M10 20V4M16 20v-7M22 20H2", filled: false, evenOdd: false),

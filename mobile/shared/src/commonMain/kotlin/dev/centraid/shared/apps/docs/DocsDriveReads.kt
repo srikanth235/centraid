@@ -120,5 +120,5 @@ public object DocsDriveReads :
         else -> DocsSort.DOCS_SORT_CHANGED
     }
 
-    private const val NO_ANSWER: String = "The vault answered without the drive."
+    private const val NO_ANSWER: String = "Docs didn't load. Try again."
 }

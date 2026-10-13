@@ -13,7 +13,7 @@ Photos' north star is **iOS Photos** ([blueprint seats](../blueprint-seats.md)):
    - **Status: SHIPPED**. There is deliberately no first-run "bring in my camera roll" offer — the backup already does it ([R-1029-PH-4](../decisions.md#photos-what-the-port-builds-and-what-it-does-not-1029)).
 
 3. **Open the timeline and browse.**
-   - Day sections under pinned months, justified rows packed from each photograph's own aspect, a scrub rail, a skeleton while the first page reads, and paging through the whole library as the member scrolls. Photographs with no capture date live in an explicit Undated section after every dated one, never interleaved as lies ([README](README.md#the-apps-shape)). Tile size is in the library menu, and a pinch steps it on Android.
+   - Day sections under pinned months, justified rows packed from each photograph's own aspect, a scrub rail, a skeleton while the first page reads, and paging through the whole library as the member scrolls. Photographs with no capture date live in an explicit Undated section after every dated one, never interleaved as lies ([README](README.md#the-apps-shape)). Tile size is a choice in More (offered at All), and a pinch steps it; the filter (All photos · Favorites) is a chip row under the search bar.
    - **Status: SHIPPED** on both shells.
 
 4. **Find a 2019 photograph by year.**

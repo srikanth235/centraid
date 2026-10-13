@@ -41,7 +41,9 @@ import dev.centraid.shared.screen.Step
 
 /**
  * DOCS' DRIVE ON THE PHONE (#1046, docs port): All · Folders · Starred, with
- * Recently added from More, search as a field, and every write a row offers.
+ * Recently added from More, search as the room's bar (R-CHROME-2), the
+ * filters and the sort as the room's chip row ([pills], R-CHROME-3), and
+ * every write a row offers.
  *
  * ## The band
  *
@@ -609,10 +611,15 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
             tab(BAND_ALL, DocsCopy.BAND_ALL, "FileText", DocsDriveState.Destination.DESTINATION_ALL),
             tab(BAND_FOLDERS, DocsCopy.BAND_FOLDERS, "Folder", DocsDriveState.Destination.DESTINATION_FOLDERS),
             tab(BAND_STARRED, DocsCopy.BAND_STARRED, "Star", DocsDriveState.Destination.DESTINATION_STARRED),
-            DocsBandTab(key = BAND_MORE, label = DocsCopy.BAND_MORE, icon_key = "more", current = false),
+            DocsBandTab(key = BAND_MORE, label = DocsCopy.BAND_MORE, icon_key = "MoreHoriz", current = false),
         )
     }
 
+    /**
+     * THE ROOM'S CHIP ROW (R-CHROME-3): the filters first, "Clear filters"
+     * while one is set, and the sort LAST, named for the order in force.
+     * Every chip but Clear opens a sheet of choices, so it carries a chevron.
+     */
     private fun pills(state: DocsDriveState, query: DocsQuery): List<DocsPill> {
         val type = TYPES.firstOrNull { it.second == query.type }?.third
         val modified = MODIFIED.firstOrNull { it.second == query.modified }?.third
@@ -623,24 +630,36 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
             label = chosen ?: name,
             active = chosen != null,
             accessibility_label = if (chosen == null) name else "$name, $chosen",
+            chevron = true,
         )
-        return listOf(
-            pill(DocsSheet.Kind.KIND_TYPE, DocsCopy.FILTER_TYPE, type),
-            pill(DocsSheet.Kind.KIND_MODIFIED, DocsCopy.FILTER_MODIFIED, modified),
-            // No label in the drive: no Label pill to open an empty sheet.
-            *(if ((state.rail?.labels.isNullOrEmpty()) && label == null) {
-                emptyArray()
-            } else {
-                arrayOf(pill(DocsSheet.Kind.KIND_LABEL, DocsCopy.FILTER_LABEL, label))
-            }),
-            DocsPill(
-                key = DocsSheet.Kind.KIND_SORT,
-                label = sort?.let { "${it.second} · ${it.third}" } ?: DocsCopy.SORT,
-                // The order is always set; it is a control, not a filter.
-                active = false,
-                accessibility_label = "${DocsCopy.SORT}, ${sort?.second ?: ""} ${sort?.third ?: ""}".trim(),
-            ),
-        )
+        return buildList {
+            add(pill(DocsSheet.Kind.KIND_TYPE, DocsCopy.FILTER_TYPE, type))
+            add(pill(DocsSheet.Kind.KIND_MODIFIED, DocsCopy.FILTER_MODIFIED, modified))
+            // No label in the drive: no Label chip to open an empty sheet.
+            if (!state.rail?.labels.isNullOrEmpty() || label != null) {
+                add(pill(DocsSheet.Kind.KIND_LABEL, DocsCopy.FILTER_LABEL, label))
+            }
+            if (type != null || modified != null || label != null) {
+                add(
+                    DocsPill(
+                        key = DocsSheet.Kind.KIND_NONE,
+                        label = DocsCopy.CLEAR_FILTERS,
+                        accessibility_label = DocsCopy.CLEAR_FILTERS,
+                        clears = true,
+                    ),
+                )
+            }
+            add(
+                DocsPill(
+                    key = DocsSheet.Kind.KIND_SORT,
+                    label = sort?.let { "${it.second} · ${it.third}" } ?: DocsCopy.SORT,
+                    // The order is always set; it is a control, not a filter.
+                    active = false,
+                    accessibility_label = sort?.let { "${DocsCopy.SORT}, ${it.second}, ${it.third}" } ?: DocsCopy.SORT,
+                    chevron = true,
+                ),
+            )
+        }
     }
 
     private fun chrome(state: DocsDriveState): DocsDriveChrome = DocsDriveChrome(
@@ -726,12 +745,10 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
                     EmptyState(headline = DocsCopy.EMPTY_FOLDER, action_label = DocsCopy.EMPTY_ALL_ACTION) to
                         DocsDriveData.EmptyAction.EMPTY_ACTION_ADD
                 }
-            // THE WHOLE DRIVE IS EMPTY: the one Docs empty that offers "See an
-            // example" — never a filtered, searched or folder empty.
+            // THE WHOLE DRIVE IS EMPTY: Docs' day one.
             else -> EmptyState(
                 headline = DocsCopy.EMPTY_ALL,
                 action_label = DocsCopy.EMPTY_ALL_ACTION,
-                offers_example = true,
             ) to DocsDriveData.EmptyAction.EMPTY_ACTION_ADD
         }
     }

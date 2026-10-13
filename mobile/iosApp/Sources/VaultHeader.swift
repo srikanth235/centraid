@@ -25,16 +25,40 @@ import SwiftUI
 /// left is one axis with three values — syncing, online, offline — each
 /// derived from the last pass rather than stored.
 ///
-/// Exactly the band's two verbs beside it, never a third.
+/// One trailing verb, Settings, and only when originals are waiting: the key
+/// to the transfer rules that decided it (HomeRoom: one trailing verb).
 struct VaultHeader: View {
     let vault: Centraid_Screen_V1_VaultLockup
     @ObservedObject var shell: ShellModel
+    /// THE VAULT'S BACKUP, said as the lockup's second line (R-ONBOARD-11):
+    /// `BackupLine.status`, in place of "on this phone". Nil — an example, or
+    /// a route with no backup line — keeps the vault's own state line.
+    var backup: Centraid_Screen_V1_BackupLine? = nil
+    /// The status line's door: the Backup tab. Nil draws it as text.
+    var onOpenBackup: (() -> Void)? = nil
+    /// HOME'S SEARCH (R-CHROME-6): a framed key at the lockup's trailing edge,
+    /// the one way into search over every app but Locker. Nil draws none.
+    var onSearch: (() -> Void)? = nil
+    var searchLabel: String = ""
     @Environment(\.colorScheme) private var scheme
+
+    /// The backup status to draw, or empty for the vault's own line. A vault
+    /// that MOVED keeps its own line: that is the fact, and the backup's
+    /// status says the same thing less exactly.
+    private var status: String {
+        guard let backup, vault.state != .frozen else { return "" }
+        return backup.status
+    }
+
+    private var loud: Bool {
+        guard let backup else { return false }
+        return backup.tone == .attention || backup.tone == .urgent
+    }
 
     /// No name is a REAL STATE; never render a blank lockup.
     private var name: String {
         let trimmed = vault.vaultName.trimmingCharacters(in: .whitespaces)
-        return trimmed.isEmpty ? "No vault yet" : trimmed
+        return trimmed.isEmpty ? PhotosWords.vaultNoneYet : trimmed
     }
 
     /// Where this vault stands, in a member's words. See [stateLine], which
@@ -55,7 +79,10 @@ struct VaultHeader: View {
     private var waiting: String {
         vault.originalsWithheld == 0
             ? ""
-            : "\(vault.originalsWithheld) original\(vault.originalsWithheld == 1 ? "" : "s") waiting for Wi-Fi"
+            : (vault.originalsWithheld == 1
+                ? PhotosWords.transferOriginalWaitingOne
+                : PhotosWords.fill(
+                    PhotosWords.transferOriginalWaitingMany, "count", "\(vault.originalsWithheld)"))
     }
 
     /// The vault's hue washed behind the mark, exactly as an app chip is washed.
@@ -75,143 +102,112 @@ struct VaultHeader: View {
         return (VaultHue.mix(hue, over: Theme.color("bg", scheme), share: share), hue)
     }
 
+    /// THE BACKUP STATUS: a dot in the tone's colour when it wants the member
+    /// (none when it is quiet), then the few words. The same mono line the
+    /// state line was, so the lockup keeps its shape; a loud status reads in
+    /// ink rather than faint.
+    private var statusLine: some View {
+        Button {
+            onOpenBackup?()
+        } label: {
+            HStack(spacing: 6) {
+                if loud {
+                    Circle()
+                        .fill(Theme.color(backup?.tone == .urgent ? "danger" : "attention", scheme))
+                        .frame(width: 6, height: 6)
+                }
+                Text(status)
+                    .centraidType("mono")
+                    .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
+                    .lineLimit(1)
+            }
+            .frame(minHeight: 18)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // NO DOOR (the Backup tab itself) IS PLAIN TEXT, not a dimmed
+        // control: the status is still true there.
+        .allowsHitTesting(onOpenBackup != nil)
+        .accessibilityLabel(status + (onOpenBackup == nil ? "" : ". " + ShellWords.backupStatusOpen))
+        .accessibilityIdentifier("home-backup-status")
+    }
+
     var body: some View {
         HStack(spacing: 12) {
+            // TWO DOORS IN ONE LOCKUP: the mark and the name are the vault
+            // switch; the status under them is the Backup tab's.
             Button {
                 shell.send(screen: "home", event: HomeEvents.vaultSwitch())
             } label: {
-                HStack(spacing: 12) {
-                    Text(String(name.prefix(1)).uppercased())
-                        .centraidType("smallStrong")
-                        .foregroundStyle(mark.ink)
-                        .frame(width: 30, height: 30)
-                        // A static control rung, not `iconChipRadius` — that
-                        // ratio is for app chips.
-                        .background(mark.ground, in: RoundedRectangle(cornerRadius: 7))
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(name)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color("text", scheme))
-                            .lineLimit(1)
-                        if !line.isEmpty {
-                            Text(line)
-                                .centraidType("mono")
-                                .foregroundStyle(Theme.color("textFaint", scheme))
-                                .lineLimit(1)
-                        }
-                        if !waiting.isEmpty {
-                            Text(waiting)
-                                .centraidType("mono")
-                                .foregroundStyle(Theme.color("textFaint", scheme))
-                                .lineLimit(1)
-                                .accessibilityIdentifier("home-originals-waiting")
-                        }
-                    }
-                    Spacer(minLength: 0)
-                }
+                Text(String(name.prefix(1)).uppercased())
+                    .centraidType("smallStrong")
+                    .foregroundStyle(mark.ink)
+                    .frame(width: 30, height: 30)
+                    // A static control rung, not `iconChipRadius` — that
+                    // ratio is for app chips.
+                    .background(mark.ground, in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
             }
             .buttonStyle(.plain)
-            // The label REPLACES the two lines for assistive tech, so a screen
-            // reader hears one sentence rather than a name and an orphan line.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(
-                [name, line, waiting].filter { !$0.isEmpty }.joined(separator: ", ")
-                    + ". Switch vault"
-            )
-            .accessibilityIdentifier("home-vault-switch")
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Button {
+                    shell.send(screen: "home", event: HomeEvents.vaultSwitch())
+                } label: {
+                    Text(name)
+                        .centraidType("smallStrong")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(name + ". Switch vault")
+                .accessibilityIdentifier("home-vault-switch")
+
+                if !status.isEmpty {
+                    statusLine
+                } else if !line.isEmpty {
+                    Text(line)
+                        .centraidType("mono")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                        .lineLimit(1)
+                }
+                if !waiting.isEmpty {
+                    Text(waiting)
+                        .centraidType("mono")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                        .lineLimit(1)
+                        .accessibilityIdentifier("home-originals-waiting")
+                }
+            }
 
             // THE DOOR TO THE TRANSFER RULES (#1025 S4). Beside the line that
             // reports them rather than buried in settings: the member reads
             // "12 originals waiting for Wi-Fi" and the next thing they want is
             // the control that decided it.
             if !waiting.isEmpty {
-                Button {
+                KitIconKey(
+                    iconKey: "Settings",
+                    label: "Download settings",
+                    identifier: "home-transfer-rules"
+                ) {
                     shell.openTransferRules()
-                } label: {
-                    CentraidIconView(
-                        iconKey: "Settings",
-                        tint: Theme.color("textSoft", scheme),
-                        size: 16
-                    )
-                    .frame(width: 34, height: 34)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Download settings")
-                .accessibilityIdentifier("home-transfer-rules")
             }
-
-            // BOUNDED, never borderless.
-            HeaderAction(iconKey: "Search", spoken: "Search everything")
+            if let onSearch {
+                KitIconKey(
+                    iconKey: "Search",
+                    label: searchLabel,
+                    framed: true,
+                    identifier: "home-search-open",
+                    action: onSearch
+                )
+            }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 12)
         .padding(.bottom, 8)
-    }
-}
-
-private struct HeaderAction: View {
-    let iconKey: String
-    let spoken: String
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        CentraidIconView(
-            iconKey: iconKey,
-            tint: Theme.color("textSoft", scheme),
-            size: 16
-        )
-        .frame(width: 34, height: 34)
-        .overlay(
-            RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-        )
-        .accessibilityLabel(spoken)
-    }
-}
-
-/// The route's own name and the ONE control the row carries.
-///
-/// Search belongs to the lockup and All apps to the band's More tab, so the
-/// title row carries Settings alone — which in v0 had no door from Home at all
-/// and sat behind All apps, a sheet a member on the springboard has no reason
-/// to open.
-struct HomeTitleRow: View {
-    @Environment(\.colorScheme) private var scheme
-    /// Optional so every existing call site — the fixture test's included —
-    /// keeps working without a shell.
-    var onSettings: (() -> Void)?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text("Home")
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
-            Spacer(minLength: 0)
-            // THE GEAR IS THE GATEWAY'S DOOR (#1020, D-1020-B7). It had no
-            // action at all; "connect this device to a gateway" is settings and
-            // adding a fourth chrome control for it would be adding chrome the
-            // rulebook does not have a place for.
-            Button {
-                onSettings?()
-            } label: {
-                CentraidIconView(
-                    iconKey: "Settings",
-                    tint: Theme.color("text", scheme),
-                    size: 22
-                )
-                .frame(minWidth: 44, minHeight: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Settings")
-            .accessibilityIdentifier("home-settings")
-        }
-        .padding(.horizontal, CentraidGeometry.pageMargin)
-        .padding(.bottom, 14)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Theme.color("line", scheme))
-                .frame(height: CentraidGeometry.hairline)
-        }
     }
 }
 
@@ -292,17 +288,17 @@ extension Centraid_Screen_V1_VaultLockup {
     /// this side probes anything, so "connected" would promise a live link no
     /// layer here has checked, and "synced" claimed a backup over a vault that
     /// was never paired (#1047 walk); what a gateway holds is the backup
-    /// line's to say (`BackupLineView`, #1080). `.syncing` and `.offline` left with the pass
+    /// status's to say (`BackupLine.status`, drawn in its place on Home, #1080). `.syncing` and `.offline` left with the pass
     /// they described (#1029 §1, W5) and `.frozen` took their place.
     var stateLine: String {
         switch state {
         case .unspecified: return ""
-        case .online: return "on this phone"
+        case .online: return PhotosWords.vaultOnline
         // THE VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1, W5). The
         // Android table states the identical sentence; the two shells must
         // read the same. The count of what this phone is still holding rides
         // beside it in `VaultLockup.frozen_line`.
-        case .frozen: return "moved to your other phone"
+        case .frozen: return PhotosWords.vaultMoved
         case .UNRECOGNIZED: return ""
         }
     }
@@ -326,55 +322,27 @@ struct TransferRulesSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("This is set for this phone, not for one vault. Thumbnails always arrive.")
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+        SheetRoom(
+            title: PhotosWords.transferTitle,
+            primary: SheetPrimary(label: ShellWords.done) { dismiss() }
+        ) {
+            Text(PhotosWords.transferSubtitle)
+                .centraidType("small")
+                .foregroundStyle(Theme.color("textSoft", scheme))
 
+            VStack(spacing: 0) {
                 ForEach(shell.transferRuleChoices, id: \.stored) { choice in
-                    Button {
+                    // THE SELECTION IS THE STORE'S ANSWER, not the tap: an
+                    // unknown word settles to the conservative default, and a
+                    // tick on a row the next launch would not tick is worse
+                    // than a tap that appears to do nothing.
+                    SheetRow(
+                        label: choice.sentence,
+                        selected: shell.transferRule == choice.stored,
+                        identifier: "transfer-rule-\(choice.stored)"
+                    ) {
                         shell.setTransferRule(choice.stored)
-                    } label: {
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            // THE SELECTION IS THE STORE'S ANSWER, not the tap:
-                            // an unknown word settles to the conservative
-                            // default, and a tick on a row the next launch
-                            // would not tick is worse than a tap that appears
-                            // to do nothing.
-                            // THE ROW IS THE CONTROL and the dot is its state,
-                            // not a second thing to read out: the button
-                            // carries the sentence and the selected trait,
-                            // which is how VoiceOver says "selected" rather
-                            // than "filled circle".
-                            Image(systemName: shell.transferRule == choice.stored
-                                ? "largecircle.fill.circle"
-                                : "circle")
-                                .accessibilityHidden(true)
-                            Text(choice.sentence)
-                                .centraidType("small")
-                                .foregroundStyle(Theme.color("text", scheme))
-                                .multilineTextAlignment(.leading)
-                            Spacer(minLength: 0)
-                        }
-                        .frame(minHeight: 44)
                     }
-                    .accessibilityAddTraits(
-                        shell.transferRule == choice.stored ? [.isSelected] : [],
-                    )
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("transfer-rule-\(choice.stored)")
-                    .accessibilityAddTraits(
-                        shell.transferRule == choice.stored ? [.isSelected] : []
-                    )
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(CentraidGeometry.pageMargin)
-            .navigationTitle("Downloads")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
                 }
             }
         }

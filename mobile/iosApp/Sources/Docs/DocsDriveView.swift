@@ -52,20 +52,36 @@ struct DocsDriveView: View {
         Group {
             if let parentTitle {
                 PushedPage(title: state.folderName, parentTitle: parentTitle, onBack: onBack) {
-                    addButton(state, content)
+                    RoomTrailing(action: addAction(state, content))
                 } content: {
+                    // A FOLDER PAGE IS NOT A ROOM, so it draws the room's
+                    // search bar and chip row itself, in the room's order.
                     VStack(spacing: 0) {
-                        if state.search.open {
-                            CentraidSearchField(
-                                field: state.search,
-                                placeholder: state.chrome.searchPlaceholder,
-                                closeLabel: state.chrome.searchClose,
-                                identifier: "docs-search",
-                                onTerm: { term in send(Self.event { $0.searchTerm = .with { $0.term = term } }) },
-                                onClose: { send(Self.event { $0.searchClosed = .init() }) }
-                            )
-                            .padding(.horizontal, CentraidGeometry.pageMargin)
-                            .padding(.bottom, 8)
+                        Group {
+                            if state.search.open {
+                                CentraidSearchField(
+                                    field: state.search,
+                                    placeholder: state.chrome.searchPlaceholder,
+                                    closeLabel: state.chrome.searchClose,
+                                    identifier: "docs-search",
+                                    onTerm: { term in send(Self.event { $0.searchTerm = .with { $0.term = term } }) },
+                                    onClose: { send(Self.event { $0.searchClosed = .init() }) }
+                                )
+                            } else if !content.isDenied {
+                                SearchOpener(
+                                    placeholder: state.chrome.searchPlaceholder,
+                                    identifier: "docs-search-open",
+                                    onOpen: { send(Self.event { $0.searchOpened = .init() }) }
+                                )
+                            }
+                        }
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
+                        let row = self.chips(state, content)
+                        if !row.isEmpty {
+                            RoomChipRow(app: "docs", chips: row)
+                                .padding(.bottom, 4)
                         }
                         page(state, content)
                     }
@@ -74,17 +90,18 @@ struct DocsDriveView: View {
                 AppPlace(
                     app: "docs",
                     title: state.chrome.title,
+                    trailing: addAction(state, content),
                     search: SearchSlot(
                         field: state.search,
                         placeholder: state.chrome.searchPlaceholder,
                         closeLabel: state.chrome.searchClose,
+                        onOpen: { send(Self.event { $0.searchOpened = .init() }) },
                         onTerm: { term in send(Self.event { $0.searchTerm = .with { $0.term = term } }) },
                         onClose: { send(Self.event { $0.searchClosed = .init() }) }
                     ),
+                    chips: chips(state, content),
                     showsBand: !content.isDenied
                 ) {
-                    addButton(state, content)
-                } band: {
                     AppBand(
                         app: "docs",
                         tabs: state.band.map { tab in
@@ -109,24 +126,39 @@ struct DocsDriveView: View {
         .onAppear(perform: reportPermissions)
     }
 
-    @ViewBuilder
-    private func addButton(
+    /// THE ONE TRAILING ACTION (R-CHROME-1): the Plus, said as the state's
+    /// add label; it opens the machine's Add sheet.
+    private func addAction(
         _ state: Centraid_Screen_V1_DocsDriveState,
         _ content: ScreenContent<Centraid_Screen_V1_DocsDriveData>
-    ) -> some View {
-        if !content.isDenied, !state.chrome.add.isEmpty {
-            Button {
-                send(Self.event { $0.sheetOpened = .with { $0.kind = .add } })
-            } label: {
-                Text(state.chrome.add)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .padding(.horizontal, 8)
-                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
+    ) -> RoomAction? {
+        guard !content.isDenied, !state.chrome.add.isEmpty else { return nil }
+        return RoomAction(iconKey: "Plus", label: state.chrome.add, identifier: "docs-add") {
+            send(Self.event { $0.sheetOpened = .with { $0.kind = .add } })
+        }
+    }
+
+    /// THE CHIP ROW (R-CHROME-3), the machine's pills as they come: the
+    /// filters, Clear while one is set, the sort last.
+    private func chips(
+        _ state: Centraid_Screen_V1_DocsDriveState,
+        _ content: ScreenContent<Centraid_Screen_V1_DocsDriveData>
+    ) -> [RoomChip] {
+        guard !content.isDenied else { return [] }
+        return state.pills.map { pill in
+            RoomChip(
+                identifier: pill.clears ? "docs-clear-filters" : "docs-pill-\(pill.key.rawValue)",
+                label: pill.label,
+                selected: pill.active,
+                chevron: pill.chevron,
+                spoken: pill.accessibilityLabel.isEmpty ? pill.label : pill.accessibilityLabel
+            ) {
+                if pill.clears {
+                    send(Self.event { $0.filtersCleared = .init() })
+                } else {
+                    send(Self.event { $0.sheetOpened = .with { $0.kind = pill.key } })
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("docs-add")
         }
     }
 
@@ -197,85 +229,28 @@ struct DocsDriveView: View {
         }
     }
 
-    /// The head's subtitle, the search opener, the filter pills, Clear and the
-    /// layout toggle — one scrolling row.
+    /// The head's subtitle and the layout toggle — one line over the list.
+    /// Search and the chips are the room's (R-CHROME-2/3), drawn above.
     private func controls(_ state: Centraid_Screen_V1_DocsDriveState) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if !state.headMeta.isEmpty {
-                Text(state.headMeta)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("textFaint", scheme))
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    if !state.search.open {
-                        iconControl("Search", state.chrome.searchLabel, "docs-search-open") {
-                            send(Self.event { $0.searchOpened = .init() })
-                        }
-                    }
-                    ForEach(state.pills, id: \.key) { pill in
-                        Button {
-                            send(Self.event { $0.sheetOpened = .with { $0.kind = pill.key } })
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text(pill.label)
-                                    .centraidType("annotLabelOn")
-                                    .foregroundStyle(Theme.color(pill.active ? "onAccent" : "text", scheme))
-                                CentraidIconView(
-                                    iconKey: "ChevronDown",
-                                    tint: Theme.color(pill.active ? "onAccent" : "textSoft", scheme),
-                                    size: 10
-                                )
-                                .accessibilityHidden(true)
-                            }
-                            .padding(.horizontal, 12)
-                            .frame(minHeight: CentraidGeometry.targetMinFine)
-                            .background(Capsule().fill(Theme.color(pill.active ? "accent" : "bgSunken", scheme)))
-                            .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(pill.accessibilityLabel.isEmpty ? pill.label : pill.accessibilityLabel)
-                        .accessibilityAddTraits(pill.active ? .isSelected : [])
-                        .accessibilityIdentifier("docs-pill-\(pill.key.rawValue)")
-                    }
-                    if state.filtersActive, !state.chrome.filtersClearLabel.isEmpty {
-                        Button {
-                            send(Self.event { $0.filtersCleared = .init() })
-                        } label: {
-                            Text(state.chrome.filtersClearLabel)
-                                .centraidType("annotLabelOn")
-                                .foregroundStyle(Theme.color("link", scheme))
-                                .padding(.horizontal, 8)
-                                .frame(minHeight: CentraidGeometry.targetMinFine)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("docs-clear-filters")
-                    }
-                    iconControl(
-                        state.chrome.layoutIconKey.isEmpty ? "Grid" : state.chrome.layoutIconKey,
-                        state.chrome.layoutToggle,
-                        "docs-layout"
-                    ) {
-                        send(Self.event { $0.layoutToggled = .init() })
-                    }
-                }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
+        HStack(spacing: 6) {
+            Text(state.headMeta)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color("textFaint", scheme))
+            Spacer(minLength: 0)
+            iconControl(
+                state.chrome.layoutIconKey.isEmpty ? "Grid" : state.chrome.layoutIconKey,
+                state.chrome.layoutToggle,
+                "docs-layout"
+            ) {
+                send(Self.event { $0.layoutToggled = .init() })
             }
         }
-        .padding(.vertical, 6)
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.vertical, 2)
     }
 
     private func iconControl(_ icon: String, _ label: String, _ identifier: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            CentraidIconView(iconKey: icon, tint: Theme.color("text", scheme), size: 16)
-                .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinFine)
-                .background(Capsule().fill(Theme.color("bgSunken", scheme)))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-        .accessibilityIdentifier(identifier)
+        KitIconKey(iconKey: icon, label: label, framed: true, identifier: identifier, action: action)
     }
 
     private func crumbs(_ crumbs: [Centraid_Screen_V1_DocsCrumb]) -> some View {

@@ -4,8 +4,9 @@ import SwiftUI
 import CentraidShared
 #endif
 
-/// LOCKER'S HOME — Items · Review · Generate · Search, More as a sheet
-/// (#1047; the handoff's Locker §1).
+/// LOCKER'S HOME — Items · Review · Generate, More as a sheet (#1047; the
+/// handoff's Locker §1). Search is the room's bar (R-CHROME-2), never a tab;
+/// the Items filters are the room's chip row (R-CHROME-3).
 ///
 /// **THE VIEW DECIDES NOTHING.** The band (empty while locked), the filter
 /// pills, the rows, the review verdicts, the search note, every empty and
@@ -52,27 +53,19 @@ struct LockerHomeView: View {
         AppPlace(
             app: "locker",
             title: state.chrome.title,
-            search: covered ? nil : SearchSlot(
+            trailing: covered || content.isDenied || state.chrome.addLabel.isEmpty
+                ? nil
+                : RoomAction(iconKey: "Plus", label: state.chrome.addLabel, identifier: "locker-add", action: addItem),
+            search: covered || content.isDenied ? nil : SearchSlot(
                 field: state.search,
                 placeholder: state.chrome.searchPlaceholder,
+                onOpen: { send(Self.event { $0.searchOpened = .init() }) },
                 onTerm: { term in send(Self.event { $0.searchTyped = .with { $0.term = term } }) },
                 onClose: { send(Self.event { $0.searchClosed = .init() }) }
             ),
+            chips: covered ? [] : filterChips(content),
             showsBand: !content.isDenied
         ) {
-            if !covered, !content.isDenied, !state.chrome.addLabel.isEmpty {
-                Button(action: addItem) {
-                    Text(state.chrome.addLabel)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .padding(.horizontal, 8)
-                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("locker-add")
-            }
-        } band: {
             AppBand(
                 app: "locker",
                 tabs: covered ? [] : state.band.map { tab in
@@ -166,9 +159,6 @@ struct LockerHomeView: View {
     @ViewBuilder
     private func items(_ home: Centraid_Screen_V1_LockerHomeData, _ state: Centraid_Screen_V1_LockerHomeState) -> some View {
         LockerNote(text: home.statusLine)
-        LockerChoicePills(choices: home.filters, identifier: "locker-filter") { key in
-            send(Self.event { $0.filter = .with { $0.key = key } })
-        }
         if home.hasItemsEmpty {
             EmptyStateView(home.itemsEmpty, onAction: home.itemsEmpty.actionLabel.isEmpty ? nil : addItem)
         }
@@ -212,6 +202,22 @@ struct LockerHomeView: View {
         }
         ForEach(home.hits, id: \.itemID) { row in
             LockerRowView(row: row) { open(row, state) }
+        }
+    }
+
+    /// THE ITEMS FILTERS AS THE ROOM'S CHIP ROW (R-CHROME-3): only Items'
+    /// data carries them, so the row is there on Items and nowhere else.
+    private func filterChips(_ content: ScreenContent<Centraid_Screen_V1_LockerHomeData>) -> [RoomChip] {
+        guard case let .data(home) = content else { return [] }
+        return home.filters.map { choice in
+            RoomChip(
+                identifier: "locker-filter-\(choice.key)",
+                label: choice.label,
+                count: choice.detail,
+                selected: choice.selected
+            ) {
+                send(Self.event { $0.filter = .with { $0.key = choice.key } })
+            }
         }
     }
 

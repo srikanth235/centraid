@@ -61,16 +61,13 @@ struct DocsDocumentView: View {
             : state.titleHint
         PushedPage(title: title, parentTitle: state.chrome.back, onBack: onBack) {
             if let document, !document.actions.isEmpty {
-                Button {
+                ToolbarIcon(
+                    iconKey: "MoreHoriz",
+                    label: state.chrome.more,
+                    identifier: "docs-document-more"
+                ) {
                     send(Self.event { $0.moreOpened = .init() })
-                } label: {
-                    CentraidIconView(iconKey: "MoreHoriz", tint: Theme.color("text", scheme), size: 18)
-                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(state.chrome.more)
-                .accessibilityIdentifier("docs-document-more")
             }
         } content: {
             VStack(spacing: 0) {
@@ -220,18 +217,11 @@ struct DocsDocumentView: View {
                         CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 10)
                             .accessibilityHidden(true)
                     }
-                    Button {
+                    KitLink(label: crumb.name, dense: true, identifier: "docs-crumb-\(crumb.folderID)") {
                         send(Self.event { $0.folderPicked = .with { $0.folderID = crumb.folderID; $0.name = crumb.name } })
                         push(DocsScreens.folderRoute(crumb.folderID, crumb.name, parent: headTitle))
-                    } label: {
-                        Text(crumb.name)
-                            .centraidType("annotLabelOn")
-                            .foregroundStyle(Theme.color("link", scheme))
-                            .frame(minHeight: CentraidGeometry.targetMinFine)
                     }
-                    .buttonStyle(.plain)
                     .disabled(crumb.folderID.isEmpty)
-                    .accessibilityIdentifier("docs-crumb-\(crumb.folderID)")
                 }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -246,18 +236,14 @@ struct DocsDocumentView: View {
         HStack(spacing: 8) {
             CentraidRow(title: version.label, meta: version.meta, dimmed: !version.current)
             if !version.restoreLabel.isEmpty {
-                Button {
+                KitLink(
+                    label: version.restoreLabel,
+                    dense: true,
+                    identifier: "docs-version-restore-\(version.contentID)"
+                ) {
                     send(Self.event { $0.versionRestore = .with { $0.contentID = version.contentID } })
-                } label: {
-                    Text(version.restoreLabel)
-                        .centraidType("annotLabelOn")
-                        .foregroundStyle(Theme.color("link", scheme))
-                        .frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
                 .disabled(state.write.phase == .inFlight)
-                .accessibilityIdentifier("docs-version-restore-\(version.contentID)")
             }
         }
         .padding(.trailing, 8)

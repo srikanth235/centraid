@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 23] = [
+const PROTOS: [&str; 24] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -61,6 +61,9 @@ const PROTOS: [&str; 23] = [
     // The chat's history, as reads (R-CHAT-1): threads, one thread's messages
     // and whether a card's row is still there.
     "proto/centraid/core/v1/chat.proto",
+    // Home's search (R-CHROME-6): the powerbox's loader over every domain but
+    // Locker, asked from Home. Its own file because Home is not an app.
+    "proto/centraid/core/v1/vault_search.proto",
     "proto/centraid/core/v1/app_query.proto",
     // The on-device chat: a session, a question and a stream of events, over
     // reads an app already answers. Its own file because a turn is neither a

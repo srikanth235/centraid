@@ -123,34 +123,59 @@ struct ChatView: View {
         .onChange(of: focused) { _, now in typing = now }
         .onDisappear { typing = false }
         .accessibilityIdentifier("chat")
-        .alert(state.renameTitle, isPresented: $renaming) {
-            TextField(state.renameTitle, text: $renameText)
-            Button(state.saveLabel) {
-                chat.renameThread(state.threadID, title: renameText)
+        // A RENAME IS A SHEET HOLDING THE FIELD, Save its one ink button.
+        .sheet(isPresented: $renaming) {
+            SheetRoom(
+                title: state.renameTitle,
+                primary: SheetPrimary(label: state.saveLabel) {
+                    chat.renameThread(state.threadID, title: renameText)
+                    renaming = false
+                }
+            ) {
+                TextField(state.renameTitle, text: $renameText)
+                    .chatType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                            .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                    )
+                    .accessibilityIdentifier("chat-rename-field")
             }
-            Button(state.cancelLabel, role: .cancel) {}
         }
-        .alert(
-            state.deleteTitle,
-            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-            presenting: deleting
-        ) { target in
-            Button(state.deleteLabel, role: .destructive) {
-                chat.deleteThread(target.id)
-                deleting = nil
-            }
-            Button(state.cancelLabel, role: .cancel) { deleting = nil }
-        } message: { target in
-            Text(target.title + "\n" + state.deleteBody)
+        // DESTRUCTIVE ASKS FIRST, in the kit's confirm (D1), never an alert.
+        .sheet(item: $deleting) { target in
+            ConfirmSheet(
+                .with {
+                    $0.title = state.deleteTitle
+                    $0.body = target.title + "\n" + state.deleteBody
+                    $0.confirmLabel = state.deleteLabel
+                    $0.destructive = true
+                },
+                cancelLabel: state.cancelLabel,
+                onConfirm: {
+                    chat.deleteThread(target.id)
+                    deleting = nil
+                },
+                onDismiss: { deleting = nil }
+            )
         }
-        .alert(state.deleteAllTitle, isPresented: $deletingAll) {
-            Button(state.deleteAllLabel, role: .destructive) {
-                chat.deleteAllThreads()
-                deletingAll = false
-            }
-            Button(state.cancelLabel, role: .cancel) { deletingAll = false }
-        } message: {
-            Text(state.deleteAllBody)
+        .sheet(isPresented: $deletingAll) {
+            ConfirmSheet(
+                .with {
+                    $0.title = state.deleteAllTitle
+                    $0.body = state.deleteAllBody
+                    $0.confirmLabel = state.deleteAllLabel
+                    $0.destructive = true
+                },
+                cancelLabel: state.cancelLabel,
+                onConfirm: {
+                    chat.deleteAllThreads()
+                    deletingAll = false
+                },
+                onDismiss: { deletingAll = false }
+            )
         }
     }
 
@@ -336,14 +361,12 @@ private struct ChatHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 4) {
-            Button(action: onDrawer) {
-                CentraidIconView(iconKey: "Menu", tint: Theme.color("text", scheme), size: 22)
-                    .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(state.drawerLabel)
-            .accessibilityIdentifier("chat-drawer")
+            KitIconKey(
+                iconKey: "Menu",
+                label: state.drawerLabel,
+                identifier: "chat-drawer",
+                action: onDrawer
+            )
 
             VStack(alignment: .center, spacing: 0) {
                 Text(verbatim: state.title)
@@ -375,14 +398,20 @@ private struct ChatHeader: View {
                         .accessibilityIdentifier("chat-menu-delete")
                 }
             } label: {
-                CentraidIconView(iconKey: "MoreVert", tint: Theme.color("text", scheme), size: 22)
-                    .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
+                // THE MENU WEARS THE ICON KEY'S FACE: a Menu's label cannot be
+                // a Button, so the 44 target and the disabled ink are stated
+                // here exactly as `KitIconKey` states them.
+                CentraidIconView(
+                    iconKey: "MoreVert",
+                    tint: Theme.color(hasMenu ? "text" : "textDisabled", scheme),
+                    size: 18
+                )
+                .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                .contentShape(Rectangle())
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
             .disabled(!hasMenu)
-            .opacity(hasMenu ? 1 : 0.4)
             .accessibilityLabel(state.menuLabel)
             .accessibilityIdentifier("chat-menu")
         }
@@ -440,26 +469,10 @@ private struct ChatDrawer: View {
                 .padding(.bottom, 12)
                 .accessibilityAddTraits(.isHeader)
 
-            Button(action: onNewChat) {
-                HStack(spacing: 8) {
-                    CentraidIconView(iconKey: "Plus", tint: Theme.color("text", scheme), size: 16)
-                    Text(verbatim: state.newChatLabel)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                        .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-                )
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
-            .accessibilityIdentifier("chat-drawer-new")
+            KitOutlineButton(label: state.newChatLabel, fullWidth: true, iconKey: "Plus", action: onNewChat)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+                .accessibilityIdentifier("chat-drawer-new")
 
             if state.threads.isEmpty {
                 Text(verbatim: state.threadsEmptyLine)
@@ -472,9 +485,11 @@ private struct ChatDrawer: View {
             } else {
                 List {
                     ForEach(state.threads, id: \.threadID) { row in
-                        ChatThreadRow(row: row, currentLabel: state.currentLabel)
-                            .contentShape(Rectangle())
-                            .onTapGesture { onOpen(row.threadID) }
+                        Button { onOpen(row.threadID) } label: {
+                            ChatThreadRow(row: row, currentLabel: state.currentLabel)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(KitRowPress())
                             .listRowInsets(EdgeInsets())
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -484,11 +499,10 @@ private struct ChatDrawer: View {
                                 } label: {
                                     Text(verbatim: state.deleteLabel)
                                 }
-                                .tint(Theme.color("danger", scheme))
+                                .tint(Theme.color("net", scheme))
                             }
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel(row.accessibilityLabel)
-                            .accessibilityAddTraits(.isButton)
                             .accessibilityAction(named: state.deleteLabel) { onDelete(row) }
                             .accessibilityIdentifier("chat-thread-row")
                     }
@@ -500,7 +514,7 @@ private struct ChatDrawer: View {
                 Button(action: onDeleteAll) {
                     Text(verbatim: state.deleteAllLabel)
                         .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("danger", scheme))
+                        .foregroundStyle(Theme.color("net", scheme))
                         .padding(.horizontal, 12)
                         .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
                         .contentShape(Rectangle())
@@ -724,33 +738,16 @@ private struct ChatMessageRow: View {
     private var copiedLabel: String { ChatWords.copied.isEmpty ? state.copyLabel : ChatWords.copied }
 }
 
-/// A small outlined action under an answer: ink on paper, 44 tall to touch.
+/// An outlined action under an answer: the kit's outline button, glyph first.
 private struct ChatActionButton: View {
     let iconKey: String
     let label: String
     let identifier: String
     let action: () -> Void
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                CentraidIconView(iconKey: iconKey, tint: Theme.color("textSoft", scheme), size: 14)
-                Text(label)
-                    .centraidType("control")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-            }
-            .padding(.horizontal, 10)
-            .frame(minHeight: 32)
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                    .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-            )
-            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(identifier)
+        KitOutlineButton(label: label, iconKey: iconKey, action: action)
+            .accessibilityIdentifier(identifier)
     }
 }
 
@@ -764,7 +761,7 @@ private struct ChatErrorLine: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(state.error)
                 .chatType("small")
-                .foregroundStyle(Theme.color("danger", scheme))
+                .foregroundStyle(Theme.color("net", scheme))
                 .accessibilityIdentifier("chat-error")
             if state.canRetry {
                 ChatActionButton(iconKey: "Refresh", label: state.retryLabel, identifier: "chat-error-retry", action: onRetry)
@@ -1056,7 +1053,12 @@ private struct ChatComposerCard: View {
             Button(state.attachDocumentLabel) { sheet = .document }
                 .accessibilityIdentifier("chat-attach-document")
         } label: {
-            CentraidIconView(iconKey: "Plus", tint: Theme.color("text", scheme), size: 18)
+            // DISABLED IS THE INK, not a faded container.
+            CentraidIconView(
+                iconKey: "Plus",
+                tint: Theme.color(state.canAttach ? "text" : "textDisabled", scheme),
+                size: 18
+            )
                 .frame(width: 36, height: 36)
                 .overlay(Circle().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
                 .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
@@ -1065,7 +1067,6 @@ private struct ChatComposerCard: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .disabled(!state.canAttach)
-        .opacity(state.canAttach ? 1 : 0.4)
         .accessibilityLabel(state.attachLabel)
         .accessibilityIdentifier("chat-attach")
     }
@@ -1146,15 +1147,14 @@ private struct ChatAttachmentChip: View {
                 .lineLimit(1)
                 .frame(maxWidth: 160, alignment: .leading)
             if let onRemove {
-                Button(action: onRemove) {
-                    CentraidIconView(iconKey: "X", tint: Theme.color("textSoft", scheme), size: 14)
-                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                KitIconKey(
+                    iconKey: "X",
+                    label: removeLabel + ", " + attachment.label,
+                    tint: "textSoft",
+                    identifier: "chat-attachment-remove",
+                    action: onRemove
+                )
                 .padding(.trailing, -8)
-                .accessibilityLabel(removeLabel + ", " + attachment.label)
-                .accessibilityIdentifier("chat-attachment-remove")
             }
         }
         .padding(.leading, 4)
@@ -1187,23 +1187,10 @@ private struct ChatVisionBanner: View {
                     // attempt stopped, and the one action.
                     Text(step.statusLine.isEmpty ? step.sizeLine : step.statusLine)
                         .centraidType("small")
-                        .foregroundStyle(Theme.color(step.statusLine.isEmpty ? "textSoft" : "danger", scheme))
+                        .foregroundStyle(Theme.color(step.statusLine.isEmpty ? "textSoft" : "net", scheme))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("chat-vision-line")
-                    Button(action: onDownload) {
-                        Text(step.actionLabel)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color("net", scheme))
-                            .padding(.horizontal, 12)
-                            .frame(height: 32)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                                    .strokeBorder(Theme.color("net", scheme), lineWidth: CentraidGeometry.hairline)
-                            )
-                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                    KitOutlineButton(label: step.actionLabel, tone: "net", action: onDownload)
                     .accessibilityIdentifier("chat-vision-download")
                 } else {
                     Text(step.statusLine)
@@ -1298,7 +1285,7 @@ private struct ChatModelStepView: View {
                 if !state.error.isEmpty {
                     Text(state.error)
                         .chatType("small")
-                        .foregroundStyle(Theme.color("danger", scheme))
+                        .foregroundStyle(Theme.color("net", scheme))
                         .accessibilityIdentifier("chat-error")
                 }
                 KitOutlineButton(label: step.actionLabel, tone: "net", action: onDownload)

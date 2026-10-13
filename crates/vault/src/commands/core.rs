@@ -103,7 +103,7 @@ const TAGGABLE: &[(&str, &str, bool)] = &[
 /// Every `core.*` command this build carries: the nineteen of v0's twenty-seven
 /// that the parties plane and Docs' whole write surface need, plus Docs' two
 /// phone commands (#1047) — `core.create_text_document` and
-/// `core.purge_document`.
+/// `core.purge_document` — and the vault switcher's `core.rename_vault`.
 ///
 /// The order is v0's own file order — parties, tags, then documents and folders
 /// — so the registry's `agent_command` record reads like the source it was
@@ -136,6 +136,9 @@ pub fn definitions() -> Vec<CommandDefinition> {
         // `merge-people`, and the second of the schema's two confirm-gated
         // commands.
         merge_party(),
+        // THE VAULT'S OWN NAME, the one row `core_vault` holds: the switcher's
+        // Rename. This build's own, not v0's.
+        rename_vault(),
     ]
 }
 
@@ -3320,6 +3323,71 @@ fn rename_folder() -> CommandDefinition {
     }
 }
 
+/// THE LONGEST VAULT NAME: a lockup is one line under a monogram, and a name
+/// past this is a paragraph the header truncates anyway.
+const VAULT_NAME_MAX: usize = 60;
+
+/// `core.rename_vault` — what this vault is called.
+///
+/// `core_vault.display_name` is the ONE place a vault's name lives (see
+/// `Vault::display_name`), so a rename is this one row and nothing beside the
+/// file; the shell re-reads the name from here. Surrounding space is trimmed,
+/// and a name that is nothing but space is refused rather than written as an
+/// unnamed vault: founding may leave a vault unnamed, a rename never makes one.
+fn rename_vault() -> CommandDefinition {
+    CommandDefinition {
+        name: "core.rename_vault",
+        owner_schema: "core",
+        input_schema: r#"{
+          "type": "object",
+          "required": ["display_name"],
+          "additionalProperties": false,
+          "properties": {
+            "display_name": { "type": "string", "minLength": 1, "maxLength": 60 }
+          }
+        }"#,
+        idempotency: Idempotency::Idempotent,
+        risk: Risk::Low,
+        confirm: false,
+        preconditions: &[CommandCondition {
+            predicate: "name_not_blank",
+            check: |ctx| {
+                let name = ctx.required_str("display_name")?.trim();
+                Ok(if name.is_empty() {
+                    Some("a vault's name has to have something in it".to_owned())
+                } else if name.chars().count() > VAULT_NAME_MAX {
+                    Some(format!(
+                        "a vault's name is at most {VAULT_NAME_MAX} characters"
+                    ))
+                } else {
+                    None
+                })
+            },
+        }],
+        postconditions: &[CommandCondition {
+            predicate: "name_applied",
+            check: |ctx| {
+                let name = ctx.required_str("display_name")?.trim();
+                let count: i64 = ctx.connection().query_row(
+                    "SELECT COUNT(*) FROM core_vault WHERE display_name = ?1",
+                    [name],
+                    |row| row.get(0),
+                )?;
+                Ok((count != 1).then(|| "the name did not take".to_owned()))
+            },
+        }],
+        handler: |ctx| {
+            let name = ctx.required_str("display_name")?.trim().to_owned();
+            ctx.connection().execute(
+                "UPDATE core_vault SET display_name = ?1, updated_at = ?2",
+                rusqlite::params![name, ctx.now],
+            )?;
+            Ok(serde_json::json!({ "display_name": name }))
+        },
+        sealed_input: &[],
+    }
+}
+
 /// `folder_exists_and_not_root` — the drive's top level is the DRIVE's name,
 /// not a folder's, so it refuses both a rename and a delete.
 fn pre_folder_not_root(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -4368,7 +4436,8 @@ mod tests {
     /// two that remain are `core.merge_entity` and
     /// `core.find_duplicate_parties` (census §A5). Docs' two phone commands
     /// (#1047) — `core.create_text_document` and `core.purge_document` — are
-    /// this build's own and not v0's, so the schema is twenty-seven.
+    /// this build's own and not v0's, as is the switcher's `core.rename_vault`,
+    /// so the schema is twenty-eight.
     #[test]
     fn the_schema_carries_twenty_five_of_v0s_twenty_seven_and_docs_two() {
         let registry =
@@ -4379,15 +4448,19 @@ mod tests {
             .copied()
             .filter(|name: &&str| name.starts_with("core."))
             .collect();
-        assert_eq!(core.len(), 27, "{core:?}");
+        assert_eq!(core.len(), 28, "{core:?}");
         assert_eq!(
             definitions().len(),
-            22,
+            23,
             "this file is still the larger half"
         );
         for phone in ["core.create_text_document", "core.purge_document"] {
             assert!(core.contains(&phone), "{phone} is Docs' (#1047)");
         }
+        assert!(
+            core.contains(&"core.rename_vault"),
+            "the switcher's Rename is this build's own"
+        );
         for landed in [
             "core.link_entities",
             "core.unlink_entities",
@@ -4439,7 +4512,9 @@ mod tests {
                 Idempotency::RetrySafe => retry_safe += 1,
             }
         }
-        assert_eq!((idempotent, once, retry_safe), (14, 7, 1));
+        // v0's split was (14, 7, 1); `core.rename_vault` is this build's own
+        // and a fifteenth idempotent one.
+        assert_eq!((idempotent, once, retry_safe), (15, 7, 1));
     }
 
     /// TWO GATES, NEVER ONE (census §A0). Docs' manifest-confirmed actions are

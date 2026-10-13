@@ -92,7 +92,7 @@ struct PhotoCellSquare: View {
                 // putting it" — so the taken dot is the muted ink.
                 if isTaken {
                     PhotoSelectionDot(selected: true, muted: true)
-                        .accessibilityLabel("Already in this album")
+                        .accessibilityLabel(PhotosWords.photosAlreadyInAlbum)
                 } else if isSelected {
                     PhotoSelectionDot(selected: true)
                 }
@@ -175,8 +175,8 @@ enum PhotoCellLabel {
         let noun = cell.live ? "Live photo" : (cell.kind == .video ? "Video" : "Photo")
         if cell.hasThumbnailPath && !cell.thumbnailPath.isEmpty { return noun }
         return packAbsent
-            ? "\(noun), preview not downloaded to this device"
-            : "\(noun), preview no longer on this device"
+            ? PhotosWords.fill(PhotosWords.photosCellNotDownloaded, "noun", noun)
+            : PhotosWords.fill(PhotosWords.photosCellPreviewGone, "noun", noun)
     }
 }
 
@@ -203,7 +203,7 @@ struct PhotoHeldMark: View {
                 .lineLimit(1)
                 .padding(.horizontal, 3)
                 .padding(.vertical, 1)
-                .background(Theme.color("bg", scheme), in: RoundedRectangle(cornerRadius: PhotoTileMetrics.radiusSmall))
+                .background(Theme.color("bg", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)))
                 .padding(4)
                 .accessibilityIdentifier("photos.cell.fetching.\(cell.assetID)")
                 .accessibilityLabel("Downloading")
@@ -213,7 +213,7 @@ struct PhotoHeldMark: View {
             } label: {
                 CentraidIconView(iconKey: "Download", tint: Theme.color("text", scheme), size: 14)
                     .padding(3)
-                    .background(Theme.color("bg", scheme), in: RoundedRectangle(cornerRadius: PhotoTileMetrics.radiusSmall))
+                    .background(Theme.color("bg", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)))
                     .padding(4)
                     // A 44 TARGET AROUND A SMALL CHIP: the mark is the tile's
                     // size, the press is a thumb's.
@@ -308,8 +308,6 @@ enum PhotoTileMetrics {
     static let dot: CGFloat = 20
     static let dotInset: CGFloat = 6
     static let outline: CGFloat = 2
-    /// The `sm` radius rung.
-    static let radiusSmall: CGFloat = 4
     /// The phone's tile heights, XS to L.
     static let rungHeights: [CGFloat] = [64, 88, 120, 168]
     static let rungLabels = ["XS", "S", "M", "L"]
@@ -424,7 +422,7 @@ struct PhotoGridSkeleton: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 HStack(spacing: PhotoTileMetrics.gap) {
                     ForEach(row, id: \.cell.assetID) { tile in
-                        RoundedRectangle(cornerRadius: PhotoTileMetrics.radiusSmall)
+                        RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
                             .fill(Theme.color("skel", scheme))
                             .frame(width: tile.width, height: tile.height)
                     }
@@ -432,7 +430,7 @@ struct PhotoGridSkeleton: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Opening your library")
+        .accessibilityLabel(PhotosWords.photosOpeningLibrary)
     }
 }
 

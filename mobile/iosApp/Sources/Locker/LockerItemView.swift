@@ -54,19 +54,10 @@ struct LockerItemView: View {
             // already draws the title in its shielded header.
             PushedPage(title: secure ? "" : state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
                 if !state.chrome.editLabel.isEmpty {
-                    Button {
+                    ToolbarVerb(label: state.chrome.editLabel, identifier: "locker-item-edit") {
                         send(Self.event { $0.edit = .init() })
                         push(LockerScreens.editRoute(state.itemID))
-                    } label: {
-                        Text(state.chrome.editLabel)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color("text", scheme))
-                            .padding(.horizontal, 8)
-                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("locker-item-edit")
                 }
             } content: {
                 // THE ITEM IS SHIELDED FROM CAPTURE while the gate says `secure`.
@@ -271,15 +262,9 @@ struct LockerFieldRowView: View {
             if !row.verbs.isEmpty {
                 HStack(spacing: 16) {
                     ForEach(row.verbs, id: \.key) { verb in
-                        Button { onVerb(verb) } label: {
-                            Text(verb.label)
-                                .centraidType("smallStrong")
-                                .foregroundStyle(Theme.color("text", scheme))
-                                .frame(minHeight: CentraidGeometry.targetMinFine)
-                                .contentShape(Rectangle())
+                        KitLink(label: verb.label, dense: true, identifier: "locker-field-\(row.key)-\(verb.key)") {
+                            onVerb(verb)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("locker-field-\(row.key)-\(verb.key)")
                     }
                 }
             }
@@ -343,15 +328,8 @@ struct LockerMemoSheetView: View {
                 .foregroundStyle(Theme.color("text", scheme))
                 .lineLimit(3...8)
                 .accessibilityIdentifier("\(identifier)-text")
-            Button(action: onClose) {
-                Text(memo.cancelLabel)
-                    .centraidType("labelOn")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("\(identifier)-cancel")
+            KitOutlineButton(label: memo.cancelLabel, fullWidth: true, action: onClose)
+                .accessibilityIdentifier("\(identifier)-cancel")
         }
     }
 }
@@ -415,21 +393,14 @@ struct LockerFieldSheetView: View {
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
             if !sheet.removeLabel.isEmpty {
-                KitOutlineButton(label: sheet.removeLabel, tone: "net") {
+                KitOutlineButton(label: sheet.removeLabel, tone: "net", fullWidth: true) {
                     send(LockerItemView.event { $0.fieldRemoved = .init() })
                 }
                 .accessibilityIdentifier("locker-field-remove")
             }
-            Button {
+            KitOutlineButton(label: sheet.cancelLabel, fullWidth: true) {
                 send(LockerItemView.event { $0.fieldClosed = .init() })
-            } label: {
-                Text(sheet.cancelLabel)
-                    .centraidType("labelOn")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .accessibilityIdentifier("locker-field-cancel")
         }
     }

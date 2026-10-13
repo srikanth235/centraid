@@ -261,7 +261,6 @@ struct ShowMoreFooter: View {
                 Spacer()
                 KitOutlineButton(label: label, action: onMore)
                     .disabled(loading)
-                    .opacity(loading ? 0.5 : 1)
                     .accessibilityIdentifier("kit-show-more")
                 Spacer()
             }
@@ -341,19 +340,20 @@ struct ChoiceFieldRow: View {
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var enabled
 
     var body: some View {
         Button(action: onTap) {
             HStack {
                 Text(key)
                     .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .foregroundStyle(Theme.color(enabled ? "text" : "textDisabled", scheme))
                 Spacer(minLength: 8)
                 Text(value)
                     .centraidType("body")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .foregroundStyle(Theme.color(enabled ? "textSoft" : "textDisabled", scheme))
                     .lineLimit(1)
-                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 14)
+                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color(enabled ? "textFaint" : "textDisabled", scheme), size: 14)
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)

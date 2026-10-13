@@ -4,8 +4,8 @@
 //! Shared by the chat's integration files. The vault is founded through the
 //! door a phone uses (`FoundRequest`, no content) and then seeded with the
 //! example scenario (`centraid_core::example::seed`) through the command plane,
-//! so what these tests read is the rows a phone holds — and, unlike an example
-//! core, the vault stays WRITABLE, because these tests write through the chat.
+//! so what these tests read is the rows a phone holds — and the vault stays
+//! WRITABLE, because these tests write through the chat.
 
 use std::sync::Arc;
 

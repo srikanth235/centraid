@@ -16,8 +16,11 @@ name: home
 # The grid is the root. Every other screen in the product is reached through it.
 - assertVisible:
     id: "home-grid"
+# The lockup's second line is the backup's status, always (R-ONBOARD-11). The
+# health ribbon (`home-status`) is drawn only while there is something to say,
+# so a healthy vault has none.
 - assertVisible:
-    id: "home-status"
+    id: "home-backup-status"
 
 # DAY ONE is a claim about the vault, and only a settled, readable, empty vault
 # earns it. When it shows, first moves show with it — never dashed placeholders.
@@ -30,13 +33,13 @@ name: home
       - assertVisible:
           id: "home-first-moves"
       # An unreadable Home must NOT be able to reach this screen.
-      - assertNotVisible: "Not copied to this device yet"
+      - assertNotVisible: "Not on this phone yet"
 
 # EVERY TILE UNREADABLE still shows the grid — demoting them all would leave a
 # launcher with no tiles — and it must never claim the vault is empty.
 - runFlow:
     when:
-      visible: "Not copied to this device yet"
+      visible: "Not on this phone yet"
     commands:
       - assertVisible:
           id: "home-grid"
@@ -52,12 +55,7 @@ name: home
       - assertNotVisible:
           id: "home-grid"
 
-# The all-apps listing is a SHEET and never a destination: BACK dismisses it and
-# leaves Home, rather than popping to a screen behind Home.
-- tapOn:
-    id: "home-all-apps"
-- assertVisible:
-    id: "home-all-apps-sheet"
-- back
+# EVERY APP IS A TILE ON HOME (R-ONBOARD-11), empty or not. There is no All
+# apps sheet.
 - assertVisible:
     id: "home-grid"

@@ -30,7 +30,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -44,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentDataType
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Rect
@@ -66,7 +64,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDataType
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -91,6 +88,8 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.copy.WordsCopy
+import dev.centraid.android.kit.KitSpinner
+import dev.centraid.android.theme.LocalCentraidTokens
 
 // THE 24 WORDS, DRAWN (#1047 E3). Two screens over the shared machines:
 // `words.make` (`VaultWordsBridge`) and `words.enter` (`WordsEntryBridge`).
@@ -124,8 +123,8 @@ import dev.centraid.design.copy.WordsCopy
 internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent) -> Unit) {
     WordsPage(testTag = "words-make", description = state.accessibility_label) {
         WordsHead(state.title, state.body)
-        // CHOOSE (R-1047-E18): the vault's name, and whether it is kept on its
-        // own 24 words.
+        // CHOOSE (R-1047-E18): the vault's name, and whether it gets its own
+        // recovery key.
         if (state.name_label.isNotEmpty()) {
             EndpointField(
                 label = state.name_label,
@@ -136,16 +135,11 @@ internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent)
             )
         }
         if (state.own_label.isNotEmpty()) {
-            SyncCheckbox(state.own_label, state.own_on, testTag = "words-make-own") { on ->
+            WordsCheckbox(state.own_label, state.own_on, testTag = "words-make-own") { on ->
                 onEvent(VaultWordsEvent(own = VaultWordsEvent.OwnToggled(on = on)))
             }
         }
         if (state.words.isNotEmpty()) ShownWords(state.words)
-        if (state.sync_label.isNotEmpty()) {
-            SyncCheckbox(state.sync_label, state.sync_on) { on ->
-                onEvent(VaultWordsEvent(sync = VaultWordsEvent.SyncToggled(on = on)))
-            }
-        }
         if (state.custody.isNotEmpty()) {
             Text(
                 state.custody,
@@ -160,7 +154,7 @@ internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent)
         WordsNotice(state.notice)
         if (state.phase == VaultWordsState.Phase.PHASE_CHECKING || state.phase == VaultWordsState.Phase.PHASE_MAKING) {
             Box(Modifier.fillMaxWidth().testTag("words-making"), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = centraidColor("textSoft"), modifier = Modifier.size(28.dp))
+                KitSpinner()
             }
         }
         WordsControls(
@@ -180,11 +174,11 @@ internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent)
 }
 
 /**
- * THE SYNC CHECKBOX (`VaultWordsState.sync_label`): ticked keeps the key in
- * Block Store, unticked keeps it on this phone only.
+ * A CHECKBOX on the words screens: the make flow's "Give this vault its own
+ * recovery key" (`VaultWordsState.own_label`).
  */
 @Composable
-private fun SyncCheckbox(label: String, on: Boolean, testTag: String = "words-sync", onToggle: (Boolean) -> Unit) {
+private fun WordsCheckbox(label: String, on: Boolean, testTag: String, onToggle: (Boolean) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -197,8 +191,8 @@ private fun SyncCheckbox(label: String, on: Boolean, testTag: String = "words-sy
         Box(
             Modifier
                 .size(22.dp)
-                .background(if (on) centraidColor("text") else Color.Transparent, RoundedCornerShape(5.dp))
-                .border(1.5.dp, centraidColor(if (on) "text" else "lineStrong"), RoundedCornerShape(5.dp)),
+                .background(if (on) centraidColor("text") else Color.Transparent, RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp))
+                .border(1.5.dp, centraidColor(if (on) "text" else "lineStrong"), RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp)),
             contentAlignment = Alignment.Center,
         ) {
             if (on) CentraidIcon(iconKey = "Check", tint = centraidColor("textInv"), size = 13.dp)
@@ -216,7 +210,7 @@ private fun SyncCheckbox(label: String, on: Boolean, testTag: String = "words-sy
  * app no way to remove.
  */
 @Composable
-private fun SaveCopyButton(label: String, words: List<String>) {
+internal fun SaveCopyButton(label: String, words: List<String>) {
     val context = LocalContext.current
     Box(
         Modifier
@@ -383,8 +377,7 @@ internal fun WordsEntryScreen(state: WordsEntryState, onEvent: (WordsEntryEvent)
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CircularProgressIndicator(color = centraidColor("textSoft"), modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                Text(state.progress, style = centraidType("small"), color = centraidColor("textSoft"))
+                KitSpinner(state.progress)
             }
         }
         for ((index, line) in state.restored.withIndex()) RestoredLine(line, index)
@@ -659,10 +652,8 @@ internal fun WordsControls(
             InkButton(
                 label = primary,
                 testTag = "$prefix-primary",
-                modifier = Modifier
-                    .alpha(if (primaryEnabled) 1f else 0.4f)
-                    .semantics { if (!primaryEnabled) disabled() },
-                onPress = { if (primaryEnabled) onPrimary() },
+                enabled = primaryEnabled,
+                onPress = onPrimary,
             )
         }
         if (secondary.isNotEmpty()) {
