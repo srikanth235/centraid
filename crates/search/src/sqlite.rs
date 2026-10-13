@@ -5,11 +5,11 @@
 //! ```sql
 //! SELECT b."<pk>", <title>, <subtitle>, snippet(<fts>, -1, '⟦', '⟧', '…', 12), <fts>.rank
 //!   FROM <fts> JOIN "<base>" b ON b."<pk>" = <fts>."<pk>"
-//!  WHERE <fts> MATCH ?1 [AND b."deleted_at" IS NULL] [AND (<fts>.rank, b."<pk>") > (?, ?)]
+//!  WHERE <fts> MATCH ?1 AND <fts>.rank MATCH ?2 [AND b."deleted_at" IS NULL] [AND (<fts>.rank, b."<pk>") > (?, ?)]
 //!  ORDER BY <fts>.rank, b."<pk>" LIMIT ?
 //! ```
 //!
-//! Three things in it are load-bearing and none is decoration:
+//! Four things in it are load-bearing and none is decoration:
 //!
 //! * **The keyset is a row value.** `(rank, pk) > (?, ?)` is what SQLite turns
 //!   into one ordered walk of the match set; the equivalent disjunction is what
@@ -20,6 +20,13 @@
 //!   negated, so `ORDER BY rank` puts the best match first — the order v0 keeps
 //!   and calls "vault order is rank order" (v0's own comment). A port that
 //!   sorted descending would answer the worst matches.
+//! * **The rank is weighted by the query, not by the index** (#1097, R1d).
+//!   `<fts>.rank MATCH 'bm25(…)'` is FTS5's rank override, bound to
+//!   [`Domain::rank_function`]: a column folded in from another table weighs half
+//!   a label. The weights are not a row in the index's `_config`, because a
+//!   vault built by replaying `contracts/schema/vault-ddl.sql` has no such row
+//!   and would rank differently from a founded one. The keyset and the ORDER BY
+//!   read the same `rank`, so they need no change.
 //! * **The soft-delete predicate is here as well as in the trigger.** A trashed
 //!   row leaves the index the moment it is trashed (#916, R11), so this is belt
 //!   and braces — but the braces were added *after* trashed profiles and
@@ -46,6 +53,7 @@ use rusqlite::Connection;
 
 use crate::domains::{
     Domain, INDEX_LABELLED, PREVIEW_CHARS, PREVIEW_FROM_TEXT, assert_no_sealed_column, domain_of,
+    folded_columns,
 };
 use crate::matching::match_expression;
 use crate::{
@@ -60,21 +68,30 @@ pub struct SqliteDoor<'connection> {
 impl<'connection> SqliteDoor<'connection> {
     /// Open the door over a connection, checking the model it is about to read.
     ///
-    /// Two checks, both at open and neither at query time — a door that checks
+    /// Four checks, all at open and none at query time — a door that checks
     /// per call is a door someone can be talked into skipping a check on:
     ///
-    /// 1. no domain PROJECTS a sealed column
+    /// 1. no domain PROJECTS a sealed column, and no fold is read from one
     ///    ([`assert_no_sealed_column`]);
     /// 2. no domain's live FTS table CARRIES one. v0 throws at DDL-build time
     ///    for this (`schema/fts.ts:404`-`:419`, #293); re-checking the live index
     ///    is what keeps the DDL and this door from disagreeing about a file that
-    ///    was written by another build.
+    ///    was written by another build;
+    /// 3. every live index column is the base table's own or a listed fold
+    ///    ([`crate::domains::FOLDED`]). A fold is text from another table, so the
+    ///    sealed check can only vouch for it through its listed sources; an
+    ///    index column nobody listed has sources nobody checked, and the door
+    ///    refuses to open over it (#1097);
+    /// 4. every domain weighs exactly the columns its index has
+    ///    ([`crate::domains::Domain::weights`]), because `bm25` takes its weights
+    ///    by position.
     ///
     /// # Errors
     ///
-    /// [`SearchError::SealedColumnReachable`] for either, and
+    /// [`SearchError::SealedColumnReachable`] for the first two, and
     /// [`SearchError::IndexUnusable`] when a domain's shadow table is not in
-    /// this file.
+    /// this file, its index carries a column that is neither the base
+    /// table's nor listed, or its column count is not its weights' length.
     pub fn open(connection: &'connection Connection) -> Result<Self, SearchError> {
         assert_no_sealed_column()?;
         let sealed = sealed_physical_columns();
@@ -92,6 +109,36 @@ impl<'connection> SqliteDoor<'connection> {
                     });
                 }
             }
+            let base = base_columns(connection, domain)?;
+            if let Some(unlisted) = columns.iter().find(|column| {
+                !base.contains(column)
+                    && !folded_columns(domain.entity).any(|folded| folded.column == column.as_str())
+            }) {
+                return Err(SearchError::IndexUnusable {
+                    entity: domain.entity.to_owned(),
+                    detail: format!(
+                        "`{fts}` carries `{unlisted}`, which is neither a column of `{table}` \
+                         nor a listed fold; list its sources in `domains::FOLDED` so the sealed \
+                         check can read them (#1097)",
+                        fts = domain.fts,
+                        table = domain.table,
+                    ),
+                });
+            }
+            // ONE WEIGHT PER INDEX COLUMN: `bm25` takes them positionally, so a
+            // list of another length weighs the wrong column or none (#1097, R1d).
+            if domain.weights.len() != columns.len() {
+                return Err(SearchError::IndexUnusable {
+                    entity: domain.entity.to_owned(),
+                    detail: format!(
+                        "`{fts}` has {live} columns and `domains::DOMAINS` weighs {listed}; \
+                         one weight per index column, in the index's order (#1097)",
+                        fts = domain.fts,
+                        live = columns.len(),
+                        listed = domain.weights.len(),
+                    ),
+                });
+            }
         }
         Ok(Self { connection })
     }
@@ -101,6 +148,19 @@ impl<'connection> SqliteDoor<'connection> {
     pub const fn connection(&self) -> &'connection Connection {
         self.connection
     }
+}
+
+/// The columns the domain's base table has.
+fn base_columns(connection: &Connection, domain: &Domain) -> Result<Vec<String>, SearchError> {
+    let mut statement = connection
+        .prepare("SELECT name FROM pragma_table_info(?1)")
+        .map_err(|error| SearchError::Sqlite(error.to_string()))?;
+    let names = statement
+        .query_map([domain.table], |row| row.get::<_, String>(0))
+        .map_err(|error| SearchError::Sqlite(error.to_string()))?
+        .collect::<Result<Vec<String>, rusqlite::Error>>()
+        .map_err(|error| SearchError::Sqlite(error.to_string()))?;
+    Ok(names)
 }
 
 /// The live column names of a domain's shadow table.
@@ -179,7 +239,15 @@ impl Search for SqliteDoor<'_> {
         let probe = probe_limit(&clamped)?;
 
         let title = title_expression(domain);
-        let mut predicates: Vec<String> = vec![format!("{fts} MATCH ?1", fts = domain.fts)];
+        // THE WEIGHTS RIDE WITH THE QUERY (#1097, R1d). FTS5's rank override is a
+        // second MATCH on the hidden `rank` column, so `ORDER BY {fts}.rank` and
+        // the keyset below read the weighted score, and a vault built by
+        // replaying the DDL ranks as a founded one does: the weights are not
+        // data in the index.
+        let mut predicates: Vec<String> = vec![
+            format!("{fts} MATCH ?1", fts = domain.fts),
+            format!("{fts}.rank MATCH ?", fts = domain.fts),
+        ];
         if let Some(deleted) = domain.deleted_column {
             predicates.push(format!("b.\"{deleted}\" IS NULL"));
         }
@@ -191,8 +259,10 @@ impl Search for SqliteDoor<'_> {
         // continuation the caller cannot use, or withhold one it is owed. A
         // fixture with one unlabelled note is what found that.
         predicates.push(format!("{title} <> ''"));
-        let mut binds: Vec<rusqlite::types::Value> =
-            vec![rusqlite::types::Value::Text(expression.clone())];
+        let mut binds: Vec<rusqlite::types::Value> = vec![
+            rusqlite::types::Value::Text(expression.clone()),
+            rusqlite::types::Value::Text(domain.rank_function()),
+        ];
         if !request.excluded_ids.is_empty() {
             let placeholders = vec!["?"; request.excluded_ids.len()].join(", ");
             predicates.push(format!(
@@ -298,6 +368,179 @@ impl Search for SqliteDoor<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domains::FOLDED;
+
+    /// The live shape of each domain's index, the id first, in the order the
+    /// weights list names them.
+    const SHAPES: [(&str, &[&str]); 7] = [
+        ("knowledge.note", &["note_id", "title", "body"]),
+        (
+            "core.party",
+            &[
+                "party_id",
+                "display_name",
+                "sort_name",
+                "nickname",
+                "role",
+                "met",
+                "channels",
+                "memo",
+            ],
+        ),
+        (
+            "core.event",
+            &["event_id", "summary", "description", "location"],
+        ),
+        (
+            "schedule.task",
+            &["task_id", "title", "description", "project"],
+        ),
+        (
+            "tally.expense",
+            &[
+                "expense_id",
+                "description",
+                "category",
+                "group_name",
+                "items",
+                "memo",
+            ],
+        ),
+        ("core.content_item", &["content_id", "title"]),
+        ("core.document", &["document_id", "title", "body"]),
+    ];
+
+    /// A connection holding the seven bases and the seven indexes in the shape
+    /// `open` accepts, with `extra` more columns on one index and `without` one
+    /// column left off another.
+    fn model(extra: Option<(&str, &str)>, without: Option<(&str, &str)>) -> Connection {
+        let connection = Connection::open_in_memory().expect("an in-memory file opens");
+        for domain in DOMAINS {
+            let shape = SHAPES
+                .iter()
+                .find(|(entity, _)| *entity == domain.entity)
+                .map(|(_, columns)| *columns)
+                .expect("every domain has a shape");
+            // The base table has the id, the labels, the subtitles and every
+            // index column that is not a listed fold.
+            let mut base: Vec<&str> = vec![domain.id_column];
+            base.extend_from_slice(domain.labels);
+            base.extend_from_slice(domain.subtitles);
+            base.extend(
+                shape
+                    .iter()
+                    .filter(|column| {
+                        !folded_columns(domain.entity).any(|folded| folded.column == **column)
+                    })
+                    .copied(),
+            );
+            base.sort_unstable();
+            base.dedup();
+            connection
+                .execute_batch(&format!(
+                    "CREATE TABLE {}({});",
+                    domain.table,
+                    base.join(", ")
+                ))
+                .expect("a base table is created");
+            let mut index: Vec<String> = shape
+                .iter()
+                .filter(|column| {
+                    !without.is_some_and(|(entity, left_off)| {
+                        entity == domain.entity && left_off == **column
+                    })
+                })
+                .enumerate()
+                .map(|(position, column)| {
+                    if position == 0 {
+                        format!("{column} UNINDEXED")
+                    } else {
+                        (*column).to_owned()
+                    }
+                })
+                .collect();
+            if let Some((entity, column)) = extra
+                && entity == domain.entity
+            {
+                index.push(column.to_owned());
+            }
+            connection
+                .execute_batch(&format!(
+                    "CREATE VIRTUAL TABLE {} USING fts5({});",
+                    domain.fts,
+                    index.join(", ")
+                ))
+                .expect("an index is created");
+        }
+        connection
+    }
+
+    #[test]
+    fn a_model_whose_every_fold_is_listed_opens() {
+        let connection = model(None, None);
+        assert!(SqliteDoor::open(&connection).is_ok());
+        // Not vacuous: the model really does carry folded columns.
+        assert!(!FOLDED.is_empty());
+    }
+
+    /// A DEMONSTRATED RED for the open-time fold check: an index column that is
+    /// neither the base table's nor listed in `FOLDED` has sources nobody
+    /// checked against the sealed registry, so the door does not open.
+    #[test]
+    fn an_index_column_nobody_listed_fails_to_open() {
+        let connection = model(Some(("core.party", "stray_notes")), None);
+        match SqliteDoor::open(&connection) {
+            Err(SearchError::IndexUnusable { entity, detail }) => {
+                assert_eq!(entity, "core.party");
+                assert!(detail.contains("stray_notes"), "{detail}");
+                assert!(detail.contains("domains::FOLDED"), "{detail}");
+            }
+            other => panic!(
+                "the door opened over an unlisted fold: {:?}",
+                other.map(|_| ())
+            ),
+        }
+    }
+
+    /// A DEMONSTRATED RED for the weights: `bm25` takes them by position, so an
+    /// index with a column more or fewer than the list weighs is a refusal.
+    #[test]
+    fn an_index_whose_columns_the_weights_do_not_cover_fails_to_open() {
+        let connection = model(None, Some(("core.party", "memo")));
+        match SqliteDoor::open(&connection) {
+            Err(SearchError::IndexUnusable { entity, detail }) => {
+                assert_eq!(entity, "core.party");
+                assert!(detail.contains("has 7 columns"), "{detail}");
+                assert!(detail.contains("weighs 8"), "{detail}");
+            }
+            other => panic!(
+                "the door opened over an index the weights do not cover: {:?}",
+                other.map(|_| ())
+            ),
+        }
+    }
+
+    #[test]
+    fn the_rank_function_is_one_weight_per_column_in_order() {
+        let party = domain_of("core.party").expect("people is a domain");
+        assert_eq!(
+            party.rank_function(),
+            "bm25(1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.5, 0.5)"
+        );
+        let content = domain_of("core.content_item").expect("photos is a domain");
+        assert_eq!(content.rank_function(), "bm25(1.0, 1.0)");
+    }
+
+    #[test]
+    fn a_listed_fold_is_listed_for_its_own_domain_only() {
+        // `memo` is a fold of the party's index and of the expense's; a note's
+        // index carrying one is a column nobody listed FOR NOTES.
+        let connection = model(Some(("knowledge.note", "memo")), None);
+        assert!(matches!(
+            SqliteDoor::open(&connection),
+            Err(SearchError::IndexUnusable { .. })
+        ));
+    }
 
     #[test]
     fn a_domain_with_no_subtitle_columns_projects_the_empty_string() {

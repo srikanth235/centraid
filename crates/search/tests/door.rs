@@ -653,3 +653,451 @@ fn an_operator_a_member_typed_matches_nothing_rather_than_running() {
         "the three words are ANDed as literals, and no note carries all three"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Folded columns (#1097): text from another table, found through the parent
+// ---------------------------------------------------------------------------
+
+/// The ids one search finds in one domain.
+fn found(door: &SqliteDoor<'_>, entity: &str, query: &str) -> Vec<String> {
+    let answer = door
+        .query(&Principal::Owner, &SearchRequest::new(entity, query, 50))
+        .unwrap_or_else(|error| panic!("{entity} answered {error}"));
+    targets(&answer)
+        .into_iter()
+        .map(|target| target.id)
+        .collect()
+}
+
+fn ids<const N: usize>(ids: [&str; N]) -> Vec<String> {
+    ids.into_iter().map(str::to_owned).collect()
+}
+
+/// One person with the profile and reach a member typed, and a memo. The
+/// fixture's triggers fire as the product's do, so each row below re-indexes
+/// the party it belongs to.
+fn seed_person(connection: &Connection) {
+    connection
+        .execute(
+            "INSERT INTO core_party (party_id, kind, display_name, sort_name, created_at)
+             VALUES ('party-2', 'person', 'Ravi Menon', 'Menon, Ravi', ?1)",
+            [NOW],
+        )
+        .expect("a person is inserted");
+    connection
+        .execute(
+            "INSERT INTO people_profile
+               (profile_id, party_id, role, nickname, cadence_days, met, created_at)
+             VALUES ('profile-2', 'party-2', 'Cousin', 'Chotu', 30, 'at the Goa wedding', ?1)",
+            [NOW],
+        )
+        .expect("a profile is inserted");
+    connection
+        .execute(
+            "INSERT INTO social_contact_channel
+               (channel_id, party_id, kind, value, normalized_value, created_at)
+             VALUES ('channel-2', 'party-2', 'email', 'Ravi.Menon@Example.org',
+                     'ravi.menon@example.org', ?1),
+                    ('channel-3', 'party-2', 'phone', '+44 20 7946 0958', '+442079460958', ?1)",
+            [NOW],
+        )
+        .expect("channels are inserted");
+    connection
+        .execute(
+            "INSERT INTO knowledge_annotation
+               (annotation_id, author_party_id, target_type, target_id, body_text, created_at)
+             VALUES ('annotation-2', 'party-1', 'core.party', 'party-2', 'loves kayaking', ?1),
+                    ('annotation-3', 'party-1', 'locker.item', 'item-1', 'zebrafish memo', ?1)",
+            [NOW],
+        )
+        .expect("memos are inserted");
+}
+
+#[test]
+fn a_person_is_found_by_nickname_role_where_they_met_email_phone_and_memo() {
+    let connection = vault();
+    seed_person(&connection);
+    let door = door(&connection);
+    for query in [
+        "chotu",
+        "cousin",
+        "goa",
+        "ravi.menon@example.org",
+        "442079460958",
+        "7946",
+        "kayaking",
+    ] {
+        assert_eq!(
+            found(&door, "core.party", query),
+            ids(["party-2"]),
+            "`{query}` finds the person"
+        );
+    }
+    // The snippet is the index's own highlight, so it shows the folded word.
+    let answer = door
+        .query(
+            &Principal::Owner,
+            &SearchRequest::new("core.party", "chotu", 8),
+        )
+        .expect("people answer");
+    assert!(targets(&answer)[0].snippet.contains("⟦"));
+    // A Locker memo is an annotation too, and it is in no domain's index.
+    for entity in DOMAINS.iter().map(|domain| domain.entity) {
+        assert_eq!(found(&door, entity, "zebrafish"), Vec::<String>::new());
+    }
+}
+
+#[test]
+fn an_event_is_found_by_its_place() {
+    let connection = vault();
+    connection
+        .execute(
+            "INSERT INTO core_place (place_id, name, created_at) VALUES ('place-1', 'Lisbon Docks', ?1)",
+            [NOW],
+        )
+        .expect("a place is inserted");
+    connection
+        .execute(
+            "INSERT INTO core_event
+               (event_id, summary, dtstart, start_tz, status, sequence, location_place_id, created_at)
+             VALUES ('event-2', 'Team offsite', '2099-06-12T09:00:00.000Z', 'Europe/London',
+                     'confirmed', 0, 'place-1', ?1)",
+            [NOW],
+        )
+        .expect("an event is inserted");
+    let door = door(&connection);
+    assert_eq!(found(&door, "core.event", "lisbon"), ids(["event-2"]));
+    // The place's own rename reaches the event's row.
+    connection
+        .execute(
+            "UPDATE core_place SET name = 'Porto Riverside' WHERE place_id = 'place-1'",
+            [],
+        )
+        .expect("the place is renamed");
+    assert_eq!(found(&door, "core.event", "lisbon"), Vec::<String>::new());
+    assert_eq!(found(&door, "core.event", "porto"), ids(["event-2"]));
+}
+
+#[test]
+fn a_task_is_found_by_its_project() {
+    let connection = vault();
+    connection
+        .execute(
+            "INSERT INTO schedule_project (project_id, owner_party_id, name, created_at)
+             VALUES ('project-1', 'party-1', 'Kitchen refit', ?1)",
+            [NOW],
+        )
+        .expect("a project is inserted");
+    connection
+        .execute(
+            "INSERT INTO schedule_task
+               (task_id, owner_party_id, title, status, priority, created_at, updated_at, project_id)
+             VALUES ('task-2', 'party-1', 'Order tiles', 'needs-action', 0, ?1, ?1, 'project-1')",
+            [NOW],
+        )
+        .expect("a task is inserted");
+    let door = door(&connection);
+    assert_eq!(found(&door, "schedule.task", "kitchen"), ids(["task-2"]));
+}
+
+#[test]
+fn an_expense_is_found_by_category_group_line_item_and_memo() {
+    let connection = vault();
+    connection
+        .execute(
+            "INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
+             VALUES ('circle-1', 'party-1', 'Sitwell Road', 'custom')",
+            [],
+        )
+        .expect("a circle is inserted");
+    connection
+        .execute(
+            "INSERT INTO tally_group (group_id, circle_id, icon, color, currency, created_at)
+             VALUES ('group-1', 'circle-1', 'x', 'blue', 'GBP', ?1)",
+            [NOW],
+        )
+        .expect("a group is inserted");
+    connection
+        .execute(
+            "INSERT INTO tally_expense
+               (expense_id, group_id, description, amount_minor, currency, paid_by, spent_on,
+                category, created_at)
+             VALUES ('expense-2', 'group-1', 'Hardware shop', 3000, 'GBP', 'party-1',
+                     '2099-05-04', 'utilities', ?1)",
+            [NOW],
+        )
+        .expect("an expense is inserted");
+    connection
+        .execute(
+            "INSERT INTO tally_expense_line_item
+               (line_item_id, expense_id, kind, description, amount_minor, sort_order, created_at)
+             VALUES ('line-1', 'expense-2', 'item', 'Paint', 2000, 0, ?1),
+                    ('line-2', 'expense-2', 'item', 'Brushes', 1000, 1, ?1)",
+            [NOW],
+        )
+        .expect("line items are inserted");
+    connection
+        .execute(
+            "INSERT INTO knowledge_annotation
+               (annotation_id, author_party_id, target_type, target_id, body_text, created_at)
+             VALUES ('annotation-4', 'party-1', 'tally.expense', 'expense-2', 'the red folder', ?1)",
+            [NOW],
+        )
+        .expect("a memo is inserted");
+    let door = door(&connection);
+    for query in ["utilities", "sitwell", "paint", "brushes", "folder"] {
+        assert_eq!(
+            found(&door, "tally.expense", query),
+            ids(["expense-2"]),
+            "`{query}` finds the expense"
+        );
+    }
+    // The seeded expense's own category is a column of its index too.
+    assert_eq!(found(&door, "tally.expense", "travel"), ids(["expense-1"]));
+}
+
+// ---------------------------------------------------------------------------
+// The weight of a folded column, in a replayed vault and in a founded one
+// ---------------------------------------------------------------------------
+
+/// A project and five tasks: the word `gutters` is the title of one task and
+/// the project of another.
+///
+/// The title hit sits in a longer row than the project hit, so equal weights
+/// rank the shorter row first — which is what makes the order below the
+/// WEIGHTS' doing. Three rows without the word keep its idf positive.
+fn plant_gutters(connection: &Connection, owner: &str) -> rusqlite::Result<()> {
+    connection.execute(
+        "INSERT INTO schedule_project (project_id, owner_party_id, name, created_at)
+         VALUES ('project-gutters', ?1, 'Gutters', ?2)",
+        rusqlite::params![owner, NOW],
+    )?;
+    for (id, title, description, project) in [
+        ("task-title", "Gutters", Some("clean before"), None),
+        ("task-project", "Errands", None, Some("project-gutters")),
+        ("task-a", "Milk", None, None),
+        ("task-b", "Eggs", None, None),
+        ("task-c", "Bread", None, None),
+    ] {
+        connection.execute(
+            "INSERT INTO schedule_task
+               (task_id, owner_party_id, title, description, status, priority,
+                created_at, updated_at, project_id)
+             VALUES (?1, ?2, ?3, ?4, 'needs-action', 0, ?5, ?5, ?6)",
+            rusqlite::params![id, owner, title, description, NOW, project],
+        )?;
+    }
+    Ok(())
+}
+
+/// The door's order for `gutters`, and the order the same index gives with equal
+/// weights.
+fn gutters_ranked(connection: &Connection) -> (Vec<String>, Vec<String>) {
+    let door = door(connection);
+    let by_door = found(&door, "schedule.task", "gutters");
+    let mut statement = connection
+        .prepare(
+            "SELECT task_id FROM fts_schedule_task
+              WHERE fts_schedule_task MATCH 'gutters'
+              ORDER BY bm25(fts_schedule_task, 1.0, 1.0, 1.0, 1.0)",
+        )
+        .expect("the control prepares");
+    let equal = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .expect("the control runs")
+        .collect::<rusqlite::Result<Vec<String>>>()
+        .expect("the control reads");
+    (by_door, equal)
+}
+
+fn assert_a_title_outranks_a_project(by_door: &[String], by_equal_weights: &[String]) {
+    let rows = |all: &[String]| -> Vec<String> {
+        all.iter()
+            .filter(|id| id.starts_with("task-title") || id.starts_with("task-project"))
+            .cloned()
+            .collect()
+    };
+    assert_eq!(
+        rows(by_equal_weights),
+        ids(["task-project", "task-title"]),
+        "with equal weights the shorter row wins, so this test discriminates"
+    );
+    assert_eq!(
+        rows(by_door),
+        ids(["task-title", "task-project"]),
+        "the folded project weighs less than the title"
+    );
+}
+
+/// THE WEIGHTS ARE THE DOOR'S, so a vault built by replaying the DDL ranks as a
+/// founded one does (#1097, R1d). This is the replayed one.
+#[test]
+fn a_title_hit_ranks_above_a_project_hit_in_a_replayed_vault() {
+    let connection = vault();
+    plant_gutters(&connection, "party-1").expect("the tasks are written");
+    let (by_door, equal) = gutters_ranked(&connection);
+    assert_a_title_outranks_a_project(&by_door, &equal);
+}
+
+/// And the founded one: `Vault::create`, every rung run, no weights stored.
+#[test]
+fn a_title_hit_ranks_above_a_project_hit_in_a_founded_vault() {
+    let founded = founded_vault("door-rank");
+    let owner = owner_of(&founded);
+    founded
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            plant_gutters(tx.connection(), &owner)?;
+            Ok(())
+        })
+        .expect("the tasks are written");
+    let (by_door, equal) = founded
+        .read(|connection| Ok(gutters_ranked(connection)))
+        .expect("the ranking reads");
+    assert_a_title_outranks_a_project(&by_door, &equal);
+}
+
+fn founded_vault(seed: &str) -> centraid_vault::Vault {
+    use centraid_vault::clock::{FixedClock, SeededIds};
+
+    let dir = centraid_ontology::golden::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("a scratch directory");
+    let vault = centraid_vault::Vault::create_with(
+        dir.join("vault.db"),
+        Box::new(FixedClock::frozen()),
+        Box::new(SeededIds::new(seed)),
+    )
+    .expect("a vault is created");
+    vault
+        .found("Test", "Test Owner")
+        .expect("a vault is founded");
+    vault
+}
+
+fn owner_of(vault: &centraid_vault::Vault) -> String {
+    vault
+        .read(|connection| {
+            Ok(
+                connection.query_row(
+                    "SELECT self_party_id FROM core_vault LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )?,
+            )
+        })
+        .expect("an owner")
+}
+
+/// The index columns rung thirteen folded in, which are the ones that weigh half.
+/// Written out here, apart from the list in `domains.rs`, so a weight that sits
+/// on the wrong column is a difference between two statements of one fact.
+const HALF_WEIGHT: [(&str, &str); 11] = [
+    ("core.party", "nickname"),
+    ("core.party", "role"),
+    ("core.party", "met"),
+    ("core.party", "channels"),
+    ("core.party", "memo"),
+    ("core.event", "location"),
+    ("schedule.task", "project"),
+    ("tally.expense", "category"),
+    ("tally.expense", "group_name"),
+    ("tally.expense", "items"),
+    ("tally.expense", "memo"),
+];
+
+fn assert_weights_sit_on_their_columns(connection: &Connection) {
+    for domain in DOMAINS {
+        let live: Vec<String> = connection
+            .prepare("SELECT name FROM pragma_table_info(?1) ORDER BY cid")
+            .expect("the columns prepare")
+            .query_map([domain.fts], |row| row.get::<_, String>(0))
+            .expect("the columns read")
+            .collect::<rusqlite::Result<_>>()
+            .expect("the columns read");
+        assert_eq!(
+            live.len(),
+            domain.weights.len(),
+            "{} has {} columns and {} weights",
+            domain.fts,
+            live.len(),
+            domain.weights.len()
+        );
+        for (column, weight) in live.iter().zip(domain.weights) {
+            let expected = if HALF_WEIGHT.contains(&(domain.entity, column.as_str())) {
+                0.5
+            } else {
+                1.0
+            };
+            assert!(
+                (weight - expected).abs() < f64::EPSILON,
+                "{}.{column} weighs {weight}, not {expected}",
+                domain.fts
+            );
+        }
+    }
+}
+
+#[test]
+fn every_weight_sits_on_the_column_it_names_in_both_kinds_of_vault() {
+    assert_weights_sit_on_their_columns(&vault());
+    let founded = founded_vault("door-weights");
+    founded
+        .read(|connection| {
+            assert_weights_sit_on_their_columns(connection);
+            Ok(())
+        })
+        .expect("the founded schema reads");
+}
+
+/// No index stores a rank: a stored override would make the two kinds of vault
+/// disagree again.
+#[test]
+fn no_index_stores_a_rank_override() {
+    let founded = founded_vault("door-no-rank");
+    founded
+        .read(|connection| {
+            for domain in DOMAINS {
+                let stored: i64 = connection.query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM {}_config WHERE k = 'rank'",
+                        domain.fts
+                    ),
+                    [],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(stored, 0, "{} stores a rank", domain.fts);
+            }
+            Ok(())
+        })
+        .expect("the config reads");
+}
+
+// ---------------------------------------------------------------------------
+// The open-time check over a real model
+// ---------------------------------------------------------------------------
+
+/// A DEMONSTRATED RED over the committed model: an index that grew a column
+/// nobody listed does not open, whatever the column is called.
+#[test]
+fn an_index_that_grew_an_unlisted_column_fails_to_open_over_the_committed_model() {
+    let connection = vault();
+    assert!(SqliteDoor::open(&connection).is_ok());
+    connection
+        .execute_batch(
+            "DROP TABLE fts_core_party;
+             CREATE VIRTUAL TABLE fts_core_party USING fts5(
+               party_id UNINDEXED, display_name, sort_name, nickname, role, met, channels, memo,
+               scratchpad, tokenize = \"unicode61 remove_diacritics 2\");",
+        )
+        .expect("the index is rebuilt with one more column");
+    match SqliteDoor::open(&connection) {
+        Err(SearchError::IndexUnusable { entity, detail }) => {
+            assert_eq!(entity, "core.party");
+            assert!(detail.contains("scratchpad"), "{detail}");
+        }
+        other => panic!(
+            "the door opened over an unlisted fold: {:?}",
+            other.map(|_| ())
+        ),
+    }
+}

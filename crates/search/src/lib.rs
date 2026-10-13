@@ -36,7 +36,10 @@
 //!    spec naming a sealed column (issue #293) — FTS exclusion is one of the
 //!    six sealed-column enforcement points (census §D2). [`SqliteDoor::open`]
 //!    re-checks the live index columns
-//!    against the same registry, so the DDL and this door cannot disagree.
+//!    against the same registry, so the DDL and this door cannot disagree. A
+//!    column folded in from another table ([`domains::FOLDED`], #1097) is held
+//!    to it through its listed sources, and an index column nobody listed does
+//!    not open.
 //! 3. **`locker.item` is not a domain.** The absence is structural: the powerbox
 //!    reaches seven domains and Locker is not one of them, so a secret
 //!    cannot become a link target by *adding a probe*. Asking for it is a
