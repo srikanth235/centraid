@@ -14,25 +14,27 @@
 //!   there is no statement to run, and "nothing matched" would be a different
 //!   claim about the vault than the one the caller is owed.
 
+use centraid_apps_kit::spelling::{MAX_WORDS, words};
+
 use crate::SearchError;
 
 /// At most this many words reach the index. v0's slice
 /// (`search.ts:34`), kept: a hundred-word paste is a question about the
-/// tokenizer's cost, not about the member's notes.
-pub const MAX_MATCH_TOKENS: usize = 16;
+/// tokenizer's cost, not about the member's notes. The number is the kit's
+/// ([`MAX_WORDS`]), because the words a query is read as are the kit's too.
+pub const MAX_MATCH_TOKENS: usize = MAX_WORDS;
 
 /// Owner-typed words → an FTS5 MATCH expression.
+///
+/// The words are [`centraid_apps_kit::spelling::words`] — **one tokenization**,
+/// shared with the correction (`Search::correct`), so the word a member sees
+/// corrected is the word the index was asked for (#1097, R5).
 ///
 /// # Errors
 ///
 /// [`SearchError::NoSearchableWords`] when nothing searchable survives.
 pub fn match_expression(query: &str) -> Result<String, SearchError> {
-    let tokens: Vec<String> = query
-        .split_whitespace()
-        .map(|token| token.replace('"', ""))
-        .filter(|token| token.chars().any(char::is_alphanumeric))
-        .take(MAX_MATCH_TOKENS)
-        .collect();
+    let tokens: Vec<String> = words(query);
     if tokens.is_empty() {
         return Err(SearchError::NoSearchableWords {
             query: query.to_owned(),

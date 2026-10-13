@@ -435,7 +435,7 @@ pub fn resolve_value(kind: Kind, field: &str, literal: &str) -> Option<&'static 
                 && (squash(name).starts_with(&said)
                     || name.split('_').any(|part| squash(part) == said))
         },
-        &|name| crate::native::resolve::one_edit(&said, &squash(name)),
+        &|name| centraid_apps_kit::spelling::one_edit(&said, &squash(name)),
     ];
     for tier in tiers {
         let found: Vec<&'static str> = names.iter().copied().filter(|name| tier(name)).collect();
@@ -540,7 +540,7 @@ pub fn resolve_currency(literal: &str, held: &[String]) -> Option<String> {
         .iter()
         .filter(|code| {
             let code = code.to_lowercase();
-            code.starts_with(&lower) || crate::native::resolve::within_one(&lower, &code)
+            code.starts_with(&lower) || centraid_apps_kit::spelling::within_one(&lower, &code)
         })
         .collect())
 }

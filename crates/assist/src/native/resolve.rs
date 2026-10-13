@@ -31,15 +31,14 @@
 
 use std::collections::BTreeSet;
 
+// THE TYPO RULE IS THE KIT'S (#1097, R5): `one_edit` and the lengths it is read in
+// (`PREFIX_MIN`, a name word's shortest start; `TYPO_MIN`, a word's shortest typo) moved
+// to `centraid_apps_kit::spelling` so search reads the same rule, unchanged.
+use centraid_apps_kit::spelling::{PREFIX_MIN, one_edit};
+
 use crate::native::search::{Spoken, aliases, fold, is_apostrophe, spellings_of, spoken_tokens};
 use crate::native::session::Session;
 use crate::native::world::{Key, Row};
-
-/// The shortest prefix of a name word a person's word may be (`kit` for `kitchen`, never `ki`).
-const PREFIX_MIN: usize = 3;
-
-/// The shortest word a typo is read in.
-const TYPO_MIN: usize = 4;
 
 /// How a name was reached; the lower, the better.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -258,40 +257,6 @@ fn light_stems(text: &str) -> Vec<String> {
 /// Whether `word` is `have` or begins it (three letters or more).
 fn starts_alike(word: &str, have: &str) -> bool {
     word == have || (word.chars().count() >= PREFIX_MIN && have.starts_with(word))
-}
-
-/// Whether two words are one edit apart: a letter more, fewer or different, or two neighbours
-/// swapped. The word said is of `TYPO_MIN` letters or more and has no digit.
-pub(crate) fn one_edit(word: &str, have: &str) -> bool {
-    if word.chars().count() < TYPO_MIN
-        || have.chars().count() < PREFIX_MIN
-        || !word.chars().all(char::is_alphabetic)
-    {
-        return false;
-    }
-    within_one(word, have)
-}
-
-/// Whether two texts are one edit apart, whatever their length (`one_edit` without its limits:
-/// a currency code of three letters is read with it).
-pub(crate) fn within_one(word: &str, have: &str) -> bool {
-    let (a, b): (Vec<char>, Vec<char>) = (word.chars().collect(), have.chars().collect());
-    if a == b || a.len().abs_diff(b.len()) > 1 {
-        return false;
-    }
-    let common = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
-    match a.len().cmp(&b.len()) {
-        std::cmp::Ordering::Equal => {
-            let after = common + 1;
-            a[after..] == b[after..]
-                || (a.len() > after
-                    && a[common] == b[after]
-                    && a[after] == b[common]
-                    && a[after + 1..] == b[after + 1..])
-        }
-        std::cmp::Ordering::Greater => a[common + 1..] == b[common..],
-        std::cmp::Ordering::Less => a[common..] == b[common + 1..],
-    }
 }
 
 /// How a literal a person wrote reads a text value of a row (nt13 R2), best first: `0` the same

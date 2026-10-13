@@ -636,6 +636,10 @@ pub(crate) fn name_reach(session: &Session, text: &str, kinds: &[Kind]) -> Vec<K
 // `search`.
 // ---------------------------------------------------------------------------
 
+// The assistant's OWN measure for ranking a search's words: Levenshtein, with a limit of two for a
+// word of seven letters or more. It is not the typo rule (`centraid_apps_kit::spelling::one_edit`,
+// Damerau one, shared with search since #1097 R5) and is not meant to be: the 0.8B evaluation is
+// scored against these rankings, so `edit_distance` and `word_score` stay as they are (R5a).
 fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
@@ -1091,10 +1095,11 @@ fn near_candidate(token: &str) -> bool {
 }
 
 /// Whether a message word reaches a row only as a NEAR SPELLING (nt15 R3c, R3e): one edit
-/// (`crate::native::resolve::one_edit`) from a word of the row's names with the same first letter (a slip
-/// is rarely the first letter: `brazil` for `Brasil`, not `right` for `night`), and not the plain
-/// plural or singular of it (`logins` for `login` is a category, not a slip); or the one word the
-/// words of a name make when said joined, or one edit from it (`weijie` for `Wei Jie`).
+/// (`centraid_apps_kit::spelling::one_edit`) from a word of the row's names with the same first
+/// letter (a slip is rarely the first letter: `brazil` for `Brasil`, not `right` for `night`), and
+/// not the plain plural or singular of it (`logins` for `login` is a category, not a slip); or the
+/// one word the words of a name make when said joined, or one edit from it (`weijie` for
+/// `Wei Jie`).
 fn near_spelling(token: &str, names: &[&str], spelled: &[String]) -> bool {
     let first = token.chars().next();
     let plural = |word: &str| {
@@ -1108,7 +1113,7 @@ fn near_spelling(token: &str, names: &[&str], spelled: &[String]) -> bool {
     if spelled.iter().any(|word| {
         word.chars().next() == first
             && !plural(word)
-            && crate::native::resolve::one_edit(token, word)
+            && centraid_apps_kit::spelling::one_edit(token, word)
     }) {
         return true;
     }
@@ -1119,7 +1124,7 @@ fn near_spelling(token: &str, names: &[&str], spelled: &[String]) -> bool {
                 let joined = words[from..=to].concat();
                 joined == token
                     || (joined.chars().next() == first
-                        && crate::native::resolve::one_edit(token, &joined))
+                        && centraid_apps_kit::spelling::one_edit(token, &joined))
             })
         })
     })
