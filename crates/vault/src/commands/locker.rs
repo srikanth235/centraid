@@ -742,7 +742,9 @@ fn set_addresses(ctx: &CommandCtx<'_, '_>, item_id: &str, addresses: &[String]) 
 /// Replace the owner's plaintext memo — `knowledge.annotation` (#310).
 ///
 /// Plaintext on purpose: a secret goes in a **sealed field**, which stays out
-/// of every index. A memo is the thing a member wants to find by searching.
+/// of every index. A memo is the thing a member wants to read back and find. It
+/// is in no full-text index either: Locker is not a search domain, and rung
+/// thirteen retired the one index that held annotations (#1097, R1c).
 fn replace_memo(ctx: &CommandCtx<'_, '_>, item_id: &str, note: &str) -> Result<()> {
     ctx.connection().execute(
         "DELETE FROM knowledge_annotation WHERE target_type = ?1 AND target_id = ?2",
@@ -2185,9 +2187,8 @@ fn set_memo() -> CommandDefinition {
             let item_id = ctx.required_str("item_id")?.to_owned();
             // An owner remark is a `knowledge.annotation` (#310) and is
             // PLAINTEXT. Secrets go in sealed fields, which stay out of every
-            // index — and this one is deliberately IN one, because a memo is
-            // the thing a member wants to find by searching. An empty note
-            // clears it.
+            // index; a memo is in none either, because Locker is not a search
+            // domain (#1097, R1c). An empty note clears it.
             replace_memo(ctx, &item_id, ctx.required_str("note")?)?;
             ctx.connection().execute(
                 "UPDATE locker_item SET updated_at = ?1 WHERE item_id = ?2",

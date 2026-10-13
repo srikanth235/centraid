@@ -153,6 +153,20 @@ pub const CHAT_SQL: &str = include_str!("../../../contracts/migrations/011_chat.
 pub const CHAT_PROPOSALS_SQL: &str =
     include_str!("../../../contracts/migrations/012_chat_proposals.sql");
 
+/// Rung thirteen: search finds what a member typed (#1097, R1-R3).
+///
+/// Four domain indexes fold in the attribute text that lived in tables nothing
+/// read (a person's nickname, reach and memos; an event's place; a task's
+/// project; an expense's category, group, items and memo), with child-table
+/// triggers that re-index the parent. The rank weights are the search door's and
+/// not a row in the index (R1d). Five indexes no
+/// one reads leave, and each of the seven domain indexes gains a persistent
+/// `fts5vocab` table for the correction pass. Every statement is guarded with
+/// IF EXISTS, because the suites wind a founded file back by pragma and climb
+/// again over this rung's own objects.
+pub const SEARCH_COVERAGE_SQL: &str =
+    include_str!("../../../contracts/migrations/013_search_coverage.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -218,6 +232,11 @@ pub const LADDER: &[Migration] = &[
         version: 12,
         name: "chat-proposals",
         sql: CHAT_PROPOSALS_SQL,
+    },
+    Migration {
+        version: 13,
+        name: "search-coverage",
+        sql: SEARCH_COVERAGE_SQL,
     },
 ];
 

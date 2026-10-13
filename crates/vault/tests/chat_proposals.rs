@@ -574,7 +574,8 @@ fn a_vault_at_rung_eleven_climbs_rung_twelve_keeping_every_message_card_and_atta
     // THE REAL PATH: `Vault::open` sees rung eleven, snapshots, and climbs.
     let migrated = Vault::open(&path).expect("the file climbs rung twelve");
     assert_eq!(migrated.schema_version(), centraid_vault::head_version());
-    assert_eq!(migrated.schema_version(), 12);
+    // Rung twelve is in the ladder this climb ran, whatever rungs sit above it.
+    assert!(centraid_vault::head_version() >= 12);
     let (after, orphans, schema) = migrated
         .read(|connection| {
             let orphans: i64 = connection.query_row(
@@ -681,7 +682,7 @@ fn a_vault_below_rung_eleven_climbs_through_twelve_with_the_widened_list() {
         .unwrap();
     }
     let migrated = Vault::open(&path).expect("the file climbs rungs eleven and twelve");
-    assert_eq!(migrated.schema_version(), 12);
+    assert_eq!(migrated.schema_version(), centraid_vault::head_version());
     let registry = Registry::with_system_commands().unwrap();
     registry.install(&migrated).unwrap();
     let saved = migrated
