@@ -203,9 +203,9 @@ message LockerPasskey {
   string created_local_day = 7;
 }
 
-// `locker.search` (62): title, username and address only (the handoff's
-// search note: secret values and notes are never searched). Live and archived
-// items; trashed ones are not found.
+// `locker.search` (62): title, username and address (the handoff's three) and,
+// since #1097, the note, full name, email, phone, card brand, aliases and memo.
+// Never a sealed cell. Live and archived items; trashed ones are not found.
 message LockerSearchRequest {
   string term = 1;
   // At most this many rows; 0 is 50.

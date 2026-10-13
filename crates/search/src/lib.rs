@@ -20,7 +20,7 @@
 //! | A denial is a VALUE | [`Answer`] is `Denied` or `Data`, never an `Err` (census §A seam 6) |
 //! | A bound reports the size it reaches | [`SearchRequest::limit`] is clamped by [`MAX_MATCH_ROWS`] and [`Answer::window`] says what it actually was (D-1020-D3-12) |
 //! | **A result can carry no secret** | [`Target`], and [`domains::assert_no_sealed_column`] — see below |
-//! | A correction is a bounded lookup (#1097) | [`Search::correct`] replaces a word by a prefix of a term the named domains' vocabularies hold, reads at most [`MAX_VOCAB_SCAN`] rows per word per domain, and refuses an entity that is not a domain exactly as `query` does |
+//! | A correction is a bounded lookup (#1097) | [`Search::correct`] replaces a word by a whole term the named domains' vocabularies hold, reads at most [`MAX_VOCAB_SCAN`] rows per word per domain, and refuses an entity that is not a domain exactly as `query` does |
 //!
 //! ## Secret-free BY CONSTRUCTION, not by filtering
 //!
@@ -243,8 +243,8 @@ pub trait Search {
     /// searched for. It is a correction and never a wider match: a word the
     /// vocabulary holds is kept, a word of fewer than four letters or with a digit
     /// is kept, a slip in the first letter is not corrected (except a swap of the
-    /// first two), and the replacement is always a prefix of a term the named
-    /// domains' vocabularies hold. The rule is
+    /// first two), and the replacement is always a whole term the named
+    /// domains' vocabularies hold (R4b). The rule is
     /// [`centraid_apps_kit::spelling`]'s, which the assistant's name resolver
     /// reads too.
     ///
