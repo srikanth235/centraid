@@ -95,7 +95,11 @@ export function bannedIn(key, value) {
 
 /** Word caps by key suffix, first match wins. */
 export const CAPS = [
-  { kind: "action", max: 4, re: /(?:^|_)(?:LABEL|ACTION|PRIMARY|SECONDARY|BUTTON|COMMIT|VERB)$/u },
+  {
+    kind: "action",
+    max: 4,
+    re: /(?:^|_)(?:LABEL|ACTION|PRIMARY|SECONDARY|BUTTON|COMMIT|VERB)$/u,
+  },
   { kind: "note", max: 12, re: /(?:^|_)(?:NOTE|DETAIL|LEDE|STATUS|HINT)$/u },
   { kind: "body", max: 25, re: /(?:^|_)(?:BODY|LEAD|NOTICE)$/u },
   { kind: "error", max: 25, re: /(?:^|_)(?:FAILED|ERROR|REFUSED|DENIED)$/u },
@@ -265,7 +269,9 @@ function main() {
     );
   }
   if (under.length > 0) {
-    console.error("\nFAIL — ratchet down: the measured count is below budget:\n");
+    console.error(
+      "\nFAIL — ratchet down: the measured count is below budget:\n"
+    );
     for (const u of under) {
       console.error(
         `  ${u.rule}  ${u.file}: ${u.count} (budget ${u.budget}) — lower the BUDGET entry to ${u.count}${u.count === 0 ? " (delete it)" : ""} in scripts/lint-copy.mjs`

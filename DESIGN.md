@@ -553,7 +553,6 @@ Rulings that hold for every control:
 - **Loading, empty and failure** go through `ReadStateView`; a bare spinner outside the kit is a finding, and an empty state with something to do carries its action.
 - **More and Reads** sheets are `OptionSheet`s; a `NavigationStack` inside a sheet is for a sheet that pushes.
 
-
 ## Copy
 
 **Copy is signage, not conversation.** The voice is calm, concrete, and specific — the same voice the rest of this document is written in — and it is read at a glance, on the way to something else. One glance is the unit: a label a member has to parse twice has already failed, and a second sentence explaining the first one is the label admitting it did not work. Crisp is not curt. "Photo deleted" is the register; "Deleted" throws away the noun that made it legible, and "Your photo has been successfully deleted." pads a fact into an announcement.
@@ -590,9 +589,9 @@ Every string has a budget, and the budget is the contract. Copy lives in `copy/<
 
 A literal command the member types stays as written (`centraid-gateway pair`), and where the member types the key, "the 24 words of your recovery key" is fine. Internals are not copy either: never seal/unseal, receipt, ledger, drain, "derived", "in memory", "at rest", "by design" or `core.*` — say what the member can do or what happened. Do not hard-code counts that rot ("Eight apps").
 
-**Hard caps.** The surface budgets above are the target; these are the ceiling, by key suffix, in words (a `{placeholder}` is one word): `_LABEL`, `_ACTION`, `_PRIMARY`, `_SECONDARY`, `_BUTTON` 4; `_NOTE`, `_DETAIL`, `_LEDE`, `_STATUS`, `_HINT` 12; `_BODY`, `_LEAD`, `_NOTICE` and errors (`_FAILED`, `_ERROR`, `_REFUSED`, `_DENIED`) 25; `_TITLE` 6. A ` · ` never joins two thoughts in one string — split it or cut one; it survives only between short metadata facts ("Edited · 3 days ago", six words or fewer).
+**Hard caps.** The surface budgets above are the target; these are the ceiling, by key suffix, in words (a `{placeholder}` is one word): `_LABEL`, `_ACTION`, `_PRIMARY`, `_SECONDARY`, `_BUTTON` 4; `_NOTE`, `_DETAIL`, `_LEDE`, `_STATUS`, `_HINT` 12; `_BODY`, `_LEAD`, `_NOTICE` and errors (`_FAILED`, `_ERROR`, `_REFUSED`, `_DENIED`) 25; `_TITLE` 6. A `·` never joins two thoughts in one string — split it or cut one; it survives only between short metadata facts ("Edited · 3 days ago", six words or fewer).
 
-`bun run lint:copy` ([scripts/lint-copy.mjs](scripts/lint-copy.mjs)) enforces the banned words, the vocabulary's retired terms, the ` · ` rule and the caps over every `copy/*.json` string. It is a shrink-only ratchet like the controls gate: a per-file budget that only goes down, so fix the string rather than raise it.
+`bun run lint:copy` ([scripts/lint-copy.mjs](scripts/lint-copy.mjs)) enforces the banned words, the vocabulary's retired terms, the `·` rule and the caps over every `copy/*.json` string. It is a shrink-only ratchet like the controls gate: a per-file budget that only goes down, so fix the string rather than raise it.
 
 The reassurance rule cuts both ways, and the second half is as binding as the first. Photos' faces disclosure keeps its full sentence — "Faces are proposed on a photograph you open, and a name is only ever yours to confirm. Nobody is named until you name them." — because it sits exactly where a member decides whether to let recognition name people. A toast, an empty state, or a shelf header making the same promise a fourth time is not more trustworthy; it is noise the disclosure has to compete with.
 

@@ -242,19 +242,19 @@ function main() {
       "\nFAIL — native controls outside the kit exceed their budget:\n"
     );
     for (const o of over) {
-      console.error(
-        `  ${o.rule}  ${o.file}: ${o.count} (budget ${o.budget})`
-      );
+      console.error(`  ${o.rule}  ${o.file}: ${o.count} (budget ${o.budget})`);
     }
     console.error(
-      "\nDESIGN.md \"The controls (mobile)\": draw the control from the kit\n" +
+      '\nDESIGN.md "The controls (mobile)": draw the control from the kit\n' +
         "(InkButton/QuietButton/KitLink/IconKey/ConfirmSheet/ReadStateView, a\n" +
         "token radius, a leaf disabled ink). Do not raise the budget; see the\n" +
         "header of scripts/lint-native-controls.mjs.\n"
     );
   }
   if (under.length > 0) {
-    console.error("\nFAIL — ratchet down: the measured count is below budget:\n");
+    console.error(
+      "\nFAIL — ratchet down: the measured count is below budget:\n"
+    );
     for (const u of under) {
       console.error(
         `  ${u.rule}  ${u.file}: ${u.count} (budget ${u.budget}) — lower the BUDGET entry to ${u.count}${u.count === 0 ? " (delete it)" : ""} in scripts/lint-native-controls.mjs`

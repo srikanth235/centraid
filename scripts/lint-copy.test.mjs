@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+// oxlint-disable-next-line no-restricted-imports -- (#1098) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is the `finally` below. Same pattern as scripts/lint-tsconfigs.test.mjs.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -78,7 +79,9 @@ test("gateway is allowed only inside a quoted centraid-gateway command", () => {
 });
 
 test("24 words is allowed only where the member types the recovery key", () => {
-  assert.deepEqual(bannedIn("SAVE_BODY", "Write down your 24 words"), ["24 words"]);
+  assert.deepEqual(bannedIn("SAVE_BODY", "Write down your 24 words"), [
+    "24 words",
+  ]);
   assert.deepEqual(bannedIn("TYPE_BODY", "Type your 24 words"), []);
   assert.deepEqual(bannedIn("ENTER_NOTE", "Enter all 24 words"), []);
   assert.deepEqual(bannedIn("PAIR_WORDS_NOTE", "The 24 words"), []);
@@ -93,7 +96,10 @@ test("a dot-join is exempt as short metadata and flagged as two thoughts", () =>
   assert.deepEqual(rules("X_META", "Edited · 3 days ago"), []);
   assert.deepEqual(rules("X_META", "Edited · {when} · {who}"), []);
   assert.deepEqual(
-    rules("X_META", "Titles are browsable · a secret is only opened when you unlock"),
+    rules(
+      "X_META",
+      "Titles are browsable · a secret is only opened when you unlock"
+    ),
     ["copy-dot-join"]
   );
   assert.deepEqual(
@@ -179,7 +185,9 @@ test("lintCopy reads strings only and honours the budget", () => {
     const stale = lintCopy(root, { "copy-banned-word": { "copy/a.json": 2 } });
     assert.equal(stale.under.length, 1);
 
-    assert.deepEqual(lintCopy(path.join(root, "nowhere"), {}).missing, ["copy"]);
+    assert.deepEqual(lintCopy(path.join(root, "nowhere"), {}).missing, [
+      "copy",
+    ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

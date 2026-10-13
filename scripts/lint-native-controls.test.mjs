@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+// oxlint-disable-next-line no-restricted-imports -- (#1098) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is the `finally` below. Same pattern as scripts/lint-tsconfigs.test.mjs.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -102,7 +103,10 @@ test("lintNativeControls exempts the kit and honours the budget", () => {
   const root = mkdtempSync(path.join(tmpdir(), "native-controls-"));
   try {
     const ios = path.join(root, "mobile/iosApp/Sources");
-    const droid = path.join(root, "mobile/androidApp/src/main/kotlin/dev/centraid/android");
+    const droid = path.join(
+      root,
+      "mobile/androidApp/src/main/kotlin/dev/centraid/android"
+    );
     mkdirSync(path.join(ios, "Kit"), { recursive: true });
     mkdirSync(path.join(droid, "kit"), { recursive: true });
     writeFileSync(path.join(ios, "Kit/K.swift"), "ProgressView()\n");
@@ -111,7 +115,8 @@ test("lintNativeControls exempts the kit and honours the budget", () => {
     writeFileSync(path.join(droid, "Screen.kt"), "IconButton(x)\n");
 
     const rel = "mobile/iosApp/Sources/Screen.swift";
-    const relKt = "mobile/androidApp/src/main/kotlin/dev/centraid/android/Screen.kt";
+    const relKt =
+      "mobile/androidApp/src/main/kotlin/dev/centraid/android/Screen.kt";
     const ok = lintNativeControls(root, {
       "native-bare-spinner": { [rel]: 1 },
       "native-icon-button": { [relKt]: 1 },
