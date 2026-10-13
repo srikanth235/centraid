@@ -68,11 +68,13 @@ import dev.centraid.android.screens.backup.writeTransferRule
 import dev.centraid.android.kit.TransferRulesSheet
 import dev.centraid.android.screens.HomeScreen
 import dev.centraid.android.theme.CentraidTheme
+import dev.centraid.android.theme.centraidDark
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.platform.platformServices
+import dev.centraid.shared.shell.Appearance
 import dev.centraid.shared.shell.TransferRuleChoice
 import dev.centraid.shared.shell.Shelf
 import dev.centraid.shared.sync.TransferRule
@@ -301,7 +303,16 @@ public class MainActivity : FragmentActivity() {
             null
         }
         setContent {
-            CentraidTheme {
+            // THE MEMBER'S APPEARANCE (R-CHROME-7), read once at launch and
+            // the phone's until the read lands. Home's header key flips it.
+            var appearance by androidx.compose.runtime.remember {
+                androidx.compose.runtime.mutableStateOf(Appearance.DEFAULT)
+            }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                appearance = Appearance.read(platformServices().secureStore)
+            }
+            val phoneDark = isSystemInDarkTheme()
+            CentraidTheme(dark = appearance.dark(phoneDark)) {
                 // The stack is shell state, not a library's: `NavStack` is
                 // immutable and a swap is the navigation.
                 var stack by androidx.compose.runtime.remember {
@@ -430,7 +441,7 @@ public class MainActivity : FragmentActivity() {
                 val onStage = stack.current is Destination.PhotoLightbox ||
                     stack.current is Destination.PhotoEditor
                 val view = LocalView.current
-                val darkScheme = isSystemInDarkTheme()
+                val darkScheme = centraidDark()
                 SideEffect {
                     WindowCompat.getInsetsController(window, view).apply {
                         val light = !onStage && !darkScheme
@@ -591,6 +602,16 @@ public class MainActivity : FragmentActivity() {
                         onOpenBackup = { backupSheet.open() },
                         searchPlaceholder = homeSearch.placeholder,
                         onOpenSearch = { stack = stack.push(homeSearch.open()) },
+                        // THE APPEARANCE KEY (R-CHROME-7): flipped against
+                        // the phone, written, and drawn from what the store
+                        // then holds.
+                        onToggleAppearance = {
+                            scope.launch {
+                                val store = platformServices().secureStore
+                                Appearance.write(store, appearance.toggled(phoneDark))
+                                appearance = Appearance.read(store)
+                            }
+                        },
                         backupShown = backupSheet.showing,
                         onOpenHome = { backupSheet.close() },
                         backupTab = {

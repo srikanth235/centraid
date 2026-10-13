@@ -40,6 +40,9 @@ struct VaultHeader: View {
     /// the one way into search over every app but Locker. Nil draws none.
     var onSearch: (() -> Void)? = nil
     var searchLabel: String = ""
+    /// THE APPEARANCE KEY (R-CHROME-7), right of search: one tap flips light
+    /// and dark. Nil draws none.
+    var onAppearance: (() -> Void)? = nil
     @Environment(\.colorScheme) private var scheme
 
     /// The backup status to draw, or empty for the vault's own line. A vault
@@ -182,28 +185,46 @@ struct VaultHeader: View {
                 }
             }
 
-            // THE DOOR TO THE TRANSFER RULES (#1025 S4). Beside the line that
-            // reports them rather than buried in settings: the member reads
-            // "12 originals waiting for Wi-Fi" and the next thing they want is
-            // the control that decided it.
-            if !waiting.isEmpty {
-                KitIconKey(
-                    iconKey: "Settings",
-                    label: "Download settings",
-                    identifier: "home-transfer-rules"
-                ) {
-                    shell.openTransferRules()
+            // THE TRAILING KEYS AS ONE GROUP: their 44pt targets touch, so
+            // the 36pt plates stand 8pt apart and read as a pair, not as
+            // two strays across the lockup's 12pt rhythm.
+            HStack(spacing: 0) {
+                // THE DOOR TO THE TRANSFER RULES (#1025 S4). Beside the line that
+                // reports them rather than buried in settings: the member reads
+                // "12 originals waiting for Wi-Fi" and the next thing they want is
+                // the control that decided it.
+                if !waiting.isEmpty {
+                    KitIconKey(
+                        iconKey: "Settings",
+                        label: "Download settings",
+                        identifier: "home-transfer-rules"
+                    ) {
+                        shell.openTransferRules()
+                    }
+                }
+                if let onSearch {
+                    KitIconKey(
+                        iconKey: "Search",
+                        label: searchLabel,
+                        framed: true,
+                        identifier: "home-search-open",
+                        action: onSearch
+                    )
+                }
+                if let onAppearance {
+                    let key = shell.appearanceKey(dark: scheme == .dark)
+                    KitIconKey(
+                        iconKey: key.iconKey,
+                        label: key.label,
+                        framed: true,
+                        identifier: "home-appearance",
+                        action: onAppearance
+                    )
                 }
             }
-            if let onSearch {
-                KitIconKey(
-                    iconKey: "Search",
-                    label: searchLabel,
-                    framed: true,
-                    identifier: "home-search-open",
-                    action: onSearch
-                )
-            }
+            // The last plate's edge on the page margin, not 4pt inside it:
+            // the target overhangs by its own inset, (44 - 36) / 2.
+            .padding(.trailing, -4)
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.top, 12)

@@ -291,6 +291,8 @@ struct CentraidApp: App {
             // taken once the scene reaches `.background`, of whatever is on
             // screen at that moment, and the mask is what it captures.
             .overlay { if shell.masked { Color.black.ignoresSafeArea() } }
+            // THE MEMBER'S APPEARANCE (R-CHROME-7): nil follows the phone.
+            .preferredColorScheme(shell.preferredScheme)
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
                 case .active:

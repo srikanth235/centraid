@@ -206,6 +206,10 @@ final class ShellModel: ObservableObject {
     @Published var transferRule = ""
     /// The three choices, each a plain sentence from the shell's copy source.
     @Published var transferRuleChoices: [(stored: String, sentence: String)] = []
+    /// THE MEMBER'S APPEARANCE (R-CHROME-7), as the store's own word, read at
+    /// launch. `HomeBridge` parses it; empty until the read lands, which
+    /// follows the phone exactly as "system" does.
+    @Published var appearance = ""
     /// The last thing the vault sheet said, in a member's words.
     ///
     /// A SENTENCE THE CORE ALREADY DECIDED WAS SHOWABLE. Nothing here composes
@@ -347,6 +351,9 @@ final class ShellModel: ObservableObject {
         }
         photos.observe { [weak self] bytes in self?.photosState = bytes.data }
         home.observeHoldsNoVault { [weak self] none in self?.holdsNoVaultChanged(none.boolValue) }
+        #if canImport(CentraidShared)
+        home.appearance { [weak self] stored in self?.appearance = stored }
+        #endif
         vaultWords.observe { [weak self] bytes in self?.vaultWordsChanged(bytes.data) }
         // A VAULT WAS MADE (`VaultWordsBridge.made`, once per make): its
         // sentence stays on the vault sheet, as `found`'s did, and what the
@@ -1399,6 +1406,45 @@ final class ShellModel: ObservableObject {
         home.setTransferRule(stored: stored) { [weak self] settled in
             self?.transferRule = settled
             if settled != before { BackgroundUploader.shared.cancelEverything() }
+        }
+        #endif
+    }
+
+    /// THE SCHEME THE WINDOW IS HELD TO, or nil to follow the phone.
+    var preferredScheme: ColorScheme? {
+        #if canImport(CentraidShared)
+        guard let held = home.appearanceHeldDark(stored: appearance) else { return nil }
+        return held.boolValue ? .dark : .light
+        #else
+        return nil
+        #endif
+    }
+
+    /// What the PHONE shows, under any hold this app puts on its own window:
+    /// the screen's trait, which `preferredColorScheme` does not override.
+    private var phoneDark: Bool {
+        let screen = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.screen }
+            .first
+        return screen?.traitCollection.userInterfaceStyle == .dark
+    }
+
+    /// Home's appearance key as drawn on a screen that is `dark`.
+    func appearanceKey(dark: Bool) -> (iconKey: String, label: String) {
+        #if canImport(CentraidShared)
+        let key = home.appearanceKey(dark: dark)
+        return (key.iconKey, key.label)
+        #else
+        return ("Moon", "")
+        #endif
+    }
+
+    /// The key's tap: flipped against the phone, written, and drawn from
+    /// what the store answers.
+    func toggleAppearance() {
+        #if canImport(CentraidShared)
+        home.toggleAppearance(current: appearance, phoneDark: phoneDark) { [weak self] stored in
+            self?.appearance = stored
         }
         #endif
     }

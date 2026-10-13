@@ -3,6 +3,8 @@
   "app": "shared",
   "strings": {
     "ALL_DAY": "All day",
+    "APPEARANCE_TO_DARK": "Switch to dark",
+    "APPEARANCE_TO_LIGHT": "Switch to light",
     "AUTOSAVE_CHANGED_ELSEWHERE": "Changed on another device",
     "AUTOSAVE_EDITED": "Edited",
     "AUTOSAVE_NOT_SAVED": "Not saved",

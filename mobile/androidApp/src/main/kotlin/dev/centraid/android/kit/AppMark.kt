@@ -1,7 +1,6 @@
 package dev.centraid.android.kit
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.centraid.android.theme.centraidDark
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.NativeAppMark
@@ -37,7 +37,7 @@ public fun AppMark(
     mutedBackground: Color = Color.Transparent,
     mutedInk: Color = Color.Transparent,
 ) {
-    val marks = if (isSystemInDarkTheme()) CentraidCatalog.darkMarks else CentraidCatalog.lightMarks
+    val marks = if (centraidDark()) CentraidCatalog.darkMarks else CentraidCatalog.lightMarks
     val mark: NativeAppMark? = marks[appId]
     val iconKey = CentraidCatalog.byId[appId]?.iconKey ?: return
     // Between 14 and 16 like v0: a mark smaller than 14 loses the silhouette,

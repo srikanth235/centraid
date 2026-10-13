@@ -36,8 +36,12 @@ import java.util.Locale
  * is what stops it drifting.
  */
 @Composable
-public fun CentraidTheme(content: @Composable () -> Unit) {
-    val tokens = if (isSystemInDarkTheme()) CentraidTokens.dark else CentraidTokens.light
+public fun CentraidTheme(
+    /** THE MEMBER'S APPEARANCE (R-CHROME-7), resolved; the phone's by default. */
+    dark: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit,
+) {
+    val tokens = if (dark) CentraidTokens.dark else CentraidTokens.light
     CompositionLocalProvider(LocalCentraidTokens provides tokens) {
         MaterialTheme(
             colorScheme = if (tokens.scheme == "dark") {
@@ -73,11 +77,20 @@ public fun CentraidTheme(content: @Composable () -> Unit) {
  * mapping that lies about what a Material slot means, so the table itself is
  * what crosses.
  *
- * `staticCompositionLocalOf`: the theme changes only with the system scheme, so
- * a read is not worth recomposition tracking.
+ * `staticCompositionLocalOf`: the theme changes only with the scheme, so a
+ * read is not worth recomposition tracking.
  */
 public val LocalCentraidTokens: androidx.compose.runtime.ProvidableCompositionLocal<NativeTheme> =
     staticCompositionLocalOf { CentraidTokens.light }
+
+/**
+ * WHETHER THE SCREEN IS DRAWN DARK — the scheme in force, which is the
+ * member's appearance (R-CHROME-7) and not necessarily the phone's. Read this,
+ * never `isSystemInDarkTheme()`, which would answer for the phone alone.
+ */
+@Composable
+@ReadOnlyComposable
+public fun centraidDark(): Boolean = LocalCentraidTokens.current.scheme == "dark"
 
 /** A colour role, in force. See [color] for why a missing role is loud. */
 @Composable

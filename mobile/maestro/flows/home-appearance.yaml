@@ -1,0 +1,31 @@
+# Home's appearance key (R-CHROME-7): right of search, one tap flips light and
+# dark, and a second tap follows the phone again.
+#
+# The key's spoken label says where a tap goes, so the flow reads it rather
+# than pixels. Two taps leave the install as it found it.
+appId: dev.centraid.Centraid
+name: home-appearance
+---
+- launchApp
+- assertVisible:
+    id: "home-appearance"
+- runFlow:
+    when:
+      visible: "Switch to dark"
+    commands:
+      - tapOn:
+          id: "home-appearance"
+      - assertVisible: "Switch to light"
+      - tapOn:
+          id: "home-appearance"
+      - assertVisible: "Switch to dark"
+- runFlow:
+    when:
+      visible: "Switch to light"
+    commands:
+      - tapOn:
+          id: "home-appearance"
+      - assertVisible: "Switch to dark"
+      - tapOn:
+          id: "home-appearance"
+      - assertVisible: "Switch to light"

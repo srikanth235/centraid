@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,6 +64,7 @@ import dev.centraid.android.kit.VaultHeader
 import dev.centraid.android.kit.stateLine
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
+import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
 import dev.centraid.android.theme.formatMoney
 import dev.centraid.design.CentraidCatalog
@@ -128,6 +128,8 @@ public fun HomeScreen(
     searchPlaceholder: String = "",
     /** The search bar was tapped. Defaulted for previews. */
     onOpenSearch: () -> Unit = {},
+    /** The appearance key was tapped (R-CHROME-7). Null draws none. */
+    onToggleAppearance: (() -> Unit)? = null,
 ) {
     // BACK ON THE BACKUP TAB returns to Home, as the band's Home does.
     BackHandler(enabled = backupShown) { onOpenHome() }
@@ -165,6 +167,7 @@ public fun HomeScreen(
             // Backup tab, which is the backup's and not the springboard's.
             onSearch = onOpenSearch.takeIf { !backupShown },
             searchLabel = searchPlaceholder,
+            onAppearance = onToggleAppearance.takeIf { !backupShown },
         )
         // THE BACKUP TAB DRAWS IN PLACE OF THE SPRINGBOARD, as Chat does on
         // iOS, under the vault's lockup: the backup it describes is that
@@ -1135,7 +1138,7 @@ private fun ColumnScope.FilledBody(body: TileBody) {
  */
 @Composable
 private fun appHue(appId: String): Color {
-    val marks = if (isSystemInDarkTheme()) CentraidCatalog.darkMarks else CentraidCatalog.lightMarks
+    val marks = if (centraidDark()) CentraidCatalog.darkMarks else CentraidCatalog.lightMarks
     return marks[appId]?.let { Color(it.hue) } ?: centraidColor("text")
 }
 

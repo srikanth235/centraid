@@ -136,7 +136,8 @@ struct HomeView: View {
                 // HOME'S SEARCH KEY (R-CHROME-6), at the lockup's trailing
                 // edge; a tap pushes the search over every app but Locker.
                 onSearch: { HomeSearchScreens.open(shell) },
-                searchLabel: HomeSearchBar.placeholder(shell)
+                searchLabel: HomeSearchBar.placeholder(shell),
+                onAppearance: { shell.toggleAppearance() }
             )
             StatusRibbon(status: home.data.status, shell: shell)
 

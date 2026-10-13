@@ -3,13 +3,13 @@ package dev.centraid.android.kit
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -31,10 +31,12 @@ import centraid.screen.v1.BackupLine
 import centraid.screen.v1.VaultLockup
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
+import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.design.copy.SharedCopy
+import dev.centraid.shared.shell.Appearance
 import dev.centraid.shared.shell.TransferRuleChoice
 
 /**
@@ -122,6 +124,8 @@ public fun VaultHeader(
      */
     onSearch: (() -> Unit)? = null,
     searchLabel: String = "",
+    /** THE APPEARANCE KEY (R-CHROME-7), right of search: one tap flips light and dark. */
+    onAppearance: (() -> Unit)? = null,
 ) {
     // No name is a REAL STATE; never render a blank lockup.
     val name = vault?.vault_name?.trim().orEmpty().ifEmpty { PhotosCopy.VAULT_NONE_YET }
@@ -243,20 +247,30 @@ public fun VaultHeader(
                 }
             }
         }
-        // THE DOOR TO THE TRANSFER RULES (#1025 S4). Beside the line that
-        // reports them rather than buried in settings: a member reads
-        // "12 originals waiting for Wi-Fi" and the next thing they want is the
-        // control that decided it.
-        if (waiting.isNotEmpty()) {
-            IconKey(
-                iconKey = "Settings",
-                label = "Download settings",
-                testTag = "home-transfer-rules",
-                onPress = onDownloadSettings,
-            )
-        }
-        if (onSearch != null) {
-            IconKey(iconKey = "Search", label = searchLabel, testTag = "home-search-open", onPress = onSearch)
+        // THE TRAILING KEYS AS ONE GROUP: their 44dp targets touch, so the
+        // 36dp plates stand 8dp apart and read as a pair, not as two
+        // strays across the lockup's 12dp rhythm. The last plate's edge sits
+        // on the page margin: the target overhangs by its inset, (44 - 36) / 2.
+        Row(Modifier.offset(x = 4.dp)) {
+            // THE DOOR TO THE TRANSFER RULES (#1025 S4). Beside the line that
+            // reports them rather than buried in settings: a member reads
+            // "12 originals waiting for Wi-Fi" and the next thing they want is the
+            // control that decided it.
+            if (waiting.isNotEmpty()) {
+                IconKey(
+                    iconKey = "Settings",
+                    label = "Download settings",
+                    testTag = "home-transfer-rules",
+                    onPress = onDownloadSettings,
+                )
+            }
+            if (onSearch != null) {
+                IconKey(iconKey = "Search", label = searchLabel, testTag = "home-search-open", onPress = onSearch)
+            }
+            if (onAppearance != null) {
+                val key = Appearance.key(dark = centraidDark())
+                IconKey(iconKey = key.iconKey, label = key.label, testTag = "home-appearance", onPress = onAppearance)
+            }
         }
     }
 }
@@ -277,7 +291,7 @@ public fun VaultHeader(
 private fun vaultHue(color: String?): VaultMark {
     val parsed = parseHex(color)
         ?: return VaultMark(centraidColor("bgSunken"), centraidColor("text"))
-    val share = if (isSystemInDarkTheme()) {
+    val share = if (centraidDark()) {
         CentraidGeometry.ICON_CHIP_TINT_DARK
     } else {
         CentraidGeometry.ICON_CHIP_TINT_LIGHT

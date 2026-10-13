@@ -3,7 +3,6 @@ package dev.centraid.android.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +56,7 @@ import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
+import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.shared.nav.Destination
@@ -226,7 +226,7 @@ private fun Groups(data: HomeSearchData, onOpen: (HomeSearchRow, List<String>) -
 /** One app's head: its hue dot, its name in the section micro-label, its count. */
 @Composable
 private fun GroupHeader(group: HomeSearchGroup) {
-    val marks = if (isSystemInDarkTheme()) CentraidCatalog.darkMarks else CentraidCatalog.lightMarks
+    val marks = if (centraidDark()) CentraidCatalog.darkMarks else CentraidCatalog.lightMarks
     val hue = marks[group.app_id]?.hue?.let { Color(it) } ?: centraidColor("textFaint")
     Row(
         Modifier

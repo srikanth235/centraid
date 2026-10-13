@@ -12,6 +12,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-tile-<appId>` | Home | one springboard tile, keyed on the app id — every app has one, an empty app drawing what to do (R-ONBOARD-11) |
 | `home-vault-switch` | Home | the vault lockup, which IS the switch |
 | `home-search-open` | Home | the framed search key at the lockup's trailing edge — opens Home's search (R-CHROME-6) |
+| `home-appearance` | Home | the framed appearance key right of search — flips light and dark (R-CHROME-7) |
 | `home-search-field` | Home search | the field (it takes focus on open) |
 | `home-search-cancel` | Home search | Cancel: back to Home, the field cleared |
 | `home-search-recent-<term>` | Home search | one of this session's recent searches, while the field is empty |

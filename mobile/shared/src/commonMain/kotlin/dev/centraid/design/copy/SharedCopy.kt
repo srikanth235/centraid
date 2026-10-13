@@ -8,6 +8,8 @@ package dev.centraid.design.copy
 /** Shared's strings. STRINGS ONLY: a function composes a sentence and is the app's to write. */
 public object SharedCopy {
     public const val ALL_DAY: String = "All day"
+    public const val APPEARANCE_TO_DARK: String = "Switch to dark"
+    public const val APPEARANCE_TO_LIGHT: String = "Switch to light"
     public const val AUTOSAVE_CHANGED_ELSEWHERE: String = "Changed on another device"
     public const val AUTOSAVE_EDITED: String = "Edited"
     public const val AUTOSAVE_NOT_SAVED: String = "Not saved"

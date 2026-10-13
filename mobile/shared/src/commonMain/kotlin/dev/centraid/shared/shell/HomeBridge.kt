@@ -372,6 +372,33 @@ public class HomeBridge {
     public fun transferRuleChoices(): List<TransferRuleChoice> =
         TransferRule.entries.map { TransferRuleChoice(it.stored, it.sentence) }
 
+    /**
+     * THE MEMBER'S APPEARANCE (R-CHROME-7), as the word the store holds — the
+     * same shape as [transferRule], for the same reason: a Swift `switch`
+     * cannot be exhaustive over an exported Kotlin enum.
+     */
+    public fun appearance(onAppearance: (String) -> Unit) {
+        scope.launch { onAppearance(Appearance.read(platformServices().secureStore).stored) }
+    }
+
+    /**
+     * THE HEADER KEY'S TAP: [Appearance.toggled] against what the phone
+     * itself shows, written, and answered as what the store then holds.
+     */
+    public fun toggleAppearance(current: String, phoneDark: Boolean, onAppearance: (String) -> Unit) {
+        scope.launch {
+            val store = platformServices().secureStore
+            Appearance.write(store, Appearance.of(current).toggled(phoneDark))
+            onAppearance(Appearance.read(store).stored)
+        }
+    }
+
+    /** The scheme [stored] holds the window to: dark, light, or null to follow the phone. */
+    public fun appearanceHeldDark(stored: String): Boolean? = Appearance.of(stored).held
+
+    /** The key as drawn on a screen that is [dark]: where a tap goes. */
+    public fun appearanceKey(dark: Boolean): AppearanceKey = Appearance.key(dark)
+
     /** The current state, for a view that needs one before it subscribes. */
     public fun current(): ByteArray =
         (session?.state?.value ?: HomeMachine.initial()).encode()

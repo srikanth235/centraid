@@ -461,8 +461,12 @@ enum BandDestinations {
         // only this shell so far: a shared policy row would draw a Chat tab on
         // Android that opens nothing, which is a control that lies. When
         // Android ships chat the row moves into the policy and this line goes.
+        //
+        // ITS MARK IS THE ASSISTANT'S, NOT A SPEECH BUBBLE: the chat is the
+        // on-device assistant, and `Sparkle` is the design system's `ask`
+        // concept (`ICON_CONCEPTS`), so the tab and every ask key agree.
         if let home = places.firstIndex(where: { $0.id == "home" }) {
-            places.insert(Place(id: "chat", short: ShellWords.bandChat, iconKey: "MessageCircle"), at: home + 1)
+            places.insert(Place(id: "chat", short: ShellWords.bandChat, iconKey: "Sparkle"), at: home + 1)
         }
         return places
         #else
