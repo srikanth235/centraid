@@ -379,6 +379,68 @@ Deleted files: `crates/search/src/containers.rs` and `crates/core/src/app_query/
 
 One slip, mine: the restore of mutant 5 was a `git checkout` of a file that held uncommitted edits; the edited copy had been saved first (`cp`) and was put back, and the diff was checked (27 insertions) before going on.
 
+### Lane H — Photos' own search through the door
+
+Q-1097-3 (b), folded into #1097 by the owner on 2026-10-14: a member who types `sunscren` finds the photograph in Photos as Home does, and a word only a picture's recognised text or a video's transcript holds finds it. Doctrine digest the lane worked under: law `b4ce8d9df2f4` (`node .governance/law/brief.mjs`). Rulings R-1097-25 to 27 in [docs/decisions.md](../docs/decisions.md#photos-own-search-is-the-doors-1097); R-1097-7 and R-1097-15 point to them. Commits: the core arm, the machine's field, the bridge and views, the flow and rulings, this receipt. The lane was rebased onto lane G (`1cadf3839`) before the device step, so the XCFramework was built once.
+
+**What it did.**
+
+- **H1, the core.** `photos.proto` (new) and `AppQueryRequest.photos_search = 90`. `crates/core/src/app_query/photos.rs` answers `PhotosSearchRequest { term = 1, limit = 2 (required), correct = 3 }` with `PhotosSearch { asset_ids = 1, albums = 2 (ContainerHit), corrected = 3 }`: the door's `core.content_item` hits (caption, recognised text, transcript) opened as the media assets that hold them with `deleted_at IS NULL AND archived_at IS NULL`, in rank order, and the album containers narrowed with `in_app("photos")`. **`centraid_apps_photos::queries::load_search` is retired** (the v0 fold of joins, uris, places and album titles: nothing read it once Photos' grid drew its own cells), with `SearchData` of grid rows and `MATCH_ROWS`; `load_search_term` replaces it and the crate now depends on `centraid-search`, as the other app crates do.
+- **H2, the machine and the reads.** `PhotosSearchState.search = 7` (a `SearchField`) and `PhotosSearchEvent.DataArrived.corrected = 2`. The machine keeps its field through `SearchLaw` (a new term clears `corrected`, a cleared field clears the field, an answer sets it only while current). `PhotosSearchReads.hitsQuery(Reach)` has no caption `LIKE`: its arms are the photographs the core named (`asset_id IN (...)`) and the structured legs' reach; it is null when nothing was reached. `albumsQuery` is gone: albums are the core's container hits, three at most, in rank order, still the album top hit. People, places and labels stay Kotlin legs.
+- **The correction.** The bridge runs the structured legs first and asks the core with `correct` set only when they found nothing; the core, with its own legs empty, corrects over `core.content_item`, `core.party` and the album container and answers its legs at the corrected words with the words, even if they found nothing; the bridge runs the structured legs at the corrected words and keeps the correction only if the whole answer is not empty. A later page reads at the words the state holds.
+- **H3, the views.** SwiftUI and Compose build the shared field from the machine's (`PhotosSearchStateView.field(open:)`, `searchState.search`), so the kit's field draws "Showing results for" (`search-corrected`); the no-match block's second line is `PHOTOS_SEARCH_NO_MATCH_QUERY` (`Nothing matches “{query}”.`) in both views, and the block is `photos-search-no-match`. The scope sentence now says "text in photos".
+- **H4, the device and the flow.** `mobile/maestro/flows/search-photos.yaml`, new; `selectors.md` has the `photos-search-no-match` row and `search-corrected` names Photos.
+
+**Files.** Rust: `crates/api-proto/proto/centraid/core/v1/photos.proto` (new), `app_query.proto`, `container.proto` (comment), `crates/api-proto/build.rs`, `crates/apps/photos/{Cargo.toml,src/queries.rs,tests/parity.rs}`, `crates/core/{Cargo.toml,src/app_query.rs,src/app_query/photos.rs}` (new), `Cargo.lock`, `crates/core-ffi/CONTRACT.md`. Wire: `crates/api-proto/proto/centraid/screen/v1/screen.proto`. Kotlin: `PhotosSearchMachine.kt`, `PhotosSearchReads.kt`, `PhotosSearchBridge.kt`, `copy/photos.json`, `PhotosCopy.kt`, `PhotosSearchSpec.kt`, `PhotosCollectionsSpec.kt`, `ScreenFixtureSpec.kt`. Swift: `PhotosSearchView.swift`, `PhotosGridView.swift`, `PhotosWords.swift`, `ScreenFixtureTests.swift`. Compose: `PhotosSearchScreen.kt`, `photos/PhotosRoutes.kt`. Fixtures: `contracts/screens/photos-search/corrected.{textproto,bin}` (new) and `manifest.json` (one more entry; regenerated with `bun contracts/tools/build-screen-fixtures.ts` then `bun run format`; no existing fixture moved). Flow and docs: `mobile/maestro/flows/search-photos.yaml`, `selectors.md`, `docs/decisions.md`, this file.
+
+**Wire (for the next lane).** `AppQueryRequest.photos_search = 90`, `AppQueryResponse.photos_search = 90`; `PhotosSearchRequest { term = 1, limit = 2, correct = 3 }`; `PhotosSearch { asset_ids = 1, albums = 2, corrected = 3 }`; `PhotosSearchState.search = 7`; `PhotosSearchEvent.DataArrived.corrected = 2`. All additive.
+
+**Parity changes** (each is the text leg or the album leg moving to the door; nothing else moved, and no existing fixture changed).
+
+| Where | Change | Reason |
+| --- | --- | --- |
+| `PhotosSearchSpec`: "the hits read is the library's shelf, and the member's words are binds" | now `hitsQuery(Reach(assetIds))`: the arm is `asset_id IN (?, ?)`, no `LIKE`, binds are the ids; null for an empty reach | the caption `LIKE` is the door's |
+| `PhotosSearchSpec`: "a wildcard the member typed is a character" | the statement checked is `peopleQuery`'s; `escapeLike` unchanged | the structured legs still match by `LIKE`; the caption leg is gone |
+| `PhotosCollectionsSpec`: "every album read in the app is kind = 'album'" | `PhotosSearchReads.albumsQuery` and its two assertions removed | the statement is retired; the album leg is `in_app("photos")` in the core, held by `albums_are_the_core_collections_that_open_in_photos` |
+| `parity.rs`: `search_keeps_the_vaults_rank_order` | replaced by `search_opens_the_live_photographs_the_door_names` | `load_search` is retired; the live rule is asserted through the real door (an archived and a trashed photograph are not found) |
+| `parity.rs`: `the_search_fold_is_what_v0_answered` | replaced by `the_search_reaches_what_v0_answered`: v0's four cases asked of the door give the **same photographs in the same order** (`tahoe`, `ana`, a miss, blank) | the fold's fields (uris, place, album titles) are not compared, because the function that folded them is retired |
+| copy twins | `PHOTOS_SEARCH_NO_MATCH_SCOPE` gains "text in photos"; `PHOTOS_SEARCH_NO_MATCH_QUERY` is new | recognised text is searched; the literal moved to copy (R-1097-27) |
+
+Behaviour that moved with the door and is not a test: a multi-word query now needs ALL its words and each matches by prefix (Home's rule), where the retired leg took ANY word as a substring (R-1097-25).
+
+**Verification.**
+
+| # | Command | Outcome |
+| --- | --- | --- |
+| H-1 | `cargo test -p centraid-search -p centraid-core -p centraid-apps-photos -p centraid-api-proto -p centraid-vault --no-fail-fast` | search, core (228), photos and api-proto green, the six new `app_query::photos` tests and the two replaced photos parity tests among them; the run (598 s) also failed `one_hash` (the new core test wrote `content_hash` by name: fixed by omitting the column, `one_hash` 4 passed) and `locker_plaintext_gate` once under load (3 passed alone, in the same tree) |
+| H-2 | `cargo check --workspace --all-targets` | finished clean (53.5 s) |
+| H-3 | `./gradlew -q -Pcentraid.android=true :shared:jvmTest :androidApp:compileDebugKotlin` (from `mobile/`) | green (`exit=0`); `PhotosSearchSpec` 20 tests (four new), the `photos-search: a corrected answer ...` fixture test in `ScreenFixtureSpec`, `CopySyncSpec` |
+| H-4 | `node scripts/lint-copy.mjs`, `node scripts/lint-native-controls.mjs` | both `ok`, at budget |
+| H-5 | `cargo build -p centraid-core-ffi --features llama --target aarch64-apple-ios-sim`; `:shared:assembleCentraidSharedDebugXCFramework`; `protoc` (Swift types); `xcodegen generate`; `xcodebuild ... -derivedDataPath build/dd build` | succeeded, once, after the rebase onto lane G. `build-for-testing` fails on four lines of `ScreenFixtureTests.swift` that read `HomeData.things` and `HomeState.allAppsSheetOpen` (not mine: neither is in `screen.proto`); the new test compiles, and no gate profile runs the iOS tests |
+| H-6 | `maestro --udid C041CC61-F9E1-4277-A00E-D1535CAA7C3D test` on `search-photos.yaml`, `search-correction.yaml`, `search-containers.yaml`, `home-search.yaml` | all four exit 0. `search-photos.yaml` runs on the Tahoe demo vault (`mobile/scripts/demo-vault.sh ios`), the others on a made vault. `search-chat.yaml` needs a model on the phone (`CENTRAID_DEV_MODEL`) and none was available, so it was not run |
+| H-7 | `cargo xtask gate --profile mobile-jvm` | `gate mobile-jvm: PASS`, 174.1 s of the 420 s budget; the committed screen fixtures did not move. `--profile local` is the root's, once, at the end (the owner's speed ruling) |
+| H-8 | `bun run check:push:static` | 4/4 gates passed |
+| H-9 | `node .governance/law/run.mjs --range 874fcd521..HEAD` | 10 rules, no findings |
+
+**On the simulator.** Word **"emrald"**, a letter dropped from the caption "Emerald Bay overlook" (the Tahoe scenario's roll, `seed-demo-vault`): the photograph's cell, the matched-caption reason and "Showing results for “emerald”" under the field (`search-corrected`); "emerald" typed whole draws the cell and no line; "zzqxv" draws `photos-search-no-match` with "Nothing matches “zzqxv”.". Screenshots: `h-photos-corrected.png`, `h-photos-no-match.png`, `h-home.png` in the session scratchpad. **Recognised text and a transcript were not exercised on the device**: no command or sync path writes a `text` or `transcript` derivative yet, so the demo vault holds none; they run through `an_ocr_or_transcript_word_finds_its_photograph`, which plants the derivative the way a sync pass writes a row. The simulator's vault was made again (uninstall and install; no simulator was erased or booted) because rung 013 was amended in place by lane G.
+
+**Decisions.**
+
+- *One album presentation: the album top hit, fed by the core.* The brief offered container rows (lane F2's component) or the existing door. The top hit and a container row are the same album; the top hit carries the photograph count and its photographs reach the grid (#712), and Photos draws it among the person and place doors, so a row above it would say it twice. The shared row stays Home's and the four other apps'; an album found from there opens the same shelf through the router.
+- *Rank decides membership, capture time decides order.* The grid is one keyset walk over `media_asset` in the library's order, and the structured legs reach photographs by id with no rank, so a mosaic ordered by relevance would be a second order for one shelf. The core still answers its asset ids in rank order, for a consumer that wants it.
+- *`load_search` is retired, not wired.* Its output was the v0 fold of a search hit (uris, places, album titles, rank order), which needs a wire message of grid assets nobody would draw and reads every album and place for it; the core's arm needs the ids. The function, its row type and its two parity tests go; the v0 cases are asked of the door.
+- *The core keeps a correction its own legs found nothing at.* `corrected_search` drops a correction that found nothing, and this arm cannot: a mistyped person's name finds no caption and no album, and the shell's people leg finds the person at the corrected words. The shell does the dropping, over the whole answer.
+- *Places and labels are not corrected.* The index holds no vocabulary of them (a place is a name, a gazetteer name inside a JSON column and arithmetic on a coordinate; a label is a concept read through the page door).
+- *Archived photographs are not found in Photos and are on Home.* Photos' shelf shows none; Home opens a photograph and draws no grid. The two rules differ on purpose and one core test holds both.
+
+**Falsification.** Each mutant was applied to the working tree, run, and restored.
+
+1. *The archived guard.* `AND archived_at IS NULL` removed from `search_assets_statement`: `an_archived_or_trashed_photograph_is_not_found_in_photos_and_an_archived_one_is_on_home` fails. Restored.
+2. *The shell's say-so.* `!may_correct` removed from the core's correction gate: `a_typo_is_corrected_only_when_every_leg_is_empty_and_the_shell_asks` fails (the plain case is corrected). Restored.
+3. *The album vocabulary.* `core.collection` removed from the correction's entities: `albums_are_the_core_collections_that_open_in_photos` fails (a slip in an album's name is no longer corrected). Restored.
+4. *The machine's field.* `PhotosSearchMachine` made to answer with `corrected = ""`: `PhotosSearchSpec` fails (2 of 20). Restored.
+5. *The text arm.* `hitsQuery` made to skip the core's asset ids: `PhotosSearchSpec` fails (1 of 20). Restored.
+
 ## Verification
 
 All commands run in the lane worktree on the working tree, with `CARGO_TARGET_DIR` set to the worktree's own `target/`.
