@@ -68,7 +68,7 @@ use crate::time::{recurrence, rrule};
 use super::event_time::{self, Bounds};
 use super::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 
-/// The grace window Docs, Photos, Locker, People and Tally carry (#883).
+/// The grace window Docs, Photos, Locker and People carry (#883).
 pub const PURGE_DAYS: i64 = 30;
 
 /// Every `schedule.*` command in the catalogue.

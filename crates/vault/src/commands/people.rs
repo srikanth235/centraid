@@ -1,5 +1,6 @@
-//! THE `people` SCHEMA: twenty-nine commands (v0's twenty-eight plus
-//! `purge_person`, #1015 D1), the personal-CRM write surface.
+//! THE `people` SCHEMA: twenty-seven commands (v0's twenty-eight less the two debt
+//! commands that left with Tally, #1099, plus `purge_person`, #1015 D1), the
+//! personal-CRM write surface.
 //!
 //! A person is a canonical `core.party` (`kind = 'person'`) plus a **1:1**
 //! `people_profile` holding the keep-in-touch facts — role, nickname, avatar
@@ -18,11 +19,10 @@
 //! | a list | a SKOS concept in the owner's `lists` scheme, membership one `core_tag` — the same mechanism Docs' folders use |
 //! | a task, a gift idea | `schedule_task` plus a `core_link` to the party (`about`, `gift-for`) |
 //! | a logged interaction | `core_activity` plus an `about` link, annotated with its text |
-//! | an IOU | `tally_obligation` — **Tally's table**, written here and read by both |
 //! | a journal entry | `knowledge_note` tagged with the People-journal marker |
 //!
 //! **Do not name the classification "circles"** (#441): that name collides with
-//! `social_circle`, the AUDIENCE mechanism shares and Tally groups target. It
+//! `social_circle`, the AUDIENCE mechanism shares target. It
 //! is "lists" end to end.
 //!
 //! **Logging an interaction is what clears "overdue"**: it stamps
@@ -111,8 +111,8 @@ const UNDO_WINDOW_MS: i64 = 10_000;
 /// The title prefix a journal entry's note carries.
 const JOURNAL_TITLE_PREFIX: &str = "People journal · ";
 
-/// Every `people.*` command this build carries — **all twenty-eight of v0's**,
-/// in v0's own file order so the registry's `agent_command` record reads like
+/// Every `people.*` command this build carries — **v0's twenty-eight less the two debt
+/// commands (#1099)**, in v0's own file order so the registry's `agent_command` record reads like
 /// the source it was ported from.
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
@@ -136,8 +136,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
         add_relationship(),
         add_gift(),
         toggle_gift(),
-        add_debt(),
-        settle_debt(),
         create_list(),
         rename_list(),
         delete_list(),
@@ -174,21 +172,6 @@ fn owner_party_id(ctx: &CommandCtx<'_, '_>) -> Result<String> {
 /// (`people.ts:47`-`:50`).
 fn actor_party_id(ctx: &CommandCtx<'_, '_>) -> Result<String> {
     owner_party_id(ctx)
-}
-
-/// The vault's base currency, for debts stored as minor units.
-///
-/// Defaults to `USD` as v0 does (`people.ts:66`). **A default currency is a
-/// real risk** — an obligation minted in the wrong currency is an arithmetic
-/// error nobody sees — and it is kept because the column is `NOT NULL` with a
-/// three-character CHECK, so a vault with no row would otherwise refuse the
-/// write with a constraint message rather than a sentence.
-fn base_currency(ctx: &CommandCtx<'_, '_>) -> String {
-    ctx.connection()
-        .query_row("SELECT base_currency FROM core_vault LIMIT 1", [], |row| {
-            row.get::<_, String>(0)
-        })
-        .unwrap_or_else(|_| "USD".to_owned())
 }
 
 /// Who asserted a link. v0 reads the identity kind (`people.ts:143`-`:145`).
@@ -1191,7 +1174,6 @@ const PURGE_OWNED_PARTY_COLUMNS: &[(&str, &str)] = &[
     ("schedule_recurrence_exception_attendee", "party_id"),
     ("social_circle_member", "party_id"),
     ("social_thread_participant", "party_id"),
-    ("tally_friend", "party_id"),
 ];
 
 /// Every `NO ACTION` foreign key onto `core_party` the purge does not own,
@@ -1260,7 +1242,7 @@ fn ids(ctx: &CommandCtx<'_, '_>, sql: &str, binds: &[&dyn rusqlite::ToSql]) -> R
 ///    channels (`people.channel`), which hold the name and the numbers.
 /// 4. The participation rows in [`PURGE_OWNED_PARTY_COLUMNS`] (the profile, the
 ///    important dates, the handles, attendance, circle and thread membership,
-///    the Tally friend row); `social_contact_channel` cascades.
+///    ); `social_contact_channel` cascades.
 /// 5. The party. `core_party_entity_delete` removes the entity row, which
 ///    cascades every `core_link` from or to them (live or ended), every
 ///    `core_tag` on them (the star, the list), and every `knowledge_annotation`
@@ -2354,195 +2336,6 @@ fn toggle_gift() -> CommandDefinition {
 }
 
 // ---------------------------------------------------------------------------
-// Debts — TALLY'S TABLE, written from here.
-// ---------------------------------------------------------------------------
-
-fn add_debt() -> CommandDefinition {
-    CommandDefinition {
-        name: "people.add_debt",
-        owner_schema: "people",
-        input_schema: r#"{
-          "type": "object",
-          "required": ["party_id", "direction", "amount_minor"],
-          "additionalProperties": false,
-          "properties": {
-            "debt_id": { "type": "string", "minLength": 1 },
-            "party_id": { "type": "string", "minLength": 1 },
-            "direction": { "type": "string", "enum": ["owe", "owed"] },
-            "amount_minor": { "type": "integer", "minimum": 1 },
-            "reason": { "type": "string" }
-          }
-        }"#,
-        idempotency: Idempotency::Once,
-        risk: Risk::Low,
-        confirm: false,
-        preconditions: &[
-            CommandCondition {
-                predicate: "person_exists",
-                check: pre_person_exists,
-            },
-            CommandCondition {
-                // THE OWNER CANNOT OWE THEMSELVES. `tally_obligation` carries
-                // `CHECK (from_party <> to_party)`, and asking here turns a
-                // constraint message into a sentence.
-                predicate: "not_the_owner_themselves",
-                check: |ctx| {
-                    let party_id = ctx.required_str("party_id")?;
-                    let owner = owner_party_id(ctx)?;
-                    Ok((owner == party_id)
-                        .then(|| "a debt needs two people; this is you".to_owned()))
-                },
-            },
-        ],
-        postconditions: &[CommandCondition {
-            predicate: "debt_added",
-            check: |ctx| {
-                let debt_id = super::core::created_row_id(ctx, "debt_id");
-                let count: i64 = ctx.connection().query_row(
-                    "SELECT COUNT(*) FROM tally_obligation WHERE obligation_id = ?1",
-                    [&debt_id],
-                    |row| row.get(0),
-                )?;
-                Ok((count != 1).then(|| "the debt was not recorded".to_owned()))
-            },
-        }],
-        handler: |ctx| {
-            let party_id = ctx.required_str("party_id")?.to_owned();
-            let direction = ctx.required_str("direction")?.to_owned();
-            let amount_minor = ctx
-                .input
-                .get("amount_minor")
-                .and_then(serde_json::Value::as_i64)
-                .unwrap_or_default();
-            let reason = ctx.optional_str("reason").map(str::to_owned);
-            // THE CALLER'S ID IS HONOURED (#922 G2), else the first one minted (so the
-            // postcondition finds it as `produced_ids[0]`, the debt's id before the friend's). The
-            // chat's confirm card names the debt before the member taps (#1088), so the id on the
-            // card is the id the row gets.
-            //
-            // A TAKEN ID IS REFUSED HERE AND NOT BY A PRECONDITION, deliberately: `add_person` and
-            // its siblings have a `minted_id_is_free` condition, but the gate writes one
-            // `agent_invocation_check` row per condition and each row takes an id, so a new
-            // condition would move every id a vault mints after a debt, with or without `debt_id`.
-            // The assistant's harness seeds worlds with ids from one sequence and orders rows by
-            // them, so that would change what the model reads. `core_entity` is where an id is held
-            // whatever kind holds it (#916): a debt id another row has is refused in a sentence
-            // before the entity trigger could abort on it.
-            let debt_id = match ctx.optional_str("debt_id") {
-                Some(given) => {
-                    let held: i64 = ctx.connection().query_row(
-                        "SELECT COUNT(*) FROM core_entity WHERE entity_id = ?1",
-                        [given],
-                        |row| row.get(0),
-                    )?;
-                    if held > 0 {
-                        return Err(VaultError::InvalidInput {
-                            name: "debt_id".to_owned(),
-                            detail: "a row already holds the id this write minted".to_owned(),
-                        });
-                    }
-                    given.to_owned()
-                }
-                None => ctx.next_id(),
-            };
-            let owner = owner_party_id(ctx)?;
-            let (from_party, to_party) = if direction == "owe" {
-                (owner.clone(), party_id.clone())
-            } else {
-                (party_id.clone(), owner.clone())
-            };
-            // A DEBT MAKES THEM A TALLY FRIEND. The row is what lets Tally's
-            // own surfaces see the person at all, and it is unique per party.
-            let known: i64 = ctx.connection().query_row(
-                "SELECT COUNT(*) FROM tally_friend WHERE party_id = ?1",
-                [&party_id],
-                |row| row.get(0),
-            )?;
-            if known == 0 {
-                let friend_id = ctx.next_id();
-                ctx.connection().execute(
-                    "INSERT INTO tally_friend (friend_id, party_id, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?3)",
-                    rusqlite::params![friend_id, party_id, ctx.now],
-                )?;
-            }
-            ctx.connection().execute(
-                "INSERT INTO tally_obligation
-                   (obligation_id, from_party, to_party, amount_minor, currency, reason,
-                    incurred_on, settled_at, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?8)",
-                rusqlite::params![
-                    debt_id,
-                    from_party,
-                    to_party,
-                    amount_minor,
-                    base_currency(ctx),
-                    reason,
-                    ctx.now.get(0..10).unwrap_or_default(),
-                    ctx.now
-                ],
-            )?;
-            Ok(serde_json::json!({ "debt_id": debt_id }))
-        },
-        sealed_input: &[],
-    }
-}
-
-fn settle_debt() -> CommandDefinition {
-    CommandDefinition {
-        name: "people.settle_debt",
-        owner_schema: "people",
-        input_schema: r#"{
-          "type": "object",
-          "required": ["debt_id"],
-          "additionalProperties": false,
-          "properties": { "debt_id": { "type": "string", "minLength": 1 } }
-        }"#,
-        idempotency: Idempotency::Idempotent,
-        risk: Risk::Low,
-        confirm: false,
-        preconditions: &[CommandCondition {
-            predicate: "debt_open",
-            check: |ctx| {
-                let debt_id = ctx.required_str("debt_id")?;
-                let count: i64 = ctx.connection().query_row(
-                    "SELECT COUNT(*) FROM tally_obligation
-                      WHERE obligation_id = ?1 AND settled_at IS NULL",
-                    [debt_id],
-                    |row| row.get(0),
-                )?;
-                Ok((count != 1).then(|| "that debt is not open".to_owned()))
-            },
-        }],
-        postconditions: &[CommandCondition {
-            predicate: "debt_settled",
-            check: |ctx| {
-                let debt_id = ctx.required_str("debt_id")?;
-                let count: i64 = ctx.connection().query_row(
-                    "SELECT COUNT(*) FROM tally_obligation
-                      WHERE obligation_id = ?1 AND settled_at IS NOT NULL",
-                    [debt_id],
-                    |row| row.get(0),
-                )?;
-                Ok((count != 1).then(|| "the debt did not settle".to_owned()))
-            },
-        }],
-        handler: |ctx| {
-            let debt_id = ctx.required_str("debt_id")?.to_owned();
-            // CLOSED, NOT DELETED: a settled debt stays as history
-            // (`actions/settle-debt.ts:3`).
-            ctx.connection().execute(
-                "UPDATE tally_obligation SET settled_at = ?1, updated_at = ?1
-                  WHERE obligation_id = ?2",
-                rusqlite::params![ctx.now, debt_id],
-            )?;
-            Ok(serde_json::json!({ "debt_id": debt_id }))
-        },
-        sealed_input: &[],
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Lists — SKOS concepts, like Docs' folders.
 // ---------------------------------------------------------------------------
 
@@ -3352,11 +3145,12 @@ mod tests {
     }
 
     /// THE WHOLE SCHEMA, and the split the census states: v0's 28 commands,
-    /// **14 idempotent / 14 once**, no retry-safe — plus `purge_person`
-    /// (#1015 D1), a fifteenth `once`.
+    /// **14 idempotent / 14 once**, no retry-safe — less `add_debt` (once) and
+    /// `settle_debt` (idempotent), which left with Tally (#1099) — plus
+    /// `purge_person` (#1015 D1), a fourteenth `once`.
     #[test]
-    fn the_schema_carries_all_twenty_eight_of_v0s_and_the_purge() {
-        assert_eq!(definitions().len(), 29);
+    fn the_schema_carries_all_twenty_six_of_v0s_and_the_purge() {
+        assert_eq!(definitions().len(), 27);
         let mut idempotent = 0;
         let mut once = 0;
         let mut retry_safe = 0;
@@ -3367,7 +3161,7 @@ mod tests {
                 Idempotency::RetrySafe => retry_safe += 1,
             }
         }
-        assert_eq!((idempotent, once, retry_safe), (14, 15, 0));
+        assert_eq!((idempotent, once, retry_safe), (13, 14, 0));
     }
 
     /// **NO `people.*` COMMAND PARKS A NON-OWNER** (census §A0's per-command

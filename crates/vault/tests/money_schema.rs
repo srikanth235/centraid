@@ -154,7 +154,7 @@ fn a_vault_climbed_from_rung_thirteen_holds_the_same_seeds_as_one_founded_at_the
         assert!(seeds(&raw).is_empty(), "the old rung seeded none of it");
     }
     let climbed = Vault::open(&path).expect("the file climbs rung fourteen");
-    assert_eq!(climbed.schema_version(), 14);
+    assert_eq!(climbed.schema_version(), centraid_vault::head_version());
     let after = climbed
         .read(|connection| Ok(seeds(connection)))
         .expect("the seeds read");
@@ -270,7 +270,7 @@ fn a_vault_holding_duplicate_external_ids_climbs_and_loses_nothing() {
         assert_eq!(rows.len(), 8);
     }
     let migrated = Vault::open(&path).expect("the file climbs with its duplicates");
-    assert_eq!(migrated.schema_version(), 14);
+    assert_eq!(migrated.schema_version(), centraid_vault::head_version());
     let after = migrated
         .read(|connection| Ok(texts_pairs(connection)))
         .unwrap();

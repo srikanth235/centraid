@@ -52,10 +52,10 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 /// three entity triggers and the indexes (R-CHAT-1), and rung twelve's two
 /// guards on a proposal's life (#1088), and rung thirteen's eleven `_vocab`
 /// tables, the folder index `fts_core_concept` with its shadow tables and four
-/// triggers, the three triggers that re-index a Tally circle from its group, and
-/// the twenty-two triggers that re-index a party, event, task or
+/// triggers, and the triggers that re-index a party, event, task or
 /// expense from the child table that feeds it, including the one edge that
-/// carries an interaction's note to the person (#1097), and its chat index
+/// carries an interaction's note to the person (#1097) — of which rung fifteen
+/// drops those that fed Tally's expense and circle indexes (#1099) — and its chat index
 /// `fts_chat_thread` with its five shadow tables, its vocabulary and the six
 /// triggers that keep it to a thread's title and what the member said
 /// (R-1097-22), and rung fourteen's Money: six `money_*` tables with their
@@ -70,7 +70,7 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 /// Named here rather than filtered by prefix: a guard that stopped being
 /// created, or an object arriving from somewhere, both have to show up as a
 /// failure.
-const LADDER_OBJECTS: [&str; 102] = [
+const LADDER_OBJECTS: [&str; 89] = [
     "chat_message",
     "chat_message_attachment",
     "chat_message_card",
@@ -136,19 +136,6 @@ const LADDER_OBJECTS: [&str; 102] = [
     "fts_schedule_project_vocab",
     "fts_schedule_task_from_schedule_project_au",
     "fts_schedule_task_vocab",
-    "fts_social_circle_from_tally_group_ad",
-    "fts_social_circle_from_tally_group_ai",
-    "fts_social_circle_from_tally_group_au",
-    "fts_social_circle_vocab",
-    "fts_tally_expense_from_knowledge_annotation_ad",
-    "fts_tally_expense_from_knowledge_annotation_ai",
-    "fts_tally_expense_from_knowledge_annotation_au",
-    "fts_tally_expense_from_social_circle_au",
-    "fts_tally_expense_from_tally_expense_line_item_ad",
-    "fts_tally_expense_from_tally_expense_line_item_ai",
-    "fts_tally_expense_from_tally_expense_line_item_au",
-    "fts_tally_expense_from_tally_group_au",
-    "fts_tally_expense_vocab",
     "idx_chat_attachment_asset",
     "idx_chat_attachment_document",
     "idx_chat_attachment_thumb",
@@ -189,15 +176,18 @@ const LADDER_OBJECTS: [&str; 102] = [
 /// `fts_core_place`, `fts_knowledge_annotation`, and by the owner's ruling
 /// `fts_core_transaction`, `fts_locker_item`, `fts_social_thread` and
 /// `fts_social_message`) with their shadow tables and twenty-one triggers
-/// (#1097, R2a, R-1097-12). `fts_schedule_project` and `fts_social_circle` are
-/// kept for containers (R-1097-19), so they are not dropped; their triggers are
-/// rewritten with a liveness guard and are in `ALTERED_OBJECTS`.
+/// (#1097, R2a, R-1097-12) — and, from rung fifteen, Tally (#1099): its twelve
+/// tables with their indexes and triggers, the expense index `fts_tally_expense`
+/// and the circle index `fts_social_circle` (whose only reader was a Tally group,
+/// R-1099-35) with their shadow tables and triggers. `fts_schedule_project` is kept
+/// for containers (R-1097-19), so it is not dropped; its triggers are rewritten
+/// with a liveness guard and are in `ALTERED_OBJECTS`.
 ///
 /// `access_device` and `access_device_secret` are NOT here, and that is an
 /// open item rather than a ruling: their writer (`Vault::enrol_device`, the
 /// gateway's peer allowlist) left with the iroh plane in #1080, and no rung
 /// drops them yet.
-const DROPPED_OBJECTS: [&str; 186] = [
+const DROPPED_OBJECTS: [&str; 276] = [
     "access_agent",
     "access_agent_secret",
     "attachments",
@@ -276,6 +266,15 @@ const DROPPED_OBJECTS: [&str; 186] = [
     "fts_people_profile_data",
     "fts_people_profile_docsize",
     "fts_people_profile_idx",
+    "fts_social_circle",
+    "fts_social_circle_ad",
+    "fts_social_circle_ai",
+    "fts_social_circle_au",
+    "fts_social_circle_config",
+    "fts_social_circle_content",
+    "fts_social_circle_data",
+    "fts_social_circle_docsize",
+    "fts_social_circle_idx",
     "fts_social_message",
     "fts_social_message_ad",
     "fts_social_message_ai",
@@ -294,6 +293,15 @@ const DROPPED_OBJECTS: [&str; 186] = [
     "fts_social_thread_data",
     "fts_social_thread_docsize",
     "fts_social_thread_idx",
+    "fts_tally_expense",
+    "fts_tally_expense_ad",
+    "fts_tally_expense_ai",
+    "fts_tally_expense_au",
+    "fts_tally_expense_config",
+    "fts_tally_expense_content",
+    "fts_tally_expense_data",
+    "fts_tally_expense_docsize",
+    "fts_tally_expense_idx",
     "harness_health",
     "idx_attachments_hash",
     "idx_attachments_item",
@@ -382,6 +390,78 @@ const DROPPED_OBJECTS: [&str; 186] = [
     "sync_external_entity",
     "sync_import_batch",
     "sync_import_row",
+    "tally_expense",
+    "tally_expense_currency_matches_group_ai",
+    "tally_expense_currency_matches_group_au",
+    "tally_expense_deleted_page_idx",
+    "tally_expense_entity_delete",
+    "tally_expense_entity_insert",
+    "tally_expense_group_idx",
+    "tally_expense_line_allocation",
+    "tally_expense_line_allocation_party_idx",
+    "tally_expense_line_allocation_touch_updated_at",
+    "tally_expense_line_expense_idx",
+    "tally_expense_line_item",
+    "tally_expense_line_item_entity_delete",
+    "tally_expense_line_item_entity_insert",
+    "tally_expense_line_item_touch_updated_at",
+    "tally_expense_line_receipt_idx",
+    "tally_expense_paid_by_idx",
+    "tally_expense_payer",
+    "tally_expense_payer_party_idx",
+    "tally_expense_payer_touch_updated_at",
+    "tally_expense_purge_idx",
+    "tally_expense_recurring_instance_idx",
+    "tally_expense_spent_page_idx",
+    "tally_expense_split",
+    "tally_expense_split_party_idx",
+    "tally_expense_split_touch_updated_at",
+    "tally_expense_touch_updated_at",
+    "tally_expense_txn_idx",
+    "tally_friend",
+    "tally_friend_entity_delete",
+    "tally_friend_entity_insert",
+    "tally_friend_touch_updated_at",
+    "tally_group",
+    "tally_group_archived_idx",
+    "tally_group_entity_delete",
+    "tally_group_entity_insert",
+    "tally_group_touch_updated_at",
+    "tally_nudge",
+    "tally_nudge_entity_delete",
+    "tally_nudge_entity_insert",
+    "tally_nudge_group_idx",
+    "tally_nudge_party_idx",
+    "tally_nudge_prepared_page_idx",
+    "tally_nudge_touch_updated_at",
+    "tally_obligation",
+    "tally_obligation_entity_delete",
+    "tally_obligation_entity_insert",
+    "tally_obligation_from_party_idx",
+    "tally_obligation_purge_idx",
+    "tally_obligation_to_party_idx",
+    "tally_obligation_touch_updated_at",
+    "tally_recurring_expense",
+    "tally_recurring_expense_entity_delete",
+    "tally_recurring_expense_entity_insert",
+    "tally_recurring_expense_group_idx",
+    "tally_recurring_expense_paid_by_idx",
+    "tally_recurring_expense_split",
+    "tally_recurring_expense_split_party_idx",
+    "tally_recurring_expense_split_touch_updated_at",
+    "tally_recurring_expense_touch_updated_at",
+    "tally_recurring_expense_updated_page_idx",
+    "tally_settlement",
+    "tally_settlement_currency_matches_group_ai",
+    "tally_settlement_currency_matches_group_au",
+    "tally_settlement_entity_delete",
+    "tally_settlement_entity_insert",
+    "tally_settlement_from_party_idx",
+    "tally_settlement_group_idx",
+    "tally_settlement_purge_idx",
+    "tally_settlement_to_party_idx",
+    "tally_settlement_touch_updated_at",
+    "tally_settlement_txn_idx",
     "trigger_ingress",
     "turns",
 ];
@@ -403,11 +483,10 @@ const DROPPED_OBJECTS: [&str; 186] = [
 ///   corpus's by those two columns.
 /// - `locker_item_address` (rung eight): `match_policy` goes with the matcher
 ///   nothing ran (Q-1047-15).
-/// - the three sync triggers of `fts_schedule_project` and of `fts_social_circle`
-///   (rung thirteen): an archived project and a circle with no live Tally group
-///   are not indexed (R-1097-19), so the triggers carry that guard.
-/// - `fts_core_party`, `fts_core_event`, `fts_schedule_task` and
-///   `fts_tally_expense` (rung thirteen): each index is dropped and created
+/// - the three sync triggers of `fts_schedule_project` (rung thirteen): an
+///   archived project is not indexed (R-1097-19), so the triggers carry that guard.
+/// - `fts_core_party`, `fts_core_event` and `fts_schedule_task` (rung
+///   thirteen): each index is dropped and created
 ///   again with the attribute columns it folds in, so the virtual table, its
 ///   `_content` shadow (one column per indexed column) and its three sync
 ///   triggers differ from the corpus's. The other shadows (`_config`, `_data`,
@@ -416,7 +495,7 @@ const DROPPED_OBJECTS: [&str; 186] = [
 ///   (rung thirteen): they re-index notes, documents and messages when a body
 ///   or a representation arrives, and rung thirteen creates them again without
 ///   the message block, because `fts_social_message` is retired (#1097).
-const ALTERED_OBJECTS: [&str; 34] = [
+const ALTERED_OBJECTS: [&str; 26] = [
     "core_collection",
     "fts_core_event",
     "fts_core_event_ad",
@@ -436,14 +515,6 @@ const ALTERED_OBJECTS: [&str; 34] = [
     "fts_schedule_task_ai",
     "fts_schedule_task_au",
     "fts_schedule_task_content",
-    "fts_social_circle_ad",
-    "fts_social_circle_ai",
-    "fts_social_circle_au",
-    "fts_tally_expense",
-    "fts_tally_expense_ad",
-    "fts_tally_expense_ai",
-    "fts_tally_expense_au",
-    "fts_tally_expense_content",
     "locker_item",
     "locker_item_address",
     "locker_key",
@@ -572,12 +643,14 @@ fn the_three_excluded_classes_are_created_by_sqlite_itself() {
             ))
         })
         .expect("the counts read");
-    // 12 FTS5 tables × 5 shadow tables each: rung five drops `fts_conversation`
+    // 10 FTS5 tables × 5 shadow tables each: rung five drops `fts_conversation`
     // with the ledger band it indexed (#1029), rung thirteen drops the seven
     // indexes nothing read (#1097, R2a, R-1097-12) and adds the folder index
-    // (R-1097-19) and the chat index (R-1097-22). The `_vocab` tables rung thirteen adds are virtual tables over
-    // those, with no shadow tables of their own.
-    assert_eq!(shadows, 60);
+    // (R-1097-19) and the chat index (R-1097-22), and rung fifteen drops the
+    // expense index and the circle index with Tally (#1099). The `_vocab` tables
+    // rung thirteen adds are virtual tables over those, with no shadow tables of
+    // their own.
+    assert_eq!(shadows, 50);
     assert_eq!(sequence, 1);
     assert!(autoindexes > 0, "no implicit index was created");
     // And none of the three appears in the baseline's own text.
@@ -611,8 +684,13 @@ fn the_fifty_seven_fts_sync_triggers_survive_the_baseline() {
     // item, memo, circle, group); and for the containers (R-1097-19) the folder
     // index's three and its one from the scheme, and the circle's three from its
     // Tally group; and for the chat (R-1097-22) the thread index's three and the
-    // three that re-index a thread from its messages.
-    assert_eq!(triggers, 51 - 21 + 12 + 1 + 1 + 8 + 4 + 3 + 3 + 3);
+    // three that re-index a thread from its messages. Rung fifteen then drops
+    // Tally's expense index (its three and the eight that re-index it) and the
+    // circle index (its three and the three from the group), 17 in all (#1099).
+    assert_eq!(
+        triggers,
+        51 - 21 + 12 + 1 + 1 + 8 + 4 + 3 + 3 + 3 - (3 + 8) - (3 + 3)
+    );
 }
 
 #[test]
@@ -646,10 +724,22 @@ fn the_entity_kind_registry_is_derived_and_equals_what_v0s_ladder_seeded() {
         .expect("the kinds read");
 
     assert_eq!(seeded.len(), 52, "the corpus's own count");
-    let missing: Vec<&String> = seeded
+    let missing: Vec<&str> = seeded
         .iter()
         .filter(|kind| !derived.contains(kind))
+        .map(String::as_str)
         .collect();
+    // THE KINDS A RUNG ABOVE THE CORPUS DROPS, NAMED: rung fifteen's Tally (#1099).
+    const DROPPED_BY_THE_LADDER: [&str; 8] = [
+        "tally.expense",
+        "tally.expense_line_item",
+        "tally.friend",
+        "tally.group",
+        "tally.nudge",
+        "tally.obligation",
+        "tally.recurring_expense",
+        "tally.settlement",
+    ];
     // THE KINDS A RUNG ABOVE THE CORPUS ADDS, NAMED: rung eleven's chat thread and
     // rung fourteen's Money rule.
     // The derivation must find it (a thread's first insert would fail its
@@ -666,14 +756,14 @@ fn the_entity_kind_registry_is_derived_and_equals_what_v0s_ladder_seeded() {
         .filter(|kind| !seeded.contains(kind) && !ADDED_BY_THE_LADDER.contains(&kind.as_str()))
         .collect();
     assert_eq!(
-        (missing.is_empty(), extra.is_empty()),
-        (true, true),
-        "missing {missing:?}, extra {extra:?}"
+        (missing, extra.is_empty()),
+        (DROPPED_BY_THE_LADDER.to_vec(), true),
+        "missing, extra {extra:?}"
     );
-    // A spot check that the exclusions are the RIGHT ones: a child row of an
-    // expense is not an entity, and a machinery band's row is not either.
-    assert!(derived.iter().any(|kind| kind == "tally.expense"));
-    assert!(!derived.iter().any(|kind| kind == "tally.expense_split"));
+    // A spot check that the exclusions are the RIGHT ones: a child row of a
+    // thread is not an entity, and a machinery band's row is not either.
+    assert!(derived.iter().any(|kind| kind == "chat.thread"));
+    assert!(!derived.iter().any(|kind| kind == "chat.message"));
     assert!(!derived.iter().any(|kind| kind == "share.authority"));
 }
 
@@ -703,10 +793,10 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     // rung ten drops rungs three and four's backup index (#1080); rung eleven
     // founds the chat (R-CHAT-1); rung twelve gives a proposal its life
     // (#1088); rung thirteen folds attribute text into the search indexes
-    // (#1097); rung fourteen founds Money (#1099).
+    // (#1097); rung fourteen founds Money and rung fifteen drops Tally (#1099).
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above.
-    assert_eq!(user_version, 14);
+    assert_eq!(user_version, 15);
     assert_eq!(journal, "wal");
 }
 

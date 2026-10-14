@@ -1,9 +1,8 @@
 //! THE `core.*` COMMANDS DOCS WRITES THROUGH (#1020 slot 4b; #1047 added
 //! `core.purge_document` and `core.create_text_document`).
 //!
-//! `crates/vault/tests/tally_commands.rs` replays a generated script and
-//! compares rows; this suite is the other half of the same proof — the
-//! behaviours a script cannot show, each one a claim a port gets wrong:
+//! This suite is the behaviours a replayed script cannot show, each one a claim
+//! a port gets wrong:
 //!
 //! 1. **Identity is the wrapper** (D-1020-DC1). Two documents over one sha are
 //!    two drive rows, two histories and two representations; only the BYTES are

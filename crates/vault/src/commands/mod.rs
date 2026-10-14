@@ -61,7 +61,6 @@ pub mod money;
 pub mod people;
 pub mod schedule;
 pub mod social;
-pub mod tally;
 
 use std::collections::BTreeMap;
 
@@ -312,9 +311,6 @@ impl Registry {
             registry.register(definition)?;
         }
         for definition in social::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in tally::definitions() {
             registry.register(definition)?;
         }
         Ok(registry)

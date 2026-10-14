@@ -256,6 +256,8 @@ pub const UNDO_RUNG_ELEVEN: &str = "DROP TABLE chat_message_attachment;
 /// shape was. A test that then sets `user_version = 11` climbs rung twelve over
 /// a chat of its own making.
 pub fn undo_rung_twelve(raw: &rusqlite::Connection) {
+    // The climb from rung eleven runs rung thirteen, which needs Tally's objects (#1099).
+    undo_rung_fifteen(raw);
     raw.execute_batch(UNDO_RUNG_ELEVEN)
         .expect("the chat's tables leave");
     raw.execute_batch(centraid_vault::migrations::CHAT_SQL)
@@ -285,3 +287,84 @@ pub const UNDO_RUNG_FOURTEEN: &str =
      DELETE FROM core_concept WHERE concept_id LIKE 'money:cat:%';
      DELETE FROM core_concept WHERE concept_id = 'money:relation:transfer';
      DELETE FROM core_concept_scheme WHERE scheme_id = 'money:categories';";
+
+/// A raw file founded at an earlier rung: the ladder run only as far as `rung`,
+/// the two header pragmas stamped and the entity kinds seeded from the DDL it
+/// holds, exactly as `Vault::create` does for the head, and nothing else (#1099).
+///
+/// A rung that DROPS objects cannot be wound back to from the head by undoing it
+/// (the objects it removed are not the objects the next rung down expects), so a
+/// suite that needs the file as an old rung left it builds it from the ladder.
+/// `Vault::open` climbs the rest.
+pub fn found_at_rung(path: &Path, rung: usize) -> rusqlite::Connection {
+    use centraid_vault::migrations::{LADDER, seed_entity_kinds};
+
+    let connection = rusqlite::Connection::open(path).expect("the file opens");
+    connection
+        .pragma_update(None, "application_id", centraid_vault::APPLICATION_ID)
+        .expect("application_id");
+    connection
+        .pragma_update(None, "foreign_keys", "OFF")
+        .expect("foreign_keys");
+    for migration in LADDER.iter().take(rung) {
+        connection
+            .execute_batch(&format!(
+                "BEGIN; {} PRAGMA user_version = {}; COMMIT;",
+                migration.sql, migration.version
+            ))
+            .unwrap_or_else(|error| {
+                panic!("rung {} `{}`: {error}", migration.version, migration.name)
+            });
+    }
+    seed_entity_kinds(&connection).expect("the kinds are seeded");
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .expect("foreign_keys");
+    connection
+}
+
+/// UNDO RUNG FIFTEEN on a raw connection: the `tally_*` tables, their indexes and
+/// triggers and the old expense index, as the baseline founded them (#1099).
+///
+/// A suite that winds a founded file back below rung thirteen runs this first,
+/// because rung thirteen creates triggers ON Tally's tables and fills an index from
+/// them, and a head file no longer has either. The objects come back EMPTY and in
+/// the baseline's own text, which is the shape a file at rung twelve held them in;
+/// rung fifteen drops them again on the climb.
+pub fn undo_rung_fifteen(raw: &rusqlite::Connection) {
+    let mut by_kind: [Vec<&str>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+    for chunk in centraid_vault::migrations::BASELINE_SQL
+        .split("\n-- ")
+        .skip(1)
+    {
+        let Some((header, body)) = chunk.split_once('\n') else {
+            continue;
+        };
+        let Some((kind, name)) = header.split_once(' ') else {
+            continue;
+        };
+        if !(name.starts_with("tally_") || name.starts_with("fts_tally_expense")) {
+            continue;
+        }
+        let slot = match kind {
+            "table" => 0,
+            "index" => 1,
+            "trigger" => 2,
+            _ => continue,
+        };
+        by_kind[slot].push(body);
+    }
+    assert_eq!(
+        by_kind.iter().map(Vec::len).collect::<Vec<_>>(),
+        [13, 28, 35],
+        "the baseline's Tally objects"
+    );
+    let mut statements = String::from("BEGIN;\n");
+    for body in by_kind.iter().flatten() {
+        statements.push_str(body.trim_end().trim_end_matches(';'));
+        statements.push_str(";\n");
+    }
+    statements.push_str("COMMIT;");
+    raw.execute_batch(&statements)
+        .expect("the baseline's Tally objects come back");
+}

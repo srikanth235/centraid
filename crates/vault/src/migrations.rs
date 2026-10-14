@@ -181,6 +181,17 @@ pub const SEARCH_COVERAGE_SQL: &str =
 /// choice and the rule for a vault that already holds duplicate `external_id`s.
 pub const MONEY_SQL: &str = include_str!("../../../contracts/migrations/014_money.sql");
 
+/// Rung fifteen: Tally leaves the vault (#1099, R-1099-19, R-1099-20, R-1099-22).
+///
+/// The app is deleted from v0, so the rows it wrote are swept (the entities of
+/// every `tally.*` kind, the circles its groups stood on, the settlement pool and
+/// the transactions mirrored into it), the twelve `tally_*` tables go with their
+/// indexes and triggers, and so does the circle index whose only reader was a
+/// Tally group (R-1099-35). The chat's two app lists name `money` where they named
+/// `tally`, in the one rebuild of `chat_thread`, `chat_message` and the two
+/// projections of a message that carries their guards and search triggers.
+pub const DROP_TALLY_SQL: &str = include_str!("../../../contracts/migrations/015_drop_tally.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -256,6 +267,11 @@ pub const LADDER: &[Migration] = &[
         version: 14,
         name: "money",
         sql: MONEY_SQL,
+    },
+    Migration {
+        version: 15,
+        name: "drop-tally",
+        sql: DROP_TALLY_SQL,
     },
 ];
 
@@ -534,8 +550,37 @@ pub const BASELINE_HEADER: &str = "\
 ";
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// UNDO RUNG FIFTEEN on a raw connection for the suites that wind a founded file back
+    /// below rung thirteen: the `tally_*` tables, indexes and triggers and the old expense
+    /// index come back EMPTY in the baseline's own text, because rung thirteen creates
+    /// triggers ON them and a head file has none (#1099). `tests/common/mod.rs` holds the
+    /// same function for the integration suites.
+    pub(crate) fn undo_rung_fifteen(connection: &Connection) {
+        let mut statements = String::from("BEGIN;\n");
+        for wanted in ["table", "index", "trigger"] {
+            for chunk in BASELINE_SQL.split("\n-- ").skip(1) {
+                let Some((header, body)) = chunk.split_once('\n') else {
+                    continue;
+                };
+                let Some((kind, name)) = header.split_once(' ') else {
+                    continue;
+                };
+                if kind == wanted
+                    && (name.starts_with("tally_") || name.starts_with("fts_tally_expense"))
+                {
+                    statements.push_str(body.trim_end().trim_end_matches(';'));
+                    statements.push_str(";\n");
+                }
+            }
+        }
+        statements.push_str("COMMIT;");
+        connection
+            .execute_batch(&statements)
+            .expect("the baseline's Tally objects come back");
+    }
 
     #[test]
     fn the_ladder_is_contiguous_from_one() {

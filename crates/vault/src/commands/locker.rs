@@ -111,7 +111,7 @@ pub const FLAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/flags";
 /// The star's notation.
 pub const STARRED_NOTATION: &str = "starred";
 
-/// ~30 days of trash before the sweep purges — mirrors Docs and Tally.
+/// ~30 days of trash before the sweep purges — mirrors Docs and People.
 const PURGE_WINDOW_DAYS: i64 = 30;
 
 /// The five `locker_item` cells that hold ciphertext under `K`.

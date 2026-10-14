@@ -7,17 +7,19 @@
 //! see (R1b), keeps a Locker memo out of every index (R1c), stores no rank weights
 //! (R1d: the door owns them) and adds a vocabulary table per domain (R3). It also
 //! keeps four indexes for the containers a member files things in (R5): a
-//! notebook and an album, a project, a Tally group, a Docs folder.
+//! notebook and an album, a project, a Docs folder. (Rung fifteen then dropped
+//! the expense index and the Tally-group circle index with Tally, #1099, and the
+//! rung's climb is proved over a file wound back from the head.)
 //!
 //! ## How the claims are made
 //!
 //! **Through the commands that write the text**, as the neighbouring
-//! `*_commands.rs` suites do: a person is added and edited with `people.*`, an
-//! expense with `tally.*`. SQL writes only what has no command: a calendar, a
+//! `*_commands.rs` suites do: a person is added and edited with `people.*`, a
+//! task with `schedule.*`. SQL writes only what has no command: a calendar, a
 //! place, a project's delete and a photograph's byte row.
 //!
 //! **Against an oracle that is not the triggers.** [`assert_indexes_match`]
-//! rebuilds what each of the four widened indexes SHOULD hold from the base
+//! rebuilds what each of the three widened indexes SHOULD hold from the base
 //! tables with plain joins and compares it, row by row and column by column,
 //! with what the index holds. The triggers and the rung's backfill are the two
 //! writers of that index; the oracle is a third answer, so a trigger that
@@ -280,69 +282,6 @@ impl World {
     fn folder(&self, name: &str) -> String {
         self.id("core.create_folder", json!({ "name": name }), "folder_id")
     }
-
-    /// The circle a Tally group stands on: the id the circle index holds.
-    fn circle_of(&self, group: &str) -> String {
-        self.vault()
-            .read(|connection| {
-                Ok(connection.query_row(
-                    "SELECT circle_id FROM tally_group WHERE group_id = ?1",
-                    [group],
-                    |row| row.get::<_, String>(0),
-                )?)
-            })
-            .expect("a group stands on a circle")
-    }
-
-    // --- tally ---
-
-    fn friend(&self, name: &str) -> String {
-        self.id("tally.add_friend", json!({ "name": name }), "party_id")
-    }
-
-    fn group(&self, name: &str, members: &[&str]) -> String {
-        self.id(
-            "tally.create_group",
-            json!({ "name": name, "icon": "x", "currency": "GBP", "member_ids": members }),
-            "group_id",
-        )
-    }
-
-    /// An expense of 3,000 minor units split between the owner and one friend,
-    /// optionally in a group and optionally with two itemised lines.
-    fn expense(
-        &self,
-        description: &str,
-        category: &str,
-        group: Option<&str>,
-        friend: &str,
-        items: Option<(&str, &str)>,
-    ) -> String {
-        let mut input = json!({
-            "description": description,
-            "amount_minor": 3000,
-            "paid_by": self.owner,
-            "category": category,
-            "spent_on": "2099-05-04",
-            "splits": [
-                { "party_id": self.owner, "share_minor": 2000 },
-                { "party_id": friend, "share_minor": 1000 }
-            ],
-        });
-        if let Some(group) = group {
-            input["group_id"] = json!(group);
-        }
-        if let Some((first, second)) = items {
-            input["split_method"] = json!("by_line");
-            input["line_items"] = json!([
-                { "kind": "item", "description": first, "amount_minor": 2000,
-                  "allocations": [{ "party_id": self.owner, "share_minor": 2000 }] },
-                { "kind": "item", "description": second, "amount_minor": 1000,
-                  "allocations": [{ "party_id": friend, "share_minor": 1000 }] }
-            ]);
-        }
-        self.id("tally.add_expense", input, "expense_id")
-    }
 }
 
 fn set<const N: usize>(ids: [&String; N]) -> BTreeSet<String> {
@@ -525,57 +464,12 @@ fn expected_tasks(connection: &Connection) -> Indexed {
     )
 }
 
-fn expected_expenses(connection: &Connection) -> Indexed {
-    let mut statement = connection
-        .prepare(
-            "SELECT x.expense_id, x.description,
-                    CASE WHEN x.category = 'general' THEN NULL ELSE x.category END, c.name
-               FROM tally_expense x
-               LEFT JOIN tally_group g ON g.group_id = x.group_id
-               LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-              WHERE x.deleted_at IS NULL",
-        )
-        .expect("the expenses read");
-    let expenses: Vec<(String, String, Option<String>, Option<String>)> = statement
-        .query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-        })
-        .expect("the expenses read")
-        .collect::<rusqlite::Result<_>>()
-        .expect("the expenses read");
-    let mut out = Indexed::new();
-    for (expense, description, category, group) in expenses {
-        let items = strings(
-            connection,
-            "SELECT description FROM tally_expense_line_item WHERE expense_id = ?1",
-            &expense,
-        );
-        let memo = strings(
-            connection,
-            "SELECT body_text FROM knowledge_annotation
-              WHERE target_type = 'tally.expense' AND target_id = ?1",
-            &expense,
-        );
-        out.insert(
-            expense,
-            bags([
-                Some(description),
-                category,
-                group,
-                joined(&items),
-                joined(&memo),
-            ]),
-        );
-    }
-    out
-}
-
-/// The four widened indexes hold exactly what their base tables say they
+/// The three widened indexes hold exactly what their base tables say they
 /// should: the same rows, and in each folded column the same words.
 fn assert_indexes_match(vault: &Vault) {
     vault
         .read(|connection| {
-            let checks: [(&str, &[&str], Indexed); 4] = [
+            let checks: [(&str, &[&str], Indexed); 3] = [
                 (
                     "fts_core_party",
                     &[
@@ -600,18 +494,6 @@ fn assert_indexes_match(vault: &Vault) {
                     &["task_id", "title", "description", "project"],
                     expected_tasks(connection),
                 ),
-                (
-                    "fts_tally_expense",
-                    &[
-                        "expense_id",
-                        "description",
-                        "category",
-                        "group_name",
-                        "items",
-                        "memo",
-                    ],
-                    expected_expenses(connection),
-                ),
             ];
             for (fts, columns, expected) in checks {
                 let actual = held(connection, fts, columns);
@@ -625,10 +507,10 @@ fn assert_indexes_match(vault: &Vault) {
         .expect("the indexes read");
 }
 
-/// The four container indexes hold exactly the live containers (R5), judged by
+/// The three container indexes hold exactly the live containers (R5), judged by
 /// plain joins that are not the triggers: a notebook or an album as it stands, a
-/// project while it is not archived, a circle a live group stands on, and a
-/// concept of the folders scheme that is not the root.
+/// project while it is not archived, and a concept of the folders scheme that is
+/// not the root.
 fn assert_containers_match(vault: &Vault) {
     vault
         .read(|connection| {
@@ -636,13 +518,16 @@ fn assert_containers_match(vault: &Vault) {
                 let mut statement = connection.prepare(sql).expect("the rows read");
                 statement
                     .query_map([], |row| {
-                        Ok((row.get::<_, String>(0)?, bags([Some(row.get::<_, String>(1)?)])))
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            bags([Some(row.get::<_, String>(1)?)]),
+                        ))
                     })
                     .expect("the rows read")
                     .collect::<rusqlite::Result<Indexed>>()
                     .expect("the rows read")
             };
-            let checks: [(&str, &[&str], Indexed); 4] = [
+            let checks: [(&str, &[&str], Indexed); 3] = [
                 (
                     "fts_core_collection",
                     &["collection_id", "name"],
@@ -654,23 +539,12 @@ fn assert_containers_match(vault: &Vault) {
                     one("SELECT project_id, name FROM schedule_project WHERE archived_at IS NULL"),
                 ),
                 (
-                    "fts_social_circle",
-                    &["circle_id", "name"],
-                    one(
-                        "SELECT c.circle_id, c.name FROM social_circle c
-                          WHERE EXISTS (SELECT 1 FROM tally_group g
-                                         WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL)",
-                    ),
-                ),
-                (
                     "fts_core_concept",
                     &["concept_id", "pref_label"],
-                    one(
-                        "SELECT c.concept_id, c.pref_label FROM core_concept c
+                    one("SELECT c.concept_id, c.pref_label FROM core_concept c
                            JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
                           WHERE s.uri = 'https://centraid.dev/schemes/folders'
-                            AND c.notation <> 'root'",
-                    ),
+                            AND c.notation <> 'root'"),
                 ),
             ];
             for (fts, columns, expected) in checks {
@@ -1056,161 +930,13 @@ fn a_tasks_project_finds_the_task_and_a_rename_moves_the_hit() {
     assert_indexes_match(world.vault());
 }
 
-#[test]
-fn an_expense_is_found_by_category_group_line_item_and_memo() {
-    let world = World::new("cov-expense");
-    let ana = world.friend("Ana");
-    let group = world.group("Sitwell Road", &[&ana]);
-    let expense = world.expense(
-        "Hardware shop",
-        "utilities",
-        Some(&group),
-        &ana,
-        Some(("Paint", "Brushes")),
-    );
-    world.run(
-        "tally.set_expense_memo",
-        json!({ "expense_id": expense, "note": "receipt is in the red folder" }),
-    );
-    let plain = world.expense("Cinema", "fun", None, &ana, None);
-
-    for (column, word) in [
-        ("category", "utilities"),
-        ("group_name", "sitwell"),
-        ("items", "paint"),
-        ("items", "brushes"),
-        ("memo", "folder"),
-    ] {
-        assert_eq!(
-            world.hits("fts_tally_expense", &col(column, word)),
-            set([&expense]),
-            "`{word}` is in `{column}`"
-        );
-    }
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("category", "fun")),
-        set([&plain])
-    );
-    assert_indexes_match(world.vault());
-
-    // A RENAME OF THE GROUP moves the hit: the name lives on the circle.
-    world.run(
-        "tally.rename_group",
-        json!({ "group_id": group, "name": "Kensington Flat" }),
-    );
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("group_name", "sitwell")),
-        none()
-    );
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("group_name", "kensington")),
-        set([&expense])
-    );
-    assert_indexes_match(world.vault());
-
-    // A trashed expense is out and a restored one is back.
-    world.run("tally.delete_expense", json!({ "expense_id": expense }));
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("items", "paint")),
-        none()
-    );
-    assert_indexes_match(world.vault());
-    world.run("tally.restore_expense", json!({ "expense_id": expense }));
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("items", "paint")),
-        set([&expense])
-    );
-    assert_indexes_match(world.vault());
-}
-
-#[test]
-fn the_default_category_is_not_folded() {
-    let world = World::new("cov-general");
-    let ana = world.friend("Ana");
-    let generic = world.expense("Dinner", "general", None, &ana, None);
-    let chosen = world.expense("Lunch", "food", None, &ana, None);
-
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("category", "general")),
-        none(),
-        "`general` is what every expense that chose nothing carries"
-    );
-    assert_eq!(world.hits("fts_tally_expense", "general"), none());
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("category", "food")),
-        set([&chosen])
-    );
-    // And the expense itself is still in the index, by its description.
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("description", "dinner")),
-        set([&generic])
-    );
-    assert_indexes_match(world.vault());
-}
-
 // ---------------------------------------------------------------------------
 // 2. What is removed, edited or cleared leaves with its words.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn deleting_a_line_item_a_channel_or_a_memo_removes_its_words() {
+fn deleting_a_channel_removes_its_words() {
     let world = World::new("cov-removal");
-    let ana = world.friend("Ana");
-    let expense = world.expense(
-        "Hardware shop",
-        "utilities",
-        None,
-        &ana,
-        Some(("Paint", "Brushes")),
-    );
-    world.run(
-        "tally.set_expense_memo",
-        json!({ "expense_id": expense, "note": "the red folder" }),
-    );
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("items", "brushes")),
-        set([&expense])
-    );
-
-    // A LINE ITEM: the edit writes the lines again with one fewer.
-    world.run(
-        "tally.edit_expense",
-        json!({
-            "expense_id": expense,
-            "description": "Hardware shop",
-            "amount_minor": 3000,
-            "paid_by": world.owner,
-            "category": "utilities",
-            "spent_on": "2099-05-04",
-            "split_method": "by_line",
-            "splits": [{ "party_id": world.owner, "share_minor": 3000 }],
-            "line_items": [{
-                "kind": "item", "description": "Paint", "amount_minor": 3000,
-                "allocations": [{ "party_id": world.owner, "share_minor": 3000 }]
-            }],
-        }),
-    );
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("items", "brushes")),
-        none()
-    );
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("items", "paint")),
-        set([&expense])
-    );
-    assert_indexes_match(world.vault());
-
-    // A MEMO: an empty note clears it.
-    world.run(
-        "tally.set_expense_memo",
-        json!({ "expense_id": expense, "note": "" }),
-    );
-    assert_eq!(
-        world.hits("fts_tally_expense", &col("memo", "folder")),
-        none()
-    );
-    assert_indexes_match(world.vault());
-
     // A CHANNEL: the delete takes the address with it, and the undo puts it back.
     let ravi = world.person("Ravi Menon", None, None);
     let channel = world.channel(&ravi, "email", "ravi@example.org");
@@ -1362,12 +1088,7 @@ fn purging_a_person_leaves_nothing_of_them_in_the_index() {
 #[test]
 fn no_widened_index_stores_a_rank_override() {
     let world = World::new("cov-no-rank");
-    for fts in [
-        "fts_core_party",
-        "fts_core_event",
-        "fts_schedule_task",
-        "fts_tally_expense",
-    ] {
+    for fts in ["fts_core_party", "fts_core_event", "fts_schedule_task"] {
         assert_eq!(
             world.count(&format!(
                 "SELECT COUNT(*) FROM {fts}_config WHERE k = 'rank'"
@@ -1382,7 +1103,6 @@ fn no_widened_index_stores_a_rank_override() {
 fn every_domain_vocabulary_answers_term_and_doc_for_a_planted_word() {
     let world = World::new("cov-vocab");
     let word = "quokka";
-    let ana = world.friend("Ana");
     let calendar = world.calendar();
 
     world.run(
@@ -1392,7 +1112,6 @@ fn every_domain_vocabulary_answers_term_and_doc_for_a_planted_word() {
     world.person("Quokka Rao", None, None);
     world.event(&calendar, "Quokka picnic", None);
     world.task_in("Quokka rescue", None);
-    world.expense("Quokka tickets", "fun", None, &ana, None);
     world.run(
         "core.create_text_document",
         json!({ "title": "Quokka lease", "body_text": "the terms" }),
@@ -1406,7 +1125,6 @@ fn every_domain_vocabulary_answers_term_and_doc_for_a_planted_word() {
         "fts_core_party",
         "fts_core_event",
         "fts_schedule_task",
-        "fts_tally_expense",
         "fts_core_content_item",
         "fts_core_document",
     ] {
@@ -1614,7 +1332,7 @@ fn no_sealed_column_appears_in_any_fts_object_at_the_ladder_head() {
     for named in [
         "fts_core_party_vocab",
         "fts_core_party_from_knowledge_annotation_ai",
-        "fts_tally_expense_from_tally_expense_line_item_au",
+        "fts_schedule_task_from_schedule_project_au",
         "fts_core_party_from_core_link_au",
         "fts_core_collection",
         "fts_chat_thread_from_chat_message_au",
@@ -1683,6 +1401,9 @@ fn baseline_block(kind: &str, name: &str) -> String {
 /// empty — a file at rung twelve held them in that shape.
 fn wind_back_to_rung_twelve(path: &Path) {
     let raw = Connection::open(path).expect("the file opens");
+    // Rung thirteen creates triggers ON Tally's tables, and a head file has none: they
+    // come back empty, in the baseline's text, for rung fifteen to drop again (#1099).
+    common::undo_rung_fifteen(&raw);
     let rung_thirteen: Vec<(String, String)> = {
         let mut statement = raw
             .prepare(
@@ -1697,13 +1418,13 @@ fn wind_back_to_rung_twelve(path: &Path) {
             .collect::<rusqlite::Result<_>>()
             .expect("the schema reads")
     };
-    // Twelve vocabularies (seven domains, four containers, the chat), twenty-two
-    // re-indexing triggers of the domains, the circle's three from the Tally
-    // group, the folder index's one from its scheme and the chat index's three
-    // from the messages.
+    // Ten vocabularies (six domains, three containers, the chat), fourteen
+    // re-indexing triggers of the domains, the folder index's one from its scheme
+    // and the chat index's three from the messages. (Rung fifteen dropped the
+    // expense and circle vocabularies and their eleven re-indexing triggers.)
     assert_eq!(
         rung_thirteen.len(),
-        12 + 22 + 3 + 1 + 3,
+        10 + 14 + 1 + 3,
         "rung thirteen's own objects"
     );
     let mut statements = String::from("BEGIN;\n");
@@ -1763,7 +1484,8 @@ fn wind_back_to_rung_twelve(path: &Path) {
 }
 
 /// The seven indexes rung thirteen retires (R2a). `fts_schedule_project` and
-/// `fts_social_circle` are not among them: they serve containers (R5).
+/// `fts_social_circle` are not among them: they served containers (R5), until rung
+/// fifteen dropped the circle index with Tally.
 const RETIRED: [&str; 7] = [
     "fts_people_profile",
     "fts_core_place",
@@ -1774,14 +1496,14 @@ const RETIRED: [&str; 7] = [
     "fts_social_message",
 ];
 
-/// The four indexes kept for containers as results of their own (Q-1097-2,
+/// The three indexes kept for containers as results of their own (Q-1097-2,
 /// R5), each with a vocabulary of its own. Chat history is `chat_thread` and
 /// `chat_message`, not the People messaging model `fts_social_*` indexed, so
-/// the messaging pair is retired.
-const CONTAINER_INDEXES: [&str; 4] = [
+/// the messaging pair is retired. The circle index, the fourth, left with Tally
+/// in rung fifteen (R-1099-35).
+const CONTAINER_INDEXES: [&str; 3] = [
     "fts_core_collection",
     "fts_schedule_project",
-    "fts_social_circle",
     "fts_core_concept",
 ];
 
@@ -1842,22 +1564,8 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
         "project_id",
     );
     let task = world.task_in("Order tiles", Some(&project));
-    let ana = world.friend("Ana");
-    let group = world.group("Sitwell Road", &[&ana]);
-    let expense = world.expense(
-        "Hardware shop",
-        "utilities",
-        Some(&group),
-        &ana,
-        Some(("Paint", "Brushes")),
-    );
-    world.run(
-        "tally.set_expense_memo",
-        json!({ "expense_id": expense, "note": "the red folder" }),
-    );
-    let generic = world.expense("Dinner", "general", None, &ana, None);
-    // Containers (R5): one of each, and an archived project and group that the
-    // baseline indexed and the rebuilt index must not.
+    // Containers (R5): one of each, and an archived project that the baseline
+    // indexed and the rebuilt index must not.
     let notebook = world.notebook("Reading list");
     let album = world.album("Goa trip");
     let folder = world.folder("Leases");
@@ -1866,9 +1574,6 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
         "UPDATE schedule_project SET archived_at = '2099-01-01T00:00:00.000Z' WHERE project_id = ?1",
         &[&archived_project],
     );
-    let mothballed = world.group("Mothballed flat", &[&ana]);
-    world.run("tally.archive_group", json!({ "group_id": mothballed }));
-    let circle = world.circle_of(&group);
     // The chat (R-1097-22): a thread whose second question and whose answers
     // were written before the rung.
     let thread = world.chat_turn(None, "sierra backfill", "assistantzed one", false);
@@ -1893,10 +1598,6 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
         ("fts_core_party", "memo", "lunch", &ravi),
         ("fts_core_event", "location", "lisbon", &event),
         ("fts_schedule_task", "project", "kitchen", &task),
-        ("fts_tally_expense", "category", "utilities", &expense),
-        ("fts_tally_expense", "group_name", "sitwell", &expense),
-        ("fts_tally_expense", "items", "brushes", &expense),
-        ("fts_tally_expense", "memo", "folder", &expense),
     ] {
         assert_eq!(
             hits(&migrated, fts, &col(column, word)),
@@ -1904,8 +1605,7 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
             "{fts}.{column} after the climb"
         );
     }
-    // A trashed profile's text, a trashed event and a `general` category are
-    // not backfilled either.
+    // A trashed profile's text and a trashed event are not backfilled either.
     assert_eq!(
         hits(&migrated, "fts_core_party", &col("nickname", "zed")),
         none()
@@ -1914,19 +1614,6 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
         hits(&migrated, "fts_core_event", &col("location", "lisbon")),
         set([&event]),
         "the trashed event is not the one found"
-    );
-    assert_eq!(
-        hits(&migrated, "fts_tally_expense", &col("category", "general")),
-        none()
-    );
-    // And what the indexes already held by their base columns is still there.
-    assert_eq!(
-        hits(
-            &migrated,
-            "fts_tally_expense",
-            &col("description", "dinner")
-        ),
-        set([&generic])
     );
     // The backfill equals what the base tables say, which is what the triggers
     // are held to as well.
@@ -1985,12 +1672,11 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
         );
     }
     // Each container index is whole: the table, its five shadow tables, its
-    // three triggers and its vocabulary (R5), and the circle's index and the
-    // folder index have the triggers of the table they hang on besides.
+    // three triggers and its vocabulary (R5), and the folder index has the
+    // trigger of the table it hangs on besides.
     for kept in CONTAINER_INDEXES {
         let objects = remaining_objects(&migrated, kept);
         let from_children = match kept {
-            "fts_social_circle" => 3,
             "fts_core_concept" => 1,
             _ => 0,
         };
@@ -2005,7 +1691,6 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
         ("fts_core_collection", "reading", &notebook),
         ("fts_core_collection", "goa", &album),
         ("fts_schedule_project", "kitchen", &project),
-        ("fts_social_circle", "sitwell", &circle),
         ("fts_core_concept", "leases", &folder),
     ] {
         assert_eq!(
@@ -2014,11 +1699,8 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
             "{fts} after the climb"
         );
     }
-    // A project and a group archived before the rung are not backfilled.
-    for (fts, word) in [
-        ("fts_schedule_project", "archived"),
-        ("fts_social_circle", "mothballed"),
-    ] {
+    // A project archived before the rung is not backfilled.
+    for (fts, word) in [("fts_schedule_project", "archived")] {
         assert_eq!(
             hits(&migrated, fts, &format!("\"{word}\"")),
             none(),
@@ -2066,6 +1748,7 @@ fn the_rung_climbs_over_a_file_that_already_has_its_objects() {
     let path = world.vault().path().to_path_buf();
     {
         let raw = Connection::open(&path).expect("the file opens");
+        common::undo_rung_fifteen(&raw);
         raw.execute_batch("PRAGMA user_version = 12;")
             .expect("the pragma is set");
     }
@@ -2217,79 +1900,6 @@ fn a_project_is_indexed_while_it_is_not_archived_and_a_rename_moves_the_hit() {
 }
 
 #[test]
-fn a_circle_is_indexed_only_while_a_live_tally_group_stands_on_it() {
-    let world = World::new("cov-circles");
-    let ana = world.friend("Ana");
-    let group = world.group("Sitwell Road", &[&ana]);
-    let circle = world.circle_of(&group);
-    assert_eq!(
-        world.hits("fts_social_circle", &word("sitwell")),
-        set([&circle])
-    );
-
-    // A RENAME is on the circle.
-    world.run(
-        "tally.rename_group",
-        json!({ "group_id": group, "name": "Elm Street" }),
-    );
-    assert_eq!(world.hits("fts_social_circle", &word("sitwell")), none());
-    assert_eq!(
-        world.hits("fts_social_circle", &word("elm")),
-        set([&circle])
-    );
-    assert_containers_match(world.vault());
-
-    // ARCHIVED IS NOT FOUND, and un-archiving finds it again.
-    world.run("tally.archive_group", json!({ "group_id": group }));
-    assert_eq!(world.hits("fts_social_circle", &word("elm")), none());
-    assert_containers_match(world.vault());
-    world.run(
-        "tally.archive_group",
-        json!({ "group_id": group, "archived": false }),
-    );
-    assert_eq!(
-        world.hits("fts_social_circle", &word("elm")),
-        set([&circle])
-    );
-
-    // A CIRCLE NO GROUP STANDS ON is no result, whoever made it: People has no
-    // circles screen. Giving it a group later makes it one, and a group moved
-    // onto another circle takes the hit with it.
-    let owner = world.owner.clone();
-    world.execute_sql(
-        "INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
-         VALUES ('circle-bare', ?1, 'Bare circle', 'friends'),
-                ('circle-spare', ?1, 'Spare circle', 'custom')",
-        &[&owner],
-    );
-    assert_eq!(world.hits("fts_social_circle", &word("bare")), none());
-    world.execute_sql(
-        "INSERT INTO tally_group (group_id, circle_id, icon, color, currency, created_at)
-         VALUES ('group-bare', 'circle-bare', 'x', 'blue', 'GBP', '2099-01-01T00:00:00.000Z')",
-        &[],
-    );
-    assert_eq!(
-        world.hits("fts_social_circle", &word("bare")),
-        set([&"circle-bare".to_owned()])
-    );
-    world.execute_sql(
-        "UPDATE tally_group SET circle_id = 'circle-spare' WHERE group_id = 'group-bare'",
-        &[],
-    );
-    assert_eq!(world.hits("fts_social_circle", &word("bare")), none());
-    assert_eq!(
-        world.hits("fts_social_circle", &word("spare")),
-        set([&"circle-spare".to_owned()])
-    );
-    assert_containers_match(world.vault());
-
-    // A DELETE takes the group and then the circle; the hit is gone.
-    world.run("tally.delete_group", json!({ "group_id": group }));
-    assert_eq!(world.hits("fts_social_circle", &word("elm")), none());
-    assert_containers_match(world.vault());
-}
-
-#[test]
 fn a_folder_is_indexed_and_the_root_a_tag_and_another_scheme_never_are() {
     let world = World::new("cov-folders");
     let leases = world.folder("Leases");
@@ -2388,10 +1998,8 @@ fn a_folder_is_indexed_and_the_root_a_tag_and_another_scheme_never_are() {
 #[test]
 fn every_container_vocabulary_answers_term_and_doc_for_a_planted_word() {
     let world = World::new("cov-container-vocab");
-    let ana = world.friend("Ana");
     world.notebook("Quokka notebook");
     world.project("Quokka project");
-    world.group("Quokka group", &[&ana]);
     world.folder("Quokka folder");
     for container in CONTAINER_INDEXES {
         let vocab = format!("{container}_vocab");

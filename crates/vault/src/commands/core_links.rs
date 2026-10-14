@@ -82,7 +82,6 @@ const LINKABLE: &[(&str, &str, bool)] = &[
     ("social.thread", "social_thread", false),
     ("social.message", "social_message", false),
     ("media.asset", "media_asset", true),
-    ("tally.expense", "tally_expense", true),
 ];
 
 /// Logical name → PK column for the subjects a file may be pinned to
@@ -683,7 +682,7 @@ fn detach() -> CommandDefinition {
             )?;
             // THE LAST REFERENCE RELEASES THE BYTES (#916, adversarial BUG-6).
             // An attachment that minted its own content item — a receipt
-            // photographed into Tally, a file dropped on a note — was the only
+            // photographed into a note, a file dropped on a note — was the only
             // thing referencing it, so detaching left a content row with no
             // referrer, no trash pair, and bytes no sweep would reclaim.
             let released = match content_id.as_deref() {

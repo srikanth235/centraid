@@ -308,17 +308,6 @@ function exceptionRows(): Record<string, unknown>[] {
       override_json: null,
     },
     {
-      // ANOTHER SERIES KIND.
-      exception_id: "exc-5",
-      target_type: "tally.recurring_expense",
-      target_id: "event-1",
-      original_start_local: "2026-03-09T09:00:00",
-      recurrence_semantics: "zoned",
-      scope: "occurrence",
-      action: "skip",
-      override_json: null,
-    },
-    {
       // NO KEY: the row the old readers treated as an exception at
       // `undefined`, matching everything or nothing.
       exception_id: "exc-6",

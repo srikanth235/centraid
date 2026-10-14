@@ -398,17 +398,17 @@ mod tests {
             may_act: false,
             scope_clamp: None,
         };
-        let decision = evaluate_access(&connection, &principal, "tally", "expense", Verb::Act)
-            .expect("judged");
+        let decision =
+            evaluate_access(&connection, &principal, "notes", "note", Verb::Act).expect("judged");
         match decision {
             Decision::Deny { failing, .. } => {
                 assert!(failing.contains("read-only"), "{failing}");
-                assert!(failing.contains("tally.expense"), "{failing}");
+                assert!(failing.contains("notes.note"), "{failing}");
             }
             Decision::Allow { .. } => panic!("act must be denied"),
         }
         assert!(
-            evaluate_access(&connection, &principal, "tally", "expense", Verb::Read)
+            evaluate_access(&connection, &principal, "notes", "note", Verb::Read)
                 .expect("judged")
                 .is_allow()
         );
@@ -420,8 +420,8 @@ mod tests {
         let decision = evaluate_access(
             &connection,
             &Principal::owner("phone"),
-            "tally",
-            "expense",
+            "notes",
+            "note",
             Verb::Act,
         )
         .expect("judged");
@@ -442,7 +442,7 @@ mod tests {
             device_id: "app".to_owned(),
             may_act: true,
             scope_clamp: Some(ScopeClamp {
-                scopes: vec![scope("tally", "read", &[])],
+                scopes: vec![scope("notes", "read", &[])],
             }),
         };
         match evaluate_access(&connection, &principal, "locker", "item", Verb::Read)
@@ -456,7 +456,7 @@ mod tests {
         }
         // And the verb is part of the cover: a `read` scope does not act.
         assert!(
-            !evaluate_access(&connection, &principal, "tally", "expense", Verb::Act)
+            !evaluate_access(&connection, &principal, "notes", "note", Verb::Act)
                 .expect("judged")
                 .is_allow()
         );
@@ -464,8 +464,8 @@ mod tests {
 
     #[test]
     fn clamp_intersection_ands_filters_and_is_order_independent() {
-        let wide = scope("tally", "read", &["a", "b", "c"]);
-        let narrow = scope("tally", "read", &["b", "c"]);
+        let wide = scope("notes", "read", &["a", "b", "c"]);
+        let narrow = scope("notes", "read", &["b", "c"]);
         let one = intersect(&[&wide, &narrow]).expect("intersects");
         let other = intersect(&[&narrow, &wide]).expect("intersects");
         assert_eq!(one, other);
@@ -476,8 +476,8 @@ mod tests {
     fn two_scopes_pinning_one_column_to_disjoint_sets_are_refused() {
         // NOT silently intersected to nothing: an empty screen reads as "no
         // data", and the truth is "these scopes contradict".
-        let left = scope("tally", "read", &["a"]);
-        let right = scope("tally", "read", &["b"]);
+        let left = scope("notes", "read", &["a"]);
+        let right = scope("notes", "read", &["b"]);
         let error = intersect(&[&left, &right]).expect_err("must refuse");
         assert!(error.to_string().contains("disjoint"), "{error}");
         assert!(error.to_string().contains("`in` filter"), "{error}");
@@ -485,11 +485,11 @@ mod tests {
 
     #[test]
     fn masks_intersect_and_no_mask_is_every_column() {
-        let mut left = scope("tally", "read", &[]);
+        let mut left = scope("notes", "read", &[]);
         left.field_mask = Some(["a", "b", "c"].into_iter().map(str::to_owned).collect());
-        let mut right = scope("tally", "read", &[]);
+        let mut right = scope("notes", "read", &[]);
         right.field_mask = Some(["b", "c", "d"].into_iter().map(str::to_owned).collect());
-        let open = scope("tally", "read", &[]);
+        let open = scope("notes", "read", &[]);
         assert_eq!(
             intersect(&[&left, &right]).expect("intersects").1,
             Some(["b", "c"].into_iter().map(str::to_owned).collect())
