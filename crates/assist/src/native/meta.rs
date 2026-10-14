@@ -55,10 +55,12 @@ pub enum Kind {
     Notebook,
     Folder,
     List,
+    /// A Money transaction (#1099, R-1099-8): read-only in v0.
+    Transaction,
 }
 
 impl Kind {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Person,
         Self::Event,
         Self::Task,
@@ -70,6 +72,7 @@ impl Kind {
         Self::Notebook,
         Self::Folder,
         Self::List,
+        Self::Transaction,
     ];
 
     #[must_use]
@@ -359,6 +362,8 @@ const EVENT_STATUS: &[(&str, &str)] = &[
     ("tentative", "tentative"),
     ("cancelled", "cancelled"),
 ];
+/// A transaction's status. `pending` is the one CHECK value left out (`UNEXPOSED`).
+const TXN_STATUS: &[(&str, &str)] = &[("posted", "posted"), ("void", "void")];
 /// Locker item types: the vault's own list, derived from
 /// `centraid_vault::commands::locker::ITEM_TYPES` and spelled identically.
 static LOCKER_TYPES: [(&str, &str); ITEM_TYPES.len()] = {
@@ -383,9 +388,13 @@ pub struct Unexposed {
     pub reason: &'static str,
 }
 
-/// The CHECK values the model's enums leave out. Empty: every enum the model
-/// speaks is the whole of its column's list.
-pub const UNEXPOSED: &[Unexposed] = &[];
+/// The CHECK values the model's enums leave out: only a transaction's `pending`.
+pub const UNEXPOSED: &[Unexposed] = &[Unexposed {
+    table: "core_transaction",
+    column: "status",
+    value: "pending",
+    reason: "Money's import writes only posted rows and the member voids one; a pending row is a provider state no member action makes",
+}];
 
 /// `log kind:` values, stored as the activity kind notation.
 pub const LOG_KINDS: &[&str] = &["call", "message", "visit", "coffee"];
@@ -393,7 +402,7 @@ pub const LOG_KINDS: &[&str] = &["call", "message", "visit", "coffee"];
 /// The starred flag lives in `core_tag` under the flags scheme for every kind.
 const STAR: Source = at("core_tag", "concept_id");
 
-use FieldType::{Bool, Date, Enum, Number, Text};
+use FieldType::{Bool, Date, Enum, Money, Number, Text};
 
 pub static KINDS: &[KindSpec] = &[
     KindSpec {
@@ -709,6 +718,33 @@ pub static KINDS: &[KindSpec] = &[
         }],
         trash: false,
         container: true,
+    },
+    KindSpec {
+        kind: Kind::Transaction,
+        name: "transaction",
+        plural: "transactions",
+        entity: "core.transaction",
+        table: "core_transaction",
+        pk: "txn_id",
+        // The name the member sees: Money's display name, else the bank's own description.
+        name_source: at("money_transaction", "display_name"),
+        date: Some(DateSpec {
+            label: "posted",
+            source: at("core_transaction", "posted_at"),
+        }),
+        // READS ONLY (#1099, R-1099-8): `amount` is signed (money out is negative) in the
+        // account's currency; `account` and `category` are the names of the rows the
+        // transaction points at. `money.categorize` takes a concept id in an array, which
+        // the one-scalar-per-field `edit` path cannot carry, so no field is editable.
+        fields: &[
+            field("amount", Money, at("core_transaction", "amount_minor")),
+            field("account", Text, at("core_account", "name")),
+            field("category", Text, at("core_concept", "pref_label")),
+            field("status", Enum, at("core_transaction", "status")).values(TXN_STATUS),
+        ],
+        links: &[],
+        trash: false,
+        container: false,
     },
 ];
 

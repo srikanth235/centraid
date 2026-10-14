@@ -86,6 +86,24 @@ pub trait Door: Send {
     /// runtime never names is never read.
     fn table(&self, table: &str, columns: &str, sort: &str, pk: &str) -> Result<Vec<Row>, String>;
 
+    /// The rows of one table that satisfy `predicate`, through the same paged read as
+    /// [`table`](Self::table). `predicate` is a `?`-placeholder fragment of the kit's statement
+    /// grammar and `binds` are its text values, in order. Money's transactions are read this way,
+    /// a window of recent months and a chunk of ids at a time, so the runtime never walks a
+    /// ledger (#1099, R-1099-8). A door that cannot answer says so.
+    fn table_where(
+        &self,
+        table: &str,
+        columns: &str,
+        sort: &str,
+        pk: &str,
+        predicate: &str,
+        binds: &[String],
+    ) -> Result<Vec<Row>, String> {
+        let _ = (table, columns, sort, pk, predicate, binds);
+        Err("this door reads no filtered table".to_owned())
+    }
+
     /// Every occurrence of an event that occupies a civil day of `from_day..=to_day`
     /// (`YYYY-MM-DD`, days of the IANA zone `tz`): repeating series expanded, the cancelled and
     /// the trashed left out, each placed on the member's calendar in `tz` (its wall clock, its

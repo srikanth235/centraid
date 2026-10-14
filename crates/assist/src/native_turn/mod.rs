@@ -104,8 +104,10 @@ pub(crate) fn civil_at(now_ms: i64, tz: &str) -> jiff::civil::DateTime {
 
 impl NativeChat {
     /// A session over `door`, for a member whose zone is `tz`. The Locker is off (R-1088-3): the
-    /// session reads no Locker row and declines a call that names one. "Today" is the day it is in
-    /// `tz` by the door's clock.
+    /// session reads no Locker row and declines a call that names one. Money is off too
+    /// (`Flags::money`, #1099, R-1099-8) until the shipped model has been measured with the
+    /// `transaction` kind in its prompt: the session reads no Money table and its kind card is
+    /// the one that model was trained on. "Today" is the day it is in `tz` by the door's clock.
     ///
     /// # Errors
     /// The door's words, when the vault would not load into a world.
@@ -113,6 +115,7 @@ impl NativeChat {
         let now = civil_at(door.now_ms(), tz);
         let flags = Flags {
             locker: false,
+            money: false,
             writes: Writes::Park,
             ..Flags::default()
         };

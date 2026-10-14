@@ -111,14 +111,14 @@ from common import AUTHORED, NATIVE, rng  # noqa: E402
 
 SECTIONS = {"people": "person", "groups": "group", "lists": "list", "events": "event", "tasks": "task",
             "notebooks": "notebook", "notes": "note", "folders": "folder", "documents": "document", "albums": "album",
-            "photos": "photo", "debts": "debt", "locker": "locker item"}
+            "photos": "photo", "debts": "debt", "locker": "locker item", "transactions": "transaction"}
 NOUN = {"person": "people", "group": "groups", "list": "lists", "event": "events", "task": "tasks",
         "notebook": "notebooks", "note": "notes", "folder": "folders", "document": "documents", "album": "albums",
-        "photo": "photos", "debt": "debts", "locker item": "locker items"}
+        "photo": "photos", "debt": "debts", "locker item": "locker items", "transaction": "transactions"}
 NOUN1 = {"person": "person", "group": "group", "list": "list", "event": "event", "task": "task",
          "notebook": "notebook", "note": "note", "folder": "folder", "document": "document", "album": "album",
-         "photo": "photo", "debt": "debt", "locker item": "locker item"}
-DATE_KINDS = {"person", "event", "task", "note", "document", "photo", "debt"}  # kinds with a date field (kind card)
+         "photo": "photo", "debt": "debt", "locker item": "locker item", "transaction": "transaction"}
+DATE_KINDS = {"person", "event", "task", "note", "document", "photo", "debt", "transaction"}  # kinds with a date field (kind card)
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november",
           "december"]

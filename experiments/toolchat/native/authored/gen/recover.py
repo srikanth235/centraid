@@ -52,6 +52,7 @@ KIND_FIELDS = {
     "photo": {"name", "date", "starred"},
     "album": {"name"},
     "debt": {"name", "date", "amount", "direction", "status"},
+    "transaction": {"name", "date", "amount", "account", "category", "status"},
     "locker item": {"name", "type", "username", "url", "notes", "starred"},
 }
 FIELD_SWAP = {"effort": "duration", "duration": "effort", "body": "description", "description": "body",

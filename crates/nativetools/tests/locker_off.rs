@@ -44,6 +44,23 @@ impl Door for Recording {
         Door::table(&self.inner, table, columns, sort, pk)
     }
 
+    fn table_where(
+        &self,
+        table: &str,
+        columns: &str,
+        sort: &str,
+        pk: &str,
+        predicate: &str,
+        binds: &[String],
+    ) -> Result<Vec<centraid_apps_kit::row::Row>, String> {
+        self.log
+            .lock()
+            .unwrap()
+            .tables
+            .push((table.to_owned(), columns.to_owned()));
+        Door::table_where(&self.inner, table, columns, sort, pk, predicate, binds)
+    }
+
     fn search(
         &self,
         entity: &str,

@@ -523,3 +523,65 @@ Doctrine: [docs/decisions.md#money-1099](../docs/decisions.md#money-1099) (R-109
 - `scripts/home-site/public/index.html`
 - `scripts/lint-copy.mjs`
 - `scripts/security/rust-unsafe-ledger.json`
+
+## Lane W8 — Money in the assistant
+
+Doctrine: [docs/decisions.md#money-1099](../docs/decisions.md#money-1099) (R-1099-8, -21, -22, -33, -34 and this lane's R-1099-80..84) and [#ontology-v0-close-916](../docs/decisions.md#ontology-v0-close-916) (the chat CHECKs already accept `money`; no schema change).
+
+**What changed.** The assistant reads Money. `Kind::Transaction` is a twelfth model-facing kind, read-only: the posted day as its date, `amount` (signed, money out negative, in the account's currency), `account`, `category`, `status` (`posted` or `void`) and Money's display name as its name. The world loads the transactions of this month and the two before it (`TRANSACTION_MONTHS = 3`) through a new `Door::table_where` (a `?`-placeholder predicate over the same paged read a screen uses; the harness's `Handle` and the phone's `CoreDoor` both answer it), fetching the display names for those ids in chunks of 200. `App::Money` is the assistant's seventh app; a transaction's chat card names `(money, transaction)` and opens Money's home (`Opens::AppHome`) until the shell has a row route. A Money-scoped chat offers three questions. A money field's `where` value may be negative (`amount < -50`).
+
+**The one write, `categorize`: not offered (R-1099-80).** The `edit` path maps one field to one scalar parameter of one command. `money.categorize` takes a list of ids and a concept id where the model would say a label, so it needs a label-to-concept step, an array input and a park simulator. That is a slice of its own.
+
+**`Flags::money` (R-1099-82).** Default on (the harness, a retrain); `NativeChat::open` sets it off on the phone. Off, no Money table is read, the world holds no transaction and the kind card is the eleven-line one the shipped model was trained on. `nativetools session --no-money` runs a harness session with that card.
+
+**Measurement, stated exactly.** The shipped model could not be run here: no Qwen3.5-0.8B GGUF exists in this environment (the only `model.gguf` files are one-byte test stubs under `/tmp`), `transformers` is not installed and the Hub is not reachable, so `eval/run.py --model gguf` could not score the frozen val or test sets before or after. **Not measured:** the model's session pass rate with the `transaction` line in its prompt, and with the `debt` and `group` lines gone (Lane T's cut, R-1099-21). **Run instead:** the deterministic suites below, including the transcript goldens (`crates/assist/tests/transcript_golden.rs`) and the committed export. The phone's flag therefore ships off, and the owner turns it on after scoring both cards.
+
+**Transcript goldens: unchanged.** No golden file changed. The goldens render prompts over worlds that hold no transaction, and the one line this wave adds to a prompt, `transaction: name, date (posted), amount (USD), account, category, status (posted|void)`, is in the regenerated export, not in a golden.
+
+**`contracts/assist/export` regenerated** with `nativetools export`: `kind_card.txt`, `prompt.{sig,compact,full}.txt` gain that one line, and `metadata.json` gains the `transaction` kind (its table, columns, the four fields and the three new mapped columns). Nothing else in the export moved.
+
+**Python estate.** `experiments/toolchat/native` could not be run here (no `transformers`, no HF cache, the public worlds are Hub artifacts). Its three kind tables (`authored/coverage.py` `SECTION_KIND`, `authored/gen/drills.py` `SECTIONS`/`NOUN`/`NOUN1`/`DATE_KINDS`, `authored/gen/recover.py` `KIND_FIELDS`) now name `transaction`. The worlds and the ~450 authored sessions still hold `debts` and `groups`, and `drills.py` still generates debt and group drills: regenerating them is a data-version rewrite (R-1099-59), and the `native-python` CI job stays red until it is done.
+
+**Verification.**
+
+- `cargo test -p centraid-assist --all-features`: pass (181 unit tests, the 3 transcript goldens). `cargo test -p centraid-nativetools --all-features`: pass, every target, including the new `money_kind` (7 tests), `meta` (the enum count is now 4: a transaction's status), `export_fixture` against the regenerated export, and `locker_off`. One run lost 29 targets to a full disk shared with another lane's build (`No space left on device` in every failure); those 29 targets were rerun alone and passed. `cargo test -p centraid-core --all-features`: pass, including `assist_door` with its new test that the phone's door reads signed, windowed transactions and `assist_native`.
+- `cargo xtask rules`: pass, every rule ok (`sql-confinement` clean: the loader states predicates as `?`-placeholder fragments through the door and writes no SQL).
+- `bun run check:push:static`: pass (4/4 gates).
+
+**Falsification.** (1) *The world holds three months and no more.* Throwaway: `TRANSACTION_MONTHS` raised to 4 -> `the_world_holds_this_month_and_the_two_before_it_and_no_older_row` red (the 30 June row came in); restored -> green. (2) *With `Flags::money` off the card is the trained one and no Money table is read.* Throwaway: `kind_card_in` made to ignore the flag -> `with_money_off_the_world_holds_no_transaction_and_the_card_is_the_trained_one` red; the loader made to read regardless -> `money_off_reads_no_money_table_and_money_on_reads_only_the_window` red; both restored -> green.
+
+### Every file this section touches
+
+- `receipts/issue-1099-money.md`, `CHANGELOG.md`, `docs/decisions.md`
+**Added** (1):
+- `crates/nativetools/tests/money_kind.rs`
+
+**Changed** (28):
+- `crates/assist/README.md`
+- `contracts/assist/export/kind_card.txt`
+- `contracts/assist/export/metadata.json`
+- `contracts/assist/export/prompt.compact.txt`
+- `contracts/assist/export/prompt.full.txt`
+- `contracts/assist/export/prompt.sig.txt`
+- `crates/assist/src/app.rs`
+- `crates/assist/src/native/act.rs`
+- `crates/assist/src/native/door.rs`
+- `crates/assist/src/native/meta.rs`
+- `crates/assist/src/native/prompt.rs`
+- `crates/assist/src/native/session.rs`
+- `crates/assist/src/native/whr.rs`
+- `crates/assist/src/native/world.rs`
+- `crates/assist/src/native_turn/cards.rs`
+- `crates/assist/src/native_turn/mod.rs`
+- `crates/assist/src/suggest.rs`
+- `crates/core/src/assist/door.rs`
+- `crates/core/tests/assist_door.rs`
+- `crates/nativetools/src/bin/nativetools.rs`
+- `crates/nativetools/src/seed.rs`
+- `crates/nativetools/src/vaultio.rs`
+- `crates/nativetools/tests/common/drive.rs`
+- `crates/nativetools/tests/locker_off.rs`
+- `crates/nativetools/tests/meta.rs`
+- `experiments/toolchat/native/authored/coverage.py`
+- `experiments/toolchat/native/authored/gen/drills.py`
+- `experiments/toolchat/native/authored/gen/recover.py`

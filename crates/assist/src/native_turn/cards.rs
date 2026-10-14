@@ -1,6 +1,6 @@
 //! A RESULT IS THE CHAT'S EXISTING CARD (R-1088-7): the kind to app and entity table.
 //!
-//! The runtime's rows are eleven kinds; the chat's card names one of seven apps (Money's is the
+//! The runtime's rows are twelve kinds; the chat's card names one of seven apps (Money's is the
 //! seventh, since rung fifteen) and an entity the
 //! shell routes by. This is the one place that says which. A card is a reference (`app`,
 //! `entity`, `id`) and a few words; the app's own tile draws the row.
@@ -17,6 +17,7 @@
 //! | notebook | notes | `notebook` | the library under that notebook |
 //! | folder | docs | `folder` | the folder's page |
 //! | list | tasks | `project` | the project |
+//! | transaction | money | `transaction` | Money's home (no row route yet) |
 //! | locker item | none | none | never drawn: the Locker is off on the phone (R-1088-3) |
 //!
 //! The album, notebook and folder routes are the shell's since the containers became search results
@@ -38,6 +39,8 @@ use crate::result::Card;
 pub enum Opens {
     /// The row itself: the shell has a route for this `(app, entity)`.
     Row,
+    /// The app's home: the shell has no route for the entity.
+    AppHome,
 }
 
 /// How one kind is drawn as a card.
@@ -58,8 +61,17 @@ const fn row(kind: Kind, app: App, entity: &'static str) -> CardKind {
     }
 }
 
+const fn home(kind: Kind, app: App, entity: &'static str) -> CardKind {
+    CardKind {
+        kind,
+        app,
+        entity,
+        opens: Opens::AppHome,
+    }
+}
+
 /// THE TABLE. Every kind but the Locker item.
-pub const TABLE: [CardKind; 10] = [
+pub const TABLE: [CardKind; 11] = [
     row(Kind::Person, App::People, "person"),
     row(Kind::Event, App::Agenda, "event"),
     row(Kind::Task, App::Tasks, "task"),
@@ -70,6 +82,7 @@ pub const TABLE: [CardKind; 10] = [
     row(Kind::Notebook, App::Notes, "notebook"),
     row(Kind::Folder, App::Docs, "folder"),
     row(Kind::List, App::Tasks, "project"),
+    home(Kind::Transaction, App::Money, "transaction"),
 ];
 
 /// How a kind is drawn, or `None` for the one that is never drawn.
@@ -92,8 +105,10 @@ pub fn card_of(row: &Row, _today: Date) -> Option<Card> {
     if let Some(stamp) = row.date {
         card = card.subtitle(stamp.show());
     }
-    let state = match row.field("status") {
-        Some(Val::Enum(status)) => (*status).to_owned(),
+    // A transaction's one word is what it moved: `-42.00 USD`.
+    let state = match (row.kind, row.field("amount"), row.field("status")) {
+        (Kind::Transaction, Some(amount), _) => amount.show(None),
+        (_, _, Some(Val::Enum(status))) => (*status).to_owned(),
         _ => String::new(),
     };
     Some(card.meta(state))
@@ -139,5 +154,32 @@ mod tests {
                 entry.entity
             );
         }
+    }
+    #[test]
+    fn a_transaction_card_names_money_opens_its_home_and_carries_the_signed_amount() {
+        use crate::native::dates::Stamp;
+        use std::collections::BTreeMap;
+        let mut fields = BTreeMap::new();
+        fields.insert("amount", Val::Money(-450, "USD".to_owned()));
+        fields.insert("status", Val::Enum("posted"));
+        let row = Row {
+            kind: Kind::Transaction,
+            id: "t1".to_owned(),
+            name: "Blue Bottle".to_owned(),
+            date: Stamp::parse("2026-09-26"),
+            fields,
+            trashed: false,
+            created: String::new(),
+            updated: String::new(),
+            extra: BTreeMap::new(),
+        };
+        let card = card_of(&row, jiff::civil::date(2026, 9, 27)).expect("a transaction is drawn");
+        assert_eq!((card.app, card.entity), (App::Money, "transaction"));
+        assert_eq!(card.title, "Blue Bottle");
+        assert_eq!(card.meta, "-4.50 USD");
+        assert_eq!(
+            card_kind(Kind::Transaction).map(|how| how.opens),
+            Some(Opens::AppHome)
+        );
     }
 }

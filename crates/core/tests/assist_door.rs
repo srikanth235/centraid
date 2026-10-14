@@ -147,6 +147,20 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
     assert!(core.search("core.party", "!!", 5).unwrap().is_empty());
 }
 
+/// `YYYY-MM-DD` of a day count since 1970-01-01 (Hinnant's civil-from-days).
+fn ymd(days: i64) -> String {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
 fn project_names(door: &dyn Door) -> Vec<String> {
     door.table(
         "schedule_project",
@@ -235,19 +249,6 @@ fn events_on_the_core_door_are_the_ones_the_harness_door_reads_in_every_zone() {
     let core = pair.core.assist_door();
     let now = core.now_ms();
     let harness = Harness::open(&pair.copy, SetClock::at(now), "door-test").unwrap();
-    /// `YYYY-MM-DD` of a day count since 1970-01-01 (Hinnant's civil-from-days).
-    fn ymd(days: i64) -> String {
-        let z = days + 719_468;
-        let era = z.div_euclid(146_097);
-        let doe = z.rem_euclid(146_097);
-        let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-        let mp = (5 * doy + 2) / 153;
-        let day = doy - (153 * mp + 2) / 5 + 1;
-        let month = if mp < 10 { mp + 3 } else { mp - 9 };
-        let year = yoe + era * 400 + i64::from(month <= 2);
-        format!("{year:04}-{month:02}-{day:02}")
-    }
     let today = now.div_euclid(86_400_000);
     // the window the runtime reads: 31 days back, 120 ahead
     let (from, to) = (ymd(today - 31), ymd(today + 120));
@@ -277,4 +278,97 @@ fn ids_and_the_clock_are_the_vaults_and_the_locker_is_not_there() {
     assert!(door.now_ms() > 1_700_000_000_000);
     assert!(door.seal("item", "secret").is_err());
     assert!(door.unseal("key", "item", "sealed").is_err());
+}
+
+#[test]
+fn money_reaches_the_world_through_the_core_door_as_signed_rows_inside_the_window() {
+    // #1099, R-1099-8: the phone's door answers `table_where` through the same paged read a
+    // screen uses, and the runtime's world holds the recent months of an account's lines.
+    let pair = pair();
+    let door = pair.core.assist_door();
+    let today = door.now_ms().div_euclid(86_400_000);
+    let day = |back: i64| ymd(today - back);
+    let account = door.mint_id();
+    let run = |key: &str, command: &str, input: serde_json::Value| {
+        let ran = door.run_keyed(key, command, input).unwrap();
+        assert!(ran.ok, "{command}: {:?}", ran.reason);
+    };
+    run(
+        "money-1:0",
+        "money.add_account",
+        serde_json::json!({"account_id": account, "name": "Everyday", "kind": "checking"}),
+    );
+    let line = |id: String, external: &str, back: i64, minor: i64, direction: &str, name: &str| {
+        serde_json::json!({
+            "txn_id": id, "external_id": external, "posted_on": day(back),
+            "amount_minor": minor, "direction": direction, "description": name.to_uppercase(),
+            "display_name": name,
+            "category_concept_id": "money:cat:food.groceries",
+        })
+    };
+    let (recent, income, old) = (door.mint_id(), door.mint_id(), door.mint_id());
+    run(
+        "money-1:1",
+        "money.import_transactions",
+        serde_json::json!({
+            "account_id": account, "source": "csv",
+            "rows": [
+                line(recent.clone(), &format!("csv:{:064x}", 1), 2, 4_250, "debit", "Corner Market"),
+                line(income.clone(), &format!("csv:{:064x}", 2), 3, 100_000, "credit", "Payroll"),
+                // two years back: outside the three months the world holds
+                line(old.clone(), &format!("csv:{:064x}", 3), 730, 999, "debit", "Ancient"),
+            ],
+        }),
+    );
+
+    let world = World::load_in(&door, false, true, None).expect("a world loads");
+    let held: Vec<(&str, String)> = world
+        .of_kind(Kind::Transaction)
+        .map(|row| {
+            (
+                row.name.as_str(),
+                format!("{:?}", row.field("amount").unwrap()),
+            )
+        })
+        .collect();
+    assert_eq!(held.len(), 2, "{held:?}");
+    assert!(
+        world
+            .rows
+            .contains_key(&(Kind::Transaction, recent.clone()))
+    );
+    assert!(!world.rows.contains_key(&(Kind::Transaction, old)));
+    let amount = |id: &String| {
+        world
+            .row(&(Kind::Transaction, id.clone()))
+            .unwrap()
+            .field("amount")
+            .cloned()
+    };
+    assert_eq!(
+        amount(&recent),
+        Some(centraid_assist::native::world::Val::Money(
+            -4_250,
+            "USD".to_owned()
+        ))
+    );
+    assert_eq!(
+        amount(&income),
+        Some(centraid_assist::native::world::Val::Money(
+            100_000,
+            "USD".to_owned()
+        ))
+    );
+    let row = world.row(&(Kind::Transaction, recent)).unwrap();
+    assert_eq!(row.name, "Corner Market");
+    assert_eq!(
+        row.field("category"),
+        Some(&centraid_assist::native::world::Val::Text(
+            "Groceries".to_owned()
+        ))
+    );
+
+    // Money off reads none of it
+    let without = World::load_in(&door, false, false, None).expect("a world loads");
+    assert_eq!(without.of_kind(Kind::Transaction).count(), 0);
 }

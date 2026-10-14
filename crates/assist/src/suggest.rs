@@ -170,6 +170,20 @@ fn candidates(app: App, world: &World, today: Date) -> Vec<Suggestion> {
             out.push(say(app, "What notebooks do I have?"));
             out.push(say(app, "Which notes are starred?"));
         }
+        App::Money => {
+            // The newest transaction's name (a world holds only recent months, `Flags::money`).
+            if let Some(transaction) = first_by(live(world, Kind::Transaction), |row| {
+                std::cmp::Reverse((row.date, row.id.clone()))
+            }) {
+                out.push(say(
+                    app,
+                    format!("What did I spend at {}?", lead_words(&transaction.name, 2)),
+                ));
+            }
+            out.push(say(app, "What did I spend this month?"));
+            out.push(say(app, "What was my biggest expense this month?"));
+            out.push(say(app, "What came in this month?"));
+        }
         App::Docs => {
             if let Some(doc) = first_by(live(world, Kind::Document), newest) {
                 out.push(say(app, format!("Find the {}", lead_words(&doc.name, 3))));
@@ -244,7 +258,7 @@ pub fn suggest(door: &dyn Door, tz: &str, scope: Option<App>) -> Vec<Suggestion>
     };
     // The Locker is off on the phone (R-1088-3): its rows are never read, so no
     // suggestion can name one.
-    let world = World::load_in(door, false, Some(&standing)).unwrap_or_default();
+    let world = World::load_in(door, false, false, Some(&standing)).unwrap_or_default();
     suggest_in(&world, today, scope)
 }
 

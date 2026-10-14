@@ -101,6 +101,7 @@ pub fn id_param(kind: Kind) -> &'static str {
         Kind::Notebook => "notebook_id",
         Kind::Folder => "folder_id",
         Kind::List => "project_id",
+        Kind::Transaction => "txn_id",
     }
 }
 
@@ -692,10 +693,8 @@ impl Session {
         let keys = if named.tier == Some(crate::native::resolve::Tier::Typo) {
             // the writes a guess must not make stay the ask: a delete or a removal (destructive),
             // money, a secret (egress), and a write the message says takes every row
-            let guess_ok = !matches!(
-                verb,
-                Verb::Delete | Verb::RemoveFrom | Verb::Reveal
-            ) && self.said_every_row().is_none();
+            let guess_ok = !matches!(verb, Verb::Delete | Verb::RemoveFrom | Verb::Reveal)
+                && self.said_every_row().is_none();
             match named.keys.as_slice() {
                 [_] if self.flags.compose && guess_ok => {
                     self.pending_notes.extend(named.typo_line.take());
@@ -2144,7 +2143,8 @@ impl Session {
         let containers = match args.get(slot) {
             Some(value) => self.resolve_rows(value)?,
             None if verb == Verb::RemoveFrom && self.flags.normalize => {
-                let expected = container_of(row.kind).ok_or_else(|| not_container_verb(verb, row))?;
+                let expected =
+                    container_of(row.kind).ok_or_else(|| not_container_verb(verb, row))?;
                 let inside = self
                     .world
                     .neighbours(&row.key())
@@ -3335,6 +3335,7 @@ impl Session {
                 ("locker.add_item", input, "item_id")
             }
             Kind::Photo => unreachable!("photos are not created by a call"),
+            Kind::Transaction => unreachable!("transactions are read-only (#1099, R-1099-8)"),
         };
         let before = self.world.clone();
         let ran = self.write_step(command, &input)?;
@@ -3896,6 +3897,7 @@ fn rename(kind: Kind) -> (&'static str, &'static str) {
         Kind::Notebook => ("knowledge.rename_notebook", "name"),
         Kind::Folder => ("core.rename_folder", "name"),
         Kind::List => ("schedule.save_project", "name"),
+        Kind::Transaction => unreachable!("transactions are read-only (#1099, R-1099-8)"),
     }
 }
 

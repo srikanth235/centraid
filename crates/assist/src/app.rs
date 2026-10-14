@@ -1,5 +1,5 @@
-//! THE APPS THE ASSISTANT READS: six, and Locker is not one of them. (Tally left with
-//! the app, #1099; Money joins in wave 8 of the same umbrella.)
+//! THE APPS THE ASSISTANT READS: seven, and Locker is not one of them. (Tally left with
+//! the app and Money joined, #1099.)
 //!
 //! [`App`] has no `Locker` variant, so no card can name it and no chat can be scoped to it. A
 //! secret that was never in a prompt cannot be in an answer (R-1088-3).
@@ -9,6 +9,7 @@
 pub enum App {
     Agenda,
     Docs,
+    Money,
     Notes,
     People,
     Photos,
@@ -17,9 +18,10 @@ pub enum App {
 
 impl App {
     /// Every app, in registry order.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Agenda,
         Self::Docs,
+        Self::Money,
         Self::Notes,
         Self::People,
         Self::Photos,
@@ -32,6 +34,7 @@ impl App {
         match self {
             Self::Agenda => "agenda",
             Self::Docs => "docs",
+            Self::Money => "money",
             Self::Notes => "notes",
             Self::People => "people",
             Self::Photos => "photos",
@@ -45,6 +48,7 @@ impl App {
         match self {
             Self::Agenda => "Agenda",
             Self::Docs => "Docs",
+            Self::Money => "Money",
             Self::Notes => "Notes",
             Self::People => "People",
             Self::Photos => "Photos",
