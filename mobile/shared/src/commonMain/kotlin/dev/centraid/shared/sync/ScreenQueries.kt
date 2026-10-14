@@ -244,6 +244,8 @@ internal fun AppQueryRequest.zone(): String? =
         ?: people_roster?.tz ?: people_touch?.tz ?: people_person?.tz ?: people_search?.tz ?: people_trash?.tz
         ?: locker_items?.tz ?: locker_item?.tz ?: locker_search?.tz ?: locker_review?.tz ?: locker_access?.tz
         ?: vault_search?.tz
+        ?: money_spending?.tz ?: money_activity?.tz ?: money_transaction?.tz ?: money_cashflow?.tz
+        ?: money_accounts?.tz ?: money_target_sheet?.tz ?: money_recurring?.tz ?: money_search?.tz
 
 private const val NOTHING_TO_READ = "Nothing to read here."
 private const val NO_ZONE = "This phone did not report its time zone."
