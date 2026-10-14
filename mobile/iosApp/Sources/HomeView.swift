@@ -731,6 +731,26 @@ private struct ContentBody: View {
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
+        case let .money(spent):
+            // THIS MONTH'S SPENDING, one figure per currency and never a sum
+            // across them. The amounts are the core's (rendered by the kit's one
+            // formatter) and the caption is the machine's.
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(spent.amounts.enumerated()), id: \.offset) { _, amount in
+                    Text(Money.render(amount))
+                        .centraidType("mono")
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Text(spent.caption)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+
         case .none:
             EmptyView()
         }

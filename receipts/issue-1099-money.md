@@ -708,3 +708,40 @@ Doctrine: [`docs/decisions.md#money-1099`](../docs/decisions.md#money-1099) (rul
 
 1. **Import sends the plan's input unchanged.** Throwaway: appended a space to each statement's `publish_input` in `MoneyImportMachine.inputs`. `MoneyScreensSpec` went red in two tests (the publish input and the proposed-duplicates input) at the `inputJson shouldBe` lines; reverted.
 2. **The Home tile never drops or sums a currency.** Throwaway: took only the first amount in `HomeMoneyTile.arrived`. The tile test went red at the two-currency assertion; reverted. Red-first on a real defect: the first run of the new spec failed two tests, a search that read on a change with no term and a categories sheet whose data did not follow its state; both were fixed in the base machine (`idle`, and the view-event re-fold) and are green.
+
+## Lane W5b — Money on iOS (wave 5b)
+
+Doctrine: the same rulings as W5 ([`docs/decisions.md#money-1099`](../docs/decisions.md#money-1099)); no new ruling. The views mirror `screens/money/*.kt` screen for screen and decide nothing: every label, sign, tone and enabled flag is the state's, an amount is the kit's one `Money.render`, and nothing sums across currencies.
+
+### What changed
+
+- **`Sources/Money/MoneyScreens.swift`** conforms to `AppScreens`: nine `ScreenPort`s (one bridge each, held for the app's life), nine routes, `tileRoute` and the intent router (the Plus and a More row push the import, accounts, rules or categories; the search bar is a door that pushes `money.search`; a transaction, a category line and Recurring push theirs). A route's parameter is a small JSON `MoneyParameter` (the transaction, the month and category of a plan, the pushing page's title, and a nonce unique to the push); `open` turns it into the screen's own `Opened` with a fresh draft token. The home and the search open once per push, because `CentraidApp` re-sends `open` on every appearance and a pop back onto the home would reset its tab, month and filters.
+- **Views** (all new, `Sources/Money/`): `MoneyHomeView` (Spending, Activity, Cash flow; month stepper; chip and More sheets), `MoneyTransactionView` (with `MoneyTargetView` and `MoneyRecurringView`), `MoneyImportView` (the `.fileImporter` over CSV, OFX, QFX and plain text, read in place and handed to the bridge as `(name, bytes)`), `MoneyManageViews` (accounts, rules, categories: forms are sheets, a confirm over an open sheet is presented by that sheet) and `MoneySearchView`; `MoneyParts` holds the shared drawing.
+- **Wiring**: one line in `AppRegistry.apps`; `HomeView`'s `ContentBody` draws `TileBody.Spent` (each amount, then the caption); `ChatRouting` routes a `money`/`transaction` reference to the page and a bare `money` to the home; `ScreenFixtureTests` counts 79 fixtures and gains eight Money laws, the Swift half of `ScreenFixtureSpec`'s "money: ..." claims.
+- `project.yml` lists `Sources` by folder, so no project edit is needed beyond `xcodegen generate`.
+
+### Hand-offs
+
+The iOS build of Money is an **owner hand-off**: no Xcode here, and the Swift has met no compiler. Names were checked against `screen.proto` by hand (including SwiftProtobuf's `_p` suffix on fields that begin `has_`) and against the Kotlin bridges in `commonMain`. [Row 1.8 of the hand-off list](../docs/release/v1-handoffs.md) names the macOS command that compiles the iOS and the Android Money views (`-Pcentraid.android=true :androidApp:compileDebugKotlin`).
+
+### Every file this section touches
+
+- `CHANGELOG.md`
+- `docs/release/v1-handoffs.md`
+- `mobile/iosApp/Sources/Chat/ChatRouting.swift`
+- `mobile/iosApp/Sources/HomeView.swift`
+- `mobile/iosApp/Sources/Kit/ScreenRegistry.swift`
+- `mobile/iosApp/Sources/Money/MoneyHomeView.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneyImportView.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneyManageViews.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneyParts.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneyScreens.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneySearchView.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneyTransactionView.swift` (new)
+- `mobile/iosApp/Tests/ScreenFixtureTests.swift`
+- `receipts/issue-1099-money.md` (this section)
+
+### Verification
+
+- `cargo xtask rules`: every rule ok. `bun run check:push:static`: 4/4. `cd mobile && ./gradlew :shared:jvmTest`: BUILD SUCCESSFUL (no shared code changed).
+- Not run, and why: `xcodebuild` and the Swift tests (no macOS). The Swift is checked by reading only.

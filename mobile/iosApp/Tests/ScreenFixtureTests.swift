@@ -60,7 +60,7 @@ final class ScreenFixtureTests: XCTestCase {
         let manifest = try Data(contentsOf: screens.appendingPathComponent("manifest.json"))
         let decoded = try JSONSerialization.jsonObject(with: manifest) as? [String: Any]
         let fixtures = decoded?["fixtures"] as? [[String: Any]] ?? []
-        XCTAssertEqual(fixtures.count, 71)
+        XCTAssertEqual(fixtures.count, 79)
         for fixture in fixtures {
             let binary = try XCTUnwrap(fixture["binary"] as? String)
             let name = String(binary.dropFirst("contracts/screens/".count).dropLast(".bin".count))
@@ -1026,5 +1026,100 @@ final class ScreenFixtureTests: XCTestCase {
         for case_ in ["create-blocked", "occurrence-repeat-locked", "save-refused"] {
             XCTAssertNotNil(try agendaEditor(case_).content, "agenda-editor/\(case_)")
         }
+    }
+
+    // MARK: - Money (#1099)
+
+    private func money(_ case_: String) throws -> Centraid_Screen_V1_MoneyHomeState {
+        try Centraid_Screen_V1_MoneyHomeState(serializedBytes: try bytes("money/\(case_)"))
+    }
+
+    private func moneyImport(_ case_: String) throws -> Centraid_Screen_V1_MoneyImportState {
+        try Centraid_Screen_V1_MoneyImportState(serializedBytes: try bytes("money-import/\(case_)"))
+    }
+
+    private func moneyTransaction(_ case_: String) throws -> Centraid_Screen_V1_MoneyTransactionState {
+        try Centraid_Screen_V1_MoneyTransactionState(serializedBytes: try bytes("money-transaction/\(case_)"))
+    }
+
+    /// Day one is one sentence and one action, with the same verb in the header.
+    func testMoneyDayOneIsOneSentenceAndOneAction() throws {
+        let state = try money("day-one")
+        let empty = state.data.spending.empty
+        XCTAssertTrue(state.data.spending.hasEmpty)
+        XCTAssertEqual(empty.headline, "Import a bank statement to see this month.")
+        XCTAssertEqual(empty.actionLabel, state.chrome.addLabel)
+        XCTAssertEqual(state.band.map(\.key), ["spending", "activity", "cashflow", "more"])
+        XCTAssertTrue(state.data.spending.heroes.isEmpty)
+    }
+
+    /// Two currencies are two heroes, and a figure never spans them.
+    func testMoneyTwoCurrenciesAreTwoHeroes() throws {
+        let spending = try money("spending").data.spending
+        XCTAssertEqual(spending.heroes.map { $0.spent.currency }, ["USD", "CAD"])
+        XCTAssertEqual(spending.tables.count, 1)
+        XCTAssertEqual(spending.tables[0].currency, "USD")
+        // Over plan is a minus sign and a tone, never a colour alone.
+        let over = try XCTUnwrap(spending.tables[0].rows.first)
+        XCTAssertTrue(over.over)
+        XCTAssertEqual(over.left.minor, -2_827)
+        XCTAssertEqual(spending.inOutNet[0].figures.map(\.label), ["In", "Out", "Net"])
+    }
+
+    /// A transfer keeps its row, greyed, and the chip row has no sort chip.
+    func testMoneyATransferKeepsItsRowGreyed() throws {
+        let state = try money("activity")
+        XCTAssertEqual(state.chips.map(\.key), ["month", "account", "category"])
+        let transfer = state.data.activity.sections[1].rows[0]
+        XCTAssertTrue(transfer.dimmed)
+        XCTAssertEqual(transfer.chips[0].label, "Transfer")
+    }
+
+    /// A denied Money is the gate; a failed read keeps its band.
+    func testMoneyDeniedIsTheGateAndAFailedReadKeepsItsBand() throws {
+        let denied = try money("denied")
+        let refused = try money("read-refused")
+        guard case .denied(let gate)? = denied.content else { return XCTFail("denied is its own arm") }
+        XCTAssertEqual(gate.title, "Money is off")
+        XCTAssertTrue(denied.band.isEmpty)
+        guard case .failure(let failure)? = refused.content else { return XCTFail("a refused read is a failure") }
+        XCTAssertEqual(failure.kind, .unavailable)
+        XCTAssertEqual(refused.band.count, 4)
+    }
+
+    /// The import review counts every verdict, and the date-order question has
+    /// no rows and no default.
+    func testMoneyImportReviewCountsEveryVerdict() throws {
+        let review = try moneyImport("planned").data
+        let statement = try XCTUnwrap(review.statements.first)
+        XCTAssertEqual(statement.counts.map(\.label), ["New", "Already in", "Check these", "Can\u{2019}t read"])
+        XCTAssertEqual(statement.rows.first { $0.lineLabel == "Row 88" }?.reason, "Amount has a letter O.")
+        XCTAssertEqual(review.publishLabel, "Import 186 rows")
+        let question = try moneyImport("question").data
+        let asked = try XCTUnwrap(question.statements.first)
+        XCTAssertTrue(asked.hasQuestion)
+        XCTAssertFalse(asked.question.options.contains(where: \.selected))
+        XCTAssertTrue(asked.rows.isEmpty)
+        XCTAssertEqual(question.publishLabel, "")
+    }
+
+    /// A transaction offers a transfer and a rule and carries no write.
+    func testMoneyATransactionOffersATransferAndARule() throws {
+        let state = try moneyTransaction("offers")
+        XCTAssertEqual(state.data.transferOffer.key, "transfer")
+        XCTAssertEqual(state.data.ruleOffer.key, "rule")
+        XCTAssertEqual(state.write.phase, .idle)
+        XCTAssertEqual(state.data.actions.filter(\.destructive).map(\.key), ["void"])
+    }
+
+    /// Every Money fixture sets exactly one content state.
+    func testEveryMoneyFixtureSetsExactlyOneContentState() throws {
+        for case_ in ["day-one", "spending", "activity", "denied", "read-refused"] {
+            XCTAssertNotNil(try money(case_).content, "money/\(case_)")
+        }
+        for case_ in ["planned", "question"] {
+            XCTAssertNotNil(try moneyImport(case_).content, "money-import/\(case_)")
+        }
+        XCTAssertNotNil(try moneyTransaction("offers").content, "money-transaction/offers")
     }
 }

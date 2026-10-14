@@ -21,6 +21,7 @@ import CentraidShared
 /// | docs | `document` | the document page |
 /// | people | `person` | the person page |
 /// | agenda | `event` | the event's detail (`qualifier` is the occurrence) |
+/// | money | `transaction` | the transaction's page |
 /// | photos | `photo` | the lightbox, with the answer's other photos as neighbours |
 /// | notes | `notebook` | the library under that notebook (a container found by name, #1097) |
 /// | photos | `album` | the album's shelf |
@@ -60,6 +61,8 @@ enum ChatRouting {
             return DocsScreens.documentRoute(card.id, card.title, parent: parent)
         case ("people", "person"):
             return PeopleScreens.personRoute(card.id, name: card.title)
+        case ("money", "transaction"):
+            return MoneyScreens.transactionRoute(card.id, parent: parent)
         case ("agenda", "event"):
             return AgendaScreens.detailRoute(
                 eventID: card.id,
@@ -103,6 +106,7 @@ enum ChatRouting {
         case "docs": return DocsScreens.driveRoute
         case "people": return PeopleScreens.homeRoute
         case "agenda": return AgendaScreens.homeRoute
+        case "money": return MoneyScreens.homeRoute()
         case "photos": return .photos
         default: return nil
         }
