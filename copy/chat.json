@@ -41,6 +41,8 @@
     "DOWNLOAD_PROGRESS": "Downloading {percent}",
     "DOWNLOAD_PROGRESS_UNKNOWN": "Downloading",
     "DRAWER_LABEL": "Chats",
+    "DRAWER_SEARCH_NO_MATCH": "No chats match “{term}”.",
+    "DRAWER_SEARCH_PLACEHOLDER": "Search chats",
     "EMPTY_LINE": "Ask about anything in your vault.",
     "ERROR_ATTACH_TOO_LARGE": "That attachment is too large.",
     "ERROR_ATTACH_UNREADABLE": "That attachment would not open.",

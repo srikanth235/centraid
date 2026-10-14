@@ -18,7 +18,9 @@ name: chat
     id: "home-band-chat"
 - assertVisible:
     id: "chat"
-- assertVisible: "On this phone"
+# The header's second line is "<vault name> · on this phone" (R-CHAT-2): matched as a
+# phrase, because Maestro matches the whole line.
+- assertVisible: ".*on this phone"
 
 # THE MODEL STEP: the size, the one note, and the one action.
 - runFlow:

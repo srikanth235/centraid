@@ -225,4 +225,59 @@ class HomeSearchSpec : StringSpec({
         picked.state.data_ shouldBe shown.data_
         RowRoutes.destination(row.target!!) shouldBe Destination.NotesEditor("n1", title = "Cabin packing")
     }
+
+    // ---- THE CHAT GROUP (#1097, R-1097-24) ---------------------------------------------------------
+
+    val chatThread = hit("chat", "chat.thread", "th-1", "Where is the marmalade recipe?")
+    val noteHit = hit("notes", "knowledge.note", "n1", "Cabin packing")
+    val withChatTab = step(HomeSearchMachine.initial(), HomeSearchEvent(opened = HomeSearchEvent.Opened(chat_tab = true))).state
+
+    "a conversation is a chat row in a Chats group, last, whose target is the thread (R-1097-24)" {
+        val data = HomeSearchMachine.fold(listOf(chatThread, noteHit))
+        // Last: the group is not an app of Home's tile order.
+        data.groups.map { it.app_id } shouldContainExactly listOf("notes", "chat")
+        val group = data.groups.last()
+        group.label shouldBe SharedCopy.HOME_SEARCH_CHAT_GROUP
+        group.accessibility_label shouldBe "Chats, 1 result"
+        group.containers.shouldBeEmpty()
+        val row = group.rows.single()
+        row.kind_label shouldBe SharedCopy.SEARCH_KIND_CHAT
+        row.accessibility_label shouldBe "Chat, Where is the marmalade recipe?"
+        // The shell opens a thread in its Chat tab: the reference names the thread and its title.
+        row.target shouldBe ChatCard(app = "chat", entity = "thread", id = "th-1", title = "Where is the marmalade recipe?")
+        // Chat is a tab and not a screen, so a stack-based shell has no destination for it.
+        RowRoutes.destination(row.target!!).shouldBeNull()
+    }
+
+    "the Chat group is drawn only when the shell says it has a Chat tab" {
+        // ON: iOS sends `Opened(chat_tab = true)`.
+        withChatTab.chat_tab shouldBe true
+        val on = step(typed(withChatTab, "cab").state, answer("cab", chatThread, noteHit)).state
+        on.data_!!.groups.map { it.app_id } shouldContainExactly listOf("notes", "chat")
+        // OFF: Android sends a bare `Opened`, so its answer has the same hits and no chat group.
+        opened.chat_tab shouldBe false
+        val off = step(typed(opened, "cab").state, answer("cab", chatThread, noteHit)).state
+        off.data_!!.groups.map { it.app_id } shouldContainExactly listOf("notes")
+        off.data_.groups.single().count shouldBe 1
+    }
+
+    "a term only a conversation holds is the no-match state where there is no Chat tab, and the group where there is" {
+        val off = step(typed(opened, "marmalade").state, answer("marmalade", chatThread)).state
+        off.data_!!.groups.shouldBeEmpty()
+        off.data_.empty.shouldNotBeNull()
+        off.data_.ask_question shouldBe "Find marmalade"
+        val on = step(typed(withChatTab, "marmalade").state, answer("marmalade", chatThread)).state
+        on.data_!!.empty.shouldBeNull()
+        on.data_.groups.single().app_id shouldBe "chat"
+    }
+
+    "the shell's word on a Chat tab survives cancelling and another vault, and opening again takes the new word" {
+        var state = step(typed(withChatTab, "cab").state, answer("cab", chatThread)).state
+        state = step(state, HomeSearchEvent(cancelled = HomeSearchEvent.Cancelled())).state
+        state.chat_tab shouldBe true
+        state = step(state, HomeSearchEvent(vault_changed = HomeSearchEvent.VaultChanged())).state
+        state.chat_tab shouldBe true
+        // The shell says it again at every open; a shell that lost its tab says so.
+        step(state, HomeSearchEvent(opened = HomeSearchEvent.Opened(chat_tab = false))).state.chat_tab shouldBe false
+    }
 })

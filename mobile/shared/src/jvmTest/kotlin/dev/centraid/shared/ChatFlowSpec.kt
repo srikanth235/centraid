@@ -26,6 +26,7 @@ import dev.centraid.shared.chat.ChatDoor
 import dev.centraid.shared.chat.ChatFlow
 import dev.centraid.shared.chat.Pending
 import dev.centraid.shared.chat.ThreadRow
+import dev.centraid.shared.chat.ThreadSearch
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
@@ -147,6 +148,14 @@ internal class ScriptedChatDoor : ChatDoor {
     override suspend fun threads(): List<ThreadRow>? {
         history += "threads"
         return if (failingThreadRead) null else storedRows.toList()
+    }
+
+    /** What the core answers to a drawer search; the default finds nothing. */
+    var searchAnswer: (String) -> ThreadSearch? = { ThreadSearch(rows = emptyList()) }
+
+    override suspend fun searchThreads(term: String): ThreadSearch? {
+        history += "search:$term"
+        return searchAnswer(term)
     }
 
     override suspend fun thread(threadId: String): ChatThread? {

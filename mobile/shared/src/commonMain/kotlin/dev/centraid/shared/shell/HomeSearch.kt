@@ -71,8 +71,10 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         HomeSearchState(field_ = SearchField(open_ = true), chrome = CHROME, resting = resting(emptyList()))
 
     override fun reduce(state: HomeSearchState, event: HomeSearchEvent): Step<HomeSearchState> = when {
-        // OPENED FROM HOME'S BAR: a fresh field, the recent searches under it.
-        event.opened != null -> Step(rest(state.copy(field_ = SearchField(open_ = true), chrome = CHROME)))
+        // OPENED FROM HOME'S BAR: a fresh field, the recent searches under it, and the shell's
+        // word on whether it has a Chat tab (R-1097-24): the shell says it, no view guesses it.
+        event.opened != null ->
+            Step(rest(state.copy(field_ = SearchField(open_ = true), chrome = CHROME, chat_tab = event.opened.chat_tab)))
         event.term != null -> term(state, event.term.term)
         event.suggestion != null -> term(state, event.suggestion.term)
         event.row != null -> Step(record(state))
@@ -98,7 +100,7 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         // ANOTHER VAULT IN FRONT: nothing typed or found in the last one
         // follows the member into this one — not the term, the rows, or the
         // recent searches.
-        event.vault_changed != null -> Step(initial().copy(seat = state.seat))
+        event.vault_changed != null -> Step(initial().copy(seat = state.seat, chat_tab = state.chat_tab))
         else -> Step(state)
     }
 
@@ -125,10 +127,15 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
     ): HomeSearchState {
         val field = state.field_ ?: return state
         if (!field.open_ || termOf(state).isEmpty() || termOf(state) != answered.trim()) return state
-        val shown = if (data.groups.isEmpty()) {
+        // THE CHAT GROUP IS DRAWN ONLY WHERE THE SHELL HAS A CHAT TAB (R-1097-24): the core answers
+        // the member's conversations as Home hits whatever the shell, and a row that opens nothing
+        // is not a result. Android has no Chat tab, so for it the group is absent, and a term that
+        // only a conversation holds is the no-match state, not a row that goes nowhere.
+        val kept = if (state.chat_tab) data else data.copy(groups = data.groups.filterNot { it.app_id == CHAT })
+        val shown = if (kept.groups.isEmpty()) {
             // NOTHING MATCHED: one sentence and one action, which asks the
             // assistant about the term (the shell sends `ask_question` to Chat).
-            data.copy(
+            kept.copy(
                 empty = EmptyState(
                     headline = SharedCopy.HOME_SEARCH_NO_MATCH_HEADLINE,
                     body = SharedCopy.HOME_SEARCH_NO_MATCH_BODY.replace("{term}", answered.trim()),
@@ -137,7 +144,7 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
                 ask_question = SharedCopy.SEARCH_ASK_QUESTION.replace("{term}", answered.trim()),
             )
         } else {
-            data.copy(empty = null, ask_question = "")
+            kept.copy(empty = null, ask_question = "")
         }
         // The words the rows answer are kept by the law, for an answer still current.
         return SearchLaw.answered(Field, state, answered.trim(), corrected).copy(
@@ -205,7 +212,11 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
             .entries
             .sortedBy { (app, _) -> order.indexOf(app).let { if (it < 0) order.size else it } }
             .map { (app, hits) ->
-                val label = CentraidCatalog.byId[app]?.name ?: app.replaceFirstChar { it.uppercase() }
+                val label = if (app == CHAT) {
+                    SharedCopy.HOME_SEARCH_CHAT_GROUP
+                } else {
+                    CentraidCatalog.byId[app]?.name ?: app.replaceFirstChar { it.uppercase() }
+                }
                 // A CONTAINER (#1097) IS A HIT OF ITS APP'S GROUP, drawn before that app's rows;
                 // `SearchContainers` says which hits are one and how each opens.
                 val (containers, rows) = hits
@@ -249,6 +260,7 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         "tally.expense" -> SharedCopy.SEARCH_KIND_EXPENSE
         "core.content_item", "media.asset" -> SharedCopy.SEARCH_KIND_PHOTO
         "core.document" -> SharedCopy.SEARCH_KIND_DOCUMENT
+        CHAT_THREAD -> SharedCopy.SEARCH_KIND_CHAT
         else -> ""
     }
 
@@ -265,10 +277,18 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         "tally.expense" -> "expense"
         "core.content_item", "media.asset" -> "photo"
         "core.document" -> "document"
+        CHAT_THREAD -> CHAT_THREAD_NOUN
         else -> ""
     }
 
     private const val LOCKER: String = "locker"
+
+    /** The member's conversations (R-1097-22): the app id the core answers them under, the index's entity, and the router's noun. */
+    public const val CHAT: String = "chat"
+    private const val CHAT_THREAD: String = "chat.thread"
+
+    /** `ChatCard.entity` for a thread: the shell's router opens it in the Chat tab, not as a route. */
+    public const val CHAT_THREAD_NOUN: String = "thread"
 
     private val CHROME = HomeSearchChrome(
         placeholder = SharedCopy.HOME_SEARCH_PLACEHOLDER,

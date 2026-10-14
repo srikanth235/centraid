@@ -126,6 +126,12 @@ public interface ChatDoor {
     /** The drawer's list, newest first; null when the core would not say. */
     public suspend fun threads(): List<ThreadRow>?
 
+    /**
+     * The chats [term] finds, best match first, and the words the core searched instead when it
+     * corrected a typo; null when the core would not say (#1097).
+     */
+    public suspend fun searchThreads(term: String): ThreadSearch?
+
     /** One stored thread and its messages; null when the core would not say. */
     public suspend fun thread(threadId: String): ChatThread?
 
@@ -269,6 +275,16 @@ public class CoreChatDoor(
     override suspend fun threads(): List<ThreadRow>? =
         query(AppQueryRequest(chat_threads = ChatThreadsRequest()))?.chat_threads?.threads?.map { row ->
             ThreadRow(id = row.thread_id, title = row.title, updatedMs = row.updated_ms)
+        }
+
+    override suspend fun searchThreads(term: String): ThreadSearch? =
+        query(AppQueryRequest(chat_threads = ChatThreadsRequest(term = term)))?.chat_threads?.let { found ->
+            ThreadSearch(
+                rows = found.threads.map { row ->
+                    ThreadRow(id = row.thread_id, title = row.title, updatedMs = row.updated_ms)
+                },
+                corrected = found.corrected,
+            )
         }
 
     override suspend fun thread(threadId: String): ChatThread? =
@@ -463,6 +479,10 @@ public class ChatFlow(
             is ChatEffect.Clear -> door.clear(effect.session)
             is ChatEffect.Copy -> copyToClipboard(effect.text)
             ChatEffect.ReadThreads -> reduce(ChatInput.Threads(door.threads(), door.nowMillis()))
+            is ChatEffect.SearchThreads -> {
+                val found = door.searchThreads(effect.term)
+                reduce(ChatInput.Found(effect.term, found?.rows, found?.corrected.orEmpty(), door.nowMillis()))
+            }
             is ChatEffect.OpenThread -> {
                 val thread = door.thread(effect.threadId)
                 // The session is asked for only for a thread that is there: the
@@ -573,8 +593,41 @@ public class ChatBridge {
         forward(ChatEvent(drawer = ChatEvent.DrawerToggled(opened = open)))
     }
 
-    public fun openThread(threadId: String) {
-        forward(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = threadId)))
+    public fun openThread(threadId: String, title: String = "") {
+        forward(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = threadId, title = title)))
+    }
+
+    /**
+     * [open], and then a past chat opened on the member's behalf (search's chat row, #1097,
+     * R-1097-24). The two run in that order on one coroutine, as [openAsking]'s do: [open] returns
+     * when its effects have, so the thread is opened against the chat [open] made. [title] is the
+     * hit's, so a chat older than the drawer's list still has its name in the header at once.
+     */
+    public fun openThreadFrom(app: String, modelBytes: Long, vaultName: String = "", threadId: String, title: String) {
+        val flow = running ?: return
+        scope.launch {
+            flow.reduce(
+                ChatInput.View(
+                    ChatEvent(opened = ChatEvent.Opened(app = app, model_bytes = modelBytes, vault_name = vaultName)),
+                ),
+            )
+            flow.reduce(ChatInput.View(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = threadId, title = title))))
+        }
+    }
+
+    /** The drawer's search opener. */
+    public fun openDrawerSearch() {
+        forward(ChatEvent(drawer_search_opened = ChatEvent.DrawerSearchOpened()))
+    }
+
+    /** The drawer's field changed. */
+    public fun drawerSearch(term: String) {
+        forward(ChatEvent(drawer_search_term = ChatEvent.DrawerSearchTerm(term = term)))
+    }
+
+    /** The drawer's field was closed. */
+    public fun closeDrawerSearch() {
+        forward(ChatEvent(drawer_search_closed = ChatEvent.DrawerSearchClosed()))
     }
 
     public fun renameThread(threadId: String, title: String) {

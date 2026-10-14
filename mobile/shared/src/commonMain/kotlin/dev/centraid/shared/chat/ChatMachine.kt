@@ -28,8 +28,11 @@ import centraid.screen.v1.ChatPending
 import centraid.screen.v1.ChatPendingStep
 import centraid.screen.v1.ChatState
 import centraid.screen.v1.ChatThreadItem
+import centraid.screen.v1.SearchField
 import dev.centraid.design.copy.ChatCopy
 import dev.centraid.design.copy.SharedCopy
+import dev.centraid.shared.kit.SearchLaw
+import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.kit.time.CivilWords
 import okio.ByteString
 
@@ -103,6 +106,17 @@ import okio.ByteString
  * chat deleted from another place and tapped here says it is gone and starts a
  * new one.
  *
+ * ## The drawer's search (#1097, R-1097-24)
+ *
+ * The drawer carries the kit's search field ([ChatState.drawer_search], the same
+ * [SearchField] every app's search holds, run through [SearchLaw]). A term asks
+ * the core ([ChatEffect.SearchThreads]), which answers the chats whose title or
+ * whose member-typed words match, best first, and says when it corrected a typo.
+ * While a term is answered the drawer's rows ARE those chats ([Chat.found]); a
+ * blank term, a close, a chat opened and a drawer shut all put the plain list
+ * back. A chat deleted or renamed from the results leaves or changes there at
+ * once, and the answer is read again when the list is.
+ *
  * ## Attachments
  *
  * A message may carry one photo and one text document (the plane's v1 limit).
@@ -135,6 +149,7 @@ public object ChatMachine {
         is ChatInput.VisionStatus -> visionStatus(chat, input.state, input.bytes)
         is ChatInput.VisionLoaded -> visionLoaded(chat, input.state)
         is ChatInput.Threads -> threadsRead(chat, input)
+        is ChatInput.Found -> searched(chat, input)
         is ChatInput.ThreadOpened -> threadLoaded(chat, input)
     }
 
@@ -159,7 +174,10 @@ public object ChatMachine {
         event.drawer?.let { return drawerToggled(chat, it.opened) }
         event.pending_confirmed?.let { return confirmTapped(chat, it.pending_id) }
         event.pending_cancelled?.let { return cancelTapped(chat, it.pending_id) }
-        event.thread_opened?.let { return threadOpened(chat, it.thread_id) }
+        event.thread_opened?.let { return threadOpened(chat, it.thread_id, it.title) }
+        event.drawer_search_opened?.let { return drawerSearchOpened(chat) }
+        event.drawer_search_term?.let { return drawerSearchTerm(chat, it.term) }
+        event.drawer_search_closed?.let { return drawerSearchClosed(chat) }
         event.thread_renamed?.let { return threadRenamed(chat, it.thread_id, it.title) }
         event.thread_deleted?.let { return threadDeleted(chat, it.thread_id) }
         event.all_threads_deleted?.let { return allThreadsDeleted(chat) }
@@ -286,6 +304,8 @@ public object ChatMachine {
         threadTitle = "",
         opening = "",
         drawerOpen = false,
+        search = SearchField(),
+        found = null,
     )
 
     private fun copied(chat: Chat, id: Long): ChatStep {
@@ -610,14 +630,69 @@ public object ChatMachine {
     /** The drawer's own control, its scrim, or the Chat tab pressed while Chat is showing. */
     private fun drawerToggled(chat: Chat, open: Boolean): ChatStep {
         if (chat.drawerOpen == open) return ChatStep(chat)
-        // Opening reads the list again: it is never older than the last act.
-        return ChatStep(render(chat.copy(drawerOpen = open)), if (open) listOf(ChatEffect.ReadThreads) else emptyList())
+        // Opening reads the list again: it is never older than the last act. Shutting the drawer
+        // closes its search with it, as every search is closed (the term does not come back).
+        val next = if (open) chat.copy(drawerOpen = true) else chat.copy(drawerOpen = false, search = SearchField(), found = null)
+        return ChatStep(render(next), if (open) listOf(ChatEffect.ReadThreads) else emptyList())
+    }
+
+    /** The drawer's search field, in the shared law's terms. */
+    private object DrawerField : SearchLens<Chat> {
+        override val screenId: String = "chat"
+
+        override fun field(state: Chat): SearchField = state.search
+
+        override fun with(state: Chat, field: SearchField): Chat = state.copy(search = field)
+    }
+
+    /** The opener was tapped: the field shows in the drawer. */
+    private fun drawerSearchOpened(chat: Chat): ChatStep {
+        if (!chat.drawerOpen || chat.search.open_) return ChatStep(chat)
+        return ChatStep(render(SearchLaw.opened(DrawerField, chat).state))
+    }
+
+    /**
+     * The field changed. A blank term puts the plain list back and reads nothing; any other asks the
+     * core. The rows on screen stay while the new term reads (the last answer is dropped only when
+     * the term is cleared), and the words the last answer corrected go with it.
+     */
+    private fun drawerSearchTerm(chat: Chat, term: String): ChatStep {
+        if (!chat.drawerOpen) return ChatStep(chat)
+        if (chat.search.open_ && chat.search.term == term) return ChatStep(chat)
+        val next = SearchLaw.term(DrawerField, chat, term).state
+        if (term.isBlank()) {
+            return ChatStep(render(next.copy(search = next.search.copy(answered_term = ""), found = null)))
+        }
+        return ChatStep(render(next), listOf(ChatEffect.SearchThreads(term.trim())))
+    }
+
+    /** The field was closed: the term, its answer and its correction go, and the list is back. */
+    private fun drawerSearchClosed(chat: Chat): ChatStep =
+        ChatStep(render(SearchLaw.closed(DrawerField, chat).state.copy(found = null)))
+
+    /**
+     * The core's answer to a term. One for a term since changed or closed is dropped, and a refusal
+     * to answer leaves the drawer as it was.
+     */
+    private fun searched(chat: Chat, input: ChatInput.Found): ChatStep {
+        val rows = input.rows ?: return ChatStep(chat)
+        if (!SearchLaw.answerIsCurrent(DrawerField, chat, input.term)) return ChatStep(chat)
+        val answered = SearchLaw.answered(DrawerField, chat, input.term.trim(), input.corrected)
+        return ChatStep(render(answered.copy(found = rows, now = if (input.nowMs > 0) input.nowMs else chat.now)))
     }
 
     /** The drawer's list, read. A refusal to answer leaves the list as it was. */
     private fun threadsRead(chat: Chat, input: ChatInput.Threads): ChatStep {
         val rows = input.rows ?: return ChatStep(chat)
-        return ChatStep(render(chat.copy(threads = rows, now = if (input.nowMs > 0) input.nowMs else chat.now)))
+        val read = chat.copy(threads = rows, now = if (input.nowMs > 0) input.nowMs else chat.now)
+        // A search that is showing is read again with the list: a chat renamed or deleted since
+        // it was answered must not stay in the results.
+        val again = if (chat.search.open_ && chat.search.term.isNotBlank()) {
+            listOf(ChatEffect.SearchThreads(chat.search.term.trim()))
+        } else {
+            emptyList()
+        }
+        return ChatStep(render(read), again)
     }
 
     /**
@@ -626,11 +701,13 @@ public object ChatMachine {
      * with its title already in the header) and asks for the stored messages
      * and a session rebuilt from them.
      */
-    private fun threadOpened(chat: Chat, id: String): ChatStep {
+    private fun threadOpened(chat: Chat, id: String, told: String = ""): ChatStep {
         if (id.isEmpty()) return ChatStep(chat)
         if (id == chat.threadId && chat.opening.isEmpty()) return drawerToggled(chat, false)
         val stopping = if (chat.running && chat.session != 0L) listOf(ChatEffect.Cancel(chat.session)) else emptyList()
-        val title = chat.threads.firstOrNull { it.id == id }?.title.orEmpty()
+        // The list's row wins; a chat found by search can be older than the list's newest hundred,
+        // so the title the shell was told (the hit's) is the header until the thread is read.
+        val title = chat.threads.firstOrNull { it.id == id }?.title ?: chat.found?.firstOrNull { it.id == id }?.title ?: told
         val loading = fresh(chat).copy(threadId = id, threadTitle = title, opening = id)
         return ChatStep(render(loading), stopping + ChatEffect.OpenThread(id))
     }
@@ -739,6 +816,7 @@ public object ChatMachine {
         val threads = chat.threads.map { if (it.id == id) it.copy(title = named) else it }
         val renamed = chat.copy(
             threads = threads,
+            found = chat.found?.map { if (it.id == id) it.copy(title = named) else it },
             threadTitle = if (id == chat.threadId) named else chat.threadTitle,
         )
         return ChatStep(render(renamed), listOf(ChatEffect.RenameThread(id, named)))
@@ -763,14 +841,19 @@ public object ChatMachine {
             return ChatStep(render(cleared), effects)
         }
         return ChatStep(
-            render(chat.copy(threads = chat.threads.filterNot { it.id == id })),
+            render(
+                chat.copy(
+                    threads = chat.threads.filterNot { it.id == id },
+                    found = chat.found?.filterNot { it.id == id },
+                ),
+            ),
             listOf(ChatEffect.DeleteThread(id)),
         )
     }
 
     /** Delete every chat in this vault. An open stored chat goes back to a new one. */
     private fun allThreadsDeleted(chat: Chat): ChatStep {
-        val base = chat.copy(threads = emptyList(), drawerOpen = false)
+        val base = chat.copy(threads = emptyList(), drawerOpen = false, search = SearchField(), found = null)
         if (chat.threadId.isEmpty() && chat.opening.isEmpty()) {
             return ChatStep(render(base), listOf(ChatEffect.DeleteAllThreads))
         }
@@ -1022,6 +1105,9 @@ public object ChatMachine {
     }
 
     internal fun render(chat: Chat): Chat {
+        // THE DRAWER SHOWS THE CHATS A SEARCH FOUND while a term is answered, and the plain list otherwise.
+        val searching = chat.found != null && chat.search.open_ && chat.search.answered_term.isNotBlank()
+        val shown = if (searching) chat.found.orEmpty() else chat.threads
         val phase = chat.phase
         val ready = phase == ChatState.Phase.PHASE_READY
         val empty = chat.messages.isEmpty()
@@ -1101,8 +1187,16 @@ public object ChatMachine {
                 vision_step = visionStep,
                 vision_blocked = ready && visionBlocked(chat),
                 drawer_open = chat.drawerOpen,
-                threads = chat.threads.map { row -> threadItem(row, chat) },
-                threads_empty_line = if (chat.threads.isEmpty()) ChatCopy.THREADS_EMPTY else "",
+                threads = shown.map { row -> threadItem(row, chat) },
+                threads_empty_line = when {
+                    // A SEARCH THAT FOUND NOTHING says so; the list's own empty line is "No chats yet."
+                    searching && shown.isEmpty() -> ChatCopy.DRAWER_SEARCH_NO_MATCH.replace("{term}", chat.search.answered_term)
+                    shown.isEmpty() -> ChatCopy.THREADS_EMPTY
+                    else -> ""
+                },
+                drawer_search = chat.search,
+                drawer_search_placeholder = ChatCopy.DRAWER_SEARCH_PLACEHOLDER,
+                can_delete_all = !searching && chat.threads.isNotEmpty(),
                 thread_id = chat.threadId,
                 can_manage_thread = chat.threadId.isNotEmpty() && !chat.running && !opening,
                 drawer_label = ChatCopy.DRAWER_LABEL,
@@ -1331,6 +1425,10 @@ public data class Chat(
     public val threads: List<ThreadRow> = emptyList(),
     /** The device clock at the last read of [threads], for "5 min ago". */
     public val now: Long = 0,
+    /** The drawer's search field: open, the term, the term answered and the words corrected. */
+    public val search: SearchField = SearchField(),
+    /** The chats the drawer's search found for `search.answered_term`, best first; null when no search is answered. */
+    public val found: List<ThreadRow>? = null,
     public val state: ChatState = ChatState(),
 )
 
@@ -1340,6 +1438,13 @@ public data class ThreadRow(
     public val title: String,
     /** When it last moved, in epoch milliseconds. */
     public val updatedMs: Long,
+)
+
+/** The drawer's search, as the core answered it: the chats found, best first, and the words it corrected the term to. */
+public data class ThreadSearch(
+    public val rows: List<ThreadRow>,
+    /** The words searched instead when the typed ones found nothing; empty otherwise. */
+    public val corrected: String = "",
 )
 
 public sealed interface ChatInput {
@@ -1375,6 +1480,18 @@ public sealed interface ChatInput {
 
     /** The drawer's list, read; null rows when the core would not answer. [nowMs] is the device clock. */
     public data class Threads(public val rows: List<ThreadRow>?, public val nowMs: Long) : ChatInput
+
+    /**
+     * The core's answer to the drawer's search for [term]: the chats it found, best first, and the
+     * words it searched instead when it corrected a typo (empty otherwise). Null [rows] when the
+     * core would not answer.
+     */
+    public data class Found(
+        public val term: String,
+        public val rows: List<ThreadRow>?,
+        public val corrected: String,
+        public val nowMs: Long,
+    ) : ChatInput
 
     /**
      * A past chat, read, and the session the core rebuilt from it — together, so
@@ -1433,6 +1550,9 @@ public sealed interface ChatEffect {
 
     /** Read the drawer's list. */
     public data object ReadThreads : ChatEffect
+
+    /** Ask the core for the chats [term] finds. Its answer returns as [ChatInput.Found]. */
+    public data class SearchThreads(public val term: String) : ChatEffect
 
     /** Read a stored thread and ask the core for a session rebuilt from it. */
     public data class OpenThread(public val threadId: String) : ChatEffect

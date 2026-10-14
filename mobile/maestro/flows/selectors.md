@@ -21,6 +21,18 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `search-corrected` | any open search field (every app's search slot, Home search, Tally's search page) | the line under the field, "Showing results for “…”", drawn only when the core corrected a typo in the term ([#1097](https://github.com/srikanth235/centraid/issues/1097)); absent for an exact answer |
 | `search-ask-about` | Home search | the no-match state's one action, "Ask about “…”": switches to the Chat tab and sends the question — **iOS only**; Android has no Chat tab, so its no-match state draws without it |
 | `search-container-<entity>-<id>` | Home search (inside the app's group, before its rows) and Notes', Tasks', Docs' and Tally's own search results | one container whose NAME matched — a notebook or album (`core.collection`), a project (`schedule.project`), a Tally group (`social.circle`, the circle's id) or a Docs folder (`core.concept`) ([#1097](https://github.com/srikanth235/centraid/issues/1097)); a tap opens it in its app (the notebook's notes, the project's list, the group's ledger, the folder's page, the album's shelf) |
+| `home-search-group-chat` | Home search (iOS only) | the head of the Chats group: the member's own conversations, last among the groups, drawn only where the shell has a Chat tab ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-24); its rows are `home-search-row-chat.thread-<id>`, and a tap opens that thread in the Chat tab |
+| `chat-drawer` | Chat | the header's menu control, which opens the drawer of past chats |
+| `chat-drawer-panel` | Chat | the drawer itself |
+| `chat-drawer-new` | Chat | the drawer's New chat |
+| `chat-drawer-search-open` | Chat drawer | the search opener, field-shaped, while the drawer's search is closed |
+| `chat-drawer-search-field` | Chat drawer | the shared search field once open (it takes focus); the "Showing results for “…”" line under it is `search-corrected` |
+| `chat-drawer-search-close` | Chat drawer | the field's close key: the term and its answer go, the plain list is back |
+| `chat-drawer-list` | Chat drawer | the list of chats (the plain list, or the chats a search found) |
+| `chat-thread-row` | Chat drawer | one chat in the list |
+| `chat-drawer-empty` | Chat drawer | the one line when the list is empty: "No chats yet.", or "No chats match “…”." over a search that found none |
+| `chat-drawer-delete-all` | Chat drawer | "Delete all chats", offered over the plain list and never over search results |
+| `chat-message-user`, `chat-message-answer` | Chat | the member's message and the assistant's answer in the open thread |
 | `home-band` | Home | the floating band plate |
 | `home-band-<placeId>` | Home | one band destination (`home`, `notifs`, `stats`, `data`) |
 | `home-band-backup` | Home | the band's Backup tab — opens the Backup screen |

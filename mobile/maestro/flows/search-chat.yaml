@@ -1,0 +1,114 @@
+# The member's chat history is searchable (#1097, R-1097-22, R-1097-24): a word
+# of a question they asked finds the chat from Home, a tap opens that thread in
+# the Chat tab, and the drawer's own search field finds it again, corrects a slip
+# and says when nothing matches.
+#
+# iOS ONLY: Android has no Chat tab, so Home's search never offers a chat row
+# there (the machine drops the group) and there is no drawer.
+#
+# THIS FLOW NEEDS A MODEL ON THE PHONE, and it does not relaunch the app. A chat
+# is saved when a turn finishes, and the composer exists only once a model is
+# ready, so a question has to be asked and its turn finished (a slow one: the
+# flow waits up to ten minutes for a small model on a simulator). Launch a DEBUG build with a model
+# file first (the flow starts from whatever is in front):
+#
+#   xcrun simctl launch <udid> dev.centraid.Centraid   # with
+#   SIMCTL_CHILD_CENTRAID_DEV_MODEL=<path to the .gguf> in the environment
+#
+# A VAULT-HOLDING INSTALL (`onboarding.yaml` leaves one). Re-runnable: each run
+# asks the question again and leaves one more chat with the same title, so the
+# flow asserts that a row is there and never how many.
+appId: dev.centraid.Centraid
+name: search-chat
+---
+# 1. Ask a distinctive question and let the turn finish, so the chat is saved.
+- tapOn:
+    id: "home-band-chat"
+- extendedWaitUntil:
+    visible: "Ask your vault"
+    timeout: 120000
+- tapOn: "Ask your vault"
+- inputText: "Where is the quarzlux warranty letter"
+# Send is found by its spoken label: Maestro does not match `chat-send` on the
+# composer's icon button.
+- tapOn: "Send"
+# The turn is over when the answer's Copy key is there, whatever the answer
+# says: a small model may well answer "I could not settle this", and the
+# member's message is saved all the same, which is all this flow needs.
+- extendedWaitUntil:
+    visible: "Copy"
+    timeout: 600000
+# 2. Home's search finds the chat by a word of the question, in a Chats group.
+# The composer still has focus, and its keyboard covers the band: a tap on the
+# thread's empty ground puts it away (R-CHAT-2), where `hideKeyboard` does not.
+- tapOn:
+    point: "50%,42%"
+- tapOn:
+    id: "home-band-home"
+- tapOn:
+    id: "home-search-open"
+- tapOn:
+    id: "home-search-field"
+- inputText: "quarzlux"
+- extendedWaitUntil:
+    visible:
+      id: "home-search-group-chat"
+    timeout: 10000
+- assertVisible: "Chats"
+- assertVisible:
+    id: "home-search-row-chat.thread-.*"
+- assertVisible: "Where is the quarzlux warranty letter"
+# 3. A tap opens that thread in the Chat tab, over Home's root and not over Search.
+- tapOn:
+    id: "home-search-row-chat.thread-.*"
+- assertVisible:
+    id: "chat"
+- assertNotVisible:
+    id: "home-search-field"
+- extendedWaitUntil:
+    visible:
+      id: "chat-message-user"
+    timeout: 10000
+- assertVisible: "Where is the quarzlux warranty letter"
+# 4. The drawer's search: the shared field, a slip corrected, an exact word, nothing.
+# The header's menu key, by its spoken label ("Chats"): Maestro does not match
+# the `chat-drawer` id on the icon key.
+- tapOn: "Chats"
+- assertVisible:
+    id: "chat-drawer-search-open"
+- tapOn:
+    id: "chat-drawer-search-open"
+- tapOn:
+    id: "chat-drawer-search-field"
+- inputText: "quarzluk"
+- extendedWaitUntil:
+    visible:
+      id: "search-corrected"
+    timeout: 10000
+- assertVisible: "Showing results for “quarzlux”"
+- assertVisible:
+    id: "chat-thread-row"
+- eraseText: 8
+- inputText: "quarzlux"
+- extendedWaitUntil:
+    visible:
+      id: "chat-thread-row"
+    timeout: 10000
+- assertNotVisible:
+    id: "search-corrected"
+- eraseText: 8
+- inputText: "zzqxv"
+- extendedWaitUntil:
+    visible:
+      id: "chat-drawer-empty"
+    timeout: 10000
+- assertVisible: "No chats match “zzqxv”."
+# 5. Closing the field puts the plain list back.
+- tapOn:
+    id: "chat-drawer-search-close"
+- extendedWaitUntil:
+    visible:
+      id: "chat-drawer-search-open"
+    timeout: 5000
+- assertVisible:
+    id: "chat-thread-row"

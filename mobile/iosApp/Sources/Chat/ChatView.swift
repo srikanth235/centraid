@@ -110,9 +110,12 @@ struct ChatView: View {
                         draft = ""
                         chat.newChat()
                     },
-                    onOpen: { chat.openThread($0) },
+                    onOpen: { chat.openThread($0.threadID, title: $0.title) },
                     onDelete: { deleting = DeleteTarget(id: $0.threadID, title: $0.title) },
-                    onDeleteAll: { deletingAll = true }
+                    onDeleteAll: { deletingAll = true },
+                    onSearchOpen: { chat.openDrawerSearch() },
+                    onSearchTerm: { chat.drawerSearch($0) },
+                    onSearchClose: { chat.closeDrawerSearch() }
                 )
                 .transition(reduceMotion ? .opacity : .move(edge: .leading).combined(with: .opacity))
                 .zIndex(1)
@@ -440,9 +443,13 @@ private struct ChatDrawer: View {
     let state: Centraid_Screen_V1_ChatState
     let onClose: () -> Void
     let onNewChat: () -> Void
-    let onOpen: (String) -> Void
+    let onOpen: (Centraid_Screen_V1_ChatThreadItem) -> Void
     let onDelete: (Centraid_Screen_V1_ChatThreadItem) -> Void
     let onDeleteAll: () -> Void
+    /// The drawer's search (#1097): the opener, the field's terms, its close.
+    let onSearchOpen: () -> Void
+    let onSearchTerm: (String) -> Void
+    let onSearchClose: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -474,6 +481,29 @@ private struct ChatDrawer: View {
                 .padding(.bottom, 12)
                 .accessibilityIdentifier("chat-drawer-new")
 
+            // THE SHARED SEARCH FIELD, above the list and not in it: the line
+            // that says what was corrected lives inside the field, so rows that
+            // arrive below it never move what the member is reading (#1097).
+            Group {
+                if state.drawerSearch.open {
+                    CentraidSearchField(
+                        field: state.drawerSearch,
+                        placeholder: state.drawerSearchPlaceholder,
+                        identifier: "chat-drawer-search",
+                        onTerm: onSearchTerm,
+                        onClose: onSearchClose
+                    )
+                } else {
+                    SearchOpener(
+                        placeholder: state.drawerSearchPlaceholder,
+                        identifier: "chat-drawer-search-open",
+                        onOpen: onSearchOpen
+                    )
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+
             if state.threads.isEmpty {
                 Text(verbatim: state.threadsEmptyLine)
                     .centraidType("small")
@@ -485,7 +515,7 @@ private struct ChatDrawer: View {
             } else {
                 List {
                     ForEach(state.threads, id: \.threadID) { row in
-                        Button { onOpen(row.threadID) } label: {
+                        Button { onOpen(row) } label: {
                             ChatThreadRow(row: row, currentLabel: state.currentLabel)
                                 .contentShape(Rectangle())
                         }
@@ -511,23 +541,25 @@ private struct ChatDrawer: View {
                 .scrollContentBackground(.hidden)
                 .accessibilityIdentifier("chat-drawer-list")
 
-                Button(action: onDeleteAll) {
-                    Text(verbatim: state.deleteAllLabel)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("net", scheme))
-                        .padding(.horizontal, 12)
-                        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-                        .contentShape(Rectangle())
+                if state.canDeleteAll {
+                    Button(action: onDeleteAll) {
+                        Text(verbatim: state.deleteAllLabel)
+                            .centraidType("smallStrong")
+                            .foregroundStyle(Theme.color("net", scheme))
+                            .padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(Theme.color("line", scheme))
+                            .frame(height: CentraidGeometry.hairline)
+                    }
+                    .accessibilityIdentifier("chat-drawer-delete-all")
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(Theme.color("line", scheme))
-                        .frame(height: CentraidGeometry.hairline)
-                }
-                .accessibilityIdentifier("chat-drawer-delete-all")
             }
         }
         .frame(width: width, alignment: .leading)

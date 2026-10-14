@@ -48,6 +48,8 @@ public object ChatCopy {
     public const val DOWNLOAD_PROGRESS: String = "Downloading {percent}"
     public const val DOWNLOAD_PROGRESS_UNKNOWN: String = "Downloading"
     public const val DRAWER_LABEL: String = "Chats"
+    public const val DRAWER_SEARCH_NO_MATCH: String = "No chats match “{term}”."
+    public const val DRAWER_SEARCH_PLACEHOLDER: String = "Search chats"
     public const val EMPTY_LINE: String = "Ask about anything in your vault."
     public const val ERROR_ATTACH_TOO_LARGE: String = "That attachment is too large."
     public const val ERROR_ATTACH_UNREADABLE: String = "That attachment would not open."

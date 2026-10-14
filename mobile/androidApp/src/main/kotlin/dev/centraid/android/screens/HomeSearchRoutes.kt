@@ -87,7 +87,9 @@ public class HomeSearchRoutes : AppRoutes {
 
     /** Home's bar was tapped: a fresh field, then the push. */
     public fun open(): Destination {
-        bridge.forward(HomeSearchEvent(opened = HomeSearchEvent.Opened()))
+        // ANDROID HAS NO CHAT TAB (R-1097-24): saying so is what keeps the member's conversations out
+        // of the answer's groups, a row that would open nothing here.
+        bridge.forward(HomeSearchEvent(opened = HomeSearchEvent.Opened(chat_tab = false)))
         return Destination.HomeSearch
     }
 

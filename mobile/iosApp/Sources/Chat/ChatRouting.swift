@@ -28,6 +28,7 @@ import CentraidShared
 /// | photos | `album` | the album's shelf |
 /// | tally | `group` | the group's ledger; `id` is the `tally_group` id |
 /// | docs | `folder` | the folder's page |
+/// | chat | `thread` | not a route: Chat is a tab. `ShellModel.openChatThread` switches to it and opens the thread (Home's search, #1097) |
 ///
 /// A notebook, album, group or folder arrives with its id and its name (the
 /// card's `title`), which is all each route needs.
@@ -96,6 +97,13 @@ enum ChatRouting {
         return (try? shelf.serializedData()) ?? Data()
     }
 
+    /// Whether a reference names one of the member's conversations (Home's
+    /// search offers them, #1097, R-1097-24). A thread opens in the Chat tab
+    /// and is no `Route`, so a caller asks this before it asks `route(for:)`.
+    static func isThread(_ card: Centraid_Screen_V1_ChatCard) -> Bool {
+        card.app == "chat" && card.entity == "thread"
+    }
+
     /// An app's own front door, for a card whose entity has no row route.
     static func appHome(_ app: String) -> ShellModel.Route? {
         switch app {
@@ -147,6 +155,11 @@ extension ShellModel {
     /// (#1097) opens through here; `parent` is the pushing page's title.
     @MainActor
     func openRow(_ card: Centraid_Screen_V1_ChatCard, parent: String) {
+        // A CONVERSATION OPENS IN THE CHAT TAB, not as a page pushed over this one.
+        if ChatRouting.isThread(card) {
+            openChatThread(card.id, title: card.title)
+            return
+        }
         guard let route = ChatRouting.route(for: card, among: [], parent: parent) else { return }
         path.append(route)
     }

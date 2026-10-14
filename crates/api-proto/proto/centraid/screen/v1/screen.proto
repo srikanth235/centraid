@@ -1786,6 +1786,10 @@ message HomeSearchState {
   // This session's searches, newest first — kept across Cancel, drawn only
   // by `resting`.
   repeated string recent = 9;
+  // THE SHELL HAS A CHAT TAB (#1097, R-1097-24), as `Opened.chat_tab` said when
+  // the search opened. Only then does an answer draw the `chat` group (the
+  // member's conversations); without a Chat tab a chat hit would open nothing.
+  bool chat_tab = 10;
 }
 
 message HomeSearchEvent {
@@ -1817,7 +1821,11 @@ message HomeSearchEvent {
     ContainerPicked container = 14;
   }
 
-  message Opened {}
+  message Opened {
+    // This shell has a Chat tab (iOS today; Android has none). Sent by the shell
+    // beside the search it opens, never guessed by a view.
+    bool chat_tab = 1;
+  }
   message VaultChanged {}
   message Asked {}
 
@@ -12370,6 +12378,21 @@ message ChatState {
   // The marker the drawer puts on the open chat, for a screen reader.
   string current_label = 47;
 
+  // THE DRAWER'S SEARCH (#1097, R-1097-24): the kit's field, the same message
+  // every app's search carries. `open` shows the field in place of the opener;
+  // `term` is what the member typed; `answered_term` is the term `threads`
+  // answers; `corrected` is the words the core searched instead when it
+  // corrected a typo (the field draws "Showing results for ..."). While a term
+  // is answered, `threads` are the chats it FOUND, best match first, and
+  // `threads_empty_line` says nothing matched.
+  SearchField drawer_search = 48;
+  // The field's placeholder and the opener's words: "Search chats".
+  string drawer_search_placeholder = 49;
+  // "Delete all chats" is offered: the drawer shows the plain list and it holds
+  // chats. Never over search results, where it would read as deleting the
+  // chats shown and not every chat in the vault.
+  bool can_delete_all = 50;
+
   enum Phase {
     PHASE_UNSPECIFIED = 0;
     // Asking the core whether a model is there. Draws nothing but the header.
@@ -12558,6 +12581,9 @@ message ChatEvent {
     AllThreadsDeleted all_threads_deleted = 17;
     PendingConfirmed pending_confirmed = 18;
     PendingCancelled pending_cancelled = 19;
+    DrawerSearchOpened drawer_search_opened = 20;
+    DrawerSearchTerm drawer_search_term = 21;
+    DrawerSearchClosed drawer_search_closed = 22;
   }
   reserved 12;
 
@@ -12665,6 +12691,11 @@ message ChatEvent {
   // closes the drawer; a running turn is stopped first.
   message ThreadOpened {
     string thread_id = 1;
+    // THE TITLE THE SHELL ALREADY HAS (#1097): a thread opened from search is
+    // not necessarily in the drawer's list (which is the newest hundred), so the
+    // header would be empty until the thread is read. Empty when the shell has
+    // none; the list's row, when it has one, wins.
+    string title = 2;
   }
 
   // INTENT: rename a chat. A blank title changes nothing.
@@ -12692,4 +12723,15 @@ message ChatEvent {
   message PendingCancelled {
     string pending_id = 1;
   }
+
+  // INTENT: the drawer's search opener was tapped (#1097).
+  message DrawerSearchOpened {}
+
+  // The drawer's field changed. A blank term shows the plain list.
+  message DrawerSearchTerm {
+    string term = 1;
+  }
+
+  // INTENT: the drawer's field was closed; the term and its answer go with it.
+  message DrawerSearchClosed {}
 }

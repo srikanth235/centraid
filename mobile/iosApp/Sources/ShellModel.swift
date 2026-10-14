@@ -634,14 +634,14 @@ final class ShellModel: ObservableObject {
     /// THE CHAT TAB WAS PRESSED. It opens scoped to the app the member last
     /// had open — but only onto an empty thread: a conversation in progress is
     /// never re-scoped by a glance at an app.
-    func openChatTab(asking question: String? = nil) {
+    func openChatTab(asking question: String? = nil, thread: String? = nil, title: String = "") {
         leaveBackupTab()
         tab = .chat
         if !lastVisitedApp.isEmpty, chat.state.messages.isEmpty {
             chatScope = lastVisitedApp
         }
         lastVisitedApp = ""
-        chat.open(app: chatScope, vaultName: foregroundVaultName, asking: question)
+        chat.open(app: chatScope, vaultName: foregroundVaultName, asking: question, thread: thread, title: title)
     }
 
     /// The foreground vault's name, for the chat's header.
@@ -658,6 +658,18 @@ final class ShellModel: ObservableObject {
         guard !line.isEmpty else { return }
         path.removeAll()
         openChatTab(asking: line)
+    }
+
+    /// OPEN ONE PAST CHAT, from a screen that found it (Home's search, #1097,
+    /// R-1097-24): back to Home's root, the Chat tab, and that thread opened.
+    /// The router's act and not a view's, and the twin of `askChat`: the view
+    /// reports the intent, the shell switches the tab. `title` is the hit's, so
+    /// a chat older than the drawer's list still has its name in the header at
+    /// once.
+    func openChatThread(_ id: String, title: String) {
+        guard !id.isEmpty else { return }
+        path.removeAll()
+        openChatTab(thread: id, title: title)
     }
 
     func openHomeTab() {

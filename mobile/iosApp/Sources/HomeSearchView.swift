@@ -28,7 +28,9 @@ enum HomeSearchScreens {
     /// Home's bar: a fresh field, then the page.
     @MainActor
     static func open(_ shell: ShellModel) {
-        shell.send(screen: screen, event: event { $0.opened = .init() })
+        // THIS SHELL HAS A CHAT TAB (R-1097-24): the machine draws the member's
+        // conversations as a group only when the shell says so.
+        shell.send(screen: screen, event: event { $0.opened = .with { $0.chatTab = true } })
         shell.path.append(route)
     }
 
@@ -45,7 +47,13 @@ enum HomeSearchScreens {
                     data: shell.state(screen),
                     send: { [weak shell] in shell?.send(screen: screen, event: $0) },
                     open: { [weak shell] target, among, parent in
-                        guard let shell, let route = ChatRouting.route(for: target, among: among, parent: parent) else { return }
+                        guard let shell else { return }
+                        // A conversation opens in the Chat tab, not as a page over Search.
+                        if ChatRouting.isThread(target) {
+                            shell.openChatThread(target.id, title: target.title)
+                            return
+                        }
+                        guard let route = ChatRouting.route(for: target, among: among, parent: parent) else { return }
                         shell.path.append(route)
                     },
                     openContainer: { [weak shell] container, parent in

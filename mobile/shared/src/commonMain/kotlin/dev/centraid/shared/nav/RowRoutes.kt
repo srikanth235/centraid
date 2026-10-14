@@ -27,6 +27,7 @@ import centraid.screen.v1.PhotoShelf
  * | photos | `album` | the album's shelf |
  * | tally | `group` | the group's ledger; `id` is the `tally_group` id |
  * | docs | `folder` | the folder's page; `parent` is the pushing page's title |
+ * | chat | `thread` | none: Chat is a tab and not a screen. The iOS shell opens it (`ShellModel.openChatThread`), and Android has no Chat tab, so Home's search never offers the row there (R-1097-24) |
  *
  * A notebook, album, group or folder arrives with its id and its name (the
  * card's `title`) and nothing else, which is all each destination needs: the
