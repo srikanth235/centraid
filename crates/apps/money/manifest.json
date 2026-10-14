@@ -70,7 +70,7 @@
   "actions": [
     {
       "name": "add-account",
-      "description": "Add an account the member imports statements into, with its currency, kind and (optionally) an opening balance.",
+      "description": "Add an account the member imports statements into, with its currency, kind, (optionally) an opening balance and the bank's own account number.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -96,6 +96,11 @@
           },
           "on_budget": {
             "type": "boolean"
+          },
+          "external_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
           },
           "opening_minor": {
             "type": "integer"
@@ -124,7 +129,7 @@
     },
     {
       "name": "edit-account",
-      "description": "Rename an account, change its kind, move it on or off budget, or close it.",
+      "description": "Rename an account, change its kind, move it on or off budget, set the bank's account number, or close it.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -146,6 +151,11 @@
           "on_budget": {
             "type": "boolean"
           },
+          "external_ref": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 64
+          },
           "closed_on": {
             "type": ["string", "null"],
             "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
@@ -166,7 +176,7 @@
           }
         }
       },
-      "writes": ["money.account"]
+      "writes": ["core.account", "money.account"]
     },
     {
       "name": "set-opening-balance",

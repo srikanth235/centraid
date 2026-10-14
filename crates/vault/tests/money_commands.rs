@@ -293,6 +293,65 @@ fn add_account_is_once_and_refuses_what_it_cannot_honour() {
 }
 
 #[test]
+fn an_accounts_bank_number_is_the_spines_external_ref_and_is_unique() {
+    // #1099 W4-b: the full OFX ACCTID lives on core_account.external_ref.
+    let money = Money::open("money-account-external-ref");
+    money.run(
+        "money.add_account",
+        json!({ "account_id": "a1", "name": "Everyday", "kind": "checking",
+                "external_ref": " 123456789012 " }),
+    );
+    assert_eq!(
+        money.text("SELECT external_ref FROM core_account WHERE account_id = 'a1'"),
+        "123456789012"
+    );
+    money.account("a2", "Visa", "credit_card", "USD");
+    assert_eq!(
+        money.text(
+            "SELECT COALESCE(external_ref, 'none') FROM core_account WHERE account_id = 'a2'"
+        ),
+        "none"
+    );
+    // Setting it later changes the row once; setting it again changes nothing.
+    let out = money.twice(
+        "money.edit_account",
+        json!({ "account_id": "a2", "external_ref": "4111-0000-1111-2222" }),
+    );
+    assert_eq!(out["changed"], true);
+    assert_eq!(
+        money.text("SELECT external_ref FROM core_account WHERE account_id = 'a2'"),
+        "4111-0000-1111-2222"
+    );
+    // Two accounts never share a number.
+    assert_eq!(
+        money.refused(
+            "money.edit_account",
+            json!({ "account_id": "a2", "external_ref": "123456789012" })
+        ),
+        "external_ref_is_free"
+    );
+    assert_eq!(
+        money.refused(
+            "money.add_account",
+            json!({ "account_id": "a3", "name": "Other", "kind": "savings",
+                    "external_ref": "4111-0000-1111-2222" })
+        ),
+        "external_ref_is_free"
+    );
+    // Null clears it.
+    money.twice(
+        "money.edit_account",
+        json!({ "account_id": "a2", "external_ref": null }),
+    );
+    assert_eq!(
+        money.text(
+            "SELECT COALESCE(external_ref, 'none') FROM core_account WHERE account_id = 'a2'"
+        ),
+        "none"
+    );
+}
+
+#[test]
 fn editing_an_account_renames_the_members_word_and_leaves_the_spines_alone() {
     let money = Money::open("money-edit-account");
     money.account("a1", "Everyday", "checking", "USD");

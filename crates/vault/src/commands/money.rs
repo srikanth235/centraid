@@ -342,6 +342,22 @@ fn name_is_taken(ctx: &CommandCtx<'_, '_>, name: &str, except: Option<&str>) -> 
     )? > 0)
 }
 
+/// Another account already carries this bank reference (compared as printed,
+/// ignoring case and surrounding space). Two accounts sharing one would make an
+/// OFX statement's account ambiguous.
+fn external_ref_is_taken(
+    ctx: &CommandCtx<'_, '_>,
+    reference: &str,
+    except: Option<&str>,
+) -> Result<bool> {
+    Ok(count(
+        ctx,
+        "SELECT COUNT(*) FROM core_account
+          WHERE lower(trim(external_ref)) = lower(trim(?1)) AND account_id IS NOT ?2",
+        &[&reference, &except],
+    )? > 0)
+}
+
 fn add_account() -> CommandDefinition {
     static PRE: &[CommandCondition] = &[
         CommandCondition {
@@ -373,6 +389,16 @@ fn add_account() -> CommandDefinition {
                 Ok(str_of(ctx, "currency")
                     .filter(|currency| !currency_code(&currency.to_uppercase()))
                     .map(|_| "A currency is a three-letter code like USD.".to_owned()))
+            },
+        },
+        CommandCondition {
+            predicate: "external_ref_is_free",
+            check: |ctx| {
+                let Some(reference) = str_of(ctx, "external_ref") else {
+                    return Ok(None);
+                };
+                Ok(external_ref_is_taken(ctx, reference, None)?
+                    .then(|| "Another account already has that bank number.".to_owned()))
             },
         },
         CommandCondition {
@@ -416,6 +442,7 @@ fn add_account() -> CommandDefinition {
             "kind": { "enum": ["checking", "savings", "credit_card", "cash"] },
             "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
             "on_budget": { "type": "boolean" },
+            "external_ref": { "type": "string", "minLength": 1, "maxLength": 64 },
             "opening_minor": { "type": "integer" },
             "opening_on": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
           }
@@ -440,18 +467,23 @@ fn add_account() -> CommandDefinition {
                 .and_then(serde_json::Value::as_i64)
                 .unwrap_or(0);
             let opening_on = str_of(ctx, "opening_on").map(str::to_owned);
+            let external_ref = str_of(ctx, "external_ref")
+                .map(str::trim)
+                .filter(|r| !r.is_empty())
+                .map(str::to_owned);
             let owner = owner_party_id(ctx)?;
             ctx.connection().execute(
                 "INSERT INTO core_account
                    (account_id, owner_party_id, name, kind, currency, institution_party_id,
                     external_ref, is_asset, opened_at, closed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, NULL, NULL)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, NULL, NULL)",
                 rusqlite::params![
                     account_id,
                     owner,
                     name,
                     core_kind(&kind),
                     currency,
+                    external_ref,
                     i64::from(kind != "credit_card")
                 ],
             )?;
@@ -517,6 +549,17 @@ fn edit_account() -> CommandDefinition {
             },
         },
         CommandCondition {
+            predicate: "external_ref_is_free",
+            check: |ctx| {
+                let Some(reference) = str_of(ctx, "external_ref") else {
+                    return Ok(None);
+                };
+                let account_id = ctx.required_str("account_id")?;
+                Ok(external_ref_is_taken(ctx, reference, Some(account_id))?
+                    .then(|| "Another account already has that bank number.".to_owned()))
+            },
+        },
+        CommandCondition {
             predicate: "closing_date_is_real",
             check: |ctx| {
                 Ok(str_of(ctx, "closed_on")
@@ -536,6 +579,7 @@ fn edit_account() -> CommandDefinition {
             "name": { "type": "string", "minLength": 1, "maxLength": 80 },
             "kind": { "enum": ["checking", "savings", "credit_card", "cash"] },
             "on_budget": { "type": "boolean" },
+            "external_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 64 },
             "closed_on": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
           }
         }"#,
@@ -562,9 +606,32 @@ fn edit_account() -> CommandDefinition {
                 None => closed_on.clone(),
                 Some(value) => value.as_str().map(str::to_owned),
             };
-            let changed = (&new_name, &new_kind, new_budget, &new_closed)
-                != (&name, &kind, on_budget, &closed_on);
-            if changed {
+            let reference: Option<String> = ctx.connection().query_row(
+                "SELECT external_ref FROM core_account WHERE account_id = ?1",
+                [&account_id],
+                |row| row.get(0),
+            )?;
+            let new_reference = match ctx.input.get("external_ref") {
+                None => reference.clone(),
+                Some(value) => value
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|r| !r.is_empty())
+                    .map(str::to_owned),
+            };
+            let reference_changed = new_reference != reference;
+            if reference_changed {
+                ctx.connection().execute(
+                    "UPDATE core_account SET external_ref = ?1 WHERE account_id = ?2",
+                    rusqlite::params![new_reference, account_id],
+                )?;
+            }
+            let changed = reference_changed
+                || (&new_name, &new_kind, new_budget, &new_closed)
+                    != (&name, &kind, on_budget, &closed_on);
+            if (&new_name, &new_kind, new_budget, &new_closed)
+                != (&name, &kind, on_budget, &closed_on)
+            {
                 ctx.connection().execute(
                     "UPDATE money_account SET name = ?1, kind = ?2, on_budget = ?3, closed_on = ?4
                       WHERE account_id = ?5",
