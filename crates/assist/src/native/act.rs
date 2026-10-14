@@ -101,6 +101,7 @@ pub fn id_param(kind: Kind) -> &'static str {
         Kind::Notebook => "notebook_id",
         Kind::Folder => "folder_id",
         Kind::List => "project_id",
+        Kind::Transaction => "txn_id",
     }
 }
 
@@ -3334,6 +3335,7 @@ impl Session {
                 ("locker.add_item", input, "item_id")
             }
             Kind::Photo => unreachable!("photos are not created by a call"),
+            Kind::Transaction => unreachable!("transactions are read-only (#1099, R-1099-8)"),
         };
         let before = self.world.clone();
         let ran = self.write_step(command, &input)?;
@@ -3895,6 +3897,7 @@ fn rename(kind: Kind) -> (&'static str, &'static str) {
         Kind::Notebook => ("knowledge.rename_notebook", "name"),
         Kind::Folder => ("core.rename_folder", "name"),
         Kind::List => ("schedule.save_project", "name"),
+        Kind::Transaction => unreachable!("transactions are read-only (#1099, R-1099-8)"),
     }
 }
 

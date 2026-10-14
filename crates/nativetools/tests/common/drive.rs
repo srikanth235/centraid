@@ -28,6 +28,8 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
         Kind::Notebook => "Recipes",
         Kind::Folder => "Taxes",
         Kind::List => "Home",
+        // read-only (#1099, R-1099-8): no verb applies, so no pair is driven
+        Kind::Transaction => return None,
     };
     Some(match verb {
         "create" => {
@@ -47,7 +49,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 Kind::Notebook => json!({"name": "Travel"}),
                 Kind::Folder => json!({"name": "Medical"}),
                 Kind::List => json!({"name": "Errands"}),
-                Kind::Photo => return None,
+                Kind::Photo | Kind::Transaction => return None,
             };
             measure(
                 session,

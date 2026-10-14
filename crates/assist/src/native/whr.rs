@@ -1043,12 +1043,20 @@ pub(crate) fn parse_cond(kind: Kind, part: &str) -> Result<Cond, String> {
         FieldType::Number | FieldType::Money => {
             let mut words = value.split_whitespace();
             let written = words.next().unwrap_or_default();
+            // A MONEY FIELD MAY BE SIGNED (a transaction's `amount`: money out is negative), so a
+            // leading minus is read before the symbol (`-50`, `-$50`) and applied after.
+            let (negative, written) = match field.ty {
+                FieldType::Money => written
+                    .strip_prefix(['-', '\u{2212}'])
+                    .map_or((false, written), |rest| (true, rest)),
+                _ => (false, written),
+            };
             let number = written.trim_start_matches(['$', '\u{20ac}', '\u{a3}', '\u{a5}']);
             let symbol = (field.ty == FieldType::Money)
                 .then(|| symbol_of(written))
                 .flatten();
             let parsed = if field.ty == FieldType::Money {
-                parse_amount(number)
+                parse_amount(number).map(|amount| if negative { -amount } else { amount })
             } else {
                 number.parse::<f64>().ok()
             }

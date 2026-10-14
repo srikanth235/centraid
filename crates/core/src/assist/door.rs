@@ -42,7 +42,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_kit::reads::{FanOutBound, read_pages};
 use centraid_apps_kit::row::Row;
-use centraid_apps_kit::statement::{PageOrder, PageQuery};
+use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_assist::native::door::Occurrence;
 use centraid_assist::native::{Door, Ran};
 use centraid_search::Target;
@@ -117,6 +117,35 @@ impl Door for CoreDoor {
             );
             let rows = read_pages(&door, &query, FanOutBound::new(PAGE_ROWS, FAN_OUT_PAGES));
             // THE VAULT'S OWN WORDS before the kit's: the door keeps the first failure it saw.
+            if let Some(failure) = door.take_failure() {
+                return Err(format!("reading {table}: {failure}"));
+            }
+            rows.map_err(|error| format!("reading {table}: {error}"))
+        })
+    }
+
+    fn table_where(
+        &self,
+        table: &str,
+        columns: &str,
+        sort: &str,
+        pk: &str,
+        predicate: &str,
+        binds: &[String],
+    ) -> Result<Vec<Row>, String> {
+        self.with(|vault| {
+            let door = VaultDoor::new(vault);
+            let query = PageQuery::new(
+                &format!("assist.native.{table}"),
+                columns,
+                table,
+                PageOrder::asc(sort, pk),
+            )
+            .filter(
+                predicate,
+                binds.iter().cloned().map(PageBindValue::Text).collect(),
+            );
+            let rows = read_pages(&door, &query, FanOutBound::new(PAGE_ROWS, FAN_OUT_PAGES));
             if let Some(failure) = door.take_failure() {
                 return Err(format!("reading {table}: {failure}"));
             }

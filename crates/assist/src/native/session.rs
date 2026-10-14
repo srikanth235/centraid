@@ -44,6 +44,14 @@ pub struct Flags {
     /// `reveal` verb ends the turn in `decline sealed_egress` (`Session::locker_off_decline`). The
     /// kind card and the prompt are the same either way (R-1088-10).
     pub locker: bool,
+    /// Whether Money is reachable (#1099, R-1099-8). On (the default, what a harness run and a
+    /// retrain use), the runtime loads the transactions of the last
+    /// [`TRANSACTION_MONTHS`](crate::native::world::TRANSACTION_MONTHS) months, the kind card
+    /// names the `transaction` kind and a call may find, open and sum them; they are read-only.
+    /// Off (the phone, until the model has been measured with Money in its prompt), it reads no
+    /// Money table, holds no transaction and the kind card is the one the shipped model was
+    /// trained on: a call that names the kind finds no row.
+    pub money: bool,
     /// What a write does (#1088, R-1088-2, R-1088-6): [`Writes::Run`](crate::native::park::Writes)
     /// (the default: the vault runs it, as in every harness run), or `Park` (a patched copy of
     /// the world takes it and it waits for the member's tap).
@@ -60,6 +68,7 @@ impl Default for Flags {
             normalize: true,
             compose: true,
             locker: true,
+            money: true,
             writes: crate::native::park::Writes::Run,
         }
     }
@@ -597,7 +606,7 @@ impl Session {
             today: now.date(),
             tz: tz.to_owned(),
         };
-        let world = World::load_in(&*door, flags.locker, Some(&standing))?;
+        let world = World::load_in(&*door, flags.locker, flags.money, Some(&standing))?;
         let me_name = if me.is_empty() {
             world
                 .row(&world.me_key())
@@ -675,7 +684,12 @@ impl Session {
             today: self.now.date(),
             tz: self.tz.clone(),
         };
-        World::load_in(&*self.door, self.flags.locker, Some(&standing))
+        World::load_in(
+            &*self.door,
+            self.flags.locker,
+            self.flags.money,
+            Some(&standing),
+        )
     }
 
     /// The session clock follows the request: the person's civil `now` and their zone. The world

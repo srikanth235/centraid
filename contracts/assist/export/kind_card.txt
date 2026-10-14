@@ -9,3 +9,4 @@ locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_cred
 notebook: name · links: notes · verbs: create edit delete
 folder: name · links: documents · verbs: create edit delete
 list: name, area · links: tasks · verbs: create edit
+transaction: name, date (posted), amount (USD), account, category, status (posted|void)

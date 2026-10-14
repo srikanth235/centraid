@@ -24,12 +24,18 @@
 //!                  "albums":["summer"],"people":["neha"],"starred":true}],
 //!   "locker":    [{"key":"bank","name":"Bank","type":"login","username":"…",
 //!                  "url":"…","notes":"…","password":"…","starred":true}],
+//!   "accounts":  [{"key":"checking","name":"Everyday","kind":"checking","currency":"USD"}],
+//!   "transactions": [{"key":"coffee","account":"checking","date":"2026-09-30","amount":-4.5,
+//!                  "name":"Blue Bottle","description":"BLUE BOTTLE #12","category":"food.dining",
+//!                  "void":true}],
 //!   "links":     [{"from":"cabin","to":"neha"}]
 //! }
 //! ```
 //!
 //! `currency` is the vault's default (base) currency, set at founding; USD
-//! when absent. Every row may carry `created` (the clock at its create command),
+//! when absent. A transaction's `amount` is signed in currency units (money out is negative), its
+//! `category` is a Money category notation and `void` is a member's void (#1099); they go in through
+//! `money.import_transactions`. Every row may carry `created` (the clock at its create command),
 //! `modified` (a later same-value edit that stamps `updated_at`) and `trashed`
 //! (`true` or a time). Keys are unique across the world; `me` is the owner.
 //! Times are `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, floating (no zone).
@@ -432,6 +438,70 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         }
         seeder.run("locker.add_item", input)?;
         seeder.key(row, Kind::LockerItem, id)?;
+    }
+    // MONEY (#1099): accounts, then each transaction through the import command, one row at a time
+    // so a row has the instant of its own.
+    let mut accounts: BTreeMap<String, (String, String)> = BTreeMap::new();
+    for row in rows(world, "accounts") {
+        seeder.clock_for(row, "created")?;
+        let id = seeder.mint();
+        let name = str_of(row, "name").ok_or("an account needs a name")?;
+        let account_currency =
+            str_of(row, "currency").map_or_else(|| currency.clone(), str::to_uppercase);
+        seeder.run(
+            "money.add_account",
+            json!({
+                "account_id": id, "name": name,
+                "kind": str_of(row, "kind").unwrap_or("checking"),
+                "currency": account_currency,
+            }),
+        )?;
+        let key = str_of(row, "key").ok_or("an account needs a key")?;
+        if accounts
+            .insert(key.to_owned(), (id, account_currency))
+            .is_some()
+        {
+            return Err(format!("the account key \"{key}\" is used twice"));
+        }
+    }
+    for (index, row) in rows(world, "transactions").iter().enumerate() {
+        seeder.clock_for(row, "created")?;
+        let account = str_of(row, "account").ok_or("a transaction needs an account")?;
+        let (account_id, account_currency) = accounts
+            .get(account)
+            .cloned()
+            .ok_or_else(|| format!("no account has the key \"{account}\""))?;
+        let date = str_of(row, "date").ok_or("a transaction needs a date")?;
+        let amount = row
+            .get("amount")
+            .and_then(Value::as_f64)
+            .ok_or("a transaction needs a signed amount")?;
+        let id = seeder.mint();
+        let description = str_of(row, "description")
+            .or_else(|| str_of(row, "name"))
+            .ok_or("a transaction needs a description or a name")?;
+        let mut line = json!({
+            "txn_id": id,
+            "external_id": format!("csv:{index:064x}"),
+            "posted_on": date,
+            "amount_minor": crate::world::minor_of(amount.abs(), &account_currency),
+            "direction": if amount < 0.0 { "debit" } else { "credit" },
+            "description": description,
+        });
+        if let Some(name) = str_of(row, "name") {
+            line["display_name"] = json!(name);
+        }
+        if let Some(category) = str_of(row, "category") {
+            line["category_concept_id"] = json!(format!("money:cat:{category}"));
+        }
+        seeder.run(
+            "money.import_transactions",
+            json!({"account_id": account_id, "source": "csv", "rows": [line]}),
+        )?;
+        if row.get("void").and_then(Value::as_bool) == Some(true) {
+            seeder.run("money.void_transaction", json!({"txn_id": id}))?;
+        }
+        seeder.key(row, Kind::Transaction, id)?;
     }
     for link in rows(world, "links") {
         let (Some(from), Some(to)) = (str_of(link, "from"), str_of(link, "to")) else {

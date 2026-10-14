@@ -897,6 +897,95 @@
       "where_fields": [
         "area"
       ]
+    },
+    {
+      "card": "transaction: name, date (posted), amount (USD), account, category, status (posted|void)",
+      "container": false,
+      "date": {
+        "label": "posted",
+        "source": {
+          "column": "posted_at",
+          "table": "core_transaction"
+        }
+      },
+      "entity": "core.transaction",
+      "fields": [
+        {
+          "create": false,
+          "edit": null,
+          "name": "amount",
+          "source": {
+            "column": "amount_minor",
+            "table": "core_transaction"
+          },
+          "type": "money",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "account",
+          "source": {
+            "column": "name",
+            "table": "core_account"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "category",
+          "source": {
+            "column": "pref_label",
+            "table": "core_concept"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "status",
+          "source": {
+            "column": "status",
+            "table": "core_transaction"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "posted",
+              "posted"
+            ],
+            [
+              "void",
+              "void"
+            ]
+          ]
+        }
+      ],
+      "kind": "transaction",
+      "links": [],
+      "name": "transaction",
+      "name_source": {
+        "column": "display_name",
+        "table": "money_transaction"
+      },
+      "pk": "txn_id",
+      "plural": "transactions",
+      "table": "core_transaction",
+      "trash": false,
+      "verbs": [],
+      "where_fields": [
+        "amount",
+        "account",
+        "category",
+        "status"
+      ]
     }
   ],
   "log_kinds": [
@@ -906,6 +995,7 @@
     "coffee"
   ],
   "mapped_columns": [
+    "core_account.name",
     "core_collection.collection_id",
     "core_collection.name",
     "core_concept.concept_id",
@@ -923,6 +1013,10 @@
     "core_party.display_name",
     "core_party.party_id",
     "core_tag.concept_id",
+    "core_transaction.amount_minor",
+    "core_transaction.posted_at",
+    "core_transaction.status",
+    "core_transaction.txn_id",
     "knowledge_note.created_at",
     "knowledge_note.note_id",
     "knowledge_note.pinned",
@@ -936,6 +1030,7 @@
     "media_asset.asset_id",
     "media_asset.captured_at",
     "media_asset.title",
+    "money_transaction.display_name",
     "people_profile.cadence_days",
     "people_profile.last_contacted_at",
     "people_profile.met",

@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use centraid_apps_kit::reads::{FanOutBound, read_pages};
 use centraid_apps_kit::row::Row;
-use centraid_apps_kit::statement::{PageOrder, PageQuery};
+use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_assist::native::{Flags, Session, world::World};
 use centraid_vault::access::Principal;
@@ -235,6 +235,36 @@ impl Handle {
             .map_err(|error| format!("reading {table}: {error}"))
     }
 
+    /// The rows of one table that satisfy `predicate` (`?` placeholders, text `binds`), through
+    /// the kit's paged read.
+    pub fn table_where(
+        &self,
+        table: &str,
+        columns: &str,
+        sort: &str,
+        pk: &str,
+        predicate: &str,
+        binds: &[String],
+    ) -> Result<Vec<Row>, String> {
+        self.vault
+            .read(|connection| {
+                let door = TestDoor::new(connection);
+                let query = PageQuery::new(
+                    &format!("nativetools.{table}"),
+                    columns,
+                    table,
+                    PageOrder::asc(sort, pk),
+                )
+                .filter(
+                    predicate,
+                    binds.iter().cloned().map(PageBindValue::Text).collect(),
+                );
+                Ok(read_pages(&door, &query, FanOutBound::new(500, 200)))
+            })
+            .map_err(|error| error.to_string())?
+            .map_err(|error| format!("reading {table}: {error}"))
+    }
+
     /// The occurrences of the days `from_day..=to_day` in the zone `tz`: Agenda's own read
     /// (`centraid_apps_agenda::occurrences`) over the owner's view, as the core's door asks it.
     pub fn events(
@@ -333,6 +363,18 @@ fn with_store(vault: Vault, path: &Path) -> Result<Vault, String> {
 impl Door for Handle {
     fn table(&self, table: &str, columns: &str, sort: &str, pk: &str) -> Result<Vec<Row>, String> {
         Self::table(self, table, columns, sort, pk)
+    }
+
+    fn table_where(
+        &self,
+        table: &str,
+        columns: &str,
+        sort: &str,
+        pk: &str,
+        predicate: &str,
+        binds: &[String],
+    ) -> Result<Vec<Row>, String> {
+        Self::table_where(self, table, columns, sort, pk, predicate, binds)
     }
 
     fn events(

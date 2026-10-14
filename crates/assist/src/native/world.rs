@@ -22,6 +22,14 @@ pub const EVENT_DAYS_BACK: i64 = 31;
 /// The days after today (Agenda's own default horizon for an open-ended `upcoming`).
 pub const EVENT_DAYS_AHEAD: i64 = 120;
 
+/// The months of transactions the world holds, this month and the ones before it (#1099,
+/// R-1099-8): the chat answers about what the member just spent, and a world is re-read after
+/// every write, so the read is bounded by months and never walks a ledger's years. A question
+/// about an older month finds nothing here and says so.
+pub const TRANSACTION_MONTHS: u32 = 3;
+/// Transactions read per chunk when the display names are fetched by id.
+const DECORATION_CHUNK: usize = 200;
+
 /// Where and when the person stands: their today, and the zone their days are in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Standing {
@@ -278,20 +286,28 @@ impl World {
             .map(|edge| edge.from.clone())
     }
 
-    /// Load everything, the Locker included.
+    /// Load everything, the Locker and the recent transactions included.
     pub fn load(door: &dyn Door) -> Result<Self, String> {
         Self::load_with(door, true)
     }
 
     /// Load everything. With `locker` false (`Flags::locker`) no Locker table and no sealed
-    /// column is read, and the world holds no Locker item. Events are read as stored.
+    /// column is read, and the world holds no Locker item. Events are read as stored. The recent
+    /// transactions are read (`Flags::money`, on).
     pub fn load_with(door: &dyn Door, locker: bool) -> Result<Self, String> {
-        Self::load_in(door, locker, None)
+        Self::load_in(door, locker, true, None)
     }
 
     /// Load everything, the events of the days around `at.today` read in the zone `at.tz` with
-    /// every repeating series expanded (R-1088-8, [`Door::events`]).
-    pub fn load_in(door: &dyn Door, locker: bool, at: Option<&Standing>) -> Result<Self, String> {
+    /// every repeating series expanded (R-1088-8, [`Door::events`]). With `money` false
+    /// (`Flags::money`) no Money table is read and the world holds no transaction; with it on,
+    /// the transactions of the last [`TRANSACTION_MONTHS`] months are.
+    pub fn load_in(
+        door: &dyn Door,
+        locker: bool,
+        money: bool,
+        at: Option<&Standing>,
+    ) -> Result<Self, String> {
         let mut world = Self::default();
         let vault = door.table(
             "core_vault",
@@ -332,6 +348,9 @@ impl World {
         world.load_documents(door, &concepts)?;
         if locker {
             world.load_locker(door, &concepts)?;
+        }
+        if money {
+            world.load_transactions(door, at)?;
         }
         world.load_links(door)?;
         world.edges.sort();
@@ -942,6 +961,130 @@ impl World {
                 created: text(asset, "created_at").unwrap_or_default(),
                 updated: text(asset, "updated_at").unwrap_or_default(),
                 extra,
+            });
+        }
+        Ok(())
+    }
+
+    /// The transactions posted in the last [`TRANSACTION_MONTHS`] months, with Money's display
+    /// name, the account's name and the category's label (#1099, R-1099-8). `amount` is signed:
+    /// money out of the account is negative. Nothing is written or derived beyond that; the
+    /// rows are read as stored.
+    fn load_transactions(&mut self, door: &dyn Door, at: Option<&Standing>) -> Result<(), String> {
+        let today = match at {
+            Some(standing) => standing.today,
+            None => jiff::Timestamp::from_millisecond(door.now_ms())
+                .unwrap_or_default()
+                .to_zoned(jiff::tz::TimeZone::UTC)
+                .date(),
+        };
+        let first = today
+            .first_of_month()
+            .checked_sub(jiff::Span::new().months(i64::from(TRANSACTION_MONTHS) - 1))
+            .map_err(|error| format!("the transaction window is out of range: {error}"))?;
+        let floor = first.to_string();
+        let rows = door.table_where(
+            "core_transaction",
+            "txn_id, account_id, posted_at, amount_minor, currency, direction, status, \
+             description, category_concept_id, created_at, updated_at",
+            "posted_at",
+            "txn_id",
+            "posted_at >= ?",
+            &[floor],
+        )?;
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let accounts = door.table(
+            "core_account",
+            "account_id, name",
+            "account_id",
+            "account_id",
+        )?;
+        let account_names: BTreeMap<String, String> = accounts
+            .iter()
+            .filter_map(|row| Some((text(row, "account_id")?, text(row, "name")?)))
+            .collect();
+        let categories = door.table(
+            "core_concept",
+            "concept_id, pref_label, created_at",
+            "created_at",
+            "concept_id",
+        )?;
+        let category_names: BTreeMap<String, String> = categories
+            .iter()
+            .filter_map(|row| Some((text(row, "concept_id")?, text(row, "pref_label")?)))
+            .collect();
+        let ids: Vec<String> = rows.iter().filter_map(|row| text(row, "txn_id")).collect();
+        let mut display: BTreeMap<String, String> = BTreeMap::new();
+        for chunk in ids.chunks(DECORATION_CHUNK) {
+            let marks = vec!["?"; chunk.len()].join(", ");
+            let decorations = door.table_where(
+                "money_transaction",
+                "txn_id, display_name",
+                "txn_id",
+                "txn_id",
+                &format!("txn_id IN ({marks})"),
+                chunk,
+            )?;
+            for decoration in &decorations {
+                if let (Some(id), Some(name)) =
+                    (text(decoration, "txn_id"), text(decoration, "display_name"))
+                    && !name.is_empty()
+                {
+                    display.insert(id, name);
+                }
+            }
+        }
+        for transaction in &rows {
+            let id = text(transaction, "txn_id").unwrap_or_default();
+            let currency = text(transaction, "currency").unwrap_or_else(|| self.currency.clone());
+            let magnitude = int(transaction, "amount_minor").unwrap_or_default();
+            let signed = if text(transaction, "direction").as_deref() == Some("debit") {
+                -magnitude
+            } else {
+                magnitude
+            };
+            let mut fields = BTreeMap::new();
+            fields.insert("amount", Val::Money(signed, currency));
+            let account = text(transaction, "account_id").unwrap_or_default();
+            put(
+                &mut fields,
+                "account",
+                nonempty(account_names.get(&account).cloned()),
+            );
+            put(
+                &mut fields,
+                "category",
+                text(transaction, "category_concept_id")
+                    .and_then(|concept| category_names.get(&concept).cloned())
+                    .map(Val::Text),
+            );
+            let status = match text(transaction, "status").as_deref() {
+                Some("void") => "void",
+                _ => "posted",
+            };
+            fields.insert("status", Val::Enum(status));
+            let description = text(transaction, "description").unwrap_or_default();
+            let name = display
+                .get(&id)
+                .cloned()
+                .filter(|name| !name.is_empty())
+                .unwrap_or(description);
+            self.insert(Row {
+                kind: Kind::Transaction,
+                name,
+                // a printed civil day (R-1099-2): stored at midnight, shown as the day
+                date: stamp(text(transaction, "posted_at")).map(|posted| Stamp {
+                    date: posted.date,
+                    time: None,
+                }),
+                fields,
+                trashed: false,
+                created: text(transaction, "created_at").unwrap_or_default(),
+                updated: text(transaction, "updated_at").unwrap_or_default(),
+                extra: BTreeMap::new(),
+                id,
             });
         }
         Ok(())

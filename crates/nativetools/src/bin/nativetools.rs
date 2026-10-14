@@ -5,7 +5,7 @@
 //! nativetools seed <world.json> <vault path>
 //! nativetools copy <vault path> <new vault path>
 //! nativetools session <vault path> --today <YYYY-MM-DD[THH:MM]> [--me <name>]
-//!                     [--no-directory] [--no-preground] [--no-normalize] [--no-compose] [--tools sig|compact|full]
+//!                     [--no-directory] [--no-preground] [--no-normalize] [--no-compose] [--no-money] [--tools sig|compact|full]
 //!                     [--writes run|park|shadow] [--auto-confirm]
 //! nativetools think
 //! ```
@@ -58,7 +58,7 @@ fn usage() -> ExitCode {
     eprintln!(
         "usage:\n  nativetools export <dir>\n  nativetools seed <world.json> <vault path>\n  nativetools copy <vault> <new vault>\n  \
          nativetools session <vault path> --today <YYYY-MM-DD[THH:MM]> [--me <name>] \
-         [--no-directory] [--no-preground] [--no-normalize] [--no-compose] [--tools sig|compact|full] \
+         [--no-directory] [--no-preground] [--no-normalize] [--no-compose] [--no-money] [--tools sig|compact|full] \
          [--writes run|park|shadow] [--auto-confirm]\n  \
          nativetools think"
     );
@@ -132,6 +132,7 @@ fn session(path: &str, rest: &[String]) -> ExitCode {
             "--no-preground" => flags.preground = false,
             "--no-normalize" => flags.normalize = false,
             "--no-compose" => flags.compose = false,
+            "--no-money" => flags.money = false,
             "--auto-confirm" => auto_confirm = true,
             "--writes" => match iter.next().and_then(|mode| Writes::parse(mode)) {
                 Some(mode) => flags.writes = mode,
