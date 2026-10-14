@@ -1,13 +1,17 @@
-//! CONTAINERS AS SEARCH RESULTS (#1097, R-1097-19..21): the notebook, album,
-//! project, Tally group and Docs folder a member typed the name of.
+//! THE NAMED AS SEARCH RESULTS (#1097, R-1097-19..24): the notebook, album,
+//! project, Tally group and Docs folder a member typed the name of, and the chat
+//! thread whose title or words they typed.
 //!
-//! The door's second registry ([`centraid_search::CONTAINERS`]) holds the rows;
+//! The door's second registry ([`centraid_search::NAMED`]) holds the rows;
 //! this module asks it for two readers. **An app's own search** takes the
 //! containers that open in that app ([`of_app`]) and lays them beside its rows in
 //! one answer, so a correction treats the two as one: the term is corrected only
-//! when the rows and the containers are both empty. **Home** takes every
-//! container index, one probe each ([`of_all`]), isolated as its domains are: a
-//! probe that refuses drops its own rows and never the answer.
+//! when the rows and the containers are both empty. A chat thread opens in no
+//! app, so no app's search asks for it. **Home** takes every named index, one
+//! probe each ([`of_all`]), isolated as its domains are: a probe that refuses
+//! drops its own rows and never the answer. A chat thread is a Home hit like the
+//! rest; whether it is drawn is the shell's, which knows whether it has a Chat
+//! tab (R-1097-24).
 //!
 //! A Tally group is a circle in the index and a `tally_group` in Tally, so a
 //! circle hit is opened by its group's id ([`Opened::open_id`]) and a circle with
@@ -22,7 +26,7 @@ use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::reads::{FanOutBound, PageDoor, in_list, read_pages};
 use centraid_apps_kit::row::text_of;
 use centraid_apps_kit::statement::{PageOrder, PageQuery};
-use centraid_search::{Answer, CONTAINERS, Principal, Search, SearchError, SearchRequest, Target};
+use centraid_search::{Answer, NAMED, Principal, Search, SearchError, SearchRequest, Target};
 
 /// The most containers one probe answers, as the domains' eight on Home.
 pub(super) const CONTAINER_ROWS: usize = 8;
@@ -46,7 +50,7 @@ pub(super) struct Opened {
 pub(super) fn entities_of(domain_entity: &'static str, app: &str) -> Vec<&'static str> {
     let mut entities = vec![domain_entity];
     entities.extend(
-        CONTAINERS
+        NAMED
             .iter()
             .filter(|container| container.apps().contains(&app))
             .map(|container| container.entity),
@@ -66,7 +70,7 @@ pub(super) fn of_app(
     limit: usize,
 ) -> KitResult<(Vec<Opened>, Option<Denial>)> {
     let mut targets = Vec::new();
-    for container in CONTAINERS
+    for container in NAMED
         .iter()
         .filter(|container| container.apps().contains(&app))
     {
@@ -91,7 +95,8 @@ pub(super) fn of_app(
     Ok((opened(door, targets)?, None))
 }
 
-/// Every container matching `term`, one probe per container index, for Home.
+/// Everything named that matches `term`, one probe per index, for Home: the
+/// containers and the chat threads.
 /// ISOLATED: a probe that refuses drops its own rows, never the answer.
 pub(super) fn of_all(
     door: &dyn PageDoor,
@@ -99,7 +104,7 @@ pub(super) fn of_all(
     term: &str,
 ) -> KitResult<Vec<Opened>> {
     let mut targets = Vec::new();
-    for container in CONTAINERS {
+    for container in NAMED {
         let request = SearchRequest::new(container.entity, term, CONTAINER_ROWS);
         if let Ok(Answer::Data { page, .. }) = search.query(&Principal::Owner, &request) {
             targets.extend(page.rows);

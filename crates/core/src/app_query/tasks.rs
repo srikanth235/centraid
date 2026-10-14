@@ -18,7 +18,7 @@ use centraid_apps_tasks::views::{self, GroupKind, Placed, View};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, containers, corrected_search, settle, zone_of};
+use super::{RecordingSearch, VaultDoor, corrected_search, named, settle, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -225,13 +225,12 @@ pub(super) fn search(
         let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
         // THE PROJECTS THE TERM NAMES RIDE BESIDE THE TASKS (#1097, R-1097-19..21),
         // and the correction treats the two as one answer.
-        let entities =
-            containers::entities_of(centraid_apps_tasks::queries::TASK_TARGET_TYPE, "tasks");
+        let entities = named::entities_of(centraid_apps_tasks::queries::TASK_TARGET_TYPE, "tasks");
         Ok(Ok(corrected_search(
             &search,
             &entities,
             &asked.term,
-            |(data, found): &(tasks::SearchData, Vec<containers::Opened>)| {
+            |(data, found): &(tasks::SearchData, Vec<named::Opened>)| {
                 data.tasks.is_empty() && found.is_empty()
             },
             |term| {
@@ -247,12 +246,12 @@ pub(super) fn search(
                 if denial.is_some() {
                     return Ok(((data, Vec::new()), denial));
                 }
-                let (found, denial) = containers::of_app(
+                let (found, denial) = named::of_app(
                     door,
                     &search,
                     "tasks",
                     term,
-                    limit.min(containers::CONTAINER_ROWS),
+                    limit.min(named::CONTAINER_ROWS),
                 )?;
                 Ok(((data, found), denial))
             },
@@ -268,7 +267,7 @@ pub(super) fn search(
                 .iter()
                 .map(|task| task_to_wire(&views::place(task, &zone, &today)))
                 .collect(),
-            containers: found.into_iter().map(containers::to_wire).collect(),
+            containers: found.into_iter().map(named::to_wire).collect(),
         })
     })
 }

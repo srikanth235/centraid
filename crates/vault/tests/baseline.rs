@@ -55,7 +55,10 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 /// triggers, the three triggers that re-index a Tally circle from its group, and
 /// the twenty-two triggers that re-index a party, event, task or
 /// expense from the child table that feeds it, including the one edge that
-/// carries an interaction's note to the person (#1097). Rungs three and four
+/// carries an interaction's note to the person (#1097), and its chat index
+/// `fts_chat_thread` with its five shadow tables, its vocabulary and the six
+/// triggers that keep it to a thread's title and what the member said
+/// (R-1097-22). Rungs three and four
 /// added the old backup plane's index and blob custody (#1029 §2, §4); rung
 /// ten drops all eight objects again (#1080), so they are founded and gone.
 ///
@@ -64,7 +67,7 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 /// Named here rather than filtered by prefix: a guard that stopped being
 /// created, or an object arriving from somewhere, both have to show up as a
 /// failure.
-const LADDER_OBJECTS: [&str; 65] = [
+const LADDER_OBJECTS: [&str; 78] = [
     "chat_message",
     "chat_message_attachment",
     "chat_message_card",
@@ -80,6 +83,19 @@ const LADDER_OBJECTS: [&str; 65] = [
     "core_entity_revision_parent_is_immutable",
     "core_entity_revision_parent_is_same_object",
     "core_link_no_revises_edge",
+    "fts_chat_thread",
+    "fts_chat_thread_ad",
+    "fts_chat_thread_ai",
+    "fts_chat_thread_au",
+    "fts_chat_thread_config",
+    "fts_chat_thread_content",
+    "fts_chat_thread_data",
+    "fts_chat_thread_docsize",
+    "fts_chat_thread_from_chat_message_ad",
+    "fts_chat_thread_from_chat_message_ai",
+    "fts_chat_thread_from_chat_message_au",
+    "fts_chat_thread_idx",
+    "fts_chat_thread_vocab",
     "fts_core_collection_vocab",
     "fts_core_concept",
     "fts_core_concept_ad",
@@ -529,12 +545,12 @@ fn the_three_excluded_classes_are_created_by_sqlite_itself() {
             ))
         })
         .expect("the counts read");
-    // 11 FTS5 tables × 5 shadow tables each: rung five drops `fts_conversation`
+    // 12 FTS5 tables × 5 shadow tables each: rung five drops `fts_conversation`
     // with the ledger band it indexed (#1029), rung thirteen drops the seven
     // indexes nothing read (#1097, R2a, R-1097-12) and adds the folder index
-    // (R-1097-19). The `_vocab` tables rung thirteen adds are virtual tables over
+    // (R-1097-19) and the chat index (R-1097-22). The `_vocab` tables rung thirteen adds are virtual tables over
     // those, with no shadow tables of their own.
-    assert_eq!(shadows, 55);
+    assert_eq!(shadows, 60);
     assert_eq!(sequence, 1);
     assert!(autoindexes > 0, "no implicit index was created");
     // And none of the three appears in the baseline's own text.
@@ -567,8 +583,9 @@ fn the_fifty_seven_fts_sync_triggers_survive_the_baseline() {
     // for an event (place), 1 for a task (project) and 8 for an expense (line
     // item, memo, circle, group); and for the containers (R-1097-19) the folder
     // index's three and its one from the scheme, and the circle's three from its
-    // Tally group.
-    assert_eq!(triggers, 51 - 21 + 12 + 1 + 1 + 8 + 4 + 3);
+    // Tally group; and for the chat (R-1097-22) the thread index's three and the
+    // three that re-index a thread from its messages.
+    assert_eq!(triggers, 51 - 21 + 12 + 1 + 1 + 8 + 4 + 3 + 3 + 3);
 }
 
 #[test]

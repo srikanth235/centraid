@@ -733,7 +733,12 @@ fn the_thread_carries_the_membership_triggers_and_the_mutable_columns() {
         vec![
             "chat_thread_entity_delete",
             "chat_thread_entity_insert",
-            "chat_thread_touch_updated_at"
+            "chat_thread_touch_updated_at",
+            // Rung thirteen's index of a thread's title and what the member said
+            // (#1097, R-1097-22): the three triggers on the thread itself.
+            "fts_chat_thread_ad",
+            "fts_chat_thread_ai",
+            "fts_chat_thread_au",
         ]
     );
     // `mutable` ⇒ `updated_at` + `row_version` (the half no corpus test holds).

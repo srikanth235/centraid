@@ -23,7 +23,7 @@
 use centraid_apps_kit::contract_vault::open_contract_vault;
 use centraid_apps_kit::page::PageRequest;
 use centraid_search::{
-    Answer, CONTAINERS, DOMAINS, MAX_VOCAB_SCAN, Principal, Search, SearchError, SearchRequest,
+    Answer, DOMAINS, MAX_VOCAB_SCAN, NAMED, Principal, Search, SearchError, SearchRequest,
     SqliteDoor, Target,
 };
 use centraid_vault::custody::locker_key::{
@@ -416,12 +416,12 @@ fn secrets_planted_in_every_sealed_column_never_reach_a_target() {
             |row| row.get(0),
         )
         .expect("the cell reads");
-    // THE CONTAINERS TOO (R-1097-20): a second registry is held to the same
+    // THE NAMED TOO (R-1097-20): a second registry is held to the same
     // property, and its entities are asked for the marker by name as well.
     let entities: Vec<&str> = DOMAINS
         .iter()
         .map(|domain| domain.entity)
-        .chain(CONTAINERS.iter().map(|container| container.entity))
+        .chain(NAMED.iter().map(|container| container.entity))
         .collect();
     for marker in [PLAINTEXT, ciphertext.as_str()] {
         for entity in &entities {
@@ -1101,7 +1101,7 @@ fn owner_of(vault: &centraid_vault::Vault) -> String {
 /// The index columns rung thirteen folded in, which are the ones that weigh half.
 /// Written out here, apart from the list in `domains.rs`, so a weight that sits
 /// on the wrong column is a difference between two statements of one fact.
-const HALF_WEIGHT: [(&str, &str); 11] = [
+const HALF_WEIGHT: [(&str, &str); 12] = [
     ("core.party", "nickname"),
     ("core.party", "role"),
     ("core.party", "met"),
@@ -1113,35 +1113,43 @@ const HALF_WEIGHT: [(&str, &str); 11] = [
     ("tally.expense", "group_name"),
     ("tally.expense", "items"),
     ("tally.expense", "memo"),
+    ("chat.thread", "said"),
 ];
 
 fn assert_weights_sit_on_their_columns(connection: &Connection) {
-    for domain in DOMAINS {
+    // THE DOMAINS' AND THE NAMED KINDS': one list of (entity, index, weights).
+    let indexes = DOMAINS
+        .iter()
+        .map(|domain| (domain.entity, domain.fts, domain.weights))
+        .chain(
+            NAMED
+                .iter()
+                .map(|named| (named.entity, named.fts, named.weights)),
+        );
+    for (entity, fts, weights) in indexes {
         let live: Vec<String> = connection
             .prepare("SELECT name FROM pragma_table_info(?1) ORDER BY cid")
             .expect("the columns prepare")
-            .query_map([domain.fts], |row| row.get::<_, String>(0))
+            .query_map([fts], |row| row.get::<_, String>(0))
             .expect("the columns read")
             .collect::<rusqlite::Result<_>>()
             .expect("the columns read");
         assert_eq!(
             live.len(),
-            domain.weights.len(),
-            "{} has {} columns and {} weights",
-            domain.fts,
+            weights.len(),
+            "{fts} has {} columns and {} weights",
             live.len(),
-            domain.weights.len()
+            weights.len()
         );
-        for (column, weight) in live.iter().zip(domain.weights) {
-            let expected = if HALF_WEIGHT.contains(&(domain.entity, column.as_str())) {
+        for (column, weight) in live.iter().zip(weights) {
+            let expected = if HALF_WEIGHT.contains(&(entity, column.as_str())) {
                 0.5
             } else {
                 1.0
             };
             assert!(
                 (weight - expected).abs() < f64::EPSILON,
-                "{}.{column} weighs {weight}, not {expected}",
-                domain.fts
+                "{fts}.{column} weighs {weight}, not {expected}"
             );
         }
     }
@@ -1166,16 +1174,17 @@ fn no_index_stores_a_rank_override() {
     let founded = founded_vault("door-no-rank");
     founded
         .read(|connection| {
-            for domain in DOMAINS {
+            let indexes = DOMAINS
+                .iter()
+                .map(|domain| domain.fts)
+                .chain(NAMED.iter().map(|named| named.fts));
+            for fts in indexes {
                 let stored: i64 = connection.query_row(
-                    &format!(
-                        "SELECT COUNT(*) FROM {}_config WHERE k = 'rank'",
-                        domain.fts
-                    ),
+                    &format!("SELECT COUNT(*) FROM {fts}_config WHERE k = 'rank'"),
                     [],
                     |row| row.get(0),
                 )?;
-                assert_eq!(stored, 0, "{} stores a rank", domain.fts);
+                assert_eq!(stored, 0, "{fts} stores a rank");
             }
             Ok(())
         })
@@ -2128,15 +2137,15 @@ fn a_typo_in_a_container_name_is_corrected_from_its_vocabulary() {
     });
 }
 
-/// LOCKER IS NEVER A CONTAINER, for a query or a correction, alone or beside a
-/// container; and the domains stay seven.
+/// LOCKER IS NEVER NAMED, for a query or a correction, alone or beside a
+/// container or the chat history; and the domains stay seven.
 #[test]
-fn locker_is_refused_beside_the_containers_and_the_domains_stay_seven() {
+fn locker_is_refused_beside_the_named_kinds_and_the_domains_stay_seven() {
     let connection = vault();
     with_a_locker_index(&connection);
     let door = door(&connection);
     assert_eq!(DOMAINS.len(), 7);
-    assert_eq!(CONTAINERS.len(), 4);
+    assert_eq!(NAMED.len(), 5);
     for entity in [
         "locker.item",
         "locker.item_field",
@@ -2148,7 +2157,11 @@ fn locker_is_refused_beside_the_containers_and_the_domains_stay_seven() {
             matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
             "{entity} answered {refused:?}"
         );
-        for entities in [vec![entity], vec!["core.collection", entity]] {
+        for entities in [
+            vec![entity],
+            vec!["core.collection", entity],
+            vec!["chat.thread", entity],
+        ] {
             let refused = door.correct(&Principal::Owner, &entities, "raeding");
             assert!(
                 matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
@@ -2162,7 +2175,7 @@ fn locker_is_refused_beside_the_containers_and_the_domains_stay_seven() {
 /// container's by being asked for narrowed.
 #[test]
 fn the_two_registries_share_no_entity_index_or_table() {
-    for container in CONTAINERS {
+    for container in NAMED {
         assert!(
             centraid_search::domain_of(container.entity).is_none(),
             "{} is a domain",
@@ -2172,7 +2185,7 @@ fn the_two_registries_share_no_entity_index_or_table() {
     }
     for domain in DOMAINS {
         assert!(
-            centraid_search::container_of(domain.entity).is_none(),
+            centraid_search::named_of(domain.entity).is_none(),
             "{} is a container",
             domain.entity
         );
@@ -2183,7 +2196,7 @@ fn the_two_registries_share_no_entity_index_or_table() {
 #[test]
 fn the_folders_scheme_is_the_one_the_vault_writes() {
     assert_eq!(
-        centraid_search::containers::FOLDERS_SCHEME_URI,
+        centraid_search::named::FOLDERS_SCHEME_URI,
         centraid_vault::commands::core::FOLDER_SCHEME_URI
     );
 }
@@ -2275,4 +2288,451 @@ fn the_door_does_not_find_a_dead_container_that_got_into_an_index() {
         app_of_each(&door, "core.concept", "kitchen"),
         pairs([("cn-1", "docs")])
     );
+}
+
+// ---------------------------------------------------------------------------
+// The chat history (#1097, R-1097-22..24): a thread is found by its title and by
+// what the member said, and by nothing the assistant or a card said
+// ---------------------------------------------------------------------------
+
+/// A founded vault and the command plane, so a thread is written the way the
+/// product writes one: `chat.save_turn`, `chat.rename_thread`,
+/// `chat.settle_proposal`, `chat.delete_thread` and `chat.clear`.
+struct Chats {
+    vault: centraid_vault::Vault,
+    registry: centraid_vault::commands::Registry,
+}
+
+/// Words that exist in one place each, so a hit names where the door looked.
+const IN_THE_TITLE: &str = "marmalade";
+const SAID_LATER: &str = "persimmon";
+const ASSISTANT_SAID: &str = "flibbertigibbet";
+const A_CARD_SAID: &str = "kumquatcard";
+const AN_ATTACHMENT_SAID: &str = "quokkalabel";
+const THE_ROUTING_SAID: &str = "recordjsonzed";
+
+impl Chats {
+    fn open(seed: &str) -> Self {
+        let vault = founded_vault(seed);
+        let registry = centraid_vault::commands::Registry::with_system_commands()
+            .expect("the registry builds");
+        registry.install(&vault).expect("the record installs");
+        Self { vault, registry }
+    }
+
+    fn run(&self, command: &str, input: serde_json::Value) -> serde_json::Value {
+        let outcome = self
+            .vault
+            .execute(
+                &self.registry,
+                &centraid_vault::access::Principal::owner("phone"),
+                &centraid_vault::Command::new(command, input),
+            )
+            .unwrap_or_else(|error| panic!("`{command}` errored: {error}"));
+        assert_eq!(
+            outcome.status,
+            centraid_vault::CommandStatus::Executed,
+            "`{command}` refused: {:?} / {:?}",
+            outcome.predicate,
+            outcome.reason
+        );
+        outcome.output
+    }
+
+    /// One turn: the member's question and the assistant's answer, which carries
+    /// a card and a routing record. Returns the thread's id.
+    fn turn(&self, thread: Option<&str>, question: &str, answer: &str, replace: bool) -> String {
+        let mut input = serde_json::json!({
+            "turn": {
+                "question": {
+                    "text": question,
+                    "attachments": [{ "kind": "image", "label": AN_ATTACHMENT_SAID }]
+                },
+                "answer": {
+                    "outcome": "answered",
+                    "text": answer,
+                    "record_json": format!("{{\"routing\":\"{THE_ROUTING_SAID}\"}}"),
+                    "cards": [{
+                        "app": "notes", "entity": "note", "id": "n-1", "title": A_CARD_SAID
+                    }]
+                }
+            }
+        });
+        if let Some(thread) = thread {
+            input["thread_id"] = serde_json::json!(thread);
+        }
+        if replace {
+            input["replace_last"] = serde_json::json!(true);
+        }
+        self.run("chat.save_turn", input)["thread_id"]
+            .as_str()
+            .expect("a turn names its thread")
+            .to_owned()
+    }
+
+    /// A turn that parks a write behind a card, so there is a proposal to settle.
+    fn propose(&self, thread: Option<&str>, question: &str, line: &str) -> String {
+        let mut input = serde_json::json!({
+            "turn": {
+                "question": { "text": question },
+                "answer": { "outcome": "proposed", "text": line }
+            }
+        });
+        if let Some(thread) = thread {
+            input["thread_id"] = serde_json::json!(thread);
+        }
+        self.run("chat.save_turn", input)["thread_id"]
+            .as_str()
+            .expect("a turn names its thread")
+            .to_owned()
+    }
+
+    /// The thread ids the door answers for `entity`'s `query`, best first.
+    fn found(&self, query: &str) -> Vec<String> {
+        self.vault
+            .read(|connection| {
+                let door = SqliteDoor::open(connection).expect("the door opens");
+                Ok(found(&door, "chat.thread", query))
+            })
+            .expect("the vault reads")
+    }
+
+    /// The door's targets, whole.
+    fn targets(&self, query: &str) -> Vec<Target> {
+        self.vault
+            .read(|connection| {
+                let door = SqliteDoor::open(connection).expect("the door opens");
+                Ok(targets(
+                    &door
+                        .query(
+                            &Principal::Owner,
+                            &SearchRequest::new("chat.thread", query, 20),
+                        )
+                        .expect("the door answers"),
+                ))
+            })
+            .expect("the vault reads")
+    }
+
+    /// What the index holds, one `(thread_id, title, said)` per row.
+    fn index(&self) -> Vec<(String, String, Option<String>)> {
+        self.vault
+            .read(|connection| {
+                let mut statement = connection.prepare(
+                    "SELECT thread_id, title, said FROM fts_chat_thread ORDER BY thread_id",
+                )?;
+                let rows = statement
+                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                Ok(rows)
+            })
+            .expect("the index reads")
+    }
+
+    fn count(&self, sql: &str) -> i64 {
+        self.vault
+            .read(|connection| Ok(connection.query_row(sql, [], |row| row.get(0))?))
+            .expect("the count reads")
+    }
+}
+
+/// R-1097-22: what the member typed is found, in the title and in the messages
+/// after the first, and the hit is the thread, in the Chat tab, with a title.
+#[test]
+fn a_thread_is_found_by_its_title_and_by_what_the_member_said() {
+    let chats = Chats::open("door-chat-found");
+    let first = chats.turn(
+        None,
+        &format!("Where did I leave the {IN_THE_TITLE} recipe?"),
+        "On the shelf.",
+        false,
+    );
+    chats.turn(
+        Some(&first),
+        &format!("And the {SAID_LATER} jam? Same recipe."),
+        "In the cellar.",
+        false,
+    );
+    let other = chats.turn(None, "Unrelated: when is the dentist?", "Tuesday.", false);
+
+    assert_eq!(chats.found(IN_THE_TITLE), [first.clone()]);
+    // A word the member said in a later message, and in no title.
+    assert_eq!(chats.found(SAID_LATER), [first.clone()]);
+    assert_eq!(chats.found("dentist"), [other]);
+    // The hit is the thread: one row for a word in the title and in two messages.
+    assert_eq!(chats.found("recipe"), [first.clone()]);
+
+    let hit = chats.targets(SAID_LATER).pop().expect("one hit");
+    assert_eq!(hit.entity, "chat.thread");
+    assert_eq!(hit.app_id, "chat");
+    assert_eq!(hit.id, first);
+    assert_eq!(
+        hit.title,
+        format!("Where did I leave the {IN_THE_TITLE} recipe?")
+    );
+    // The highlight is the member's own word, not the assistant's.
+    assert!(
+        hit.snippet.contains(&format!("⟦{SAID_LATER}⟧")),
+        "{}",
+        hit.snippet
+    );
+}
+
+/// R-1097-22, the reason for the rule: what the assistant said, a card's title,
+/// an attachment's label, the routing record and the assistant's refusal are
+/// copies of other apps' rows or not text, and are found by nothing.
+#[test]
+fn what_the_assistant_and_its_cards_said_is_never_found() {
+    let chats = Chats::open("door-chat-never");
+    let thread = chats.turn(
+        None,
+        &format!("Remind me about {IN_THE_TITLE}"),
+        &format!("Sure: {ASSISTANT_SAID}."),
+        false,
+    );
+    // The control: the member's word is found, so the empty answers below are
+    // the door looking and finding nothing, not the door not looking.
+    assert_eq!(chats.found(IN_THE_TITLE), [thread.clone()]);
+    for planted in [
+        ASSISTANT_SAID,
+        A_CARD_SAID,
+        AN_ATTACHMENT_SAID,
+        THE_ROUTING_SAID,
+        "answered",
+    ] {
+        assert!(
+            chats.found(planted).is_empty(),
+            "{planted} found a thread: the index holds more than the member said"
+        );
+    }
+    // The planted words really are in the vault, which is what makes the empty
+    // answers a proof: the assistant's text, the card, the label and the record.
+    assert_eq!(
+        chats.count(&format!(
+            "SELECT COUNT(*) FROM chat_message WHERE role = 'assistant' AND text LIKE '%{ASSISTANT_SAID}%'"
+        )),
+        1
+    );
+    assert_eq!(
+        chats.count(&format!(
+            "SELECT COUNT(*) FROM chat_message_card WHERE title = '{A_CARD_SAID}'"
+        )),
+        1
+    );
+    assert_eq!(
+        chats.count(&format!(
+            "SELECT COUNT(*) FROM chat_message_attachment WHERE label = '{AN_ATTACHMENT_SAID}'"
+        )),
+        1
+    );
+    assert_eq!(
+        chats.count(&format!(
+            "SELECT COUNT(*) FROM chat_message WHERE record_json LIKE '%{THE_ROUTING_SAID}%'"
+        )),
+        1
+    );
+    // And the index holds exactly the title and the question.
+    assert_eq!(
+        chats.index(),
+        [(
+            thread,
+            format!("Remind me about {IN_THE_TITLE}"),
+            Some(format!("Remind me about {IN_THE_TITLE}")),
+        )]
+    );
+}
+
+/// A title outranks the same word said: the folded column weighs half.
+#[test]
+fn a_title_hit_ranks_above_a_said_hit() {
+    let chats = Chats::open("door-chat-rank");
+    let said = chats.turn(None, "Plan the weekend", "Ok.", false);
+    chats.turn(Some(&said), &format!("buy {IN_THE_TITLE}"), "Ok.", false);
+    let titled = chats.turn(
+        None,
+        &format!("{IN_THE_TITLE} for the weekend"),
+        "Ok.",
+        false,
+    );
+    assert_eq!(chats.found(IN_THE_TITLE), [titled, said]);
+}
+
+/// Every write that moves what a thread is found by moves the hit, through the
+/// commands: a rename, a regenerated turn, a settled proposal, a delete and a
+/// clear (and the cascade that carries the last two to the messages).
+#[test]
+fn a_rename_a_replaced_turn_a_settled_proposal_a_delete_and_a_clear_move_the_hit() {
+    let chats = Chats::open("door-chat-moves");
+
+    // RENAME: the old title's word goes, the new one comes.
+    let thread = chats.turn(None, "alpha question", "Ok.", false);
+    assert_eq!(chats.found("alpha"), [thread.clone()]);
+    chats.run(
+        "chat.rename_thread",
+        serde_json::json!({ "thread_id": thread, "title": "bravo plans" }),
+    );
+    // The title moved; the member's question still says "alpha".
+    assert_eq!(chats.found("bravo"), [thread.clone()]);
+    assert_eq!(chats.found("alpha"), [thread.clone()]);
+    assert_eq!(chats.index()[0].1, "bravo plans");
+
+    // REPLACE_LAST: the regenerated turn's old question leaves and the new one
+    // is in, and the thread has one row.
+    chats.turn(Some(&thread), "charlie question", "Ok.", false);
+    assert_eq!(chats.found("charlie"), [thread.clone()]);
+    chats.turn(Some(&thread), "delta question", "Ok.", true);
+    assert_eq!(chats.found("delta"), [thread.clone()]);
+    assert!(
+        chats.found("charlie").is_empty(),
+        "the replaced question stayed"
+    );
+    assert_eq!(chats.found("alpha"), [thread.clone()]);
+    assert_eq!(chats.index().len(), 1);
+
+    // SETTLE_PROPOSAL rewrites an assistant message's text: the proposal's words
+    // and the settled line are found by nothing, and the row is untouched.
+    let proposed = chats.propose(None, "echo question", "Proposed: pencil it in.");
+    assert!(chats.found("pencil").is_empty());
+    let before = chats.index();
+    chats.run(
+        "chat.settle_proposal",
+        serde_json::json!({
+            "thread_id": proposed, "outcome": "applied", "text": "Done: ink it in."
+        }),
+    );
+    assert!(chats.found("ink").is_empty());
+    assert!(chats.found("pencil").is_empty());
+    assert_eq!(chats.index(), before, "settling a proposal moved the index");
+    assert_eq!(chats.found("echo"), [proposed.clone()]);
+    assert_eq!(
+        chats.count("SELECT COUNT(*) FROM chat_message WHERE text = 'Done: ink it in.'"),
+        1,
+        "the settled line was not written, so the empty answer above proves nothing"
+    );
+
+    // DELETE_THREAD: the thread, its messages (the foreign key's cascade) and its
+    // index row go; the other thread stays.
+    chats.run(
+        "chat.delete_thread",
+        serde_json::json!({ "thread_id": proposed }),
+    );
+    assert!(chats.found("echo").is_empty());
+    assert_eq!(
+        chats.count(&format!(
+            "SELECT COUNT(*) FROM chat_message WHERE thread_id = '{proposed}'"
+        )),
+        0
+    );
+    assert_eq!(chats.found("alpha"), [thread.clone()]);
+
+    // CLEAR: every thread, every message, every index row.
+    chats.turn(None, "foxtrot question", "Ok.", false);
+    assert_eq!(chats.found("foxtrot").len(), 1);
+    chats.run("chat.clear", serde_json::json!({}));
+    for word in ["alpha", "bravo", "delta", "foxtrot"] {
+        assert!(chats.found(word).is_empty(), "{word} survived a clear");
+    }
+    assert_eq!(chats.count("SELECT COUNT(*) FROM chat_message"), 0);
+    assert_eq!(chats.count("SELECT COUNT(*) FROM fts_chat_thread"), 0);
+    assert_eq!(
+        chats.count("SELECT COUNT(*) FROM fts_chat_thread_vocab WHERE term = 'foxtrot'"),
+        0
+    );
+}
+
+/// A TYPO IN A MEMBER'S OWN WORDS IS CORRECTED from the chat vocabulary, and
+/// the chat's words are not offered to a search that did not name the chat.
+#[test]
+fn a_typo_in_a_thread_is_corrected_from_the_chat_vocabulary() {
+    let chats = Chats::open("door-chat-typo");
+    let thread = chats.turn(
+        None,
+        "What did the surveyor say about the boundary?",
+        "Ok.",
+        false,
+    );
+    chats
+        .vault
+        .read(|connection| {
+            let door = door(connection);
+            // The exact word finds nothing; the correction is the whole word the
+            // vault holds, and the corrected query finds the thread.
+            assert!(found(&door, "chat.thread", "surveyer").is_empty());
+            let words = corrected(&door, &["chat.thread"], "surveyer")
+                .expect("a slip in a chat word is corrected");
+            assert_eq!(words, "surveyor");
+            assert_eq!(found(&door, "chat.thread", &words), [thread.clone()]);
+            // Not named, not offered.
+            assert_eq!(corrected(&door, &["schedule.task"], "surveyer"), None);
+            Ok(())
+        })
+        .expect("the vault reads");
+}
+
+/// The chat is a registry entry and not a domain: the domains stay seven, the
+/// chat's entity is refused as a domain by name, and Locker is still refused
+/// beside it.
+#[test]
+fn the_chat_is_named_not_a_domain_and_locker_is_still_refused() {
+    assert_eq!(DOMAINS.len(), 7);
+    assert!(centraid_search::domain_of("chat.thread").is_none());
+    assert!(centraid_search::named_of("chat.thread").is_some());
+    assert!(DOMAINS.iter().all(|domain| domain.app_id != "chat"));
+    let chats = Chats::open("door-chat-registry");
+    chats
+        .vault
+        .read(|connection| {
+            let door = door(connection);
+            for entity in ["locker.item", "locker.item_field"] {
+                let refused =
+                    door.query(&Principal::Owner, &SearchRequest::new(entity, "cabin", 8));
+                assert!(
+                    matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+                    "{entity} answered {refused:?}"
+                );
+            }
+            Ok(())
+        })
+        .expect("the vault reads");
+}
+
+/// A DEMONSTRATED RED for the open checks over the committed model: a chat
+/// index with a column nobody listed does not open, and a file without the
+/// chat's vocabulary cannot correct.
+#[test]
+fn a_chat_index_that_grew_a_column_fails_to_open_and_a_missing_vocabulary_is_unusable() {
+    let connection = vault();
+    assert!(SqliteDoor::open(&connection).is_ok());
+    connection
+        .execute_batch(
+            "DROP TABLE fts_chat_thread_vocab;
+             DROP TABLE fts_chat_thread;
+             CREATE VIRTUAL TABLE fts_chat_thread USING fts5(
+               thread_id UNINDEXED, title, said, assistant,
+               tokenize = \"unicode61 remove_diacritics 2\");",
+        )
+        .expect("the index is rebuilt with one more column");
+    match SqliteDoor::open(&connection) {
+        Err(SearchError::IndexUnusable { entity, detail }) => {
+            assert_eq!(entity, "chat.thread");
+            assert!(detail.contains("assistant"), "{detail}");
+        }
+        other => panic!(
+            "the door opened over a stray column: {:?}",
+            other.map(|_| ())
+        ),
+    }
+
+    let connection = vault();
+    connection
+        .execute_batch("DROP TABLE fts_chat_thread_vocab;")
+        .expect("the vocabulary is dropped");
+    let door = door(&connection);
+    match door.correct(&Principal::Owner, &["chat.thread"], "surveyer") {
+        Err(SearchError::IndexUnusable { entity, detail }) => {
+            assert_eq!(entity, "chat.thread");
+            assert!(detail.contains("fts_chat_thread_vocab"), "{detail}");
+        }
+        other => panic!("a missing vocabulary answered {other:?}"),
+    }
 }

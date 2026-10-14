@@ -67,9 +67,10 @@ use crate::error::{CoreError, Result};
 
 // The chat's arm (R-CHAT-1): the thread list, a thread, and a card's row.
 mod chat;
-// Containers as search results (#1097, R-1097-19..21): notebooks, albums,
-// projects, Tally groups and Docs folders, for Home and the owning apps.
-mod containers;
+// The named as search results (#1097, R-1097-19..24): notebooks, albums,
+// projects, Tally groups, Docs folders and chat threads, for Home and the
+// owning apps.
+mod named;
 // People's arm (#1046): its conversions and tests, beside this one.
 // Docs' arm (#1046): its conversions and tests, beside this one.
 mod docs;

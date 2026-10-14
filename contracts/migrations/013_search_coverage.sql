@@ -1,4 +1,4 @@
--- SEARCH FINDS WHAT A MEMBER TYPED — RUNG THIRTEEN (#1097, R1, R1a, R1b, R1c, R1d, R2a, R3, R5).
+-- SEARCH FINDS WHAT A MEMBER TYPED — RUNG THIRTEEN (#1097, R1, R1a, R1b, R1c, R1d, R2a, R3, R5, R6).
 --
 -- **ON THE LADDER.** `LADDER` in `crates/vault/src/migrations.rs` ends here.
 -- The file is both the migration and its fixture (D-1020-D1-13).
@@ -16,8 +16,9 @@
 -- found nothing, in the app and on Home, because the text lived in a table whose
 -- index nothing read. This rung moves that text into the index the door DOES
 -- read, so one probe per domain still answers (the domains stay at seven), it
--- retires seven indexes nothing reads (R2a), and it keeps four for the door's
--- other registry, the containers a member files things in (R5).
+-- retires seven indexes nothing reads (R2a), it keeps four for the door's
+-- other registry, the containers a member files things in (R5), and it adds one
+-- to that registry for the chat history, found by what the member said (R6).
 --
 -- ## R1 — an entity's index folds in its attribute text
 --
@@ -104,7 +105,8 @@
 -- `fts_locker_item` (no feature is proposed to read either, and Locker has its
 -- own walker) and `fts_social_thread` and `fts_social_message`, which index the
 -- People messaging model (`social_thread`, `social_message`) that has no screen;
--- the Chat tab is `chat_thread` and `chat_message`, which a later lane indexes.
+-- the Chat tab is `chat_thread` and `chat_message`, which section 8 indexes by
+-- what the member said (R6).
 -- The door test that proved `locker.item` is no domain now plants its own table.
 -- That is seven. The other two of the nine, `fts_schedule_project` and
 -- `fts_social_circle`, are KEPT: the owner folded containers into #1097
@@ -113,7 +115,8 @@
 -- ## R3 — a vocabulary for each domain
 --
 -- `fts_<index>_vocab`, an `fts5vocab(<index>, 'row')` table, for the seven
--- domain indexes and for the four container indexes (R5), and never for Locker. It lists every term with the number of
+-- domain indexes, for the four container indexes (R5) and for the chat index
+-- (R6), and never for Locker. It lists every term with the number of
 -- rows it is in (`term`, `doc`, `cnt`), which is what a correction pass reads
 -- to find the word a member meant. It is a persistent table because the read
 -- connection is `query_only` and a temp table needs a write. The name is not an
@@ -128,10 +131,10 @@
 -- A notebook, an album, a Tasks project, a Tally group and a Docs folder are
 -- things a member names and goes looking for by that name. They are NOT domains:
 -- the Notes `[[` powerbox loops the domains, and a container is no link target.
--- `crates/search` keeps them in a second registry, `CONTAINERS`, and holds it to
--- the same open-time checks. Four indexes serve them; each has a persistent
--- `_vocab` of its own, so a typo in a container's name is corrected like a
--- typo in a note's.
+-- `crates/search` keeps them in a second registry, `NAMED` (it was `CONTAINERS`
+-- until the chat joined it, R6), and holds it to the same open-time checks.
+-- Four indexes serve them; each has a persistent `_vocab` of its own, so a typo
+-- in a container's name is corrected like a typo in a note's.
 --
 --   fts_core_collection   (collection_id, name)   notebooks AND albums. UNCHANGED:
 --                                                 `core_collection.kind` is immutable
@@ -163,6 +166,38 @@
 --
 -- A notebook, a circle, a folder are removed by DELETE, not by a flag, so the
 -- `_ad` triggers stay; a hit is live because the index holds live rows only.
+--
+-- ## R6 — the chat history is found by what the member said (R-1097-22)
+--
+-- A conversation is a thing a member goes looking for by a word they remember
+-- asking. It is no container (nothing is filed in a thread) and no domain, so it
+-- is one more entry in the door's second registry, which is named for what it
+-- now holds (`crates/search/src/named.rs`, R-1097-23).
+--
+--   fts_chat_thread       (thread_id, title, said)   ONE ROW PER THREAD. `title` is the
+--                                                    thread's own; `said` is the text of
+--                                                    the member's OWN messages
+--                                                    (`chat_message.role = 'user'`), in
+--                                                    order, joined by a space, folded and
+--                                                    capped like every folded body
+--                                                    (262144 characters, then the
+--                                                    truncation marker).
+--
+-- NEVER INDEXED: the assistant's text, its cards, attachments, `record_json`,
+-- `refusal`, `notice`, `outcome` and `scope_app`. The assistant's words and a
+-- card's title are copies of other apps' rows that outlive the rows (R-CHAT-3),
+-- so a hit on them would answer with data the member has since deleted; the
+-- routing record is not text. The triggers below select `role = 'user'` and read
+-- no other column of `chat_message`.
+--
+-- A message that is inserted, edited or deleted re-indexes its thread, exactly as
+-- a line item re-indexes its expense, and the triggers are named
+-- `fts_chat_thread_from_chat_message_<ai|au|ad>`. They cover `replace_last` (a
+-- delete and an insert) and the foreign key's cascade from a thread's delete and
+-- from `chat.clear`: SQLite fires a child's triggers for a cascaded delete, and
+-- the thread's own `_ad` trigger removes the row after them. A message trigger
+-- re-indexes only while its thread is still there, so deleting a long thread
+-- does not rebuild the index row once per message it takes away.
 --
 -- ## Idempotent on purpose
 --
@@ -1649,7 +1684,159 @@ BEGIN
        AND new.uri = 'https://centraid.dev/schemes/folders';
 END;
 
--- 7. The vocabulary of each domain and each container (R3, R5).
+-- 7. Chat (R6): one row per thread, its title and what the member said.
+
+DROP TABLE IF EXISTS fts_chat_thread_vocab;
+DROP TRIGGER IF EXISTS fts_chat_thread_ai;
+DROP TRIGGER IF EXISTS fts_chat_thread_au;
+DROP TRIGGER IF EXISTS fts_chat_thread_ad;
+DROP TRIGGER IF EXISTS fts_chat_thread_from_chat_message_ai;
+DROP TRIGGER IF EXISTS fts_chat_thread_from_chat_message_au;
+DROP TRIGGER IF EXISTS fts_chat_thread_from_chat_message_ad;
+DROP TABLE IF EXISTS fts_chat_thread;
+
+CREATE VIRTUAL TABLE fts_chat_thread USING fts5(
+  thread_id UNINDEXED, title, said,
+  tokenize = "unicode61 remove_diacritics 2"
+);
+
+INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+  SELECT p.rowid, p.thread_id, p.title,
+         CASE WHEN s.said IS NULL THEN NULL
+              WHEN length(s.said) > 262144
+              THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+              ELSE s.said END
+    FROM chat_thread p
+    LEFT JOIN (SELECT u.thread_id AS thread_id, group_concat(u.text, ' ') AS said
+                 FROM (SELECT m.thread_id, m.text FROM chat_message m
+                        WHERE m.role = 'user'
+                        ORDER BY m.thread_id, m.ordinal) u
+                GROUP BY u.thread_id) s ON s.thread_id = p.thread_id;
+
+CREATE TRIGGER fts_chat_thread_ad
+  AFTER DELETE ON chat_thread
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid = old.rowid;
+END;
+
+CREATE TRIGGER fts_chat_thread_ai
+  AFTER INSERT ON chat_thread
+BEGIN
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
+END;
+
+-- Only a new title (or id) re-indexes: `chat_thread_touch_updated_at` rewrites
+-- `updated_at` and `row_version` on every activity, and those are in no column.
+CREATE TRIGGER fts_chat_thread_au
+  AFTER UPDATE OF thread_id, title ON chat_thread
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid = old.rowid;
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
+END;
+
+-- The member's messages only: an assistant message, whatever it says and
+-- whatever settles it, is in no index (R6).
+CREATE TRIGGER fts_chat_thread_from_chat_message_ai
+  AFTER INSERT ON chat_message
+  WHEN new.role = 'user'
+   AND EXISTS (SELECT 1 FROM chat_thread t WHERE t.thread_id = new.thread_id)
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t WHERE t.thread_id = new.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
+END;
+
+CREATE TRIGGER fts_chat_thread_from_chat_message_ad
+  AFTER DELETE ON chat_message
+  WHEN old.role = 'user'
+   AND EXISTS (SELECT 1 FROM chat_thread t WHERE t.thread_id = old.thread_id)
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t WHERE t.thread_id = old.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = old.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = old.thread_id;
+END;
+
+CREATE TRIGGER fts_chat_thread_from_chat_message_au
+  AFTER UPDATE OF thread_id, ordinal, role, text ON chat_message
+  WHEN old.role = 'user' OR new.role = 'user'
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t WHERE t.thread_id = new.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t
+     WHERE t.thread_id = old.thread_id AND old.thread_id IS NOT new.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = old.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = old.thread_id
+       AND old.thread_id IS NOT new.thread_id;
+END;
+
+-- 8. The vocabulary of each domain, each container and the chat index (R3, R5, R6).
 
 DROP TABLE IF EXISTS fts_knowledge_note_vocab;
 CREATE VIRTUAL TABLE fts_knowledge_note_vocab USING fts5vocab(fts_knowledge_note, 'row');
@@ -1683,3 +1870,6 @@ CREATE VIRTUAL TABLE fts_social_circle_vocab USING fts5vocab(fts_social_circle, 
 
 DROP TABLE IF EXISTS fts_core_concept_vocab;
 CREATE VIRTUAL TABLE fts_core_concept_vocab USING fts5vocab(fts_core_concept, 'row');
+
+DROP TABLE IF EXISTS fts_chat_thread_vocab;
+CREATE VIRTUAL TABLE fts_chat_thread_vocab USING fts5vocab(fts_chat_thread, 'row');

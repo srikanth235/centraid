@@ -1617,6 +1617,7 @@ fn no_sealed_column_appears_in_any_fts_object_at_the_ladder_head() {
         "fts_tally_expense_from_tally_expense_line_item_au",
         "fts_core_party_from_core_link_au",
         "fts_core_collection",
+        "fts_chat_thread_from_chat_message_au",
     ] {
         assert!(
             fts_objects.iter().any(|object| object.name == named),
@@ -1696,12 +1697,13 @@ fn wind_back_to_rung_twelve(path: &Path) {
             .collect::<rusqlite::Result<_>>()
             .expect("the schema reads")
     };
-    // Eleven vocabularies (seven domains, four containers), twenty-two
+    // Twelve vocabularies (seven domains, four containers, the chat), twenty-two
     // re-indexing triggers of the domains, the circle's three from the Tally
-    // group and the folder index's one from its scheme.
+    // group, the folder index's one from its scheme and the chat index's three
+    // from the messages.
     assert_eq!(
         rung_thirteen.len(),
-        11 + 22 + 3 + 1,
+        12 + 22 + 3 + 1 + 3,
         "rung thirteen's own objects"
     );
     let mut statements = String::from("BEGIN;\n");
@@ -1715,6 +1717,13 @@ fn wind_back_to_rung_twelve(path: &Path) {
         ));
     }
     statements.push_str("DROP TABLE IF EXISTS fts_core_concept;\n");
+    // So is the chat index (R-1097-22): it leaves, and nothing replaces it.
+    for suffix in ["ai", "au", "ad"] {
+        statements.push_str(&format!(
+            "DROP TRIGGER IF EXISTS fts_chat_thread_{suffix};\n"
+        ));
+    }
+    statements.push_str("DROP TABLE IF EXISTS fts_chat_thread;\n");
     let rebuilt = [
         "fts_core_party",
         "fts_core_event",
@@ -1860,6 +1869,10 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
     let mothballed = world.group("Mothballed flat", &[&ana]);
     world.run("tally.archive_group", json!({ "group_id": mothballed }));
     let circle = world.circle_of(&group);
+    // The chat (R-1097-22): a thread whose second question and whose answers
+    // were written before the rung.
+    let thread = world.chat_turn(None, "sierra backfill", "assistantzed one", false);
+    world.chat_turn(Some(&thread), "tango later", "assistantzed two", false);
 
     let path = world.vault().path().to_path_buf();
     wind_back_to_rung_twelve(&path);
@@ -1918,6 +1931,18 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
     // The backfill equals what the base tables say, which is what the triggers
     // are held to as well.
     assert_indexes_match(&migrated);
+    // The chat history is backfilled: the title, the member's later question,
+    // and nothing the assistant said.
+    assert_eq!(
+        hits(&migrated, "fts_chat_thread", &col("title", "sierra")),
+        set([&thread])
+    );
+    assert_eq!(
+        hits(&migrated, "fts_chat_thread", &col("said", "tango")),
+        set([&thread])
+    );
+    assert_eq!(hits(&migrated, "fts_chat_thread", "assistantzed"), none());
+    assert_chat_matches(&migrated);
 
     // The retired indexes are gone: the table, its FTS5 shadow tables and its
     // triggers. Seven were retired (R2a): five whose text is folded, and two
@@ -2424,4 +2449,433 @@ fn no_container_index_stores_a_rank_override() {
             "{fts} stores a rank, so a replayed vault would order differently"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// The chat history (R6, R-1097-22): a thread's title and what the member said.
+// ---------------------------------------------------------------------------
+
+impl World {
+    /// One saved turn, as the shell saves it: the member's question and an
+    /// answer that carries a card and a routing record (the things the index must
+    /// not read). Returns the thread.
+    fn chat_turn(
+        &self,
+        thread: Option<&str>,
+        question: &str,
+        answer: &str,
+        replace: bool,
+    ) -> String {
+        let mut input = json!({ "turn": {
+            "question": {
+                "text": question,
+                "attachments": [{ "kind": "image", "label": "labelzed" }]
+            },
+            "answer": {
+                "outcome": "answered",
+                "text": answer,
+                "record_json": "{\"routing\":\"recordzed\"}",
+                "cards": [{ "app": "notes", "entity": "note", "id": "n-1", "title": "cardzed" }]
+            }
+        }});
+        if let Some(thread) = thread {
+            input["thread_id"] = json!(thread);
+        }
+        if replace {
+            input["replace_last"] = json!(true);
+        }
+        self.run("chat.save_turn", input)["thread_id"]
+            .as_str()
+            .expect("a turn names its thread")
+            .to_owned()
+    }
+
+    /// A turn that parks a write behind a card.
+    fn chat_proposal(&self, question: &str, line: &str) -> String {
+        self.run(
+            "chat.save_turn",
+            json!({ "turn": {
+                "question": { "text": question },
+                "answer": { "outcome": "proposed", "text": line }
+            }}),
+        )["thread_id"]
+            .as_str()
+            .expect("a turn names its thread")
+            .to_owned()
+    }
+}
+
+/// THE CHAT INDEX HOLDS EXACTLY A THREAD'S TITLE AND THE TEXT OF THE MEMBER'S
+/// OWN MESSAGES, in order, judged by a plain join that is not the triggers.
+fn assert_chat_matches(vault: &Vault) {
+    vault
+        .read(|connection| {
+            let threads: Vec<(String, String)> = {
+                let mut statement =
+                    connection.prepare("SELECT thread_id, title FROM chat_thread")?;
+                statement
+                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                    .collect::<rusqlite::Result<_>>()?
+            };
+            let mut expected = Indexed::new();
+            let mut exact: BTreeMap<String, Option<String>> = BTreeMap::new();
+            for (id, title) in threads {
+                let said = strings(
+                    connection,
+                    "SELECT text FROM chat_message
+                      WHERE thread_id = ?1 AND role = 'user' ORDER BY ordinal",
+                    &id,
+                );
+                exact.insert(id.clone(), joined(&said));
+                expected.insert(id, bags([Some(title), joined(&said)]));
+            }
+            let actual = held(
+                connection,
+                "fts_chat_thread",
+                &["thread_id", "title", "said"],
+            );
+            assert_eq!(
+                actual, expected,
+                "fts_chat_thread does not hold what the threads and the member's messages say"
+            );
+            // The member's messages come in the order they were said.
+            let mut statement =
+                connection.prepare("SELECT thread_id, said FROM fts_chat_thread")?;
+            let stored: BTreeMap<String, Option<String>> = statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?;
+            assert_eq!(stored, exact, "said is not the member's messages in order");
+            Ok(())
+        })
+        .expect("the index reads");
+}
+
+#[test]
+fn the_chat_index_holds_a_threads_title_and_what_the_member_said_through_every_write() {
+    let world = World::new("cov-chat");
+    assert_chat_matches(world.vault());
+
+    let first = world.chat_turn(None, "alpha harvest festival", "assistantzed one", false);
+    assert_chat_matches(world.vault());
+    world.chat_turn(Some(&first), "bravo orchard", "assistantzed two", false);
+    world.chat_turn(
+        Some(&first),
+        "charlie vineyard",
+        "assistantzed three",
+        false,
+    );
+    let second = world.chat_turn(None, "delta lighthouse", "assistantzed four", false);
+    assert_chat_matches(world.vault());
+
+    // THE WORDS ARE FOUND IN THE COLUMN THEY ARE IN, and only there.
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "orchard")),
+        set([&first])
+    );
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("title", "orchard")),
+        none()
+    );
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("title", "harvest")),
+        set([&first])
+    );
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "lighthouse")),
+        set([&second])
+    );
+
+    // WHAT THE ASSISTANT AND ITS CARDS SAID IS IN NO COLUMN.
+    for word in [
+        "assistantzed",
+        "cardzed",
+        "labelzed",
+        "recordzed",
+        "answered",
+        "notes",
+    ] {
+        assert_eq!(
+            world.hits("fts_chat_thread", word),
+            none(),
+            "{word} is in the chat index"
+        );
+    }
+
+    // A REGENERATED TURN: the replaced question leaves, the new one is in.
+    world.chat_turn(Some(&first), "echo glasshouse", "assistantzed five", true);
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "vineyard")),
+        none()
+    );
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "glasshouse")),
+        set([&first])
+    );
+    assert_chat_matches(world.vault());
+
+    // A RENAME moves the title and no more.
+    world.run(
+        "chat.rename_thread",
+        json!({ "thread_id": first, "title": "foxtrot greenhouse" }),
+    );
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("title", "greenhouse")),
+        set([&first])
+    );
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("title", "harvest")),
+        none()
+    );
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "harvest")),
+        set([&first])
+    );
+    assert_chat_matches(world.vault());
+
+    // A SETTLED PROPOSAL rewrites an assistant message and moves nothing.
+    let proposed = world.chat_proposal("golf beekeeping", "Proposed: pencilzed it in.");
+    assert_chat_matches(world.vault());
+    let before = held(
+        &world_connection(&world),
+        "fts_chat_thread",
+        &["thread_id", "title", "said"],
+    );
+    world.run(
+        "chat.settle_proposal",
+        json!({ "thread_id": proposed, "outcome": "applied", "text": "Done: inkzed it in." }),
+    );
+    let after = held(
+        &world_connection(&world),
+        "fts_chat_thread",
+        &["thread_id", "title", "said"],
+    );
+    assert_eq!(before, after, "settling a proposal moved the chat index");
+    assert_eq!(
+        world.count("SELECT COUNT(*) FROM chat_message WHERE text = 'Done: inkzed it in.'"),
+        1,
+        "the settled line was never written"
+    );
+    for word in ["pencilzed", "inkzed"] {
+        assert_eq!(world.hits("fts_chat_thread", word), none());
+    }
+
+    // A DELETE, then a CLEAR.
+    world.run("chat.delete_thread", json!({ "thread_id": second }));
+    assert_eq!(world.hits("fts_chat_thread", "lighthouse"), none());
+    assert_chat_matches(world.vault());
+    world.run("chat.clear", json!({}));
+    assert_eq!(world.count("SELECT COUNT(*) FROM fts_chat_thread"), 0);
+    assert_eq!(
+        world.count("SELECT COUNT(*) FROM fts_chat_thread_vocab WHERE term = 'orchard'"),
+        0
+    );
+    assert_chat_matches(world.vault());
+}
+
+/// A fresh read connection's view of the index, for a before/after.
+fn world_connection(world: &World) -> Connection {
+    let path = world.scratch.vault.path().to_owned();
+    Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .expect("a second reader opens")
+}
+
+/// THE CASCADE FIRES THE MESSAGE TRIGGERS. A thread's delete (and `chat.clear`,
+/// which is `DELETE FROM chat_thread`, and a purge of the entity, which cascades
+/// into the thread) takes the thread's messages by the foreign key's
+/// `ON DELETE CASCADE`. The probe is a temp trigger on `chat_message`, which
+/// counts every deleted row: SQLite fires a child table's triggers for a
+/// cascaded delete, so `fts_chat_thread_from_chat_message_ad` runs for each of
+/// the member's messages, and the thread's own `_ad` removes the row. Neither
+/// leaves a stale row, and the control (the probe saw the rows) is asserted.
+#[test]
+fn a_cascaded_delete_of_a_thread_fires_the_message_triggers_and_leaves_no_row() {
+    let world = World::new("cov-chat-cascade");
+    for (word, path) in [("kilo", "thread"), ("lima", "clear"), ("mike", "entity")] {
+        let thread = world.chat_turn(None, &format!("{word} one"), "Ok.", false);
+        world.chat_turn(Some(&thread), &format!("{word} two"), "Ok.", false);
+        assert_eq!(world.hits("fts_chat_thread", word), set([&thread]));
+        world
+            .vault()
+            .commit(|tx| {
+                tx.set_producer("test.fixture");
+                tx.connection().execute_batch(
+                    "CREATE TEMP TABLE IF NOT EXISTS probe(role TEXT);
+                     DELETE FROM probe;
+                     CREATE TEMP TRIGGER IF NOT EXISTS probe_trigger AFTER DELETE ON chat_message
+                     BEGIN INSERT INTO probe(role) VALUES (old.role); END;",
+                )?;
+                Ok(())
+            })
+            .expect("the probe is installed");
+        let delete = match path {
+            "thread" => "DELETE FROM chat_thread WHERE thread_id = ?1",
+            "clear" => "DELETE FROM chat_thread WHERE ?1 IS NOT NULL",
+            _ => "DELETE FROM core_entity WHERE entity_id = ?1",
+        };
+        let seen: i64 = world
+            .vault()
+            .commit(|tx| {
+                tx.set_producer("test.fixture");
+                tx.connection().execute(delete, [&thread])?;
+                Ok(tx
+                    .connection()
+                    .query_row("SELECT COUNT(*) FROM temp.probe", [], |row| {
+                        row.get::<_, i64>(0)
+                    })?)
+            })
+            .expect("the thread is deleted")
+            .value;
+        assert_eq!(
+            seen, 4,
+            "{path}: the cascade did not fire the message triggers"
+        );
+        assert_eq!(
+            world.hits("fts_chat_thread", word),
+            none(),
+            "{path} left a row"
+        );
+        assert_eq!(
+            world.count("SELECT COUNT(*) FROM chat_message"),
+            0,
+            "{path}"
+        );
+        assert_chat_matches(world.vault());
+    }
+}
+
+/// A MESSAGE EDITED OR DELETED IN PLACE MOVES THE HIT (the member's), AND AN
+/// ASSISTANT MESSAGE EDITED IN PLACE DOES NOT (settle_proposal's shape).
+#[test]
+fn a_member_message_edited_or_deleted_in_place_moves_the_hit_and_an_assistant_one_does_not() {
+    let world = World::new("cov-chat-update");
+    let thread = world.chat_turn(None, "november question", "Ok.", false);
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "november")),
+        set([&thread])
+    );
+    world.execute_sql(
+        "UPDATE chat_message SET text = 'oscar question' WHERE thread_id = ?1 AND role = 'user'",
+        &[&thread],
+    );
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "november")),
+        none()
+    );
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "oscar")),
+        set([&thread])
+    );
+    assert_chat_matches(world.vault());
+    world.execute_sql(
+        "UPDATE chat_message SET text = 'papa assistant' WHERE thread_id = ?1 AND role = 'assistant'",
+        &[&thread],
+    );
+    assert_eq!(world.hits("fts_chat_thread", "papa"), none());
+    assert_chat_matches(world.vault());
+
+    // A MESSAGE DELETED IN PLACE takes its words with it, and no insert follows
+    // to re-index the thread (a regenerated turn deletes and then inserts, which
+    // hides a delete trigger that does nothing).
+    world.chat_turn(Some(&thread), "quasar question", "Ok.", false);
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "quasar")),
+        set([&thread])
+    );
+    world.execute_sql(
+        "DELETE FROM chat_message WHERE thread_id = ?1 AND text = 'quasar question'",
+        &[&thread],
+    );
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "quasar")),
+        none()
+    );
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "oscar")),
+        set([&thread])
+    );
+    assert_chat_matches(world.vault());
+}
+
+/// THE FOLD IS CAPPED like every folded body: 262144 characters, then the marker.
+#[test]
+fn a_very_long_conversation_is_capped_with_the_marker() {
+    let world = World::new("cov-chat-cap");
+    let thread = world.chat_turn(None, "quebec opening", "Ok.", false);
+    // 150 messages of 2000 characters (about 300 000 in all), written by SQL
+    // because the command caps a question at 8000.
+    world.execute_sql(
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 150)
+         INSERT INTO chat_message (thread_id, ordinal, role, text, outcome, created_at)
+         SELECT ?1, 100 + i, 'user',
+                CASE WHEN i = 150 THEN 'romeo ' ELSE '' END
+                  || substr(replace(hex(zeroblob(1000)), '00', 'ab '), 1, 2000),
+                'sent', '2099-01-01T00:00:00.000Z'
+           FROM n",
+        &[&thread],
+    );
+    let (length, tail): (i64, String) = world
+        .vault()
+        .read(|connection| {
+            Ok(connection.query_row(
+                "SELECT length(said), substr(said, -31) FROM fts_chat_thread WHERE thread_id = ?1",
+                [&thread],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?)
+        })
+        .expect("the row reads");
+    let marker = " ...(truncated for search index)";
+    assert_eq!(length, 262_144 + marker.chars().count() as i64);
+    assert!(tail.ends_with("truncated for search index)"), "{tail}");
+    // The head is in, the tail past the cap is not.
+    assert_eq!(
+        world.hits("fts_chat_thread", &col("said", "quebec")),
+        set([&thread])
+    );
+    assert_eq!(world.hits("fts_chat_thread", &col("said", "romeo")), none());
+}
+
+/// THE TRIGGERS READ NOTHING BUT A MESSAGE'S TEXT AND ROLE (and the keys they
+/// join by): no routing record, refusal, notice, outcome, card or attachment, and
+/// not the thread's scope. A structural statement of R-1097-22, made over the
+/// vault's own text of them.
+#[test]
+fn the_chat_triggers_read_no_column_the_rule_keeps_out() {
+    let world = World::new("cov-chat-structure");
+    let bodies: Vec<(String, String)> = world
+        .vault()
+        .read(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT name, sql FROM sqlite_master
+                  WHERE type = 'trigger' AND name LIKE 'fts\\_chat\\_thread%' ESCAPE '\\'",
+            )?;
+            Ok(statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .expect("the triggers read");
+    assert_eq!(bodies.len(), 6, "{bodies:?}");
+    for (name, sql) in &bodies {
+        for kept_out in [
+            "record_json",
+            "refusal",
+            "notice",
+            "outcome",
+            "scope_app",
+            "chat_message_card",
+            "chat_message_attachment",
+        ] {
+            assert!(
+                !mentions_word(sql, kept_out),
+                "{name} reads {kept_out}, which the chat index keeps out"
+            );
+        }
+        if name.contains("from_chat_message") {
+            assert!(mentions_word(sql, "role"), "{name} does not select by role");
+        }
+    }
+    // And the index has exactly three columns.
+    assert_eq!(
+        world.count("SELECT COUNT(*) FROM pragma_table_info('fts_chat_thread')"),
+        3
+    );
 }

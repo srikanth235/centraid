@@ -23,8 +23,7 @@ use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
 use super::{
-    RecordingSearch, VaultDoor, containers, corrected_search, non_empty, settle, zone_if_any,
-    zone_of,
+    RecordingSearch, VaultDoor, corrected_search, named, non_empty, settle, zone_if_any, zone_of,
 };
 use crate::error::{CoreError, Result};
 
@@ -196,13 +195,13 @@ pub(super) fn search(
     // THE NOTEBOOKS THE TERM NAMES RIDE BESIDE THE NOTES (#1097, R-1097-19..21),
     // and the correction treats the two as one answer: it runs only when both
     // are empty, over the notes' vocabulary and the notebooks'.
-    let entities = containers::entities_of(queries::NOTE_TARGET_TYPE, "notes");
+    let entities = named::entities_of(queries::NOTE_TARGET_TYPE, "notes");
     let loaded = with_search(vault, door, |search| {
         corrected_search(
             search,
             &entities,
             &asked.term,
-            |(data, found): &(queries::SearchData, Vec<containers::Opened>)| {
+            |(data, found): &(queries::SearchData, Vec<named::Opened>)| {
                 data.notes.is_empty() && found.is_empty()
             },
             |term| {
@@ -211,7 +210,7 @@ pub(super) fn search(
                     return Ok(((data, Vec::new()), denial));
                 }
                 let (found, denial) =
-                    containers::of_app(door, search, "notes", term, containers::CONTAINER_ROWS)?;
+                    named::of_app(door, search, "notes", term, named::CONTAINER_ROWS)?;
                 Ok(((data, found), denial))
             },
         )
@@ -224,7 +223,7 @@ pub(super) fn search(
                 .into_iter()
                 .map(|hit| hit_to_wire(hit, zone.as_ref()))
                 .collect(),
-            containers: found.into_iter().map(containers::to_wire).collect(),
+            containers: found.into_iter().map(named::to_wire).collect(),
         })
     })
 }

@@ -1779,6 +1779,30 @@ CREATE TABLE enrich_target_failure (
     REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 
+-- table fts_chat_thread on fts_chat_thread
+CREATE VIRTUAL TABLE fts_chat_thread USING fts5(
+  thread_id UNINDEXED, title, said,
+  tokenize = "unicode61 remove_diacritics 2"
+);
+
+-- table fts_chat_thread_config on fts_chat_thread_config
+CREATE TABLE 'fts_chat_thread_config'(k PRIMARY KEY, v) WITHOUT ROWID;
+
+-- table fts_chat_thread_content on fts_chat_thread_content
+CREATE TABLE 'fts_chat_thread_content'(id INTEGER PRIMARY KEY, c0, c1, c2);
+
+-- table fts_chat_thread_data on fts_chat_thread_data
+CREATE TABLE 'fts_chat_thread_data'(id INTEGER PRIMARY KEY, block BLOB);
+
+-- table fts_chat_thread_docsize on fts_chat_thread_docsize
+CREATE TABLE 'fts_chat_thread_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
+
+-- table fts_chat_thread_idx on fts_chat_thread_idx
+CREATE TABLE 'fts_chat_thread_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
+
+-- table fts_chat_thread_vocab on fts_chat_thread_vocab
+CREATE VIRTUAL TABLE fts_chat_thread_vocab USING fts5vocab(fts_chat_thread, 'row');
+
 -- table fts_core_collection on fts_core_collection
 CREATE VIRTUAL TABLE fts_core_collection USING fts5(
   collection_id UNINDEXED, name,
@@ -3814,6 +3838,131 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE domain = NEW.domain;
+END;
+
+-- trigger fts_chat_thread_ad on chat_thread
+CREATE TRIGGER fts_chat_thread_ad
+  AFTER DELETE ON chat_thread
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid = old.rowid;
+END;
+
+-- trigger fts_chat_thread_ai on chat_thread
+CREATE TRIGGER fts_chat_thread_ai
+  AFTER INSERT ON chat_thread
+BEGIN
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
+END;
+
+-- trigger fts_chat_thread_au on chat_thread
+CREATE TRIGGER fts_chat_thread_au
+  AFTER UPDATE OF thread_id, title ON chat_thread
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid = old.rowid;
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
+END;
+
+-- trigger fts_chat_thread_from_chat_message_ad on chat_message
+CREATE TRIGGER fts_chat_thread_from_chat_message_ad
+  AFTER DELETE ON chat_message
+  WHEN old.role = 'user'
+   AND EXISTS (SELECT 1 FROM chat_thread t WHERE t.thread_id = old.thread_id)
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t WHERE t.thread_id = old.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = old.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = old.thread_id;
+END;
+
+-- trigger fts_chat_thread_from_chat_message_ai on chat_message
+CREATE TRIGGER fts_chat_thread_from_chat_message_ai
+  AFTER INSERT ON chat_message
+  WHEN new.role = 'user'
+   AND EXISTS (SELECT 1 FROM chat_thread t WHERE t.thread_id = new.thread_id)
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t WHERE t.thread_id = new.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
+END;
+
+-- trigger fts_chat_thread_from_chat_message_au on chat_message
+CREATE TRIGGER fts_chat_thread_from_chat_message_au
+  AFTER UPDATE OF thread_id, ordinal, role, text ON chat_message
+  WHEN old.role = 'user' OR new.role = 'user'
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t WHERE t.thread_id = new.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t
+     WHERE t.thread_id = old.thread_id AND old.thread_id IS NOT new.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = old.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = old.thread_id
+       AND old.thread_id IS NOT new.thread_id;
 END;
 
 -- trigger fts_core_collection_ad on core_collection

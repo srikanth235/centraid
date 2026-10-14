@@ -20,7 +20,7 @@
 //! | A denial is a VALUE | [`Answer`] is `Denied` or `Data`, never an `Err` (census §A seam 6) |
 //! | A bound reports the size it reaches | [`SearchRequest::limit`] is clamped by [`MAX_MATCH_ROWS`] and [`Answer::window`] says what it actually was (D-1020-D3-12) |
 //! | **A result can carry no secret** | [`Target`], and [`domains::assert_no_sealed_column`] — see below |
-//! | A correction is a bounded lookup (#1097) | [`Search::correct`] replaces a word by a whole term the named domains' and containers' vocabularies hold, reads at most [`MAX_VOCAB_SCAN`] rows per word per index, and refuses an entity that is neither exactly as `query` does |
+//! | A correction is a bounded lookup (#1097) | [`Search::correct`] replaces a word by a whole term the named domains' and named kinds' vocabularies hold, reads at most [`MAX_VOCAB_SCAN`] rows per word per index, and refuses an entity that is neither exactly as `query` does |
 //!
 //! ## Secret-free BY CONSTRUCTION, not by filtering
 //!
@@ -41,9 +41,10 @@
 //!    column folded in from another table ([`domains::FOLDED`], #1097) is held
 //!    to it through its listed sources, and an index column nobody listed does
 //!    not open.
-//! 3. **`locker.item` is not a domain, and not a container.** The absence is
-//!    structural: the powerbox reaches seven domains, the containers are a second
-//!    list ([`containers::CONTAINERS`], held to the same two checks above) and
+//! 3. **`locker.item` is not a domain, and not named.** The absence is
+//!    structural: the powerbox reaches seven domains, the named kinds (the
+//!    containers a member files things in, and the chat history) are a second
+//!    list ([`named::NAMED`], held to the same two checks above) and
 //!    Locker is in neither, so a secret cannot become a link target or a result
 //!    by *adding a probe*. Asking for it is a typed [`SearchError::NotADomain`].
 //!
@@ -63,14 +64,14 @@
 //! and states, in [`SqliteDoor`]'s own words, which of those walls it does and
 //! does not stand behind yet.
 
-pub mod containers;
 pub mod domains;
 pub mod matching;
+pub mod named;
 pub mod sqlite;
 
-pub use containers::{CONTAINERS, Container, container_of};
 pub use domains::{DOMAINS, Domain, domain_of};
 pub use matching::{MAX_MATCH_TOKENS, match_expression};
+pub use named::{NAMED, Named, named_of};
 pub use sqlite::{MAX_VOCAB_SCAN, SqliteDoor};
 
 use centraid_apps_kit::page::{Page, PageRequest};
@@ -112,7 +113,7 @@ impl Principal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchRequest {
     /// A logical entity from [`DOMAINS`], e.g. `knowledge.note`, or from
-    /// [`CONTAINERS`], e.g. `core.collection`.
+    /// [`NAMED`], e.g. `core.collection` or `chat.thread`.
     pub entity: String,
     /// Owner-typed words. Compiled by [`match_expression`]; FTS5 operators in
     /// it stay literals.
@@ -265,7 +266,7 @@ pub trait Search {
     /// [`centraid_apps_kit::spelling`]'s, which the assistant's name resolver
     /// reads too.
     ///
-    /// `entities` are the domains and containers the caller is about to search
+    /// `entities` are the domains and named kinds the caller is about to search
     /// again, and the same refusal applies as in `query`: an entity that is
     /// neither is [`SearchError::NotADomain`], so Locker has no vocabulary to ask.
     ///
@@ -292,12 +293,12 @@ pub trait Search {
 /// empty page.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SearchError {
-    /// The entity is not one of the seven domains or the containers. **`locker.item`
+    /// The entity is not one of the seven domains or the named kinds. **`locker.item`
     /// lands here on purpose**: the absence is the security property, so asking has
     /// to fail loudly rather than answer nothing and look like "no matches".
     /// `count` is the number of domains.
     #[error(
-        "`{entity}` is not a search domain or a container — the powerbox reaches {count} domains and a secret cannot become one by adding a probe (#1020, D-1020-N1)"
+        "`{entity}` is not a search domain or a named kind — the powerbox reaches {count} domains and a secret cannot become one by adding a probe (#1020, D-1020-N1)"
     )]
     NotADomain { entity: String, count: usize },
 

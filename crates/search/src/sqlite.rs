@@ -54,14 +54,12 @@ use centraid_ontology::jsvalue::js_number_to_string;
 use centraid_ontology::registries::sealed_physical_columns;
 use rusqlite::Connection;
 
-use crate::containers::{
-    CONTAINERS, Container, Guard, Opens, assert_no_sealed_container_column, container_of,
-};
 use crate::domains::{
     Domain, INDEX_LABELLED, PREVIEW_CHARS, PREVIEW_FROM_TEXT, assert_no_sealed_column, domain_of,
     folded_columns,
 };
 use crate::matching::match_expression;
+use crate::named::{Guard, NAMED, Named, Opens, assert_no_sealed_named_column, named_of};
 use crate::{
     Answer, DOMAINS, MAX_MATCH_ROWS, Principal, Search, SearchError, SearchRequest, Target,
 };
@@ -74,8 +72,8 @@ pub struct SqliteDoor<'connection> {
 impl<'connection> SqliteDoor<'connection> {
     /// Open the door over a connection, checking the model it is about to read.
     ///
-    /// Four checks over the domains, and the first three again over the
-    /// containers ([`crate::containers::CONTAINERS`], which fold nothing), all at
+    /// Four checks over the domains, and the same four again over the named kinds
+    /// ([`crate::named::NAMED`], whose only fold is a chat thread's), all at
     /// open and none at query time — a door that checks
     /// per call is a door someone can be talked into skipping a check on:
     ///
@@ -102,10 +100,10 @@ impl<'connection> SqliteDoor<'connection> {
     /// table's nor listed, or its column count is not its weights' length.
     pub fn open(connection: &'connection Connection) -> Result<Self, SearchError> {
         assert_no_sealed_column()?;
-        assert_no_sealed_container_column()?;
+        assert_no_sealed_named_column()?;
         let sealed = sealed_physical_columns();
-        for container in CONTAINERS {
-            check_container(connection, container, &sealed)?;
+        for named in NAMED {
+            check_named(connection, named, &sealed)?;
         }
         for domain in DOMAINS {
             let columns = index_columns(connection, domain.entity, domain.fts)?;
@@ -162,48 +160,57 @@ impl<'connection> SqliteDoor<'connection> {
     }
 }
 
-/// The open-time checks for one container: its index is in the file, carries no
-/// sealed column, carries only the base table's own columns (a container folds
-/// nothing in), and is weighed column for column.
-fn check_container(
+/// The open-time checks for one named kind: its index is in the file, carries no
+/// sealed column, carries only the base table's own columns and its listed folds
+/// (a fold is text from another table, so the sealed check reads its sources
+/// through [`crate::named::Fold`], and a column nobody listed is refused), and is
+/// weighed column for column.
+fn check_named(
     connection: &Connection,
-    container: &Container,
+    named: &Named,
     sealed: &[(String, String)],
 ) -> Result<(), SearchError> {
-    let columns = index_columns(connection, container.entity, container.fts)?;
+    let columns = index_columns(connection, named.entity, named.fts)?;
     for column in &columns {
         if sealed
             .iter()
-            .any(|(table, name)| table == container.table && name == column)
+            .any(|(table, name)| table == named.table && name == column)
         {
             return Err(SearchError::SealedColumnReachable {
-                entity: container.entity.to_owned(),
-                table: container.table.to_owned(),
+                entity: named.entity.to_owned(),
+                table: named.table.to_owned(),
                 column: column.clone(),
             });
         }
     }
-    let base = base_columns(connection, container.table)?;
-    if let Some(unlisted) = columns.iter().find(|column| !base.contains(column)) {
+    let base = base_columns(connection, named.table)?;
+    if let Some(unlisted) = columns.iter().find(|column| {
+        !base.contains(column)
+            && !named
+                .folds
+                .iter()
+                .any(|fold| fold.column == column.as_str())
+    }) {
         return Err(SearchError::IndexUnusable {
-            entity: container.entity.to_owned(),
+            entity: named.entity.to_owned(),
             detail: format!(
-                "`{fts}` carries `{unlisted}`, which is not a column of `{table}`; a container \
-                 folds nothing in (#1097)",
-                fts = container.fts,
-                table = container.table,
+                "`{fts}` carries `{unlisted}`, which is neither a column of `{table}` nor a \
+                 listed fold; list its sources in `named::NAMED` so the sealed check can read \
+                 them (#1097)",
+                fts = named.fts,
+                table = named.table,
             ),
         });
     }
-    if container.weights.len() != columns.len() {
+    if named.weights.len() != columns.len() {
         return Err(SearchError::IndexUnusable {
-            entity: container.entity.to_owned(),
+            entity: named.entity.to_owned(),
             detail: format!(
-                "`{fts}` has {live} columns and `containers::CONTAINERS` weighs {listed}; \
+                "`{fts}` has {live} columns and `named::NAMED` weighs {listed}; \
                  one weight per index column, in the index's order (#1097)",
-                fts = container.fts,
+                fts = named.fts,
                 live = columns.len(),
-                listed = container.weights.len(),
+                listed = named.weights.len(),
             ),
         });
     }
@@ -223,7 +230,7 @@ fn base_columns(connection: &Connection, table: &str) -> Result<Vec<String>, Sea
     Ok(names)
 }
 
-/// The live column names of an index (a domain's or a container's).
+/// The live column names of an index (a domain's or a named kind's).
 fn index_columns(
     connection: &Connection,
     entity: &str,
@@ -303,14 +310,14 @@ fn coalesce_columns(columns: &[&str]) -> String {
 /// in one domain and a prefix of the alphabet's busiest letters in a bigger one.
 pub const MAX_VOCAB_SCAN: usize = 8_192;
 
-/// An index a correction reads the vocabulary of: a domain's or a container's.
+/// An index a correction reads the vocabulary of: a domain's or a named kind's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Indexed {
     entity: &'static str,
     fts: &'static str,
 }
 
-/// The index a logical entity names, among the domains and then the containers.
+/// The index a logical entity names, among the domains and then the named kinds.
 fn index_of(entity: &str) -> Option<Indexed> {
     domain_of(entity)
         .map(|domain| Indexed {
@@ -318,9 +325,9 @@ fn index_of(entity: &str) -> Option<Indexed> {
             fts: domain.fts,
         })
         .or_else(|| {
-            container_of(entity).map(|container| Indexed {
-                entity: container.entity,
-                fts: container.fts,
+            named_of(entity).map(|named| Indexed {
+                entity: named.entity,
+                fts: named.fts,
             })
         })
 }
@@ -447,12 +454,12 @@ fn unusable_vocabulary(index: &Indexed, vocabulary: &str, error: &rusqlite::Erro
     SearchError::IndexUnusable {
         entity: index.entity.to_owned(),
         detail: format!(
-            "`{vocabulary}` is not usable: {error} (rung thirteen creates the vocabulary of each domain and each container)"
+            "`{vocabulary}` is not usable: {error} (rung thirteen creates the vocabulary of each domain and each named kind)"
         ),
     }
 }
 
-/// What one MATCH statement is built from: a domain's or a container's index,
+/// What one MATCH statement is built from: a domain's or a named kind's index,
 /// with the expressions that read its row. ONE statement shape serves both
 /// registries, so the two cannot drift apart.
 struct Probe {
@@ -468,7 +475,7 @@ struct Probe {
     opens: Opens,
 }
 
-/// The probe a logical entity names: a domain first, then a container.
+/// The probe a logical entity names: a domain first, then a named kind.
 fn probe_of(entity: &str) -> Option<Probe> {
     if let Some(domain) = domain_of(entity) {
         return Some(Probe {
@@ -484,17 +491,17 @@ fn probe_of(entity: &str) -> Option<Probe> {
             opens: Opens::App(domain.app_id),
         });
     }
-    container_of(entity).map(|container| Probe {
-        entity: container.entity,
-        fts: container.fts,
-        table: container.table,
-        id_column: container.id_column,
-        title: coalesce_columns(container.labels),
+    named_of(entity).map(|named| Probe {
+        entity: named.entity,
+        fts: named.fts,
+        table: named.table,
+        id_column: named.id_column,
+        title: coalesce_columns(named.labels),
         subtitle: "''".to_owned(),
-        rank_function: container.rank_function(),
-        deleted_column: container.deleted_column,
-        guards: container.guards,
-        opens: container.opens,
+        rank_function: named.rank_function(),
+        deleted_column: named.deleted_column,
+        guards: named.guards,
+        opens: named.opens,
     })
 }
 
@@ -708,7 +715,7 @@ impl Search for SqliteDoor<'_> {
     /// `entities` do not hold, replaced by the words they do. `None` when no word
     /// changed.
     ///
-    /// Every entity must be one of the seven domains or one of the containers,
+    /// Every entity must be one of the seven domains or one of the named kinds,
     /// exactly as in `query`: the vocabulary of either is its index's, and Locker
     /// has neither, so a secret has no term a correction could offer.
     fn correct(
@@ -878,35 +885,37 @@ mod tests {
                 ))
                 .expect("an index is created");
         }
-        // The containers: a base table with the id, the label and the columns
-        // the door tests, and an index of the id and the label.
-        for container in CONTAINERS {
-            let mut base: Vec<&str> = container.projected_columns();
+        // The named kinds: a base table with the id, the label and the columns
+        // the door tests (a fold's column is not among them), and an index of the
+        // id, the label and each fold.
+        for named in NAMED {
+            let mut base: Vec<&str> = named.projected_columns();
             base.sort_unstable();
             base.dedup();
             connection
                 .execute_batch(&format!(
                     "CREATE TABLE {}({});",
-                    container.table,
+                    named.table,
                     base.join(", ")
                 ))
-                .expect("a container table is created");
+                .expect("a named table is created");
             let mut index = vec![
-                format!("{} UNINDEXED", container.id_column),
-                container.labels[0].to_owned(),
+                format!("{} UNINDEXED", named.id_column),
+                named.labels[0].to_owned(),
             ];
+            index.extend(named.folds.iter().map(|fold| fold.column.to_owned()));
             if let Some((entity, column)) = extra
-                && entity == container.entity
+                && entity == named.entity
             {
                 index.push(column.to_owned());
             }
             connection
                 .execute_batch(&format!(
                     "CREATE VIRTUAL TABLE {} USING fts5({});",
-                    container.fts,
+                    named.fts,
                     index.join(", ")
                 ))
-                .expect("a container index is created");
+                .expect("a named index is created");
         }
         connection
     }
@@ -969,27 +978,26 @@ mod tests {
         }
     }
 
-    /// A DEMONSTRATED RED for the containers' open-time checks: an index column
-    /// the base table lacks (a container folds nothing in), and a weight list of
-    /// the wrong length, are refusals.
+    /// A DEMONSTRATED RED for the named kinds' open-time checks: an index column
+    /// that is neither the base table's nor a listed fold is a refusal.
     #[test]
-    fn a_container_index_with_a_column_the_table_lacks_fails_to_open() {
+    fn a_named_index_with_a_column_nobody_listed_fails_to_open() {
         let connection = model(Some(("core.collection", "stray_notes")), None);
         match SqliteDoor::open(&connection) {
             Err(SearchError::IndexUnusable { entity, detail }) => {
                 assert_eq!(entity, "core.collection");
                 assert!(detail.contains("stray_notes"), "{detail}");
-                assert!(detail.contains("folds nothing"), "{detail}");
+                assert!(detail.contains("named::NAMED"), "{detail}");
             }
             other => panic!(
-                "the door opened over a container with a stray column: {:?}",
+                "the door opened over a named index with a stray column: {:?}",
                 other.map(|_| ())
             ),
         }
     }
 
     #[test]
-    fn a_model_without_a_container_index_fails_to_open_naming_it() {
+    fn a_model_without_a_named_index_fails_to_open_naming_it() {
         let connection = model(None, None);
         connection
             .execute_batch("DROP TABLE fts_schedule_project;")
@@ -1000,7 +1008,7 @@ mod tests {
                 assert!(detail.contains("fts_schedule_project"), "{detail}");
             }
             other => panic!(
-                "the door opened without a container index: {:?}",
+                "the door opened without a named index: {:?}",
                 other.map(|_| ())
             ),
         }

@@ -26,7 +26,7 @@ use centraid_vault::Vault;
 use centraid_vault::page::format_byte_size;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, containers, corrected_search, settle, zone_of};
+use super::{RecordingSearch, VaultDoor, corrected_search, named, settle, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -171,12 +171,12 @@ pub(super) fn search(
         // THE FOLDERS THE TERM NAMES RIDE BESIDE THE DOCUMENTS (#1097,
         // R-1097-19..21), and the correction treats the two as one answer.
         let entities =
-            containers::entities_of(centraid_apps_docs::queries::DOCUMENT_TARGET_TYPE, "docs");
+            named::entities_of(centraid_apps_docs::queries::DOCUMENT_TARGET_TYPE, "docs");
         Ok(Ok(corrected_search(
             &search,
             &entities,
             &asked.term,
-            |(data, found): &(docs::SearchData, Vec<containers::Opened>)| {
+            |(data, found): &(docs::SearchData, Vec<named::Opened>)| {
                 data.documents.is_empty() && found.is_empty()
             },
             |term| {
@@ -190,12 +190,12 @@ pub(super) fn search(
                 if denial.is_some() {
                     return Ok(((data, Vec::new()), denial));
                 }
-                let (found, denial) = containers::of_app(
+                let (found, denial) = named::of_app(
                     door,
                     &search,
                     "docs",
                     term,
-                    limit.min(containers::CONTAINER_ROWS),
+                    limit.min(named::CONTAINER_ROWS),
                 )?;
                 Ok(((data, found), denial))
             },
@@ -210,7 +210,7 @@ pub(super) fn search(
                 .map(|row| row_to_wire(row, &zone, clock.now_ms))
                 .collect(),
             today: clock.today,
-            containers: found.into_iter().map(containers::to_wire).collect(),
+            containers: found.into_iter().map(named::to_wire).collect(),
         })
     })
 }

@@ -12,15 +12,16 @@
 //! in the index and a live `people_profile` in People, so a party with no live
 //! profile (a Tally friend, a trashed person) is dropped too.
 //!
-//! **CONTAINERS ARE HITS TOO** (#1097, R-1097-19..21): one more probe per
-//! container index ([`centraid_search::CONTAINERS`]) — a notebook or an album,
-//! a project, a Tally group, a Docs folder — appended after the domains' rows,
-//! each with the app it opens in and, where the app opens it by another key (a
-//! Tally group is a circle in the index and a `tally_group` in Tally), that key
-//! as `open_id`. They are not domains: the Notes powerbox above does not see
-//! them.
+//! **THE NAMED ARE HITS TOO** (#1097, R-1097-19..24): one more probe per named
+//! index ([`centraid_search::NAMED`]) — a notebook or an album, a project, a
+//! Tally group, a Docs folder, and a chat thread (entity `chat.thread`, app
+//! `chat`, found by its title and by what the member said) — appended after the
+//! domains' rows, each with the app it opens in and, where the app opens it by
+//! another key (a Tally group is a circle in the index and a `tally_group` in
+//! Tally), that key as `open_id`. They are not domains: the Notes powerbox above
+//! does not see them. A shell with no Chat tab draws no `chat` row.
 //!
-//! **A TYPO IS CORRECTED ACROSS THE SEVEN DOMAINS AND THE CONTAINERS** (#1097,
+//! **A TYPO IS CORRECTED ACROSS THE SEVEN DOMAINS AND THE NAMED KINDS** (#1097,
 //! R4, R8), only when the whole answer, rows and containers, is empty, and the
 //! answer says so in `corrected`.
 
@@ -36,7 +37,7 @@ use centraid_search::{Principal, Target};
 use centraid_vault::Vault;
 
 use super::notes::subtitle_day;
-use super::{VaultDoor, containers, corrected_search, settle, zone_if_any};
+use super::{VaultDoor, corrected_search, named, settle, zone_if_any};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -52,11 +53,7 @@ const OPENABLE: FanOutBound = FanOutBound::new(64, 1);
 
 /// What a Home answer is made of: the hits that open something, the media
 /// asset each photo opens by, and the containers that matched.
-type Opened = (
-    Vec<Target>,
-    BTreeMap<String, String>,
-    Vec<containers::Opened>,
-);
+type Opened = (Vec<Target>, BTreeMap<String, String>, Vec<named::Opened>);
 
 pub(super) fn search(
     vault: &Vault,
@@ -66,7 +63,7 @@ pub(super) fn search(
     // ISOLATED PER DOMAIN, as the powerbox is (`notes::link_targets`): the
     // plain FTS door, so one domain's refusal drops its rows and not the answer.
     //
-    // THE CORRECTION SPANS THE SEVEN DOMAINS AND THE CONTAINERS (#1097, R4, R8,
+    // THE CORRECTION SPANS THE SEVEN DOMAINS AND THE NAMED KINDS (#1097, R4, R8,
     // R-1097-19..21) and runs only when the whole answer, after the rows that
     // cannot be opened are dropped, is empty; the vocabulary it reads is every
     // domain's and every container index's.
@@ -79,7 +76,7 @@ pub(super) fn search(
             .iter()
             .map(|domain| domain.entity)
             .chain(
-                centraid_search::CONTAINERS
+                centraid_search::NAMED
                     .iter()
                     .map(|container| container.entity),
             )
@@ -107,8 +104,8 @@ pub(super) fn search(
                             _ => true,
                         })
                         .collect();
-                    // ISOLATED PER CONTAINER INDEX, like the domains above.
-                    let found = containers::of_all(door, &index, term)?;
+                    // ISOLATED PER NAMED INDEX, like the domains above.
+                    let found = named::of_all(door, &index, term)?;
                     Ok(((targets, assets, found), None))
                 },
             )
@@ -363,7 +360,7 @@ mod tests {
         );
     }
 
-    /// THE CORRECTION SPANS THE SEVEN DOMAINS AND THE CONTAINERS (#1097, R4, R8): a slip in a word
+    /// THE CORRECTION SPANS THE SEVEN DOMAINS AND THE NAMED KINDS (#1097, R4, R8): a slip in a word
     /// two apps hold finds both, once, and says what it searched; an exact term
     /// is untouched.
     #[test]

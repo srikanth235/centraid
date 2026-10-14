@@ -28,7 +28,7 @@ use centraid_apps_tally::phone::{self, Activity, Entry, Role};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, containers, settle, zone_of};
+use super::{RecordingSearch, VaultDoor, named, settle, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -323,7 +323,7 @@ pub(super) fn search(
             total_matches: count(data.total_matches),
             results: data.results.into_iter().map(entry).collect(),
             corrected: data.corrected.unwrap_or_default(),
-            containers: groups.into_iter().map(containers::to_wire).collect(),
+            containers: groups.into_iter().map(named::to_wire).collect(),
         })
     })
 }
@@ -337,10 +337,10 @@ fn search_with_groups(
     search: &dyn centraid_search::Search,
     term: &str,
     limit: usize,
-) -> KitResult<(phone::SearchResults, Vec<containers::Opened>)> {
-    let rows = limit.min(containers::CONTAINER_ROWS);
-    let groups_of = |words: &str| -> KitResult<Vec<containers::Opened>> {
-        let (found, denial) = containers::of_app(door, search, "tally", words, rows)?;
+) -> KitResult<(phone::SearchResults, Vec<named::Opened>)> {
+    let rows = limit.min(named::CONTAINER_ROWS);
+    let groups_of = |words: &str| -> KitResult<Vec<named::Opened>> {
+        let (found, denial) = named::of_app(door, search, "tally", words, rows)?;
         match denial {
             Some(denial) => Err(KitError::Door(denial.message.unwrap_or_default())),
             None => Ok(found),
