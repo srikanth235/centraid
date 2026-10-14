@@ -1,0 +1,54 @@
+# Photos' own search is the door's (#1097, R-1097-25..27): a slip in a word of
+# a photograph's caption finds the photograph, and the shared field says what
+# was searched ("Showing results for “emerald”"); a term nothing matches draws
+# the no-match block from the copy twins.
+#
+# THE DEMO VAULT, and no other: the onboarding starters hold no photograph.
+# Seed it first with `mobile/scripts/demo-vault.sh ios` (it places the Tahoe
+# scenario's vaults in the running simulator's app and relaunches it keyed);
+# the "Demo vault" is the one this flow reads. Its roll holds a photograph
+# captioned "Emerald Bay overlook", and "emrald" is its first word with a
+# letter dropped. Re-runnable: the flow leaves a closed search and nothing
+# else.
+#
+# A photograph cell's id is `photos.cell.<asset id>`, or the path of its held
+# thumbnail (a file in the vault's `vault.bytes`) once it has one; the flow
+# matches either.
+appId: dev.centraid.Centraid
+name: search-photos
+---
+- launchApp
+- tapOn:
+    id: "home-tile-photos"
+- tapOn:
+    id: "photos-search-open"
+- inputText: "emrald"
+# The slip finds the photograph, and the shared field names the word searched.
+- extendedWaitUntil:
+    visible:
+      id: "search-corrected"
+    timeout: 8000
+- assertVisible: "Showing results for “emerald”"
+- assertVisible:
+    id: "photos\\.cell\\..*|.*vault\\.bytes.*"
+- assertNotVisible:
+    id: "photos-search-no-match"
+# An exact word says nothing: no line over a photograph it did not correct.
+- eraseText: 6
+- inputText: "emerald"
+- extendedWaitUntil:
+    visible:
+      id: "photos\\.cell\\..*|.*vault\\.bytes.*"
+    timeout: 8000
+- assertNotVisible:
+    id: "search-corrected"
+# Nothing matches: the block, from the copy.
+- eraseText: 7
+- inputText: "zzqxv"
+- extendedWaitUntil:
+    visible:
+      id: "photos-search-no-match"
+    timeout: 8000
+- assertVisible: "Nothing matches “zzqxv”."
+- assertNotVisible:
+    id: "search-corrected"
