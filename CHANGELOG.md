@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Money's vault half** ([#1099](https://github.com/srikanth235/centraid/issues/1099)), in progress. Rung 14 gives a vault the tables Money keeps a member's decisions in (an account's name and kind, a line's own name, a plan per category and month, rules, a remembered statement layout, a stated balance), lands a statement line once per account, holds a Money account to one currency and an imported line to never being edited, and seeds the `transfer` relation and 23 starter categories. Twenty `money.*` commands write them: importing the same file twice writes nothing, voiding never deletes, and merging a category rewrites every line, rule and plan in one commit. No app screen yet.
+
 ### Changed
 
 - **Search finds what you typed, and forgives a slipped letter** ([#1097](https://github.com/srikanth235/centraid/issues/1097)). A person is found by a nickname, a role, where you met, an email, a phone number or a note on them or on a time you logged with them; an event by its place; a task by its project; an expense by its category, group, line item or note. Search used to read seven of the vault's seventeen indexes, so none of that was found, in an app or on Home. When a search finds nothing, it now looks for the word you meant in your own vault: `budegt` finds "budget", `sunscren` finds "sunscreen", and the line under the field says "Showing results for “sunscreen”" (a word of four letters or more, never a slip in the first letter). Locker and Tally search more of the text you typed and forgive a slip too, and Locker still never searches a secret. An empty search on Home offers **Ask about “x”**, which opens Chat. Home no longer lists a Tally friend or a deleted person that opened nothing in People. A notebook, an album, a project, a Tally group or a Docs folder is found by its name too, on Home and in the app that owns it, and a slipped letter in its name is forgiven. Seven indexes that nothing read are retired, and the vault's schema is at rung thirteen.

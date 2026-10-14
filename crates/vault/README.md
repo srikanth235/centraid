@@ -12,7 +12,7 @@ cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl
 | Module | What it owns |
 | --- | --- |
 | `file` | `Vault::create` / `open`, the one writable connection, `read` under `query_only`, the pragma set, `finish`. |
-| `migrations` | The forward-only ladder (thirteen rungs), the baseline, `application_id`, the derived entity-kind registry. |
+| `migrations` | The forward-only ladder (fourteen rungs), the baseline, `application_id`, the derived entity-kind registry. |
 | `log` | The commit guard — `BEGIN IMMEDIATE`, the body, `COMMIT`, with an `update_hook` reporting which tables a commit touched — and SQL identifier quoting. |
 | `value`, `canonical`, `clock`, `time`, `error` | A SQLite value and its JSON; the one canonical JSON spelling; time and ids as injected facts; civil time and recurrence; `VaultError`, with `DiskFull` typed. |
 | `access` | `Principal`, `Verb`, `evaluate_access` — a deny is a value. |
