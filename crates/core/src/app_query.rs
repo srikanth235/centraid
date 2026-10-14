@@ -218,7 +218,7 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::LockerSearch(asked) => locker::search(vault, &door, asked)?,
         Q::LockerReview(asked) => locker::review(vault, &door, &now, asked)?,
         Q::LockerAccess(asked) => locker::access(vault, &door, asked)?,
-        Q::ChatThreads(asked) => chat::threads(vault, asked)?,
+        Q::ChatThreads(asked) => chat::threads(vault, &door, asked)?,
         Q::ChatThread(asked) => chat::thread(vault, asked)?,
         Q::ChatCard(asked) => chat::card(vault, asked)?,
         Q::VaultSearch(asked) => vault::search(vault, &door, asked)?,

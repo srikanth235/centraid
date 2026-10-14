@@ -130,6 +130,31 @@ impl Vault {
         })
     }
 
+    /// The threads `ids` name, IN THE ORDER OF `ids` (the order a search ranked
+    /// them), at most as many as there are ids. An id with no thread is skipped:
+    /// a thread deleted between the search and this read is not an error.
+    ///
+    /// # Errors
+    /// [`crate::error::VaultError`] when the vault itself is unreadable.
+    pub fn chat_thread_rows(&self, ids: &[String]) -> Result<Vec<ThreadRow>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut rows = self.read(|connection| {
+            let placeholders = vec!["?"; ids.len()].join(", ");
+            let mut statement = connection.prepare(&format!(
+                "SELECT thread_id, title, scope_app, created_at, updated_at
+                   FROM chat_thread WHERE thread_id IN ({placeholders})"
+            ))?;
+            let rows = statement
+                .query_map(rusqlite::params_from_iter(ids), thread_row)?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })?;
+        rows.sort_by_key(|row| ids.iter().position(|id| *id == row.thread_id));
+        Ok(rows)
+    }
+
     /// Whether a thread's last answer is a proposal nobody has settled (rung twelve): a write that
     /// parked behind a card and has not been applied, dismissed, found stale or refused. `false`
     /// for a thread with no answer, and for one that is not there.

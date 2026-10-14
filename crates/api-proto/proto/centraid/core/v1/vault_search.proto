@@ -5,9 +5,10 @@
 // (`notes.link_targets`, D-1020-N1): one isolated FTS probe per
 // `centraid_search::DOMAINS` domain — notes, people, agenda, tasks, tally,
 // photos and docs — at most eight rows each, under the owner, with People's
-// journal notes left out — and one more probe per container index (notebooks
-// and albums, projects, Tally groups, Docs folders; #1097, R-1097-19..21), also
-// at most eight. There is no second search engine behind it
+// journal notes left out — and one more probe per named index (notebooks
+// and albums, projects, Tally groups, Docs folders; #1097, R-1097-19..21; and
+// chat threads, found by their title and by what the member said, R-1097-22),
+// also at most eight. There is no second search engine behind it
 // (R-1046-1, D-1020-S1); this arm is that loader asked from Home.
 //
 // **LOCKER IS NEVER A DOMAIN.** Its items sit behind the owner check, and the
@@ -38,9 +39,9 @@ message VaultSearchRequest {
 
 message VaultSearch {
   // In the domains' order (`centraid_search::DOMAINS`), each domain's rows in
-  // the index's rank order, then the containers' (`centraid_search::CONTAINERS`,
-  // #1097), each container index's rows in rank order. A shell groups and orders
-  // them as it draws.
+  // the index's rank order, then the named kinds' (`centraid_search::NAMED`,
+  // #1097), each index's rows in rank order. A shell groups and orders them as
+  // it draws, and draws a `chat` row only if it has a Chat tab.
   repeated VaultSearchHit hits = 1;
   // THE WORDS THE ROWS ANSWER (#1097, R4, R8). Set only when the term as typed
   // found nothing and a correction of its words did: the typed words with each
@@ -58,7 +59,9 @@ message VaultSearchHit {
   // `schedule.task`, `tally.expense`, `core.content_item`, `core.document`, or a
   // CONTAINER's (#1097, R-1097-19): `core.collection` (a notebook, app `notes`, or
   // an album, app `photos`), `schedule.project`, `social.circle` (a Tally group)
-  // or `core.concept` (a Docs folder).
+  // or `core.concept` (a Docs folder); or a chat thread's (R-1097-22): `chat.thread`,
+  // app `chat`, `id` the thread's id, `title` its title, `snippet` the match in
+  // the member's own words.
   string entity = 1;
   // The row's own primary key.
   string id = 2;

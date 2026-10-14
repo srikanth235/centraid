@@ -4,12 +4,23 @@
 //! These read through `Vault::chat_*` — the `chat` schema's own readers, SQL and
 //! all, in `crates/vault` — and convert to `chat.proto`. Nothing is written
 //! here: a conversation's writers are the `chat.*` commands.
+//!
+//! **THE LIST CAN BE SEARCHED** (#1097, R-1097-22, R-1097-24): `chat.threads`
+//! with a `term` is the drawer's search. The rows are the FTS door's
+//! (`chat.thread`, one entry in the named registry), ranked, with the owner as
+//! principal; a typo is corrected only when the exact words found nothing, by
+//! the same helper every other surface uses ([`corrected_search`]), and the
+//! words it searched instead ride in `ChatThreads.corrected`. What a thread is
+//! found by is its title and the member's own messages: never the assistant's
+//! words or a card.
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_search::{Answer as Found, Principal, Search, SearchError, SearchRequest};
 use centraid_vault::Vault;
 use centraid_vault::chat::{StoredAttachment, StoredMessage, ThreadRow};
 
-use crate::error::Result;
+use super::{RecordingSearch, VaultDoor, corrected_search, settle};
+use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
 
@@ -18,6 +29,9 @@ const DEFAULT_LIMIT: usize = 100;
 
 /// The most threads one list ever answers.
 const MAX_LIMIT: usize = 500;
+
+/// The chat thread's entity in the FTS door (`centraid_search::NAMED`).
+const THREAD_ENTITY: &str = "chat.thread";
 
 fn row_to_wire(row: ThreadRow) -> wire::ChatThreadRow {
     wire::ChatThreadRow {
@@ -122,20 +136,90 @@ fn attachment_to_wire(attachment: StoredAttachment) -> wire::ChatStoredAttachmen
     }
 }
 
-/// `chat.threads`.
-pub(super) fn threads(vault: &Vault, asked: &wire::ChatThreadsRequest) -> Result<Answer> {
-    let limit = if asked.limit == 0 {
+/// The most threads one search answers when the request names none, and the
+/// most it ever answers: the list's own.
+fn limit_of(asked: &wire::ChatThreadsRequest) -> usize {
+    if asked.limit == 0 {
         DEFAULT_LIMIT
     } else {
         (asked.limit as usize).min(MAX_LIMIT)
-    };
-    Ok(Answer::ChatThreads(wire::ChatThreads {
-        threads: vault
-            .chat_threads(limit)?
-            .into_iter()
-            .map(row_to_wire)
-            .collect(),
-    }))
+    }
+}
+
+/// `chat.threads`: the list, or — with a `term` — the threads the term finds.
+pub(super) fn threads(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    asked: &wire::ChatThreadsRequest,
+) -> Result<Answer> {
+    let limit = limit_of(asked);
+    if asked.term.trim().is_empty() {
+        return Ok(Answer::ChatThreads(wire::ChatThreads {
+            threads: vault
+                .chat_threads(limit)?
+                .into_iter()
+                .map(row_to_wire)
+                .collect(),
+            corrected: String::new(),
+        }));
+    }
+    let found = vault.read(|connection| {
+        let index = match centraid_search::SqliteDoor::open(connection) {
+            Ok(index) => index,
+            Err(error) => {
+                return Ok(Err(CoreError::Invariant {
+                    context: format!("the search index will not open: {error}"),
+                }));
+            }
+        };
+        let search = RecordingSearch {
+            inner: &index,
+            door,
+        };
+        Ok(Ok(corrected_search(
+            &search,
+            &[THREAD_ENTITY],
+            &asked.term,
+            |rows: &Vec<ThreadRow>| rows.is_empty(),
+            |term| {
+                let request = SearchRequest::new(THREAD_ENTITY, term, limit);
+                let ids: Vec<String> = match search.query(&Principal::Owner, &request) {
+                    Ok(Found::Data { page, .. }) => {
+                        page.rows.into_iter().map(|target| target.id).collect()
+                    }
+                    Ok(Found::Denied(denial)) => {
+                        return Ok((
+                            Vec::new(),
+                            Some(centraid_apps_kit::Denial {
+                                code: denial.code,
+                                message: denial.message,
+                                revoked_at: denial.revoked_at,
+                            }),
+                        ));
+                    }
+                    // A term with no word in it is an answer with no rows; any
+                    // other failure is the recorder's to have kept.
+                    Err(SearchError::NoSearchableWords { .. }) => Vec::new(),
+                    Err(_) => Vec::new(),
+                };
+                // The rows in the order the door ranked them. A read that
+                // fails is kept the way the door's own failures are.
+                match vault.chat_thread_rows(&ids) {
+                    Ok(rows) => Ok((rows, None)),
+                    Err(error) => {
+                        door.keep(error.into());
+                        Ok((Vec::new(), None))
+                    }
+                }
+            },
+        )))
+    })??;
+    settle(door, found, |(rows, corrected)| {
+        Answer::ChatThreads(wire::ChatThreads {
+            threads: rows.into_iter().map(row_to_wire).collect(),
+            corrected,
+        })
+    })
 }
 
 /// `chat.thread`.
@@ -221,3 +305,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "chat_tests.rs"]
+mod search_tests;
