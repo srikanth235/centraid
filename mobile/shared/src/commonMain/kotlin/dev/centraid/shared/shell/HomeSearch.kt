@@ -76,6 +76,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         event.term != null -> term(state, event.term.term)
         event.suggestion != null -> term(state, event.suggestion.term)
         event.row != null -> Step(record(state))
+        // A CONTAINER OPENED FROM THE ANSWER is a row opened: the term is a search the member made.
+        event.container != null -> Step(record(state))
         // THE ASK ACTION is the shell's to carry out (Chat is a tab, not a screen
         // this machine can push); the term is a search the member made.
         event.asked != null -> Step(record(state))

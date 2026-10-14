@@ -155,7 +155,8 @@ enum TasksScreens: AppScreens {
             return AnyView(TasksHomeView(
                 data: shell.state(home),
                 send: send,
-                onHome: { [weak shell] in shell?.path.removeAll() }
+                onHome: { [weak shell] in shell?.path.removeAll() },
+                openContainer: { [weak shell] in shell?.openRow($0, parent: $1) }
             ))
         case list:
             return AnyView(TasksListView(data: shell.state(list), send: send, onBack: pop))

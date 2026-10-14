@@ -140,3 +140,14 @@ enum ChatRouting {
         #endif
     }
 }
+
+extension ShellModel {
+    /// OPEN ONE ROW BY ITS REFERENCE: the shell's one router for a row reference
+    /// (`ChatRouting`), pushed over the stack. A search result that is a container
+    /// (#1097) opens through here; `parent` is the pushing page's title.
+    @MainActor
+    func openRow(_ card: Centraid_Screen_V1_ChatCard, parent: String) {
+        guard let route = ChatRouting.route(for: card, among: [], parent: parent) else { return }
+        path.append(route)
+    }
+}

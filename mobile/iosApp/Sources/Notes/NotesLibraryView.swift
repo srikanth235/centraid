@@ -12,6 +12,8 @@ struct NotesLibraryView: View {
     let data: Data
     let send: (Data) -> Void
     let onHome: () -> Void
+    /// Open a notebook found by name (#1097) through the shell's one row router.
+    var openContainer: (Centraid_Screen_V1_ChatCard, String) -> Void = { _, _ in }
 
     @Environment(\.colorScheme) private var scheme
 
@@ -70,7 +72,14 @@ struct NotesLibraryView: View {
         } content: {
             VStack(spacing: 0) {
                 if state.search.open {
-                    NotesSearchResultsView(results: state.results, loading: chrome.loading, send: send)
+                    NotesSearchResultsView(
+                        results: state.results,
+                        containers: state.search.containers,
+                        loading: chrome.loading,
+                        send: send,
+                        openContainer: openContainer,
+                        parent: chrome.title
+                    )
                 } else {
                     ReadStateView(
                         content: content,
@@ -308,22 +317,29 @@ struct NotesRowView: View {
 
 private struct NotesSearchResultsView: View {
     let results: Centraid_Screen_V1_NotesSearchResults
+    let containers: [Centraid_Screen_V1_SearchContainer]
     let loading: String
     let send: (Data) -> Void
+    let openContainer: (Centraid_Screen_V1_ChatCard, String) -> Void
+    let parent: String
 
     var body: some View {
-        if results.loading, results.rows.isEmpty {
+        if results.loading, results.rows.isEmpty, containers.isEmpty {
             RowSkeleton(label: loading)
-        } else if results.rows.isEmpty {
+        } else if results.rows.isEmpty, containers.isEmpty {
             EmptyStateView(results.empty)
             Spacer(minLength: 0)
         } else {
             ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(results.rows, id: \.noteID) { row in
-                        NotesRowView(row: row, onTap: {
-                            send(NotesEvents.library { $0.notePicked = .with { $0.noteID = row.noteID; $0.title = row.title } })
-                        })
+                VStack(spacing: 0) {
+                    // THE NOTEBOOKS WHOSE NAME MATCHED come first (#1097), through the router.
+                    SearchContainerList(containers: containers) { openContainer($0, parent) }
+                    LazyVStack(spacing: 0) {
+                        ForEach(results.rows, id: \.noteID) { row in
+                            NotesRowView(row: row, onTap: {
+                                send(NotesEvents.library { $0.notePicked = .with { $0.noteID = row.noteID; $0.title = row.title } })
+                            })
+                        }
                     }
                 }
             }

@@ -209,6 +209,7 @@ public class NotesRoutes : AppRoutes {
                 if (event.more_row?.key == NotesLibraryMachine.MORE_TRASH) nav.go(nav.stack.push(Destination.NotesTrash))
             },
             onHome = { nav.home() },
+            onOpenContainer = { card -> nav.open(card, parent = state.chrome?.title.orEmpty()) },
         )
     }
 

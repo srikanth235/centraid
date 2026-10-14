@@ -45,6 +45,7 @@ import centraid.screen.v1.HomeSearchGroup
 import centraid.screen.v1.HomeSearchResting
 import centraid.screen.v1.HomeSearchRow
 import centraid.screen.v1.HomeSearchState
+import centraid.screen.v1.SearchContainer
 import centraid.screen.v1.SectionHead
 import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.EmptyStateView
@@ -53,6 +54,7 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
+import dev.centraid.android.kit.SearchContainerRow
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
@@ -107,6 +109,12 @@ public class HomeSearchRoutes : AppRoutes {
                 RowRoutes.destination(target, parent = state.chrome?.title.orEmpty(), neighbours = among)
                     ?.let { nav.go(nav.stack.push(it)) }
             },
+            onOpenContainer = { container ->
+                bridge.forward(HomeSearchEvent(container = HomeSearchEvent.ContainerPicked(container = container)))
+                val target = container.target ?: return@HomeSearchScreen
+                RowRoutes.destination(target, parent = state.chrome?.title.orEmpty())
+                    ?.let { nav.go(nav.stack.push(it)) }
+            },
             onCancel = {
                 bridge.forward(HomeSearchEvent(cancelled = HomeSearchEvent.Cancelled()))
                 nav.pop()
@@ -126,6 +134,7 @@ internal fun HomeSearchScreen(
     state: HomeSearchState,
     onEvent: (HomeSearchEvent) -> Unit,
     onOpen: (HomeSearchRow, List<String>) -> Unit,
+    onOpenContainer: (SearchContainer) -> Unit,
     onCancel: () -> Unit,
 ) {
     val chrome = state.chrome
@@ -177,7 +186,7 @@ internal fun HomeSearchScreen(
                     // NOTHING MATCHED: the empty state's one action asks the
                     // assistant about the term, and the Chat tab is iOS's alone
                     // (Android has no Chat), so it draws without it.
-                    if (empty != null) EmptyStateView(empty, onAction = null) else Groups(found, onOpen)
+                    if (empty != null) EmptyStateView(empty, onAction = null) else Groups(found, onOpen, onOpenContainer)
                 }
             }
         }
@@ -213,10 +222,18 @@ private fun Resting(resting: HomeSearchResting, onPick: (String) -> Unit) {
 }
 
 @Composable
-private fun Groups(data: HomeSearchData, onOpen: (HomeSearchRow, List<String>) -> Unit) {
+private fun Groups(
+    data: HomeSearchData,
+    onOpen: (HomeSearchRow, List<String>) -> Unit,
+    onOpenContainer: (SearchContainer) -> Unit,
+) {
     LazyColumn(Modifier.fillMaxSize()) {
         data.groups.forEach { group ->
             item(key = "group-${group.app_id}") { GroupHeader(group) }
+            // CONTAINERS FIRST (#1097): the notebook, project, group or folder whose name matched.
+            items(group.containers, key = { "container-${it.entity}-${it.id}" }) { container ->
+                SearchContainerRow(container) { onOpenContainer(container) }
+            }
             items(group.rows, key = { "${it.entity}-${it.id}" }) { row ->
                 val among = group.rows.mapNotNull { it.target?.id }
                 HitRow(row) { onOpen(row, among) }

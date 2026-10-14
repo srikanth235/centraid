@@ -12,6 +12,8 @@ struct TasksHomeView: View {
     let data: Data
     let send: (Data) -> Void
     let onHome: () -> Void
+    /// Open a project found by name (#1097) through the shell's one row router.
+    var openContainer: (Centraid_Screen_V1_ChatCard, String) -> Void = { _, _ in }
 
     @Environment(\.colorScheme) private var scheme
     /// The header's Plus asks the quick add for the keyboard (R-CHROME-1).
@@ -140,8 +142,12 @@ struct TasksHomeView: View {
 
     @ViewBuilder
     private func homeList(_ home: Centraid_Screen_V1_TasksHomeData, chrome: Centraid_Screen_V1_TasksChrome) -> some View {
-        let nothing = home.groups.isEmpty && home.projects.isEmpty
+        let containers = state.search.containers
+        let nothing = home.groups.isEmpty && home.projects.isEmpty && containers.isEmpty
         ScrollView {
+          VStack(alignment: .leading, spacing: 0) {
+            // THE PROJECTS WHOSE NAME MATCHED come first (#1097), through the router.
+            SearchContainerList(containers: containers) { openContainer($0, chrome.title) }
             LazyVStack(alignment: .leading, spacing: 0) {
                 if home.hasNotice {
                     noticeView(home.notice)
@@ -181,7 +187,8 @@ struct TasksHomeView: View {
                     send(event { $0.nextPage = .init() })
                 }
             }
-            .padding(.bottom, 16)
+          }
+          .padding(.bottom, 16)
         }
         .refreshable { send(event { $0.refreshed = .init() }) }
         .accessibilityIdentifier("tasks-home-list")

@@ -119,7 +119,8 @@ enum NotesScreens: AppScreens {
                         shell.send(screen: library, event: bytes)
                         routeLibrary(bytes, shell)
                     },
-                    onHome: { [weak shell] in shell?.path.removeAll() }
+                    onHome: { [weak shell] in shell?.path.removeAll() },
+                    openContainer: { [weak shell] in shell?.openRow($0, parent: $1) }
                 ))
             }
         )

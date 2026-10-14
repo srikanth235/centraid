@@ -1812,6 +1812,9 @@ message HomeSearchEvent {
     // Chat tab and sends `data.ask_question`; the machine records the term as a
     // recent search.
     Asked asked = 13;
+    // INTENT: the shell opens `container.target` in its app (#1097); the
+    // machine records the term as a recent search, as it does for a row.
+    ContainerPicked container = 14;
   }
 
   message Opened {}
@@ -1852,6 +1855,10 @@ message HomeSearchEvent {
   }
 
   message Refreshed {}
+
+  message ContainerPicked {
+    SearchContainer container = 1;
+  }
 }
 
 // ---------------------------------------------------------------------------

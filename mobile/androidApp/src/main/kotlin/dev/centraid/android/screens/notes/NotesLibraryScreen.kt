@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import centraid.screen.v1.ChatCard
 import centraid.screen.v1.NotesBandTab
 import centraid.screen.v1.NotesLibraryEvent
 import centraid.screen.v1.NotesLibrarySort
@@ -32,6 +33,7 @@ import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomChip
 import dev.centraid.android.kit.RoomSearch
+import dev.centraid.android.kit.SearchContainerRow
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetOption
@@ -69,6 +71,7 @@ public fun NotesLibraryScreen(
     state: NotesLibraryState,
     onEvent: (NotesLibraryEvent) -> Unit,
     onHome: () -> Unit,
+    onOpenContainer: (ChatCard) -> Unit = {},
 ) {
     val chrome = state.chrome
     val search = state.search
@@ -113,6 +116,10 @@ public fun NotesLibraryScreen(
                     item(key = "empty") {
                         if (empty.headline.isEmpty()) Quiet(empty.body) else EmptyStateView(empty, onAction = null)
                     }
+                }
+                // THE NOTEBOOKS WHOSE NAME MATCHED come first (#1097), through the router.
+                items(search.containers, key = { "c-${it.entity}-${it.id}" }) { container ->
+                    SearchContainerRow(container, onOpen = onOpenContainer)
                 }
                 items(results.rows, key = { "s-" + it.note_id }) { row -> NoteRow(row, chrome?.row_menu_label.orEmpty(), onEvent) }
             }

@@ -1,8 +1,10 @@
 package dev.centraid.android.screens
 
 import androidx.compose.runtime.Composable
+import centraid.screen.v1.ChatCard
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
+import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 import kotlin.reflect.KProperty
@@ -78,6 +80,16 @@ public class RouteNav(
 
     public fun home() {
         go(NavStack())
+    }
+
+    /**
+     * OPEN ONE ROW BY ITS REFERENCE: the shell's one router for a row reference
+     * ([RowRoutes], the table iOS's chat cards route by), pushed over the stack.
+     * A search result that is a container (#1097) opens through here; [parent] is
+     * the pushing page's title, which a pushed page's back says.
+     */
+    public fun open(card: ChatCard, parent: String = "") {
+        RowRoutes.destination(card, parent = parent)?.let { go(stack.push(it)) }
     }
 
     public operator fun getValue(thisRef: Any?, property: KProperty<*>): NavStack = read()

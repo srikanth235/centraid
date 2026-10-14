@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.DocsAction
+import centraid.screen.v1.ChatCard
 import centraid.screen.v1.DocsCrumb
 import centraid.screen.v1.DocsDocumentEvent
 import centraid.screen.v1.DocsDocumentState
@@ -90,6 +91,7 @@ import dev.centraid.android.kit.RoomChipRow
 import dev.centraid.android.kit.RoomSearchOpener
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
+import dev.centraid.android.kit.SearchContainerRow
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
@@ -260,6 +262,7 @@ internal fun DocsDriveScreen(
     ingest: DocsIngestState? = null,
     onIngestRetry: () -> Unit = {},
     onIngestDismiss: () -> Unit = {},
+    onOpenContainer: (ChatCard) -> Unit = {},
 ) {
     val chrome = state.chrome
     // ADDING A DOCUMENT: the ingest's own line in the room's status host —
@@ -331,7 +334,7 @@ internal fun DocsDriveScreen(
                     RoomSearchOpener(search.placeholder, testTag = "docs-search-open", onOpen = search.onOpen)
                 }
                 if (chips.isNotEmpty()) RoomChipRow("docs", chips)
-                Box(Modifier.weight(1f)) { DriveBody(state, onEvent) }
+                Box(Modifier.weight(1f)) { DriveBody(state, onEvent, onOpenContainer) }
             }
         }
         PushedPage(
@@ -366,7 +369,7 @@ internal fun DocsDriveScreen(
                     onHome = onHome,
                 )
             },
-            content = { DriveBody(state, onEvent) },
+            content = { DriveBody(state, onEvent, onOpenContainer) },
         )
     }
     DocsSheetView(
@@ -393,7 +396,7 @@ internal fun DocsDriveScreen(
 }
 
 @Composable
-private fun DriveBody(state: DocsDriveState, onEvent: (DocsDriveEvent) -> Unit) {
+private fun DriveBody(state: DocsDriveState, onEvent: (DocsDriveEvent) -> Unit, onOpenContainer: (ChatCard) -> Unit) {
     val chrome = state.chrome
     Column(Modifier.fillMaxSize()) {
         // THE LAYOUT TOGGLE, at the list's head. Search and the chips are
@@ -417,14 +420,21 @@ private fun DriveBody(state: DocsDriveState, onEvent: (DocsDriveEvent) -> Unit) 
             onRetry = { onEvent(DocsDriveEvent(refreshed = DocsDriveEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
             skeleton = { RowSkeleton(label = chrome?.loading.orEmpty().ifEmpty { KitWords.OPENING }) },
-        ) { data -> DriveData(state, data, onEvent) }
+        ) { data -> DriveData(state, data, onEvent, onOpenContainer) }
     }
 }
 
 @Composable
-private fun DriveData(state: DocsDriveState, data: DocsDriveData, onEvent: (DocsDriveEvent) -> Unit) {
+private fun DriveData(
+    state: DocsDriveState,
+    data: DocsDriveData,
+    onEvent: (DocsDriveEvent) -> Unit,
+    onOpenContainer: (ChatCard) -> Unit,
+) {
     val empty = data.empty
-    if (data.rows.isEmpty() && data.folders.isEmpty() && empty != null) {
+    // THE FOLDERS WHOSE NAME MATCHED (#1097) come before the documents, through the router.
+    val containers = state.search?.containers.orEmpty()
+    if (data.rows.isEmpty() && data.folders.isEmpty() && containers.isEmpty() && empty != null) {
         EmptyStateView(
             empty,
             onAction = when (data.empty_action) {
@@ -455,6 +465,9 @@ private fun DriveData(state: DocsDriveState, data: DocsDriveData, onEvent: (Docs
     if (state.layout == DocsDriveState.Layout.LAYOUT_GRID) {
         LazyVerticalGrid(columns = GridCells.Adaptive(150.dp), modifier = Modifier.fillMaxSize()) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "head") { DriveHead(data, openFolder) }
+            items(containers, span = { GridItemSpan(maxLineSpan) }, key = { "c-${it.entity}-${it.id}" }) { container ->
+                SearchContainerRow(container, onOpen = onOpenContainer)
+            }
             items(data.folders, key = { "f-" + it.folder_id }) { folder ->
                 Tile(folder.name, folder.count_label, "Folder", folder.accessibility_label, "docs-folder-${folder.folder_id}", null, null) {
                     openFolder(folder.folder_id, folder.name)
@@ -470,6 +483,9 @@ private fun DriveData(state: DocsDriveState, data: DocsDriveData, onEvent: (Docs
     } else {
         LazyColumn(Modifier.fillMaxSize()) {
             item(key = "head") { DriveHead(data, openFolder) }
+            items(containers, key = { "c-${it.entity}-${it.id}" }) { container ->
+                SearchContainerRow(container, onOpen = onOpenContainer)
+            }
             items(data.folders, key = { "f-" + it.folder_id }) { folder -> FolderLine(folder) { openFolder(folder.folder_id, folder.name) } }
             items(data.rows, key = { "d-" + it.document_id }) { row ->
                 DocumentLine(row, chrome?.starred.orEmpty(), chrome?.row_menu.orEmpty(), onTap = { openRow(row) }, onMenu = { openMenu(row) })

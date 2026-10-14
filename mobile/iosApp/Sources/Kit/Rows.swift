@@ -390,3 +390,64 @@ enum KitHue {
         return centraidColorRoles.contains(wheel) ? wheel : nil
     }
 }
+
+/// A CONTAINER AS A SEARCH RESULT (#1097): the notebook, album, project, group
+/// or folder a member typed the name of. ONE ROW for Home's search and for the
+/// four owning apps' own search results — its glyph by kind, its title, its kind
+/// in a soft word — drawn above the result rows. The machine finished every
+/// word and the glyph (`SearchContainer`); a tap hands the row's reference
+/// (`target`) to the shell's one row router and decides nothing itself. Its id is
+/// `search-container-<entity>-<id>`, the same everywhere.
+struct SearchContainerRow: View {
+    let container: Centraid_Screen_V1_SearchContainer
+    let onOpen: (Centraid_Screen_V1_ChatCard) -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Button {
+            guard container.hasTarget else { return }
+            onOpen(container.target)
+        } label: {
+            HStack(spacing: 12) {
+                CentraidIconView(iconKey: container.iconKey, tint: Theme.color("textSoft", scheme), size: 18)
+                Text(container.title)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 8)
+                Text(container.kindLabel)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+            .overlay(alignment: .bottom) { KitHairline() }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(KitRowPress())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(container.accessibilityLabel)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("search-container-\(container.entity)-\(container.id)")
+    }
+}
+
+/// THE CONTAINERS OF ONE ANSWER, in a plain stack: a handful at most, drawn
+/// ABOVE a screen's lazy list and never inside it. Rows inserted into a lazy
+/// stack above its first item moved the scroll position and left the answer
+/// scrolled out of sight (Tasks' own search, #1097).
+struct SearchContainerList: View {
+    let containers: [Centraid_Screen_V1_SearchContainer]
+    let onOpen: (Centraid_Screen_V1_ChatCard) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(containers, id: \.id) { container in
+                SearchContainerRow(container: container, onOpen: onOpen)
+            }
+        }
+    }
+}

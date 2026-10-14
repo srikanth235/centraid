@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -35,7 +36,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.Autosave
+import centraid.screen.v1.ChatCard
 import centraid.screen.v1.ListRow
+import centraid.screen.v1.SearchContainer
 import centraid.screen.v1.SectionHead
 import centraid.screen.v1.StatusChip
 import dev.centraid.android.theme.centraidColor
@@ -447,3 +450,63 @@ private val PARTY_HUES: Set<String> =
 
 /** The same eight, as the theme's colour roles. */
 private val PARTY_ROLES: Set<String> = PARTY_HUES.mapTo(mutableSetOf()) { "c" + it.replaceFirstChar(Char::uppercaseChar) }
+
+/**
+ * A CONTAINER AS A SEARCH RESULT (#1097): the notebook, album, project, group
+ * or folder a member typed the name of. ONE ROW for Home's search and for the
+ * four owning apps' own search results — its glyph by kind, its title, its kind
+ * in a soft word — drawn above the result rows. The machine finished every
+ * word and the glyph ([SearchContainer]); a tap hands the row's reference
+ * ([SearchContainer.target]) to the shell's one row router and decides nothing
+ * itself. Its id is `search-container-<entity>-<id>`, the same everywhere.
+ */
+@Composable
+public fun SearchContainerRow(
+    container: SearchContainer,
+    modifier: Modifier = Modifier,
+    onOpen: (ChatCard) -> Unit,
+) {
+    val target = container.target
+    Column(
+        modifier
+            .fillMaxWidth()
+            .then(if (target != null) Modifier.clickable { onOpen(target) } else Modifier)
+            .testTag("search-container-${container.entity}-${container.id}")
+            .clearAndSetSemantics {
+                contentDescription = container.accessibility_label
+                role = Role.Button
+            },
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = KitGeometry.ROW_MIN)
+                .padding(horizontal = KitGeometry.GUTTER),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CentraidIcon(iconKey = container.icon_key, tint = centraidColor("textSoft"), size = 18.dp)
+            Text(
+                container.title,
+                style = centraidType("body"),
+                color = centraidColor("text"),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 12.dp).weight(1f),
+            )
+            Text(
+                container.kind_label,
+                style = centraidType("small"),
+                color = centraidColor("textSoft"),
+                maxLines = 1,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        Spacer(
+            Modifier
+                .padding(start = KitGeometry.GUTTER)
+                .fillMaxWidth()
+                .height(KitGeometry.HAIRLINE)
+                .background(centraidColor("line")),
+        )
+    }
+}

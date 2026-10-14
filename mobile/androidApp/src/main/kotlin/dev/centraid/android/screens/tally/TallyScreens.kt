@@ -963,6 +963,7 @@ internal fun TallySearchScreen(
     state: TallySearchState,
     onEvent: (TallySearchEvent) -> Unit,
     onBack: () -> Unit,
+    onOpenContainer: (centraid.screen.v1.ChatCard) -> Unit = {},
 ) {
     val chrome = state.chrome
     PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back.orEmpty(), onBack = onBack) {
@@ -988,6 +989,10 @@ internal fun TallySearchScreen(
                         EmptyStateView(empty, onAction = null)
                     } else {
                         LazyColumn {
+                            // THE GROUPS WHOSE NAME MATCHED (#1097) come first, through the router.
+                            items(state.field_?.containers.orEmpty(), key = { "c-${it.entity}-${it.id}" }) { container ->
+                                dev.centraid.android.kit.SearchContainerRow(container, onOpen = onOpenContainer)
+                            }
                             item(key = "count") { StatusLine(search.count_label) }
                             items(search.results, key = { it.row_key }) { row ->
                                 TallyLedgerLine(row) {

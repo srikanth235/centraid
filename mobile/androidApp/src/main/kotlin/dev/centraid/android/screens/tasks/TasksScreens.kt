@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
+import centraid.screen.v1.ChatCard
 import centraid.screen.v1.SearchField
 import centraid.screen.v1.SectionHead
 import centraid.screen.v1.TasksCatchUpEvent
@@ -39,6 +40,7 @@ import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
+import dev.centraid.android.kit.SearchContainerRow
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
@@ -55,6 +57,7 @@ internal fun TasksHomeScreen(
     state: TasksHomeState,
     onEvent: (TasksHomeEvent) -> Unit,
     onHome: () -> Unit,
+    onOpenContainer: (ChatCard) -> Unit = {},
 ) {
     val chrome = state.chrome
     val data = state.data_
@@ -106,7 +109,9 @@ internal fun TasksHomeScreen(
                 skeleton = { RowSkeleton(label = chrome?.loading?.ifEmpty { null } ?: dev.centraid.android.kit.KitWords.OPENING) },
                 modifier = Modifier.weight(1f),
             ) { home ->
-                val nothing = home.groups.isEmpty() && home.projects.isEmpty()
+                // THE PROJECTS WHOSE NAME MATCHED (#1097) are an answer: they come first, through the router.
+                val containers = state.search?.containers.orEmpty()
+                val nothing = home.groups.isEmpty() && home.projects.isEmpty() && containers.isEmpty()
                 val empty = home.empty
                 if (nothing && empty != null) {
                     EmptyStateView(empty, onAction = { onEvent(TasksHomeEvent(empty_acted = TasksHomeEvent.EmptyActed())) })
@@ -117,6 +122,9 @@ internal fun TasksHomeScreen(
                             item(key = "notice") {
                                 TasksNoticeView(notice) { onEvent(TasksHomeEvent(notice_acted = TasksHomeEvent.NoticeActed())) }
                             }
+                        }
+                        items(containers, key = { "c-${it.entity}-${it.id}" }) { container ->
+                            SearchContainerRow(container, onOpen = onOpenContainer)
                         }
                         home.projects.forEach { group ->
                             item(key = "projects-${group.key}") { SectionHeader(SectionHead(title = group.title)) }

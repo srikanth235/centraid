@@ -20,6 +20,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-search-row-<entity>-<id>` | Home search | one hit (`entity` is the index's, e.g. `schedule.task`); a tap opens it in its app |
 | `search-corrected` | any open search field (every app's search slot, Home search, Tally's search page) | the line under the field, "Showing results for “…”", drawn only when the core corrected a typo in the term ([#1097](https://github.com/srikanth235/centraid/issues/1097)); absent for an exact answer |
 | `search-ask-about` | Home search | the no-match state's one action, "Ask about “…”": switches to the Chat tab and sends the question — **iOS only**; Android has no Chat tab, so its no-match state draws without it |
+| `search-container-<entity>-<id>` | Home search (inside the app's group, before its rows) and Notes', Tasks', Docs' and Tally's own search results | one container whose NAME matched — a notebook or album (`core.collection`), a project (`schedule.project`), a Tally group (`social.circle`, the circle's id) or a Docs folder (`core.concept`) ([#1097](https://github.com/srikanth235/centraid/issues/1097)); a tap opens it in its app (the notebook's notes, the project's list, the group's ledger, the folder's page, the album's shelf) |
 | `home-band` | Home | the floating band plate |
 | `home-band-<placeId>` | Home | one band destination (`home`, `notifs`, `stats`, `data`) |
 | `home-band-backup` | Home | the band's Backup tab — opens the Backup screen |

@@ -205,6 +205,8 @@ struct TallySearchView: View {
     let send: (Data) -> Void
     let push: (ShellModel.Route) -> Void
     let onBack: () -> Void
+    /// Open a group found by name (#1097) through the shell's one row router.
+    var openContainer: (Centraid_Screen_V1_ChatCard, String) -> Void = { _, _ in }
 
     @Environment(\.colorScheme) private var scheme
 
@@ -264,6 +266,9 @@ struct TallySearchView: View {
                             EmptyStateView(results.empty)
                         } else {
                             ScrollView {
+                              VStack(alignment: .leading, spacing: 0) {
+                                // THE GROUPS WHOSE NAME MATCHED come first (#1097), through the router.
+                                SearchContainerList(containers: state.field.containers) { openContainer($0, state.chrome.title) }
                                 LazyVStack(alignment: .leading, spacing: 0) {
                                     TallyNote(text: results.countLabel)
                                     ForEach(results.results, id: \.rowKey) { row in
@@ -274,6 +279,7 @@ struct TallySearchView: View {
                                         }
                                     }
                                 }
+                              }
                             }
                             .scrollDismissesKeyboard(.interactively)
                         }

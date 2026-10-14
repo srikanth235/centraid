@@ -173,7 +173,7 @@ public class TallyRoutes : AppRoutes {
                 LaunchedEffect(destination) { search.open() }
                 val held by search.host.state.collectAsStateWithLifecycle()
                 val state = held.screen
-                TallySearchScreen(state, onBack = nav::pop, onEvent = { event: TallySearchEvent ->
+                TallySearchScreen(state, onBack = nav::pop, onOpenContainer = { card -> nav.open(card, parent = state.chrome?.title.orEmpty()) }, onEvent = { event: TallySearchEvent ->
                     search.forward(event)
                     event.expense?.let { push(nav, Destination.TallyExpense(it.expense_id, parent = state.chrome?.title.orEmpty())) }
                 })

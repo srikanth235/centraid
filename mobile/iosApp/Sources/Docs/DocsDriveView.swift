@@ -23,6 +23,8 @@ struct DocsDriveView: View {
     let push: (ShellModel.Route) -> Void
     let onBack: () -> Void
     let onHome: () -> Void
+    /// Open a folder found by name (#1097) through the shell's one row router.
+    var openContainer: (Centraid_Screen_V1_ChatCard, String) -> Void = { _, _ in }
 
     @Environment(\.colorScheme) private var scheme
 
@@ -188,6 +190,9 @@ struct DocsDriveView: View {
                 onRetry: { send(Self.event { $0.refreshed = .init() }) }
             ) { drive in
                 ScrollView {
+                  VStack(alignment: .leading, spacing: 0) {
+                    // THE FOLDERS WHOSE NAME MATCHED come first (#1097), through the router.
+                    SearchContainerList(containers: state.search.containers) { openContainer($0, state.chrome.title) }
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if !drive.crumbs.isEmpty, parentTitle != nil { crumbs(drive.crumbs) }
                         ForEach(drive.folders, id: \.folderID) { node in
@@ -211,7 +216,8 @@ struct DocsDriveView: View {
                         note(drive.shelfNote)
                         note(drive.truncatedNote)
                     }
-                    .padding(.bottom, 16)
+                  }
+                  .padding(.bottom, 16)
                 }
                 .refreshable { send(Self.event { $0.refreshed = .init() }) }
                 .scrollDismissesKeyboard(.interactively)

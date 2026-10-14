@@ -48,6 +48,11 @@ enum HomeSearchScreens {
                         guard let shell, let route = ChatRouting.route(for: target, among: among, parent: parent) else { return }
                         shell.path.append(route)
                     },
+                    openContainer: { [weak shell] container, parent in
+                        guard let shell else { return }
+                        shell.send(screen: screen, event: event { $0.container = .with { $0.container = container } })
+                        shell.openRow(container.target, parent: parent)
+                    },
                     ask: { [weak shell] question in shell?.askChat(question) },
                     onCancel: { [weak shell] in
                         guard let shell, !shell.path.isEmpty else { return }
@@ -69,6 +74,8 @@ struct HomeSearchView: View {
     let send: (Data) -> Void
     /// Open a row's target through the one router a row reference has.
     let open: (Centraid_Screen_V1_ChatCard, [Centraid_Screen_V1_ChatCard], String) -> Void
+    /// Open a container found by name (#1097) through the same router.
+    let openContainer: (Centraid_Screen_V1_SearchContainer, String) -> Void
     /// Ask the assistant a question: the shell's router switches to Chat and sends it.
     let ask: (String) -> Void
     let onCancel: () -> Void
@@ -157,6 +164,10 @@ struct HomeSearchView: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(results.groups, id: \.appID) { group in
                     GroupHeader(group: group)
+                    // CONTAINERS FIRST (#1097): the notebook, project, group or folder whose name matched.
+                    ForEach(group.containers, id: \.id) { container in
+                        SearchContainerRow(container: container) { _ in openContainer(container, parent) }
+                    }
                     ForEach(group.rows, id: \.id) { row in
                         HitRow(row: row) {
                             send(HomeSearchScreens.event { $0.row = .with { $0.row = row } })
