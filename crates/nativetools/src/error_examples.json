@@ -107,7 +107,7 @@
         "tool": "act",
         "args": {
           "verb": "undo",
-          "rows": "#8"
+          "rows": "#6"
         }
       }
     ]
@@ -121,7 +121,7 @@
         "args": {
           "verb": "create",
           "kind": "note",
-          "rows": "#8",
+          "rows": "#6",
           "args": "name: x"
         }
       }
@@ -338,7 +338,7 @@
           "verb": "add_to",
           "kind": "task",
           "name": "Book the cabin",
-          "args": "to: #8, #6"
+          "args": "to: #6, #4"
         }
       }
     ]
@@ -353,7 +353,7 @@
           "verb": "add_to",
           "kind": "task",
           "name": "Book the cabin",
-          "args": "to: #6"
+          "args": "to: #4"
         }
       }
     ]
@@ -697,7 +697,7 @@
         "args": {
           "verb": "create",
           "kind": "task",
-          "args": "name: x\nlist: #8, #6"
+          "args": "name: x\nlist: #6, #4"
         }
       }
     ]
@@ -752,8 +752,8 @@
         "tool": "act",
         "args": {
           "verb": "delete",
-          "kind": "group",
-          "name": "Tahoe Trip"
+          "kind": "folder",
+          "name": "Taxes"
         }
       }
     ]
@@ -974,7 +974,7 @@
       {
         "tool": "answer",
         "args": {
-          "rows": "#8",
+          "rows": "#6",
           "kind": "task"
         }
       }
@@ -1119,7 +1119,7 @@
       {
         "tool": "find",
         "args": {
-          "kind": "debt"
+          "kind": "album"
         }
       },
       {
@@ -1131,7 +1131,7 @@
       {
         "tool": "find",
         "args": {
-          "kind": "group"
+          "kind": "notebook"
         }
       }
     ]
@@ -1240,7 +1240,7 @@
       {
         "tool": "open",
         "args": {
-          "row": "#8, #7"
+          "row": "#6, #5"
         }
       }
     ]
@@ -1325,7 +1325,7 @@
       {
         "tool": "answer",
         "args": {
-          "rows": "#8",
+          "rows": "#6",
           "name": "x"
         }
       }
@@ -1364,7 +1364,7 @@
         "tool": "compute",
         "args": {
           "op": "count",
-          "rows": "#8",
+          "rows": "#6",
           "name": "x"
         }
       }
@@ -1458,8 +1458,8 @@
       {
         "tool": "find",
         "args": {
-          "kind": "debt",
-          "where": "task count > 1"
+          "kind": "event",
+          "where": "album count > 1"
         }
       }
     ]
@@ -1804,24 +1804,7 @@
   "whr.amounts_are_in_currency_here_x": {
     "tool": "act",
     "argument": "args",
-    "calls": [
-      {
-        "tool": "find",
-        "args": {
-          "kind": "group",
-          "name": "Tahoe Trip"
-        }
-      },
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "group: #1\namount: €5"
-        }
-      }
-    ]
+    "why_none": "defensive: a currency symbol is checked only against an amount field, and no kind the assistant reads has one until Money is read again (symbol_conflict has no caller)"
   },
   "act.name_is_one_occurrence_of_a": {
     "tool": "act",

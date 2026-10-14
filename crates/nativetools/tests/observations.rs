@@ -13,10 +13,10 @@ fn the_observations_read_exactly_as_specified() {
     let world = seeded();
     let mut session = world.session_uncomposed();
     let prompt = session.prompt();
-    // Eight containers are pre-numbered before anything else is shown.
-    assert_eq!(prompt["directory"], json!([1, 2, 3, 4, 5, 6, 7, 8]));
+    // Six containers are pre-numbered before anything else is shown.
+    assert_eq!(prompt["directory"], json!([1, 2, 3, 4, 5, 6]));
     assert!(prompt["system"].as_str().unwrap().contains(
-        "vault directory:\ngroups: Flat 4B (#1), Tahoe Trip (#2)\nalbums: Wedding (#3), Summer (#4)\nnotebooks: Ideas (#5), Recipes (#6)\nfolders: Taxes (#7)\nlists: Home (#8)"
+        "vault directory:\nalbums: Wedding (#1), Summer (#2)\nnotebooks: Ideas (#3), Recipes (#4)\nfolders: Taxes (#5)\nlists: Home (#6)"
     ));
     session.user("what's due next week?");
     assert_eq!(
@@ -27,8 +27,8 @@ fn the_observations_read_exactly_as_specified() {
         ),
         format!(
             "@1 · 2 tasks (showing 2)   {CARD} · when: 2026-09-28..2026-10-04\n\
-             #9 [1] task \"Pay rent\" · Thu 2026-10-01 (next Thursday) · status open · priority 2\n\
-             #10 [2] task \"Book the cabin\" · Fri 2026-10-02 09:00 (next Friday) · status open · effort 30 min"
+             #7 [1] task \"Pay rent\" · Thu 2026-10-01 (next Thursday) · status open · priority 2\n\
+             #8 [2] task \"Book the cabin\" · Fri 2026-10-02 09:00 (next Friday) · status open · effort 30 min"
         )
     );
     assert_eq!(
@@ -37,7 +37,7 @@ fn the_observations_read_exactly_as_specified() {
             "find",
             json!({"kind": "task", "name": "tabla"})
         ),
-        "0 tasks called \"tabla\". Other kinds called \"tabla\": #11 event \"Tabla class with Benedikt\""
+        "0 tasks called \"tabla\". Other kinds called \"tabla\": #9 event \"Tabla class with Benedikt\""
     );
     assert_eq!(
         text(
@@ -45,13 +45,13 @@ fn the_observations_read_exactly_as_specified() {
             "find",
             json!({"kind": "task", "name": "library"})
         ),
-        "no live task called \"library\"; trashed: #12 task \"Library books\" · trashed"
+        "no live task called \"library\"; trashed: #10 task \"Library books\" · trashed"
     );
     assert_eq!(
         text(
             &mut session,
             "find",
-            json!({"kind": "event", "linked_to": "#4"})
+            json!({"kind": "event", "linked_to": "#2"})
         ),
         "events are not linked to albums. No event mentions \"Summer\". event links: person."
     );
@@ -61,7 +61,7 @@ fn the_observations_read_exactly_as_specified() {
             "act",
             json!({"verb": "log", "kind": "person", "name": "Neha", "args": "kind: call"})
         ),
-        "ambiguous: \"Neha\" fits #13 person \"Neha Rao\", #14 person \"Neha Kulkarni\"; nothing was done."
+        "ambiguous: \"Neha\" fits #11 person \"Neha Rao\", #12 person \"Neha Kulkarni\"; nothing was done."
     );
     session.user("how much effort is on my tasks?");
     assert_eq!(
@@ -70,7 +70,7 @@ fn the_observations_read_exactly_as_specified() {
             "compute",
             json!({"op": "sum", "field": "effort", "kind": "task"})
         ),
-        "@2 = 37.50 USD (sum of amount over 2 debts)"
+        "@2 = 50 (sum of effort over 5 tasks)"
     );
     assert_eq!(
         text(&mut session, "answer", json!({"value": "@2"})),
@@ -78,7 +78,7 @@ fn the_observations_read_exactly_as_specified() {
     );
     session.user("");
     // A compacted row keeps its session-stable number and is still addressable.
-    assert!(!text(&mut session, "open", json!({"row": "#10"})).starts_with("error"));
+    assert!(!text(&mut session, "open", json!({"row": "#8"})).starts_with("error"));
     assert_eq!(
         text(
             &mut session,
@@ -87,35 +87,35 @@ fn the_observations_read_exactly_as_specified() {
         ),
         format!(
             "@3 · 1 task (showing 1)   {CARD}\n\
-             #10 [1] task \"Book the cabin\" · Fri 2026-10-02 09:00 (next Friday) · status open · effort 30 min"
+             #8 [1] task \"Book the cabin\" · Fri 2026-10-02 09:00 (next Friday) · status open · effort 30 min"
         )
     );
     assert_eq!(
         text(
             &mut session,
             "act",
-            json!({"verb": "complete", "rows": "#10"})
+            json!({"verb": "complete", "rows": "#8"})
         ),
-        "completed: #10 task \"Book the cabin\" · status open → completed · completed none → Sun 2026-09-27 09:00"
+        "completed: #8 task \"Book the cabin\" · status open → completed · completed none → Sun 2026-09-27 09:00"
     );
     session.user("");
     assert_eq!(
         text(
             &mut session,
             "act",
-            json!({"verb": "complete", "rows": "#10"})
+            json!({"verb": "complete", "rows": "#8"})
         ),
-        "already: #10 task \"Book the cabin\" is completed (Sun 2026-09-27 09:00)"
+        "already: #8 task \"Book the cabin\" is completed (Sun 2026-09-27 09:00)"
     );
     assert_eq!(
-        text(&mut session, "open", json!({"row": "#10"})),
-        "#10 task \"Book the cabin\" · Fri 2026-10-02 09:00 (next Friday) · status completed · effort 30 min · completed Sun 2026-09-27 09:00\n\
-         created 2026-01-05\nsubtasks (0)\npeople (0)\nlist (1): #8 \"Home\""
+        text(&mut session, "open", json!({"row": "#8"})),
+        "#8 task \"Book the cabin\" · Fri 2026-10-02 09:00 (next Friday) · status completed · effort 30 min · completed Sun 2026-09-27 09:00\n\
+         created 2026-01-05\nsubtasks (0)\npeople (0)\nlist (1): #6 \"Home\""
     );
     assert_eq!(
         text(&mut session, "search", json!({"text": "beach"})),
         "@4 · search \"beach\": 1 photo (showing 1)\n\
-         #15 [1] photo \"Beach day\" · Wed 2026-07-01 10:00 · starred · links: person #13 \"Neha Rao\", album #4 \"Summer\""
+         #13 [1] photo \"Beach day\" · Wed 2026-07-01 10:00 · starred · links: person #11 \"Neha Rao\", album #2 \"Summer\""
     );
 }
 
@@ -177,16 +177,16 @@ fn an_ask_completed_from_the_candidates_and_a_refused_call_repeated_read_exactly
             "act",
             json!({"verb": "log", "kind": "person", "name": "Neha", "args": "kind: call"})
         ),
-        "ambiguous: \"Neha\" fits #9 person \"Neha Rao\", #10 person \"Neha Kulkarni\"; nothing was done."
+        "ambiguous: \"Neha\" fits #7 person \"Neha Rao\", #8 person \"Neha Kulkarni\"; nothing was done."
     );
     // the model names one candidate; the runtime lists them all (D-1044-9)
     assert_eq!(
         text(
             &mut session,
             "ask",
-            json!({"question": "which neha?", "options": "#10"})
+            json!({"question": "which neha?", "options": "#8"})
         ),
-        "asked: \"which neha?\" · options: #9 person \"Neha Rao\", #10 person \"Neha Kulkarni\" · options completed from the candidates"
+        "asked: \"which neha?\" · options: #7 person \"Neha Rao\", #8 person \"Neha Kulkarni\" · options completed from the candidates"
     );
     // a call the runtime refused as invalid, sent again, gets one hint (nt10 G1); the second
     // resend ends the turn

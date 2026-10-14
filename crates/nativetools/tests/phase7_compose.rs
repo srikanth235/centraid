@@ -756,12 +756,12 @@ fn a_verb_that_does_not_apply_to_the_kind_declines_out_of_scope() {
 fn a_row_for_a_container_of_another_kind_declines_out_of_scope() {
     let world = seeded();
     let mut session = world.session();
-    session.user("add ray to the dentist");
-    let dentist = find_in_turn(&mut session, "event", "Dentist");
+    session.user("add the dal note to taxes");
+    let taxes = find_in_turn(&mut session, "folder", "Taxes");
     let reply = call(
         &mut session,
         "act",
-        json!({"verb": "add_to", "kind": "person", "name": "Ray Ochoa", "args": format!("to: {dentist}")}),
+        json!({"verb": "add_to", "kind": "note", "name": "Dal", "args": format!("to: {taxes}")}),
     );
     assert_declined(&reply, "out_of_scope");
     assert_eq!(reply["effect"]["refusal"]["predicate"], "wrong_container");
@@ -843,12 +843,12 @@ fn without_the_flag_the_refusals_are_the_old_errors() {
     let world = seeded();
     let mut session = world.session_with(common::TODAY, uncomposed());
     session.user("do these");
-    let dentist = find_in_turn(&mut session, "event", "Dentist");
+    let taxes = find_in_turn(&mut session, "folder", "Taxes");
     let calls = [
         json!({"verb": "create", "kind": "event", "args": "name: Call\ndate: {\"date\":\"2026-10-02\",\"time\":\"09:15\"}"}),
         json!({"verb": "reschedule", "kind": "event", "name": "Launch party", "args": "to: {\"unit\":\"week\",\"rel\":1,\"weekday\":5}"}),
         json!({"verb": "star", "kind": "event", "name": "Dentist"}),
-        json!({"verb": "add_to", "kind": "person", "name": "Ray Ochoa", "args": format!("to: {dentist}")}),
+        json!({"verb": "add_to", "kind": "note", "name": "Dal", "args": format!("to: {taxes}")}),
     ];
     for args in calls {
         session.user("");

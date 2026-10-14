@@ -1,6 +1,16 @@
 {
   "families": [
     {
+      "argument": "verb",
+      "example": null,
+      "family": "applicability",
+      "id": "act.x_does_not_apply_to_x",
+      "source": "act.rs",
+      "template": "error: {} does not apply to {}.",
+      "tool": "act",
+      "why_no_example": "defensive: add_to and remove_from apply only to kinds that have a container, and the verb table already refuses the other kinds with the family below"
+    },
+    {
       "argument": "args",
       "example": [
         {
@@ -70,7 +80,7 @@
       "example": [
         {
           "args": {
-            "rows": "#8",
+            "rows": "#6",
             "verb": "undo"
           },
           "think": null,
@@ -92,7 +102,7 @@
           "args": {
             "args": "name: x",
             "kind": "note",
-            "rows": "#8",
+            "rows": "#6",
             "verb": "create"
           },
           "think": null,
@@ -256,7 +266,7 @@
         }
       ],
       "family": "applicability",
-      "id": "act.x_does_not_apply_to_x",
+      "id": "act.x_does_not_apply_to_x_2",
       "source": "act.rs",
       "template": "error: {} does not apply to {}. {} applies to: {}.",
       "tool": "act",
@@ -427,7 +437,7 @@
       "example": [
         {
           "args": {
-            "args": "to: #8, #6",
+            "args": "to: #6, #4",
             "kind": "task",
             "name": "Book the cabin",
             "verb": "add_to"
@@ -449,7 +459,7 @@
       "example": [
         {
           "args": {
-            "args": "to: #6",
+            "args": "to: #4",
             "kind": "task",
             "name": "Book the cabin",
             "verb": "add_to"
@@ -463,166 +473,6 @@
       "id": "act.a_x_goes_into_a_x",
       "source": "act.rs",
       "template": "error: a {} goes into a {}, and {} is a {}.{fits}",
-      "tool": "act",
-      "why_no_example": ""
-    },
-    {
-      "argument": "args",
-      "example": [
-        {
-          "args": {
-            "args": "foo: bar",
-            "kind": "person",
-            "name": "Ray",
-            "verb": "settle_up"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "act.settle_up_takes_group_n_and_amount",
-      "source": "act.rs",
-      "template": "error: settle_up takes group: #n and amount: N, not \"{key}\".",
-      "tool": "act",
-      "why_no_example": ""
-    },
-    {
-      "argument": "name",
-      "example": [
-        {
-          "args": {
-            "kind": "person"
-          },
-          "think": null,
-          "tool": "find",
-          "user": null
-        },
-        {
-          "args": {
-            "args": "group: #2",
-            "rows": "#13",
-            "verb": "settle_up"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "act.settle_up_is_with_someone_else_not",
-      "source": "act.rs",
-      "template": "error: settle_up is with someone else, not you.",
-      "tool": "act",
-      "why_no_example": ""
-    },
-    {
-      "argument": "args",
-      "example": [
-        {
-          "args": {
-            "kind": "person",
-            "name": "Benedikt",
-            "verb": "settle_up"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "act.settle_up_needs_group_n",
-      "source": "act.rs",
-      "template": "error: settle_up needs group: #n.",
-      "tool": "act",
-      "why_no_example": ""
-    },
-    {
-      "argument": "args",
-      "example": [
-        {
-          "args": {
-            "args": "group: #1, #2",
-            "kind": "person",
-            "name": "Ray",
-            "verb": "settle_up"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
-      "family": "cardinality",
-      "id": "act.group_is_exactly_one_n",
-      "source": "act.rs",
-      "template": "error: group is exactly one #n.",
-      "tool": "act",
-      "why_no_example": ""
-    },
-    {
-      "argument": "args",
-      "example": [
-        {
-          "args": {
-            "args": "group: #8",
-            "kind": "person",
-            "name": "Ray",
-            "verb": "settle_up"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "act.group_names_a_group_and_name",
-      "source": "act.rs",
-      "template": "error: group: names a group, and {name} is not one.{fits}",
-      "tool": "act",
-      "why_no_example": ""
-    },
-    {
-      "argument": "args",
-      "example": [
-        {
-          "args": {
-            "args": "group: #2\namount: lots",
-            "kind": "person",
-            "name": "Ray",
-            "verb": "settle_up"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "act.amount_is_a_number_in_currency",
-      "source": "act.rs",
-      "template": "error: amount is a number in currency units.",
-      "tool": "act",
-      "why_no_example": ""
-    },
-    {
-      "argument": "args",
-      "example": [
-        {
-          "args": {
-            "args": "group: #2\namount: 0",
-            "kind": "person",
-            "name": "Ray",
-            "verb": "settle_up"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "act.amount_is_more_than_zero",
-      "source": "act.rs",
-      "template": "error: amount is more than zero.",
       "tool": "act",
       "why_no_example": ""
     },
@@ -1127,7 +977,7 @@
       "example": [
         {
           "args": {
-            "args": "name: x\nlist: #8, #6",
+            "args": "name: x\nlist: #6, #4",
             "kind": "task",
             "verb": "create"
           },
@@ -1190,85 +1040,6 @@
       "example": [
         {
           "args": {
-            "args": "name: x",
-            "kind": "debt",
-            "verb": "create"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "act.create_debt_needs_person_n",
-      "source": "act.rs",
-      "template": "error: create debt needs person: #n.",
-      "tool": "act",
-      "why_no_example": ""
-    },
-    {
-      "argument": "args",
-      "example": [
-        {
-          "args": {
-            "kind": "person"
-          },
-          "think": null,
-          "tool": "find",
-          "user": null
-        },
-        {
-          "args": {
-            "args": "name: x\nperson: #12",
-            "kind": "debt",
-            "verb": "create"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "act.create_debt_needs_amount_n_currency",
-      "source": "act.rs",
-      "template": "error: create debt needs amount: N (currency units).",
-      "tool": "act",
-      "why_no_example": ""
-    },
-    {
-      "argument": "args",
-      "example": [
-        {
-          "args": {
-            "kind": "person"
-          },
-          "think": null,
-          "tool": "find",
-          "user": null
-        },
-        {
-          "args": {
-            "args": "name: x\nperson: #12\namount: 5",
-            "kind": "debt",
-            "verb": "create"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "act.create_debt_needs_direction_owes_me_or",
-      "source": "act.rs",
-      "template": "error: create debt needs direction: owes_me or i_owe.",
-      "tool": "act",
-      "why_no_example": ""
-    },
-    {
-      "argument": "args",
-      "example": [
-        {
-          "args": {
             "args": "name: x\ntype: wifi\nurl: https://x.example",
             "kind": "locker item",
             "verb": "create"
@@ -1319,8 +1090,8 @@
       "example": [
         {
           "args": {
-            "kind": "group",
-            "name": "Tahoe Trip",
+            "kind": "folder",
+            "name": "Taxes",
             "verb": "delete"
           },
           "think": null,
@@ -1655,7 +1426,7 @@
         {
           "args": {
             "kind": "task",
-            "rows": "#8"
+            "rows": "#6"
           },
           "think": null,
           "tool": "answer",
@@ -1918,7 +1689,7 @@
         },
         {
           "args": {
-            "kind": "debt"
+            "kind": "album"
           },
           "think": null,
           "tool": "find",
@@ -1934,7 +1705,7 @@
         },
         {
           "args": {
-            "kind": "group"
+            "kind": "notebook"
           },
           "think": null,
           "tool": "find",
@@ -2104,7 +1875,7 @@
       "example": [
         {
           "args": {
-            "row": "#8, #7"
+            "row": "#6, #5"
           },
           "think": null,
           "tool": "open",
@@ -2207,7 +1978,7 @@
         {
           "args": {
             "name": "x",
-            "rows": "#8"
+            "rows": "#6"
           },
           "think": null,
           "tool": "answer",
@@ -2267,7 +2038,7 @@
           "args": {
             "name": "x",
             "op": "count",
-            "rows": "#8"
+            "rows": "#6"
           },
           "think": null,
           "tool": "compute",
@@ -2299,28 +2070,6 @@
       "id": "session.op_needs_exactly_one_kind_fields",
       "source": "session.rs",
       "template": "error: {op} needs exactly one kind; fields are per kind.",
-      "tool": "compute",
-      "why_no_example": ""
-    },
-    {
-      "argument": "group",
-      "example": [
-        {
-          "args": {
-            "group": "effort",
-            "kind": "person",
-            "name": "Ray",
-            "op": "balance"
-          },
-          "think": null,
-          "tool": "compute",
-          "user": null
-        }
-      ],
-      "family": "cardinality",
-      "id": "session.balance_takes_no_group",
-      "source": "session.rs",
-      "template": "error: balance takes no group.",
       "tool": "compute",
       "why_no_example": ""
     },
@@ -2429,34 +2178,13 @@
     },
     {
       "argument": "args",
-      "example": [
-        {
-          "args": {
-            "kind": "group",
-            "name": "Tahoe Trip"
-          },
-          "think": null,
-          "tool": "find",
-          "user": null
-        },
-        {
-          "args": {
-            "args": "group: #1\namount: €5",
-            "kind": "person",
-            "name": "Ray",
-            "verb": "settle_up"
-          },
-          "think": null,
-          "tool": "act",
-          "user": null
-        }
-      ],
+      "example": null,
       "family": "value",
       "id": "whr.amounts_are_in_currency_here_x",
       "source": "whr.rs",
       "template": "error: amounts are in {currency} here; \"{}\" names {}. Write the number in {currency}.",
       "tool": "act",
-      "why_no_example": ""
+      "why_no_example": "defensive: a currency symbol is checked only against an amount field, and no kind the assistant reads has one until Money is read again (symbol_conflict has no caller)"
     },
     {
       "argument": "",
@@ -2533,8 +2261,8 @@
       "example": [
         {
           "args": {
-            "kind": "debt",
-            "where": "task count > 1"
+            "kind": "event",
+            "where": "album count > 1"
           },
           "think": null,
           "tool": "find",
@@ -2856,128 +2584,6 @@
       "source": "whr.rs",
       "template": "error: {field} has no value \"{value}\". {} {field} values: {}.",
       "tool": "find",
-      "why_no_example": ""
-    },
-    {
-      "argument": "name",
-      "example": [
-        {
-          "args": {
-            "kind": "person",
-            "name": "Zed",
-            "op": "balance"
-          },
-          "think": null,
-          "tool": "compute",
-          "user": null
-        }
-      ],
-      "family": "cardinality",
-      "id": "values.balance_needs_one_x_the_selection",
-      "source": "values.rs",
-      "template": "error: balance needs one {}; the selection holds none.{what}",
-      "tool": "compute",
-      "why_no_example": ""
-    },
-    {
-      "argument": "kind",
-      "example": [
-        {
-          "args": {
-            "kind": "person",
-            "op": "balance"
-          },
-          "think": null,
-          "tool": "compute",
-          "user": null
-        }
-      ],
-      "family": "cardinality",
-      "id": "values.balance_is_for_one_x_the",
-      "source": "values.rs",
-      "template": "error: balance is for one {}; the selection holds {}: {}.",
-      "tool": "compute",
-      "why_no_example": ""
-    },
-    {
-      "argument": "name",
-      "example": [
-        {
-          "args": {
-            "kind": "person",
-            "name": "Sam Park",
-            "op": "balance"
-          },
-          "think": null,
-          "tool": "compute",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "values.that_is_you_balance_is_you",
-      "source": "values.rs",
-      "template": "error: that is you; balance is you versus someone else.",
-      "tool": "compute",
-      "why_no_example": ""
-    },
-    {
-      "argument": "linked_to",
-      "example": [
-        {
-          "args": {
-            "kind": "person",
-            "name": "Neha Rao"
-          },
-          "think": null,
-          "tool": "find",
-          "user": null
-        },
-        {
-          "args": {
-            "kind": "person",
-            "name": "Ray Ochoa"
-          },
-          "think": null,
-          "tool": "find",
-          "user": null
-        },
-        {
-          "args": {
-            "kind": "group",
-            "linked_to": "#9, #10",
-            "name": "Tahoe Trip",
-            "op": "balance"
-          },
-          "think": null,
-          "tool": "compute",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "values.a_group_s_balance_is_one",
-      "source": "values.rs",
-      "template": "error: a group's balance is one person's: kind=group linked_to=#n (the person) op=balance.",
-      "tool": "compute",
-      "why_no_example": ""
-    },
-    {
-      "argument": "kind",
-      "example": [
-        {
-          "args": {
-            "kind": "task",
-            "op": "balance"
-          },
-          "think": null,
-          "tool": "compute",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "values.balance_is_defined_for_person_and",
-      "source": "values.rs",
-      "template": "error: balance is defined for person and for group (with linked_to a person), not for {}.",
-      "tool": "compute",
       "why_no_example": ""
     },
     {

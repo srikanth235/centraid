@@ -76,7 +76,7 @@ fn the_focus_line_names_the_rows_of_the_last_result() {
     );
     assert_eq!(
         focus(&mut session, "the second one").as_deref(),
-        Some("focus: @1: #9 task \"Pay rent\", #10 task \"Book the cabin\"")
+        Some("focus: @1: #7 task \"Pay rent\", #8 task \"Book the cabin\"")
     );
     // a later result is the last one
     call(
@@ -151,7 +151,7 @@ fn a_value_is_a_set_of_its_own_after_the_rows() {
 fn the_focus_line_holds_the_rows_created_this_session() {
     let world = seeded();
     let mut session = world.session();
-    session.user("make a group called Lisboa");
+    session.user("make a notebook called Lisboa");
     let made = call(
         &mut session,
         "act",
@@ -162,7 +162,7 @@ fn the_focus_line_holds_the_rows_created_this_session() {
         .expect("a number");
     assert_eq!(
         focus(&mut session, "put ray in it").as_deref(),
-        Some(format!("focus: created #{n} group \"Lisboa\"").as_str())
+        Some(format!("focus: created #{n} notebook \"Lisboa\"").as_str())
     );
     // a second create joins it, in order
     call(
@@ -172,7 +172,7 @@ fn the_focus_line_holds_the_rows_created_this_session() {
     );
     let line = focus(&mut session, "and the flights").expect("a focus line");
     assert!(
-        line.starts_with(&format!("focus: created #{n} group \"Lisboa\", #"))
+        line.starts_with(&format!("focus: created #{n} notebook \"Lisboa\", #"))
             && line.contains("task \"Book flights\""),
         "{line}"
     );
@@ -299,7 +299,7 @@ fn the_asked_options_show_at_most_the_row_cap_and_count_the_rest() {
 fn the_three_parts_come_in_order_and_the_block_adds_the_vault_and_dates_lines() {
     let world = seeded();
     let mut session = world.session();
-    session.user("make a group called Lisboa");
+    session.user("make a notebook called Lisboa");
     call(
         &mut session,
         "act",
@@ -372,7 +372,7 @@ fn without_pre_grounding_the_turn_has_no_block() {
             ..Flags::default()
         },
     );
-    session.user("make a group called Lisboa");
+    session.user("make a notebook called Lisboa");
     call(
         &mut session,
         "act",
@@ -501,7 +501,7 @@ fn an_ask_that_already_lists_every_candidate_is_left_as_it_is() {
 #[test]
 fn an_ask_whose_options_are_not_among_the_candidates_is_untouched() {
     let (_world, mut session, listed) = at_neha();
-    // #1 is a group the directory numbered: a row the ambiguity never listed
+    // #1 is an album the directory numbered: a row the ambiguity never listed
     let asked = call(
         &mut session,
         "ask",
@@ -660,7 +660,7 @@ fn the_ask_the_runtime_ends_a_pick_with_is_held_in_focus_and_never_completed() {
 fn a_created_row_that_was_undone_leaves_the_focus_line() {
     let world = seeded();
     let mut session = world.session();
-    session.user("make a group called Lisboa");
+    session.user("make a notebook called Lisboa");
     call(
         &mut session,
         "act",

@@ -172,8 +172,7 @@
               "count",
               "sum",
               "min",
-              "max",
-              "balance"
+              "max"
             ],
             "type": "string"
           },
@@ -258,7 +257,7 @@
       "parameters": {
         "properties": {
           "args": {
-            "description": "field: value lines, dates as date expressions (create: name and fields, kind as the kind param · edit: field: value, or body+: / description+: text to add · reschedule, add_to: to · remove_from: from · log: kind · settle_up: group · reveal: field)",
+            "description": "field: value lines, dates as date expressions (create: name and fields, kind as the kind param · edit: field: value, or body+: / description+: text to add · reschedule, add_to: to · remove_from: from · log: kind · reveal: field)",
             "type": "string"
           },
           "exclude": {
@@ -311,8 +310,6 @@
               "add_to",
               "remove_from",
               "log",
-              "settle_up",
-              "settle_debt",
               "reveal",
               "undo"
             ],
@@ -413,8 +410,7 @@
               "count",
               "sum",
               "min",
-              "max",
-              "balance"
+              "max"
             ],
             "type": "string"
           },

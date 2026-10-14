@@ -470,7 +470,7 @@ fn every_error_family_has_an_example_that_produces_it_or_says_why_not() {
             ),
         }
     }
-    assert!(with_example >= 125, "{with_example} examples");
+    assert!(with_example >= 116, "{with_example} examples");
 }
 
 #[test]
@@ -686,9 +686,9 @@ fn ten_slot_sets_compile_to_the_calls_the_reference_run_makes() {
     compiles_to(|_| {
         (
             "what is in the home list".into(),
-            json!({"intent": "read", "kind": "task", "linked_to": [{"pick": {"row": "#8"}}],
+            json!({"intent": "read", "kind": "task", "linked_to": [{"pick": {"row": "#6"}}],
                    "where": [{"field": "effort", "op": "<=", "value": 60}]}),
-            json!({"tool": "answer", "args": {"kind": "task", "linked_to": ["#8"], "where": "effort <= 60"}}),
+            json!({"tool": "answer", "args": {"kind": "task", "linked_to": ["#6"], "where": "effort <= 60"}}),
         )
     });
 }
@@ -745,7 +745,7 @@ fn a_slot_that_does_not_compile_is_refused_with_its_name() {
         &world,
         "tick off the rent",
         json!({"intent": "write", "verb": "complete",
-               "pick": [{"row": "#8", "verdict": "no"}, {"row": "#40", "verdict": "ok"}]}),
+               "pick": [{"row": "#6", "verdict": "no"}, {"row": "#40", "verdict": "ok"}]}),
     );
     assert_eq!(why["slot"], "pick[1]", "{why}");
     assert!(
@@ -756,7 +756,7 @@ fn a_slot_that_does_not_compile_is_refused_with_its_name() {
     let why = refused(
         &world,
         "",
-        json!({"intent": "read", "kind": "task", "linked_to": ["#8", "#77"]}),
+        json!({"intent": "read", "kind": "task", "linked_to": ["#6", "#77"]}),
     );
     assert_eq!(why["slot"], "linked_to[1]", "{why}");
     // a result that was never issued
