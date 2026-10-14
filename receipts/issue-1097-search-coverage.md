@@ -204,6 +204,62 @@ The owner answered the seven open questions on 2026-10-14 and took every recomme
 3. *The social pair.* The four rebuilt content triggers removed from the rung while the social tables are dropped: `knowledge.create_note` errors with `no such table: main.fts_social_message`, and the climb test fails on "an object still names fts_social_message". Restored.
 4. *The door still refuses `locker.item`.* A `locker.item` domain added to `DOMAINS` in a throwaway: `an_entity_with_sealed_columns_is_not_a_domain_and_asking_is_a_refusal` fails ("locker.item answered Ok(Data { … Cabin booking site … }) rather than refusing"), and so do the other three Locker tests. Restored (`git diff` of `crates/search/src` empty).
 
+### Lane F — containers as search results of their own
+
+The owner folded the containers half of Q-1097-2 (b) into #1097 on 2026-10-14. Lane F is its Rust half; the Kotlin, SwiftUI and Compose half is lane F2, after it. Rung 013 has run nowhere, so it is **amended in place** again: no rung 014, `LADDER` stays at thirteen rungs. Doctrine digest the lane worked under: law `b4ce8d9df2f4` (`node .governance/law/brief.mjs`). Rulings: R-1097-19 (what a container is), R-1097-20 (containers are not domains) and R-1097-21 (where a container hit appears), in [docs/decisions.md](../docs/decisions.md#containers-are-search-results-of-their-own-1097).
+
+**What it did.**
+
+- **F1, the schema.** `fts_schedule_project` and `fts_social_circle` stop being retired (seven indexes are retired in all, not nine). Both are dropped and created again with the columns they had and with triggers that carry the liveness rule: a project is indexed while `archived_at IS NULL`; a circle while a live `tally_group` (`archived_at IS NULL`) stands on it, with `fts_social_circle_from_tally_group_ai/au/ad` re-indexing the circle when a group is made, archived, restored, re-pointed or deleted (a group is made after its circle and deleted before it, so the circle's own triggers alone cannot see it). `fts_core_concept` is new: a concept of the folders scheme that is not its `root`, with `fts_core_concept_from_core_concept_scheme_au` moving the concepts of a scheme whose URI changes. `fts_core_collection` is untouched. All four get an `fts_<index>_vocab`. **The name `fts_core_concept`**: the repo's convention is `fts_<table>` (the door's registry tests hold it), and an index of a guarded table holds the live subset of it, as every soft-delete index does; a name that said "folder" would be the one index not named for its table. **Kind to app**: a join at query time, not a column. `core_collection.kind` is immutable (rung six) and the door already joins the base row, so the index carries no column its table lacks, nothing was rebuilt, and no trigger needed to learn the kind.
+- **F2a, the door.** `crates/search/src/containers.rs` is `CONTAINERS`, a registry beside `DOMAINS` (which stays seven): entity, the app a row opens in (one app, or by a column of the base row), table, index, id, labels, an archive column, guards (SQL over the base row that names every column it reads) and weights. `SqliteDoor::open` runs the sealed check over projected columns and guard reads, and refuses an index with a column the table lacks (a container folds nothing in) or a weight list of the wrong length. `query` and `correct` accept a container entity through one `Probe`, so one statement shape serves both registries; anything else stays `NotADomain`. `SearchRequest::in_app` narrows a shared index to one app.
+- **F2b, core and wire.** `crates/core/src/app_query/containers.rs`: `of_app` (an app's own containers, each probe narrowed to the app), `of_all` (Home, one probe per container index, isolated) and `opened` (a circle is opened by its `tally_group.group_id`, and a circle with no live group is dropped). Home appends container hits as `VaultSearchHit`s. `NotesSearch`, `TasksSearch`, `DocsSearch` and `TallySearch` gain `repeated ContainerHit containers` (`container.proto`). `corrected_search` takes the pair (rows, containers) as one answer, corrects only when both are empty and nothing was denied, and reads the domain's and the containers' vocabularies. Tally's walk stays a walk (`phone::load_search_with(.., correct)`): it corrects its own words only when no group matched exactly, and when both come back empty the door's group-name vocabulary is asked and both are run again.
+- **F3, docs.** R-1097-19 to 21; R-1097-14 now says the owner folded it into #1097; R-1097-2, 3 and 12 carry supersession pointers.
+
+**Files.**
+
+- `contracts/migrations/013_search_coverage.sql`: sections 6a to 6c and the vocabularies, the header (R2a, R3, the new R5).
+- `contracts/schema/vault-ddl.sql`: regenerated with `cargo run -q -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl.sql` (155 `CREATE TABLE`, 11 FTS5 tables and 11 `fts5vocab`, from 140, 8 and 7).
+- `crates/vault/tests/search_coverage.rs`: `assert_containers_match` (an oracle of plain joins, apart from the triggers), six tests for the containers (collections, projects, circles, folders, vocabularies, no stored rank), the wind-back and the climb test for the new objects.
+- `crates/vault/tests/baseline.rs`: `LADDER_OBJECTS` 48 to 65, `DROPPED_OBJECTS` 204 to 186, `ALTERED_OBJECTS` 28 to 34, FTS shadow count 40 to 55, sync triggers `51 - 21 + 12 + 1 + 1 + 8 + 4 + 3`.
+- `crates/vault/src/migrations.rs` (comment).
+- `crates/search/src/containers.rs` (new), `crates/search/src/lib.rs`, `crates/search/src/sqlite.rs`, `crates/search/tests/door.rs`, `crates/search/README.md`.
+- `crates/api-proto/proto/centraid/core/v1/container.proto` (new), `notes.proto`, `tasks.proto`, `docs.proto`, `tally.proto`, `vault_search.proto`, `crates/api-proto/build.rs`.
+- `crates/apps/tally/src/phone.rs` (`load_search_with`).
+- `crates/core/src/app_query.rs`, `crates/core/src/app_query/containers.rs` (new), `notes.rs`, `tasks.rs`, `docs.rs`, `tally.rs`, `vault.rs`, `tasks_tests.rs`, `docs_tests.rs`, `tally_tests.rs`.
+- `docs/decisions.md`, `docs/vault-ontology.md`, `crates/vault/README.md`, `contracts/README.md`, `CHANGELOG.md`.
+
+**Wire (for lane F2).** `ContainerHit { entity = 1, id = 2, title = 3, app_id = 4, snippet = 5, open_id = 6 }`; `NotesSearch.containers = 3`, `TasksSearch.containers = 5`, `DocsSearch.containers = 4`, `TallySearch.containers = 4`. Entities: `core.collection` (a notebook, `app_id` `notes`, or an album, `app_id` `photos`; `id` is the collection id and the open key), `schedule.project` (`id` is the project id), `social.circle` (a Tally group; `id` is the circle id and `open_id` is the `tally_group.group_id` the app opens by), `core.concept` (a Docs folder; `id` is the concept id). Home carries the same as `VaultSearchHit`s after the domains' rows, `subtitle` = the app id, `open_id` set for a group.
+
+**Verification.**
+
+| # | Command | Outcome |
+| --- | --- | --- |
+| F1 | `cargo test -p centraid-search -p centraid-vault -p centraid-core -p centraid-apps-notes -p centraid-apps-tally -p centraid-apps-tasks -p centraid-apps-docs --no-fail-fast` | **1,174 passed, 0 failed, 3 ignored** across the seven packages and their doc tests (`exit=0`) |
+| F2 | `cargo check --workspace --all-targets` | finished clean (1 m 26 s) |
+| F3 | `cargo test -p centraid-vault --test ladder_ddl` | 3 passed; the fixture is `cargo run -q -p centraid-vault --bin export-ladder-ddl` byte for byte |
+| F4 | `bun run check:push:static` | 4/4 gates passed (`format:check`, `lint`, `turbo:lint`, `typecheck:affected`); the untracked `.lane-f-notes.md` was formatted first, as the close pass did for its notes file |
+| F5 | `node .governance/law/run.mjs --range 874fcd521..HEAD` | 10 rules, no findings, over the four lane F commits and everything beneath them |
+| F6 | `cargo xtask gate --profile local`, alone | every step green (fmt 2.4 s, clippy 68.9 s, test 1,869.5 s, restore-drill 36.9 s, rules 0.4 s, ledgers 0.2 s); last line `gate local: FAIL — over budget`, 1,978.3 s against 120 s, which is Inherited red row 1 (the budget was not touched) |
+
+**Decisions.**
+
+- *Containers are not domains, they are a second registry.* A domain that grew an eighth member would grow the Notes `[[` sheet with it, and `load_link_targets` and its tests (`DOMAINS.len() == 7`) would move. A second list passes the same open-time checks and costs a `Probe` shared by both.
+- *Liveness is in the index and at the door.* The triggers keep the indexes to live rows (so a vocabulary offers no archived group's word); the door repeats the rule (`deleted_column`, `guards`) because a guard that lives only in a trigger answers a row written into an index by hand. `the_door_does_not_find_a_dead_container_that_got_into_an_index` is that case.
+- *A circle is indexed through its group.* People has no circles screen and Tally writes every circle with a group, so a circle with no live group is no result; the alternative, indexing every circle and filtering at the door, would leave an archived group's name in the vocabulary.
+- *`SearchRequest::in_app`* rather than filtering after the page: the kit's page is the window plus one row, and dropping rows after it makes `next` claim a continuation the caller cannot use (the same lesson as the excluded ids).
+- *The app answers carry `ContainerHit`; Home carries `VaultSearchHit`.* Home's hit already has a subtitle and a local day, and the shell groups by `app_id`; the apps' answers need neither.
+- *Tally's correction.* The walk corrects over the words of the expenses it walked, the door over the group names. Neither is a superset of the other, so the order is: exact group names first; the walk's own correction only when no group matched exactly; then the group vocabulary only when both are empty. A slip in a word an expense holds is corrected as before, and no group is asked for the corrected words unless it is.
+- *Out:* calendars (one seeded, no create command, no destination) and People circles (no UI).
+
+**Falsification.** Each mutant was applied to the working tree, run, and restored.
+
+1. *The project archive guard.* The `archived_at IS NULL` removed from the project's insert and update triggers: `a_project_is_indexed_while_it_is_not_archived_and_a_rename_moves_the_hit` fails. Restored.
+2. *The root.* `notation <> 'root'` removed from the folder triggers: `a_folder_is_indexed_and_the_root_a_tag_and_another_scheme_never_are` and `every_container_vocabulary_answers_term_and_doc_for_a_planted_word` fail. Restored.
+3. *The circle's group triggers.* `fts_social_circle_from_tally_group_au` removed: `a_circle_is_indexed_only_while_a_live_tally_group_stands_on_it` and the climb test fail (an archived group stays found). The circle's liveness guard removed from its own insert and update triggers: the circle test fails. `fts_core_concept_from_core_concept_scheme_au` removed: the folder test and the climb test fail. Restored.
+4. *The door's belt.* `deleted_column` and both guards removed from `CONTAINERS` in a throwaway: `the_door_does_not_find_a_dead_container_that_got_into_an_index` fails and the 41 other door tests pass, which is the point (they go through the triggers). Restored from a copy.
+5. *The app narrowing.* `.in_app(app)` removed from `of_app`: `a_notebook_is_found_by_name_and_an_album_is_not_notes` fails (the album is a Notes hit). Restored.
+6. *The group's open key.* `opened` made to open a circle by its own id: `a_group_is_found_by_name_and_opens_by_its_group_id`, `the_correction_treats_expenses_and_groups_as_one_answer` and `every_container_is_a_home_hit_with_its_app_and_open_id` fail. Restored.
+
 ## Verification
 
 All commands run in the lane worktree on the working tree, with `CARGO_TARGET_DIR` set to the worktree's own `target/`.

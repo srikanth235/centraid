@@ -258,7 +258,11 @@ impl World {
     // --- containers (R5) ---
 
     fn notebook(&self, name: &str) -> String {
-        self.id("knowledge.create_notebook", json!({ "name": name }), "notebook_id")
+        self.id(
+            "knowledge.create_notebook",
+            json!({ "name": name }),
+            "notebook_id",
+        )
     }
 
     fn album(&self, title: &str) -> String {
@@ -266,7 +270,11 @@ impl World {
     }
 
     fn project(&self, name: &str) -> String {
-        self.id("schedule.save_project", json!({ "name": name }), "project_id")
+        self.id(
+            "schedule.save_project",
+            json!({ "name": name }),
+            "project_id",
+        )
     }
 
     fn folder(&self, name: &str) -> String {
@@ -2104,8 +2112,14 @@ fn a_notebook_and_an_album_are_indexed_renamed_and_removed() {
     assert_containers_match(world.vault());
 
     // A DELETE IS A HARD DELETE and the hit goes with the row.
-    world.run("knowledge.delete_notebook", json!({ "notebook_id": nested }));
-    world.run("knowledge.delete_notebook", json!({ "notebook_id": notebook }));
+    world.run(
+        "knowledge.delete_notebook",
+        json!({ "notebook_id": nested }),
+    );
+    world.run(
+        "knowledge.delete_notebook",
+        json!({ "notebook_id": notebook }),
+    );
     world.run("media.delete_album", json!({ "album_id": album }));
     for query in ["novels", "lisbon", "cookery"] {
         assert_eq!(world.hits("fts_core_collection", &word(query)), none());
@@ -2141,7 +2155,10 @@ fn a_project_is_indexed_while_it_is_not_archived_and_a_rename_moves_the_hit() {
         "UPDATE schedule_project SET archived_at = '2099-01-01T00:00:00.000Z' WHERE project_id = ?1",
         &[&project],
     );
-    assert_eq!(world.hits("fts_schedule_project", &word("bathroom")), none());
+    assert_eq!(
+        world.hits("fts_schedule_project", &word("bathroom")),
+        none()
+    );
     assert_containers_match(world.vault());
     world.execute_sql(
         "UPDATE schedule_project SET archived_at = NULL WHERE project_id = ?1",
@@ -2167,7 +2184,10 @@ fn a_project_is_indexed_while_it_is_not_archived_and_a_rename_moves_the_hit() {
         "DELETE FROM schedule_project WHERE project_id = ?1",
         &[&project],
     );
-    assert_eq!(world.hits("fts_schedule_project", &word("bathroom")), none());
+    assert_eq!(
+        world.hits("fts_schedule_project", &word("bathroom")),
+        none()
+    );
     assert_containers_match(world.vault());
 }
 
@@ -2360,7 +2380,11 @@ fn every_container_vocabulary_answers_term_and_doc_for_a_planted_word() {
                 )?)
             })
             .unwrap_or_else(|error| panic!("{vocab} does not answer `quokka`: {error}"));
-        assert_eq!((docs, total), (1, 1), "{vocab}: one container holds it once");
+        assert_eq!(
+            (docs, total),
+            (1, 1),
+            "{vocab}: one container holds it once"
+        );
         assert_eq!(
             world.count(&format!(
                 "SELECT COUNT(*) FROM {vocab} WHERE term = 'nosuchword'"
@@ -2370,11 +2394,14 @@ fn every_container_vocabulary_answers_term_and_doc_for_a_planted_word() {
     }
     // A DELETED container leaves its words: a vocabulary offers nothing the
     // member can no longer find.
-    world.run("core.delete_folder", json!({ "folder_id": world.id(
+    world.run(
+        "core.delete_folder",
+        json!({ "folder_id": world.id(
         "core.create_folder",
         json!({ "name": "Wombat" }),
         "folder_id",
-    ) }));
+    ) }),
+    );
     assert_eq!(
         world.count("SELECT COUNT(*) FROM fts_core_concept_vocab WHERE term = 'wombat'"),
         0
