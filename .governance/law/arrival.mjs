@@ -103,10 +103,17 @@ const DEFAULT_BRANCHES = Object.freeze(["origin/main", "origin/master", "main", 
  * detached CI checkout) it falls back to the last commit, which is the smallest
  * honest answer rather than the whole history.
  *
+ * At the hook door (`staged`) HEAD being a trunk's own tip means a branch cut
+ * from it, or a commit landing on it, with nothing committed yet: the range is
+ * empty and only the pending commit is judged, not the tip someone else
+ * already landed (#1103). The window door and a checkout with no trunk keep
+ * the tip-commit fallback.
+ *
  * @param {string} [explicit] A `base..head` string from `--range`.
+ * @param {{staged?: boolean}} [options] `staged` is the hook door.
  * @returns {{base: string, head: string, mergeBase: string|null}} Resolved oids.
  */
-export function resolveRange(explicit) {
+export function resolveRange(explicit, options = {}) {
   if (explicit) {
     const [base, head = "HEAD"] = explicit.split("..");
     const resolved = { base: git(["rev-parse", base]), head: git(["rev-parse", head]) };
@@ -117,6 +124,7 @@ export function resolveRange(explicit) {
   // "the merge-base is HEAD" as "there is no new work" — the case that makes
   // them skip. `hasBase` carries that distinction into the record so a rule
   // reproduces the skip without asking git anything.
+  let atTrunkTip = false;
   for (const candidate of DEFAULT_BRANCHES) {
     try {
       git(["rev-parse", "--verify", candidate]);
@@ -132,6 +140,10 @@ export function resolveRange(explicit) {
     if (mergeBase && mergeBase !== head) {
       return { base: mergeBase, head, mergeBase, hasBase: true };
     }
+    if (mergeBase) atTrunkTip = true;
+  }
+  if (atTrunkTip && options.staged === true) {
+    return { base: head, head, mergeBase: head, hasBase: false };
   }
   // No new work against a trunk. The range is the tip commit alone — which is
   // exactly what `commit-message-format`'s fallback validated — and `hasBase`
@@ -379,7 +391,7 @@ export async function buildArrival(options = {}) {
   // The one fact about the checkout the record may hold, and only at that door:
   // a commit landing straight on the trunk is a completed change. In a
   // `--range` run it is `null` and `completed` derives from the range alone.
-  const range = { ...resolveRange(options.range), onDefaultBranch: onTrunk(staged) };
+  const range = { ...resolveRange(options.range, { staged }), onDefaultBranch: onTrunk(staged) };
   const source = treeSource(staged ? null : range.head);
   const rawCommits = collectCommits(range);
   // One classifier for the whole record: #1002's squash alone carries 1022
