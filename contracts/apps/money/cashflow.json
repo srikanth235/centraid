@@ -1,0 +1,44 @@
+{
+  "_": "Twelve months ending 2024-03, today 2024-03-20. Only the months with money in them are listed; every other month is in 0, out 0, net 0, no rate. Savings rate is net over in in basis points, half away from zero. 2024-03 is partial.",
+  "through": "2024-03",
+  "today": "2024-03-20",
+  "months": 12,
+  "expected": {
+    "USD": [
+      {
+        "month": "2024-01",
+        "in": 300000,
+        "out": 14099,
+        "net": 285901,
+        "savings_rate_bp": 9530,
+        "partial": false
+      },
+      {
+        "month": "2024-02",
+        "in": 300000,
+        "out": 13599,
+        "net": 286401,
+        "savings_rate_bp": 9547,
+        "partial": false
+      },
+      {
+        "month": "2024-03",
+        "in": 302500,
+        "out": 18099,
+        "net": 284401,
+        "savings_rate_bp": 9402,
+        "partial": true
+      }
+    ],
+    "CAD": [
+      {
+        "month": "2024-03",
+        "in": 10000,
+        "out": 3000,
+        "net": 7000,
+        "savings_rate_bp": 7000,
+        "partial": true
+      }
+    ]
+  }
+}

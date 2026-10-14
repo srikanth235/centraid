@@ -55,6 +55,9 @@ pub struct ExistingTxn {
     pub direction: Direction,
     pub description: String,
     pub display_name: Option<String>,
+    /// Voided by the member: it still claims its `external_id` (a re-import is
+    /// `already_in`), but it is never proposed as a duplicate.
+    pub void: bool,
 }
 
 /// What one row would do.
@@ -251,7 +254,7 @@ pub fn plan(
     // Step 4: the fuzzy proposal, one-to-one over what is left.
     let mut index: HashMap<(Direction, i64), Vec<usize>> = HashMap::new();
     for (at, e) in existing.iter().enumerate() {
-        if !claimed.contains(&at) {
+        if !claimed.contains(&at) && !e.void {
             index
                 .entry((e.direction, e.amount_minor))
                 .or_default()

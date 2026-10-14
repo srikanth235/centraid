@@ -18,6 +18,8 @@
 //! [`rules`] is the rule semantics the vault agrees with.
 
 pub mod civil;
+pub mod engine;
 pub mod import;
+pub mod queries;
 pub mod rules;
 pub mod year3;

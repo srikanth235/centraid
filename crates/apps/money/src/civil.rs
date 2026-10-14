@@ -93,6 +93,58 @@ pub fn shift(text: &str, days: i64) -> Option<String> {
     Some(from_day_number(day_number_of(text)? + days))
 }
 
+/// `YYYY-MM` of a `YYYY-MM-DD` (or longer) text.
+#[must_use]
+pub fn month_of(day: &str) -> &str {
+    day.get(..7).unwrap_or(day)
+}
+
+/// Splits `YYYY-MM`.
+#[must_use]
+pub fn parse_month(month: &str) -> Option<(i32, u32)> {
+    let bytes = month.as_bytes();
+    if bytes.len() != 7 || bytes[4] != b'-' {
+        return None;
+    }
+    let year: i32 = month.get(0..4)?.parse().ok()?;
+    let number: u32 = month.get(5..7)?.parse().ok()?;
+    ((1900..=2199).contains(&year) && (1..=12).contains(&number)).then_some((year, number))
+}
+
+/// The month `delta` months from `month` (negative goes back), as `YYYY-MM`.
+#[must_use]
+pub fn add_months(month: &str, delta: i32) -> Option<String> {
+    let (year, number) = parse_month(month)?;
+    let index = year * 12 + i32::try_from(number).ok()? - 1 + delta;
+    let (year, number) = (index.div_euclid(12), index.rem_euclid(12) + 1);
+    Some(format!("{year:04}-{number:02}"))
+}
+
+/// The first day of `month` as the text a posted-at range starts with.
+#[must_use]
+pub fn month_start_stamp(month: &str) -> String {
+    format!("{month}-01T00:00:00Z")
+}
+
+/// Days in a `YYYY-MM` month.
+#[must_use]
+pub fn month_length(month: &str) -> u32 {
+    parse_month(month).map_or(0, |(year, number)| days_in_month(year, number))
+}
+
+/// The day of the month (1-based) of a `YYYY-MM-DD` text.
+#[must_use]
+pub fn day_of_month(day: &str) -> Option<u32> {
+    parse(day).map(|(_, _, d)| d)
+}
+
+/// The weekday of a day number, Monday = 0.
+#[must_use]
+pub fn weekday(day_number: i64) -> u32 {
+    // 1970-01-01 was a Thursday.
+    u32::try_from((day_number + 3).rem_euclid(7)).unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,5 +157,14 @@ mod tests {
         assert_eq!(shift("2023-12-31", 1).as_deref(), Some("2024-01-01"));
         assert!(parse("2023-02-29").is_none());
         assert!(parse("2024-02-29").is_some());
+    }
+
+    #[test]
+    fn months_add_across_years_and_weekdays_count_from_monday() {
+        assert_eq!(add_months("2024-01", -1).as_deref(), Some("2023-12"));
+        assert_eq!(add_months("2024-11", 3).as_deref(), Some("2025-02"));
+        assert_eq!(month_length("2024-02"), 29);
+        assert_eq!(weekday(day_number(2024, 1, 1)), 0);
+        assert_eq!(weekday(day_number(2024, 1, 7)), 6);
     }
 }

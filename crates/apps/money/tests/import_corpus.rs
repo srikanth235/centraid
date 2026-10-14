@@ -70,6 +70,7 @@ fn existing_of(statement: &Statement, prefix: &str) -> Vec<ExistingTxn> {
             direction: row.direction,
             description: row.description.clone(),
             display_name: None,
+            void: false,
         })
         .collect()
 }
@@ -664,6 +665,7 @@ fn a_weekly_same_amount_charge_is_never_proposed_as_last_weeks() {
         direction: Direction::Debit,
         description: "STREAMCO".into(),
         display_name: None,
+        void: false,
     }];
     let plan = plan_of(&weekly, &existing);
     let kinds: Vec<&str> = plan
@@ -719,6 +721,7 @@ fn the_fuzzy_pass_proposes_one_to_one_and_never_across_distinct_fitids() {
         direction: Direction::Debit,
         description: "TARGET T-1234 SAN FRANCISCO".into(),
         display_name: None,
+        void: false,
     };
     let plan = plan_of(&qfx.statement, std::slice::from_ref(&csv_copy));
     assert_eq!(
@@ -752,6 +755,7 @@ fn two_incoming_rows_cannot_claim_the_same_existing_row() {
         direction: Direction::Debit,
         description: "COFFEE SHOP".into(),
         display_name: None,
+        void: false,
     }];
     let plan = plan_of(&statement, &existing);
     assert_eq!(plan.totals.proposed_duplicates, 1);
