@@ -523,3 +523,32 @@ Doctrine: [docs/decisions.md#money-1099](../docs/decisions.md#money-1099) (R-109
 - `scripts/home-site/public/index.html`
 - `scripts/lint-copy.mjs`
 - `scripts/security/rust-unsafe-ledger.json`
+
+## Lane W4 — Money through the core (wave 4)
+
+Doctrine: [`docs/decisions.md#money-1099`](../docs/decisions.md#money-1099) (rulings R-1099-60 to R-1099-63; R-1099-12 is the arm range) and, for the vault half, [`docs/decisions.md#ontology-v0-close-916`](../docs/decisions.md#ontology-v0-close-916). Branch `money/w4`. Owner scope (2026-10-14): no docs prose, no full `pr` gate, no verifier.
+
+### What changed
+
+- **W4-a, `Vault::keyset_page` keeps its cursor at the ceiling.** The `limit + 1` probe was re-clamped to 500 by `page_raw`; it now has its own ceiling (`MAX_PAGE_ROWS + 1`). Money's `PAGE_ROWS` is 500.
+- **W4-b, `external_ref`.** `money.add_account` and `money.edit_account` take it (unique per vault, null clears on edit); the manifest's two action schemas follow, `edit-account` now lists `core.account` in its writes. `import::resolve_account` already matched by full ACCTID; the core now feeds it the stored numbers.
+- **Protos.** `core/v1/money.proto` (new): `MoneySpending`, `MoneyActivity`, `MoneyTransaction`, `MoneyCashflow`, `MoneyAccounts`, `MoneyRules`, `MoneyCategories`, `MoneyTargetSheet`, `MoneyRecurring`, `MoneySearch`, `MoneyHomeTile`, `MoneyImportPlan`. `AppQuery` arms 100-109 in both oneofs (110-119 reserved by comment); `Request.money` / `Response.money` = 32 carry the import plan and the tile. Amounts are `MoneyAmount` in `core.v1`, not `screen.v1.Money` (the core package imports nothing from the shell-internal one).
+- **Core dispatch.** `crates/core/src/app_query/money.rs` converts each phone answer; the plan flow is read, resolve account, load existing/rules/categories/saved layouts, plan, convert, and mint ids for `publish_input`. The statement is read once and dropped.
+- **Demo ledger.** `example::seed_money` (APPS gains `money`; three accounts, about three months of lines, eight rules, three targets); `seed-demo-vault` lists it.
+
+### Files changed or added
+
+- `crates/vault/src/page.rs`, `crates/vault/src/commands/money.rs`, `crates/vault/tests/money_commands.rs`
+- `crates/apps/money/src/queries.rs`, `crates/apps/money/README.md`, `crates/apps/money/manifest.json`
+- `crates/api-proto/proto/centraid/core/v1/money.proto` (new), `crates/api-proto/proto/centraid/core/v1/app_query.proto`, `crates/api-proto/proto/centraid/core/v1/envelope.proto`, `crates/api-proto/build.rs`, `crates/api-proto/tests/roundtrip.rs`
+- `crates/core/Cargo.toml`, `crates/core/src/app_query.rs`, `crates/core/src/app_query/money.rs` (new), `crates/core/src/app_query/money_tests.rs` (new), `crates/core/src/handle.rs`, `crates/core/src/example.rs`
+- `crates/centraid/src/bin/seed-demo-vault.rs`, `scripts/security/rust-unsafe-ledger.json`, `docs/decisions.md`, `CHANGELOG.md`, `receipts/issue-1099-money.md`
+
+### Verification
+
+`cargo test -p centraid-vault -p centraid-apps-money -p centraid-core --all-features`, `cargo xtask rules`, clippy on core and the money crate with `-D warnings`, and `bun run check:push:static`: see the lane report. One run of the `centraid-core` integration tests failed `phone_backup::a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time` while the disk had 3 GB free (the spool is sized from free space); it passes alone with 8 GB free.
+
+### Falsification
+
+1. **A page asked at the ceiling keeps its cursor.** Red on base: with the fix reverted to `MAX_PAGE_ROWS` the new `page.rs` test panics at "one row remains, so a cursor is present"; green with `MAX_PAGE_ROWS + 1`.
+2. **The core's door serves all 17 declared statements.** Throwaway: dropped the `load_saved_profiles` call from `every_statement_the_crate_declares_is_served_by_the_cores_door`; it went red naming `money.import.profile` as never asked. A second throwaway let `publish_input` keep `AlreadyIn` rows; `a_plan_publishes_through_the_command_and_a_replan_offers_nothing` went red at the empty-publish assertion. Both restored.

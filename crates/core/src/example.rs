@@ -41,7 +41,9 @@ use crate::error::Result;
 
 /// The apps the scenario seeds through [`seed`], in the order it seeds them.
 /// Locker is not one of them, and never will be: see the module header.
-pub const APPS: [&str; 6] = ["people", "notes", "docs", "photos", "tasks", "agenda"];
+pub const APPS: [&str; 7] = [
+    "people", "notes", "docs", "photos", "tasks", "agenda", "money",
+];
 
 /// What a seeding pass did not do.
 ///
@@ -122,6 +124,9 @@ pub fn seed(
                 .refused
                 .push("agenda: this vault has no calendar".to_owned()),
         }
+    }
+    if wanted("money") {
+        seed_money(&mut seeder, now_ms);
     }
     Ok(seeder.report)
 }
@@ -250,6 +255,231 @@ impl Seeder<'_> {
             .get(field)
             .and_then(Value::as_str)
             .map(str::to_owned)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Money.
+//
+// "Three accounts and about three months of statement lines, imported the way a
+// member imports them: through `money.import_transactions`, with the dedupe key
+// the app's own reader would have computed. A few rules file the regulars; a
+// handful of lines stay unfiled so Activity has something to ask, and one move
+// between checking and savings is left for the member to accept." (#1099, R-1099-9)
+//
+// Only the dev fixture seeds this; no member's vault ever gets sample rows.
+// ---------------------------------------------------------------------------
+
+/// One statement line: how many days before the anchor, the signed minor
+/// amount and the bank's words.
+struct MoneyLine {
+    days_ago: i64,
+    signed_minor: i64,
+    text: String,
+}
+
+/// A line the seed writes into `account`, at most once per (day, amount, text).
+fn money_rows(
+    now: i64,
+    lines: &[MoneyLine],
+    ordinals: &mut centraid_apps_money::import::keys::Ordinals,
+    first_id: &mut u32,
+) -> Vec<Value> {
+    lines
+        .iter()
+        .map(|line| {
+            let posted_on = day(now, -line.days_ago);
+            let external_id = centraid_apps_money::import::keys::csv_key(
+                ordinals,
+                &posted_on,
+                line.signed_minor,
+                &line.text,
+            );
+            *first_id += 1;
+            json!({
+                "txn_id": format!("demo-money-txn-{first_id}"),
+                "external_id": external_id,
+                "posted_on": posted_on,
+                "amount_minor": line.signed_minor.abs(),
+                "direction": if line.signed_minor < 0 { "debit" } else { "credit" },
+                "description": line.text,
+            })
+        })
+        .collect()
+}
+
+fn seed_money(seeder: &mut Seeder, now: i64) {
+    for (id, name, kind, reference) in [
+        (
+            "demo-money-everyday",
+            "Everyday",
+            "checking",
+            Some("000123456789"),
+        ),
+        (
+            "demo-money-rainy",
+            "Rainy day",
+            "savings",
+            Some("000987654321"),
+        ),
+        ("demo-money-visa", "Visa", "credit_card", None),
+    ] {
+        let mut input = json!({
+            "account_id": id, "name": name, "kind": kind, "currency": "USD",
+        });
+        if let Some(reference) = reference {
+            input["external_ref"] = json!(reference);
+        }
+        seeder.run("money.add_account", input);
+    }
+
+    let line = |days_ago: i64, signed_minor: i64, text: &str| MoneyLine {
+        days_ago,
+        signed_minor,
+        text: text.to_owned(),
+    };
+    let mut everyday = Vec::new();
+    let mut rainy = Vec::new();
+    let mut visa = Vec::new();
+    // Pay every other Friday, rent and a streaming charge once a month.
+    for fortnight in 0..7 {
+        everyday.push(line(
+            3 + fortnight * 14,
+            214_000,
+            "PAYROLL SIERRA DESIGN CO",
+        ));
+    }
+    for month in 0..3 {
+        let base = 4 + month * 30;
+        everyday.push(line(base, -165_000, "RENT PAYMENT ALPINE PROPERTIES"));
+        everyday.push(line(base + 2, -1_549, "NETFLIX.COM"));
+        everyday.push(line(base + 6, -7_200, "COMCAST CABLE 8001234"));
+        everyday.push(line(base + 9, -50_000, "TRANSFER TO RAINY DAY"));
+        rainy.push(line(base + 9, 50_000, "TRANSFER FROM EVERYDAY"));
+        rainy.push(line(base + 1, -100, "MONTHLY SERVICE FEE"));
+    }
+    // Groceries and coffee on the checking card; fuel and dining on the Visa.
+    for visit in 0..16 {
+        let cents = 5_100 + (visit * 977) % 6_400;
+        everyday.push(line(1 + visit * 5, -cents, "WHOLE FOODS MKT #10234"));
+    }
+    for visit in 0..28 {
+        everyday.push(line(
+            visit * 3,
+            -(575 + (visit % 4) * 25),
+            "STARBUCKS STORE 12345",
+        ));
+    }
+    for fill in 0..7 {
+        visa.push(line(
+            2 + fill * 12,
+            -(4_200 + (fill * 313) % 1_900),
+            "SHELL OIL 574441",
+        ));
+    }
+    for night in 0..12 {
+        visa.push(line(
+            5 + night * 7,
+            -(3_800 + (night * 541) % 4_700),
+            "SQ *CORNER BISTRO",
+        ));
+    }
+    // Two lines no rule files, so Activity has something to ask about.
+    visa.push(line(9, -6_480, "AMZN MKTP US*2K4LM1"));
+    visa.push(line(21, -12_999, "SQ *LOCAL SHOP"));
+
+    // Dated oldest first within each account, as a statement is; the keys carry
+    // an ordinal per (day, amount, text) triple so identical lines stay two.
+    let mut next_id = 0;
+    for (account, mut lines) in [
+        ("demo-money-everyday", everyday),
+        ("demo-money-rainy", rainy),
+        ("demo-money-visa", visa),
+    ] {
+        lines.sort_by_key(|l| std::cmp::Reverse(l.days_ago));
+        let mut ordinals = centraid_apps_money::import::keys::Ordinals::default();
+        let rows = money_rows(now, &lines, &mut ordinals, &mut next_id);
+        seeder.run(
+            "money.import_transactions",
+            json!({ "account_id": account, "source": "csv", "rows": rows }),
+        );
+    }
+
+    // The regulars are filed by rules, applied to what is already in.
+    for (rule, pattern, category, name) in [
+        (
+            "demo-money-rule-pay",
+            "PAYROLL",
+            "money:cat:income.pay",
+            "Payroll",
+        ),
+        (
+            "demo-money-rule-rent",
+            "RENT PAYMENT",
+            "money:cat:housing.rent",
+            "Rent",
+        ),
+        (
+            "demo-money-rule-netflix",
+            "NETFLIX",
+            "money:cat:fun.subscriptions",
+            "Netflix",
+        ),
+        (
+            "demo-money-rule-comcast",
+            "COMCAST",
+            "money:cat:utilities.phone",
+            "Comcast",
+        ),
+        (
+            "demo-money-rule-wf",
+            "WHOLE FOODS",
+            "money:cat:food.groceries",
+            "Whole Foods",
+        ),
+        (
+            "demo-money-rule-sbux",
+            "STARBUCKS",
+            "money:cat:food.dining",
+            "Starbucks",
+        ),
+        (
+            "demo-money-rule-shell",
+            "SHELL OIL",
+            "money:cat:transport.fuel",
+            "Shell",
+        ),
+        (
+            "demo-money-rule-bistro",
+            "CORNER BISTRO",
+            "money:cat:food.dining",
+            "Corner Bistro",
+        ),
+    ] {
+        seeder.run(
+            "money.add_rule",
+            json!({
+                "rule_id": rule, "match_kind": "contains", "pattern": pattern,
+                "set_category_concept_id": category, "set_display_name": name,
+            }),
+        );
+        seeder.run("money.apply_rule_to_history", json!({ "rule_id": rule }));
+    }
+
+    // A plan for this month, so Spending has something to be measured against.
+    let month = day(now, 0)[..7].to_owned();
+    for (category, minor) in [
+        ("money:cat:food.groceries", 55_000),
+        ("money:cat:food.dining", 30_000),
+        ("money:cat:transport.fuel", 25_000),
+    ] {
+        seeder.run(
+            "money.set_target",
+            json!({
+                "month": month, "category_concept_id": category,
+                "amount_minor": minor, "currency": "USD", "carry": true,
+            }),
+        );
     }
 }
 

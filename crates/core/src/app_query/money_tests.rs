@@ -979,3 +979,58 @@ fn the_bytes_of_a_statement_are_in_no_answer_and_an_answer_round_trips() {
         assert!(stored.rows.is_empty(), "{month}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// 6. The demo ledger (R-1099-9).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_demo_ledger_seeds_whole_through_the_real_commands_and_reads_back() {
+    let scratch = Scratch::founded();
+    let now = centraid_vault::time::recurrence::parse_instant_ms(NOW).expect("an instant");
+    let report = scratch
+        .handle
+        .with_vault(|vault| {
+            let registry = centraid_vault::commands::Registry::with_system_commands()?;
+            crate::example::seed(
+                vault,
+                &registry,
+                &centraid_vault::Principal::owner("demo"),
+                &|app| app == "money",
+                now,
+            )
+        })
+        .expect("the ledger seeds");
+    assert!(report.is_whole(), "the ledger seeds whole: {report:?}");
+
+    let february = scratch.spending("");
+    assert!(!february.empty);
+    assert!(
+        february.categories.iter().any(|c| c.planned.is_some()),
+        "a plan to be measured against"
+    );
+    let accounts = match scratch.ask(Q::MoneyAccounts(wire::MoneyAccountsRequest {
+        tz: TZ.to_owned(),
+    })) {
+        Answer::MoneyAccounts(accounts) => accounts,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(accounts.on_budget.len() + accounts.off_budget.len(), 3);
+    // A handful of lines are left unfiled, so Activity has something to ask.
+    let needing = scratch.activity(wire::MoneyActivityRequest {
+        tz: TZ.to_owned(),
+        month: "2024-01".to_owned(),
+        limit: 50,
+        category_filter: wire::MoneyCategoryFilter::Uncategorised as i32,
+        ..wire::MoneyActivityRequest::default()
+    });
+    assert!(!needing.rows.is_empty());
+    // And the recurring charges are found in what was seeded.
+    let recurring = match scratch.ask(Q::MoneyRecurring(wire::MoneyRecurringRequest {
+        tz: TZ.to_owned(),
+    })) {
+        Answer::MoneyRecurring(recurring) => recurring,
+        other => panic!("{other:?}"),
+    };
+    assert!(!recurring.series.is_empty());
+}

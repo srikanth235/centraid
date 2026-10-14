@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - **Money's vault half** ([#1099](https://github.com/srikanth235/centraid/issues/1099)), in progress. Rung 14 gives a vault the tables Money keeps a member's decisions in (an account's name and kind, a line's own name, a plan per category and month, rules, a remembered statement layout, a stated balance), lands a statement line once per account, holds a Money account to one currency and an imported line to never being edited, and seeds the `transfer` relation and 23 starter categories. Twenty `money.*` commands write them: importing the same file twice writes nothing, voiding never deletes, and merging a category rewrites every line, rule and plan in one commit. No app screen yet.
+- **Money reaches the phone's core** ([#1099](https://github.com/srikanth235/centraid/issues/1099)), in progress. The core answers Money's ten screens (`AppQuery` arms 100–109), plans a bank or card statement the member picks (CSV, OFX, QFX) without keeping its bytes, and serves Home's tile; an account can carry the bank's own account number so an OFX file finds it. A list that asked for exactly 500 rows no longer loses its next page. The development vault gets about three months of sample lines.
 
 ### Changed
 

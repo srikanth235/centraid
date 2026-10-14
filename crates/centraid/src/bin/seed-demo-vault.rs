@@ -17,13 +17,13 @@
 //! and Photos as genuinely empty, which is a state the grid already knows
 //! how to say and does not have to invent.
 //!
-//! **One scenario across seven apps** — agenda, docs, locker, notes, people,
-//! photos and tasks: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
+//! **One scenario across eight apps** — agenda, docs, locker, money, notes,
+//! people, photos and tasks: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
 //! Chris, with notes and a packing list. A demo
 //! corpus is for reading like somebody's life rather than like
 //! `Item 1, Item 2`.
 //!
-//! **SIX OF THE SEVEN ARE THE LIBRARY'S.** The scenario lives in
+//! **SEVEN OF THE EIGHT ARE THE LIBRARY'S.** The scenario lives in
 //! `centraid_core::example`, which the chat's tests seed too, so a fixture and
 //! the rows those tests read are one set. This binary is the thin caller: the command line, the guard below, the byte store, the
 //! count it prints — and Locker, which is the one app that stays here because
@@ -250,7 +250,7 @@ fn main() {
     let now = centraid_core::example::now_ms();
     let mut report = handle
         .with_vault(|vault| {
-            let founded = vault.found(&vault_name, "Owner")?;
+            vault.found(&vault_name, "Owner")?;
             let registry = Registry::with_system_commands()?;
             let principal = Principal::owner("demo-device");
             centraid_core::example::seed(vault, &registry, &principal, &|app| wanted.has(app), now)
@@ -318,13 +318,14 @@ fn main() {
 /// with a live `people_profile` (#1047), so its mirror counts the profiles —
 /// this seeder trashes none, so every profile is live. Locker counts live,
 /// unarchived items, as its tile does; the trashed demo item is not one.
-const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 7] = [
+const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
     ("photos", "media_asset", "asset_id", None),
     ("docs", "core_document", "document_id", None),
     ("notes", "knowledge_note", "note_id", None),
     ("agenda", "core_event", "event_id", None),
     ("tasks", "schedule_task", "task_id", None),
     ("people", "people_profile", "profile_id", None),
+    ("money", "core_transaction", "txn_id", None),
     (
         "locker",
         "locker_item",
