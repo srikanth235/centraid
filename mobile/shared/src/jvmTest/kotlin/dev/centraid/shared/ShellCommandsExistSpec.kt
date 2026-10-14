@@ -3,7 +3,6 @@ package dev.centraid.shared
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.people.PeopleTrashSpec
 import dev.centraid.shared.apps.photos.FaceReviewMachine
-import dev.centraid.shared.apps.tally.TallyExpenseMachine
 import dev.centraid.shared.apps.tasks.TasksTrashSpec
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
@@ -35,8 +34,8 @@ import java.io.File
  *
  * The first draft of this pointed at `contracts/apps/<app>/commands.json` and
  * was wrong in a useful way: those bundles are SCENARIOS — the cases a parity
- * test replays — not the registry, so `tally.materialize_recurring_expense`
- * (which is real, `crates/vault/src/commands/tally.rs`) is absent from them and
+ * test replays — not the registry, so a command that is real and has no scenario
+ * (Tally's `materialize_recurring_expense` was one) is absent from them and
  * the gate failed a name that exists. An oracle that is a sample of the surface
  * will fail honest callers, which is worse than not having one.
  *
@@ -78,7 +77,6 @@ class ShellCommandsExistSpec : StringSpec({
     val shellCommands = mapOf(
         "NotesEditorMachine.SAVE_COMMAND" to NotesEditorMachine.SAVE_COMMAND,
         "FaceReviewMachine.CREATE_PERSON_COMMAND" to FaceReviewMachine.CREATE_PERSON_COMMAND,
-        "TallyExpenseMachine.MEMO_COMMAND" to TallyExpenseMachine.MEMO_COMMAND,
         "TasksTrashSpec.restoreCommand" to TasksTrashSpec.restoreCommand,
         "TasksTrashSpec.purgeCommand" to TasksTrashSpec.purgeCommand.orEmpty(),
         "PeopleTrashSpec.purgeCommand" to PeopleTrashSpec.purgeCommand.orEmpty(),

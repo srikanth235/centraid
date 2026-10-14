@@ -7,7 +7,7 @@ import SwiftUI
 /// `contracts/tools/export-native-catalog.ts` — the same 24×24 silhouettes the
 /// web renderer and Compose draw. SF Symbols are deliberately NOT used here: a
 /// second set is a second product, and Home's invariant header promises that
-/// eight unlike bodies read as one grid. A `lock.fill` beside Compose's Lucide
+/// seven unlike bodies read as one grid. A `lock.fill` beside Compose's Lucide
 /// lock is exactly the shells disagreeing that this wave exists to stop.
 ///
 /// SINGLE TONE. One stroke in one colour — no duotone, no fill behind the

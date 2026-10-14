@@ -43,7 +43,7 @@ public class ScreenHost<S, E>(public val machine: ScreenMachine<S, E>) {
      * `LOADING` and stayed there.
      *
      * It was invisible on a single-threaded dispatcher and appeared the moment
-     * a real core answered from a pool: Docs, People and Tally sat loading on a
+     * a real core answered from a pool: Docs and People sat loading on a
      * simulator while Notes, Agenda and Tasks drew their rows, every run.
      *
      * A `Mutex` and not a single-threaded dispatcher, because which dispatcher

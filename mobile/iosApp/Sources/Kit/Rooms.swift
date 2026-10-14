@@ -22,7 +22,7 @@ import CentraidShared
 /// **SEARCH IS ALWAYS IN THE SAME PLACE** (R-CHROME-2): closed, the slot is a
 /// field-shaped bar reading the placeholder, and a tap sends `onOpen`; open,
 /// it is the field. Never a More row, a bar glyph or a band tab. An app whose
-/// search is a page of its own (Photos, Tally) pushes it from `onOpen` and
+/// search is a page of its own (Photos) pushes it from `onOpen` and
 /// never sets `field.open`.
 struct SearchSlot {
     let field: Centraid_Screen_V1_SearchField

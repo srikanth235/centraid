@@ -35,7 +35,6 @@ public object SpringboardPolicy {
         "agenda",
         "tasks",
         "people",
-        "tally",
         "locker",
     )
 
@@ -51,7 +50,6 @@ public object SpringboardPolicy {
         "locker" to TileSize.TILE_SIZE_SMALL,
         "people" to TileSize.TILE_SIZE_SMALL,
         "photos" to TileSize.TILE_SIZE_LARGE,
-        "tally" to TileSize.TILE_SIZE_SMALL,
         "tasks" to TileSize.TILE_SIZE_SMALL,
     )
 
@@ -141,7 +139,6 @@ public object SpringboardPolicy {
         "notes" to "Write your first note",
         "people" to "Add someone you know",
         "photos" to "Import your first photo",
-        "tally" to "Log your first expense",
         "tasks" to "Capture the next thing to do",
     )
 

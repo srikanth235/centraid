@@ -38,7 +38,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
- * WHAT A LOCKER MACHINE HOLDS (#1047): Tally's shape (`TallyHeld`), plus the
+ * WHAT A LOCKER MACHINE HOLDS (#1047): the retired Tally screens' shape, plus the
  * two things only Locker has — whether the gate is [open], and a reveal.
  *
  * - [answers] are the core's raw typed answers, kept so a filter or a band tab
@@ -175,7 +175,7 @@ public class LockerShown(
 
 /**
  * WHAT REACHES A LOCKER MACHINE. A view sends only [View]; everything else is
- * the runtime's or the bridge's, Kotlin-side for Tally's reason.
+ * the runtime's or the bridge's, Kotlin-side for the retired Tally screens' reason.
  */
 public sealed interface LockerInput<out E> {
     /**
@@ -219,7 +219,7 @@ public sealed interface LockerInput<out E> {
 }
 
 /**
- * THE READ LOOP EVERY LOCKER SCREEN RUNS — Tally's (`TallyQueryMachine`) with
+ * THE READ LOOP EVERY LOCKER SCREEN RUNS — the retired Tally screens' query loop with
  * the gate in it: a read happens only while [LockerHeld.open]; an answer, a
  * refusal or a denial that lands after a relock is dropped; a relock wipes.
  */
@@ -390,7 +390,7 @@ public open class LockerQueries<S, E>(
 }
 
 /**
- * WHAT BOTH SHELLS HOLD FOR ONE LOCKER SCREEN — `TallyScreenBridge`'s surface
+ * WHAT BOTH SHELLS HOLD FOR ONE LOCKER SCREEN — the retired Tally bridge's surface
  * (`attach`, `observe`, `send`, `forward`, `current`, `departed`, `close`),
  * plus the two things a Locker screen needs a runner for:
  *

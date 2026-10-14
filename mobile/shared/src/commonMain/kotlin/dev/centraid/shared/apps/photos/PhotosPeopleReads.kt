@@ -301,9 +301,9 @@ public object PhotosPeopleReads : ScreenWrites<PhotosPeopleState, PhotosPeopleEv
 
         val people = assetsByParty
             .mapNotNull { (partyId, assets) ->
-                // AN ID IS NEVER DRAWN WHERE A NAME GOES (`AppReadsSpec`, Tally's
-                // payer column). A counted party the name book does not know was
-                // purged, and it is left out rather than rendered as its key.
+                // AN ID IS NEVER DRAWN WHERE A NAME GOES (`AppReadsSpec`). A counted
+                // party the name book does not know was purged, and it is left out
+                // rather than rendered as its key.
                 val name = names[partyId] ?: return@mapNotNull null
                 PersonRow(
                     party_id = partyId,

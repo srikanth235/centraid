@@ -21,7 +21,7 @@ import dev.centraid.shared.sync.TransferRule
  * The statement is `crates/apps/photos`'s own — `photos.library.live` in
  * `queries.rs`: `media_asset`, the live and unarchived rows, ordered
  * `captured_at DESC, asset_id DESC`. Followed rather than re-derived, for the
- * reason `TallyReads` gives: a grid in a different order from the desktop's
+ * reason the retired Tally reads gave: a grid in a different order from the desktop's
  * over the same assets is two libraries.
  *
  * **THE LIBRARY IS TWO WALKS, AND THE SECOND ONE IS THE UNDATED TAIL** (#1029,

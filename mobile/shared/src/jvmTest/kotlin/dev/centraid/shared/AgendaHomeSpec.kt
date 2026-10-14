@@ -610,7 +610,7 @@ class AgendaHomeSpec : StringSpec({
         val moved = drive(home, AgendaHomeMachine.rowsChanged("schedule_attendee", listOf("att-1"))!!)
         moved.effects shouldBe listOf(ScreenEffect.ReadPage(AgendaHomeMachine.SCREEN_ID, null))
         moved.state.screen.data_.shouldNotBeNull()
-        AgendaHomeMachine.rowsChanged("tally_expense", listOf("x")).shouldBeNull()
+        AgendaHomeMachine.rowsChanged("locker_item", listOf("x")).shouldBeNull()
         AgendaReads.tables shouldBe AgendaHomeMachine.TABLES
     }
 

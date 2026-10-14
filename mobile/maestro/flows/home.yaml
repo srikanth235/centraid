@@ -1,6 +1,6 @@
 # Home: the three springboards, and the two that are easy to confuse.
 #
-# THE POINT OF THIS FLOW is the same as the Tally one's, one level up. An empty
+# THE POINT OF THIS FLOW is the same as the per-app flows', one level up. An empty
 # vault and an unreadable one both produce a Home with no content in it, and
 # only one of them may say the vault is empty. A unit test asserts the state; a
 # flow is the only thing that can assert the two RENDER differently, which is

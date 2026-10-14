@@ -15,8 +15,6 @@ import CentraidShared
 ///
 /// | app | entity | route |
 /// | --- | --- | --- |
-/// | tally | `expense` | the expense page |
-/// | tally | `friend` | the friend page |
 /// | tasks | `task` | the task's detail |
 /// | tasks | `project` | the project's list |
 /// | notes | `note` | the note's editor |
@@ -26,11 +24,10 @@ import CentraidShared
 /// | photos | `photo` | the lightbox, with the answer's other photos as neighbours |
 /// | notes | `notebook` | the library under that notebook (a container found by name, #1097) |
 /// | photos | `album` | the album's shelf |
-/// | tally | `group` | the group's ledger; `id` is the `tally_group` id |
 /// | docs | `folder` | the folder's page |
 /// | chat | `thread` | not a route: Chat is a tab. `ShellModel.openChatThread` switches to it and opens the thread (Home's search, #1097) |
 ///
-/// A notebook, album, group or folder arrives with its id and its name (the
+/// A notebook, album or folder arrives with its id and its name (the
 /// card's `title`), which is all each route needs.
 ///
 /// An entity this table has no row for opens the app's home instead
@@ -47,10 +44,6 @@ enum ChatRouting {
     ) -> ShellModel.Route? {
         let parent = parent ?? chatTitle
         switch (card.app, card.entity) {
-        case ("tally", "expense"):
-            return TallyScreens.expenseRoute(card.id, parent: parent)
-        case ("tally", "friend"):
-            return TallyScreens.friendRoute(card.id, card.title, parent: parent)
         case ("tasks", "task"):
             return TasksScreens.detailRoute(card.id)
         case ("tasks", "project"):
@@ -61,8 +54,6 @@ enum ChatRouting {
             return NotesScreens.libraryRoute(notebookID: card.id, notebookName: card.title)
         case ("photos", "album"):
             return .photoShelf(albumShelf(card.id, card.title))
-        case ("tally", "group"):
-            return TallyScreens.groupRoute(card.id, card.title, parent: parent)
         case ("docs", "folder"):
             return DocsScreens.folderRoute(card.id, card.title, parent: parent)
         case ("docs", "document"):
@@ -107,7 +98,6 @@ enum ChatRouting {
     /// An app's own front door, for a card whose entity has no row route.
     static func appHome(_ app: String) -> ShellModel.Route? {
         switch app {
-        case "tally": return TallyScreens.homeRoute
         case "tasks": return TasksScreens.homeRoute
         case "notes": return NotesScreens.libraryRoute()
         case "docs": return DocsScreens.driveRoute
@@ -118,7 +108,7 @@ enum ChatRouting {
         }
     }
 
-    /// The app an opened route belongs to (`tally.home` is Tally), or nil. The
+    /// The app an opened route belongs to (`tasks.home` is Tasks), or nil. The
     /// Chat tab scopes itself to the app the member last had open.
     static func app(of route: ShellModel.Route) -> String? {
         switch route {
@@ -138,7 +128,7 @@ enum ChatRouting {
     }
 
     /// The apps a chat can be scoped to, in the order the composer's menu lists them.
-    static let scopable = ["agenda", "docs", "notes", "people", "photos", "tally", "tasks"]
+    static let scopable = ["agenda", "docs", "notes", "people", "photos", "tasks"]
 
     private static var chatTitle: String {
         #if canImport(CentraidShared)

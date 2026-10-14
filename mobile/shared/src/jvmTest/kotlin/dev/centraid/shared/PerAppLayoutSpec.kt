@@ -11,7 +11,7 @@ import io.kotest.matchers.shouldBe
  *
  * `commonMain` was one flat `screen/` package holding Home, the springboard
  * policy, the band, the vault roster, the gateway link, the mount AND the three
- * app machines. Nothing stopped Tally from reading Photos' state, and nothing
+ * app machines. Nothing stopped Docs from reading Photos' state, and nothing
  * stopped the shell from reading either — so the layout said "these are all
  * screens" where the product says "one shell, many apps", and the difference
  * only shows up when somebody reaches across and nothing complains.
@@ -20,14 +20,14 @@ import io.kotest.matchers.shouldBe
  * `crates/apps`, `copy` and `contracts/apps` — and these two rules are what make
  * the mirror load-bearing rather than decorative:
  *
- * 1. **An app knows no other app.** `apps.tally` importing `apps.photos` is a
+ * 1. **An app knows no other app.** `apps.docs` importing `apps.photos` is a
  *    coupling nothing in the product justifies: two apps meet in the VAULT, as
  *    rows, and never in a reducer.
  * 2. **Nothing outside `apps` reaches into one.** The shell drives an app
  *    through the `screen` contract — [dev.centraid.shared.screen.ScreenMachine]
  *    and [dev.centraid.shared.screen.ScreenHost] — which is what lets a shell
  *    host a screen it knows nothing else about. A `shell/` file that imported
- *    `apps.tally.TallyListState` would be a shell that has to be edited to add
+ *    `apps.docs.DocsDriveState` would be a shell that has to be edited to add
  *    an app.
  *
  * Konsist and not a reviewer, for the reason the platform-free rule gives: the
@@ -41,7 +41,7 @@ class PerAppLayoutSpec : StringSpec({
 
     val appsRoot = "dev.centraid.shared.apps"
 
-    /** `dev.centraid.shared.apps.tally.Foo` -> `tally`. Null for anything else. */
+    /** `dev.centraid.shared.apps.docs.Foo` -> `docs`. Null for anything else. */
     fun appOf(name: String?): String? = name
         ?.takeIf { it == appsRoot || it.startsWith("$appsRoot.") }
         ?.removePrefix(appsRoot)
@@ -108,7 +108,6 @@ class PerAppLayoutSpec : StringSpec({
                 "dev.centraid.shared.platform",
                 "dev.centraid.shared.kit",
                 "dev.centraid.shared.kit.time",
-                "dev.centraid.shared.apps.tally",
                 "dev.centraid.shared.apps.photos",
                 "dev.centraid.shared.apps.notes",
                 "dev.centraid.shared.apps.docs",

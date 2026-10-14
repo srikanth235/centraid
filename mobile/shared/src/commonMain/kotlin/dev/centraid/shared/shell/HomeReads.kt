@@ -13,7 +13,6 @@ import dev.centraid.design.copy.LockerCopy
 import dev.centraid.design.copy.NotesCopy
 import dev.centraid.design.copy.PeopleCopy
 import dev.centraid.design.copy.PhotosCopy
-import dev.centraid.design.copy.TallyCopy
 import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.design.PartyHueWheel
 
@@ -236,17 +235,6 @@ public object HomeReads {
             countOne = PeopleCopy.TILE_COUNT_ONE,
             countMany = PeopleCopy.TILE_COUNT_MANY,
             alsoReads = setOf("people_profile"),
-        ),
-        TileRead(
-            appId = "tally",
-            query = PageQuery(
-                name = "home.tally",
-                select = listOf("group_id", "currency"),
-                from = "tally_group",
-                order = order("group_id", "group_id"),
-            ),
-            countOne = TallyCopy.TILE_COUNT_ONE,
-            countMany = TallyCopy.TILE_COUNT_MANY,
         ),
         // LOCKER COUNTS ITS ITEMS AND SHOWS NONE OF THEM (#1047, D-5): the
         // read selects the id and the order column and nothing a member
@@ -480,8 +468,8 @@ public object HomeReads {
                             // this read forgot: `core_party` has no
                             // `avatar_color`. It carries `avatar_content_id` —
                             // a PHOTOGRAPH — and the only `avatar_color` this
-                            // repository ever had was v0's `tally_friend`. So
-                            // every face today is derived from `party_id`,
+                            // repository ever had was a v0 friend row's (gone with Tally,
+                            // #1099). So every face today is derived from `party_id`,
                             // which is the branch that matters anyway: a hue
                             // keyed off the display name would repaint a
                             // person the member recognises the moment they
@@ -496,22 +484,6 @@ public object HomeReads {
                 ),
             )
             }
-
-            // Tally's figure is a BALANCE, and a balance is derived by the
-            // app's own projection (`tally.dashboard`'s valuation) rather than
-            // counted off a table, so this tile states NO figure until that
-            // projection is wired into Home. What it can stand behind is the
-            // count, WITH ITS NOUN: the header draws the bare number, and a
-            // body of nothing under "Tally 1" read as a tile that had failed
-            // to load. The caption is that number and its noun, from the
-            // tile's own count label; `figure` is absent, which a renderer
-            // draws as the caption alone.
-            "tally" -> TileBody(
-                tally = TileBody.Tally(
-                    caption = "${rows.size}${if (capped) "+" else ""} " +
-                        (READS.firstOrNull { it.appId == "tally" }?.countLabel(rows.size, capped) ?: ""),
-                ),
-            )
 
             // A STATE AND ITS WORDS, never a row (the read carries none).
             "locker" -> lockerOpen().let { open ->

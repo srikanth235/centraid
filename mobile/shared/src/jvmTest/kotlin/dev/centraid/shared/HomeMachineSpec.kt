@@ -136,11 +136,10 @@ class HomeMachineSpec : StringSpec({
         tiles.getValue("docs").size shouldBe TileSize.TILE_SIZE_MEDIUM
         tiles.getValue("notes").size shouldBe TileSize.TILE_SIZE_MEDIUM
         // A figure or a chip needs neither.
-        tiles.getValue("tally").size shouldBe TileSize.TILE_SIZE_SMALL
         tiles.getValue("locker").size shouldBe TileSize.TILE_SIZE_SMALL
         // `LARGE` flattens to full width on the two-column phone grid.
         tiles.getValue("photos").wide.shouldBeTrue()
-        tiles.getValue("tally").wide.shouldBeFalse()
+        tiles.getValue("locker").wide.shouldBeFalse()
     }
 
     // --- the fourth state -------------------------------------------------
@@ -168,8 +167,8 @@ class HomeMachineSpec : StringSpec({
     }
 
     "an UNKNOWN tile never votes the vault empty" {
-        // Seven settled-empty and one unreadable is NOT first run: we do not
-        // know what the eighth holds.
+        // Six settled-empty and one unreadable is NOT first run: we do not
+        // know what the seventh holds.
         var state = opened()
         state = refuse(state, "photos")
         for (appId in SpringboardPolicy.SPRINGBOARD_ORDER.filterNot { it == "photos" }) {
@@ -327,9 +326,7 @@ class HomeMachineSpec : StringSpec({
             listOf("notes"),
             // Smalls pair.
             listOf("agenda", "tasks"),
-            listOf("people", "tally"),
-            // A lone small at the END is not a hole.
-            listOf("locker"),
+            listOf("people", "locker"),
         )
     }
 
@@ -362,11 +359,11 @@ class HomeMachineSpec : StringSpec({
         // half-empty row followed by a full-width tile. The rule is pinned here
         // rather than discovered then.
         fun tile(appId: String) = HomeTile(app_id = appId, wide = SpringboardPolicy.isWide(appId))
-        val pinned = listOf("tally", "photos", "locker", "docs")
+        val pinned = listOf("people", "photos", "locker", "docs")
         SpringboardPolicy.packTiles(pinned.map(::tile)).map { it.app_id } shouldContainExactly
-            listOf("tally", "locker", "photos", "docs")
+            listOf("people", "locker", "photos", "docs")
         SpringboardPolicy.rows(pinned.map(::tile)).map { row -> row.map { it.app_id } } shouldBe
-            listOf(listOf("tally", "locker"), listOf("photos"), listOf("docs"))
+            listOf(listOf("people", "locker"), listOf("photos"), listOf("docs"))
     }
 
     "packing never resizes, drops or demotes a tile to make a row come out even" {

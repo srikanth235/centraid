@@ -235,7 +235,7 @@ struct VaultHeader: View {
 /// A vault's own hue, and the one wash that is not emitted.
 ///
 /// Every APP hue is resolved and composited by
-/// `contracts/tools/export-native-catalog.ts`, because the eight apps are known
+/// `contracts/tools/export-native-catalog.ts`, because the seven apps are known
 /// at build time. A vault's colour is the member's, chosen at runtime, so it
 /// cannot be in that table — and this is the one place the blend is computed
 /// rather than read. It uses the SAME tint share the emitter uses, from the

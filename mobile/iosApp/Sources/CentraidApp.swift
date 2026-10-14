@@ -262,7 +262,7 @@ struct CentraidApp: App {
             .kitRootTint()
 
             // EVERY APP'S ROOT WATCHER (#1047): Docs' filed-document push and
-            // its picker, Locker's prompt and lifecycle, Tally's save sheet.
+            // its picker, Locker's prompt and lifecycle.
             .background { AppGlobals(shell: shell) }
             // IOS'S CONTACT PICKER, for an import over limited access.
             .modifier(ContactAccessPickerHost(shell: shell))

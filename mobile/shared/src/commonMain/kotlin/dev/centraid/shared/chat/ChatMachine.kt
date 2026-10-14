@@ -1092,7 +1092,7 @@ public object ChatMachine {
         text.replace("**", "").replace("__", "").replace("`", "")
             .lines().joinToString("\n") { it.replaceFirst(Regex("^\\s*#{1,6}\\s+"), "") }
 
-    /** An app id as a member reads it: `tally` is Tally. */
+    /** An app id as a member reads it: `tasks` is Tasks. */
     internal fun appName(id: String): String = id.replaceFirstChar { it.uppercase() }
 
     /** `530 MB`, `1.6 GB`: decimal units, the way a download is quoted. */

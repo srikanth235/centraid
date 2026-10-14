@@ -34,7 +34,7 @@ class CatalogSpec : StringSpec({
     "every app on the springboard is in the emitted catalogue" {
         // The grid's order and the catalogue's order are different questions —
         // one is the hand-off's tile list, the other is the all-apps listing —
-        // but they name the same eight apps, and a tile with no catalogue entry
+        // but they name the same seven apps, and a tile with no catalogue entry
         // draws no mark and no name.
         CentraidCatalog.apps.map { it.id } shouldContainExactlyInAnyOrder
             SpringboardPolicy.SPRINGBOARD_ORDER

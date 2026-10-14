@@ -79,28 +79,6 @@ import dev.centraid.shared.apps.photos.PhotosMemoriesReads
 import dev.centraid.shared.apps.photos.PhotosReads
 import dev.centraid.shared.apps.photos.PlacesMachine
 import dev.centraid.shared.apps.photos.PlacesReads
-import dev.centraid.shared.apps.tally.TallyEditorMachine
-import dev.centraid.shared.apps.tally.TallyEditorReads
-import dev.centraid.shared.apps.tally.TallyExpenseMachine
-import dev.centraid.shared.apps.tally.TallyExpenseReads
-import dev.centraid.shared.apps.tally.TallyExportMachine
-import dev.centraid.shared.apps.tally.TallyExportReads
-import dev.centraid.shared.apps.tally.TallyFriendMachine
-import dev.centraid.shared.apps.tally.TallyFriendReads
-import dev.centraid.shared.apps.tally.TallyGroupMachine
-import dev.centraid.shared.apps.tally.TallyGroupReads
-import dev.centraid.shared.apps.tally.TallyHomeMachine
-import dev.centraid.shared.apps.tally.TallyHomeReads
-import dev.centraid.shared.apps.tally.TallyRecurringMachine
-import dev.centraid.shared.apps.tally.TallyRecurringReads
-import dev.centraid.shared.apps.tally.TallySearchMachine
-import dev.centraid.shared.apps.tally.TallySearchReads
-import dev.centraid.shared.apps.tally.TallySettleUpMachine
-import dev.centraid.shared.apps.tally.TallySettleUpReads
-import dev.centraid.shared.apps.tally.TallySpendingMachine
-import dev.centraid.shared.apps.tally.TallySpendingReads
-import dev.centraid.shared.apps.tally.TallyTrashMachine
-import dev.centraid.shared.apps.tally.TallyTrashReads
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.kit.TrashReads
 import dev.centraid.shared.shell.HomeMachine
@@ -172,8 +150,6 @@ class AppReadsSpec : StringSpec({
         Triple("photos.duplicate", DuplicateReviewReads, DuplicateReviewMachine),
         Triple("docs.trash", DocsTrashReads, DocsTrashMachine),
         Triple("tasks.trash", TasksTrashMachine.reads, TasksTrashMachine.machine),
-        // TALLY (#1046 port): the kit's trash over `tally_expense`, restore only.
-        Triple("tally.trash", TallyTrashReads, TallyTrashMachine),
         // LOCKER (#1047): the kit's trash over `locker_item`. The statement is
         // the kit's own; `LockerTrashReads` adds only the gate in front of it
         // (`LockerSpec`).
@@ -231,7 +207,6 @@ class AppReadsSpec : StringSpec({
         "photos.duplicates" -> DuplicatesReads.query(DuplicatesMachine.initial(), null)
         "docs.trash" -> DocsTrashReads.query(DocsTrashMachine.initial(), null)
         "tasks.trash" -> TasksTrashMachine.reads.query(TasksTrashMachine.machine.initial(), null)
-        "tally.trash" -> TallyTrashReads.query(TallyTrashMachine.initial(), null)
         "locker.trash" -> TrashReads(LOCKER_TRASH).query(LockerTrashMachine.initial(), null)
         else -> DuplicateReviewReads.query(
             DuplicateReviewMachine.reduce(
@@ -333,20 +308,6 @@ class AppReadsSpec : StringSpec({
         Triple("tasks.project", TasksProjectReads, TasksProjectMachine),
         Triple("tasks.detail", TasksDetailReads, TasksDetailMachine),
         Triple("tasks.catch_up", TasksCatchUpReads, TasksCatchUpMachine),
-        // TALLY (#1046 port). Every ledger screen folds the same load, so
-        // they share one table set; the expense and editor add revisions and
-        // memos, recurring reads its templates.
-        Triple("tally.home", TallyHomeReads, TallyHomeMachine),
-        Triple("tally.group", TallyGroupReads, TallyGroupMachine),
-        Triple("tally.friend", TallyFriendReads, TallyFriendMachine),
-        Triple("tally.expense", TallyExpenseReads, TallyExpenseMachine),
-        Triple("tally.editor", TallyEditorReads, TallyEditorMachine),
-        Triple("tally.settle_up", TallySettleUpReads, TallySettleUpMachine),
-        Triple("tally.recurring", TallyRecurringReads, TallyRecurringMachine),
-        Triple("tally.spending", TallySpendingReads, TallySpendingMachine),
-        Triple("tally.search", TallySearchReads, TallySearchMachine),
-        // The export folds the same load, plus the dashboard for its picker.
-        Triple("tally.export", TallyExportReads, TallyExportMachine),
         // LOCKER (#1047). Every read screen shares one table set — the item,
         // its sidecars, the tag plane and the memo; the generator reads none.
         Triple("locker.home", LockerHomeReads, LockerHomeMachine),
@@ -555,7 +516,7 @@ class AppReadsSpec : StringSpec({
         // would be a second page that silently repeats the first.
         //
         // The separator is the FIXTURES': `ScreenFixtureSpec` asserts that
-        // `tally/data-page`'s `next_cursor` contains a `|`, so that is the
+        // `photos-shelf/album-selecting`'s `next_cursor` contains a `|`, so that is the
         // product's written-down spelling and a second one here would make the
         // fixture a fixture of nothing.
         val cursor = PageCursor(sort_key = "2026-02-03", pk = "exp-1")

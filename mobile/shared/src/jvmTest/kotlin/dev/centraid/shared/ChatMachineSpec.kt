@@ -97,11 +97,11 @@ class ChatMachineSpec : StringSpec({
         chat.state.title shouldBe "New chat"
         chat.state.subtitle shouldBe "On this phone"
         chat.state.messages.shouldBeEmpty()
-        val step = reduce(chat, opened("tally", bytes = 530_000_000))
+        val step = reduce(chat, opened("notes", bytes = 530_000_000))
         // The drawer's list is read beside the model's status, so it is ready
         // before the member opens the drawer.
         step.effects shouldBe listOf(ChatEffect.ReadStatus, ChatEffect.ReadThreads)
-        step.chat.state.scope_app shouldBe "tally"
+        step.chat.state.scope_app shouldBe "notes"
     }
 
     "no model draws the download step: the size, the one sentence, and Download model" {
@@ -187,8 +187,8 @@ class ChatMachineSpec : StringSpec({
         chosen.chat.state.scope_app shouldBe "photos"
         chosen.effects shouldBe listOf(ChatEffect.Cancel(7L), ChatEffect.ReadStatus, ChatEffect.ReadThreads)
         // An untouched chat adopts the app the tab was opened from.
-        val adopted = reduce(ready(), opened("tally"))
-        adopted.chat.state.scope_app shouldBe "tally"
+        val adopted = reduce(ready(), opened("notes"))
+        adopted.chat.state.scope_app shouldBe "notes"
     }
 
     "opening a chat that is still waiting for a model looks again, in case the file arrived" {
@@ -319,9 +319,9 @@ class ChatMachineSpec : StringSpec({
     "the tool activity names the app the core named" {
         val chat = reduce(
             asked(),
-            coreEvent(1) { it.copy(activity = AssistActivity(app = "tally", tool = "tally.balances")) },
+            coreEvent(1) { it.copy(activity = AssistActivity(app = "tasks", tool = "tasks.find")) },
         ).chat
-        chat.state.activity shouldBe "Looking in Tally"
+        chat.state.activity shouldBe "Looking in Tasks"
     }
 
     "the answer to the send call settles the turn exactly as the terminal event does, whichever comes first" {
@@ -514,7 +514,7 @@ class ChatMachineSpec : StringSpec({
     }
 
     "an app id reads as its name" {
-        ChatMachine.appName("tally") shouldBe "Tally"
+        ChatMachine.appName("tasks") shouldBe "Tasks"
         ChatMachine.appName("") shouldBe ""
     }
 

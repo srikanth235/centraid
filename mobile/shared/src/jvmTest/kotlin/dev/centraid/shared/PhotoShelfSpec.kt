@@ -121,7 +121,7 @@ class PhotoShelfSpec : StringSpec({
     }
 
     "rowsChanged on a foreign table answers null" {
-        PhotoShelfMachine.rowsChanged("tally_expense", listOf("k")) shouldBe null
+        PhotoShelfMachine.rowsChanged("locker_item", listOf("k")) shouldBe null
         PhotoShelfMachine.rowsChanged("media_asset_phash", listOf("k")) shouldBe null
     }
 

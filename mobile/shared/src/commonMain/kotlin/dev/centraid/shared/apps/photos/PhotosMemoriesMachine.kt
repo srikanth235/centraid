@@ -44,7 +44,7 @@ import dev.centraid.shared.screen.Step
  * `MemoryRow.member_count` and `cover_thumbnail_path` are facts about
  * `media_memory_member` and `media_asset`; the shelf statement reads
  * `media_memory` and the door has no join clause. They are left ABSENT rather
- * than guessed, which is `TallyReads`' rule for `payer_name`: a renderer draws
+ * than guessed, which was the retired Tally reads' rule for `payer_name`: a renderer draws
  * no name instead of drawing an id as a person. [titleOf] composes a title
  * without them, and the views print no count rather than printing zero —
  * because on this door a zero is "not read", never "empty".

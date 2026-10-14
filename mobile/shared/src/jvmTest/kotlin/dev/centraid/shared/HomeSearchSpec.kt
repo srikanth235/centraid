@@ -94,7 +94,7 @@ class HomeSearchSpec : StringSpec({
                 hit("tasks", "schedule.task", "t1", "Book the cabin"),
             ),
         )
-        // SPRINGBOARD_ORDER: photos, docs, notes, agenda, tasks, people, tally.
+        // SPRINGBOARD_ORDER: photos, docs, notes, agenda, tasks, people.
         data.groups.map { it.app_id } shouldContainExactly listOf("photos", "notes", "agenda", "tasks")
         data.groups.map { it.label } shouldContainExactly listOf("Photos", "Notes", "Agenda", "Tasks")
         data.groups.map { it.count } shouldContainExactly listOf(1, 2, 1, 1)
@@ -201,7 +201,6 @@ class HomeSearchSpec : StringSpec({
                 hit("people", "core.party", "p1", "Kate Bell"),
                 hit("agenda", "core.event", "e1", "Cabin weekend"),
                 hit("tasks", "schedule.task", "t1", "Book the cabin"),
-                hit("tally", "tally.expense", "x1", "Cabin deposit"),
                 hit("docs", "core.document", "d1", "Cabin lease"),
                 hit("photos", "core.content_item", "c1", "Cabin at dusk", openId = "a1"),
             ),
@@ -214,7 +213,6 @@ class HomeSearchSpec : StringSpec({
         opens["people"] shouldBe Destination.PeoplePerson("p1", "Kate Bell")
         opens["agenda"] shouldBe Destination.AgendaEvent("e1", "", null, "")
         opens["tasks"] shouldBe Destination.TasksDetail("t1")
-        opens["tally"] shouldBe Destination.TallyExpense("x1", parent = "Search")
         opens["docs"] shouldBe Destination.DocsDocument("d1", "Cabin lease", parent = "Search")
         opens["photos"] shouldBe Destination.PhotoLightbox("a1", listOf("a1"))
         // Picking a row is an intent: the machine records, the shell opens.

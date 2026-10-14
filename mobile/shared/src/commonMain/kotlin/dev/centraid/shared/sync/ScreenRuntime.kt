@@ -36,7 +36,7 @@ import okio.ByteString.Companion.encodeUtf8
  * be the same table, and the defect when they are not is silent: a screen whose
  * query moved stops moving on sync, nothing fails, and the symptom is a list
  * that is right only after a relaunch. `AppReadsSpec` asserts the pairing
- * mechanically for all three screens.
+ * mechanically for every screen.
  */
 public interface ScreenReads<S, E> {
     /** The `screenId` this screen's `ReadPage` effects carry. */
@@ -97,7 +97,7 @@ public interface ScreenReads<S, E> {
 /**
  * WHAT ONE APP SCREEN WRITES (#1025 S5).
  *
- * Implemented only by screens that have a write. Tally and Photos have none
+ * Implemented only by screens that have a write. Photos has none
  * yet, and `null` on the runtime is how that is said — an interface every
  * screen had to implement with a stub would be four stubs standing for "this
  * screen does not write", which is a thing an absence already says.
@@ -152,7 +152,7 @@ public interface ScreenWrites<S, E> {
  *
  * ## The gap this closes
  *
- * `TallyListMachine`, `PhotosGridMachine` and `NotesEditorMachine` have emitted
+ * `PhotosGridMachine` and `NotesEditorMachine` have emitted
  * `ScreenEffect.ReadPage` since #1020 and **nothing served it** — there was no
  * per-screen query, no runner and no bridge, on either shell. Home alone was
  * wired, through `shell/HomeRuntime.kt`. So all three app screens drew their
@@ -183,7 +183,7 @@ public interface ScreenWrites<S, E> {
  * Every screen-specific decision — the statement, the projection, the event —
  * is [ScreenReads], which each app implements in its own package. That is what
  * keeps this file inside the second Konsist rule: a runtime that mentioned
- * `TallyListState` would be a runtime that has to be edited to add an app.
+ * `PhotosGridState` would be a runtime that has to be edited to add an app.
  *
  * ## The core is a SUPPLIER, not a handle
  *
@@ -372,7 +372,7 @@ public class ScreenRuntime<S, E>(
      * back to this runtime, and never compared to anything.
      *
      * **THE SPELLING IS THE FIXTURES', NOT A NEW ONE.** `contracts/screens`'
-     * `tally/data-page` carries a `next_cursor` and `ScreenFixtureSpec` asserts
+     * `photos-shelf/album-selecting` carries a `next_cursor` and `ScreenFixtureSpec` asserts
      * it contains a `|` — so the pipe is already this product's written-down
      * answer to "how does a keyset pair ride as one string", and a second
      * spelling here would make the fixture a fixture of nothing. It cannot

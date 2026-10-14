@@ -43,7 +43,6 @@ extension AppScreens {
 /// THE ONE LIST. A port adds exactly one line here.
 enum AppRegistry {
     static let apps: [any AppScreens.Type] = [
-        TallyScreens.self,
         NotesScreens.self,
         AgendaScreens.self,
         TasksScreens.self,
@@ -83,8 +82,7 @@ struct ScreenPort {
     var departed: () -> Void = {}
 
     /// A kit `ScreenBridge` subclass — `NotesBridge`, `PeopleHomeBridge`, and
-    /// every port's bridge (Tally's speak the same verbs through
-    /// `TallyScreenBridge`; see `ScreenPort.tally`).
+    /// every port's bridge.
     static func of<S: AnyObject, E: AnyObject>(_ id: String, _ bridge: ScreenBridge<S, E>) -> ScreenPort {
         ScreenPort(
             id: id,

@@ -35,7 +35,7 @@ import kotlin.time.TimeSource
  * seeded from them at three times the measured p95, and the device half is an
  * owner hand-off (`mobile/README.md`).
  *
- * The three screens' read messages are the ones the state machines in `:shared`
+ * The two screens' read messages are the ones the state machines in `:shared`
  * actually send, so the budget is over the product's reads and not over a
  * synthetic one.
  */
@@ -296,7 +296,7 @@ class AbiRoundTripSpec : StringSpec({
         }
     }
 
-    "the five calls' latencies, and the call budget for the three screens' reads" {
+    "the five calls' latencies, and the call budget for the two screens' reads" {
         val core = openRealCore()
         try {
             val report = StringBuilder("{\"marker\":\"mobile-jvm-abi\",\"reads\":{")
@@ -413,23 +413,15 @@ class AbiRoundTripSpec : StringSpec({
         )
 
         /**
-         * THE THREE SCREENS' READS, over the real tables
-         * (`contracts/schema/vault-ddl.sql`): `tally_expense`, `media_asset`,
+         * THE TWO SCREENS' READS, over the real tables
+         * (`contracts/schema/vault-ddl.sql`): `media_asset` and
          * `knowledge_note`. The fixture vault has rows in `core_party` and none
-         * in these three, so these numbers are a **bounded read's floor** — the
+         * in these two, so these numbers are a **bounded read's floor** — the
          * SQL plan, the protobuf round trip and the JNA marshalling are real and
          * the row copy is not. The device measurement at 50k assets is the
          * owner's, and `docs/mobile-offline.md` says which number decides what.
          */
         private val SCREEN_READS = mapOf(
-            "tally.list" to ScreenRead(
-                name = "tally.list",
-                select = listOf("expense_id", "description", "amount_minor", "currency"),
-                from = "tally_expense",
-                sortColumn = "created_at",
-                pkColumn = "expense_id",
-                limit = 50,
-            ),
             "photos.grid" to ScreenRead(
                 name = "photos.grid",
                 select = listOf("asset_id", "kind", "captured_at"),

@@ -33,7 +33,6 @@ import centraid.screen.v1.PlacesState
 import centraid.screen.v1.ReadFailureKind
 import centraid.screen.v1.SearchMatch
 import centraid.screen.v1.SeatState
-import centraid.screen.v1.TallyListState
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -92,73 +91,6 @@ class ScreenFixtureSpec : StringSpec({
         onDisk.forEach { path ->
             contracts.resolve(path.replace(".bin", ".textproto")).exists().shouldBeTrue()
         }
-    }
-
-    // --- Tally ------------------------------------------------------------
-
-    "tally/loading-first is the first load, and carries no rows and no failure" {
-        val state = TallyListState.ADAPTER.decode(screens.bytes("tally/loading-first"))
-        state.loading.shouldNotBeNull().first_load.shouldBeTrue()
-        state.data_.shouldBeNull()
-        state.failure.shouldBeNull()
-        state.destination shouldBe TallyListState.Destination.DESTINATION_ACTIVITY
-    }
-
-    "tally/empty-ledger and tally/refused-denied are DIFFERENT screens" {
-        // THE LAW. v0 pins it in `tally-store.test.ts`: a failed read never
-        // reads as an empty ledger. Asserting the two fixtures separately would
-        // not catch a decoder that collapsed them, so they are asserted
-        // against each other.
-        val empty = TallyListState.ADAPTER.decode(screens.bytes("tally/empty-ledger"))
-        val refused = TallyListState.ADAPTER.decode(screens.bytes("tally/refused-denied"))
-
-        empty.data_.shouldNotBeNull().rows.shouldContainExactly()
-        empty.failure.shouldBeNull()
-
-        refused.data_.shouldBeNull()
-        refused.failure.shouldNotBeNull().kind shouldBe ReadFailureKind.READ_FAILURE_KIND_REFUSED
-
-        // The sentence is the access plane's, not its predicate.
-        refused.failure.sentence shouldBe "This is not shared with you."
-        (empty == refused).shouldBeFalse()
-    }
-
-    "tally/data-page carries money with its own exponent and locale" {
-        // v0's formatter divides minor units by 100 unconditionally and reads
-        // the HOST's locale (`packages/design/src/format.ts:38`, `:49`), so the
-        // same vault renders differently on two devices. The fixture carries a
-        // JPY row precisely because an exponent of 0 is what breaks that code.
-        val state = TallyListState.ADAPTER.decode(screens.bytes("tally/data-page"))
-        val rows = state.data_.shouldNotBeNull().rows
-        rows.size shouldBe 2
-        val yen = rows.single { it.amount?.currency == "JPY" }
-        yen.amount.shouldNotBeNull().exponent shouldBe 0
-        yen.amount.locale shouldBe "ja-JP"
-        val dollars = rows.single { it.amount?.currency == "USD" }
-        dollars.amount!!.exponent shouldBe 2
-        // A keyset cursor, and it is the SORT KEY plus the primary key.
-        state.data_.next_cursor.shouldNotBeNull().contains('|').shouldBeTrue()
-        // The pending-write overlay is on the STATE, not on the row.
-        state.pending_expense_ids shouldContainExactly listOf("exp-0001")
-    }
-
-    "tally/low-disk-parked is a state with a remedy, never an eviction" {
-        val state = TallyListState.ADAPTER.decode(screens.bytes("tally/low-disk-parked"))
-        state.failure.shouldNotBeNull().kind shouldBe
-            ReadFailureKind.READ_FAILURE_KIND_LOW_DISK_PARKED
-        state.failure.remedy.isNotBlank().shouldBeTrue()
-        state.seat.shouldNotBeNull().durability shouldBe
-            SeatState.Durability.DURABILITY_PARKED_LOW_DISK
-    }
-
-    "tally/offline-withheld says the verb is withheld rather than offering it" {
-        val state = TallyListState.ADAPTER.decode(screens.bytes("tally/offline-withheld"))
-        state.recurring_materialisation_withheld.shouldBeTrue()
-        state.seat.shouldNotBeNull().durability shouldBe
-            SeatState.Durability.DURABILITY_LOCAL_ONLY
-        state.seat.pending.shouldNotBeNull().queued_writes shouldBe 3
-        // Rows are still there: offline is not a failed read.
-        state.data_.shouldNotBeNull().rows.size shouldBe 1
     }
 
     // --- Photos -----------------------------------------------------------
@@ -257,6 +189,8 @@ class ScreenFixtureSpec : StringSpec({
         album.selected_asset_ids shouldContainExactly listOf("ast-0201", "ast-0204")
         val loaded = album.data_.shouldNotBeNull().cells.map { it.asset_id }
         loaded.contains("ast-0204").shouldBeFalse()
+        // A keyset cursor, and it is the SORT KEY plus the primary key.
+        album.data_.next_cursor.shouldNotBeNull().contains('|').shouldBeTrue()
     }
 
     "photos-shelf: an empty shelf is data, and its head still has a title" {
@@ -804,10 +738,6 @@ class ScreenFixtureSpec : StringSpec({
         // The three-state law as a sweep rather than a claim: no fixture may
         // carry both a failure and data, which is the shape a decoder that
         // collapsed the two would produce.
-        screens.resolve("tally").binFiles().forEach { file ->
-            val state = TallyListState.ADAPTER.decode(file.readBytes())
-            contentCount(state.loading, state.failure, state.data_) shouldBe 1
-        }
         screens.resolve("photos").binFiles().forEach { file ->
             val state = PhotosGridState.ADAPTER.decode(file.readBytes())
             contentCount(state.loading, state.failure, state.data_) shouldBe 1
@@ -824,7 +754,7 @@ class ScreenFixtureSpec : StringSpec({
 
     "home: an unreadable springboard is NOT a first run" {
         // THE FOURTH READ STATE, and the reason Home has one. Both fixtures
-        // show eight tiles with no content; only one of them may say the vault
+        // show seven tiles with no content; only one of them may say the vault
         // is empty, and it is the one whose reads LANDED.
         val unreadable = home("every-tile-unreadable")
         val firstRun = home("first-run")

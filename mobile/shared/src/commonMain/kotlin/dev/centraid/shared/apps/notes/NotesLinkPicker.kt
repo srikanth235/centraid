@@ -153,7 +153,6 @@ public object NotesLinkPickerMachine : ScreenMachine<NotesLinkPickerState, Notes
         "schedule.task" -> NotesCopy.DOMAIN_TASKS
         "core.document" -> NotesCopy.DOMAIN_DOCS
         "core.content_item", "media.asset" -> NotesCopy.DOMAIN_PHOTOS
-        "tally.expense" -> NotesCopy.DOMAIN_TALLY
         else -> NotesCopy.DOMAIN_OTHER
     }
 
@@ -165,7 +164,6 @@ public object NotesLinkPickerMachine : ScreenMachine<NotesLinkPickerState, Notes
         "schedule.task" -> NotesCopy.LINK_KIND_TASK
         "core.document" -> NotesCopy.LINK_KIND_DOCUMENT
         "core.content_item", "media.asset" -> NotesCopy.LINK_KIND_PHOTOGRAPH
-        "tally.expense" -> NotesCopy.LINK_KIND_EXPENSE
         else -> ""
     }
 

@@ -309,7 +309,7 @@ public object HomeMachine : ScreenMachine<HomeState, HomeEvent> {
         val unreadable = SpringboardPolicy.everyTileUnreadable(graded)
         // WHICH ROWS THE TILES SIT IN IS ALSO A DECISION, and EVERY APP HAS A
         // TILE (R-ONBOARD-11): one with nothing in it draws what to do, so the
-        // member always sees Docs, Agenda, People and Tally and the packer only
+        // member always sees Docs, Agenda and People and the packer only
         // closes the holes a small-before-wide leaves. It is written here, so
         // neither renderer has to reach one, and the two cannot reach different
         // ones.

@@ -60,7 +60,7 @@ final class ScreenFixtureTests: XCTestCase {
         let manifest = try Data(contentsOf: screens.appendingPathComponent("manifest.json"))
         let decoded = try JSONSerialization.jsonObject(with: manifest) as? [String: Any]
         let fixtures = decoded?["fixtures"] as? [[String: Any]] ?? []
-        XCTAssertEqual(fixtures.count, 77)
+        XCTAssertEqual(fixtures.count, 71)
         for fixture in fixtures {
             let binary = try XCTUnwrap(fixture["binary"] as? String)
             let name = String(binary.dropFirst("contracts/screens/".count).dropLast(".bin".count))
@@ -68,43 +68,11 @@ final class ScreenFixtureTests: XCTestCase {
         }
     }
 
-    /// The law, from the Swift side: an empty ledger and a refused read must
-    /// not decode to the same screen.
-    func testEmptyLedgerAndRefusedReadAreDifferentScreens() throws {
-        let empty = try Centraid_Screen_V1_TallyListState(
-            serializedBytes: try bytes("tally/empty-ledger")
+    /// A keyset cursor: the sort key and the primary key, never an offset.
+    func testAShelfCursorIsTheSortKeyAndThePrimaryKey() throws {
+        let state = try Centraid_Screen_V1_PhotoShelfState(
+            serializedBytes: try bytes("photos-shelf/album-selecting")
         )
-        let refused = try Centraid_Screen_V1_TallyListState(
-            serializedBytes: try bytes("tally/refused-denied")
-        )
-
-        // `data` present with no rows IS an answer.
-        XCTAssertEqual(empty.content, .data(Centraid_Screen_V1_TallyListData()))
-        XCTAssertTrue(empty.data.rows.isEmpty)
-
-        // A refusal has no data at all, and carries the access plane's
-        // sentence rather than its predicate.
-        guard case let .failure(failure) = refused.content else {
-            return XCTFail("a refused read decodes to the failure case")
-        }
-        XCTAssertEqual(failure.kind, .refused)
-        XCTAssertEqual(failure.sentence, "This is not shared with you.")
-        XCTAssertNotEqual(empty, refused)
-    }
-
-    /// Money carries its own exponent and locale. JPY at exponent 0 is the row
-    /// that breaks a renderer that divides minor units by 100 unconditionally,
-    /// which is v0's bug (`packages/design/src/format.ts:38`).
-    func testMoneyCarriesItsOwnExponentAndLocale() throws {
-        let state = try Centraid_Screen_V1_TallyListState(
-            serializedBytes: try bytes("tally/data-page")
-        )
-        let yen = try XCTUnwrap(state.data.rows.first { $0.amount.currency == "JPY" })
-        XCTAssertEqual(yen.amount.exponent, 0)
-        XCTAssertEqual(yen.amount.locale, "ja-JP")
-        let dollars = try XCTUnwrap(state.data.rows.first { $0.amount.currency == "USD" })
-        XCTAssertEqual(dollars.amount.exponent, 2)
-        // A keyset cursor: the sort key and the primary key, never an offset.
         XCTAssertTrue(state.data.nextCursor.contains("|"))
     }
 
@@ -172,10 +140,9 @@ final class ScreenFixtureTests: XCTestCase {
 
     /// The sweep: no fixture may carry both a failure and data.
     func testEveryFixtureSetsAtMostOneContentState() throws {
-        for fixture in ["loading-first", "data-page", "empty-ledger", "refused-denied",
-                        "low-disk-parked", "offline-withheld"] {
-            let state = try Centraid_Screen_V1_TallyListState(
-                serializedBytes: try bytes("tally/\(fixture)")
+        for fixture in ["permission-denied", "limited-selection"] {
+            let state = try Centraid_Screen_V1_PhotosGridState(
+                serializedBytes: try bytes("photos/\(fixture)")
             )
             XCTAssertNotNil(state.content, "\(fixture) sets exactly one content case")
         }
@@ -189,7 +156,7 @@ final class ScreenFixtureTests: XCTestCase {
 
     /// THE FOURTH READ STATE, and the reason Home has one.
     ///
-    /// Both of these show eight tiles with no content. Only one of them may say
+    /// Both of these show seven tiles with no content. Only one of them may say
     /// the vault is empty, and it is the one whose reads LANDED.
     func testUnreadableSpringboardIsNotAFirstRun() throws {
         let unreadable = try home("every-tile-unreadable")

@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 /**
  * WHAT BOTH SHELLS HOLD FOR AGENDA'S HOME (#1046).
  *
- * `TallyBridge`'s shape, for its reasons — bytes and not objects across to
+ * The retired Tally bridge's shape, for its reasons — bytes and not objects across to
  * SwiftUI, and nothing `suspend` — with one difference: the machine's state is
  * [AgendaHome], which carries the raw answers beside the screen, and only
  * [AgendaHome.screen] ever leaves. So Compose reads [screen] (or

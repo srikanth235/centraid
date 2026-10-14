@@ -2,7 +2,7 @@
 // (#1020, wave A; the same road as `export-native-theme.ts`).
 //
 // Home's tile header is an INVARIANT — icon chip, name, count, in that order —
-// and it is what makes eight unlike bodies read as one grid
+// and it is what makes seven unlike bodies read as one grid
 // (v0 `apps/mobile/src/screens/home/LauncherGrid.tsx:1-4`). Three of those four
 // things are design data that lived only in TypeScript: the app's display name,
 // its slot on the identity hue ring, and the shared single-tone icon stroke.
@@ -311,7 +311,7 @@ export function emitNativeCatalog(repositoryRoot: string): {
     "",
     "public object CentraidCatalog {",
     "    /**",
-    "     * The eight first-party apps, in CATALOGUE order.",
+    "     * The seven first-party apps, in CATALOGUE order.",
     "     *",
     "     * This is the all-apps listing's order and says nothing about the grid",
     "     * — `SpringboardPolicy.SPRINGBOARD_ORDER` owns that.",
@@ -409,7 +409,7 @@ export function emitNativeCatalog(repositoryRoot: string): {
     "}",
     "",
     "public enum CentraidCatalog {",
-    "    /// The eight first-party apps, in CATALOGUE order — the all-apps",
+    "    /// The seven first-party apps, in CATALOGUE order — the all-apps",
     "    /// listing's order, which says nothing about the grid.",
     "    public static let apps: [CentraidAppMeta] = [",
     ...apps.map(

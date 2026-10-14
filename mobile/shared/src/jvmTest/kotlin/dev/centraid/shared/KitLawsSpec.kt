@@ -50,8 +50,8 @@ class KitLawsSpec : StringSpec({
     // --- Paged list -------------------------------------------------------
     //
     // THROUGH THE KIT'S TRASH SCREEN, the paged list every app now shares
-    // (Tally's legacy `tally.list`, where these laws were first pinned, is
-    // gone with the native views that drew it).
+    // (the retired Tally list, where these laws were first pinned, left with
+    // the app, #1099).
 
     "paged list: a first page replaces, a later page appends deduplicated, a refusal clears with no effect" {
         val one = listed(pagedList.initial(), page("a", "b", cursor = "c1"), "")

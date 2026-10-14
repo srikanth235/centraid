@@ -431,7 +431,7 @@ public fun AutosaveStatus(autosave: Autosave?, modifier: Modifier = Modifier) {
 
 /**
  * A party hue to its colour. The state carries either the theme's colour role
- * itself (`cRose` — People) or a wheel key (`rose` — Agenda, Tally), and both
+ * itself (`cRose` — People) or a wheel key (`rose` — Agenda), and both
  * draw the same role. An unknown value draws slate, the neutral for "no party".
  */
 @Composable
