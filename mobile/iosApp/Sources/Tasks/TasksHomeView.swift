@@ -154,7 +154,12 @@ struct TasksHomeView: View {
                 }
                 TasksCountLine(count: home.countLabel, window: home.windowLabel)
                 if nothing, !home.empty.headline.isEmpty {
-                    EmptyStateView(home.empty, onAction: { send(event { $0.emptyActed = .init() }) })
+                    if home.searching {
+                        // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, with Ask (#1097).
+                        SearchEmptyView(home.empty, ask: state.search.ask)
+                    } else {
+                        EmptyStateView(home.empty, onAction: { send(event { $0.emptyActed = .init() }) })
+                    }
                 }
                 ForEach(home.groups, id: \.key) { group in
                     TasksGroupView(

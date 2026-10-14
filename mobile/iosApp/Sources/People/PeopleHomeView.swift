@@ -345,7 +345,7 @@ private struct PeopleSearchResults: View {
         if state.hasSearchData {
             let results = state.searchData
             if results.hasEmpty {
-                EmptyStateView(results.empty)
+                SearchEmptyView(results.empty, ask: state.search.ask)
                 Spacer(minLength: 0)
             } else {
                 ScrollView {

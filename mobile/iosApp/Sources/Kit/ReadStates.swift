@@ -224,6 +224,48 @@ struct EmptyStateView: View {
     }
 }
 
+private struct AskChatKey: EnvironmentKey {
+    static let defaultValue: ((String) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    /// The shell's "ask the assistant" door, or nil where there is none
+    /// (previews). A search that found nothing reaches Chat through it, never
+    /// through a view's own routing (#1097, R-1097-30).
+    var askChat: ((String) -> Void)? {
+        get { self[AskChatKey.self] }
+        set { self[AskChatKey.self] = newValue }
+    }
+}
+
+/// THE NO-MATCH STATE OF AN APP'S SEARCH (#1097, R-1097-30): the kit empty
+/// state, with Ask as its one action when the machine named one. `ask` is the
+/// field's question and the words are the machine's (`SEARCH_ASK_ABOUT` is the
+/// action's label, finished in `empty`); this view only draws them and hands the
+/// question to the shell, which switches to the Chat tab and sends it. Empty `ask`
+/// is no action: a term typed since, a denial, or an app that offers none (Locker
+/// never does, R-1097-29, and does not draw this view).
+struct SearchEmptyView: View {
+    let empty: Centraid_Screen_V1_EmptyState
+    let ask: String
+
+    @Environment(\.askChat) private var askChat
+
+    init(_ empty: Centraid_Screen_V1_EmptyState, ask: String) {
+        self.empty = empty
+        self.ask = ask
+    }
+
+    var body: some View {
+        EmptyStateView(empty, actionIdentifier: "search-ask-about", onAction: action)
+    }
+
+    private var action: (() -> Void)? {
+        guard !ask.isEmpty, let askChat else { return nil }
+        return { askChat(ask) }
+    }
+}
+
 /// The Photos views' name for an empty sentence with an optional remedy line.
 struct ScreenEmptyView: View {
     let sentence: String

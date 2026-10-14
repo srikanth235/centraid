@@ -263,7 +263,7 @@ struct TallySearchView: View {
                         EmptyStateView(empty)
                     case let .results(results):
                         if results.hasEmpty {
-                            EmptyStateView(results.empty)
+                            SearchEmptyView(results.empty, ask: state.field.ask)
                         } else {
                             ScrollView {
                               VStack(alignment: .leading, spacing: 0) {

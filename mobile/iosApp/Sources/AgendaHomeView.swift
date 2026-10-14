@@ -130,10 +130,15 @@ struct AgendaHomeView: View {
         state: Centraid_Screen_V1_AgendaHomeState
     ) -> some View {
         if home.empty != .none, home.empty != .unspecified {
-            // WHERE THE PHONE HOLDS A CALENDAR, ITS IMPORT IS DAY ONE'S
-            // ACTION (the kit's empty state draws it); "New event" stays in
-            // the header.
-            EmptyStateView(emptyState(home), onAction: { send(AgendaEvents.make { $0.newEvent = .init() }) })
+            if home.empty == .noMatch {
+                // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, with Ask (#1097).
+                SearchEmptyView(emptyState(home), ask: state.searchAsk)
+            } else {
+                // WHERE THE PHONE HOLDS A CALENDAR, ITS IMPORT IS DAY ONE'S
+                // ACTION (the kit's empty state draws it); "New event" stays in
+                // the header.
+                EmptyStateView(emptyState(home), onAction: { send(AgendaEvents.make { $0.newEvent = .init() }) })
+            }
         } else {
             AgendaList(home: home, chrome: state.chrome, send: send)
         }

@@ -247,6 +247,8 @@ struct CentraidApp: App {
                         // without sample data"): an app's empty state offers
                         // the phone's own data.
                         .environment(\.importFromPhone, { shell.importFromPhone($0) })
+                        // THE ASSISTANT'S DOOR for a search that found nothing (#1097, R-1097-30).
+                        .environment(\.askChat, { shell.askChat($0) })
                         // THE IMPORT'S LINE over every route. ON EACH DESTINATION and not on the stack: an
                         // app hides the navigation bar and draws its own header
                         // at the top of its safe area, and an inset on the

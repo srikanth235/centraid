@@ -463,7 +463,7 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
                     state.screen.search?.term ?: "",
                     answer.search?.corrected ?: "",
                     SearchContainers.fold(answer.search?.containers ?: emptyList()),
-                    rows = answer.search?.tasks?.size,
+                    rows = answer.search.tasks.size,
                 ).screen
             } else {
                 state.screen

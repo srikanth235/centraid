@@ -75,6 +75,7 @@ struct NotesLibraryView: View {
                     NotesSearchResultsView(
                         results: state.results,
                         containers: state.search.containers,
+                        ask: state.search.ask,
                         loading: chrome.loading,
                         send: send,
                         openContainer: openContainer,
@@ -318,6 +319,7 @@ struct NotesRowView: View {
 private struct NotesSearchResultsView: View {
     let results: Centraid_Screen_V1_NotesSearchResults
     let containers: [Centraid_Screen_V1_SearchContainer]
+    let ask: String
     let loading: String
     let send: (Data) -> Void
     let openContainer: (Centraid_Screen_V1_ChatCard, String) -> Void
@@ -327,7 +329,7 @@ private struct NotesSearchResultsView: View {
         if results.loading, results.rows.isEmpty, containers.isEmpty {
             RowSkeleton(label: loading)
         } else if results.rows.isEmpty, containers.isEmpty {
-            EmptyStateView(results.empty)
+            SearchEmptyView(results.empty, ask: ask)
             Spacer(minLength: 0)
         } else {
             ScrollView {

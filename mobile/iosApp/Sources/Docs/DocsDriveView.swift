@@ -199,7 +199,12 @@ struct DocsDriveView: View {
                             folderRow(node)
                         }
                         if drive.hasEmpty {
-                            EmptyStateView(drive.empty, onAction: emptyAction(drive.emptyAction))
+                            if drive.mode == .search {
+                                // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, with Ask (#1097).
+                                SearchEmptyView(drive.empty, ask: state.search.ask)
+                            } else {
+                                EmptyStateView(drive.empty, onAction: emptyAction(drive.emptyAction))
+                            }
                         } else if state.layout == .grid {
                             grid(drive.rows, state)
                         } else {
