@@ -4,7 +4,7 @@
 //! (a letter more, fewer or different, or two neighbours swapped), read in a word
 //! of four letters or more and never in a word with a digit
 //! (`crates/assist/src/native/resolve.rs`, nt11 R1). Search had none, and Locker
-//! and Tally's walkers had less. This module is that rule lifted to the one place
+//! and Locker's walker had less. This module is that rule lifted to the one place
 //! all of them can reach ([`within_one`], [`one_edit`]), plus what search needs
 //! on top of it: the tokenization of a query ([`words`]), the fold the full-text
 //! index applies ([`fold_like_index`]), and a correction that is **a lookup in the
@@ -436,7 +436,7 @@ pub fn correct_words(
 /// THE WORDS A WALKER HAS READ, as the vocabulary its own correction asks
 /// (#1097, R6).
 ///
-/// Locker and Tally answer a search by walking a bounded window of rows and
+/// Locker and Money answer a search by walking a bounded window of rows and
 /// matching text, not by asking the full-text door, and Locker is never a search
 /// domain: it has no index and no vocabulary, and must not get one. So a walker
 /// that found nothing corrects a typo against **the words of the very rows it

@@ -587,26 +587,6 @@ pub fn person_tags_statement(party_id: &str) -> PageQuery {
     )
 }
 
-/// `people.person.debtsFrom` / `people.person.debtsTo` — **TALLY'S TABLE, READ
-/// CROSS-APP** (census §A seam 4).
-///
-/// People is the only app in the tree that reads another app's domain table for
-/// a first-class surface. It reads only: `tally_obligation` is written by
-/// `tally.*` and by `people.{add_debt,settle_debt}` through the vault, never by
-/// a statement here.
-pub fn obligations_statement(name: &str, column: &str, party_id: &str) -> PageQuery {
-    PageQuery::new(
-        name,
-        "obligation_id, from_party, to_party, amount_minor, currency, reason, settled_at",
-        "tally_obligation",
-        PageOrder::asc("obligation_id", "obligation_id"),
-    )
-    .filter(
-        &format!("{column} = ? AND deleted_at IS NULL"),
-        vec![PageBindValue::Text(party_id.to_owned())],
-    )
-}
-
 /// `people.person.tasks` — the tasks and gift ideas one person's incoming links
 /// name. One read; which of the two a row is depends on its link's relation.
 pub fn tasks_statement(task_ids: &[String]) -> KitResult<PageQuery> {
@@ -631,20 +611,6 @@ pub fn activities_statement(name: &str, activity_ids: &[String]) -> KitResult<Pa
         PageOrder::desc("started_at", "activity_id"),
     )
     .filter(&fragment.sql, fragment.bind))
-}
-
-/// `people.person.vault` — the vault's own row, for `self_party_id`.
-///
-/// The owner's party id is what turns an obligation into "you owe" or "owed to
-/// you"; a sheet that could not read it would have to guess a direction.
-#[must_use]
-pub fn vault_statement() -> PageQuery {
-    PageQuery::new(
-        "people.person.vault",
-        "vault_id, self_party_id",
-        "core_vault",
-        PageOrder::asc("vault_id", "vault_id"),
-    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1038,8 +1004,6 @@ mod tests {
             journal_activity_links_statement(),
             person_notes_statement("p1"),
             person_tags_statement("p1"),
-            obligations_statement("people.person.debtsFrom", "from_party", "p1"),
-            vault_statement(),
             journal_scheme_statement(),
             journal_concepts_statement("s1"),
             journal_tags_statement("c1"),

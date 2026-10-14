@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "people",
   "name": "People",
-  "description": "Your circle, remembered — a personal CRM projected from the canonical vault. people_profile keeps only the genuine 1:1 CRM decoration; interactions are core activities, tasks are schedule tasks, relationships are typed core links, IOUs are Tally obligations, and journal entries are knowledge notes. Lists, favorites, notes, important dates, and gift ideas reuse the vault's shared mechanisms too. Every write runs through a typed command — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
+  "description": "Your circle, remembered — a personal CRM projected from the canonical vault. people_profile keeps only the genuine 1:1 CRM decoration; interactions are core activities, tasks are schedule tasks, relationships are typed core links, and journal entries are knowledge notes. Lists, favorites, notes, important dates, and gift ideas reuse the vault's shared mechanisms too. Every write runs through a typed command — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.1.2",
   "iconKey": "Users",
   "colorKey": "violet",
@@ -22,7 +22,6 @@
       { "schema": "knowledge", "table": "annotation", "verbs": "read" },
       { "schema": "knowledge", "table": "note", "verbs": "read" },
       { "schema": "schedule", "table": "task", "verbs": "read" },
-      { "schema": "tally", "table": "obligation", "verbs": "read" },
       { "schema": "social", "table": "contact_channel", "verbs": "read" },
       { "schema": "social", "table": "save_contact_channel", "verbs": "act" },
       {
@@ -568,51 +567,6 @@
       "writes": ["schedule.task"]
     },
     {
-      "name": "add-debt",
-      "description": "Record a debt you owe a person or they owe you through people.add_debt, in minor units.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "party_id": { "type": "string", "minLength": 1 },
-          "direction": { "type": "string", "enum": ["owe", "owed"] },
-          "amount_minor": { "type": "integer", "minimum": 0 },
-          "reason": { "type": "string" }
-        },
-        "required": ["party_id", "direction", "amount_minor"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
-        }
-      },
-      "writes": ["tally.friend", "tally.obligation"]
-    },
-    {
-      "name": "settle-debt",
-      "description": "Settle a debt through people.settle_debt (marks it closed, kept as history).",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": { "debt_id": { "type": "string", "minLength": 1 } },
-        "required": ["debt_id"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
-        }
-      },
-      "writes": ["tally.obligation"]
-    },
-    {
       "name": "create-list",
       "description": "Create a list (a SKOS concept in your lists scheme) through people.create_list, like a Docs folder.",
       "confirmation": "none",
@@ -841,7 +795,7 @@
     },
     {
       "name": "person",
-      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history.",
+      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas and interaction history.",
       "input": {
         "type": "object",
         "properties": { "party_id": { "type": "string", "minLength": 1 } },

@@ -1,6 +1,6 @@
 //! MONEY KEEPS ITS CURRENCY (#996 ruling R22, drift ONT-23; ported for #1020).
 //!
-//! v0's bug, in full: Tally's `pairwise` accumulated minor units into a map
+//! v0's bug, in full: a pairwise balance fold accumulated minor units into a map
 //! keyed by *party alone* and the dashboard labelled the sum with the vault's
 //! base currency, so a EUR 100 debt and a USD 100 debt read as one 200 — a
 //! number true in no currency, rendered as if it were. **The fix is a type,

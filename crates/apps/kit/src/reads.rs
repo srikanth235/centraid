@@ -27,7 +27,7 @@ use crate::statement::{PageBindValue, PageQuery};
 ///
 /// An app crate depends on this trait and on nothing that holds a file: SQL is
 /// confined to `crates/{ontology,vault,seat,search}` and `crates/apps/kit`
-/// (#1020 invariant), so `crates/apps/tally` can hold statements-as-data and
+/// (#1020 invariant), so an app crate can hold statements-as-data and
 /// never a statement. The implementations are the vault's own paged door and,
 /// for tests and fixture generation, [`crate::testdoor`].
 pub trait PageDoor {
@@ -121,10 +121,10 @@ impl FanOutBound {
     /// (`paged-reads.ts:57`, `:136`) and its walk asks for `pageSize` per page
     /// — but the window clamps at `MAX_PAGE_ROWS`, so a bound with a page size
     /// over 500 reaches only `500 * fanOutPages` rows and then throws a message
-    /// naming a number twice as large as the one it stopped at. Tally declares
-    /// `LEDGER_FAN_OUT = {pageSize: 1000, fanOutPages: 8}` and states 8,000
-    /// rows; it reaches 4,000. At 2,000 expenses with four sharers each — the
-    /// window Tally's own ceiling is stated at — `loadTally` throws.
+    /// naming a number twice as large as the one it stopped at. v0's ledger declared
+    /// `LEDGER_FAN_OUT = {pageSize: 1000, fanOutPages: 8}` and stated 8,000
+    /// rows; it reached 4,000. At 2,000 expenses with four sharers each — the
+    /// window its own ceiling was stated at — the loader threw.
     ///
     /// A cap that lies about its own size is worse than a smaller cap, so this
     /// reports the reachable number and the error quotes it.
@@ -182,13 +182,13 @@ pub struct Window {
 ///
 /// **This is the second half of the v0 finding in [`FanOutBound::cap`], and the
 /// worse half** (D-1020-D3-12). `MAX_PAGE_ROWS` clamps a page to 500, and v0's
-/// `loadTally` asks for its 2,000-row ledger window as ONE page and takes
+/// ledger loader asks for its 2,000-row ledger window as ONE page and takes
 /// `.rows` (`queries/dashboard.ts:267-280`) — so the dashboard reads **500
 /// expenses while declaring 2,000**, discards the `next` cursor that says there
 /// are more, and folds a BALANCE over what it got. That is exactly the failure
 /// its own doctrine names four lines earlier: "a balance derived from a
 /// silently short ledger is a WRONG NUMBER — not a slow screen"
-/// (`:45-51`). Verified: at the year-3 Tally profile the ported statement
+/// (`:45-51`). Verified: at a year-3 ledger profile the ported statement
 /// returns 500 of 1,960 live expenses in one page.
 ///
 /// A window is a clamp for a LIST, where a member who scrolled fast is not

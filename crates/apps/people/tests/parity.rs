@@ -44,16 +44,18 @@
 //! shelf (by `deleted_at DESC`), `history`'s rail (by `recorded_at DESC`) and
 //! the person sheet's `notes` and `interactions`.
 //!
-//! ## THE SHARING KEYS ARE FILTERED OUT OF v0'S ANSWER, NOT EDITED OUT
+//! ## THE SHARING AND DEBT KEYS ARE FILTERED OUT OF v0'S ANSWER, NOT EDITED OUT
 //!
 //! `contracts/apps/people/queries.json` is a frozen golden (TESTING.md,
 //! "Fixtures and parity") and is never touched. It carries `linked` and
 //! `vault_count` on every roster row, `links_available` on the roster,
 //! `linked` / `to_link` in the dashboard's counts and `vaults` on the person
 //! sheet — v0's answers about `share_party_vault_binding`, which rung five
-//! drops (#1029, the owner's ruling of 2026-09-21). There is nothing left for
-//! those keys to be an answer ABOUT, so [`expected`] removes exactly those five
-//! names and everything else is compared as before. `SHARING_KEYS_FILTERED`
+//! drops (#1029, the owner's ruling of 2026-09-21) — and `debts` on the person
+//! sheet, v0's answer about Tally's `tally_obligation`, which rung fifteen drops
+//! (#1099). There is nothing left for those keys to be an answer ABOUT, so
+//! [`expected`] removes exactly those six names and everything else is compared
+//! as before. `SHARING_KEYS_FILTERED`
 //! is what stops the filter outliving its reason.
 //!
 //! ## The three stated divergences
@@ -122,9 +124,10 @@ fn fixture_vault() -> rusqlite::Connection {
         &rows,
         // THE MAPPING, stated: `contracts/apps/people/rows.json` is frozen and
         // still carries v0's `share_party_vault_binding` rows, which rung five
-        // drops (#1029).
+        // drops (#1029), and Tally's `tally_obligation` rows, which rung fifteen
+        // drops (#1099).
         &FrozenRowMapping {
-            tables_gone: &["share_party_vault_binding"],
+            tables_gone: &["share_party_vault_binding", "tally_obligation"],
             columns_gone: &[],
             columns_added: &[],
         },
@@ -447,22 +450,6 @@ fn person_body(person: &Person) -> Value {
             })
             .collect::<Vec<Value>>()
     }));
-    value["debts"] = json!(
-        person
-            .obligations
-            .ready()
-            .map_or_else(Vec::new, |obligations| obligations
-                .debts
-                .iter()
-                .map(|debt| json!({
-                    "debt_id": debt.debt_id,
-                    "direction": debt.direction.as_str(),
-                    "amount_minor": debt.amount.amount_minor,
-                    "currency": debt.amount.currency.code(),
-                    "reason": debt.reason,
-                }))
-                .collect::<Vec<Value>>())
-    );
     value
 }
 
@@ -532,7 +519,8 @@ fn expected(output: &Value) -> Value {
 static SHARING_KEYS_FILTERED: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
-/// v0's answer, minus the five keys about the share plane rung five drops.
+/// v0's answer, minus the five keys about the share plane rung five drops and the
+/// one about Tally's debts rung fifteen drops.
 ///
 /// The fixture is frozen and is not edited; the mapping is stated in this
 /// file's header.
@@ -546,6 +534,7 @@ fn without_sharing(value: &mut Value) -> usize {
                 "links_available",
                 "to_link",
                 "vaults",
+                "debts",
             ] {
                 if map.remove(key).is_some() {
                     removed += 1;

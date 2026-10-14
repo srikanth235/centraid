@@ -1,6 +1,6 @@
 //! THE TEST DOOR — the only place in the app plane that holds a connection.
 //!
-//! **Why here and not in `crates/apps/tally`.** SQL appears only under
+//! **Why here and not in an app crate.** SQL appears only under
 //! `crates/{ontology,vault,seat,search}` and `crates/apps/kit` (#1020
 //! invariant, enforced by `cargo xtask rules`' `sql-confinement`). An app crate
 //! holds statements-as-data and never a statement, so the door an app's tests
@@ -189,15 +189,15 @@ mod tests {
         connection
             .execute_batch(
                 // `spent_on` is NOT NULL in the vault's own DDL
-                // (`contracts/schema/vault-ddl.sql:3699`), and every Tally
+                // (`contracts/schema/vault-ddl.sql:3699`), and every app
                 // statement orders on a NOT NULL column for the reason
                 // `KitError::NullSortKeyBoundary` states.
-                "CREATE TABLE tally_expense (
+                "CREATE TABLE sample_entry (
                    expense_id TEXT PRIMARY KEY,
                    spent_on TEXT NOT NULL,
                    amount_minor INTEGER NOT NULL
                  );
-                 INSERT INTO tally_expense VALUES
+                 INSERT INTO sample_entry VALUES
                    ('e-1', '2026-01-01', 100),
                    ('e-2', '2026-01-01', 200),
                    ('e-3', '2026-01-01', 300),
@@ -211,7 +211,7 @@ mod tests {
         PageQuery::new(
             "kit.testdoor.expenses",
             "expense_id, spent_on, amount_minor",
-            "tally_expense",
+            "sample_entry",
             PageOrder::asc("spent_on", "expense_id"),
         )
     }
@@ -253,7 +253,7 @@ mod tests {
             &door,
             "kit.testdoor.one",
             "expense_id, amount_minor",
-            "tally_expense",
+            "sample_entry",
             "expense_id",
             "e-2",
         )
@@ -265,7 +265,7 @@ mod tests {
                 &door,
                 "kit.testdoor.one",
                 "expense_id",
-                "tally_expense",
+                "sample_entry",
                 "expense_id",
                 "nope"
             )
@@ -295,15 +295,15 @@ mod tests {
         let connection = Connection::open_in_memory().expect("an in-memory database opens");
         connection
             .execute_batch(
-                "CREATE TABLE tally_expense (expense_id TEXT PRIMARY KEY, spent_on TEXT);
-                 INSERT INTO tally_expense VALUES ('e-1', NULL), ('e-2', NULL), ('e-3', 'z');",
+                "CREATE TABLE sample_entry (expense_id TEXT PRIMARY KEY, spent_on TEXT);
+                 INSERT INTO sample_entry VALUES ('e-1', NULL), ('e-2', NULL), ('e-3', 'z');",
             )
             .expect("the nullable fixture is created");
         let door = TestDoor::new(&connection);
         let query = PageQuery::new(
             "kit.testdoor.nullable",
             "expense_id, spent_on",
-            "tally_expense",
+            "sample_entry",
             PageOrder::asc("spent_on", "expense_id"),
         );
         let outcome = door.page(&query, &PageRequest::first(1));
@@ -334,7 +334,7 @@ mod tests {
         let connection = ledger();
         let door = TestDoor::new(&connection);
         let mut bad = query();
-        bad.r#where = Some("amount_minor > 0; DROP TABLE tally_expense".to_owned());
+        bad.r#where = Some("amount_minor > 0; DROP TABLE sample_entry".to_owned());
         assert!(matches!(
             door.page(&bad, &PageRequest::first(1)),
             Err(KitError::GrammarRefused { .. })

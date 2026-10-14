@@ -1,4 +1,4 @@
-//! THE SEVEN DOMAINS, and the one that is missing on purpose.
+//! THE SIX DOMAINS, and the one that is missing on purpose.
 //!
 //! v0's `LINK_TARGET_KINDS` is the powerbox's whole vocabulary: what `[[` may
 //! point at. It is ported here rather than into `crates/apps/notes` because
@@ -80,13 +80,12 @@ impl Domain {
     }
 }
 
-/// The powerbox's seven, in v0's own order — which is the order the sheet groups
+/// The powerbox's six, in v0's own order — which is the order the sheet groups
 /// them in (`powerbox.ts:8`-`:11`: the group order is DERIVED from this table,
 /// never a second list that can disagree).
 ///
 /// The subtitle choices are v0's and each is a judgement: an event's is its
-/// start, a task's its due date, an expense's the day it was spent, a photo's
-/// its media type. A note's is its body preview, which is why `knowledge.note`
+/// start, a task's its due date, a photo's its media type. A note's is its body preview, which is why `knowledge.note`
 /// reads a column the base table does not have — see [`PREVIEW_FROM_TEXT`].
 pub const DOMAINS: &[Domain] = &[
     Domain {
@@ -136,18 +135,6 @@ pub const DOMAINS: &[Domain] = &[
         deleted_column: Some("deleted_at"),
         // task_id, title, description, then the fold: project
         weights: &[1.0, 1.0, 1.0, 0.5],
-    },
-    Domain {
-        app_id: "tally",
-        entity: "tally.expense",
-        table: "tally_expense",
-        fts: "fts_tally_expense",
-        id_column: "expense_id",
-        labels: &["description"],
-        subtitles: &["spent_on"],
-        deleted_column: Some("deleted_at"),
-        // expense_id, description, then the folds: category, group_name, items, memo
-        weights: &[1.0, 1.0, 0.5, 0.5, 0.5, 0.5],
     },
     Domain {
         app_id: "photos",
@@ -207,7 +194,7 @@ pub const PREVIEW_CHARS: usize = 200;
 ///
 /// An index folds attribute text into the entity's own row so that one probe per
 /// domain answers (#1097, R1): a person's nickname and email, an event's place, a
-/// task's project, an expense's group, line items and memo. Each fold is a
+/// task's project. Each fold is a
 /// column the base table lacks, so a column check against the base table cannot
 /// vouch for it. This list can: it names the source of every one, and
 /// [`assert_no_sealed_column`] reads the sources against the sealed registry.
@@ -228,11 +215,7 @@ pub struct Folded {
 /// The first three are older than #1097 (a note's and a document's decoded body,
 /// a photo's asset title and recognised text); the rest are rung thirteen's. A
 /// Locker memo is a `knowledge_annotation` too, and no entry here names it: the
-/// party and expense memos are selected by their `target_type` in the triggers
-/// (R1c).
-///
-/// `category` is a column of `tally_expense` itself and is listed because rung
-/// thirteen folds it deliberately (not when it is `general`, R1b).
+/// party memo is selected by its `target_type` in the triggers (R1c).
 pub const FOLDED: &[Folded] = &[
     Folded {
         entity: "knowledge.note",
@@ -276,26 +259,6 @@ pub const FOLDED: &[Folded] = &[
         entity: "schedule.task",
         column: "project",
         sources: &[("schedule_project", "name")],
-    },
-    Folded {
-        entity: "tally.expense",
-        column: "category",
-        sources: &[("tally_expense", "category")],
-    },
-    Folded {
-        entity: "tally.expense",
-        column: "group_name",
-        sources: &[("social_circle", "name")],
-    },
-    Folded {
-        entity: "tally.expense",
-        column: "items",
-        sources: &[("tally_expense_line_item", "description")],
-    },
-    Folded {
-        entity: "tally.expense",
-        column: "memo",
-        sources: &[("knowledge_annotation", "body_text")],
     },
     Folded {
         entity: "core.content_item",
@@ -385,8 +348,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_powerbox_reaches_seven_domains_and_locker_is_not_one() {
-        assert_eq!(DOMAINS.len(), 7);
+    fn the_powerbox_reaches_six_domains_and_locker_is_not_one() {
+        assert_eq!(DOMAINS.len(), 6);
         assert!(domain_of("locker.item").is_none());
         assert!(domain_of("locker.item_field").is_none());
         assert!(domain_of("sync.connection_credential").is_none());

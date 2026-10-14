@@ -13,4 +13,4 @@ People's parity fixtures: a **frozen golden**, read by `crates/apps/people/tests
 
 ## What the fixture cannot show, and where that is proved instead
 
-Every case runs under the owner's own credential, so `vaultDenied` is absent everywhere and People's three-state readings — the share plane, the linked plane and Tally's obligations — have nothing to deny. They are proved in `crates/apps/people/tests/three_state.rs`, which runs the same queries through a door that refuses one plane at a time.
+Every case runs under the owner's own credential, so `vaultDenied` is absent everywhere and People's three-state readings — v0's share plane, linked plane and Tally obligations; the first and last are gone from the port (#1029, #1099) — have nothing to deny. They are proved in `crates/apps/people/tests/three_state.rs`, which runs the same queries through a door that refuses one plane at a time.

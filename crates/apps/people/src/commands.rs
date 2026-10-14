@@ -1,9 +1,9 @@
-//! THE TWENTY-NINE ACTIONS, as command invocations.
+//! THE TWENTY-EIGHT ACTIONS, as command invocations.
 //!
 //! Every People action is a thin invocation of ONE typed vault command: the
 //! projection lives in the command, not the app. So this module is a
-//! table, not logic. Twenty-nine actions over twenty-nine commands —
-//! **twenty-eight `people.*` and one `core.merge_party`** — which is the
+//! table, not logic. Twenty-eight actions over twenty-eight commands —
+//! **twenty-seven `people.*` and one `core.merge_party`** — which is the
 //! largest action surface in the tree and the reason the census calls People
 //! the clearest lane-sizing signal in §A.
 //!
@@ -169,7 +169,7 @@ const fn confirmed(action: &'static str, command: &'static str) -> ActionRow {
 }
 
 /// THE TABLE. Thirty actions, thirty commands, in the manifest's own order.
-pub const ACTIONS: [ActionRow; 30] = [
+pub const ACTIONS: [ActionRow; 28] = [
     act("add-person", "people.add_person"),
     act("edit-person", "people.edit_person"),
     act("set-cadence", "people.set_cadence"),
@@ -192,8 +192,6 @@ pub const ACTIONS: [ActionRow; 30] = [
     act("add-relationship", "people.add_relationship"),
     act("add-gift", "people.add_gift"),
     act("toggle-gift", "people.toggle_gift"),
-    act("add-debt", "people.add_debt"),
-    act("settle-debt", "people.settle_debt"),
     act("create-list", "people.create_list"),
     act("rename-list", "people.rename_list"),
     act("delete-list", "people.delete_list"),
@@ -288,8 +286,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn thirty_actions_invoke_thirty_distinct_commands() {
-        assert_eq!(ACTIONS.len(), 30);
+    fn twenty_eight_actions_invoke_twenty_eight_distinct_commands() {
+        assert_eq!(ACTIONS.len(), 28);
         let mut commands: Vec<&str> = ACTIONS.iter().map(|row| row.command).collect();
         commands.sort_unstable();
         let before = commands.len();
@@ -300,8 +298,8 @@ mod tests {
                 .iter()
                 .filter(|row| row.command.starts_with("people."))
                 .count(),
-            29,
-            "twenty-nine of the thirty are the people schema's"
+            27,
+            "twenty-seven of the twenty-eight are the people schema's"
         );
     }
 

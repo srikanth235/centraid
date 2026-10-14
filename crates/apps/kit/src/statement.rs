@@ -285,7 +285,7 @@ mod tests {
         PageQuery::new(
             "kit.test",
             "expense_id, spent_on",
-            "tally_expense",
+            "sample_entry",
             PageOrder::desc("spent_on", "expense_id"),
         )
     }
@@ -325,7 +325,7 @@ mod tests {
         let one = PageQuery::new(
             "kit.test",
             "expense_id",
-            "tally_expense",
+            "sample_entry",
             PageOrder::asc("expense_id", "expense_id"),
         );
         let statement = page_statement(&one, &PageRequest::first(1), None).unwrap();

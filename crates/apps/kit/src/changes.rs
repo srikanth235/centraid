@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn a_purge_always_matches_even_with_no_dependencies() {
-        let set = DependencySet::of(&[Dependency::row("tally.expense", "e-1")]);
+        let set = DependencySet::of(&[Dependency::row("sample.entry", "e-1")]);
         assert!(set.matches(&Invalidation {
             dependency: Dependency::entity("*"),
             source: InvalidationSource::Purge,
@@ -190,45 +190,45 @@ mod tests {
     #[test]
     fn a_read_with_no_dependencies_always_reruns() {
         let set = DependencySet::default();
-        assert!(set.matches(&canonical(Dependency::row("tally.expense", "e-1"))));
+        assert!(set.matches(&canonical(Dependency::row("sample.entry", "e-1"))));
     }
 
     #[test]
     fn an_entity_miss_never_matches() {
-        let set = DependencySet::of(&[Dependency::entity("tally.expense")]);
-        assert!(!set.matches(&canonical(Dependency::entity("tally.settlement"))));
+        let set = DependencySet::of(&[Dependency::entity("sample.entry")]);
+        assert!(!set.matches(&canonical(Dependency::entity("sample.payment"))));
     }
 
     #[test]
     fn a_whole_entity_invalidation_always_matches_that_entity() {
-        let set = DependencySet::of(&[Dependency::row("tally.expense", "e-1")]);
-        assert!(set.matches(&canonical(Dependency::entity("tally.expense"))));
+        let set = DependencySet::of(&[Dependency::row("sample.entry", "e-1")]);
+        assert!(set.matches(&canonical(Dependency::entity("sample.entry"))));
     }
 
     #[test]
     fn two_rows_of_one_entity_are_the_only_skip() {
-        let set = DependencySet::of(&[Dependency::row("tally.expense", "e-1")]);
-        assert!(!set.matches(&canonical(Dependency::row("tally.expense", "e-2"))));
-        assert!(set.matches(&canonical(Dependency::row("tally.expense", "e-1"))));
+        let set = DependencySet::of(&[Dependency::row("sample.entry", "e-1")]);
+        assert!(!set.matches(&canonical(Dependency::row("sample.entry", "e-2"))));
+        assert!(set.matches(&canonical(Dependency::row("sample.entry", "e-1"))));
     }
 
     #[test]
     fn a_whole_entity_dependency_reruns_for_any_row_of_it() {
-        let set = DependencySet::of(&[Dependency::entity("tally.expense")]);
-        assert!(set.matches(&canonical(Dependency::row("tally.expense", "e-9"))));
+        let set = DependencySet::of(&[Dependency::entity("sample.entry")]);
+        assert!(set.matches(&canonical(Dependency::row("sample.entry", "e-9"))));
     }
 
     #[test]
     fn coalescing_keeps_one_event_per_table_and_the_wider_claim() {
         let events = vec![
-            ChangeEvent::of("tally_expense", ["e-1"]),
-            ChangeEvent::of("tally_expense", ["e-2"]),
-            ChangeEvent::of("tally_settlement", []),
-            ChangeEvent::of("tally_settlement", ["s-1"]),
+            ChangeEvent::of("sample_entry", ["e-1"]),
+            ChangeEvent::of("sample_entry", ["e-2"]),
+            ChangeEvent::of("sample_payment", []),
+            ChangeEvent::of("sample_payment", ["s-1"]),
         ];
         let out = coalesce(events);
         assert_eq!(out.len(), 2);
-        assert_eq!(out[0].table, "tally_expense");
+        assert_eq!(out[0].table, "sample_entry");
         assert_eq!(
             out[0].pk_set,
             ["e-1", "e-2"].into_iter().map(str::to_owned).collect()

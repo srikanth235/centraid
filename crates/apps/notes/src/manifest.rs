@@ -192,17 +192,17 @@ mod tests {
         assert_eq!(schemas, ["core", "knowledge", "schedule"]);
     }
 
-    /// THIRTY-THREE SCOPES: eighteen reads over five schemas, and **fifteen
+    /// THIRTY-TWO SCOPES: seventeen reads over four schemas, and **fifteen
     /// `act` scopes** (census §A0's table).
     ///
     /// The `act` half is compared against the action table rather than
     /// transcribed: a sixteenth action with no scope is an action the grant does
     /// not cover, and a scope with no action is reach nothing uses.
     #[test]
-    fn it_declares_thirty_three_scopes_with_one_act_scope_per_action() {
+    fn it_declares_thirty_two_scopes_with_one_act_scope_per_action() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("Notes declares its reach");
-        assert_eq!(vault.scopes.len(), 33);
+        assert_eq!(vault.scopes.len(), 32);
 
         let mut schemas: Vec<&str> = vault
             .scopes
@@ -211,7 +211,7 @@ mod tests {
             .collect();
         schemas.sort_unstable();
         schemas.dedup();
-        assert_eq!(schemas, ["core", "knowledge", "media", "schedule", "tally"]);
+        assert_eq!(schemas, ["core", "knowledge", "media", "schedule"]);
 
         let mut declared: Vec<(&str, &str)> = vault
             .scopes
@@ -236,7 +236,7 @@ mod tests {
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Read)
             .count();
-        assert_eq!(reads, 18);
+        assert_eq!(reads, 17);
         // NOTHING WIDER, and nothing revealed: `read+act` over a whole schema
         // is the widest form and only agenda and people use it; `reveal` is
         // Locker's alone. Notes' `knowledge` read scope IS whole-schema, which
@@ -255,14 +255,14 @@ mod tests {
         );
     }
 
-    /// THE POWERBOX IS WHY `tally` AND `media` ARE IN THE SCOPE LIST.
+    /// THE POWERBOX IS WHY `media` IS IN THE SCOPE LIST.
     ///
-    /// Notes is the only app that reads seven domains (census §A4), and the two
-    /// scopes nothing else in this app touches are the proof: an expense and an
-    /// asset are read ONLY as link targets. A port that dropped them would
-    /// silently shrink the sheet by two columns.
+    /// Notes reads other apps' domains (census §A4), and the scope nothing else
+    /// in this app touches is the proof: an asset is read ONLY as a link target.
+    /// A port that dropped it would silently shrink the sheet by a column. (An
+    /// expense was the second, until Tally left, #1099.)
     #[test]
-    fn the_two_scopes_only_the_powerbox_needs_are_declared() {
+    fn the_scope_only_the_powerbox_needs_is_declared() {
         let vault = manifest().vault.as_ref().expect("Notes declares its reach");
         let declared = |schema: &str, table: &str| {
             vault.scopes.iter().any(|scope| {
@@ -271,7 +271,6 @@ mod tests {
                     && scope.verbs == ScopeVerbs::Read
             })
         };
-        assert!(declared("tally", "expense"));
         assert!(declared("media", "asset"));
         assert!(declared("schedule", "task"));
         // And Locker is not reachable at all — the absence is structural.

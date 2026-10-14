@@ -557,9 +557,8 @@ impl Search for SqliteDoor<'_> {
         if let Some(deleted) = probe.deleted_column {
             predicates.push(format!("b.\"{deleted}\" IS NULL"));
         }
-        // A CONTAINER IS LIVE BY MORE THAN A FLAG: a Tally group is a circle a
-        // live group stands on, a folder a concept of the folders scheme that is
-        // not the root. The triggers keep the index to such rows; this is the
+        // A CONTAINER IS LIVE BY MORE THAN A FLAG: a folder is a concept of the
+        // folders scheme that is not the root. The triggers keep the index to such rows; this is the
         // door's belt to them.
         for guard in probe.guards {
             predicates.push(format!("({})", guard.sql));
@@ -785,7 +784,7 @@ mod tests {
 
     /// The live shape of each domain's index, the id first, in the order the
     /// weights list names them.
-    const SHAPES: [(&str, &[&str]); 7] = [
+    const SHAPES: [(&str, &[&str]); 6] = [
         ("knowledge.note", &["note_id", "title", "body"]),
         (
             "core.party",
@@ -808,22 +807,11 @@ mod tests {
             "schedule.task",
             &["task_id", "title", "description", "project"],
         ),
-        (
-            "tally.expense",
-            &[
-                "expense_id",
-                "description",
-                "category",
-                "group_name",
-                "items",
-                "memo",
-            ],
-        ),
         ("core.content_item", &["content_id", "title"]),
         ("core.document", &["document_id", "title", "body"]),
     ];
 
-    /// A connection holding the seven bases and the seven indexes in the shape
+    /// A connection holding the six bases and the six indexes in the shape
     /// `open` accepts, with `extra` more columns on one index and `without` one
     /// column left off another.
     fn model(extra: Option<(&str, &str)>, without: Option<(&str, &str)>) -> Connection {
@@ -1027,7 +1015,7 @@ mod tests {
 
     #[test]
     fn a_listed_fold_is_listed_for_its_own_domain_only() {
-        // `memo` is a fold of the party's index and of the expense's; a note's
+        // `memo` is a fold of the party's index; a note's
         // index carrying one is a column nobody listed FOR NOTES.
         let connection = model(Some(("knowledge.note", "memo")), None);
         assert!(matches!(

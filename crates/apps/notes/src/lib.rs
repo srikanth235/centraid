@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! # Notes — six queries, fifteen actions, and the one app that reads seven domains
+//! # Notes — six queries, fifteen actions, and the one app that reads six domains
 //!
 //! 9,336 lines of v0 TypeScript, 6 queries, 15 actions, 33 scopes over five
 //! schemas (#1020, wave 4 census §A4). Its doctrine, from the manifest's own
@@ -26,7 +26,7 @@
 //!   `current_revision_id` through `parent_revision_id` ([`version_chain`],
 //!   #996 R20(a)). A cycle is a REFUSAL, not a truncated list (D-1020-N2).
 //! - **THE POWERBOX IS SECRET-FREE BY CONSTRUCTION** ([`queries::load_link_targets`]):
-//!   seven domains through `crates/search`, and Locker is not one of them.
+//!   six domains through `crates/search`, and Locker is not one of them.
 //! - **A DENIAL IS A VALUE.** Every query wraps its body and answers the empty
 //!   shape plus `vaultDenied` rather than throwing.
 //!

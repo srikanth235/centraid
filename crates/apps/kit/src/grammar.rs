@@ -590,8 +590,8 @@ mod tests {
         vec![
             TableFacts {
                 alias: "e".to_owned(),
-                physical: "tally_expense".to_owned(),
-                entity: "tally.expense".to_owned(),
+                physical: "sample_entry".to_owned(),
+                entity: "sample.entry".to_owned(),
                 columns: ["expense_id", "group_id", "amount_minor", "deleted_at"]
                     .into_iter()
                     .map(str::to_owned)
@@ -601,8 +601,8 @@ mod tests {
             },
             TableFacts {
                 alias: "s".to_owned(),
-                physical: "tally_expense_split".to_owned(),
-                entity: "tally.expense_split".to_owned(),
+                physical: "sample_split".to_owned(),
+                entity: "sample.split".to_owned(),
                 columns: ["expense_id", "party_id", "share_minor"]
                     .into_iter()
                     .map(str::to_owned)
@@ -617,7 +617,7 @@ mod tests {
     fn a_join_with_an_alias_and_an_on_condition_is_taken_apart() {
         let shape = parse(&query(
             "e.expense_id, s.party_id",
-            "tally_expense e LEFT JOIN tally_expense_split AS s ON s.expense_id = e.expense_id",
+            "sample_entry e LEFT JOIN sample_split AS s ON s.expense_id = e.expense_id",
             Some("e.deleted_at IS NULL"),
         ))
         .unwrap();
@@ -625,11 +625,11 @@ mod tests {
             shape.tables,
             vec![
                 FromPart {
-                    physical: "tally_expense".to_owned(),
+                    physical: "sample_entry".to_owned(),
                     alias: "e".to_owned()
                 },
                 FromPart {
-                    physical: "tally_expense_split".to_owned(),
+                    physical: "sample_split".to_owned(),
                     alias: "s".to_owned()
                 },
             ]
@@ -645,15 +645,15 @@ mod tests {
         let cases: Vec<(&str, PageQuery)> = vec![
             (
                 "a second statement",
-                query("expense_id", "tally_expense", Some("1 = 1; DROP TABLE x")),
+                query("expense_id", "sample_entry", Some("1 = 1; DROP TABLE x")),
             ),
             (
                 "a comment",
-                query("expense_id", "tally_expense", Some("1 = 1 -- and more")),
+                query("expense_id", "sample_entry", Some("1 = 1 -- and more")),
             ),
             (
                 "a block comment",
-                query("expense_id /* hi */", "tally_expense", None),
+                query("expense_id /* hi */", "sample_entry", None),
             ),
             (
                 "a subquery in FROM",
@@ -663,41 +663,37 @@ mod tests {
                 "a nested SELECT in WHERE",
                 query(
                     "expense_id",
-                    "tally_expense",
+                    "sample_entry",
                     Some("expense_id IN ( SELECT expense_id )"),
                 ),
             ),
             (
                 "an unlisted function",
-                query("readfile ( expense_id )", "tally_expense", None),
+                query("readfile ( expense_id )", "sample_entry", None),
             ),
             (
                 "a JOIN with no ON",
-                query(
-                    "e.expense_id",
-                    "tally_expense e JOIN tally_expense_split s",
-                    None,
-                ),
+                query("e.expense_id", "sample_entry e JOIN sample_split s", None),
             ),
             (
                 "an unterminated string",
-                query("expense_id", "tally_expense", Some("group_id = 'oops")),
+                query("expense_id", "sample_entry", Some("group_id = 'oops")),
             ),
             (
                 "a token the grammar has no shape for",
-                query("expense_id", "tally_expense", Some("group_id @> 'x'")),
+                query("expense_id", "sample_entry", Some("group_id @> 'x'")),
             ),
             (
                 "two tables under one name",
                 query(
                     "e.expense_id",
-                    "tally_expense e JOIN tally_expense_split e ON e.expense_id = e.expense_id",
+                    "sample_entry e JOIN sample_split e ON e.expense_id = e.expense_id",
                     None,
                 ),
             ),
             (
                 "an alias the door cannot read",
-                query("expense_id", "tally_expense the big one", None),
+                query("expense_id", "sample_entry the big one", None),
             ),
         ];
         for (why, case) in cases {
@@ -713,7 +709,7 @@ mod tests {
     fn an_unqualified_column_two_tables_have_is_refused() {
         let shape = parse(&query(
             "expense_id",
-            "tally_expense e JOIN tally_expense_split s ON s.expense_id = e.expense_id",
+            "sample_entry e JOIN sample_split s ON s.expense_id = e.expense_id",
             None,
         ))
         .unwrap();
@@ -725,7 +721,7 @@ mod tests {
 
     #[test]
     fn a_column_outside_the_field_mask_and_a_sealed_column_are_both_refused() {
-        let shape = parse(&query("e.amount_minor", "tally_expense e", None)).unwrap();
+        let shape = parse(&query("e.amount_minor", "sample_entry e", None)).unwrap();
         let mut masked = facts();
         masked[0].field_mask = Some(vec!["expense_id".to_owned()]);
         assert!(matches!(
@@ -744,7 +740,7 @@ mod tests {
     fn a_listed_function_and_a_literal_are_not_columns() {
         let shape = parse(&query(
             "coalesce ( e.amount_minor , 0 ) , 'x' , 12 , ?",
-            "tally_expense e",
+            "sample_entry e",
             None,
         ))
         .unwrap();

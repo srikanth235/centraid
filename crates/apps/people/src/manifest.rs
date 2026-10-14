@@ -46,10 +46,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_seven_queries_and_thirty_actions() {
+    fn it_declares_seven_queries_and_twenty_eight_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 7);
-        assert_eq!(manifest.actions.len(), 30);
+        assert_eq!(manifest.actions.len(), 28);
         // The seven are the handler FILES the dispatcher resolves —
         // `queries/<name>.ts` — and `_shared.ts` and `person-contacts.ts` are
         // helpers beside them rather than queries (`person-contacts.ts:17`).
@@ -143,26 +143,26 @@ mod tests {
                 "outbox",
                 "people",
                 "schedule",
-                "social",
-                "tally"
+                "social"
             ]
         );
     }
 
-    /// TWENTY SCOPES: fifteen reads, four `act` and **one `read+act` over the
+    /// NINETEEN SCOPES: fourteen reads, four `act` and **one `read+act` over the
     /// whole `people` schema**. The four `share.*` reads went with the tables
-    /// they named (#1029: v1 has no sharing plane).
+    /// they named (#1029: v1 has no sharing plane) and `tally.obligation` with
+    /// Tally (#1099).
     ///
     /// The whole-schema form is the widest there is and only agenda and People
     /// use it. It is asserted here rather than narrowed, because expanding it
-    /// into twenty explicit scopes CHANGES THE GRANT'S MEANING — the
-    /// member consented to "People, over the People schema", and twenty
+    /// into nineteen explicit scopes CHANGES THE GRANT'S MEANING — the
+    /// member consented to "People, over the People schema", and nineteen
     /// rows is a different sentence even where the reach is the same.
     #[test]
-    fn it_declares_twenty_scopes_with_one_whole_schema_grant() {
+    fn it_declares_nineteen_scopes_with_one_whole_schema_grant() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("People declares its reach");
-        assert_eq!(vault.scopes.len(), 20);
+        assert_eq!(vault.scopes.len(), 19);
 
         let mut schemas: Vec<&str> = vault
             .scopes
@@ -173,7 +173,7 @@ mod tests {
         schemas.dedup();
         assert_eq!(
             schemas,
-            ["core", "knowledge", "people", "schedule", "social", "tally"]
+            ["core", "knowledge", "people", "schedule", "social"]
         );
 
         let whole_schema: Vec<&str> = vault
@@ -198,7 +198,7 @@ mod tests {
                 .iter()
                 .filter(|scope| scope.verbs == ScopeVerbs::Read)
                 .count(),
-            15
+            14
         );
         assert_eq!(
             vault
