@@ -353,7 +353,11 @@ public object TallySearchMachine :
             held.screen.field_?.term ?: "",
             held.answers.search?.corrected ?: "",
             SearchContainers.fold(held.answers.search?.containers ?: emptyList()),
+            rows = held.answers.search?.results?.size,
         )
+
+    override fun unanswered(held: TallyHeld<TallySearchState>): TallyHeld<TallySearchState> =
+        SearchLaw.unasked(Field, held)
 
     override fun fold(held: TallyHeld<TallySearchState>): TallySearchData? {
         val answer = held.answers.search ?: return null
@@ -369,7 +373,14 @@ public object TallySearchMachine :
             },
             // A GROUP THAT MATCHED THE NAME IS AN ANSWER: no "nothing found" over it.
             empty = if (rows.isEmpty() && answer.containers.isEmpty()) {
-                EmptyState(headline = "${TallyCopy.NOTHING_MATCHES} “$shownTerm”.", body = TallyCopy.SEARCH_NOT_SEARCHED)
+                // THE ONE ACTION is Ask, when the law offered it (#1097).
+                SearchLaw.asking(
+                    EmptyState(
+                        headline = TallyCopy.NOTHING_MATCHES.replace("{term}", shownTerm),
+                        body = TallyCopy.SEARCH_NOT_SEARCHED,
+                    ),
+                    held.screen.field_ ?: SearchField(),
+                )
             } else {
                 null
             },
@@ -390,6 +401,7 @@ public object TallySearchMachine :
 
     private object Field : SearchLens<TallyHeld<TallySearchState>> {
         override val screenId: String = SCREEN_ID
+        override val asks: Boolean = true
 
         override fun field(state: TallyHeld<TallySearchState>): SearchField = state.screen.field_ ?: SearchField()
 

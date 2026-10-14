@@ -170,7 +170,7 @@
     "MORE_TRASH_META": "Kept 30 days, restorable",
     "NEXT_MONTH": "Next month",
     "NOBODY_SHARES": "Choose who shares it.",
-    "NOTHING_MATCHES": "Nothing matches",
+    "NOTHING_MATCHES": "Nothing matches “{term}”.",
     "NOT_AN_AMOUNT": "not an amount",
     "NOT_A_PERCENTAGE": "not a percentage",
     "NOT_A_WEIGHT": "not a weight",

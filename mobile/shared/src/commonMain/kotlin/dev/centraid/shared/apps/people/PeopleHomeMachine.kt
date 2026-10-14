@@ -170,7 +170,7 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
         event.data_ != null -> arrived(state, event.data_)
         event.refused != null -> refused(state, event.refused.failure ?: Reads.refused(""))
         event.denied != null -> Step(
-            state.copy(
+            SearchLaw.unasked(Search, state).copy(
                 loading = null,
                 failure = null,
                 data_ = null,
@@ -233,8 +233,13 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
         val term = activeTerm(state)
         if (event.search != null) {
             if (term == null) return Step(settled)
-            val answered = SearchLaw.answered(Search, settled, term, event.corrected)
-            return Step(answered.copy(search_data = event.search.copy(term = term)))
+            val answered = SearchLaw.answered(Search, settled, term, event.corrected, rows = event.search.rows.size)
+            // THE ONE ACTION OF THE NO-MATCH SENTENCE is Ask, when the law offered it (#1097).
+            val data = event.search.copy(
+                term = term,
+                empty = event.search.empty?.let { SearchLaw.asking(it, answered.search ?: SearchField()) },
+            )
+            return Step(answered.copy(search_data = data))
         }
         val data = event.data_ ?: return Step(settled)
         // The surface must be the one on screen; anything else is re-asked.
@@ -419,6 +424,7 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
 
     private object Search : SearchLens<PeopleHomeState> {
         override val screenId: String = SCREEN_ID
+        override val asks: Boolean = true
 
         override fun field(state: PeopleHomeState): SearchField = state.search ?: SearchField()
 

@@ -312,6 +312,27 @@ class DocsSpec : StringSpec({
         drive(DocsDriveReads.arrived(listOf(answer)), closed).state.search!!.containers.shouldBeEmpty()
     }
 
+    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+        var s = onScreen(driveAnswer(folders = listOf(DocsFolder(folder_id = "f", name = "Taxes"))))
+        s = drive(DocsDriveEvent(search_opened = DocsDriveEvent.SearchOpened()), s).state
+        val typed = drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "zzqx")), s)
+        fun answer(search: DocsSearch) = DocsDriveReads.arrived(listOf(AppQueryResponse(docs_search = search)))
+        val none = drive(answer(DocsSearch(today = TODAY)), typed.state).state
+        none.search!!.ask shouldBe "Find zzqx"
+        none.data_!!.empty!!.action_label shouldBe "Ask about “zzqx”"
+        // The data's own action stays none: the shell draws and sends Ask.
+        none.data_.empty_action shouldBe DocsDriveData.EmptyAction.EMPTY_ACTION_NONE
+        // Anything found is no Ask: a document, or a folder.
+        val folder = centraid.core.v1.ContainerHit(entity = "core.concept", id = "f", title = "Taxes", app_id = "docs")
+        drive(answer(DocsSearch(today = TODAY, containers = listOf(folder))), typed.state).state.search!!.ask shouldBe ""
+        // A new term, a close and a denial clear it; an answer for a closed search sets none.
+        drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "zzq")), none).state.search!!.ask shouldBe ""
+        drive(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed()), none).state.search!!.ask shouldBe ""
+        drive(DocsDriveReads.denied(AppQueryDenial(message = "no")), none).state.search!!.ask shouldBe ""
+        val closed = drive(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed()), typed.state).state
+        drive(answer(DocsSearch(today = TODAY)), closed).state.search!!.ask shouldBe ""
+    }
+
     // --- Empties, day one, denied -----------------------------------------
 
     "every shelf has its own empty sentence and at most one action" {

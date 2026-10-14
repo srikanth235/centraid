@@ -280,6 +280,10 @@ public object LockerHomeMachine :
         field.copy(
             answered_term = answered,
             corrected = if (answer != null && answered.trim() == field.term.trim()) answer.corrected else "",
+            // LOCKER NEVER OFFERS ASK (#1097, R-1097-29): a search term here can itself be a secret, and
+            // Ask would write it into a chat thread, the chat index and the model's context. This
+            // machine does not go through `SearchLaw.answered`, so the guard is stated, not inherited.
+            ask = "",
         )
 
     private fun band(current: LockerHomeState.Destination): List<LockerBandTab> = listOf(

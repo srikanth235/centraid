@@ -17,6 +17,7 @@ import centraid.screen.v1.AgendaRowStatus
 import centraid.screen.v1.Denied
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.shared.design.PartyHueWheel
+import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.time.dayOfMonthOf
 import dev.centraid.shared.kit.time.isoWeekdayOf
 import dev.centraid.shared.kit.time.plusDays
@@ -168,8 +169,12 @@ internal object AgendaFold {
                 AgendaCopy.EMPTY_DAY_ONE_BODY,
                 AgendaCopy.NEW_EVENT,
             )
-            AgendaEmpty.AGENDA_EMPTY_NO_MATCH ->
-                Triple(AgendaCopy.EMPTY_NO_MATCH, AgendaCopy.EMPTY_NO_MATCH_BODY, "")
+            // THE ONE ACTION is Ask, when the machine offered it (#1097): the shell draws and sends it.
+            AgendaEmpty.AGENDA_EMPTY_NO_MATCH -> Triple(
+                AgendaCopy.EMPTY_NO_MATCH,
+                AgendaCopy.EMPTY_NO_MATCH_BODY,
+                if (screen.search_ask.isEmpty()) "" else SearchLaw.askLabel(screen.search_term),
+            )
             AgendaEmpty.AGENDA_EMPTY_NOTHING_WAITING -> Triple(AgendaCopy.EMPTY_WAITING, "", "")
             AgendaEmpty.AGENDA_EMPTY_NOTHING_ON_DAY -> Triple(
                 if (span == 1) AgendaCopy.EMPTY_DAY else AgendaCopy.EMPTY_DAYS,

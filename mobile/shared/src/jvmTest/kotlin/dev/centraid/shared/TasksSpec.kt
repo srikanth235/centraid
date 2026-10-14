@@ -426,6 +426,29 @@ class TasksSpec : StringSpec({
         TasksHomeMachine.reduce(closed, answer).state.screen.search!!.containers.shouldBeEmpty()
     }
 
+    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
+        val open = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
+        val typed = TasksHomeMachine.reduce(open, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "zzqx")))).state
+        val none = TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY))).state
+        none.screen.search!!.ask shouldBe "Find zzqx"
+        none.screen.data_!!.empty!!.action_label shouldBe "Ask about “zzqx”"
+        // Anything found is no Ask: a task, or a project.
+        TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Call Ana")))))
+            .state.screen.search!!.ask shouldBe ""
+        val project = centraid.core.v1.ContainerHit(entity = "schedule.project", id = "p-1", title = "Garden", app_id = "tasks")
+        TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY, containers = listOf(project))))
+            .state.screen.search!!.ask shouldBe ""
+        // A new term, a close and a denial clear it; an answer for a closed search sets none.
+        TasksHomeMachine.reduce(none, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "zzq"))))
+            .state.screen.search!!.ask shouldBe ""
+        TasksHomeMachine.reduce(none, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())))
+            .state.screen.search!!.ask shouldBe ""
+        TasksHomeMachine.reduce(none, TasksHomeInput.Denied(AppQueryDenial(code = "rcp_8802"))).state.screen.search!!.ask shouldBe ""
+        val closed = TasksHomeMachine.reduce(typed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed()))).state
+        TasksHomeMachine.reduce(closed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY))).state.screen.search!!.ask shouldBe ""
+    }
+
     "the band: the tab you are on is nothing; another reads; More is a sheet without Search; the search bar opens the field" {
         val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY))
         TasksHomeMachine.reduce(landed, view(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = "today")))).effects.shouldBeEmpty()

@@ -114,7 +114,14 @@ internal fun TasksHomeScreen(
                 val nothing = home.groups.isEmpty() && home.projects.isEmpty() && containers.isEmpty()
                 val empty = home.empty
                 if (nothing && empty != null) {
-                    EmptyStateView(empty, onAction = { onEvent(TasksHomeEvent(empty_acted = TasksHomeEvent.EmptyActed())) })
+                    // A SEARCH THAT FOUND NOTHING carries Ask as its action (#1097, R-1097-30); Android has no Chat
+                    // tab, so it draws the sentence alone, as Home does.
+                    EmptyStateView(
+                        empty,
+                        onAction = if (home.searching) null else {
+                            { onEvent(TasksHomeEvent(empty_acted = TasksHomeEvent.EmptyActed())) }
+                        },
+                    )
                 } else {
                     LazyColumn(Modifier.fillMaxSize()) {
                         val notice = home.notice

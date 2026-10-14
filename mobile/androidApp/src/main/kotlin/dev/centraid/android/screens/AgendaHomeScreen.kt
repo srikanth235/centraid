@@ -271,7 +271,9 @@ private fun AgendaList(
                     testTag = "agenda-empty-import",
                     modifier = Modifier.padding(top = 16.dp),
                 ) { door(data.import_source) }
-            } else if (data.empty_action.isNotEmpty()) {
+            } else if (data.empty_action.isNotEmpty() && data.empty != AgendaEmpty.AGENDA_EMPTY_NO_MATCH) {
+                // NO-MATCH'S ACTION IS ASK (#1097, R-1097-30): drawn only where the shell has a Chat tab,
+                // and Android has none, so it draws the sentence without it.
                 QuietButton(
                     label = data.empty_action,
                     testTag = "agenda-empty-action",

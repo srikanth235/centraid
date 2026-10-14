@@ -166,6 +166,8 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
 
     private object Field : SearchLens<HomeSearchState> {
         override val screenId: String = SCREEN_ID
+        // Home keeps its own `ask_question` on its data (#1097, R-1097-28).
+        override val asks: Boolean = false
 
         override fun field(state: HomeSearchState): SearchField = state.field_ ?: SearchField()
 

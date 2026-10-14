@@ -672,7 +672,7 @@ class TallyScreensSpec : StringSpec({
         typed.effects shouldBe listOf(ScreenEffect.ReadPage("tally.search", afterCursor = null))
         TallySearchReads.requests(typed.state, CLOCK)!!.single().tally_search?.term shouldBe "ferry"
         val none = TallySearchMachine.reduce(typed.state, TallyInput.Answered(listOf(AppQueryResponse(tally_search = TallySearch())))).state
-        none.screen.data_?.empty?.headline shouldBe "${TallyCopy.NOTHING_MATCHES} “ferry”."
+        none.screen.data_?.empty?.headline shouldBe "Nothing matches “ferry”."
         none.screen.field_?.answered_term shouldBe "ferry"
         val hits = TallySearchMachine.reduce(
             typed.state,
@@ -727,6 +727,29 @@ class TallyScreensSpec : StringSpec({
         val cleared = TallySearchMachine.reduce(found, view(TallySearchEvent(cleared = TallySearchEvent.Cleared()))).state
         cleared.screen.field_!!.containers.shouldBeEmpty()
         TallySearchMachine.reduce(cleared, answer).state.screen.field_!!.containers.shouldBeEmpty()
+    }
+
+    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+        val typed = TallySearchMachine.reduce(
+            TallySearchMachine.initial(),
+            view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "zzqx"))),
+        ).state
+        fun answer(search: TallySearch) = TallyInput.Answered(listOf(AppQueryResponse(tally_search = search)))
+        val none = TallySearchMachine.reduce(typed, answer(TallySearch())).state
+        none.screen.field_!!.ask shouldBe "Find zzqx"
+        none.screen.data_!!.empty!!.action_label shouldBe "Ask about “zzqx”"
+        // Anything found is no Ask: an expense, or a group.
+        TallySearchMachine.reduce(typed, answer(TallySearch(results = listOf(expenseRow("e1")), total_matches = 1)))
+            .state.screen.field_!!.ask shouldBe ""
+        val group = centraid.core.v1.ContainerHit(entity = "social.circle", id = "circle-1", title = "Lisbon trip", app_id = "tally", open_id = "group-1")
+        TallySearchMachine.reduce(typed, answer(TallySearch(containers = listOf(group)))).state.screen.field_!!.ask shouldBe ""
+        // A new term, a clear and a denial clear it; an answer for a cleared field sets none.
+        TallySearchMachine.reduce(none, view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "zzq")))).state
+            .screen.field_!!.ask shouldBe ""
+        val cleared = TallySearchMachine.reduce(none, view(TallySearchEvent(cleared = TallySearchEvent.Cleared()))).state
+        cleared.screen.field_!!.ask shouldBe ""
+        TallySearchMachine.reduce(none, TallyInput.Denied(AppQueryDenial())).state.screen.field_!!.ask shouldBe ""
+        TallySearchMachine.reduce(cleared, answer(TallySearch())).state.screen.field_!!.ask shouldBe ""
     }
 
     "Tally's trash restores and never offers to destroy" {

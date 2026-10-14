@@ -14,6 +14,7 @@ import centraid.screen.v1.AgendaToolbar
 import centraid.screen.v1.Loading
 import centraid.screen.v1.SeatState
 import dev.centraid.design.copy.AgendaCopy
+import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -220,6 +221,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                             search_open = false,
                             search_term = "",
                             search_corrected = "",
+                            search_ask = "",
                             sheet = AgendaHomeState.Sheet.SHEET_NONE,
                             due_open_days = emptyList(),
                             loading = Loading(first_load = true),
@@ -271,7 +273,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             event.search_term != null -> {
                 val opened = openSearch(state)
                 val typed = opened.copy(
-                    screen = opened.screen.copy(search_term = event.search_term.term, search_corrected = ""),
+                    screen = opened.screen.copy(search_term = event.search_term.term, search_corrected = "", search_ask = ""),
                 )
                 if (activeTerm(typed.screen) == null) {
                     // NO TERM, NO SEARCH: the window's own list, re-folded.
@@ -411,7 +413,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
 
     /** Search shut, and its term CLEARED (v0 kept it — a defect not carried). */
     private fun closedSearch(state: AgendaHome): AgendaHome = state.copy(
-        screen = state.screen.copy(search_open = false, search_term = "", search_corrected = ""),
+        screen = state.screen.copy(search_open = false, search_term = "", search_corrected = "", search_ask = ""),
         answers = state.answers?.copy(search = null),
     )
 
@@ -478,6 +480,13 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             // THE WORDS THE HITS ANSWER: kept only while a term is, and only
             // when this answer is a search's.
             search_corrected = if (searching) answer.search?.corrected ?: "" else "",
+            // THE QUESTION THE NO-MATCH STATE OFFERS (#1097, R-1097-28): for a search's own answer to the
+            // term on screen, with no event in it. Agenda keeps flat fields, so this is the law by hand.
+            search_ask = if (searching && answer.search != null && answer.search.events.isEmpty()) {
+                SearchLaw.question(state.screen.search_term)
+            } else {
+                ""
+            },
         )
         val held = AgendaAnswers(
             upcoming = upcoming,
@@ -509,6 +518,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                     search_open = false,
                     search_term = "",
                     search_corrected = "",
+                    search_ask = "",
                     sheet = AgendaHomeState.Sheet.SHEET_NONE,
                 ),
             ),

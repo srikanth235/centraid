@@ -175,7 +175,7 @@ public object TallyCopy {
     public const val MORE_TRASH_META: String = "Kept 30 days, restorable"
     public const val NEXT_MONTH: String = "Next month"
     public const val NOBODY_SHARES: String = "Choose who shares it."
-    public const val NOTHING_MATCHES: String = "Nothing matches"
+    public const val NOTHING_MATCHES: String = "Nothing matches “{term}”."
     public const val NOT_AN_AMOUNT: String = "not an amount"
     public const val NOT_A_PERCENTAGE: String = "not a percentage"
     public const val NOT_A_WEIGHT: String = "not a weight"

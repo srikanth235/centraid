@@ -639,6 +639,8 @@ public object ChatMachine {
     /** The drawer's search field, in the shared law's terms. */
     private object DrawerField : SearchLens<Chat> {
         override val screenId: String = "chat"
+        // The drawer's search finds chats; asking the assistant about a chat search is not an Ask (#1097, R-1097-28).
+        override val asks: Boolean = false
 
         override fun field(state: Chat): SearchField = state.search
 

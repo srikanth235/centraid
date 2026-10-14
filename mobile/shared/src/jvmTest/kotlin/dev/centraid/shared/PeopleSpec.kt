@@ -360,6 +360,32 @@ class PeopleSpec : StringSpec({
             .state.search.shouldNotBeNull().corrected shouldBe ""
     }
 
+    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+        val landed = home(opened(), roster(person("p1", "Dana"))).state
+        val typed = run(
+            PeopleHomeMachine,
+            landed,
+            PeopleHomeEvent(search_opened = PeopleHomeEvent.SearchOpened()),
+            PeopleHomeEvent(search_term = PeopleHomeEvent.SearchTermChanged(term = "zzqx")),
+        ).state
+        fun answer(search: PeopleSearch) = PeopleHomeReads.arrived(listOf(AppQueryResponse(people_search = search)))
+        val none = PeopleHomeMachine.reduce(typed, answer(PeopleSearch())).state
+        none.search.shouldNotBeNull().ask shouldBe "Find zzqx"
+        none.search_data.shouldNotBeNull().empty.shouldNotBeNull().action_label shouldBe "Ask about “zzqx”"
+        // A person found is no Ask.
+        val found = PeopleHomeMachine.reduce(typed, answer(PeopleSearch(people = listOf(centraid.core.v1.PeopleRosterRow(party_id = "p1", name = "Dana"))))).state
+        found.search.shouldNotBeNull().ask shouldBe ""
+        // A new term, a close and a denial clear it; an answer for a closed search sets none.
+        PeopleHomeMachine.reduce(none, PeopleHomeEvent(search_term = PeopleHomeEvent.SearchTermChanged(term = "zzq")))
+            .state.search.shouldNotBeNull().ask shouldBe ""
+        PeopleHomeMachine.reduce(none, PeopleHomeEvent(search_closed = PeopleHomeEvent.SearchClosed()))
+            .state.search.shouldNotBeNull().ask shouldBe ""
+        PeopleHomeMachine.reduce(none, PeopleHomeReads.denied(AppQueryDenial(message = "No grant for people.")))
+            .state.search.shouldNotBeNull().ask shouldBe ""
+        val closed = PeopleHomeMachine.reduce(typed, PeopleHomeEvent(search_closed = PeopleHomeEvent.SearchClosed())).state
+        PeopleHomeMachine.reduce(closed, answer(PeopleSearch())).state.search.shouldNotBeNull().ask shouldBe ""
+    }
+
     // --- Home: Touch -----------------------------------------------------
 
     "Touch: tiles, Reconnect with days over and a Log a touch action, Upcoming nearest first, Recent in words" {

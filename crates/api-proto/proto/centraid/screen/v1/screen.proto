@@ -4196,6 +4196,11 @@ message AgendaHomeState {
   // screen and not a `SearchField`, so the correction sits beside the term.
   // A new term, closing search, and a refusal clear it.
   string search_corrected = 19;
+  // THE QUESTION THE NO-MATCH STATE OFFERS TO SEND TO THE ASSISTANT (#1097,
+  // R-1097-28), the twin of `SearchField.ask` on Agenda's flat fields: set
+  // when the hits for the current term come back wholly empty, cleared by a
+  // new term, closing search and a refusal.
+  string search_ask = 20;
 
   enum Destination {
     DESTINATION_UNSPECIFIED = 0;
@@ -5121,12 +5126,23 @@ enum ImportSource {
 // one container row each shell has. They are set under `corrected`'s rule: by an
 // answer that is still the current one for a term that is not blank, and
 // cleared by a new term and a close; a stale answer never sets them.
+//
+// `ask` is THE QUESTION THE NO-MATCH STATE OFFERS TO SEND TO THE ASSISTANT
+// (#1097, R-1097-28): "Find <term>", finished by `SearchLaw`, set by an answer
+// that is still the current one, not denied and wholly empty (rows plus
+// containers), and ONLY for an app that offers Ask. EMPTY means no Ask: a new
+// term, a close, a denial, a stale answer and any answer with something in it
+// clear it. Locker never sets it (R-1097-29): its search term can be a secret,
+// and Ask would write it into a chat thread and the chat index. The shell
+// draws the action only where it has a Chat tab (R-1097-30) and sends this
+// string through its router, never a string the view built.
 message SearchField {
   bool open = 1;
   string term = 2;
   string answered_term = 3;
   string corrected = 4;
   repeated SearchContainer containers = 5;
+  string ask = 6;
 }
 
 // A CONTAINER AS A SEARCH RESULT (#1097, R-1097-19..21): one notebook, album,

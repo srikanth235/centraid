@@ -463,6 +463,7 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
                     state.screen.search?.term ?: "",
                     answer.search?.corrected ?: "",
                     SearchContainers.fold(answer.search?.containers ?: emptyList()),
+                    rows = answer.search?.tasks?.size,
                 ).screen
             } else {
                 state.screen
@@ -554,7 +555,8 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
                 groups = if (rows.isEmpty()) emptyList() else listOf(TasksRowGroup(key = "results", title = TasksCopy.GROUP_RESULTS, meta = rows.size.toString(), rows = rows)),
                 // A PROJECT THAT MATCHED THE NAME IS AN ANSWER: no "nothing found" over it.
                 empty = if (rows.isEmpty() && screen.search?.containers.isNullOrEmpty()) {
-                    EmptyState(headline = TasksCopy.SEARCH_EMPTY)
+                    // THE ONE ACTION is Ask, when the law offered it (#1097).
+                    SearchLaw.asking(EmptyState(headline = TasksCopy.SEARCH_EMPTY), screen.search ?: SearchField())
                 } else {
                     EmptyState()
                 },
@@ -810,6 +812,7 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
 
     private object Search : SearchLens<TasksHome> {
         override val screenId: String = SCREEN_ID
+        override val asks: Boolean = true
 
         override fun field(state: TasksHome): SearchField = state.screen.search ?: SearchField()
 

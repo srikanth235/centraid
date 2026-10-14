@@ -379,6 +379,29 @@ class NotesAppSpec : StringSpec({
         NotesLibraryMachine.reduce(closed, answer).state.search!!.containers.shouldBeEmpty()
     }
 
+    "library: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+        val state = loadedLibrary(row("n-1", "A"))
+        val open = NotesLibraryMachine.reduce(state, NotesLibraryEvent(search_opened = NotesLibraryEvent.SearchOpened()))
+        val typed = NotesLibraryMachine.reduce(open.state, NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "zzqx"))).state
+        fun answer(search: NotesSearch) = NotesLibraryReads.arrived(listOf(AppQueryResponse(notes_search = search)))
+        val none = NotesLibraryMachine.reduce(typed, answer(NotesSearch())).state
+        none.search!!.ask shouldBe "Find zzqx"
+        none.results!!.empty!!.action_label shouldBe "Ask about “zzqx”"
+        // Anything found is no Ask: a note, or a notebook.
+        val hit = NotesSearchHit(note_id = "n-1", title = "A", preview = "p", snippet = "p")
+        NotesLibraryMachine.reduce(typed, answer(NotesSearch(hits = listOf(hit)))).state.search!!.ask shouldBe ""
+        val notebook = centraid.core.v1.ContainerHit(entity = "core.collection", id = "nb-1", title = "Cabin", app_id = "notes")
+        NotesLibraryMachine.reduce(typed, answer(NotesSearch(containers = listOf(notebook)))).state.search!!.ask shouldBe ""
+        // A new term, a close and a denial clear it; an answer for a closed search sets none.
+        NotesLibraryMachine.reduce(none, NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "zzq")))
+            .state.search!!.ask shouldBe ""
+        NotesLibraryMachine.reduce(none, NotesLibraryEvent(search_closed = NotesLibraryEvent.SearchClosed()))
+            .state.search!!.ask shouldBe ""
+        NotesLibraryMachine.reduce(none, NotesLibraryReads.denied(AppQueryDenial(message = "revoked"))).state.search!!.ask shouldBe ""
+        val closed = NotesLibraryMachine.reduce(typed, NotesLibraryEvent(search_closed = NotesLibraryEvent.SearchClosed())).state
+        NotesLibraryMachine.reduce(closed, answer(NotesSearch())).state.search!!.ask shouldBe ""
+    }
+
     "library: a change while searching re-reads the search, and the library on close" {
         val searching = NotesLibraryMachine.run(
             loadedLibrary(row("n-1", "A")),

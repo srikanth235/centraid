@@ -484,6 +484,20 @@ class LockerSpec : StringSpec({
             .screen.search!!.corrected shouldBe ""
     }
 
+    "search: Locker never offers Ask, whatever the answer: a term here can itself be a secret (#1097, R-1097-29)" {
+        val (open, _) = home.run(openHome, LockerInput.Lock(open = true), LockerInput.Answered(listOf(items(row("a", "Bank")))))
+        val opened = home.reduce(open, homeView(LockerHomeEvent(search_opened = LockerHomeEvent.SearchOpened()))).state
+        val typed = home.reduce(opened, homeView(LockerHomeEvent(search_typed = LockerHomeEvent.SearchTyped(term = "hunter2")))).state
+        val none = home.reduce(
+            typed,
+            LockerInput.Answered(listOf(AppQueryResponse(locker_search = LockerSearch(term = "hunter2", items = emptyList())))),
+        ).state
+        // The answer is wholly empty and current, and still no Ask: not the question, not the label.
+        none.screen.data_!!.search_empty.shouldNotBeNull().headline shouldBe "Nothing matches “hunter2”"
+        none.screen.search!!.ask shouldBe ""
+        none.screen.data_.search_empty.shouldNotBeNull().action_label shouldBe ""
+    }
+
     // --- one item -----------------------------------------------------------
 
     val item = LockerItemMachine

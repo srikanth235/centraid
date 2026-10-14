@@ -502,6 +502,26 @@ class AgendaHomeSpec : StringSpec({
         drive(fixed, view(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed()))).state.screen.search_corrected shouldBe ""
     }
 
+    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+        val home = landed(schedule, upcoming(timed("a", "Stand-up", "2026-06-16T09:00")))
+        val typed = drive(home, searchOpened(), term("zzqx")).state
+        val none = drive(typed, AgendaInput.Answered(null, context(), AgendaSearch())).state
+        none.screen.search_ask shouldBe "Find zzqx"
+        none.screen.data_.shouldNotBeNull().let {
+            it.empty shouldBe AgendaEmpty.AGENDA_EMPTY_NO_MATCH
+            it.empty_action shouldBe "Ask about “zzqx”"
+        }
+        // An event found is no Ask, and its sentence has no action.
+        val hit = AgendaInput.Answered(null, context(), AgendaSearch(events = listOf(timed("d", "Dentist", "2026-05-02T14:00").copy(calendar_id = "cal-1"))))
+        drive(typed, hit).state.screen.search_ask shouldBe ""
+        // A new term, a close and a denial clear it; an answer for a closed search sets none.
+        drive(none, term("zzq")).state.screen.search_ask shouldBe ""
+        drive(none, view(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed()))).state.screen.search_ask shouldBe ""
+        drive(none, AgendaInput.Denied(AppQueryDenial(code = "revoked"))).state.screen.search_ask shouldBe ""
+        val closed = drive(typed, view(AgendaHomeEvent(search_closed = AgendaHomeEvent.SearchClosed()))).state
+        drive(closed, AgendaInput.Answered(null, context(), AgendaSearch())).state.screen.search_ask shouldBe ""
+    }
+
     "search from Waiting covers every event, not only the ones waiting on you (#1047)" {
         val invite = timed("w", "Offsite", "2026-06-16T09:00").copy(attendees = listOf(you("needs-action")))
         val home = landed(waiting, upcoming(invite, timed("a", "Stand-up", "2026-06-16T10:00")))

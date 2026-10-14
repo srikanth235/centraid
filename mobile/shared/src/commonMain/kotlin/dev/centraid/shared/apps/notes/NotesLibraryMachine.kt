@@ -302,20 +302,29 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
                 Step(state)
             } else {
                 val rows = event.search_arrived.rows
+                val answered = SearchLaw.answered(
+                    Search,
+                    state,
+                    term,
+                    event.search_arrived.corrected,
+                    event.search_arrived.containers,
+                    rows = rows.size,
+                )
                 Step(
-                    SearchLaw.answered(
-                        Search,
-                        state,
-                        term,
-                        event.search_arrived.corrected,
-                        event.search_arrived.containers,
-                    ).copy(
+                    answered.copy(
                         results = NotesSearchResults(
                             term = term,
                             rows = rows,
                             // A NOTEBOOK THAT MATCHED IS AN ANSWER: no "nothing found" over it.
+                            // The one action is Ask, when the law offered it (#1097).
                             empty = if (rows.isEmpty() && event.search_arrived.containers.isEmpty()) {
-                                EmptyState(headline = NotesCopy.SEARCH_NO_MATCH_HEADLINE, body = NotesCopy.SEARCH_NO_MATCH_BODY)
+                                SearchLaw.asking(
+                                    EmptyState(
+                                        headline = NotesCopy.SEARCH_NO_MATCH_HEADLINE,
+                                        body = NotesCopy.SEARCH_NO_MATCH_BODY,
+                                    ),
+                                    answered.search ?: SearchField(),
+                                )
                             } else {
                                 null
                             },
@@ -333,7 +342,9 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
                 .copy(first_page_pending = false, results = state.results?.copy(loading = false)),
         )
 
-        event.denied != null -> Step(Content.with(state, ReadContent.Denied(event.denied)).copy(first_page_pending = false))
+        event.denied != null -> Step(
+            Content.with(SearchLaw.unasked(Search, state), ReadContent.Denied(event.denied)).copy(first_page_pending = false),
+        )
 
         event.rows_changed != null ->
             if (event.rows_changed.table !in TABLES) {
@@ -571,6 +582,7 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
 
     private object Search : SearchLens<NotesLibraryState> {
         override val screenId: String = SCREEN_ID
+        override val asks: Boolean = true
 
         override fun field(state: NotesLibraryState): SearchField = state.search ?: SearchField()
 
