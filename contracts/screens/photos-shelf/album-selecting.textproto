@@ -4,8 +4,7 @@
 # which is the entire reason the field is on the STATE and not a `selected` bool
 # on `PhotoCell`. A member who picks a photograph, scrolls past the page
 # boundary and scrolls back must find it still picked; a selection carried on
-# the cells is a selection the next page read silently drops. `TallyListState`
-# keeps `pending_expense_ids` on the state for the same reason.
+# the cells is a selection the next page read silently drops.
 #
 # `selecting` is its own bool beside the list: an empty selection in selection
 # mode is a real screen — the toolbar is up and every verb is disabled — and it

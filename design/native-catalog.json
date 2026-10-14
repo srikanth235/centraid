@@ -31,13 +31,6 @@
       "name": "Locker"
     },
     {
-      "colorKey": "indigo",
-      "desc": "Log expenses and see balances.",
-      "iconKey": "Receipt",
-      "id": "tally",
-      "name": "Tally"
-    },
-    {
       "colorKey": "ochre",
       "desc": "Capture the next thing to do.",
       "iconKey": "Check",
@@ -1125,11 +1118,6 @@
         "hue": "#8c4c61",
         "markColor": "#894a5f"
       },
-      "tally": {
-        "chipBackground": "#e9e8ee",
-        "hue": "#635a93",
-        "markColor": "#5f568d"
-      },
       "tasks": {
         "chipBackground": "#ede8e0",
         "hue": "#845922",
@@ -1166,11 +1154,6 @@
         "chipBackground": "#36272c",
         "hue": "#d48da2",
         "markColor": "#d48da2"
-      },
-      "tally": {
-        "chipBackground": "#2c2a37",
-        "hue": "#a39bda",
-        "markColor": "#a39bda"
       },
       "tasks": {
         "chipBackground": "#332a1f",

@@ -66,7 +66,6 @@ const TYPES: Record<string, string> = {
   "photos-search": "centraid.screen.v1.PhotosSearchState",
   "photos-shelf": "centraid.screen.v1.PhotoShelfState",
   seat: "centraid.screen.v1.SeatState",
-  tally: "centraid.screen.v1.TallyListState",
 };
 
 const repositoryRoot = new URL("../..", import.meta.url).pathname;

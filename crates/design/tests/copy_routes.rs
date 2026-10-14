@@ -22,68 +22,60 @@ fn leaf(app: &str) -> CopyLeaf {
     CopyLeaf::from_json(&value)
 }
 
+/// A synthetic leaf: the route-id claim is about the two sets of ids, and no
+/// emitted leaf carries a routed table since Tally left (#1099), so the claim is
+/// proved on a leaf built here until an app brings one back.
+fn routed(routes: &[&str], shelves: &[&str]) -> CopyLeaf {
+    CopyLeaf::from_json(&serde_json::json!({
+        "app": "synthetic",
+        "strings": { "SOME_SENTENCE": "A sentence." },
+        "functions": ["routeStatus"],
+        "routes": routes,
+        "moreRoutes": [],
+        "shelves": shelves
+            .iter()
+            .map(|id| serde_json::json!({ "id": id, "label": id, "segment": id }))
+            .collect::<Vec<_>>(),
+    }))
+}
+
 /// The ids that are a second sentence for one route, or a state of it, rather
 /// than a route of their own. Each is named with its reason on purpose: a bare
 /// allow-list is how a deleted route's copy survives for a year.
 ///
-/// - `groupOwn` — the group ledger's OTHER sentence, for a group the member
-///   keeps alone rather than shares (`route-copy.ts:26-34`).
 /// - `denied` — the consent denial, which every route can be in and no route
-///   is (`queries/dashboard.ts`'s `deniedPayload`).
-const TALLY_VARIANTS: &[&str] = &["groupOwn", "denied"];
+///   is.
+const VARIANTS: &[&str] = &["denied"];
 
 #[test]
-fn tallys_copy_table_and_shelf_table_name_the_same_routes() {
-    let tally = leaf("tally");
-    assert_eq!(tally.app, "tally");
-    assert_eq!(
-        tally.shelves.len(),
-        15,
-        "Tally's spec has fifteen routed shelves (`shelves.ts:45-61`)"
-    );
-    let gaps = route_gaps(&tally, TALLY_VARIANTS);
-    assert!(
-        gaps.without_copy.is_empty(),
-        "these routes render a silent empty string: {:?}",
-        gaps.without_copy
-    );
-    assert!(
-        gaps.without_screen.is_empty(),
-        "these sentences reach no route: {:?}",
-        gaps.without_screen
-    );
-    // The More sheet's lenses are routes too, and its metas key on the same ids.
-    for id in &tally.more_routes {
-        assert!(
-            tally.shelves.iter().any(|shelf| &shelf.id == id),
-            "the More sheet names {id}, which is not a shelf"
-        );
-    }
+fn a_copy_table_and_a_shelf_table_that_name_the_same_routes_have_no_gap() {
+    let leaf = routed(&["list", "trash", "denied"], &["list", "trash"]);
+    assert!(route_gaps(&leaf, VARIANTS).is_empty());
 }
 
 #[test]
 fn a_leaf_carries_sentences_and_names_what_did_not_cross() {
-    let tally = leaf("tally");
+    let docs = leaf("docs");
     assert!(
-        tally.strings.len() >= 100,
-        "Tally's three leaves hold {} sentences",
-        tally.strings.len()
+        docs.strings.len() >= 100,
+        "Docs' leaf holds {} sentences",
+        docs.strings.len()
     );
     // The composed sentences are LISTED, not emitted: a generated port of one
     // would be a second implementation that drifts.
-    for composed in ["routeStatus", "moreMeta"] {
+    for composed in ["shelfCopy", "folderCaption"] {
         assert!(
-            tally.functions.iter().any(|name| name == composed),
+            docs.functions.iter().any(|name| name == composed),
             "{composed} is a composed sentence and must be listed as not crossing"
         );
         assert!(
-            tally.text(composed).is_none(),
+            docs.text(composed).is_none(),
             "{composed} must not be emitted as a string"
         );
     }
     // An absent name is `None`, never `""` — a missing sentence has to be
     // distinguishable from a deliberately empty one.
-    assert_eq!(tally.text("NO_SUCH_SENTENCE"), None);
+    assert_eq!(docs.text("NO_SUCH_SENTENCE"), None);
 }
 
 /// Every copy leaf still reads.
@@ -93,12 +85,12 @@ fn a_leaf_carries_sentences_and_names_what_did_not_cross() {
 #[test]
 fn every_emitted_leaf_loads() {
     for app in [
-        "agenda", "docs", "locker", "notes", "people", "photos", "shared", "tally", "tasks",
+        "agenda", "docs", "locker", "notes", "people", "photos", "shared", "tasks",
     ] {
         let loaded = leaf(app);
         assert_eq!(loaded.app, app);
         assert!(
-            !loaded.strings.is_empty() || app == "tally" || !loaded.functions.is_empty(),
+            !loaded.strings.is_empty() || !loaded.functions.is_empty(),
             "{app} emitted neither a sentence nor a note about what did not cross"
         );
     }
@@ -107,9 +99,8 @@ fn every_emitted_leaf_loads() {
 /// A DEMONSTRATED RED: a route whose sentence was deleted is named, by id.
 #[test]
 fn a_route_with_no_sentence_is_reported_rather_than_rendered_empty() {
-    let mut tally = leaf("tally");
-    tally.routes.remove("trash");
-    let gaps = route_gaps(&tally, TALLY_VARIANTS);
+    let leaf = routed(&["list", "denied"], &["list", "trash"]);
+    let gaps = route_gaps(&leaf, VARIANTS);
     assert_eq!(
         gaps.without_copy
             .iter()
@@ -118,10 +109,9 @@ fn a_route_with_no_sentence_is_reported_rather_than_rendered_empty() {
         vec!["trash"]
     );
     // And the other direction: a sentence for a route that no longer exists.
-    let mut stale = leaf("tally");
-    stale.routes.insert("deleted-shelf".to_owned());
+    let stale = routed(&["list", "trash", "deleted-shelf"], &["list", "trash"]);
     assert!(
-        route_gaps(&stale, TALLY_VARIANTS)
+        route_gaps(&stale, VARIANTS)
             .without_screen
             .contains("deleted-shelf")
     );

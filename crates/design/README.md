@@ -4,7 +4,7 @@
 
 ## Why it exists
 
-`contracts/apps/tally/queries.json` carries, on every ledger row, a party's `color` from `partyHueValue(partyHueKey(id))`, its `initials` from `identityInitials` and a figure's tone from `figureTone`. Wave 2 committed those 29 cases and could not compare them: dropping the fields would have meant editing a generated fixture, and retyping the functions would have meant two hue wheels that look right and disagree.
+A parity fixture carries, on every ledger row, a party's `color` from `partyHueValue(partyHueKey(id))`, its `initials` from `identityInitials` and a figure's tone from `figureTone`. Wave 2 committed the Tally cases (the fixture left with the app, [#1099](https://github.com/srikanth235/centraid/issues/1099)) and could not compare them: dropping the fields would have meant editing a generated fixture, and retyping the functions would have meant two hue wheels that look right and disagree.
 
 ## What keeps it honest
 

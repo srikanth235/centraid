@@ -28,7 +28,6 @@ data {
   tiles { app_id: "agenda" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Put something on the calendar" }
   tiles { app_id: "tasks" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Capture the next thing to do" }
   tiles { app_id: "people" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Add someone you know" }
-  tiles { app_id: "tally" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Log your first expense" }
   # LOCKER WITHHOLDS ITS COUNT. No `count` field at all — absent is the withheld
   # glyph, and a `0` here would be a lie about how many secrets a member has.
   tiles { app_id: "locker" status: TILE_STATUS_CONTENT size: TILE_SIZE_SMALL count_label: "items" body { locker { locked: true } } }
@@ -41,6 +40,5 @@ data {
   grid_rows { app_ids: "docs" }
   grid_rows { app_ids: "notes" }
   grid_rows { app_ids: "agenda" app_ids: "tasks" }
-  grid_rows { app_ids: "people" app_ids: "tally" }
-  grid_rows { app_ids: "locker" }
+  grid_rows { app_ids: "people" app_ids: "locker" }
 }

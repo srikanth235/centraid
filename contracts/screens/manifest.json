@@ -498,48 +498,6 @@
       "type": "centraid.screen.v1.SeatState",
       "textproto": "contracts/screens/seat/waiting-for-mount.textproto",
       "binary": "contracts/screens/seat/waiting-for-mount.bin"
-    },
-    {
-      "case": "data-page",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/data-page.textproto",
-      "binary": "contracts/screens/tally/data-page.bin"
-    },
-    {
-      "case": "empty-ledger",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/empty-ledger.textproto",
-      "binary": "contracts/screens/tally/empty-ledger.bin"
-    },
-    {
-      "case": "loading-first",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/loading-first.textproto",
-      "binary": "contracts/screens/tally/loading-first.bin"
-    },
-    {
-      "case": "low-disk-parked",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/low-disk-parked.textproto",
-      "binary": "contracts/screens/tally/low-disk-parked.bin"
-    },
-    {
-      "case": "offline-withheld",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/offline-withheld.textproto",
-      "binary": "contracts/screens/tally/offline-withheld.bin"
-    },
-    {
-      "case": "refused-denied",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/refused-denied.textproto",
-      "binary": "contracts/screens/tally/refused-denied.bin"
     }
   ]
 }
