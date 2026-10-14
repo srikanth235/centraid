@@ -1751,10 +1751,13 @@ message HomeSearchGroup {
   string app_id = 1;
   // The app's name, as the catalogue spells it.
   string label = 2;
+  // Rows and containers together.
   uint32 count = 3;
   // "Notes, 2 results".
   string accessibility_label = 4;
   repeated HomeSearchRow rows = 5;
+  // THE APP'S CONTAINERS whose name matched (#1097), drawn before its rows.
+  repeated SearchContainer containers = 6;
 }
 
 message HomeSearchData {
@@ -5084,11 +5087,42 @@ enum ImportSource {
 // `term` (#1097); EMPTY for an exact answer. The shell draws it as "Showing
 // results for <corrected>" under the field; a new term, a close, or an answer
 // that is not the current one clears it.
+//
+// `containers` are the notebooks, projects, Tally groups and Docs folders whose
+// NAME the answer found (#1097, R-1097-19), drawn above the result rows by the
+// one container row each shell has. They are set under `corrected`'s rule: by an
+// answer that is still the current one for a term that is not blank, and
+// cleared by a new term and a close; a stale answer never sets them.
 message SearchField {
   bool open = 1;
   string term = 2;
   string answered_term = 3;
   string corrected = 4;
+  repeated SearchContainer containers = 5;
+}
+
+// A CONTAINER AS A SEARCH RESULT (#1097, R-1097-19..21): one notebook, album,
+// project, Tally group or Docs folder, finished by `SearchContainers` so Home's
+// search and the four owning apps' own searches draw the same row and open it
+// through the one router a row reference has.
+message SearchContainer {
+  // The index's entity (`core.collection`, `schedule.project`, `social.circle`,
+  // `core.concept`) and the row's own id (a group's is the circle's).
+  string entity = 1;
+  string id = 2;
+  // The app it opens in: `notes`, `photos`, `tasks`, `tally`, `docs`.
+  string app_id = 3;
+  // What it IS, in a word: "Notebook", "Album", "Project", "Group", "Folder".
+  string kind_label = 4;
+  string title = 5;
+  // The kit's glyph for that kind (`Book`, `Image`, `List`, `Users`, `Folder`).
+  string icon_key = 6;
+  // "Notebook, Cabin".
+  string accessibility_label = 7;
+  // WHERE A TAP GOES: the reference a chat card carries (`ChatCard`), so the
+  // shell's one row router opens it. A group's `id` here is the Tally group's
+  // own id, never the circle's.
+  ChatCard target = 8;
 }
 
 // ONE WRITE IN FLIGHT ON A DETAIL SCREEN. A refused write keeps the content;
@@ -5666,6 +5700,8 @@ message NotesLibraryEvent {
     repeated NotesNoteRow rows = 1;
     // The answer's `corrected` (EMPTY for an exact answer).
     string corrected = 2;
+    // The notebooks whose name matched (#1097).
+    repeated SearchContainer containers = 3;
   }
 
   message ReadRefused {
@@ -8445,6 +8481,8 @@ message DocsDriveEvent {
     optional DocsRail rail = 2;
     // A search answer's `corrected` (EMPTY for an exact answer or a shelf).
     string corrected = 3;
+    // A search answer's folders whose name matched (#1097).
+    repeated SearchContainer containers = 4;
   }
 
   message ReadRefused {

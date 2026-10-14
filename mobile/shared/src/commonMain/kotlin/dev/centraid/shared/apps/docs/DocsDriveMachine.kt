@@ -187,7 +187,7 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
             val arrived = event.data_.data_ ?: DocsDriveData()
             val rail = event.data_.rail ?: s.rail
             val answered = if (arrived.mode == DocsDriveData.Mode.MODE_SEARCH) {
-                SearchLaw.answered(Search, s, s.search?.term ?: "", event.data_.corrected)
+                SearchLaw.answered(Search, s, s.search?.term ?: "", event.data_.corrected, event.data_.containers)
             } else {
                 s
             }
@@ -699,7 +699,8 @@ public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
         } else {
             data.rows.map { if (it.document_id == rename.document_id) it.copy(title = rename.title) else it }
         }
-        val nothing = rows.isEmpty() && folders.isEmpty()
+        // A FOLDER THAT MATCHED THE NAME IS AN ANSWER: no "nothing found" over it.
+        val nothing = rows.isEmpty() && folders.isEmpty() && !(search && state.search?.containers?.isNotEmpty() == true)
         val (empty, action) = if (!nothing) {
             null to DocsDriveData.EmptyAction.EMPTY_ACTION_NONE
         } else {

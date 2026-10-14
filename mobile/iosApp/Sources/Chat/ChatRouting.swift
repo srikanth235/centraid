@@ -24,6 +24,13 @@ import CentraidShared
 /// | people | `person` | the person page |
 /// | agenda | `event` | the event's detail (`qualifier` is the occurrence) |
 /// | photos | `photo` | the lightbox, with the answer's other photos as neighbours |
+/// | notes | `notebook` | the library under that notebook (a container found by name, #1097) |
+/// | photos | `album` | the album's shelf |
+/// | tally | `group` | the group's ledger; `id` is the `tally_group` id |
+/// | docs | `folder` | the folder's page |
+///
+/// A notebook, album, group or folder arrives with its id and its name (the
+/// card's `title`), which is all each route needs.
 ///
 /// An entity this table has no row for opens the app's home instead
 /// ([appHome]); a tap that reached nothing would read as a broken card.
@@ -49,6 +56,14 @@ enum ChatRouting {
             return TasksScreens.projectRoute(card.id, title: card.title)
         case ("notes", "note"):
             return NotesScreens.editorRoute(card.id)
+        case ("notes", "notebook"):
+            return NotesScreens.libraryRoute(notebookID: card.id, notebookName: card.title)
+        case ("photos", "album"):
+            return .photoShelf(albumShelf(card.id, card.title))
+        case ("tally", "group"):
+            return TallyScreens.groupRoute(card.id, card.title, parent: parent)
+        case ("docs", "folder"):
+            return DocsScreens.folderRoute(card.id, card.title, parent: parent)
         case ("docs", "document"):
             return DocsScreens.documentRoute(card.id, card.title, parent: parent)
         case ("people", "person"):
@@ -68,6 +83,17 @@ enum ChatRouting {
         default:
             return appHome(card.app)
         }
+    }
+
+    /// An album's shelf: the library under that album, its name riding along so
+    /// the head has words before the page read lands (`ShellModel.placeShelf`'s rule).
+    static func albumShelf(_ identifier: String, _ name: String) -> Data {
+        var shelf = Centraid_Screen_V1_PhotoShelf()
+        shelf.album = .with {
+            $0.collectionID = identifier
+            $0.name = name
+        }
+        return (try? shelf.serializedData()) ?? Data()
     }
 
     /// An app's own front door, for a card whose entity has no row route.

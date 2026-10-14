@@ -292,6 +292,26 @@ class DocsSpec : StringSpec({
         drive(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed()), fixed).state.search!!.corrected shouldBe ""
     }
 
+    "search: a folder found by name is a container on the field, with no nothing-found over it, cleared by a new term or a close, and a stale answer sets none (#1097)" {
+        var s = onScreen(driveAnswer(folders = listOf(DocsFolder(folder_id = "f", name = "Taxes"))))
+        s = drive(DocsDriveEvent(search_opened = DocsDriveEvent.SearchOpened()), s).state
+        val typed = drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "taxes")), s)
+        val folder = centraid.core.v1.ContainerHit(entity = "core.concept", id = "f", title = "Taxes", app_id = "docs")
+        val answer = AppQueryResponse(docs_search = DocsSearch(today = TODAY, containers = listOf(folder)))
+        val found = drive(DocsDriveReads.arrived(listOf(answer)), typed.state).state
+        val container = found.search!!.containers.single()
+        container.kind_label shouldBe "Folder"
+        container.target shouldBe centraid.screen.v1.ChatCard(app = "docs", entity = "folder", id = "f", title = "Taxes")
+        // A folder that matched is an answer: no rows, and no nothing-found.
+        found.data_!!.rows.shouldBeEmpty()
+        found.data_.empty.shouldBeNull()
+        drive(DocsDriveEvent(search_term = DocsDriveEvent.SearchTermChanged(term = "tax")), found)
+            .state.search!!.containers.shouldBeEmpty()
+        drive(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed()), found).state.search!!.containers.shouldBeEmpty()
+        val closed = drive(DocsDriveEvent(search_closed = DocsDriveEvent.SearchClosed()), typed.state).state
+        drive(DocsDriveReads.arrived(listOf(answer)), closed).state.search!!.containers.shouldBeEmpty()
+    }
+
     // --- Empties, day one, denied -----------------------------------------
 
     "every shelf has its own empty sentence and at most one action" {

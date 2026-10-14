@@ -1,6 +1,7 @@
 package dev.centraid.shared.nav
 
 import centraid.screen.v1.ChatCard
+import centraid.screen.v1.PhotoShelf
 
 /**
  * WHERE A REFERENCE TO ONE ROW OPENS (R-CHROME-6).
@@ -22,6 +23,14 @@ import centraid.screen.v1.ChatCard
  * | people | `person` | the person page |
  * | agenda | `event` | the event's detail (`qualifier` is the occurrence) |
  * | photos | `photo` | the lightbox, with [neighbours] as its swipe |
+ * | notes | `notebook` | the library under that notebook (a container found by name, #1097) |
+ * | photos | `album` | the album's shelf |
+ * | tally | `group` | the group's ledger; `id` is the `tally_group` id |
+ * | docs | `folder` | the folder's page; `parent` is the pushing page's title |
+ *
+ * A notebook, album, group or folder arrives with its id and its name (the
+ * card's `title`) and nothing else, which is all each destination needs: the
+ * names ride along the route so the head has words before the page reads.
  *
  * An entity this table has no row for opens the app's home; an app it does
  * not know is null, and the stack stays put.
@@ -38,6 +47,12 @@ public object RowRoutes {
         "tasks" to "task" -> Destination.TasksDetail(card.id)
         "tasks" to "project" -> Destination.TasksProject(card.id, card.title)
         "notes" to "note" -> Destination.NotesEditor(card.id, title = card.title)
+        "notes" to "notebook" -> Destination.NotesLibrary(notebookId = card.id, notebookName = card.title, unfiledOnly = false)
+        "photos" to "album" -> Destination.PhotoShelfRoute(
+            PhotoShelf(album = PhotoShelf.Album(collection_id = card.id, name = card.title)),
+        )
+        "tally" to "group" -> Destination.TallyGroup(card.id, card.title, parent = parent)
+        "docs" to "folder" -> Destination.DocsFolder(card.id, card.title, parent = parent)
         "docs" to "document" -> Destination.DocsDocument(card.id, card.title, parent = parent)
         "people" to "person" -> Destination.PeoplePerson(card.id, card.title)
         "agenda" to "event" -> Destination.AgendaEvent(

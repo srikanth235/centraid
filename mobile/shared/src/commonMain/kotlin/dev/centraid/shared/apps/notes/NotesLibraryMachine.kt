@@ -303,11 +303,18 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
             } else {
                 val rows = event.search_arrived.rows
                 Step(
-                    SearchLaw.answered(Search, state, term, event.search_arrived.corrected).copy(
+                    SearchLaw.answered(
+                        Search,
+                        state,
+                        term,
+                        event.search_arrived.corrected,
+                        event.search_arrived.containers,
+                    ).copy(
                         results = NotesSearchResults(
                             term = term,
                             rows = rows,
-                            empty = if (rows.isEmpty()) {
+                            // A NOTEBOOK THAT MATCHED IS AN ANSWER: no "nothing found" over it.
+                            empty = if (rows.isEmpty() && event.search_arrived.containers.isEmpty()) {
                                 EmptyState(headline = NotesCopy.SEARCH_NO_MATCH_HEADLINE, body = NotesCopy.SEARCH_NO_MATCH_BODY)
                             } else {
                                 null

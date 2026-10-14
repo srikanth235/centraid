@@ -405,6 +405,27 @@ class TasksSpec : StringSpec({
             .state.screen.search!!.corrected shouldBe ""
     }
 
+    "search: a project found by name is a container on the field, with no nothing-found over it, cleared by a new term or a close, and a stale answer sets none (#1097)" {
+        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
+        val open = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
+        val typed = TasksHomeMachine.reduce(open, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "garden")))).state
+        val project = centraid.core.v1.ContainerHit(entity = "schedule.project", id = "p-1", title = "Garden", app_id = "tasks")
+        val answer = TasksHomeInput.Answered(search = TasksSearch(today = TODAY, containers = listOf(project)))
+        val found = TasksHomeMachine.reduce(typed, answer).state
+        val container = found.screen.search!!.containers.single()
+        container.kind_label shouldBe "Project"
+        container.target shouldBe centraid.screen.v1.ChatCard(app = "tasks", entity = "project", id = "p-1", title = "Garden")
+        // A project that matched is an answer: no tasks, and no nothing-found.
+        found.screen.data_!!.groups.shouldBeEmpty()
+        found.screen.data_.empty!!.headline shouldBe ""
+        TasksHomeMachine.reduce(found, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "gard"))))
+            .state.screen.search!!.containers.shouldBeEmpty()
+        TasksHomeMachine.reduce(found, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())))
+            .state.screen.search!!.containers.shouldBeEmpty()
+        val closed = TasksHomeMachine.reduce(typed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed()))).state
+        TasksHomeMachine.reduce(closed, answer).state.screen.search!!.containers.shouldBeEmpty()
+    }
+
     "the band: the tab you are on is nothing; another reads; More is a sheet without Search; the search bar opens the field" {
         val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY))
         TasksHomeMachine.reduce(landed, view(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = "today")))).effects.shouldBeEmpty()

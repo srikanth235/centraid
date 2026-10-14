@@ -356,6 +356,29 @@ class NotesAppSpec : StringSpec({
             .state.search!!.corrected shouldBe ""
     }
 
+    "library: a notebook found by name is a container on the field, with no nothing-found over it, cleared by a new term or a close, and a stale answer sets none (#1097)" {
+        val state = loadedLibrary(row("n-1", "A"))
+        val open = NotesLibraryMachine.reduce(state, NotesLibraryEvent(search_opened = NotesLibraryEvent.SearchOpened()))
+        val typed = NotesLibraryMachine.reduce(open.state, NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "cabin"))).state
+        val notebook = centraid.core.v1.ContainerHit(entity = "core.collection", id = "nb-1", title = "Cabin", app_id = "notes")
+        val answer = NotesLibraryReads.arrived(listOf(AppQueryResponse(notes_search = NotesSearch(containers = listOf(notebook)))))
+        val found = NotesLibraryMachine.reduce(typed, answer).state
+        val container = found.search!!.containers.single()
+        container.entity shouldBe "core.collection"
+        container.kind_label shouldBe "Notebook"
+        container.target shouldBe centraid.screen.v1.ChatCard(app = "notes", entity = "notebook", id = "nb-1", title = "Cabin")
+        // A notebook that matched is an answer: rows are empty and the sentence is not drawn.
+        found.results!!.rows.shouldBeEmpty()
+        found.results.empty.shouldBeNull()
+        // A NEW TERM clears it; a close clears it; an answer for a closed search sets none.
+        NotesLibraryMachine.reduce(found, NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term = "cabi")))
+            .state.search!!.containers.shouldBeEmpty()
+        NotesLibraryMachine.reduce(found, NotesLibraryEvent(search_closed = NotesLibraryEvent.SearchClosed()))
+            .state.search!!.containers.shouldBeEmpty()
+        val closed = NotesLibraryMachine.reduce(typed, NotesLibraryEvent(search_closed = NotesLibraryEvent.SearchClosed())).state
+        NotesLibraryMachine.reduce(closed, answer).state.search!!.containers.shouldBeEmpty()
+    }
+
     "library: a change while searching re-reads the search, and the library on close" {
         val searching = NotesLibraryMachine.run(
             loadedLibrary(row("n-1", "A")),

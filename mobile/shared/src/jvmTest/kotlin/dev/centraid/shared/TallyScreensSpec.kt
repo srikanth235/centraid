@@ -707,6 +707,28 @@ class TallyScreensSpec : StringSpec({
         TallySearchMachine.reduce(cleared, corrected).state.screen.field_?.corrected shouldBe ""
     }
 
+    "search: a group found by name is a container opening by its group id, with no nothing-found over it, cleared by a new term or a clear, and a stale answer sets none (#1097)" {
+        val typed = TallySearchMachine.reduce(
+            TallySearchMachine.initial(),
+            view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "lisbon"))),
+        ).state
+        val group = centraid.core.v1.ContainerHit(entity = "social.circle", id = "circle-1", title = "Lisbon trip", app_id = "tally", open_id = "group-1")
+        val answer = TallyInput.Answered(listOf(AppQueryResponse(tally_search = TallySearch(containers = listOf(group)))))
+        val found = TallySearchMachine.reduce(typed, answer).state
+        val container = found.screen.field_!!.containers.single()
+        container.kind_label shouldBe "Group"
+        container.id shouldBe "circle-1"
+        // It opens by the tally_group id, never by the circle's.
+        container.target shouldBe centraid.screen.v1.ChatCard(app = "tally", entity = "group", id = "group-1", title = "Lisbon trip")
+        found.screen.data_!!.results.shouldBeEmpty()
+        found.screen.data_.empty.shouldBeNull()
+        TallySearchMachine.reduce(found, view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "lisb")))).state
+            .screen.field_!!.containers.shouldBeEmpty()
+        val cleared = TallySearchMachine.reduce(found, view(TallySearchEvent(cleared = TallySearchEvent.Cleared()))).state
+        cleared.screen.field_!!.containers.shouldBeEmpty()
+        TallySearchMachine.reduce(cleared, answer).state.screen.field_!!.containers.shouldBeEmpty()
+    }
+
     "Tally's trash restores and never offers to destroy" {
         val loaded = TallyTrashMachine.reduce(
             TallyTrashMachine.initial(),

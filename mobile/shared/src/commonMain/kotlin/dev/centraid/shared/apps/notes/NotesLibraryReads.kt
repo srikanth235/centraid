@@ -14,6 +14,7 @@ import centraid.screen.v1.NotesLibrarySort
 import centraid.screen.v1.NotesLibraryState
 import centraid.screen.v1.NotesTagChip
 import centraid.screen.v1.ReadFailure
+import dev.centraid.shared.kit.SearchContainers
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.sync.ScreenQueries
@@ -67,7 +68,11 @@ public object NotesLibraryReads :
     override fun arrived(answers: List<AppQueryResponse>): NotesLibraryEvent {
         answers.firstNotNullOfOrNull { it.notes_search }?.let { search ->
             return NotesLibraryEvent(
-                search_arrived = NotesLibraryEvent.SearchArrived(rows = search.hits.map(NotesFold::hit), corrected = search.corrected),
+                search_arrived = NotesLibraryEvent.SearchArrived(
+                    rows = search.hits.map(NotesFold::hit),
+                    corrected = search.corrected,
+                    containers = SearchContainers.fold(search.containers),
+                ),
             )
         }
         val library = answers.firstNotNullOfOrNull { it.notes_library }

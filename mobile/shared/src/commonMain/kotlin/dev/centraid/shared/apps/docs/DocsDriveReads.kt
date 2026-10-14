@@ -14,6 +14,7 @@ import centraid.screen.v1.DocsDriveEvent
 import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.DocsQuery
 import centraid.screen.v1.ReadFailure
+import dev.centraid.shared.kit.SearchContainers
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
@@ -76,7 +77,11 @@ public object DocsDriveReads :
     override fun arrived(answers: List<AppQueryResponse>): DocsDriveEvent {
         answers.firstNotNullOfOrNull { it.docs_search }?.let { search ->
             return DocsDriveEvent(
-                data_ = DocsDriveEvent.DataArrived(data_ = DocsFold.search(search), corrected = search.corrected),
+                data_ = DocsDriveEvent.DataArrived(
+                    data_ = DocsFold.search(search),
+                    corrected = search.corrected,
+                    containers = SearchContainers.fold(search.containers),
+                ),
             )
         }
         val drive = answers.firstNotNullOfOrNull { it.docs_drive }

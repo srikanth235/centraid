@@ -21,6 +21,7 @@ import centraid.screen.v1.SeatState
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.kit.ScreenBridge
+import dev.centraid.shared.kit.SearchContainers
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.platform.DeviceClock
@@ -201,16 +202,23 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
             .groupBy { it.app_id }
             .entries
             .sortedBy { (app, _) -> order.indexOf(app).let { if (it < 0) order.size else it } }
-            .map { (app, rows) ->
+            .map { (app, hits) ->
                 val label = CentraidCatalog.byId[app]?.name ?: app.replaceFirstChar { it.uppercase() }
+                // A CONTAINER (#1097) IS A HIT OF ITS APP'S GROUP, drawn before that app's rows;
+                // `SearchContainers` says which hits are one and how each opens.
+                val (containers, rows) = hits
+                    .map { hit -> SearchContainers.of(hit.entity, hit.id, hit.app_id, hit.title, hit.open_id) to hit }
+                    .partition { (container, _) -> container != null }
+                val count = hits.size
                 HomeSearchGroup(
                     app_id = app,
                     label = label,
-                    count = rows.size,
-                    accessibility_label = (if (rows.size == 1) SharedCopy.HOME_SEARCH_GROUP_ONE else SharedCopy.HOME_SEARCH_GROUP)
+                    count = count,
+                    accessibility_label = (if (count == 1) SharedCopy.HOME_SEARCH_GROUP_ONE else SharedCopy.HOME_SEARCH_GROUP)
                         .replace("{name}", label)
-                        .replace("{n}", rows.size.toString()),
-                    rows = rows.map(::row),
+                        .replace("{n}", count.toString()),
+                    containers = containers.mapNotNull { it.first },
+                    rows = rows.map { (_, hit) -> row(hit) },
                 )
             }
         return HomeSearchData(groups = groups)

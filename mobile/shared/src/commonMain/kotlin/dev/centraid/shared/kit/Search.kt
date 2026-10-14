@@ -1,5 +1,6 @@
 package dev.centraid.shared.kit
 
+import centraid.screen.v1.SearchContainer
 import centraid.screen.v1.SearchField
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.Step
@@ -23,11 +24,11 @@ public object SearchLaw {
 
     /**
      * A new term. A blank one reads nothing: there is nothing to answer. The
-     * words the last answer corrected go with it: they said what the OLD term
-     * searched for.
+     * words the last answer corrected go with it, and so do the containers it
+     * found: they said what the OLD term searched for.
      */
     public fun <S> term(l: SearchLens<S>, s: S, term: String): Step<S> {
-        val next = l.with(s, l.field(s).copy(open_ = true, term = term, corrected = ""))
+        val next = l.with(s, l.field(s).copy(open_ = true, term = term, corrected = "", containers = emptyList()))
         return if (term.isBlank()) {
             Step(next)
         } else {
@@ -36,9 +37,9 @@ public object SearchLaw {
     }
 
     /**
-     * Close CLEARS the term, the term answered and the words corrected (a v0
-     * defect: the old term came back the next time the field opened, over
-     * results for it).
+     * Close CLEARS the term, the term answered, the words corrected and the
+     * containers found (a v0 defect: the old term came back the next time the
+     * field opened, over results for it).
      */
     public fun <S> closed(l: SearchLens<S>, s: S): Step<S> = Step(l.with(s, SearchField()))
 
@@ -60,13 +61,26 @@ public object SearchLaw {
      * current one ([answerIsCurrent]) for a term that is not blank: one for a
      * term since changed or closed says nothing about the field now on screen,
      * and a blank term has nothing to correct.
+     *
+     * THE CONTAINERS the answer found (#1097) follow the same rule: kept only
+     * for a current answer to a term that is not blank, else cleared, so a
+     * stale answer never sets them.
      */
-    public fun <S> answered(l: SearchLens<S>, s: S, answeredTerm: String, corrected: String = ""): S =
-        l.with(
+    public fun <S> answered(
+        l: SearchLens<S>,
+        s: S,
+        answeredTerm: String,
+        corrected: String = "",
+        containers: List<SearchContainer> = emptyList(),
+    ): S {
+        val current = answeredTerm.isNotBlank() && answerIsCurrent(l, s, answeredTerm)
+        return l.with(
             s,
             l.field(s).copy(
                 answered_term = answeredTerm,
-                corrected = if (answeredTerm.isNotBlank() && answerIsCurrent(l, s, answeredTerm)) corrected else "",
+                corrected = if (current) corrected else "",
+                containers = if (current) containers else emptyList(),
             ),
         )
+    }
 }

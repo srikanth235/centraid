@@ -37,6 +37,7 @@ import dev.centraid.shared.kit.BandLaw
 import dev.centraid.shared.kit.BandLens
 import dev.centraid.shared.kit.ContentLens
 import dev.centraid.shared.kit.ReadContent
+import dev.centraid.shared.kit.SearchContainers
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.kit.WriteLaw
@@ -456,7 +457,13 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
             // A SEARCH CLOSED WHILE ITS HITS WERE READING IS NOT REOPENED.
             search = if (term == null) null else answer.search ?: state.search,
             screen = if (term != null && answer.search != null) {
-                SearchLaw.answered(Search, state, state.screen.search?.term ?: "", answer.search?.corrected ?: "").screen
+                SearchLaw.answered(
+                    Search,
+                    state,
+                    state.screen.search?.term ?: "",
+                    answer.search?.corrected ?: "",
+                    SearchContainers.fold(answer.search?.containers ?: emptyList()),
+                ).screen
             } else {
                 state.screen
             },
@@ -545,7 +552,12 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
             return TasksHomeData(
                 today = hits.today,
                 groups = if (rows.isEmpty()) emptyList() else listOf(TasksRowGroup(key = "results", title = TasksCopy.GROUP_RESULTS, meta = rows.size.toString(), rows = rows)),
-                empty = if (rows.isEmpty()) EmptyState(headline = TasksCopy.SEARCH_EMPTY) else EmptyState(),
+                // A PROJECT THAT MATCHED THE NAME IS AN ANSWER: no "nothing found" over it.
+                empty = if (rows.isEmpty() && screen.search?.containers.isNullOrEmpty()) {
+                    EmptyState(headline = TasksCopy.SEARCH_EMPTY)
+                } else {
+                    EmptyState()
+                },
                 count_label = TasksRows.count(rows.size, TasksCopy.HIT_ONE, TasksCopy.HIT_MANY),
                 searching = true,
             )
