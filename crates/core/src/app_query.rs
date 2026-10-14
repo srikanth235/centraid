@@ -76,6 +76,8 @@ mod named;
 mod docs;
 // Locker's arm (#1047): metadata only; a secret is the session's.
 mod locker;
+// Money's arm (#1099): ten answers, the import plan and Home's tile.
+pub(crate) mod money;
 mod notes;
 mod people;
 // Photos' own search (#1097, R-1097-25..27): the text and album legs, the live rule
@@ -214,6 +216,16 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::ChatCard(asked) => chat::card(vault, asked)?,
         Q::VaultSearch(asked) => vault::search(vault, &door, asked)?,
         Q::PhotosSearch(asked) => photos::search(vault, &door, asked)?,
+        Q::MoneySpending(asked) => money::spending(vault, &door, &now, asked)?,
+        Q::MoneyActivity(asked) => money::activity(vault, &door, &now, asked)?,
+        Q::MoneyTransaction(asked) => money::transaction(vault, &door, &now, asked)?,
+        Q::MoneyCashflow(asked) => money::cashflow(vault, &door, &now, asked)?,
+        Q::MoneyAccounts(asked) => money::accounts(vault, &door, &now, asked)?,
+        Q::MoneyRules(_) => money::rules(&door)?,
+        Q::MoneyCategories(_) => money::categories(&door)?,
+        Q::MoneyTargetSheet(asked) => money::target_sheet(vault, &door, &now, asked)?,
+        Q::MoneyRecurring(asked) => money::recurring(vault, &door, &now, asked)?,
+        Q::MoneySearch(asked) => money::search(vault, &door, &now, asked)?,
     };
     Ok(wire::AppQueryResponse {
         answer: Some(answer),

@@ -25,6 +25,8 @@ centraid-api-proto = { path = "../api-proto" }
 # LOCKER'S PHONE LOADERS (#1047 L1): `app_query::locker` asks
 # `centraid_apps_locker::phone` for the list, the item and the counts.
 centraid-apps-locker = { path = "../apps/locker" }
+# MONEY'S PHONE ANSWERS, import plan and Home's tile (#1099): `app_query::money`.
+centraid-apps-money = { path = "../apps/money" }
 # A LOCKER ONE-TIME CODE (#1047, Q-1047-16): RFC 6238 is HMAC-SHA-1, fixed by
 # the specification every authenticator shares. Used by `locker::phone` alone,
 # over a seed opened under `K` after the code's receipt lands; see the

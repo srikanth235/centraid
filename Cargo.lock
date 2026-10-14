@@ -609,6 +609,7 @@ dependencies = [
  "centraid-apps-docs",
  "centraid-apps-kit",
  "centraid-apps-locker",
+ "centraid-apps-money",
  "centraid-apps-notes",
  "centraid-apps-people",
  "centraid-apps-photos",

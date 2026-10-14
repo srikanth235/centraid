@@ -40,6 +40,7 @@ import "centraid/core/v1/agenda.proto";
 import "centraid/core/v1/chat.proto";
 import "centraid/core/v1/docs.proto";
 import "centraid/core/v1/locker.proto";
+import "centraid/core/v1/money.proto";
 import "centraid/core/v1/notes.proto";
 import "centraid/core/v1/people.proto";
 import "centraid/core/v1/photos.proto";
@@ -96,6 +97,19 @@ message AppQueryRequest {
     VaultSearchRequest vault_search = 80;
     // Photos' own search (#1097, R-1097-25..27): 90.
     PhotosSearchRequest photos_search = 90;
+    // Money (#1099, R-1099-12): 100-109. 110-119 stay reserved for Money. The
+    // import plan and Home's tile are not app queries: they ride
+    // `Request.money` (`money.proto`).
+    MoneySpendingRequest money_spending = 100;
+    MoneyActivityRequest money_activity = 101;
+    MoneyTransactionRequest money_transaction = 102;
+    MoneyCashflowRequest money_cashflow = 103;
+    MoneyAccountsRequest money_accounts = 104;
+    MoneyRulesRequest money_rules = 105;
+    MoneyCategoriesRequest money_categories = 106;
+    MoneyTargetSheetRequest money_target_sheet = 107;
+    MoneyRecurringRequest money_recurring = 108;
+    MoneySearchRequest money_search = 109;
   }
 }
 
@@ -146,6 +160,16 @@ message AppQueryResponse {
     ChatCardLive chat_card = 72;
     VaultSearch vault_search = 80;
     PhotosSearch photos_search = 90;
+    MoneySpending money_spending = 100;
+    MoneyActivity money_activity = 101;
+    MoneyTransaction money_transaction = 102;
+    MoneyCashflow money_cashflow = 103;
+    MoneyAccounts money_accounts = 104;
+    MoneyRules money_rules = 105;
+    MoneyCategories money_categories = 106;
+    MoneyTargetSheet money_target_sheet = 107;
+    MoneyRecurring money_recurring = 108;
+    MoneySearch money_search = 109;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }

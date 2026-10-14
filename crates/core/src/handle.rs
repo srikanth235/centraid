@@ -968,6 +968,30 @@ impl Handle {
             K::AppQuery(request) => Ok(response(wire::response::Kind::AppQuery(Box::new(
                 self.with_vault(|vault| crate::app_query::answer(vault, request))?,
             )))),
+            // MONEY'S IMPORT PLAN AND HOME'S TILE (#1099). See `money.proto`;
+            // `with_vault` like an app query, because they ARE page reads. The
+            // statement's bytes are read once and dropped with the request.
+            K::Money(request) => {
+                use wire::money_request::Kind as M;
+                let kind = match &request.kind {
+                    Some(M::ImportPlan(asked)) => {
+                        wire::money_response::Kind::ImportPlan(self.with_vault(|vault| {
+                            crate::app_query::money::import_plan(vault, asked)
+                        })?)
+                    }
+                    Some(M::HomeTile(asked)) => wire::money_response::Kind::HomeTile(
+                        self.with_vault(|vault| crate::app_query::money::home_tile(vault, asked))?,
+                    ),
+                    None => {
+                        return Err(CoreError::InvalidRequest {
+                            detail: "a money request names no kind".to_owned(),
+                        });
+                    }
+                };
+                Ok(response(wire::response::Kind::Money(wire::MoneyResponse {
+                    kind: Some(kind),
+                })))
+            }
             // THE BACKUP PLANE'S DOORS BESIDE THE PASS (#1080). See
             // `phone.proto` and `crate::phone`.
             K::Handoff(request) => {
@@ -1320,6 +1344,9 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // walks a declared fan-out and every expansion a declared instance
             // cap, and reaching one is `ReadBoundReached`, not a longer read.
             | K::AppQuery(_)
+            // MONEY'S PLAN IS BOUNDED: one file of at most 8 MiB and 20,000
+            // rows read once, and the same declared fan-outs an app query has.
+            | K::Money(_)
             // A LOCKER STEP IS BOUNDED: one key load, one receipt, one cell.
             | K::Locker(_)
             // A PHRASE STEP IS 24 WORDS AND ONE PBKDF2 (#1047 E1).

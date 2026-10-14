@@ -312,3 +312,97 @@ fn prost_drops_unknown_fields_which_is_why_nothing_relays_a_decoded_message() {
 // `gateway.proto`, `backup.proto` and `lease.proto` (#1080): the gateway a
 // phone speaks to now declares its protocol in `crates/gateway/src/rules`, and
 // its wire is held by that crate's own conformance suite.
+
+/// MONEY'S ARMS (#1099, R-1099-12): the ten queries sit at 100-109 in both
+/// oneofs and 110-119 are unclaimed; the import plan and Home's tile ride the
+/// envelope's own arm 32, and an absent amount stays absent through the encoder.
+#[test]
+fn money_takes_its_ten_arms_and_keeps_absence_and_bytes_intact() {
+    use core::app_query_request::Query as Q;
+    let asked = [
+        (
+            Q::MoneySpending(core::MoneySpendingRequest::default()),
+            100u32,
+        ),
+        (Q::MoneyActivity(core::MoneyActivityRequest::default()), 101),
+        (
+            Q::MoneyTransaction(core::MoneyTransactionRequest::default()),
+            102,
+        ),
+        (Q::MoneyCashflow(core::MoneyCashflowRequest::default()), 103),
+        (Q::MoneyAccounts(core::MoneyAccountsRequest::default()), 104),
+        (Q::MoneyRules(core::MoneyRulesRequest::default()), 105),
+        (
+            Q::MoneyCategories(core::MoneyCategoriesRequest::default()),
+            106,
+        ),
+        (
+            Q::MoneyTargetSheet(core::MoneyTargetSheetRequest::default()),
+            107,
+        ),
+        (
+            Q::MoneyRecurring(core::MoneyRecurringRequest::default()),
+            108,
+        ),
+        (Q::MoneySearch(core::MoneySearchRequest::default()), 109),
+    ];
+    for (query, number) in asked {
+        let request = core::AppQueryRequest { query: Some(query) };
+        let bytes = request.encode_to_vec();
+        // Field `number`, wire type 2 (a length-delimited message): the tag is
+        // a two-byte varint for 100 and up.
+        let tag = u64::from(number) << 3 | 2;
+        let mut expected = Vec::new();
+        prost::encoding::encode_varint(tag, &mut expected);
+        assert!(
+            bytes.starts_with(&expected),
+            "arm {number} is not at its number"
+        );
+        roundtrip(&request);
+    }
+
+    let content = vec![0u8, 255, 10, 13, 0, 1];
+    let request = core::Request {
+        kind: Some(core::request::Kind::Money(core::MoneyRequest {
+            kind: Some(core::money_request::Kind::ImportPlan(
+                core::MoneyImportPlanRequest {
+                    tz: "America/Toronto".to_owned(),
+                    source: core::MoneySource::Csv as i32,
+                    content: content.clone(),
+                    account_id: Some("chq".to_owned()),
+                    date_order: core::MoneyDateOrder::Dmy as i32,
+                    sign: core::MoneySignChoice::Unspecified as i32,
+                },
+            )),
+        })),
+    };
+    roundtrip(&request);
+    let decoded = core::Request::decode(request.encode_to_vec().as_slice()).expect("decode");
+    let Some(core::request::Kind::Money(money)) = decoded.kind else {
+        panic!("the money arm survives");
+    };
+    let Some(core::money_request::Kind::ImportPlan(plan)) = money.kind else {
+        panic!("the import plan survives");
+    };
+    assert_eq!(
+        plan.content, content,
+        "statement bytes survive byte for byte"
+    );
+
+    // An absent balance is not a zero balance.
+    let line = core::money_accounts::AccountLine {
+        account_id: "a".to_owned(),
+        balance: None,
+        ..Default::default()
+    };
+    let decoded =
+        core::money_accounts::AccountLine::decode(line.encode_to_vec().as_slice()).expect("decode");
+    assert!(decoded.balance.is_none());
+    let zero = core::money_accounts::AccountLine {
+        balance: Some(core::MoneyAmount::default()),
+        ..line
+    };
+    let decoded =
+        core::money_accounts::AccountLine::decode(zero.encode_to_vec().as_slice()).expect("decode");
+    assert_eq!(decoded.balance, Some(core::MoneyAmount::default()));
+}

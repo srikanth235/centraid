@@ -1,0 +1,697 @@
+// MONEY'S PHONE QUERIES, AS THE CORE ANSWERS THEM (#1099).
+//
+// `crates/apps/money` reads accounts, transactions, targets, rules and
+// checkpoints through the page door and folds them (`phone.rs`): spending
+// against a plan, cash flow, balances checked against stated balances,
+// recurring charges, the import plan. These are its answers, typed. A shell
+// reaches them through `app_query.proto`'s `AppQueryRequest` (arms 100-109) and
+// draws them; it derives no figure, adds no two amounts and sums nothing across
+// currencies, because a second engine in Kotlin or Swift is exactly the drift
+// "every figure is derived at read time" exists to prevent.
+//
+// Every message mirrors a Rust struct in `crates/apps/money/src/phone.rs`;
+// `crates/core`'s `app_query/money.rs` is the one conversion.
+//
+// EVERY FIGURE IS A `MoneyAmount`: minor units, the currency code and that
+// currency's minor-unit exponent from `centraid_apps_kit::money::minor_units`,
+// never a bare integer a shell would divide by 100 (JPY is 0, BHD is 3). It is
+// declared here rather than imported from `screen.v1.Money`: the core package
+// imports nothing from the shell-internal package, whose compatibility promise
+// is weaker, and the locale a screen renders in is the vault's, which every
+// shell already holds. A figure that spans currencies is one `MoneyAmount` PER
+// currency and nothing here adds across them.
+//
+// SIGNS: an amount on a transaction is SIGNED (negative is money out). A
+// spending figure is a positive magnitude of money out. A balance is signed.
+//
+// CIVIL TIME IS THE DEVICE'S, under `agenda.proto`'s zone rule: a request that
+// carries `tz` states an IANA name; EMPTY is the vault's own zone, and a vault
+// that names none is `ERROR_CODE_INVALID_REQUEST`. Days are `YYYY-MM-DD` and are
+// the day the bank PRINTED (never shifted by a zone); a month is `YYYY-MM`.
+//
+// STATEMENT BYTES ARE NEVER STORED. `MoneyImportPlanRequest.content` is read
+// once, planned and dropped; the answer carries rows and the command input that
+// would write them, never the file.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+// ---------------------------------------------------------------------------
+// Shared shapes.
+// ---------------------------------------------------------------------------
+
+// A money amount in ONE currency.
+message MoneyAmount {
+  // Minor units: 4250 is USD 42.50, JPY 4,250, BHD 4.250.
+  int64 minor = 1;
+  // ISO 4217 code, as the vault holds it.
+  string currency = 2;
+  // The currency's minor-unit exponent, from the kit's table. Never guessed.
+  uint32 exponent = 3;
+}
+
+// What a row of Activity is flagged as.
+enum MoneyFlag {
+  MONEY_FLAG_UNSPECIFIED = 0;
+  // One half of an accepted transfer: not spending, not income.
+  MONEY_FLAG_TRANSFER = 1;
+  // Voided by the member: kept, never counted.
+  MONEY_FLAG_VOID = 2;
+  // No category yet.
+  MONEY_FLAG_UNCATEGORISED = 3;
+  // Dated after today.
+  MONEY_FLAG_FUTURE = 4;
+}
+
+enum MoneyMatchKind {
+  MONEY_MATCH_KIND_UNSPECIFIED = 0;
+  MONEY_MATCH_KIND_IS = 1;
+  MONEY_MATCH_KIND_CONTAINS = 2;
+  MONEY_MATCH_KIND_MATCHES = 3;
+}
+
+enum MoneyCadence {
+  MONEY_CADENCE_UNSPECIFIED = 0;
+  MONEY_CADENCE_WEEKLY = 1;
+  MONEY_CADENCE_BIWEEKLY = 2;
+  MONEY_CADENCE_MONTHLY = 3;
+  MONEY_CADENCE_QUARTERLY = 4;
+  MONEY_CADENCE_YEARLY = 5;
+}
+
+enum MoneyRecurringStatus {
+  MONEY_RECURRING_STATUS_UNSPECIFIED = 0;
+  // Not seen yet, and not past its date by more than the tolerance.
+  MONEY_RECURRING_STATUS_DUE = 1;
+  // Not seen, and past that.
+  MONEY_RECURRING_STATUS_LATE = 2;
+  // A matching charge posted.
+  MONEY_RECURRING_STATUS_PAID = 3;
+}
+
+// The ordered keyset position of the next page of Activity: the sort key and
+// the primary key of the last row served. Opaque to a shell; sent back as is.
+message MoneyCursor {
+  string sort_key = 1;
+  string pk = 2;
+}
+
+// One row of Activity, and of a search.
+message MoneyActivityRow {
+  string txn_id = 1;
+  // The printed day.
+  string posted_on = 2;
+  // The member's name for it, else the bank's words.
+  string display_name = 3;
+  // The bank's words, exactly as written.
+  string raw = 4;
+  // Signed: negative is money out.
+  MoneyAmount amount = 5;
+  string account_id = 6;
+  string account_label = 7;
+  optional string category_id = 8;
+  optional string category_label = 9;
+  repeated MoneyFlag flags = 10;
+}
+
+// A count and the sum of what it counts, in one currency.
+message MoneyCounted {
+  uint32 count = 1;
+  MoneyAmount amount = 2;
+}
+
+// ---------------------------------------------------------------------------
+// The ten queries (AppQueryRequest 100-109).
+// ---------------------------------------------------------------------------
+
+// `money.spending`: what one month went on, against its plan.
+message MoneySpendingRequest {
+  // The zone TODAY is read in.
+  string tz = 1;
+  // `YYYY-MM`. EMPTY is the month today falls in; a value not of that shape is
+  // `ERROR_CODE_INVALID_REQUEST`.
+  string month = 2;
+}
+
+message MoneySpending {
+  string month = 1;
+  // Today's civil day (`YYYY-MM-DD`) in the request's zone.
+  string today = 2;
+  uint32 day_of_month = 3;
+  uint32 days_in_month = 4;
+  uint32 days_left = 5;
+  // One hero per currency.
+  repeated SpendingCurrency per_currency = 6;
+  repeated SpendingCategory categories = 7;
+  // Rows with no category, per currency.
+  repeated MoneyCounted uncategorised = 8;
+  repeated InOutNet in_out_net = 9;
+  // Accepted transfers, left out of every figure above, per currency.
+  repeated MoneyCounted transfers_excluded = 10;
+  // Rows dated after today, left out of "so far", per currency.
+  repeated MoneyCounted future_excluded = 11;
+  repeated ForecastLine forecast = 12;
+  // Keys of the definitions printed under the figures (`money.def.*`); the copy
+  // lives with the shell.
+  repeated string definitions = 13;
+  // Day one: no account or no transaction yet. The screen offers Import.
+  bool empty = 14;
+  optional LastImportLine last_import = 15;
+  // A month window held more than the ceiling: the figures are over a window.
+  bool truncated = 16;
+
+  message SpendingCurrency {
+    MoneyAmount spent = 1;
+    optional MoneyAmount planned = 2;
+    optional MoneyAmount left = 3;
+    // Spent over planned, basis points.
+    optional int64 progress_bp = 4;
+    MoneyAmount refund_credit = 5;
+  }
+
+  message SpendingCategory {
+    string currency = 1;
+    string category_id = 2;
+    string label = 3;
+    optional string group = 4;
+    optional MoneyAmount planned = 5;
+    MoneyAmount carry_in = 6;
+    MoneyAmount spent = 7;
+    optional MoneyAmount left = 8;
+    bool over = 9;
+    MoneyAmount refund_credit = 10;
+  }
+
+  message InOutNet {
+    MoneyAmount incoming = 1;
+    MoneyAmount outgoing = 2;
+    MoneyAmount net = 3;
+  }
+
+  message ForecastLine {
+    MoneyAmount spent_so_far = 1;
+    MoneyAmount expected = 2;
+    MoneyAmount month_end = 3;
+  }
+
+  message LastImportLine {
+    // The vault's instant text.
+    string imported_at = 1;
+    // `csv` or `ofx`.
+    string source = 2;
+    optional string account_name = 3;
+  }
+}
+
+// `money.activity`: one page of a month's transactions, newest first.
+message MoneyActivityRequest {
+  string tz = 1;
+  // `YYYY-MM`. EMPTY is the month today falls in.
+  string month = 2;
+  // Only this account's rows.
+  optional string account_id = 3;
+  MoneyCategoryFilter category_filter = 4;
+  // The category `MONEY_CATEGORY_FILTER_IS` names.
+  string category_id = 5;
+  // REQUIRED: 0 is `ERROR_CODE_INVALID_REQUEST`, never a default.
+  uint32 limit = 6;
+  // The previous page's `next`; absent is the first page.
+  optional MoneyCursor after = 7;
+}
+
+enum MoneyCategoryFilter {
+  MONEY_CATEGORY_FILTER_UNSPECIFIED = 0;
+  // Every row (the same as unspecified).
+  MONEY_CATEGORY_FILTER_ANY = 1;
+  // "Needs a category".
+  MONEY_CATEGORY_FILTER_UNCATEGORISED = 2;
+  // Only `category_id`.
+  MONEY_CATEGORY_FILTER_IS = 3;
+}
+
+message MoneyActivity {
+  string month = 1;
+  string today = 2;
+  repeated MoneyActivityRow rows = 3;
+  // Rows still needing a category this month, per currency.
+  repeated MoneyCounted needs_category = 4;
+  // Absent on the last page.
+  optional MoneyCursor next = 5;
+  bool truncated = 6;
+}
+
+// `money.transaction`: one transaction and everything derived about it.
+message MoneyTransactionRequest {
+  string tz = 1;
+  string txn_id = 2;
+}
+
+message MoneyTransaction {
+  // False when no such transaction is live; every other field is then empty.
+  bool found = 1;
+  string txn_id = 2;
+  string posted_on = 3;
+  string display_name = 4;
+  // `rule` or `member`; absent when the bank's words are shown.
+  optional string display_name_source = 5;
+  string raw = 6;
+  // Signed.
+  MoneyAmount amount = 7;
+  string account_id = 8;
+  string account_label = 9;
+  optional string category_id = 10;
+  optional string category_label = 11;
+  optional string memo = 12;
+  optional string check_number = 13;
+  optional string bank_type = 14;
+  // `csv` or `ofx`.
+  optional string imported_from = 15;
+  repeated MoneyFlag flags = 16;
+  // A transfer the app PROPOSES; never written without the member.
+  optional TransferOffer transfer_proposal = 17;
+  // The transaction this one is accepted as a transfer with.
+  optional string transferred_with = 18;
+  // The counting learner's offer; never created silently.
+  optional RuleOffer rule_proposal = 19;
+  // The rules that would name and file it today.
+  repeated string applied_rule_ids = 20;
+  uint32 seen_times = 21;
+  optional RecurringNote recurring = 22;
+
+  message TransferOffer {
+    string other_txn_id = 1;
+    string other_account_label = 2;
+    string other_description = 3;
+    string other_posted_on = 4;
+    int64 days_apart = 5;
+  }
+
+  message RuleOffer {
+    MoneyMatchKind kind = 1;
+    string pattern = 2;
+    string category_id = 3;
+    string category_label = 4;
+    string display_name = 5;
+    uint32 support = 6;
+    uint32 of = 7;
+  }
+
+  message RecurringNote {
+    MoneyCadence cadence = 1;
+    optional string next_due = 2;
+    MoneyAmount amount = 3;
+  }
+}
+
+// `money.cashflow`: twelve months of in, out and net, per currency.
+message MoneyCashflowRequest {
+  string tz = 1;
+  // `YYYY-MM`, the last of the twelve. EMPTY is the month today falls in.
+  string through = 2;
+}
+
+message MoneyCashflow {
+  string through = 1;
+  string today = 2;
+  repeated Series series = 3;
+  repeated string definitions = 4;
+  bool truncated = 5;
+
+  // One currency's twelve months, oldest first.
+  message Series {
+    string currency = 1;
+    repeated Month months = 2;
+  }
+
+  message Month {
+    string month = 1;
+    MoneyAmount incoming = 2;
+    MoneyAmount outgoing = 3;
+    MoneyAmount net = 4;
+    // Net over incoming, basis points; absent when nothing came in.
+    optional int64 savings_rate_bp = 5;
+    // The month is not over (or not fully imported).
+    bool partial = 6;
+  }
+}
+
+// `money.accounts`: accounts with derived balances, and net worth.
+message MoneyAccountsRequest {
+  string tz = 1;
+}
+
+message MoneyAccounts {
+  string today = 1;
+  repeated AccountLine on_budget = 2;
+  repeated AccountLine off_budget = 3;
+  // One per currency; nothing is summed across them.
+  repeated NetWorthLine net_worth = 4;
+  repeated string definitions = 5;
+
+  message AccountLine {
+    string account_id = 1;
+    string name = 2;
+    // The last four characters of the bank's account number, if the member
+    // entered it.
+    optional string mask = 3;
+    // `checking`, `savings`, `credit_card` or `cash`.
+    string kind = 4;
+    string currency = 5;
+    // Absent when the ledger was too long to derive it.
+    optional MoneyAmount balance = 6;
+    optional CheckpointLine checkpoint = 7;
+    bool closed = 8;
+  }
+
+  message CheckpointLine {
+    string as_of = 1;
+    // The balance the statement stated.
+    MoneyAmount stated = 2;
+    // Derived minus stated.
+    MoneyAmount delta = 3;
+    bool agrees = 4;
+  }
+
+  message NetWorthLine {
+    MoneyAmount amount = 1;
+    // False when an account's balance could not be derived.
+    bool complete = 2;
+  }
+}
+
+// `money.rules`: the member's rules in application order.
+message MoneyRulesRequest {}
+
+message MoneyRules {
+  repeated RuleLine rules = 1;
+  // The ceiling on rules (500).
+  uint32 limit = 2;
+  bool truncated = 3;
+
+  message RuleLine {
+    string rule_id = 1;
+    MoneyMatchKind kind = 2;
+    string pattern = 3;
+    // Inclusive bounds on the amount's MAGNITUDE, in the account's minor units.
+    optional int64 amount_min = 4;
+    optional int64 amount_max = 5;
+    optional string account_label = 6;
+    optional string category_label = 7;
+    optional string display_name = 8;
+    uint32 specificity = 9;
+  }
+}
+
+// `money.categories`: groups, then their categories.
+message MoneyCategoriesRequest {}
+
+message MoneyCategories {
+  repeated Group groups = 1;
+
+  message Group {
+    string group_id = 1;
+    string label = 2;
+    repeated Category categories = 3;
+  }
+
+  message Category {
+    string category_id = 1;
+    string label = 2;
+    bool archived = 3;
+  }
+}
+
+// `money.target_sheet`: the sheet that sets a month's plan for one category.
+message MoneyTargetSheetRequest {
+  string tz = 1;
+  string month = 2;
+  string category_id = 3;
+  string currency = 4;
+  // What the member is typing, so the sheet previews it. Absent: the stored
+  // target's own amount and carry.
+  optional int64 typing_amount_minor = 5;
+  bool typing_carry = 6;
+}
+
+message MoneyTargetSheet {
+  string category_id = 1;
+  string category_label = 2;
+  string month = 3;
+  string currency = 4;
+  // The amount planned now, if a target is set (or typed).
+  optional MoneyAmount amount = 5;
+  bool carry = 6;
+  MoneyAmount carry_in = 7;
+  MoneyAmount spent = 8;
+  MoneyAmount six_month_average = 9;
+  MoneyAmount next_month_preview = 10;
+}
+
+// `money.recurring`: the recurring charges detected in the last months.
+message MoneyRecurringRequest {
+  string tz = 1;
+}
+
+message MoneyRecurring {
+  string today = 1;
+  repeated Line series = 2;
+  repeated string definitions = 3;
+  bool truncated = 4;
+
+  message Line {
+    string merchant = 1;
+    string account_label = 2;
+    MoneyCadence cadence = 3;
+    // "every month" and the like, in the app's words.
+    string cadence_words = 4;
+    MoneyAmount amount = 5;
+    optional string next_due = 6;
+    MoneyRecurringStatus status = 7;
+    uint32 seen_times = 8;
+    optional string category_label = 9;
+  }
+}
+
+// `money.search`: transactions whose words contain the term, newest first,
+// walking month windows back from `month`.
+message MoneySearchRequest {
+  string tz = 1;
+  // `YYYY-MM` to start from. EMPTY is the month today falls in.
+  string month = 2;
+  string term = 3;
+  // REQUIRED: 0 is `ERROR_CODE_INVALID_REQUEST`, never a default.
+  uint32 limit = 4;
+}
+
+message MoneySearch {
+  string term = 1;
+  repeated MoneyActivityRow rows = 2;
+  uint32 total_matches = 3;
+  // The term the search ran as, when it was corrected from the member's.
+  optional string corrected = 4;
+  bool truncated = 5;
+  // How many months back the walk went.
+  uint32 months_walked = 6;
+}
+
+// ---------------------------------------------------------------------------
+// Home's tile and the import plan: their own request, `Request.money`
+// (envelope arm 32), because neither is an app screen's read. The tile is
+// Home's; the import plan carries a file.
+// ---------------------------------------------------------------------------
+
+message MoneyRequest {
+  oneof kind {
+    MoneyImportPlanRequest import_plan = 1;
+    MoneyHomeTileRequest home_tile = 2;
+  }
+}
+
+message MoneyResponse {
+  oneof kind {
+    MoneyImportPlan import_plan = 1;
+    MoneyHomeTile home_tile = 2;
+  }
+}
+
+// `money.home_tile`: this month's spending per currency, for Home's tile.
+message MoneyHomeTileRequest {
+  string tz = 1;
+}
+
+message MoneyHomeTile {
+  string month = 1;
+  // Spent this month, one per currency; empty on day one.
+  repeated MoneyAmount spent = 2;
+  // Nothing to show yet: the tile says what to do, never a fabricated zero.
+  bool empty = 3;
+}
+
+enum MoneySource {
+  MONEY_SOURCE_UNSPECIFIED = 0;
+  MONEY_SOURCE_CSV = 1;
+  // OFX and QFX.
+  MONEY_SOURCE_OFX = 2;
+}
+
+// The member's answer to a date-order question.
+enum MoneyDateOrder {
+  MONEY_DATE_ORDER_UNSPECIFIED = 0;
+  // `MM/DD/YYYY`.
+  MONEY_DATE_ORDER_MDY = 1;
+  // `DD/MM/YYYY`.
+  MONEY_DATE_ORDER_DMY = 2;
+  // The file prints year first: nothing to ask. Never an answer.
+  MONEY_DATE_ORDER_YMD = 3;
+}
+
+// The member's override of a guessed sign, for a single signed amount column.
+enum MoneySignChoice {
+  MONEY_SIGN_CHOICE_UNSPECIFIED = 0;
+  // Negative is money out (a chequing account).
+  MONEY_SIGN_CHOICE_DEBITS_NEGATIVE = 1;
+  // Positive is money out (a credit card).
+  MONEY_SIGN_CHOICE_DEBITS_POSITIVE = 2;
+}
+
+// `money.import_plan`: read a statement and say what importing it would do. It
+// writes nothing and keeps nothing: PUBLISHING is the command
+// `money.import_transactions`, sent through the ordinary command plane with the
+// plan's `publish_input`.
+message MoneyImportPlanRequest {
+  string tz = 1;
+  MoneySource source = 2;
+  // The file as picked, byte for byte. At most 8 MiB (`IMPORT_BYTES`); more is
+  // answered as a plan that refuses the file, never truncated. Read once and
+  // dropped; never stored.
+  bytes content = 3;
+  // The account the statement belongs to. REQUIRED for CSV. For OFX it is
+  // optional: absent, each statement is matched to an account by its ACCTID.
+  optional string account_id = 4;
+  // The answer to a plan's `question`, when the file could not say its date
+  // order.
+  MoneyDateOrder date_order = 5;
+  MoneySignChoice sign = 6;
+}
+
+// The plan: what each row of the file would do. A file may hold several
+// statements (OFX), each its own `MoneyStatementPlan`.
+message MoneyImportPlan {
+  // The whole file was refused (empty, too large, too many rows, not a
+  // statement): the member's sentence. Then `statements` is empty.
+  optional string refusal = 1;
+  repeated MoneyStatementPlan statements = 2;
+}
+
+message MoneyStatementPlan {
+  // The account this statement imports into; absent when it matched none (then
+  // `statement_refusal` says why).
+  optional string account_id = 1;
+  optional string account_label = 2;
+  // The sentence for a statement that matched no account, matched two, or
+  // differs in currency from its account.
+  optional string statement_refusal = 3;
+  repeated MoneyImportPlanRow rows = 4;
+  uint32 new = 5;
+  uint32 already_in = 6;
+  uint32 proposed_duplicates = 7;
+  uint32 repeats_in_file = 8;
+  uint32 rejected = 9;
+  uint32 future_dated = 10;
+  // The file's totals (all readable rows) and the new rows' totals.
+  MoneyAmount file_in = 11;
+  MoneyAmount file_out = 12;
+  MoneyAmount new_in = 13;
+  MoneyAmount new_out = 14;
+  optional string first_day = 15;
+  optional string last_day = 16;
+  // The date-order question, when the file could not answer it. No rows then.
+  optional MoneyDateOrderQuestion question = 17;
+  repeated MoneyImportWarning warnings = 18;
+  // The closing balance the statement stated, written with the rows.
+  optional MoneyImportCheckpoint checkpoint = 19;
+  // The layout to remember: send it as `money.save_import_profile` only after
+  // a successful import.
+  optional MoneyImportProfile profile_to_save = 20;
+  // Canonical JSON: the `money.import_transactions` input for the rows whose
+  // verdict is NEW (with the statement's checkpoint, if any). Send it as
+  // `Command.input` unchanged. Empty when nothing is new.
+  bytes publish_input = 21;
+  // The same, plus the rows the member chose to keep that were PROPOSED as
+  // duplicates. Empty when there are none.
+  bytes publish_input_with_proposed = 22;
+}
+
+enum MoneyImportVerdict {
+  MONEY_IMPORT_VERDICT_UNSPECIFIED = 0;
+  // Would be written.
+  MONEY_IMPORT_VERDICT_NEW = 1;
+  // The same row is already in (the same bank id or hash); writes nothing.
+  MONEY_IMPORT_VERDICT_ALREADY_IN = 2;
+  // Looks like a row already in under another id (same account, same amount,
+  // within three days, alike words). PROPOSED only: the member decides.
+  MONEY_IMPORT_VERDICT_PROPOSED_DUPLICATE = 3;
+  // The same row twice in this file.
+  MONEY_IMPORT_VERDICT_REPEAT_IN_FILE = 4;
+  // Unreadable: `reason` says why.
+  MONEY_IMPORT_VERDICT_REJECTED = 5;
+}
+
+message MoneyImportPlanRow {
+  // 1-based line in the file.
+  uint32 line = 1;
+  MoneyImportVerdict verdict = 2;
+  optional string posted_on = 3;
+  // Signed.
+  optional MoneyAmount amount = 4;
+  optional string description = 5;
+  // After the rules.
+  optional string display_name = 6;
+  optional string category_label = 7;
+  bool future_dated = 8;
+  // The existing transaction an ALREADY_IN or a proposal points at.
+  optional string existing_txn_id = 9;
+  // A sentence for a rejected row.
+  optional string reason = 10;
+}
+
+message MoneyDateOrderQuestion {
+  // A few raw date cells, as printed.
+  repeated string samples = 1;
+  repeated MoneyDateOrder options = 2;
+}
+
+enum MoneyImportWarning {
+  MONEY_IMPORT_WARNING_UNSPECIFIED = 0;
+  // A saved layout no longer fits the file's header; columns were detected
+  // afresh.
+  MONEY_IMPORT_WARNING_PROFILE_CHANGED = 1;
+  // Which sign means money out was guessed from the file's majority sign. The
+  // screen shows it so the member can flip it (`sign`).
+  MONEY_IMPORT_WARNING_SIGN_GUESSED = 2;
+}
+
+message MoneyImportCheckpoint {
+  // `YYYY-MM-DD`.
+  string as_of = 1;
+  // Signed.
+  MoneyAmount balance = 2;
+}
+
+// The layout a CSV import remembers (`money.save_import_profile`'s input).
+message MoneyImportProfile {
+  string header_fingerprint = 1;
+  string delimiter = 2;
+  uint32 skip_lines = 3;
+  string date_order = 4;
+  string sign_mode = 5;
+  uint32 date_col = 6;
+  optional uint32 amount_col = 7;
+  optional uint32 debit_col = 8;
+  optional uint32 credit_col = 9;
+  uint32 desc_col = 10;
+  optional uint32 memo_col = 11;
+  optional uint32 indicator_col = 12;
+  optional string indicator_out_value = 13;
+}
