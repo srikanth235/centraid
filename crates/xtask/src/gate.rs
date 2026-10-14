@@ -424,7 +424,7 @@ fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
     }
     // THEN FORMAT, because the committed artifacts are formatted and the
     // emitters do not format. Without this the check fails on every run over a
-    // clean tree — `copy/tally.json`'s `functions` array is one line from
+    // clean tree — a copy leaf's `functions` array is one line from
     // `JSON.stringify` and three from oxfmt — which is a drift check that
     // reports drift that is not there, and a gate nobody believes is a gate
     // nobody reads (#1020 wave 3 lane X3). JSON and YAML in this repository are

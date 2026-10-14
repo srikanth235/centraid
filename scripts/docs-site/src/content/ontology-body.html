@@ -48,7 +48,7 @@
           <div class="bt"><h3>Product surfaces</h3><span class="tag">UI projections — rebuildable, replaceable</span></div>
           <div class="row">
             <span class="pill">Tasks — Todoist</span><span class="pill">Agenda — Google Calendar</span>
-            <span class="pill">Tally — Splitwise</span><span class="pill">People — Google Contacts</span>
+            <span class="pill">People — Google Contacts</span>
             <span class="pill">Notes — Apple Notes</span><span class="pill">Docs — Google Drive</span>
             <span class="pill">Locker — 1Password</span><span class="pill">Photos — Google Photos</span>
           </div>
@@ -150,7 +150,7 @@
 
     <div class="physcard rv">
       <h3>Since v1.1 — what the implementation added, and two standing stances</h3>
-      <p><strong>New canonical surface.</strong> <span class="k">core.collection</span> (one curation mechanism, #274) and standoff link anchors (#282); the <strong>sync spine</strong> — <span class="k">sync.connection</span>, the external-id map, staged import batches — with broker-owned credentials as sealed sidecars (#290, #304); the <strong>sealed column class</strong> (AES-GCM at rest, explicit <span class="k">reveal</span> verb, structural FTS bar, #293); blob custody with content derivatives (#296); the <strong>enrichment spine</strong> (derived rows land in tables the ontology already has, attributed and re-derivable, #299) now under per-class standing consent (#310); the <strong>outbox</strong> — external writes as inert artifacts the owner decides on, standing (actor, verb, target) grants, typed graph refs and drain-side publish-back (#306, #308, #310); consent memory (scope tombstones + widening requests, #308); and three new domains — People, Locker, Tally — each re-anchored by #310: settlements post to the canonical ledger, groups decorate <span class="k">social.circle</span>, locker items anchor their broker connection and tag through <span class="k">core.tag</span>. Then the <strong>polymorphic-ref registry</strong> (#441) enumerated every <span class="k">(type,id)</span> pointer once, each with a cleanup policy — end-date, delete or revoke — so a hard delete swept them by construction; before it, <span class="k">consent.share</span>, enrichment embeddings and sync-map rows dangled after their target was purged. (#916 replaced that registry with the engine: see below.) The same #441 pass retired the last per-domain favorite/silo columns into the one starring mechanism the universal joins already give (a flags-scheme <span class="k">core.tag</span> on the canonical row), and made People groups <em>lists</em> (a SKOS scheme) while <span class="k">social.circle</span> stayed an audience mechanism. Blob custody moved onto a hosted-vs-local storage surface (the <span class="k">/v1/storage</span> wire protocol, #436).</p>
+      <p><strong>New canonical surface.</strong> <span class="k">core.collection</span> (one curation mechanism, #274) and standoff link anchors (#282); the <strong>sync spine</strong> — <span class="k">sync.connection</span>, the external-id map, staged import batches — with broker-owned credentials as sealed sidecars (#290, #304); the <strong>sealed column class</strong> (AES-GCM at rest, explicit <span class="k">reveal</span> verb, structural FTS bar, #293); blob custody with content derivatives (#296); the <strong>enrichment spine</strong> (derived rows land in tables the ontology already has, attributed and re-derivable, #299) now under per-class standing consent (#310); the <strong>outbox</strong> — external writes as inert artifacts the owner decides on, standing (actor, verb, target) grants, typed graph refs and drain-side publish-back (#306, #308, #310); consent memory (scope tombstones + widening requests, #308); and three new domains — People, Locker, Tally (since deleted, #1099) — each re-anchored by #310: settlements post to the canonical ledger, groups decorate <span class="k">social.circle</span>, locker items anchor their broker connection and tag through <span class="k">core.tag</span>. Then the <strong>polymorphic-ref registry</strong> (#441) enumerated every <span class="k">(type,id)</span> pointer once, each with a cleanup policy — end-date, delete or revoke — so a hard delete swept them by construction; before it, <span class="k">consent.share</span>, enrichment embeddings and sync-map rows dangled after their target was purged. (#916 replaced that registry with the engine: see below.) The same #441 pass retired the last per-domain favorite/silo columns into the one starring mechanism the universal joins already give (a flags-scheme <span class="k">core.tag</span> on the canonical row), and made People groups <em>lists</em> (a SKOS scheme) while <span class="k">social.circle</span> stayed an audience mechanism. Blob custody moved onto a hosted-vs-local storage surface (the <span class="k">/v1/storage</span> wire protocol, #436).</p>
       <p style="margin-top:10px"><strong>Since v1.3 — the #883 reconciliation.</strong> One authority plane: every standing answer a member gives — to a person, circle, harness or device — is a <span class="k">share.authority</span> row, principal × subject × verb × duration, where granted and declined are both rows (V-table); <span class="k">consent.share</span> never shipped in that shape. An identifier is not a channel: reachability lives in <span class="k">social.contact_channel</span> and <span class="k">social.contact_card</span> retired (O-contact). <span class="k">home.*</span> and <span class="k">business.*</span> were dropped — zero consumers; their product case is proposal #885 (O-domains). Receipts ride <span class="k">core.attachment</span> with <span class="k">role=receipt</span> (O-attach). Tasks and Agenda gained the <span class="k">deleted_at / purge_at</span> trash pair (O-trash); <span class="k">updated_at</span> triggers widened to thirteen more tables (O-updated); the registry’s per-entity label is the one name source (O-label).</p>
       <p style="margin-top:10px"><strong>Since #883 — the #916 close of v0.</strong> The model above is what a full re-review left standing, and the changes were structural rather than cosmetic. <strong>One supertype:</strong> every entity row is also a <span class="k">core.entity</span> row, so a pointer pair is a composite foreign key the engine enforces and cascades — the poly-ref registry, its sweep and the class of dangling-pointer bug it managed are gone, and nine projections that are parts of an entity rather than entities keep only their parent key. <strong>Dormant domains left:</strong> <span class="k">health</span>, <span class="k">finance</span>, the observation spine, the learn loop (<span class="k">agent.correction</span> / <span class="k">judgment</span>), registered app views, export jobs and availability rules had DDL and typed commands but no producer and no consumer, so O-domains’ own test was applied evenly; <span class="k">social.thread</span> and <span class="k">message</span> stayed, because they have writers. <strong>One version scheme:</strong> the file (<span class="k">PRAGMA user_version</span>) and the command contract carry the version; the per-row <span class="k">ontology_version</span> stamp two tables happened to have is gone. <strong>Lifecycle is declared:</strong> each entity says append-only, mutable, trash or machinery, and a test — not a habit — holds the timestamps and the trash pair to it. <strong>The consent plane became the <span class="k">access</span> plane</strong>, its scopes now naming one dotted entity instead of four encodings of “which entity”. <strong>Money states its currency</strong> on the group, the expense and the settlement; <strong>recurrence exceptions</strong> key on the series’ wall clock instead of a resolved UTC instant, and both a template’s splits and an exception’s attendees are rows instead of JSON. <strong>The version is 1.0</strong>, and the ladder is one rung: the schema modules carry the shipping shape, and a pre-1.0 vault is recreated rather than migrated.</p>
       <p style="margin-top:10px"><strong>Stance — the runtime store stays outside the graph.</strong> Conversation transcripts and automation run summaries live in the ledger band of <span class="k">vault.db</span> (formerly a standalone <span class="k">transcripts.db</span>, then a second file), deliberately not in the model (issue #280: the vault directory is the sovereign unit; the runtime store is operational state). Sharing a file is not joining the graph: the band is excluded from the export and the replica, and no canonical row references it. They are activity-shaped, so the pull to join them will grow — the decision of record is: they stay out until an agent query genuinely needs them, and the door in is a thin <span class="k">core.activity</span> projection, never soft TEXT joins from canonical rows. That band is now <strong>bounded</strong> (#438): idle turn-ranges digest into <span class="k">conversation_digest</span>, seal into the vault blob CAS indexed by <span class="k">conversation_archive</span>, and the raw turns prune only once custody is proven — reopening a conversation lazily rehydrates from the archive, and Insights read the digests either way. Bounding the runtime store is orthogonal to keeping it out of the graph; both hold.</p>
@@ -312,7 +312,7 @@
     </div>
     <div class="cta rv" style="border-color:var(--ext-text)">
       <h3>The domain admission checklist (issue #310 C6)</h3>
-      <p>Locker and Tally shipped whole apps before anyone noticed the universal mechanisms had not come along — a second tag table, a private junction, an unindexed domain. New domains keep landing; drift is a process failure, not a modeling one. <strong>A PR that adds a vault domain answers all seven in review</strong> — and the eighth, since #916: is every entity row also a <span class="k">core.entity</span> row, with every pointer pair a composite foreign key, or is it a projection that says so in the registry?</p>
+      <p>Locker and Tally (since deleted, #1099) shipped whole apps before anyone noticed the universal mechanisms had not come along — a second tag table, a private junction, an unindexed domain. New domains keep landing; drift is a process failure, not a modeling one. <strong>A PR that adds a vault domain answers all seven in review</strong> — and the eighth, since #916: is every entity row also a <span class="k">core.entity</span> row, with every pointer pair a composite foreign key, or is it a projection that says so in the registry?</p>
       <p style="margin-top:8px">
         <span class="k">1 anchor</span> — does every entity extend or reference a core row (R02), or carry a written exemption?&nbsp;
         <span class="k">2 relations</span> — do cross-entity joins ride <span class="k">core.link</span> / an existing mechanism, not a new junction (R03)?&nbsp;
@@ -378,7 +378,7 @@
       <p><strong>Consent model: manifest-declared scopes with explicit owner approval.</strong> An app's <span class="k">app.json</span> <span class="k">vault</span> block is a request, never a grant; the owner approves it over <span class="k">POST /centraid/_vault/apps/&lt;id&gt;/grants</span>, and until then every call is a receipted deny.</p>
       <p><strong>Data planes: one file, one canon, one band per app.</strong> The per-app <span class="k">data.sqlite</span> is deleted (issue #286); app extension tables ride inside <span class="k">vault.db</span> as the declared ext band, and the shipped blueprints declare zero of them — pure projections. The canon stays the consent-gated shared plane; the band boundary, not a separate file, is the silo line now.</p>
       <p>All six phases are implemented and tested: the vault plane mounts off <span class="k">GatewayPaths.vaultDir</span> (<span class="k">gateway/src/serve/vault-plane.ts</span>), live apps enroll and uninstalls cascade, <span class="k">ctx.vault</span> rides the worker RPC (<span class="k">app-engine/src/worker/runner.ts</span>), owner routes serve grants and parked confirmations, the automation compiler teaches cloned handlers this same surface (there is no user-facing build-an-app flow — #799 retired that plane, and the compiler survives because it is what turns an automation into a plan), and the sweep clock runs on the gateway lifecycle.</p>
-      <p><strong>And the §01 projection band ships as blueprints.</strong> Eight product surfaces are first-class templates in <span class="k">packages/blueprints/apps</span> — <span class="k">docs</span>, <span class="k">photos</span>, <span class="k">notes</span>, <span class="k">people</span>, <span class="k">locker</span>, <span class="k">tally</span>, <span class="k">agenda</span>, <span class="k">tasks</span> — each a pure projection: zero private tables, every row from <span class="k">ctx.vault</span>, every mutation a typed command, consent denial and the parked pause rendered as first-class UI states. Revoke a grant and the projection goes dark; the model, history and receipts remain. The same eight are documented from the user's side in <a href="../apps/" style="color:var(--core-text)">the Apps chapter</a>.</p>
+      <p><strong>And the §01 projection band ships as blueprints.</strong> Seven product surfaces are first-class templates in <span class="k">packages/blueprints/apps</span> — <span class="k">docs</span>, <span class="k">photos</span>, <span class="k">notes</span>, <span class="k">people</span>, <span class="k">locker</span>, <span class="k">agenda</span>, <span class="k">tasks</span> — each a pure projection: zero private tables, every row from <span class="k">ctx.vault</span>, every mutation a typed command, consent denial and the parked pause rendered as first-class UI states. Revoke a grant and the projection goes dark; the model, history and receipts remain. The same eight are documented from the user's side in <a href="../apps/" style="color:var(--core-text)">the Apps chapter</a>.</p>
     </div>
   </div>
 </section>
@@ -573,10 +573,10 @@ cols:[
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live.'],
 ['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL).'],
 ]},
-{ n:'attachment', std:'Homebox attachments · Joplin note_resources · Firefly-III attachments', p:'Files-on-anything, once: the receipt on an expense, the manual on an appliance, the photo on a place — one (target_type,target_id) pair, engine-enforced against core.entity, instead of a per-domain junction each time. Tally’s receipts are role receipt rows here (#883, ruling O-attach).',
+{ n:'attachment', std:'Homebox attachments · Joplin note_resources · Firefly-III attachments', p:'Files-on-anything, once: the receipt on an expense, the manual on an appliance, the photo on a place — one (target_type,target_id) pair, engine-enforced against core.entity, instead of a per-domain junction each time. A receipt is a role receipt row here (#883, ruling O-attach).',
 cols:[
 ['attachment_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Immutable attachment identity.'],
-['target_type','TEXT','FK NN','core_entity', 'Logical table of the annotated row (e.g. tally.expense, core.place).'],
+['target_type','TEXT','FK NN','core_entity', 'Logical table of the annotated row (e.g. core.place, knowledge.note).'],
 ['target_id','TEXT','FK NN','core_entity', 'Attached-to row id; (target_type,target_id) is a composite foreign key onto core.entity — engine-enforced and cascading, not a gateway promise (#916).'],
 ['content_id','TEXT','FK NN','core.content_item', 'The attached bytes, as owned content identity.'],
 ['role','TEXT','NN CK','', 'CHECK in (\'photo\',\'manual\',\'receipt\',\'warranty\',\'contract\',\'embed\',\'other\').'],
@@ -784,10 +784,10 @@ cols:[
 ['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
 ['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
 ]},
-{ n:'recurrence_exception', std:'—', p:'One skipped or overridden occurrence of a recurring series, whatever domain owns the series — a calendar event or a Tally recurring expense. One exception table for every series in the vault.',
+{ n:'recurrence_exception', std:'—', p:'One skipped or overridden occurrence of a recurring series, whatever domain owns the series — a calendar event. One exception table for every series in the vault.',
 cols:[
 ['exception_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Exception identity.'],
-['target_type','TEXT','FK NN CK','core_entity', 'CHECK in (\'core.event\',\'tally.recurring_expense\') — the series’ owning table. finance.recurring_series left with the finance pack (#916, ruling ONT-06).'],
+['target_type','TEXT','FK NN CK','core_entity', 'CHECK in (\'core.event\',\'tally.recurring_expense\') — the series’ owning table; the second value is vestigial, because a baseline is never edited, and no row carries it since rung fifteen (#1099, ONT-41). finance.recurring_series left with the finance pack (#916, ruling ONT-06).'],
 ['target_id','TEXT','FK NN','core_entity', 'Series row identity; (target_type,target_id) is a composite foreign key onto core.entity (#916).'],
 ['original_start_local','TEXT','NN','', 'The series-local WALL CLOCK of the occurrence, in the series’ own zone (#916, ruling R5). Keyed on the resolved UTC instant, every exception was orphaned the moment the series moved zone.'],
 ['recurrence_semantics','TEXT','NN CK','', 'CHECK in (\'zoned\',\'floating\',\'all-day\') — the series’ reading of that wall clock, copied at write time so an exception matches without re-reading the series.'],
@@ -998,7 +998,7 @@ cols:[
 ['party_id','TEXT','FK UQ NN','core.party', 'The party this profile enriches, 1:1. Interactions, tasks, relationships and debts stay on their own spines (#450).'],
 ['role','TEXT','','', 'Role line for display (job title, relationship). The retired social.contact_card ORG/TITLE landed here.'],
 ['nickname','TEXT','','', 'vCard NICKNAME; migrated from the retired social.contact_card.'],
-['avatar_color','TEXT','','', 'Avatar hue. One hue per party: Tally reads this rather than storing its own (#441).'],
+['avatar_color','TEXT','','', 'Avatar hue. One hue per party: every app reads this rather than storing its own (#441).'],
 ['cadence_days','INTEGER','NN CK','', 'Keep-in-touch cadence in days; CHECK(cadence_days >= 0). 0 means never — a zero-cadence person is never overdue (#821).'],
 ['last_contacted_at','TEXT (iso8601)','','', 'Ground fact, not a projection (#441 A3): stamped only by people.log_interaction. A logged touch is what clears “overdue”; never a cache of activity timestamps.'],
 ['met','TEXT','','', 'How the owner met them; free text.'],
@@ -1102,174 +1102,6 @@ cols:[
 ]},
 ],
 },
-{ id:'tally', label:'tally', desc:'Shared expenses with no stored balance — every figure folds at read time from expenses, payers, splits, settlements and obligations. A group decorates a social.circle (#310), friends are core parties, and expenses and settlements may bind to core.transaction. Money now states its currency on the group, the expense and the settlement (#916, ruling R1), and a recurring template’s division is rows (ruling D3).',
-tables:[
-{ n:'friend', std:'—', p:'The bare enrolment marker: this core.party is a friend in Tally. No avatar hue here — one hue per party, people_profile’s (#441). The owner is the implicit “me” and never gets a row. Hard-delete by design: un-enrolling trashes no content.',
-cols:[
-['friend_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Enrolment identity.'],
-['party_id','TEXT','FK UQ NN','core.party', 'The enrolled party, 1:1.'],
-['created_at','TEXT (iso8601)','NN','', 'Enrolment instant.'],
-['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-]},
-{ n:'group', std:'—', p:'A thin decoration on a social.circle (#310): the emoji and colour the circle has no home for. Name and membership live on the circle, owner included. Structural, not content: delete is refused while expenses remain (trashed ones included), then cascades its circle.',
-cols:[
-['group_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Group identity.'],
-['circle_id','TEXT','FK UQ NN','social.circle', 'The audience this group decorates, 1:1; membership is social.circle_member.'],
-['icon','TEXT','NN','', 'Emoji icon.'],
-['color','TEXT','NN','', 'Colour.'],
-['simplify_opt_in','INTEGER (bool)','NN CK','', 'CHECK in (0,1); simplification rewires who owes whom, so it is off unless the group opts in. The only stored fact: the proposal derives at read time; acceptance writes settlements.'],
-['archived_at','TEXT (iso8601)','','', 'Archive is not delete: drops out of the default lists, keeps every row, needs no settled balance.'],
-['currency','TEXT','NN CK','', 'THE GROUP’S CURRENCY (#916, ruling R1): a group is the ledger everyone in it reads, so every expense and settlement in it agrees with this by trigger. CHECK(length(currency)=3).'],
-['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
-['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-]},
-{ n:'expense', std:'ISO 4217 currency codes', p:'One shared cost. The vault stores the resolved shares (expense_split), who paid (expense_payer) and the division it was entered with; balances are never stored. May stand outside any group and may bind to a core.transaction.',
-cols:[
-['expense_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Expense identity.'],
-['group_id','TEXT','FK','tally.group', 'NULL for a group-less 1:1 expense; its participants validate against the friend roster instead of a circle.'],
-['description','TEXT','NN','', 'What was paid for.'],
-['amount_minor','INTEGER (minor units)','NN CK','', 'Total in the settlement currency; CHECK(amount_minor > 0). Splits, payers and lines each re-validate to sum to it.'],
-['currency','TEXT','NN CK','', 'The currency <span class="k">amount_minor</span> IS (#916, ruling R1). Splits, payers and line items inherit it by construction — they are shares of this amount — so none of them carries a column; a grouped expense is held to its group’s currency by trigger.'],
-['paid_by','TEXT','FK NN','core.party', 'The principal payer, always one of the expense_payer rows — keeps a reader that only knows this column right in the single-payer case.'],
-['split_method','TEXT','NN CK','', 'CHECK in (\'equally\',\'exact\',\'percentages\',\'shares\',\'adjusted\',\'by_line\'); the division the expense was entered with — provenance, never a second arithmetic path. Older rows read \'exact\'.'],
-['split_params_json','TEXT (json1)','CK','', 'That division’s parameters, so an edit re-opens as entered; CHECK json_valid or NULL. Nothing re-derives a share from it.'],
-['spent_on','TEXT (date)','NN','', 'Date of the expense, YYYY-MM-DD.'],
-['category','TEXT','NN CK','', 'CHECK in (\'food\',\'groceries\',\'rent\',\'utilities\',\'transport\',\'fun\',\'travel\',\'shopping\',\'general\').'],
-['txn_id','TEXT','FK','core.transaction', 'Finance bridge (#310): the core.transaction this expense is bound to when the bank already knows — bind, don’t duplicate.'],
-['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
-['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live. A trashed expense still blocks group deletion until it purges.'],
-['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL) (#441 A4). Purge cascades the splits.'],
-['original_amount_minor','INTEGER (minor units)','CK','', 'Amount in the currency it was entered in; CHECK(NULL or > 0).'],
-['original_currency','TEXT (char 3)','CK','', 'Currency the expense was entered in; CHECK(NULL or length = 3).'],
-['settlement_currency','TEXT (char 3)','CK','', 'Currency amount_minor is settled in; CHECK(NULL or length = 3).'],
-['rate_scaled','INTEGER','CK','', 'Fixed-point rate original → settlement, scaled by 10^rate_scale; CHECK(NULL or > 0).'],
-['rate_scale','INTEGER','CK','', 'Decimal places of rate_scaled; CHECK(NULL or 0–12).'],
-['rate_source','TEXT','','', 'Where the rate came from, as entered; free text.'],
-['rate_date','TEXT (date)','','', 'Date the rate applies to.'],
-['recurring_template_id','TEXT','FK','tally.recurring_expense', 'The tally.recurring_expense this instance was materialized from; UNIQUE with spent_on so an occurrence cannot materialize twice. Declared without FK.'],
-]},
-{ n:'expense_split', std:'—', p:'One participant’s resolved share of an expense. The rows must sum to the amount, re-validated on every write — the only arithmetic the vault keeps.',
-cols:[
-['expense_id','TEXT','PK FK NN','tally.expense', 'Expense; cascades on purge.'],
-['party_id','TEXT','PK FK NN','core.party', 'Participant.'],
-['share_minor','INTEGER (minor units)','NN CK','', 'Resolved share; CHECK(share_minor >= 0).'],
-['created_at','TEXT','NN','', 'UTC creation instant.'],
-['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-]},
-{ n:'recurring_expense_split', std:'Splitwise recurring templates', p:'How a future occurrence of the template will be divided, as ROWS (#916, ruling D3). <span class="k">splits_json</span> put party ids where merge could not see them and no constraint could hold the shares to the template’s amount.',
-cols:[
-['template_id','TEXT','PK FK NN','tally.recurring_expense', 'The template being divided; ON DELETE CASCADE.'],
-['party_id','TEXT','PK FK NN','core.party', 'The party who will owe this share.'],
-['share_minor','INTEGER','NN CK','', 'Share in minor units of the template’s settlement currency; CHECK(>= 0).'],
-['created_at','TEXT','NN','', 'UTC creation instant.'],
-['updated_at','TEXT','NN','', 'UTC last mutation; one shape everywhere — NOT NULL with a default, touched by trigger (#916, ruling R8).'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-]},
-{ n:'expense_payer', std:'—', p:'Who actually put money down on an expense, and how much. Written for every expense — the single-payer case as one degenerate row — so both balance folds read one shape.',
-cols:[
-['expense_id','TEXT','PK FK NN','tally.expense', 'Expense; cascades on purge.'],
-['party_id','TEXT','PK FK NN','core.party', 'Payer.'],
-['paid_minor','INTEGER (minor units)','NN CK','', 'What this payer put down; CHECK(paid_minor >= 0). The rows sum to the expense amount, re-validated server-side.'],
-['created_at','TEXT','NN','', 'UTC creation instant.'],
-['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-]},
-{ n:'expense_line_item', std:'—', p:'A typed line (item, tax or tip) belonging to the expense, not to a photo. The receipt is a nullable decoration, so a “By line” division needs no capture (#883 O-attach).',
-cols:[
-['line_item_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Line identity.'],
-['expense_id','TEXT','FK NN','tally.expense', 'Owning expense; cascades on purge.'],
-['receipt_id','TEXT','FK','core.attachment', 'The role=\'receipt\' core.attachment this line was read off; NULL for By line. ON DELETE SET NULL — detaching the photo leaves the lines standing.'],
-['kind','TEXT','NN CK','', 'CHECK in (\'item\',\'tax\',\'tip\').'],
-['description','TEXT','NN','', 'Line text.'],
-['amount_minor','INTEGER (minor units)','NN CK','', 'Line amount; CHECK(amount_minor >= 0). Lines sum to the expense amount.'],
-['sort_order','INTEGER','NN CK','', 'Order on the receipt; CHECK(sort_order >= 0).'],
-['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
-['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-]},
-{ n:'expense_line_allocation', std:'—', p:'Who each line is assigned to, and for how much. A line’s allocations must sum to that line, re-validated server-side.',
-cols:[
-['line_item_id','TEXT','PK FK NN','tally.expense_line_item', 'Line; cascades on purge.'],
-['party_id','TEXT','PK FK NN','core.party', 'Participant.'],
-['share_minor','INTEGER (minor units)','NN CK','', 'Share of this line; CHECK(share_minor >= 0).'],
-['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
-['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-]},
-{ n:'recurring_expense', std:'RFC 5545 RRULE · IANA time zones · ISO 4217', p:'A template that materializes tally.expense instances on a schedule (#630). Materialization is deterministic and idempotent, so two offline devices may enqueue one occurrence without duplicates. A template names one payer.',
-cols:[
-['template_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Template identity.'],
-['group_id','TEXT','FK NN','tally.group', 'Group the instances land in; a template is always grouped.'],
-['description','TEXT','NN','', 'Description each instance inherits.'],
-['original_amount_minor','INTEGER (minor units)','NN CK','', 'Amount in original_currency; CHECK(original_amount_minor > 0).'],
-['original_currency','TEXT (char 3)','NN CK','', 'Currency the amount is entered in; CHECK(length = 3).'],
-['settlement_currency','TEXT (char 3)','NN CK','', 'Currency instances settle in; CHECK(length = 3).'],
-['paid_by','TEXT','FK NN','core.party', 'The single payer each instance records.'],
-['category','TEXT','NN','', 'Category each instance inherits; no CHECK on the template.'],
-['rrule','TEXT','NN','', 'Recurrence rule the occurrences expand from.'],
-['anchor_start','TEXT','NN','', 'Series start the rule is anchored to.'],
-['tz','TEXT','NN','', 'IANA zone the rrule is read in — <span class="k">tz</span>, not <span class="k">time_zone</span> (#916, ruling R4).'],
-['rate_scaled','INTEGER','CK','', 'Fixed-point rate original → settlement, scaled by 10^rate_scale; CHECK(NULL or > 0).'],
-['rate_scale','INTEGER','CK','', 'Decimal places of rate_scaled; CHECK(NULL or 0–12).'],
-['rate_source','TEXT','','', 'Where the rate came from; free text.'],
-['rate_date','TEXT (date)','','', 'Date the rate applies to.'],
-['status','TEXT','NN CK','', 'CHECK in (\'active\',\'paused\',\'ended\'); default \'active\'.'],
-['last_materialized_start','TEXT','','', 'Occurrence start most recently materialized; NULL until the first instance.'],
-['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
-['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation.'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-]},
-{ n:'settlement', std:'—', p:'A payment that settles up, from one party to another, inside or outside a group. settle_up emits a core.transaction when the owner’s money actually moved, or binds to one the bank already imported.',
-cols:[
-['settlement_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Settlement identity.'],
-['group_id','TEXT','FK','tally.group', 'NULL for a free-standing friend-to-friend payment.'],
-['from_party','TEXT','FK NN','core.party', 'Who paid.'],
-['to_party','TEXT','FK NN','core.party', 'Who was paid.'],
-['amount_minor','INTEGER (minor units)','NN CK','', 'Amount paid; CHECK(amount_minor > 0).'],
-['currency','TEXT','NN CK','', 'What was PAID, in the currency it was paid in (#916, ruling R1); a grouped settlement is held to its group’s currency by trigger.'],
-['paid_on','TEXT (date)','NN','', 'Date paid, YYYY-MM-DD.'],
-['txn_id','TEXT','FK','core.transaction', 'Finance bridge (#310): the core.transaction settle_up emitted when the owner is a party, or bound via tally.bind_txn.'],
-['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
-['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live.'],
-['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL) (#441 A4).'],
-]},
-{ n:'obligation', std:'ISO 4217 currency codes', p:'A standing IOU as a ground fact, not a stored balance (#450). Sits beside expenses and settlements so every surface folds the same facts into one net; settling end-dates it rather than inventing a People-only balance.',
-cols:[
-['obligation_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Obligation identity.'],
-['from_party','TEXT','FK NN','core.party', 'Who owes; CHECK(from_party <> to_party).'],
-['to_party','TEXT','FK NN','core.party', 'Who is owed.'],
-['amount_minor','INTEGER (minor units)','NN CK','', 'Amount owed; CHECK(amount_minor > 0).'],
-['currency','TEXT (char 3)','NN CK','', 'Currency of the amount; CHECK(length(currency) = 3).'],
-['reason','TEXT','','', 'Why; free text.'],
-['incurred_on','TEXT (date)','NN','', 'Date incurred.'],
-['settled_at','TEXT (iso8601)','','', 'When settled; NULL while outstanding. Settling end-dates the row rather than deleting it.'],
-['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
-['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live.'],
-['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion; CHECK(purge_at IS NULL OR deleted_at IS NOT NULL).'],
-]},
-{ n:'nudge', std:'—', p:'A PREPARED reminder about a stale balance, never a sent one. Tally has no delivery path and wants none; tally.nudge carries confirm:true so an app-issued nudge parks for the owner’s confirmation instead of firing.',
-cols:[
-['nudge_id','TEXT (uuidv7)','PK FK NN','core_entity', 'Nudge identity.'],
-['party_id','TEXT','FK NN','core.party', 'Who the reminder is about.'],
-['group_id','TEXT','FK','tally.group', 'Group scope; NULL for a friend-level balance.'],
-['as_of_minor','INTEGER (minor units)','NN','', 'The net the owner saw when preparing it — provenance for the wording, never read back as a balance.'],
-['note','TEXT','','', 'The owner’s note.'],
-['prepared_at','TEXT (iso8601)','NN','', 'When the owner prepared it.'],
-['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
-['updated_at','TEXT (iso8601)','NN','', 'UTC last mutation; maintained by trigger.'],
-['row_version','INTEGER','NN CK','', 'Monotonic per-row change counter (#996, ruling R6); CHECK(row_version &gt;= 1), bumped by the same touch trigger. An offline intent carries the version it read and the gateway compares THIS column, so a stale base is a conflict rather than a silent overwrite.'],
-]},
-],
-},
 { id:'access', label:'access plane', desc:'Sovereignty as first-class tables: enrolled apps, agents and devices, scoped expiring grants, the owner’s remembered “no”, policy. The gateway evaluates these on every read and every command. Named <span class="k">consent</span> until #916 renamed it <span class="k">access</span> — the plane answers “may this actor reach this data”, which is access; consent is one of the answers. Person-to-person sharing is not here — it is a row of share.authority, the one authority plane; provenance and receipts are the audit band.',
 tables:[
 { n:'app', std:'OAuth 2.0 client metadata · Solid app registration', p:'The install register. A first-party app is NOT a principal (#928): it runs on the owner’s own device against the owner’s own vault, and what it may touch is fixed at build time by the entity manifest its code declares plus the static tripwire over it. This row says it is installed, not what it was granted.',
@@ -1332,7 +1164,7 @@ tables:[
 { n:'command', std:'MCP tool schema · JSON Schema 2020-12 · design-by-contract', p:'A typed verb a domain exposes: name, input/output schemas, declared pre/postconditions. The only legal write path (rule R4).',
 cols:[
 ['command_id','TEXT (uuidv7)','PK NN','', 'Immutable command identity.'],
-['name','TEXT','UQ NN','', 'Namespaced verb, e.g. schedule.reschedule_event, tally.add_expense.'],
+['name','TEXT','UQ NN','', 'Namespaced verb, e.g. schedule.reschedule_event, money.add_account.'],
 ['owner_schema','TEXT','NN','', 'Domain that implements it.'],
 ['input_schema_json','TEXT (json1)','NN CK','', 'JSON Schema of arguments (MCP tool inputSchema); CHECK(json_valid(…)).'],
 ['output_schema_json','TEXT (json1)','NN CK','', 'JSON Schema of result.'],
@@ -1380,7 +1212,6 @@ const MAP_ZONES = [
 {id:'photos',prod:'Photos · Immich',label:'Photos',schema:'media',entities:[['Media asset','content_item','ext'],['Album','party','ref'],['Face region','party','ref'],['Capture place','place','ref']],core:['content_item','place','party','link']},
 {id:'people',prod:'Monica · Clay',label:'People',schema:'people',entities:[['Profile','party','ext'],['Important date','party','ref'],['List','concept','ref'],['Star','tag','ref']],core:['party','link','concept','activity']},
 {id:'locker',prod:'1Password · Bitwarden',label:'Locker',schema:'locker',entities:[['Item','item','own'],['Custom field','item_field','own'],['Passkey','item_passkey','own'],['Star / tag','tag','ref']],core:['concept']},
-{id:'tally',prod:'Splitwise',label:'Tally',schema:'tally',entities:[['Group','circle','ref'],['Expense','party','ref'],['Settlement','transaction','ref'],['Obligation','party','ref']],core:['party','transaction','content_item','concept']},
 ];
 
 /* ---------- §05 layers ---------- */
@@ -1388,7 +1219,7 @@ const LAYERS = [
 {n:'L7',t:'App projections',k:'domain',d:'Screens, feeds, smart albums, dashboards, rendered PDFs. Deletable and regenerable from below; nothing durable is allowed to live only here.'},
 {n:'L6',t:'Capability & command surface',k:'agent',d:'Typed commands (MCP tools) with JSON-Schema contracts, discovery, pre/postconditions. The only interface agents and apps may write through.'},
 {n:'L5',t:'Access & policy plane',k:'shared',d:'Grants, scopes, shares, retention/purpose/minimization policy — and, in the append-only audit band beside them, the provenance and receipts every decision leaves. Evaluated in the gateway on every read and every command.'},
-{n:'L4',t:'Domain state machines & rules',k:'domain',d:'RSVP transitions, face-review states, Tally settlement folds, task recurrence anchors, locker item states — behavior local to a domain, expressed over shared identity.'},
+{n:'L4',t:'Domain state machines & rules',k:'domain',d:'RSVP transitions, face-review states, task recurrence anchors, locker item states — behavior local to a domain, expressed over shared identity.'},
 {n:'L3',t:'Domain extensions',k:'domain',d:'MediaAsset ⊂ Content, Profile ⊂ Party, Group ⊂ Circle, EventExt ⊂ Event: thin typed rows holding a UNIQUE FK to the core row they specialize.'},
 {n:'L2',t:'Relationship & classification fabric',k:'shared',d:'core.link (typed, temporal, provenance-carrying edges) and SKOS concept schemes. All cross-entity meaning and every taxonomy flows through here.'},
 {n:'L1',t:'Canonical entities',k:'shared',d:'party, place, event, account/transaction, content_item, document, activity — identity plus history for the stable meanings of a life, every one of them also a row of the core.entity supertype that gives the model one id space.'},
@@ -1397,10 +1228,10 @@ const LAYERS = [
 
 /* ---------- §06 core explorer ---------- */
 const CORE_INFO = [
-{id:'party',t:'party',std:'vCard · FOAF · schema.org',contract:'A party is the same party across every rename, new phone number, employer change and app. Identity = the uuidv7 key, never a handle; handles live in party_identifier with validity windows. Merging duplicates keeps both rows joined by a same-as link — history is never rewritten.',prov:'Every party row records how it entered the model (owner-created, vCard import, message-header resolution) and every identifier records verification.',ext:['people.profile (keep-in-touch decoration)','tally.friend (enrolment marker)','access.agent (enrolled AI)','social.contact_channel · media face region · tally payer — by reference']},
+{id:'party',t:'party',std:'vCard · FOAF · schema.org',contract:'A party is the same party across every rename, new phone number, employer change and app. Identity = the uuidv7 key, never a handle; handles live in party_identifier with validity windows. Merging duplicates keeps both rows joined by a same-as link — history is never rewritten.',prov:'Every party row records how it entered the model (owner-created, vCard import, message-header resolution) and every identifier records verification.',ext:['people.profile (keep-in-touch decoration)','access.agent (enrolled AI)','social.contact_channel · media face region — by reference']},
 {id:'place',t:'place',std:'schema.org/Place · ISO 6709 · IANA tz',contract:'A place is a named location with optional geometry and containment (room ⊂ home ⊂ city). The same “home” is referenced by events, photos, meters and items — coordinates may be refined, identity never changes.',prov:'Geocoding results record the resolver and input; owner corrections supersede imports via provenance chains.',ext:['schedule (event location)','media (capture place, named places)','locker.item_address — all by reference']},
 {id:'event',t:'event',std:'RFC 5545 · JSCalendar RFC 8984',contract:'An event is a scheduled span with an RFC 5545 UID surviving round-trips to external calendars. Reschedules increment sequence on the same identity; recurrence is a rule, and occurrences are projections.',prov:'ICS imports, agent proposals and owner edits each stamp provenance; a reschedule chains to the proposal that caused it.',ext:['schedule.event_ext (calendar, busy, reminders)','schedule.attendee (party×event RSVP)','schedule.recurrence_exception (+ its attendee overrides) — by reference']},
-{id:'account',t:'account · transaction',std:'ISO 20022 · OFX · Plaid',contract:'An account is a durable pool of value; a transaction is an immutable movement. Corrections and recategorizations are new rows or tags with provenance — the ledger is append-mostly, amounts are fixed-scale integers, and external_id makes imports idempotent.',prov:'Every movement records its import batch (OFX FITID / provider id) or the command that created it; category changes trace to owner or judgment.',ext:['tally.settlement.txn_id · tally.expense.txn_id (settle-up posts here)','sync.external_entity (the import that carried it)']},
+{id:'account',t:'account · transaction',std:'ISO 20022 · OFX · Plaid',contract:'An account is a durable pool of value; a transaction is an immutable movement. Corrections and recategorizations are new rows or tags with provenance — the ledger is append-mostly, amounts are fixed-scale integers, and external_id makes imports idempotent.',prov:'Every movement records its import batch (OFX FITID / provider id) or the command that created it; category changes trace to owner or judgment.',ext:['sync.external_entity (the import that carried it)']},
 {id:'content_item',t:'content_item',std:'RFC 6838 · schema.org/CreativeWork',contract:'Content identity is the sha256 of the bytes plus an owned row; content_uri is a replaceable pointer. Re-homing storage rewrites URIs, never identity — every note, photo, message and PDF keeps its relationships.',prov:'Capture device, creating app or generating command is recorded; derived renditions link wasDerivedFrom the original.',ext:['media.asset (capture context)','core.document (identity over versions)','knowledge.note body','social.message body','attachments on any row — by reference']},
 {id:'activity',t:'activity',std:'W3C Activity Streams 2.0',contract:'An activity is an actor doing a kind of thing over a span. One span, many lenses: the interaction People logs is the same row the agenda can show as busy. Kind comes from a SKOS scheme, so “what people do” is a vocabulary, not an enum per app.',prov:'Recording app/device is stamped; agent-inferred activities are marked asserted_by=agent until confirmed.',ext:['people interactions (people.log_interaction) — the same row, read through a CRM lens']},
 {id:'link',t:'link',std:'W3C PROV · SKOS relations',contract:'A link is a typed, temporal, provenance-carrying edge between any two rows. Relation types are SKOS concepts (spouse-of, works-for, about, same-as, duplicate-of), and validity windows make relationships honest about time.',prov:'asserted_by distinguishes owner claims from agent inferences and imports; provenance_id is required for non-owner assertions.',ext:['Every domain: attendance context, note backlinks, task↔project, photo↔event — links are how domains touch without coupling.']},
@@ -1413,25 +1244,24 @@ const DOM_INFO = [
 {id:'social',prod:'Contacts · Monica · Nextcloud Talk',t:'Social',refs:['core.party (everyone)','core.content_item (message bodies)','core.link (relationships)'],owns:['contact_channel','circle','circle_member','thread','thread_participant','message'],state:'message.delivery: draft → sent → delivered → read | failed — outbound transitions only via social.send_message (risk=high, confirmation required).',aff:['social.resolve_identity','social.draft_message','social.send_message','social.mark_thread_read'],boundary:'Social resolves raw addresses to parties; it never creates duplicate people per channel. An identifier is not a channel (#883 O-contact): a key someone IS stays in core.party_identifier, an address they can be REACHED at is a social.contact_channel, and the contact card is gone. Kinship and employment claims are core links with provenance, not card fields. The personal-CRM “interaction history” is a projection over messages and activities — never a parallel store. Sending is the highest-risk command in the model.'},
 {id:'knowledge',prod:'Obsidian · Joplin · Notion',t:'Knowledge',refs:['core.content_item (note bodies)','core.link (backlinks, mentions)','core.concept (topic tags)'],owns:['note','annotation'],state:'note lifecycle is intentionally flat, but edits are no longer just provenance: a body edit records a “revises” core.link (issue #352) between the old and new content item, the same lineage core.document keeps, so a note’s edit history is walkable through core.link too; annotation: open → resolved for actionable comments.',aff:['knowledge.create_note','knowledge.edit_note','knowledge.move_note','knowledge.create_notebook','knowledge.restore_note_version'],boundary:'Notes join the graph — “note about Tuesday’s appointment” is a link to the core event, not a text coincidence. Knowledge never stores facts other domains own; it cites them.'},
 {id:'media',prod:'Immich · Apple Photos · Google Photos',t:'Media',refs:['core.content_item (the bytes contract)','core.place (capture location)','core.party (faces)','access.device (camera)'],owns:['asset','face_region','asset_phash','memory','memory_member','face_cluster'],state:'face_region.review_state: proposed → confirmed | rejected | dismissed — written only by media.answer_face_proposal, nothing else. “confirmed” is pinned to confirmed_by_party_id by CHECK, and a rejected or dismissed region carries no party, so it survives as a state instead of a DELETE the enricher would re-propose.',aff:['media.add_asset','media.answer_face_proposal','media.create_album','media.set_favorite','media.set_archived','media.set_asset_place','media.forget_person'],boundary:'Media may not confirm identity on its own: a proposed face becomes the owner’s assertion only when the owner answers the proposal. Albums are core.collection curation; memories and face groups are rebuildable projections registered as sidecars, never identity. The star is the flags-scheme tag on the asset — the mirror column left in #916 (ONT-03).'},
-{id:'people',prod:'Google Contacts · Monica · Clay',t:'People',refs:['core.party (every person — the profile is 1:1 on the party)','core.activity (logged interactions)','core.link (relationships)','core.concept · core.tag (lists, stars)','tally.obligation (debts, read only)'],owns:['profile','important_date'],state:'profile: live → trashed (deleted_at) → purged (purge_at, ~30 days) — trashing hides the person without deleting the canonical party, so restore is lossless; once purge_at lapses the sweep purges the party itself — one DELETE the supertype cascades, refused while money or authority still names them (#916 D1).',aff:['people.add_person','people.edit_person','people.log_interaction','people.add_important_date','people.add_relationship','people.save_contact_channel','people.trash_person'],boundary:'People never re-imports cross-domain facts at table grain: interactions are core.activity, tasks are schedule.task, relationships are core.link, debts are tally.obligation, journal entries are knowledge.note, reachability is social.contact_channel. The band keeps only the two genuine CRM rows — profile and important dates. Lists are SKOS concepts filed by core.tag, never circles.'},
+{id:'people',prod:'Google Contacts · Monica · Clay',t:'People',refs:['core.party (every person — the profile is 1:1 on the party)','core.activity (logged interactions)','core.link (relationships)','core.concept · core.tag (lists, stars)'],owns:['profile','important_date'],state:'profile: live → trashed (deleted_at) → purged (purge_at, ~30 days) — trashing hides the person without deleting the canonical party, so restore is lossless; once purge_at lapses the sweep purges the party itself — one DELETE the supertype cascades, refused while money or authority still names them (#916 D1).',aff:['people.add_person','people.edit_person','people.log_interaction','people.add_important_date','people.add_relationship','people.save_contact_channel','people.trash_person'],boundary:'People never re-imports cross-domain facts at table grain: interactions are core.activity, tasks are schedule.task, relationships are core.link, journal entries are knowledge.note, reachability is social.contact_channel. The band keeps only the two genuine CRM rows — profile and important dates. Lists are SKOS concepts filed by core.tag, never circles.'},
 {id:'locker',prod:'1Password · Bitwarden',t:'Locker',refs:['core.tag (the star and the locker-tags scheme — its only spine contact)','core.concept (tag vocabulary)','sync.connection (the broker an item came from)'],owns:['item','item_field','item_address','item_alias','item_passkey'],state:'item: live | archived | trashed — exclusive by CHECK (archived_at IS NULL OR deleted_at IS NULL); trash carries the purge_at pair (~30 days), archive keeps forever and hides from lists, and no write can invent a fourth state.',aff:['locker.add_item','locker.edit_item','locker.set_field','locker.totp_code','locker.archive_item','locker.trash_item','locker.watchtower'],boundary:'The list is metadata, the secret is not: secrets are never in list payloads, never in search (sealed columns are structurally barred from FTS), never logged, never placed or shared. Locker items anchor no core row, and a type is a template of sections and fields, never a set of columns. History is core.entity_revision like every other entity, retained forever for this pack (#916 D2) — a second history table is a second answer.'},
-{id:'tally',prod:'Splitwise',t:'Tally',refs:['core.party (friends, payers, debtors — the owner is the implicit me)','social.circle (a group is a decoration on a circle)','core.transaction (settle_up emits one; bind_txn binds an imported one)','core.attachment role=receipt (receipt photos)','knowledge.annotation (expense memo)'],owns:['friend','group','expense','expense_split','recurring_expense_split','expense_payer','expense_line_item','expense_line_allocation','recurring_expense','settlement','obligation','nudge'],state:'expense / settlement / obligation: live → trashed (deleted_at) → purged (purge_at, ~30 days) — a trashed expense still blocks group deletion until it purges. friend and group are hard-delete by design. No balance state exists: who owes whom is folded at read time.',aff:['tally.add_expense','tally.add_receipt_expense','tally.settle_up','tally.bind_txn','tally.create_group','tally.add_friend','tally.save_recurring_expense','tally.materialize_recurring_expense','tally.nudge'],boundary:'No balance is stored — balances are derived at read time from expenses, settlements and obligations, and the one balance engine lives in the query layer. A group is a decoration on social.circle (name and membership live on the circle), a friend is a bare enrolment marker on a canonical party, and Tally is a lens over shared money, never a second ledger. Every amount states its currency (#916 R1); a recurring template’s division is rows, not JSON (D3).'},
 ];
 
 /* ---------- §08 ownership matrix ---------- */
-const MX_DOMAINS = ['Core','Schedule','Social','Knowledge','Media','People','Locker','Tally'];
+const MX_DOMAINS = ['Core','Schedule','Social','Knowledge','Media','People','Locker'];
 const MX_ROWS = [
-['Entity (the supertype)',       ['C','R','R','R','R','R','R','R']],
-['Person / organization',        ['C','R','R','R','R','E','—','R']],
-['Place',                        ['C','R','—','—','R','—','—','—']],
-['Event (scheduled time)',       ['C','E','—','R','R','—','—','—']],
-['Money movement',               ['C','—','—','—','—','—','—','R']],
-['Content (bytes ref)',          ['C','—','R','R','E','R','—','R']],
-['Activity (span of doing)',     ['C','—','—','—','—','R','—','—']],
-['Relationship (typed link)',    ['C','R','R','R','R','R','—','—']],
-['Classification (SKOS)',        ['C','R','R','R','R','R','R','—']],
-['Access / grant / receipt',     ['—','R','R','R','R','R','R','R']],
-['Typed command',                ['—','E','E','E','E','E','E','E']],
+['Entity (the supertype)',       ['C','R','R','R','R','R','R']],
+['Person / organization',        ['C','R','R','R','R','E','—']],
+['Place',                        ['C','R','—','—','R','—','—']],
+['Event (scheduled time)',       ['C','E','—','R','R','—','—']],
+['Money movement',               ['C','—','—','—','—','—','—']],
+['Content (bytes ref)',          ['C','—','R','R','E','R','—']],
+['Activity (span of doing)',     ['C','—','—','—','—','R','—']],
+['Relationship (typed link)',    ['C','R','R','R','R','R','—']],
+['Classification (SKOS)',        ['C','R','R','R','R','R','R']],
+['Access / grant / receipt',     ['—','R','R','R','R','R','R']],
+['Typed command',                ['—','E','E','E','E','E','E']],
 ];
 
 /* ---------- §09 scenarios ---------- */
@@ -1439,26 +1269,8 @@ const SCENARIOS = [
 {id:'briefing',t:'Morning briefing',intro:'7:05 am. The most ordinary agent task — and the one silos make impossible: today’s plan lives in four apps that have never met. Here it is one graph walk, each hop consent-checked and receipted.',
 steps:[
 {sys:'Schedule',act:'Read today’s events and open tasks; expand recurrences into occurrences and pull each event’s place for travel buffers.',obj:'core.event ×4 · schedule.task ×6 (needs-action) · core.place ×2',consent:'grant g_agent_ops · scope schedule.event:read · purpose dpv:ServiceProvision',receipt:'receipt r_a101 · allow · read event (set)'},
-{sys:'Money',act:'Surface the shared bills that fall due this week — recurring expense templates read forward through their rrule in the template’s own zone, nothing materialized until the day arrives.',obj:'tally.recurring_expense ×2 (next occurrence ≤ 7d) · tally.recurring_expense_split ×6',consent:'grant g_agent_ops · scope tally:read · row_filter due window',receipt:'receipt r_a102 · allow · read recurring_expense'},
 {sys:'Photos',act:'Count what yesterday captured — assets are content items with capture context, so “18 photos” is a fold over the canon, not a Photos-only statistic.',obj:'media.asset ×18 (captured_at = yesterday, deleted_at IS NULL)',consent:'grant g_agent_ops · scope media:read',receipt:'receipt r_a103 · allow · read asset (set)'},
-{sys:'Tally',act:'Fold open balances at read time — no balance row exists anywhere; who owes whom is derived now from expenses, settlements and standing obligations. A nudge the owner prepared is surfaced, never sent.',obj:'tally.expense ×9 · tally.settlement ×2 · tally.obligation ×1 (open) → net position per party',consent:'grant g_agent_ops · scope tally:read',receipt:'receipt r_a104 · allow · read expense (set)'},
 {sys:'Agent plane',act:'Compose one briefing as an owned content item; the explanation row cites every receipt above, so “why is this in my briefing” is answerable line by line.',obj:'core.content_item c_brief_0702 · agent.explanation x_4410 (evidence ×4, in the audit band)',consent:'grant g_agent_ops · verbs read+act · risk low',receipt:'receipt r_a105 · allow · act agent.compose_briefing'},
-]},
-{id:'settle',t:'Settle the dinner',intro:'Sunday night. Friday’s dinner was paid by one person and split six ways. In the silo world the split app, the bank app and the address book never meet. Here the expense, the settlement and the friend are one graph — and money becomes a ledger fact only when the owner’s own money moved.',
-steps:[
-{sys:'Tally',act:'Read the group — a decoration on a social.circle whose membership is the roster — and its live expenses with resolved splits and payers. Every split sums to its expense by command-side validation, never by trust.',obj:'tally.group g_dinner → social.circle c_10 · tally.expense ×3 · tally.expense_split ×18 · tally.expense_payer ×3',consent:'grant g_agent_ops · scope tally:read · scope social:read',receipt:'receipt r_t201 · allow · read expense (set)'},
-{sys:'Tally',act:'Fold the balance at read time: expenses minus settlements minus open obligations, simplified per the group’s setting. The proposal — who pays whom — is a projection; nothing is written.',obj:'derived net position: p_asha owes owner ₹1,850 · owner owes p_ravi ₹600',consent:'grant g_agent_ops · scope tally:read',receipt:'receipt r_t202 · allow · read settlement (set)'},
-{sys:'Tally',act:'Invoke tally.settle_up for Asha → owner. Preconditions: both parties in the circle, amount > 0, payer ≠ payee, currency stated. Because the owner’s money actually moved, the command EMITS a core.transaction and binds it through txn_id — Tally is a lens over shared money, not a second ledger. Risk is low: it records money that already moved rather than moving it.',obj:'agent.command_invocation i_7702 → tally.settlement s_31 (txn_id) → core.transaction t_01J…C4 (+₹1,850)',consent:'grant g_agent_ops · verbs read+act · scope tally:act',receipt:'receipt r_t203 · allow · act tally.settle_up'},
-{sys:'People',act:'Open Asha in People: the debt card reads the same tally.obligation and settlement rows every surface folds, so her IOU shows cleared — no People-only balance is invented, and her keep-in-touch cadence is untouched because a settlement is not an interaction.',obj:'people.profile pr_asha ⊂ core.party p_asha · tally.obligation ×0 open',consent:'grant g_agent_ops · scope people:read · scope tally:read',receipt:'receipt r_t204 · allow · read obligation'},
-{sys:'Agent plane',act:'Evidence rows bind the settlement to the expenses it closed and the explanation cites every receipt above, so “why does Tally say we’re even” is answerable from rows. When the bank later imports the same credit, tally.bind_txn binds to t_01J…C4 rather than minting a duplicate.',obj:'agent.evidence ×4 · agent.explanation x_5120 · access.provenance on tally.settlement s_31',consent:'grant g_agent_ops · verbs read+act · risk low',receipt:'receipt r_t205 · allow · read transaction'},
-]},
-{id:'receipt',t:'Split the receipt',intro:'A photographed till slip becomes lines, and the lines become who owes what. In the silo world the camera roll, the OCR and the split app never meet; here one content item carries the bytes, one attachment binds it to the expense, and every allocation is a row a fold can read.',
-steps:[
-{sys:'Photos',act:'The photo enters once: media.add_asset writes a core.content_item keyed on the sha256 of the bytes plus a media.asset for the capture context. Re-photographing the same slip does not mint a second identity.',obj:'core.content_item c_slip_44 (sha256) · media.asset a_slip_44',consent:'grant g_agent_ops · scope media:read+act',receipt:'receipt r_r401 · allow · act media.add_asset'},
-{sys:'Docs',act:'Extracted text is set on the content item, not stashed in a Photos column — every surface that renders the item can search it, and the sealed-column bar keeps secrets structurally out of the index.',obj:'core.content_item c_slip_44.extracted_text → FTS core.content_item',consent:'grant g_agent_ops · scope core:act',receipt:'receipt r_r402 · allow · act core.set_extracted_text'},
-{sys:'Tally',act:'tally.add_receipt_expense mints the expense in a stated currency, attaches the slip as a core.attachment with role=receipt (there is no Tally receipt table), and writes each line and its allocations as rows. Σ allocations = the line, Σ splits = the expense — validated command-side, not trusted.',obj:'tally.expense e_88 (currency INR) · core.attachment role=receipt → c_slip_44 · tally.expense_line_item ×7 · tally.expense_line_allocation ×14',consent:'grant g_agent_ops · verbs read+act · scope tally:act',receipt:'receipt r_r403 · allow · act tally.add_receipt_expense'},
-{sys:'Tally',act:'A line went to the wrong person: tally.reallocate_receipt rewrites the allocations and re-derives the splits in one transaction. The postcondition is the invariant, so a rewrite that broke the sum would roll back rather than land.',obj:'tally.expense_line_allocation ×14 → ×14 (re-shared) · tally.expense_split ×4',consent:'grant g_agent_ops · scope tally:act',receipt:'receipt r_r404 · allow · act tally.reallocate_receipt'},
-{sys:'Agent plane',act:'Ask why the total moved: the invocation, its precondition checks and the evidence rows are in the append-only audit band of the same file, so the answer is a query — and because the receipt commits in the same transaction as the rows, there is no state where the expense changed and the evidence did not.',obj:'agent.command_invocation i_9930 · agent.invocation_check ×3 · agent.evidence ×2',consent:'grant g_agent_ops · verbs read+act · risk low',receipt:'receipt r_r405 · allow · read expense'},
 ]},
 {id:'album',t:'Grandma’s birthday album',intro:'Next Tuesday is Grandma’s birthday. In the silo world the date is in one app, the photos in another, and the sharing in a third that copies the bytes. Here the date is a People row, the album a core collection, and the share a standing grant her own vault fulfils.',
 steps:[

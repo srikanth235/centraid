@@ -932,8 +932,8 @@ fn door() {
         let root = fixture_dir("commonmain-red");
         write(
             &root,
-            "mobile/shared/src/commonMain/kotlin/Tally.kt",
-            "package tally\n\nimport android.os.Bundle\nimport kotlin.time.Duration\n",
+            "mobile/shared/src/commonMain/kotlin/Money.kt",
+            "package money\n\nimport android.os.Bundle\nimport kotlin.time.Duration\n",
         );
         let report = commonmain_no_platform_import(&root);
         assert_eq!(report.findings.len(), 1, "{:?}", report.findings);
@@ -945,8 +945,8 @@ fn door() {
         let root = fixture_dir("commonmain-green");
         write(
             &root,
-            "mobile/shared/src/commonMain/kotlin/Tally.kt",
-            "package tally\n\nimport kotlinx.coroutines.flow.StateFlow\n",
+            "mobile/shared/src/commonMain/kotlin/Money.kt",
+            "package money\n\nimport kotlinx.coroutines.flow.StateFlow\n",
         );
         assert!(commonmain_no_platform_import(&root).findings.is_empty());
     }
