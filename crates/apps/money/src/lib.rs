@@ -20,6 +20,7 @@
 pub mod civil;
 pub mod engine;
 pub mod import;
+pub mod phone;
 pub mod queries;
 pub mod recurring;
 pub mod rules;

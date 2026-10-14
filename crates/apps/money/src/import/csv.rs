@@ -83,6 +83,117 @@ pub struct CsvProfile {
     pub amounts: AmountSpec,
 }
 
+/// The layout as `money.save_import_profile` takes it (the vault's
+/// `money_import_profile` columns). It is deliberately smaller than
+/// [`CsvProfile`]: the columns are re-detected from the file, which is
+/// deterministic; what is kept is the fingerprint that says "this is the same
+/// bank's layout" and the decisions a member made that detection cannot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedProfile {
+    pub header_fingerprint: String,
+    pub delimiter: String,
+    /// Records before the first data row, header included; 0 for no header.
+    pub skip_lines: usize,
+    /// `mdy` | `dmy` | `ymd`.
+    pub date_order: String,
+    /// `signed` | `debit_credit` | `indicator` | `flip`.
+    pub sign_mode: String,
+    pub date_col: usize,
+    pub amount_col: Option<usize>,
+    pub debit_col: Option<usize>,
+    pub credit_col: Option<usize>,
+    pub desc_col: usize,
+    pub memo_col: Option<usize>,
+    pub indicator_col: Option<usize>,
+    pub indicator_out_value: Option<String>,
+}
+
+impl CsvProfile {
+    /// The vault's spelling of this profile, or none when it has no place in
+    /// it: a date order still to be asked, or a lone debit or credit column
+    /// (the table's `debit_credit` mode needs both).
+    #[must_use]
+    pub fn to_saved(&self) -> Option<SavedProfile> {
+        let date_order = match self.date_order {
+            DateOrder::Mdy => "mdy",
+            DateOrder::Dmy => "dmy",
+            DateOrder::Ymd => "ymd",
+            DateOrder::Ask => return None,
+        };
+        let (sign_mode, amount, debit, credit, indicator, out) = match &self.amounts {
+            AmountSpec::Signed { amount } => ("signed", Some(*amount), None, None, None, None),
+            AmountSpec::Flip { amount } => ("flip", Some(*amount), None, None, None, None),
+            AmountSpec::DebitCredit {
+                debit: Some(debit),
+                credit: Some(credit),
+            } => (
+                "debit_credit",
+                None,
+                Some(*debit),
+                Some(*credit),
+                None,
+                None,
+            ),
+            AmountSpec::DebitCredit { .. } => return None,
+            AmountSpec::Indicator {
+                amount,
+                indicator,
+                out_value,
+                ..
+            } => (
+                "indicator",
+                Some(*amount),
+                None,
+                None,
+                Some(*indicator),
+                Some(out_value.clone()),
+            ),
+        };
+        Some(SavedProfile {
+            header_fingerprint: self.fingerprint.clone(),
+            delimiter: self.delimiter.to_string(),
+            skip_lines: if self.has_header {
+                self.skip_rows + 1
+            } else {
+                0
+            },
+            date_order: date_order.to_owned(),
+            sign_mode: sign_mode.to_owned(),
+            date_col: self.date,
+            amount_col: amount,
+            debit_col: debit,
+            credit_col: credit,
+            desc_col: self.description,
+            memo_col: self.memo,
+            indicator_col: indicator,
+            indicator_out_value: out,
+        })
+    }
+}
+
+impl<'a> CsvOptions<'a> {
+    /// Options carrying the decisions a saved profile remembers: the date order
+    /// the member answered, and which way a single signed column runs. The
+    /// columns themselves are detected again from the file; a changed layout
+    /// is told apart by the fingerprint (`SavedProfile::header_fingerprint`
+    /// against the read profile's).
+    #[must_use]
+    pub fn from_saved(currency: &'a str, saved: &SavedProfile) -> Self {
+        let mut options = Self::new(currency);
+        options.date_order = match saved.date_order.as_str() {
+            "mdy" => Some(DateOrder::Mdy),
+            "dmy" => Some(DateOrder::Dmy),
+            _ => None,
+        };
+        options.sign = match saved.sign_mode.as_str() {
+            "signed" => Some(SignChoice::DebitsNegative),
+            "flip" => Some(SignChoice::DebitsPositive),
+            _ => None,
+        };
+        options
+    }
+}
+
 /// Which way a single signed column runs, when the member overrides the guess.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignChoice {
@@ -506,11 +617,12 @@ fn detect_profile(
     };
     let mut used = vec![false; width];
 
-    // --- Date: a header's best-ranked dated column, else the first dated one.
+    // --- Date: a header's best-ranked dated column (half the cells reading as
+    // dates is enough evidence beside a header that says "date"), else the
+    // first column that reads as dates all the way down.
     let dated: Vec<usize> = (0..width).filter(|&c| stats[c].is_dated()).collect();
-    let date_col = dated
-        .iter()
-        .copied()
+    let date_col = (0..width)
+        .filter(|&c| stats[c].fraction(stats[c].dates) >= 0.5)
         .filter_map(|c| match roles[c] {
             Role::Date(rank) => Some((rank, c)),
             _ => None,
@@ -520,6 +632,10 @@ fn detect_profile(
         .or_else(|| dated.first().copied())
         .ok_or(Refusal::NotAStatement)?;
     used[date_col] = true;
+    let mut dated = dated;
+    if !dated.contains(&date_col) {
+        dated.push(date_col);
+    }
 
     // --- Date order over every dated column's cells: they share a format.
     let order = date::decide(data.iter().flat_map(|record| {

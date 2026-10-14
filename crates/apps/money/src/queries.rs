@@ -247,6 +247,27 @@ pub fn month_statement(month: &str, filter: &ActivityFilter) -> KitResult<PageQu
     .filter(&predicate, bind))
 }
 
+/// `money.transaction` — one row by id.
+pub fn transaction_statement(txn_id: &str) -> PageQuery {
+    query(
+        "money.transaction",
+        TXN_COLUMNS,
+        "core_transaction",
+        PageOrder::asc("txn_id", "txn_id"),
+    )
+    .filter("txn_id = ?", vec![PageBindValue::from(txn_id)])
+}
+
+/// `money.imports.last` — the newest import, by its stamp.
+pub fn last_import_statement() -> PageQuery {
+    query(
+        "money.imports.last",
+        "txn_id, imported_at, imported_from",
+        "money_transaction",
+        PageOrder::desc("imported_at", "txn_id"),
+    )
+}
+
 /// `money.transactions.decorations` — Money's columns for a set of rows.
 pub fn decoration_statement(txn_ids: &[String]) -> KitResult<PageQuery> {
     let fragment = in_list("txn_id", txn_ids)?;
@@ -567,6 +588,43 @@ pub fn load_activity_page(
         rows,
         next: page.next.map(|cursor| (cursor.sort_key, cursor.pk)),
     })
+}
+
+/// One transaction with its Money columns, or none.
+pub fn load_transaction(door: &dyn PageDoor, txn_id: &str) -> KitResult<Option<TxnRow>> {
+    let page = read_page(door, &transaction_statement(txn_id), &PageRequest::first(1))?;
+    let mut rows: Vec<TxnRow> = page.rows.iter().map(txn_of).collect();
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    decorate(door, &mut rows)?;
+    Ok(rows.pop())
+}
+
+/// When and from what the newest import came.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LastImport {
+    pub imported_at: String,
+    /// `csv` | `ofx`.
+    pub source: String,
+    pub account_id: Option<String>,
+}
+
+/// The newest import, if any row was ever imported.
+pub fn load_last_import(door: &dyn PageDoor) -> KitResult<Option<LastImport>> {
+    let page = read_page(door, &last_import_statement(), &PageRequest::first(1))?;
+    let Some(row) = page.rows.first() else {
+        return Ok(None);
+    };
+    let account_id = match text_of(row, "txn_id") {
+        Some(id) => load_transaction(door, &id)?.map(|t| t.account_id),
+        None => None,
+    };
+    Ok(Some(LastImport {
+        imported_at: text_of(row, "imported_at").unwrap_or_default(),
+        source: text_of(row, "imported_from").unwrap_or_default(),
+        account_id,
+    }))
 }
 
 /// Money's accounts, with the spine's currency.

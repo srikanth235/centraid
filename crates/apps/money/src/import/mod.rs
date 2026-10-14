@@ -34,7 +34,7 @@ pub mod text;
 
 use serde::{Deserialize, Serialize};
 
-pub use csv::{AmountSpec, CsvOptions, CsvProfile, SignChoice, read_csv};
+pub use csv::{AmountSpec, CsvOptions, CsvProfile, SavedProfile, SignChoice, read_csv};
 pub use date::DateOrder;
 pub use ofx::{AccountRef, OfxFile, OfxStatement, StatementRefusal, read_ofx, resolve_account};
 pub use plan::{
