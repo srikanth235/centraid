@@ -66,6 +66,7 @@ import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
+import dev.centraid.android.theme.formatMoney
 import dev.centraid.design.CentraidCatalog
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.copy.WordsCopy
@@ -809,6 +810,7 @@ private fun ColumnScope.FilledBody(body: TileBody) {
     val people = body.people
     val tasks = body.tasks
     val locker = body.locker
+    val spent = body.money
     when {
         photos != null -> {
             val cells = photos.cells
@@ -1061,6 +1063,28 @@ private fun ColumnScope.FilledBody(body: TileBody) {
                     )
                 }
             }
+        }
+
+        // THIS MONTH'S SPENDING, one figure per currency and never a sum across them.
+        // The amounts are the core's and the caption is the machine's.
+        spent != null -> Column(column, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            spent.amounts.forEach { amount ->
+                Text(
+                    formatMoney(amount),
+                    style = centraidType("mono"),
+                    color = centraidColor("text"),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                spent.caption,
+                style = centraidType("small"),
+                color = centraidColor("textSoft"),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
 
         locker != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
