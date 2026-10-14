@@ -5131,6 +5131,60 @@ pub fn asset_id_by_title(connection: &Connection, title: &str) -> KitResult<Opti
         })
 }
 
+/// Archive a photograph, as the member's Archive act does (R-1097-25: an
+/// archived photograph is no search hit). `at` is the instant it happened.
+pub fn archive_asset(connection: &Connection, asset_id: &str, at: &str) -> KitResult<()> {
+    connection
+        .execute(
+            "UPDATE media_asset SET archived_at = ?2 WHERE asset_id = ?1",
+            rusqlite::params![asset_id, at],
+        )
+        .map(drop)
+        .map_err(door)
+}
+
+/// Trash a photograph that was archived: the archive mark clears and the trash
+/// mark is set, as the Trash act does.
+pub fn trash_archived_asset(connection: &Connection, asset_id: &str, at: &str) -> KitResult<()> {
+    connection
+        .execute(
+            "UPDATE media_asset SET archived_at = NULL, deleted_at = ?2 WHERE asset_id = ?1",
+            rusqlite::params![asset_id, at],
+        )
+        .map(drop)
+        .map_err(door)
+}
+
+/// The text a recogniser read in a picture, or a video's transcript: a
+/// derivative of the content item, which the search index folds in. No command
+/// writes one yet (the enrichment plane's), so a test plants it the way a sync
+/// pass writes a row.
+pub fn plant_text_derivative(
+    connection: &Connection,
+    content_id: &str,
+    variant: &str,
+    text: &str,
+    at: &str,
+) -> KitResult<()> {
+    connection
+        .execute(
+            "INSERT INTO core_content_derivative
+               (derivative_id, content_id, variant, media_type,
+                byte_size, text_content, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'text/plain', ?4, ?5, ?6, ?6)",
+            rusqlite::params![
+                format!("derivative-{variant}-{content_id}"),
+                content_id,
+                variant,
+                i64::try_from(text.len()).unwrap_or(i64::MAX),
+                text,
+                at
+            ],
+        )
+        .map(drop)
+        .map_err(door)
+}
+
 /// The content ids behind a set of titles, newest title first — the hit list a
 /// search hands the fold, in the vault's own rank order.
 pub fn content_ids_by_title_desc(

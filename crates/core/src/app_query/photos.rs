@@ -289,15 +289,10 @@ mod tests {
             self.handle
                 .with_vault(|vault| {
                     Ok(vault.apply_replica(|connection| {
-                        let length = text.len();
-                        connection.execute_batch(&format!(
-                            "INSERT INTO core_content_derivative
-                               (derivative_id, content_id, variant, media_type,
-                                byte_size, text_content, created_at, updated_at)
-                             VALUES ('derivative-{variant}-{content_id}', '{content_id}',
-                                     '{variant}', 'text/plain', {length}, '{text}',
-                                     '{NOW}', '{NOW}')"
-                        ))?;
+                        centraid_apps_kit::fixtures::plant_text_derivative(
+                            connection, content_id, variant, text, NOW,
+                        )
+                        .expect("the derivative is planted");
                         Ok(())
                     })?)
                 })

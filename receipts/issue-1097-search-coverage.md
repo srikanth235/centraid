@@ -472,6 +472,39 @@ Files changed, by full path: `crates/api-proto/proto/centraid/screen/v1/screen.p
 2. **"A lens that does not ask never sets it."** `l.asks &&` removed from `SearchLaw.answered`: `KitLawsSpec` fails.
 3. **"A stale answer sets none."** `current &&` removed from the same line: `KitLawsSpec` and `TallyScreensSpec` fail.
 
+### Lane J — the join, Photos' Ask, and the one full gate
+
+Lane J joins lane I onto lane H (`git rebase 1d7e69cba`, history linear), gives Photos the Ask the other apps got in lane I (rulings R-1097-28 to 30, R-1097-30 now naming Photos), and runs the gates once over the joined tree. No new owner question.
+
+**The join.** Two conflicts, both "both lanes appended at the end": `docs/decisions.md` (kept H's R-1097-25 to 27 section, then I's 28 to 30) and `mobile/maestro/flows/selectors.md` (kept H's `search-corrected` row that names Photos and its `photos-search-no-match` row, then I's `search-ask-about` row). The receipt, `screen.proto` and `Search.kt` merged without conflict.
+
+**What it did.**
+
+- **Photos asks.** `PhotosSearchMachine`'s lens says `asks = true`; the answer passes `rows` (photographs plus doors) to `SearchLaw.answered`, and a refusal clears the question through `SearchLaw.unasked`. Photos has no `EmptyState` in its state, so the machine builds the no-match state (`noMatch`: "No results", then the sentence for the query and everywhere search looked, both from copy) and wraps it in `SearchLaw.asking`; it travels as `SearchHits.empty = 8` (`screen.proto`) and is unset for an answer with anything in it. iOS draws it with `SearchEmptyView(empty, ask: state.ask)` inside the block that keeps the id `photos-search-no-match`; the action is `search-ask-about`. Android draws `hits.empty` in the kit empty state under the same test tag and no action (no Chat tab). The hand-drawn three-line block and its `missBody` are gone; the no-match words are one body paragraph, so `search-photos.yaml` matches "Nothing matches “zzqxv”.*".
+- **Selectors / design / decisions:** `selectors.md` (the two Photos rows), `DESIGN.md` (Photos moved into the app-search row), R-1097-30's text.
+
+**Verification.**
+
+- `cargo test -p centraid-search -p centraid-vault -p centraid-core` and `-p centraid-apps-photos`: every result line `ok`, 0 failed.
+- `./gradlew -q -Pcentraid.android=true :shared:jvmTest :androidApp:compileDebugKotlin` (from `mobile/`): exit 0, 1,361 tests, 0 failures. New spec `PhotosSearchSpec` "Ask is the no-match question": a wholly empty current answer sets `ask` to "Find zzqx" and the empty state's headline, body and "Ask about “zzqx”" label; a photograph in the answer, a new term, a clear, a refusal and a late answer leave none.
+- `node scripts/lint-copy.mjs`, `node scripts/lint-native-controls.mjs`: ok, at budget.
+- Rust slice rebuilt, XCFramework rebuilt (`:shared:assembleCentraidSharedDebugXCFramework`, 195 s), `protoc`, `xcodegen`, `xcodebuild … -derivedDataPath build/dd build` for `Centraid iPhone 17` (C041CC61): `** BUILD SUCCEEDED **`.
+- **Device** (`Centraid iPhone 17`, the only lane running): `search-ask-apps.yaml`, extended with a Photos step (nonsense term "zzqxp", assert `search-ask-about` "Ask about “zzqxp”", tap, Chat opens, `photos-search-no-match` gone): pass, 35 steps completed, 4 skipped (the no-model conditionals). `search-containers.yaml`, `home-search.yaml`: pass. `search-photos.yaml`: pass, on the Demo vault (`demo-vault.sh ios` with `CENTRAID_DEMO_DIR` set to a scratch directory, because `/tmp/centraid-demo` held another vault and the tool refuses to overwrite it; the install then opens on "My vault", so the flow's vault was chosen in the switcher). **`search-correction.yaml` failed first** on `search-ask-about`: the earlier `search-ask-apps` run had sent "Find zzqxv" into a chat thread, Home's search finds chats (R-1097-24), so the term found it. Not a product defect; the flow now types a fresh nonsense word each run (`evalScript`), and passes. **No crash** this lane: no "App crashed or stopped" in any run and no `DiagnosticReports` entry for Centraid.
+- Screenshot (the root's scratchpad): `lane-j-photos-ask.png`.
+- `cargo xtask gate --profile mobile-jvm`: `ok mobile-jvm 22.9s`, budget 420 s, PASS (the first run failed on `git diff --exit-code` over an uncommitted flow edit, which is the step's design).
+- `cargo xtask gate --profile local`: the first run was RED on three things that came from #1097, all fixed (below). The second run: `ok fmt 2.6s`, `ok clippy 68.0s`, `ok test 2058.0s`, `ok restore-drill 37.4s`, `ok rules 0.4s`, `ok ledgers 0.2s`, total 2,166.4 s; it prints "over budget" (the inherited red, row 1, not touched). The `test` step ran slower than the 1,522 to 1,658 s of earlier alone runs because the machine was not quiet (load average 10 to 13 during it, other sessions' builds); the number is not a statement about this lane.
+- `bun run check:push:static`: 4/4 gates. `node .governance/law/run.mjs --range 874fcd521..HEAD`: window door, 10 rules, no findings.
+
+**What the gate found, and the fixes.** None of these was visible before the joined tree was gated.
+
+1. `clippy` (`-D warnings`): 13 `clone` calls in `crates/search/tests/door.rs` (lane G's chat tests) that clippy wants as `std::slice::from_ref`. Fixed in place.
+2. `cargo test --workspace`: `centraid-assist` `native_turn::cards::tests::the_shells_row_routes_are_exactly_the_entries_that_open_a_row`. Lane F2 gave `ChatRouting.swift` routes for the notebook, album, Tally group and Docs folder, and the table in `crates/assist/src/native_turn/cards.rs` still said those four kinds open their app's home. The table (and its doc comment) now says `row` for all four.
+3. `rules`, `sql-confinement`: lane H's tests planted rows with raw SQL in `crates/core/src/app_query/photos.rs` (an `INSERT` into `core_content_derivative`) and `crates/apps/photos/tests/parity.rs` (`SELECT`, two `UPDATE`s), outside the crates SQL may live in. The statements moved to `crates/apps/kit/src/fixtures.rs` as `plant_text_derivative`, `archive_asset` and `trash_archived_asset` (parameterised; the lookup was `asset_id_by_title`, already there), and both tests call them.
+
+**Decisions.** R-1097-30 now includes Photos.
+
+**Falsification.** Mutant applied to the working tree, run and restored; not committed. Photos' lens `asks = true` made `false` in `PhotosSearchMachine.kt`: `PhotosSearchSpec` "Ask is the no-match question…" **fails** (`expected:<Find zzqx> but was:<<empty string>>`, `PhotosSearchSpec.kt:430`), 20 of 21 pass.
+
 ## Verification
 
 All commands run in the lane worktree on the working tree, with `CARGO_TARGET_DIR` set to the worktree's own `target/`.

@@ -551,12 +551,8 @@ fn search_opens_the_live_photographs_the_door_names() {
             .asset_ids
     };
     let asset_of = |title: &str| -> String {
-        connection
-            .query_row(
-                "SELECT asset_id FROM media_asset WHERE title = ?1",
-                [title],
-                |row| row.get(0),
-            )
+        fixtures::asset_id_by_title(&connection, title)
+            .expect("the title reads")
             .expect("the demo roll holds the title")
     };
     let dusk = asset_of("Dusk over the west shore");
@@ -577,22 +573,13 @@ fn search_opens_the_live_photographs_the_door_names() {
     assert!(ask("---").is_empty());
     // A TRASHED PHOTOGRAPH AND AN ARCHIVED ONE ARE NO HIT: Photos' own shelf
     // does not show one.
-    connection
-        .execute(
-            "UPDATE media_asset SET archived_at = '2026-03-16T00:00:00.000Z' WHERE asset_id = ?1",
-            [&dusk],
-        )
+    fixtures::archive_asset(&connection, &dusk, "2026-03-16T00:00:00.000Z")
         .expect("the photograph is archived");
     assert!(
         ask("dusk").is_empty(),
         "an archived photograph is not found"
     );
-    connection
-        .execute(
-            "UPDATE media_asset SET archived_at = NULL, deleted_at = '2026-03-16T00:00:00.000Z' \
-             WHERE asset_id = ?1",
-            [&dusk],
-        )
+    fixtures::trash_archived_asset(&connection, &dusk, "2026-03-16T00:00:00.000Z")
         .expect("the photograph is trashed");
     assert!(ask("dusk").is_empty(), "a trashed photograph is not found");
 }

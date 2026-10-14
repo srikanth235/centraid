@@ -2455,12 +2455,12 @@ fn a_thread_is_found_by_its_title_and_by_what_the_member_said() {
     );
     let other = chats.turn(None, "Unrelated: when is the dentist?", "Tuesday.", false);
 
-    assert_eq!(chats.found(IN_THE_TITLE), [first.clone()]);
+    assert_eq!(chats.found(IN_THE_TITLE), std::slice::from_ref(&first));
     // A word the member said in a later message, and in no title.
-    assert_eq!(chats.found(SAID_LATER), [first.clone()]);
+    assert_eq!(chats.found(SAID_LATER), std::slice::from_ref(&first));
     assert_eq!(chats.found("dentist"), [other]);
     // The hit is the thread: one row for a word in the title and in two messages.
-    assert_eq!(chats.found("recipe"), [first.clone()]);
+    assert_eq!(chats.found("recipe"), std::slice::from_ref(&first));
 
     let hit = chats.targets(SAID_LATER).pop().expect("one hit");
     assert_eq!(hit.entity, "chat.thread");
@@ -2492,7 +2492,7 @@ fn what_the_assistant_and_its_cards_said_is_never_found() {
     );
     // The control: the member's word is found, so the empty answers below are
     // the door looking and finding nothing, not the door not looking.
-    assert_eq!(chats.found(IN_THE_TITLE), [thread.clone()]);
+    assert_eq!(chats.found(IN_THE_TITLE), std::slice::from_ref(&thread));
     for planted in [
         ASSISTANT_SAID,
         A_CARD_SAID,
@@ -2566,27 +2566,27 @@ fn a_rename_a_replaced_turn_a_settled_proposal_a_delete_and_a_clear_move_the_hit
 
     // RENAME: the old title's word goes, the new one comes.
     let thread = chats.turn(None, "alpha question", "Ok.", false);
-    assert_eq!(chats.found("alpha"), [thread.clone()]);
+    assert_eq!(chats.found("alpha"), std::slice::from_ref(&thread));
     chats.run(
         "chat.rename_thread",
         serde_json::json!({ "thread_id": thread, "title": "bravo plans" }),
     );
     // The title moved; the member's question still says "alpha".
-    assert_eq!(chats.found("bravo"), [thread.clone()]);
-    assert_eq!(chats.found("alpha"), [thread.clone()]);
+    assert_eq!(chats.found("bravo"), std::slice::from_ref(&thread));
+    assert_eq!(chats.found("alpha"), std::slice::from_ref(&thread));
     assert_eq!(chats.index()[0].1, "bravo plans");
 
     // REPLACE_LAST: the regenerated turn's old question leaves and the new one
     // is in, and the thread has one row.
     chats.turn(Some(&thread), "charlie question", "Ok.", false);
-    assert_eq!(chats.found("charlie"), [thread.clone()]);
+    assert_eq!(chats.found("charlie"), std::slice::from_ref(&thread));
     chats.turn(Some(&thread), "delta question", "Ok.", true);
-    assert_eq!(chats.found("delta"), [thread.clone()]);
+    assert_eq!(chats.found("delta"), std::slice::from_ref(&thread));
     assert!(
         chats.found("charlie").is_empty(),
         "the replaced question stayed"
     );
-    assert_eq!(chats.found("alpha"), [thread.clone()]);
+    assert_eq!(chats.found("alpha"), std::slice::from_ref(&thread));
     assert_eq!(chats.index().len(), 1);
 
     // SETTLE_PROPOSAL rewrites an assistant message's text: the proposal's words
@@ -2603,7 +2603,7 @@ fn a_rename_a_replaced_turn_a_settled_proposal_a_delete_and_a_clear_move_the_hit
     assert!(chats.found("ink").is_empty());
     assert!(chats.found("pencil").is_empty());
     assert_eq!(chats.index(), before, "settling a proposal moved the index");
-    assert_eq!(chats.found("echo"), [proposed.clone()]);
+    assert_eq!(chats.found("echo"), std::slice::from_ref(&proposed));
     assert_eq!(
         chats.count("SELECT COUNT(*) FROM chat_message WHERE text = 'Done: ink it in.'"),
         1,
@@ -2623,7 +2623,7 @@ fn a_rename_a_replaced_turn_a_settled_proposal_a_delete_and_a_clear_move_the_hit
         )),
         0
     );
-    assert_eq!(chats.found("alpha"), [thread.clone()]);
+    assert_eq!(chats.found("alpha"), std::slice::from_ref(&thread));
 
     // CLEAR: every thread, every message, every index row.
     chats.turn(None, "foxtrot question", "Ok.", false);
@@ -2661,7 +2661,10 @@ fn a_typo_in_a_thread_is_corrected_from_the_chat_vocabulary() {
             let words = corrected(&door, &["chat.thread"], "surveyer")
                 .expect("a slip in a chat word is corrected");
             assert_eq!(words, "surveyor");
-            assert_eq!(found(&door, "chat.thread", &words), [thread.clone()]);
+            assert_eq!(
+                found(&door, "chat.thread", &words),
+                std::slice::from_ref(&thread)
+            );
             // Not named, not offered.
             assert_eq!(corrected(&door, &["schedule.task"], "surveyer"), None);
             Ok(())
