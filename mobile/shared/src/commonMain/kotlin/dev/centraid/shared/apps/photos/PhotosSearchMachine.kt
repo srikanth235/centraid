@@ -3,9 +3,12 @@ package dev.centraid.shared.apps.photos
 import centraid.screen.v1.Loading
 import centraid.screen.v1.PhotosSearchEvent
 import centraid.screen.v1.PhotosSearchState
+import centraid.screen.v1.SearchField
 import centraid.screen.v1.SearchHits
 import centraid.screen.v1.SearchResting
 import centraid.screen.v1.SeatState
+import dev.centraid.shared.kit.SearchLaw
+import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -40,6 +43,14 @@ import dev.centraid.shared.screen.Step
  * is the same vault's vocabulary: the people, places and labels a query could
  * land on, read when the field is empty, never a fixed list of words the
  * product hopes are there.
+ *
+ * ## THE FIELD IS THE MACHINE'S (#1097, R-1097-27)
+ *
+ * The typed words are `query`, as before, and the shared search field's state is
+ * `search` through `SearchLaw`: a new term clears the words the last answer
+ * corrected, a cleared field clears the field, and an answer sets `corrected`
+ * only while it is still the current one. The kit's field draws "Showing
+ * results for" from it, so this screen draws no correction line of its own.
  *
  * ## ONE `ReadPage`, TWO ANSWERS
  *
@@ -78,7 +89,9 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
                 restAndRead(state)
             } else {
                 Step(
-                    state.copy(
+                    // THE FIELD FOLLOWS THE TERM, and a new term says what the
+                    // last answer corrected no more (`SearchLaw.term`).
+                    SearchLaw.term(Search, state, query).state.copy(
                         query = query,
                         // FIRST LOAD IS ABOUT THE FRAME, not about the query.
                         // A spinner over an empty screen and a spinner over the
@@ -113,11 +126,16 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
                 Step(state)
             } else {
                 Step(
-                    state.copy(
-                        loading = null,
-                        failure = null,
-                        resting = null,
-                        hits = merge(state.hits, event.data_.hits),
+                    SearchLaw.answered(
+                        Search,
+                        state.copy(
+                            loading = null,
+                            failure = null,
+                            resting = null,
+                            hits = merge(state.hits, event.data_.hits),
+                        ),
+                        state.query,
+                        event.data_.corrected,
                     ),
                 )
             }
@@ -201,6 +219,9 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
 
     private fun rest(state: PhotosSearchState, query: String): PhotosSearchState = state.copy(
         query = query,
+        // A CLEARED FIELD IS A CLOSED ONE: the term, the answer and the words it
+        // corrected go together (`SearchLaw.closed`).
+        search = SearchField(),
         resting = resting(),
         loading = null,
         failure = null,
@@ -258,6 +279,16 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
         "core_tag",
         "core_concept",
     )
+
+    /** Where this screen keeps the shared field. */
+    private object Search : SearchLens<PhotosSearchState> {
+        override val screenId: String = SCREEN_ID
+
+        override fun field(state: PhotosSearchState): SearchField = state.search ?: SearchField()
+
+        override fun with(state: PhotosSearchState, field: SearchField): PhotosSearchState =
+            state.copy(search = field)
+    }
 
     override fun seatChanged(seat: SeatState): PhotosSearchEvent =
         PhotosSearchEvent(seat_changed = PhotosSearchEvent.SeatChanged(seat = seat))
