@@ -1161,4 +1161,3 @@ fn seed_agenda(seeder: &mut Seeder, now: i64, calendar_id: &str) {
         seeder.run("schedule.propose_event", input);
     }
 }
-

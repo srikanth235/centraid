@@ -209,8 +209,7 @@ pub(super) fn search(
                 if denial.is_some() {
                     return Ok(((data, Vec::new()), denial));
                 }
-                let (found, denial) =
-                    named::of_app(search, "notes", term, named::CONTAINER_ROWS);
+                let (found, denial) = named::of_app(search, "notes", term, named::CONTAINER_ROWS);
                 Ok(((data, found), denial))
             },
         )
@@ -1073,13 +1072,7 @@ mod tests {
         let containers: Vec<(&str, &str, &str)> = found
             .containers
             .iter()
-            .map(|hit| {
-                (
-                    hit.entity.as_str(),
-                    hit.id.as_str(),
-                    hit.app_id.as_str(),
-                )
-            })
+            .map(|hit| (hit.entity.as_str(), hit.id.as_str(), hit.app_id.as_str()))
             .collect();
         assert_eq!(
             containers,

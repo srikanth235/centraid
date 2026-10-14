@@ -107,10 +107,7 @@ fn every_mapped_write_makes_a_line_that_names_its_row_and_asks_twice_only_when_i
             assert_eq!(step.destructive, destructive_verb(verb), "{pair}");
             assert_eq!(
                 step.destructive,
-                matches!(
-                    *verb,
-                    "delete" | "remove_from" | "cancel"
-                ),
+                matches!(*verb, "delete" | "remove_from" | "cancel"),
                 "{pair}"
             );
         }

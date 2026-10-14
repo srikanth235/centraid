@@ -462,15 +462,11 @@ pub fn profiles_statement(account_id: &str) -> PageQuery {
 // Loaders.
 // ---------------------------------------------------------------------------
 
-/// Rows asked for in one page: ONE UNDER the door's ceiling of 500.
+/// Rows asked for in one page.
 ///
-/// The vault's `keyset_page` probes for a next page by asking its own runner for
-/// `limit + 1` rows, and that runner clamps to the same 500, so a page asked for
-/// at exactly 500 reports no next page and a walk silently stops there (found
-/// in the year-3 suite, reported to the root; a vault fix makes this 500 again).
-/// At 499 the probe fits under the clamp, and a window over a month of 512 rows
-/// is whole.
-pub const PAGE_ROWS: usize = 499;
+/// The door's ceiling: the vault's `keyset_page` serves a page asked at exactly
+/// 500 with its `next` intact (#1099 W4-a).
+pub const PAGE_ROWS: usize = 500;
 
 const SMALL: FanOutBound = FanOutBound::new(PAGE_ROWS, 4);
 const LARGE: FanOutBound = FanOutBound::new(PAGE_ROWS, 82);

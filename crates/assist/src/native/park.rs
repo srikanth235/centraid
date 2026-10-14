@@ -164,10 +164,7 @@ pub struct RowChange {
 /// Whether a verb deletes, removes or cancels: the writes a card asks twice for.
 #[must_use]
 pub fn destructive_verb(verb: &str) -> bool {
-    matches!(
-        verb,
-        "delete" | "remove_from" | "cancel"
-    )
+    matches!(verb, "delete" | "remove_from" | "cancel")
 }
 
 /// What the session remembers of a conversation that a write changes, as it was when the turn
@@ -2196,7 +2193,7 @@ impl Session {
         self.park.before = None;
         self.park.pending = None;
         if !matches!(outcome, Confirmed::Done { .. }) {
-                if let Some(memory) = self.park.memory.take() {
+            if let Some(memory) = self.park.memory.take() {
                 self.writes.truncate(memory.writes);
                 self.undone = memory.undone;
                 self.noops = memory.noops;

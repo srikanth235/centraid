@@ -235,11 +235,19 @@ pub fn link_fix(kind: Kind, target: Kind) -> String {
         // nt15 R1a: a task's or an event's notes are its description, not rows
         (Kind::Task | Kind::Event, Kind::Note) => format!(
             " {} notes are its description: where description is empty (or is set, or contains \"…\").",
-            if kind == Kind::Task { "A task's" } else { "An event's" }
+            if kind == Kind::Task {
+                "A task's"
+            } else {
+                "An event's"
+            }
         ),
         (Kind::Note, Kind::Task | Kind::Event) => format!(
             " {} notes are its description, not linked rows: where description is set (or contains \"…\") on the {}.",
-            if target == Kind::Task { "A task's" } else { "An event's" },
+            if target == Kind::Task {
+                "A task's"
+            } else {
+                "An event's"
+            },
             target.name()
         ),
         _ => String::new(),

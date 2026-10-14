@@ -277,10 +277,8 @@ impl Session {
         selector: &Selector,
         into: Option<Kind>,
     ) -> Option<Key> {
-        if matches!(
-            verb,
-            Verb::Delete | Verb::RemoveFrom | Verb::Reveal
-        ) || self.said_every_row().is_some()
+        if matches!(verb, Verb::Delete | Verb::RemoveFrom | Verb::Reveal)
+            || self.said_every_row().is_some()
         {
             return None;
         }

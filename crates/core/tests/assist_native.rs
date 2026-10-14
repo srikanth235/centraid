@@ -241,7 +241,7 @@ fn a_follow_up_in_the_same_chat_reads_the_conversation_so_far() {
 
 #[test]
 fn every_kind_is_drawn_as_a_card_of_one_of_the_six_apps_and_the_homeless_ones_open_their_apps_home()
- {
+{
     // One `answer kind=…` turn each, in one chat. (app, entity) per kind, from the kind table.
     let kinds = [
         ("person", "people", "person"),

@@ -189,7 +189,10 @@ fn linked_to_reads_the_metadata_links() {
     summer.sort();
     let mut want = vec![world.id("beach"), world.id("hike")];
     want.sort();
-    assert_eq!(summer, want, "an album's photos are the photos linked to it");
+    assert_eq!(
+        summer, want,
+        "an album's photos are the photos linked to it"
+    );
     let subtasks = call(
         &mut session,
         "find",

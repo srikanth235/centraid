@@ -377,11 +377,7 @@ fn a_parked_person_keeps_the_id_the_card_showed_and_a_later_step_names_it() {
         .as_str()
         .expect("an id")
         .to_owned();
-    let starred = call(
-        &mut session,
-        "act",
-        json!({"verb": "star", "rows": person}),
-    );
+    let starred = call(&mut session, "act", json!({"verb": "star", "rows": person}));
     let id = pending_id(&starred);
     let steps = &starred["effect"]["pending"]["steps"];
     assert_eq!(steps[0]["command"], json!("people.add_person"));

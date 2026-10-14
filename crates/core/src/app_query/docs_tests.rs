@@ -778,11 +778,7 @@ fn a_folder_is_found_by_name_and_the_root_is_not() {
     assert_eq!(found.containers.len(), 1);
     let hit = &found.containers[0];
     assert_eq!(
-        (
-            hit.entity.as_str(),
-            hit.id.as_str(),
-            hit.app_id.as_str()
-        ),
+        (hit.entity.as_str(), hit.id.as_str(), hit.app_id.as_str()),
         ("core.concept", folder.as_str(), "docs")
     );
     assert_eq!(hit.title, "Leases");

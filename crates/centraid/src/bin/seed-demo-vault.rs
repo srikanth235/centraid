@@ -253,13 +253,7 @@ fn main() {
             let founded = vault.found(&vault_name, "Owner")?;
             let registry = Registry::with_system_commands()?;
             let principal = Principal::owner("demo-device");
-            centraid_core::example::seed(
-                vault,
-                &registry,
-                &principal,
-                &|app| wanted.has(app),
-                now,
-            )
+            centraid_core::example::seed(vault, &registry, &principal, &|app| wanted.has(app), now)
         })
         .expect("the scenario seeds");
     // LOCKER THROUGH THE SHELL'S DOOR, not `Vault::execute`: sealing is the

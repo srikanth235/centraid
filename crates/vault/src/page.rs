@@ -53,12 +53,20 @@ impl Vault {
     /// which means a grammar bug that let a write through is caught by SQLite
     /// rather than by a reviewer.
     pub fn page_raw(&self, page: &RawPage) -> Result<Vec<RowImage>> {
+        self.page_clamped(page, MAX_PAGE_ROWS)
+    }
+
+    /// [`Self::page_raw`] with the ceiling stated. `keyset_page` reads one row
+    /// past the page it serves (the probe that says "more rows follow"), so its
+    /// ceiling is `MAX_PAGE_ROWS + 1`; clamping the probe to `MAX_PAGE_ROWS`
+    /// made a page asked at exactly the ceiling look like the last one.
+    fn page_clamped(&self, page: &RawPage, ceiling: i64) -> Result<Vec<RowImage>> {
         if page.limit < 1 {
             return Err(VaultError::Invariant {
                 context: "a page limit is required; a default is how an unbounded read gets written by accident".to_owned(),
             });
         }
-        let limit = page.limit.min(MAX_PAGE_ROWS);
+        let limit = page.limit.min(ceiling);
         self.read(|connection| {
             let mut statement = connection.prepare(&page.sql)?;
             let names: Vec<String> = statement
@@ -771,11 +779,14 @@ impl Vault {
             probe = limit + 1,
         );
 
-        let mut rows = self.page_raw(&RawPage {
-            sql,
-            binds,
-            limit: limit + 1,
-        })?;
+        let mut rows = self.page_clamped(
+            &RawPage {
+                sql,
+                binds,
+                limit: limit + 1,
+            },
+            MAX_PAGE_ROWS + 1,
+        )?;
         let filled = i64::try_from(rows.len()).unwrap_or(i64::MAX) > limit;
         rows.truncate(usize::try_from(limit).unwrap_or(0));
         if page.held_thumbnail {
@@ -1366,6 +1377,56 @@ mod keyset_tests {
         let whole = vault.keyset_page(&last).expect("a page serves");
         assert_eq!(whole.rows.len(), 6, "five parties plus the vault's owner");
         assert!(whole.next.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_page_asked_at_the_ceiling_still_says_more_rows_follow() {
+        // #1099 W4-a: the `limit + 1` probe was re-clamped to the ceiling, so a
+        // page asked at exactly MAX_PAGE_ROWS over MAX_PAGE_ROWS + 1 rows lost
+        // its cursor and the walk silently stopped one row short.
+        let dir = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("made");
+        let vault = Vault::create(dir.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        let registry = crate::commands::Registry::with_system_commands().expect("registry");
+        let principal = crate::access::Principal::owner("d1");
+        // The vault's owner is one row; MAX_PAGE_ROWS more make MAX + 1.
+        for index in 0..MAX_PAGE_ROWS {
+            vault
+                .execute(
+                    &registry,
+                    &principal,
+                    &crate::commands::Command::new(
+                        "core.add_party",
+                        serde_json::json!({ "display_name": format!("P{index}"), "kind": "person" }),
+                    ),
+                )
+                .expect("the command executes");
+        }
+        let page = KeysetPage {
+            name: "parties".to_owned(),
+            select: vec!["party_id".to_owned(), "created_at".to_owned()],
+            from: "core_party".to_owned(),
+            predicate: None,
+            binds: Vec::new(),
+            sort_column: "created_at".to_owned(),
+            pk_column: "party_id".to_owned(),
+            descending: false,
+            limit: MAX_PAGE_ROWS,
+            after: None,
+            held_thumbnail: false,
+            note_body: false,
+            document_size: false,
+        };
+        let first = vault.keyset_page(&page).expect("a page serves");
+        assert_eq!(first.rows.len(), 500);
+        let cursor = first.next.expect("one row remains, so a cursor is present");
+        let mut tail = page;
+        tail.after = Some(cursor);
+        let second = vault.keyset_page(&tail).expect("a page serves");
+        assert_eq!(second.rows.len(), 1);
+        assert!(second.next.is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

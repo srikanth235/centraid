@@ -263,8 +263,5 @@ fn the_closed_words_and_the_kind_of_a_verb_are_the_runtimes() {
     let think = "intent: write\nverb: star\npick: #5 (position)";
     assert!(think::compile_think(think, None, TraceMode::V4).is_err());
     // the verbs a selector stands for one row under
-    assert_eq!(
-        SINGLE_ROW_VERBS,
-        ["edit", "reschedule", "log", "reveal"]
-    );
+    assert_eq!(SINGLE_ROW_VERBS, ["edit", "reschedule", "log", "reveal"]);
 }

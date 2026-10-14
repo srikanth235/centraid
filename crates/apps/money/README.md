@@ -54,7 +54,7 @@ The crate has two halves: the import (`import`, `rules`) and the reads and folds
 | `ACCOUNT_ROWS` | 40,000 | one account's history, for its balance; past it the balance is unavailable, never short |
 | `MATCH_SCAN_ROWS` | 500 | newest rows per account a transfer is looked for among |
 | `EXISTING_ROWS` | 40,000 | rows an import plan compares against |
-| `PAGE_ROWS` | 499 | rows asked per page: one under the door's 500, so the vault's `limit + 1` probe fits its own clamp |
+| `PAGE_ROWS` | 500 | rows asked per page: the door's ceiling |
 | `CARRY_MONTHS` | 12 | how far a target's carry chain is followed |
 | `LEARNER_WINDOW` / `LEARNER_SUPPORT` | 5 / 3 | the counting learner proposes after 3 of a merchant's last 5 categorised rows agree |
 
