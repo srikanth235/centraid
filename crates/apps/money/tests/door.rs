@@ -270,3 +270,29 @@ fn seam_s2_the_crate_and_the_vault_agree_on_every_row_of_the_shared_cases() {
         );
     }
 }
+
+#[test]
+fn a_saved_layout_round_trips_through_the_real_command_and_read() {
+    use centraid_apps_money::import::{CsvOptions, read_csv};
+    let scratch = Scratch::founded("profile");
+    let door = scratch.door();
+    add_account(&door, "acct-1", "Checking", "checking", "USD");
+    let file = b"Date,Description,Amount\n2024-03-12,\"SHOP\",-12.50\n2024-03-13,\"PAY\",100.00\n";
+    let statement = read_csv(file, &CsvOptions::new("USD")).expect("reads");
+    let saved = statement
+        .profile
+        .as_ref()
+        .and_then(|p| p.to_saved())
+        .expect("a layout");
+    let mut input = serde_json::to_value(&saved).expect("json");
+    input["account_id"] = json!("acct-1");
+    execute(&door, "money.save_import_profile", input);
+    let read = scratch
+        .vault
+        .read(|connection| {
+            let door = TestDoor::new(connection);
+            Ok(centraid_apps_money::queries::load_saved_profiles(&door, "acct-1").expect("reads"))
+        })
+        .expect("reads");
+    assert_eq!(read, vec![saved]);
+}

@@ -903,6 +903,36 @@ pub fn load_existing(
         .collect())
 }
 
+fn optional_column(row: &Row, column: &str) -> Option<usize> {
+    optional_integer(row, column).and_then(|n| usize::try_from(n).ok())
+}
+
+/// The layouts saved for an account, one per header fingerprint.
+pub fn load_saved_profiles(
+    door: &dyn PageDoor,
+    account_id: &str,
+) -> KitResult<Vec<crate::import::SavedProfile>> {
+    let rows = read_pages(door, &profiles_statement(account_id), SMALL)?;
+    Ok(rows
+        .iter()
+        .map(|row| crate::import::SavedProfile {
+            header_fingerprint: text_of(row, "header_fingerprint").unwrap_or_default(),
+            delimiter: text_of(row, "delimiter").unwrap_or_default(),
+            skip_lines: optional_column(row, "skip_lines").unwrap_or(0),
+            date_order: text_of(row, "date_order").unwrap_or_default(),
+            sign_mode: text_of(row, "sign_mode").unwrap_or_default(),
+            date_col: optional_column(row, "date_col").unwrap_or(0),
+            amount_col: optional_column(row, "amount_col"),
+            debit_col: optional_column(row, "debit_col"),
+            credit_col: optional_column(row, "credit_col"),
+            desc_col: optional_column(row, "desc_col").unwrap_or(0),
+            memo_col: optional_column(row, "memo_col"),
+            indicator_col: optional_column(row, "indicator_col"),
+            indicator_out_value: text_of(row, "indicator_out_value"),
+        })
+        .collect())
+}
+
 /// The newest [`MATCH_SCAN_ROWS`] non-void rows of each account.
 pub fn load_transfer_candidates(
     door: &dyn PageDoor,
