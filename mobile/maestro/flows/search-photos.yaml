@@ -42,13 +42,13 @@ name: search-photos
     timeout: 8000
 - assertNotVisible:
     id: "search-corrected"
-# Nothing matches: the block, from the copy.
+# Nothing matches: the block, from the copy (its sentence leads the body).
 - eraseText: 7
 - inputText: "zzqxv"
 - extendedWaitUntil:
     visible:
       id: "photos-search-no-match"
     timeout: 8000
-- assertVisible: "Nothing matches “zzqxv”."
+- assertVisible: "Nothing matches “zzqxv”.*"
 - assertNotVisible:
     id: "search-corrected"

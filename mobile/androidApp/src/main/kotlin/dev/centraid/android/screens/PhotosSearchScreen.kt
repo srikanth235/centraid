@@ -43,8 +43,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import centraid.screen.v1.EmptyState
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosSearchEvent
@@ -53,6 +53,7 @@ import centraid.screen.v1.SearchMatch
 import centraid.screen.v1.SearchResting
 import centraid.screen.v1.SearchTopHit
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.PhotoCellsGrid
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.bandFloor
@@ -115,30 +116,13 @@ public fun PhotosSearchScreen(
             hits != null -> {
                 val cells = hits.cells
                 if (cells.isEmpty() && hits.top_hits.isEmpty()) {
-                    // NOTHING MATCHED IS NOT NOTHING TYPED. The query is quoted
-                    // back, because the first thing a member wants to check is
-                    // whether the words they see are the words they meant — and
-                    // the line under it says everywhere search looked (v0's
-                    // `SEARCH_COPY.miss`). Centred, as the system draws "No
-                    // Results".
-                    Column(
-                        Modifier.fillMaxWidth().padding(top = 160.dp).testTag("photos-search-no-match"),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(PhotosCopy.PHOTOS_SEARCH_NO_RESULTS, style = centraidType("title"), color = centraidColor("text"))
-                        Text(
-                            PhotosCopy.PHOTOS_SEARCH_NO_MATCH_QUERY.replace("{query}", state.query),
-                            style = centraidType("small"),
-                            color = centraidColor("textSoft"),
-                            textAlign = TextAlign.Center,
-                        )
-                        Text(
-                            MISS_BODY,
-                            style = centraidType("small"),
-                            color = centraidColor("textFaint"),
-                            textAlign = TextAlign.Center,
-                        )
+                    // NOTHING MATCHED IS NOT NOTHING TYPED. The machine quotes the
+                    // query back and says everywhere search looked (v0's
+                    // `SEARCH_COPY.miss`) in the kit's empty state. Its one action is
+                    // Ask (#1097, R-1097-30), drawn only where the shell has a Chat
+                    // tab; Android has none, so the sentence draws alone.
+                    Box(Modifier.fillMaxWidth().padding(top = 160.dp).testTag("photos-search-no-match")) {
+                        EmptyStateView(hits.empty ?: EmptyState(), onAction = null)
                     }
                 } else {
                     PhotoCellsGrid(
@@ -241,9 +225,6 @@ private fun kindIcon(kind: SearchMatch.Kind): String = when (kind) {
     SearchMatch.Kind.KIND_ALBUM -> "album"
     else -> "Search"
 }
-
-/** v0's `SEARCH_COPY.miss.body`, in this build's words for what search reaches. */
-private const val MISS_BODY: String = PhotosCopy.PHOTOS_SEARCH_NO_MATCH_SCOPE
 
 @Composable
 private fun SearchCircle(iconKey: String, spoken: String, tag: String, onPress: () -> Unit) {

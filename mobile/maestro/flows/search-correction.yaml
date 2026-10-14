@@ -40,9 +40,12 @@ name: search-correction
     timeout: 5000
 - assertNotVisible:
     id: "search-corrected"
-# Nothing matches: the sentence and the one action.
+# Nothing matches: the sentence and the one action. THE TERM IS FRESH EACH RUN:
+# Home's search also finds chats (R-1097-24), and the tap below sends "Find
+# <term>" into a thread that a later run would then find under the same term.
+- evalScript: ${output.nonsense = 'zzqx' + Math.random().toString(36).slice(2, 8)}
 - eraseText: 6
-- inputText: "zzqxv"
+- inputText: ${output.nonsense}
 - runFlow:
     when:
       platform: iOS
@@ -51,7 +54,7 @@ name: search-correction
           visible:
             id: "search-ask-about"
           timeout: 5000
-      - assertVisible: "Ask about “zzqxv”"
+      - assertVisible: "Ask about “${output.nonsense}”"
       - assertNotVisible:
           id: "search-corrected"
       # The shell's router: the Chat tab opens, and the question is sent when
@@ -72,5 +75,5 @@ name: search-correction
                   notVisible: "Chat is not available here."
                 commands:
                   - extendedWaitUntil:
-                      visible: "Find zzqxv"
+                      visible: "Find ${output.nonsense}"
                       timeout: 15000

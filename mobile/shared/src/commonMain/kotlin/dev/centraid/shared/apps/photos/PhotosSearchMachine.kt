@@ -1,5 +1,6 @@
 package dev.centraid.shared.apps.photos
 
+import centraid.screen.v1.EmptyState
 import centraid.screen.v1.Loading
 import centraid.screen.v1.PhotosSearchEvent
 import centraid.screen.v1.PhotosSearchState
@@ -7,6 +8,7 @@ import centraid.screen.v1.SearchField
 import centraid.screen.v1.SearchHits
 import centraid.screen.v1.SearchResting
 import centraid.screen.v1.SeatState
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.screen.Reads
@@ -125,19 +127,16 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
             if (state.query.isBlank() || event.data_.hits?.query != state.query) {
                 Step(state)
             } else {
-                Step(
-                    SearchLaw.answered(
-                        Search,
-                        state.copy(
-                            loading = null,
-                            failure = null,
-                            resting = null,
-                            hits = merge(state.hits, event.data_.hits),
-                        ),
-                        state.query,
-                        event.data_.corrected,
-                    ),
+                val hits = merge(state.hits, event.data_.hits)
+                val answered = SearchLaw.answered(
+                    Search,
+                    state.copy(loading = null, failure = null, resting = null, hits = hits),
+                    state.query,
+                    event.data_.corrected,
+                    // ASK (#1097, R-1097-28): rows are the photographs and the doors, the screen's only results.
+                    rows = hits?.let { it.cells.size + it.top_hits.size },
                 )
+                Step(answered.copy(hits = hits?.let { noMatch(it, answered) }))
             }
 
         // THE VOCABULARY LANDS ONLY ON AN EMPTY FIELD. A member who started
@@ -160,7 +159,7 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
         // query" and "the vault refused this read" are two different sentences
         // and only one of them means the member should try other words.
         event.refused != null -> Step(
-            state.copy(
+            SearchLaw.unasked(Search, state).copy(
                 loading = null,
                 hits = null,
                 resting = null,
@@ -211,6 +210,26 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
      * it is already on its way ([restAndRead]).
      */
     private fun resting(): SearchResting = SearchResting()
+
+    /**
+     * THE NO-MATCH STATE of an answer that holds no photograph and no door
+     * (#1097, R-1097-30): the query quoted back and the line saying everywhere
+     * search looked (v0's `SEARCH_COPY.miss`), with Ask as its one action when the
+     * field offers it ([SearchLaw.asking]). An answer with anything in it carries none.
+     */
+    private fun noMatch(hits: SearchHits, state: PhotosSearchState): SearchHits {
+        if (hits.cells.isNotEmpty() || hits.top_hits.isNotEmpty()) return hits.copy(empty = null)
+        val sentence = PhotosCopy.PHOTOS_SEARCH_NO_MATCH_QUERY.replace("{query}", state.query)
+        return hits.copy(
+            empty = SearchLaw.asking(
+                EmptyState(
+                    headline = PhotosCopy.PHOTOS_SEARCH_NO_RESULTS,
+                    body = "$sentence ${PhotosCopy.PHOTOS_SEARCH_NO_MATCH_SCOPE}",
+                ),
+                state.search ?: SearchField(),
+            ),
+        )
+    }
 
     private fun restAndRead(state: PhotosSearchState): Step<PhotosSearchState> = Step(
         rest(state, query = ""),
@@ -283,6 +302,7 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
     /** Where this screen keeps the shared field. */
     private object Search : SearchLens<PhotosSearchState> {
         override val screenId: String = SCREEN_ID
+        override val asks: Boolean = true
 
         override fun field(state: PhotosSearchState): SearchField = state.search ?: SearchField()
 

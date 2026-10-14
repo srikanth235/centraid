@@ -1,5 +1,5 @@
 # An app's own search that finds nothing offers the assistant (#1097,
-# R-1097-28 to 30): Tasks and Notes draw the kit's one no-match state with
+# R-1097-28 to 30): Tasks, Notes and Photos draw the kit's one no-match state with
 # "Ask about “…”" (`search-ask-about`), the tap opens the Chat tab, and
 # Locker's search never draws it, because a term there can itself be a secret.
 #
@@ -88,6 +88,40 @@ name: search-ask-apps
           commands:
             - extendedWaitUntil:
                 visible: "Find zzqxn"
+                timeout: 15000
+# --- Photos ---------------------------------------------------------------
+# Photos' search is the door's too (R-1097-25..27), and its no-match block is
+# the same kit state with the same one action (R-1097-30).
+- launchApp
+- tapOn:
+    id: "home-tile-photos"
+- tapOn:
+    id: "photos-search-open"
+- inputText: "zzqxp"
+- extendedWaitUntil:
+    visible:
+      id: "search-ask-about"
+    timeout: 8000
+- assertVisible: "Ask about “zzqxp”"
+- tapOn:
+    id: "search-ask-about"
+- extendedWaitUntil:
+    visible:
+      id: "chat"
+    timeout: 5000
+- assertNotVisible:
+    id: "photos-search-no-match"
+- runFlow:
+    when:
+      notVisible:
+        id: "chat-download"
+    commands:
+      - runFlow:
+          when:
+            notVisible: "Chat is not available here."
+          commands:
+            - extendedWaitUntil:
+                visible: "Find zzqxp"
                 timeout: 15000
 # --- Locker: never ----------------------------------------------------------
 - launchApp

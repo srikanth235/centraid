@@ -45,31 +45,15 @@ struct PhotosSearchView: View {
                 RowSkeleton()
             case let .failure(sentence, remedy):
                 ScreenFailureView(sentence: sentence, remedy: remedy)
-            case let .hits(cells, packAbsent, matches, topHits):
+            case let .hits(cells, packAbsent, matches, topHits, empty):
                 if cells.isEmpty, topHits.isEmpty {
-                    // NOTHING MATCHED IS NOT NOTHING TYPED. The query is quoted
-                    // back, because the one thing a member wants to check first
-                    // is whether the words they see are the words they meant —
-                    // and the line under it says everywhere search looked (v0's
-                    // `SEARCH_COPY.miss`). Centred, as the system draws "No
-                    // Results".
-                    VStack(spacing: 6) {
-                        Text(PhotosWords.photosSearchNoResults)
-                            .centraidType("title")
-                            .foregroundStyle(Theme.color("text", scheme))
-                        Text(PhotosWords.fill(PhotosWords.photosSearchNoMatchQuery, "query", state.query))
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
-                            .multilineTextAlignment(.center)
-                        Text(PhotosSearchStateView.missBody)
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textFaint", scheme))
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 160)
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("photos-search-no-match")
+                    // NOTHING MATCHED IS NOT NOTHING TYPED. The machine quotes the
+                    // query back and says everywhere search looked (v0's
+                    // `SEARCH_COPY.miss`), and offers Ask as the one action when
+                    // the field names a question (#1097, R-1097-30): the kit's
+                    // search empty view draws it, as every app's search does.
+                    SearchEmptyView(empty, ask: state.ask)
+                        .accessibilityIdentifier("photos-search-no-match")
                 } else {
                     // THE DOORS FIRST (v0 §9: "each one tap from the surface
                     // that owns it"), then why the grid matched, then the grid.
@@ -271,6 +255,10 @@ struct PhotosSearchStateView {
     /// What the member has typed, as the reducer last published it.
     var query: String { state.query }
 
+    /// The question the no-match state offers to send to the assistant, or empty
+    /// for no Ask (#1097, R-1097-28).
+    var ask: String { state.search.ask }
+
     /// THE SHARED SEARCH FIELD, as the machine holds it (#1097, R-1097-27): the
     /// term and the words the answer corrected, which the kit's field draws as
     /// "Showing results for". [open] is the grid's destination and the caller's
@@ -289,12 +277,14 @@ struct PhotosSearchStateView {
         case loading(Bool)
         case failure(String, String)
         /// The cells as the wire holds them, whether this device has a
-        /// thumbnail pack, why these matched, and the doors above them.
+        /// thumbnail pack, why these matched, the doors above them, and the
+        /// no-match state of an answer with none of those.
         case hits(
             [Centraid_Screen_V1_PhotoCell],
             Bool,
             [Centraid_Screen_V1_SearchMatch],
-            [Centraid_Screen_V1_SearchTopHit]
+            [Centraid_Screen_V1_SearchTopHit],
+            Centraid_Screen_V1_EmptyState
         )
     }
 
@@ -305,7 +295,7 @@ struct PhotosSearchStateView {
         case let .failure(failure):
             return .failure(failure.sentence, failure.remedy)
         case let .hits(hits):
-            return .hits(hits.cells, hits.thumbnailPackAbsent, hits.matches, hits.topHits)
+            return .hits(hits.cells, hits.thumbnailPackAbsent, hits.matches, hits.topHits, hits.empty)
         case let .loading(loading):
             return .loading(loading.firstLoad)
         // A MESSAGE WITH NO CONTENT SET IS A SCREEN THAT HAS NOT READ, which
@@ -363,8 +353,6 @@ struct PhotosSearchStateView {
     static let restingNote =
         PhotosWords.photosSearchHint
 
-    /// v0's `SEARCH_COPY.miss.body`, in this build's words for what search reaches.
-    static let missBody = PhotosWords.photosSearchNoMatchScope
 
     /// "Person · 12 photos", or "Album · at least 500 photos". A zero
     /// is "not counted" on this door, so it prints the kind alone.

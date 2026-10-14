@@ -424,6 +424,35 @@ class PhotosSearchSpec : StringSpec({
         cleared.search.shouldNotBeNull().term shouldBe ""
     }
 
+    "Ask is the no-match question: a wholly empty current answer sets it and carries the action, and anything found, a new term, a denial or a clear takes it away (#1097, R-1097-28, R-1097-30)" {
+        val typing = machine.reduce(machine.initial(), typed("zzqx")).state
+        val none = machine.reduce(typing, hits("zzqx", emptyList())).state
+        none.search.shouldNotBeNull().ask shouldBe "Find zzqx"
+        // The no-match state is the machine's: the sentence and everywhere search looked, with Ask as its action.
+        val empty = none.hits.shouldNotBeNull().empty.shouldNotBeNull()
+        empty.headline shouldBe "No results"
+        empty.body shouldBe "Nothing matches “zzqx”. Search covers captions, text in photos, people, places, labels and albums."
+        empty.action_label shouldBe "Ask about “zzqx”"
+
+        // A photograph is a result: no Ask, no no-match state.
+        val found = machine.reduce(
+            typing,
+            hits("zzqx", listOf(assetRow("a-1", "2026-02-03T10:00:00Z"))),
+        ).state
+        found.search.shouldNotBeNull().ask shouldBe ""
+        found.hits.shouldNotBeNull().empty shouldBe null
+        // A new term, a clear and a refusal take the question away.
+        machine.reduce(none, typed("zzq")).state.search.shouldNotBeNull().ask shouldBe ""
+        machine.reduce(none, typed("")).state.search.shouldNotBeNull().ask shouldBe ""
+        machine.reduce(
+            none,
+            PhotosSearchReads.refused(Reads.refused("The access plane said no.")),
+        ).state.search.shouldNotBeNull().ask shouldBe ""
+        // A late answer for a term the field has left sets none.
+        val moved = machine.reduce(none, typed("zzqy")).state
+        machine.reduce(moved, hits("zzqx", emptyList())).state.search.shouldNotBeNull().ask shouldBe ""
+    }
+
     "a late corrected answer sets no correction, and a second page keeps it" {
         val asking = machine.reduce(machine.initial(), typed("sunscren")).state
         val corrected = PhotosSearchReads.hitsArrived(

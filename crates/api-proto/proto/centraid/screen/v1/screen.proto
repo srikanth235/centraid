@@ -2890,6 +2890,12 @@ message SearchHits {
   // so a page can land after the field has moved on; a reducer that took it
   // would draw the last query's photographs under this query's words.
   string query = 7;
+  // THE NO-MATCH STATE (#1097, R-1097-30), set by the machine when the answer
+  // holds no photograph and no door: the sentence for the query and, through
+  // `SearchLaw.asking`, the Ask action when the search field offers one. Unset
+  // for an answer with anything in it. A shell draws it with the kit's search
+  // empty view; the words are the machine's, never the view's.
+  EmptyState empty = 8;
 
   // 4 WAS `repeated string matched_on`, AND IT WAS THE ONE PLACE IN THIS
   // SECTION THAT CARRIED A KIND AS PROSE. Every shell composing its own
