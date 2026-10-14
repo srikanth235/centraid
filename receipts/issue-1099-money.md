@@ -542,7 +542,7 @@ Doctrine: [`docs/decisions.md#money-1099`](../docs/decisions.md#money-1099) (rul
 - `crates/apps/money/src/queries.rs`, `crates/apps/money/README.md`, `crates/apps/money/manifest.json`
 - `crates/api-proto/proto/centraid/core/v1/money.proto` (new), `crates/api-proto/proto/centraid/core/v1/app_query.proto`, `crates/api-proto/proto/centraid/core/v1/envelope.proto`, `crates/api-proto/build.rs`, `crates/api-proto/tests/roundtrip.rs`
 - `crates/core/Cargo.toml`, `crates/core/src/app_query.rs`, `crates/core/src/app_query/money.rs` (new), `crates/core/src/app_query/money_tests.rs` (new), `crates/core/src/handle.rs`, `crates/core/src/example.rs`
-- `crates/centraid/src/bin/seed-demo-vault.rs`, `scripts/security/rust-unsafe-ledger.json`, `docs/decisions.md`, `CHANGELOG.md`, `receipts/issue-1099-money.md`
+- `crates/centraid/src/bin/seed-demo-vault.rs`, `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/ScreenQueries.kt` (the zone pre-check lists Money's eight `tz` arms; not Gradle-run), `scripts/security/rust-unsafe-ledger.json`, `docs/decisions.md`, `CHANGELOG.md`, `receipts/issue-1099-money.md`
 
 ### Verification
 
