@@ -7,8 +7,9 @@
 // is found. Home carries the same fact as a `VaultSearchHit` (`vault_search.proto`),
 // which has its own subtitle and day and so does not use this.
 //
-// Photos' albums in Photos' own search are a later lane's; Home already carries
-// them.
+// Photos' albums in Photos' own search ride `PhotosSearch.albums`
+// (`photos.proto`, #1097, R-1097-25): the same message, narrowed to the rows
+// that open in Photos.
 
 syntax = "proto3";
 

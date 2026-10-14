@@ -13,6 +13,9 @@ path = "src/lib.rs"
 
 [dependencies]
 centraid-apps-kit = { path = "../kit" }
+# The FTS door. An app holds no `MATCH`, so a search asks this crate for its hits
+# and reads them back through the page door (D-1020-N1, #1097).
+centraid-search = { path = "../../search" }
 serde_json.workspace = true
 thiserror.workspace = true
 

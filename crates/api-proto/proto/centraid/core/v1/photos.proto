@@ -1,0 +1,59 @@
+// PHOTOS' OWN SEARCH, ASKED OF THE FULL-TEXT DOOR (#1097, R-1097-25..27).
+//
+// Photos' search used to be Kotlin legs of `LIKE` over `media_asset.title`. Its
+// TEXT leg and its ALBUM leg are now the door's: the photograph domain
+// (`core.content_item`: the caption, the text recognised in the picture and
+// the transcript of a video) and the album container (`core.collection`,
+// narrowed to the rows that open in Photos). The STRUCTURED legs (the people a
+// member confirmed on a face, the places, the labels) stay with the shell,
+// which reads them through the page door and folds them with this answer.
+//
+// It rides `app_query.proto` at number 90, Photos' own: 80 is Home's, and the
+// apps' blocks are below it.
+//
+// **NO `tz`.** A photograph search states no civil time (the grid is in capture
+// order and reads its days elsewhere), so the arm names no zone.
+
+syntax = "proto3";
+
+package centraid.core.v1;
+
+import "centraid/core/v1/container.proto";
+
+// `photos.search`: the photographs and the albums one term names.
+message PhotosSearchRequest {
+  // The words. Blank answers nothing, never every photograph.
+  string term = 1;
+  // REQUIRED: zero is refused, `ERROR_CODE_INVALID_REQUEST`. The best this many
+  // photographs by rank; clamped to 500.
+  uint32 limit = 2;
+  // MAY THE CORE CORRECT THE TERM? The shell sets this only when its OWN legs
+  // (people, places, labels) found nothing for the term as typed, because the
+  // core cannot see them: the correction runs only when EVERY leg is empty.
+  // With it set and the core's legs empty too, the core replaces each
+  // mistyped word by a word the vault's own vocabularies hold
+  // (`core.content_item`, `core.party` and the album container) and runs its
+  // legs again at the corrected words; `PhotosSearch.corrected` says what it
+  // searched. Without it the term is searched as typed and never corrected.
+  bool correct = 3;
+}
+
+message PhotosSearch {
+  // THE PHOTOGRAPHS, as ASSET ids, in the index's rank order (best first): the
+  // live, unarchived assets whose caption, recognised text or transcript holds
+  // the words. A trashed or archived photograph is never here, because Photos'
+  // own shelf does not show one (Home's search keeps the archived: it opens a
+  // photograph and this draws a grid). Order is the rank; a grid draws them in
+  // capture order and uses this for WHICH, not for where.
+  repeated string asset_ids = 1;
+  // THE ALBUMS whose own name the words hold, in rank order, at most eight:
+  // `core.collection` rows that open in Photos. `ContainerHit.id` is the
+  // collection id.
+  repeated ContainerHit albums = 2;
+  // THE WORDS SEARCHED when the term was corrected (#1097, R4, R8): the typed
+  // words with each mistyped one replaced by a word the vault holds. EMPTY for an
+  // exact answer. Set even when the core's own legs above found nothing at the
+  // corrected words, because the shell's legs may have: the SHELL keeps it only
+  // if the whole answer, its legs and these, is not empty.
+  string corrected = 3;
+}

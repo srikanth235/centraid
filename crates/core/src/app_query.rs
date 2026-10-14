@@ -78,6 +78,9 @@ mod docs;
 mod locker;
 mod notes;
 mod people;
+// Photos' own search (#1097, R-1097-25..27): the text and album legs, the live rule
+// and the correction.
+mod photos;
 // Tally's arm (#1046): its conversions and tests, beside this one.
 mod tally;
 // Tasks' arm (#1046): its conversions and tests, beside this one.
@@ -222,6 +225,7 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::ChatThread(asked) => chat::thread(vault, asked)?,
         Q::ChatCard(asked) => chat::card(vault, asked)?,
         Q::VaultSearch(asked) => vault::search(vault, &door, asked)?,
+        Q::PhotosSearch(asked) => photos::search(vault, &door, asked)?,
     };
     Ok(wire::AppQueryResponse {
         answer: Some(answer),

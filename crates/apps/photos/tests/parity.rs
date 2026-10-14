@@ -41,9 +41,10 @@ use centraid_apps_photos::duplicates::duplicate_clusters;
 use centraid_apps_photos::enrichment::{Tier, enrichment_status};
 use centraid_apps_photos::faces::{asset_faces, face_queue, people_roster};
 use centraid_apps_photos::places::{NamedPlace, PhraseContext, PhraseInput, place_phrase};
-use centraid_apps_photos::queries::{LibraryInput, load_library, load_search};
+use centraid_apps_photos::queries::{LibraryInput, load_library, load_search_term};
 use centraid_apps_photos::storage::{Totals, storage_summary};
 use centraid_apps_photos::{Reading, manifest};
+use centraid_search::{Principal, SqliteDoor};
 use rusqlite::Connection;
 
 /// The repository root, from this crate's manifest directory.
@@ -533,37 +534,67 @@ fn the_enrichment_mirror_is_off_until_a_policy_row_says_otherwise() {
     );
 }
 
-/// `search` folds the same grid rows in the vault's own RANK order. The FTS read
-/// is `crates/search`'s, so the hits are handed in — which is also what keeps
-/// the ranking from being re-sorted away.
+/// `search` names the LIVE photographs the full-text door finds, as asset ids in
+/// the door's rank order (#1097, R-1097-25). The index is `crates/search`'s, so
+/// it is asked here through the real door over the seeded roll; what is
+/// compared is the open step: a content id becomes the live, unarchived
+/// assets that hold it.
 #[test]
-fn search_keeps_the_vaults_rank_order() {
+fn search_opens_the_live_photographs_the_door_names() {
     let connection = seeded();
     let door = TestDoor::new(&connection);
-    let content_ids = fixtures::content_ids_by_title_desc(
-        &connection,
-        &["Emerald Bay overlook", "Dusk over the west shore"],
-    )
-    .expect("every id reads");
-    assert_eq!(content_ids.len(), 2);
-    let data = load_search(&door, &content_ids, NOW_MS).expect("the search reads");
+    let search = SqliteDoor::open(&connection).expect("the FTS door opens");
+    let ask = |term: &str| {
+        load_search_term(&door, &search, &Principal::Owner, term, 50)
+            .expect("the search reads")
+            .0
+            .asset_ids
+    };
+    let asset_of = |title: &str| -> String {
+        connection
+            .query_row(
+                "SELECT asset_id FROM media_asset WHERE title = ?1",
+                [title],
+                |row| row.get(0),
+            )
+            .expect("the demo roll holds the title")
+    };
+    let dusk = asset_of("Dusk over the west shore");
     assert_eq!(
-        data.assets
-            .iter()
-            .map(|asset| asset.asset.content_id.as_str())
-            .collect::<Vec<_>>(),
-        content_ids.iter().map(String::as_str).collect::<Vec<_>>(),
-        "best match first, whatever the capture order"
+        ask("dusk"),
+        vec![dusk.clone()],
+        "a caption word finds its photograph"
     );
-    // The rows are the GRID's rows: the same joins, so a hit renders in place.
-    assert!(data.assets.iter().all(|asset| asset.uris.src.is_some()));
-    // An empty hit list is an empty answer, not a table scan.
+    assert_eq!(
+        ask("dus"),
+        vec![dusk.clone()],
+        "the door matches by prefix, as Home's search does"
+    );
+    assert_eq!(ask("emerald"), vec![asset_of("Emerald Bay overlook")]);
+    // A blank term is an empty answer, never every photograph; a term of
+    // punctuation has no searchable word and is empty too.
+    assert!(ask("   ").is_empty());
+    assert!(ask("---").is_empty());
+    // A TRASHED PHOTOGRAPH AND AN ARCHIVED ONE ARE NO HIT: Photos' own shelf
+    // does not show one.
+    connection
+        .execute(
+            "UPDATE media_asset SET archived_at = '2026-03-16T00:00:00.000Z' WHERE asset_id = ?1",
+            [&dusk],
+        )
+        .expect("the photograph is archived");
     assert!(
-        load_search(&door, &[], NOW_MS)
-            .expect("the read runs")
-            .assets
-            .is_empty()
+        ask("dusk").is_empty(),
+        "an archived photograph is not found"
     );
+    connection
+        .execute(
+            "UPDATE media_asset SET archived_at = NULL, deleted_at = '2026-03-16T00:00:00.000Z' \
+             WHERE asset_id = ?1",
+            [&dusk],
+        )
+        .expect("the photograph is trashed");
+    assert!(ask("dusk").is_empty(), "a trashed photograph is not found");
 }
 
 /// The Places facet over the seeded roll: the vault's coordinate-shaped names
@@ -1354,10 +1385,20 @@ fn the_enrichment_mirror_is_what_v0_answered() {
     );
 }
 
+/// v0's own search cases, asked of the door that now answers them (#1097,
+/// R-1097-25): the same photographs, whatever the retired fold decorated them
+/// with.
+///
+/// The index is the vault's, built here by the schema's own triggers from v0's
+/// rows, so what is compared is which photographs a term reaches and in what
+/// order. v0 answered with the FOLD (joins, uris, places, album titles); that
+/// fold had no consumer once Photos' grid read its own cells, and it is retired
+/// with its function.
 #[test]
-fn the_search_fold_is_what_v0_answered() {
+fn the_search_reaches_what_v0_answered() {
     let connection = v0_vault();
     let door = TestDoor::new(&connection);
+    let search = SqliteDoor::open(&connection).expect("the FTS door opens");
     let cases = v0_swept("search");
     assert_eq!(
         cases.len(),
@@ -1367,73 +1408,31 @@ fn the_search_fold_is_what_v0_answered() {
     let mut hits_compared = 0;
     for case in &cases {
         let term = case["input"]["term"].as_str().expect("a term");
-        let want = case["output"]["assets"].as_array().expect("a list");
-        // THE INDEX IS THE VAULT'S, NOT THE APP'S. `load_search` takes the
-        // hits as its input for exactly that reason (the app holds no SQL and
-        // no FTS), so the hits v0's index returned — the content ids on its
-        // own answer — are this case's input, and what is compared is the
-        // FOLD: the joins, the uris, the place, the album titles.
-        let hits: Vec<String> = want
+        let want: Vec<&str> = case["output"]["assets"]
+            .as_array()
+            .expect("a list")
             .iter()
-            .map(|asset| {
-                asset["content_id"]
-                    .as_str()
-                    .expect("a content id")
-                    .to_owned()
-            })
+            .map(|asset| asset["asset_id"].as_str().expect("an asset id"))
             .collect();
-        let data = load_search(&door, &hits, V0_NOW_MS).expect("the search reads");
-        if hits.is_empty() {
+        let (data, denial) = load_search_term(&door, &search, &Principal::Owner, term, 50)
+            .expect("the search reads");
+        assert!(denial.is_none(), "{term}");
+        if want.is_empty() {
             assert!(
-                data.assets.is_empty(),
+                data.asset_ids.is_empty(),
                 "a term nothing matched is an empty answer, never an error: {term}"
             );
             continue;
         }
         hits_compared += 1;
         assert_eq!(
-            data.assets
+            data.asset_ids
                 .iter()
-                .map(|entry| entry.asset.asset_id.as_str())
-                .collect::<Vec<&str>>(),
-            want.iter()
-                .map(|asset| asset["asset_id"].as_str().expect("an asset id"))
-                .collect::<Vec<&str>>(),
-            "the hits for {term}, in the vault's own rank order"
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            want,
+            "the photographs for {term}, in the vault's own rank order"
         );
-        for (entry, row) in data.assets.iter().zip(want.iter()) {
-            let where_ = format!("{} for {term}", entry.asset.asset_id);
-            assert_eq!(
-                entry.byte_size,
-                row["byte_size"].as_i64(),
-                "byte_size of {where_}"
-            );
-            assert_eq!(
-                entry.taken_at.as_deref(),
-                text(&row["taken_at"]),
-                "taken_at of {where_}"
-            );
-            assert_eq!(
-                entry.uris.thumb.as_deref(),
-                text(&row["thumb_uri"]),
-                "thumb_uri of {where_}"
-            );
-            assert_eq!(
-                entry.place.as_ref().map(|place| place.place_id.as_str()),
-                row["place"]["place_id"].as_str(),
-                "the place join of {where_}"
-            );
-            assert_eq!(
-                entry.album_titles,
-                row["album_titles"]
-                    .as_array()
-                    .expect("a list")
-                    .iter()
-                    .map(|title| title.as_str().expect("a title").to_owned())
-                    .collect::<Vec<String>>(),
-                "album_titles of {where_}"
-            );
-        }
     }
     assert!(
         hits_compared >= 2,
