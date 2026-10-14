@@ -70,6 +70,9 @@ public object PhotosSearchReads {
     /** How many of each kind stand above the grid (v0's `PER_KIND_CAP`). */
     public const val PER_KIND_CAP: Int = 3
 
+    /** The photographs the core names by text: the best of them by rank (`photos.proto`). */
+    public const val TEXT_LIMIT: Int = 500
+
     /** A mosaic's page, the same size the library's is, and for its reason. */
     public const val HIT_LIMIT: Int = 120
 
@@ -636,7 +639,12 @@ public object PhotosSearchReads {
      * Only the KEPT doors: a fourth person the member cannot see above the
      * grid must not be why photographs are in it (v0's `reachableAssetIds`).
      */
-    public fun reach(topHits: List<SearchTopHit>, labels: List<Named>): Reach = Reach(
+    public fun reach(
+        topHits: List<SearchTopHit>,
+        labels: List<Named>,
+        assetIds: List<String> = emptyList(),
+    ): Reach = Reach(
+        assetIds = assetIds,
         partyIds = topHits.mapNotNull { it.shelf?.state_view?.person?.party_id },
         placeIds = topHits.mapNotNull { hit ->
             hit.shelf?.place?.takeIf { !it.unplaced }?.place_id

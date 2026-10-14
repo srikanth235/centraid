@@ -57,7 +57,7 @@ struct PhotosSearchView: View {
                         Text(PhotosWords.photosSearchNoResults)
                             .centraidType("title")
                             .foregroundStyle(Theme.color("text", scheme))
-                        Text("Nothing matches \u{201C}\(state.query)\u{201D}.")
+                        Text(PhotosWords.fill(PhotosWords.photosSearchNoMatchQuery, "query", state.query))
                             .centraidType("small")
                             .foregroundStyle(Theme.color("textSoft", scheme))
                             .multilineTextAlignment(.center)
@@ -68,6 +68,8 @@ struct PhotosSearchView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 160)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("photos-search-no-match")
                 } else {
                     // THE DOORS FIRST (v0 §9: "each one tap from the surface
                     // that owns it"), then why the grid matched, then the grid.
@@ -268,6 +270,18 @@ struct PhotosSearchStateView {
 
     /// What the member has typed, as the reducer last published it.
     var query: String { state.query }
+
+    /// THE SHARED SEARCH FIELD, as the machine holds it (#1097, R-1097-27): the
+    /// term and the words the answer corrected, which the kit's field draws as
+    /// "Showing results for". [open] is the grid's destination and the caller's
+    /// to state; a field that is not open carries no term and no correction.
+    func field(open: Bool) -> Centraid_Screen_V1_SearchField {
+        guard open else { return Centraid_Screen_V1_SearchField() }
+        var field = state.search
+        field.open = true
+        field.term = state.query
+        return field
+    }
 
     /// Four cases, always.
     enum Content {

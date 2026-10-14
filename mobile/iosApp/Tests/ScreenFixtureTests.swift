@@ -477,6 +477,21 @@ final class ScreenFixtureTests: XCTestCase {
         )
     }
 
+    /// A corrected answer is the shared field's words (#1097, R-1097-27): the
+    /// hits still answer what was typed, and an exact answer carries none.
+    func testACorrectedAnswerIsTheFieldsWords() throws {
+        let corrected = try search("corrected")
+        XCTAssertEqual(corrected.query, "sunscren")
+        XCTAssertEqual(corrected.search.corrected, "sunscreen")
+        XCTAssertEqual(corrected.search.term, "sunscren")
+        guard case let .hits(hits) = corrected.content else {
+            return XCTFail("a corrected answer is hits")
+        }
+        XCTAssertEqual(hits.query, "sunscren")
+        XCTAssertEqual(hits.cells.count, 1)
+        XCTAssertFalse(try search("hits-say-why").hasSearch)
+    }
+
     /// Resting and no-hits must never read the same words. Both show a grid
     /// with nothing in it; only one of them may say "Nothing matched".
     func testRestingAndNoHitsAreDifferentScreens() throws {
@@ -848,7 +863,7 @@ final class ScreenFixtureTests: XCTestCase {
         // nor a result, and it is still exactly one of them.
         try sweep(
             "photos-search",
-            ["hits-say-why", "no-hits", "resting"]
+            ["corrected", "hits-say-why", "no-hits", "resting"]
         ) { try Centraid_Screen_V1_PhotosSearchState(serializedBytes: $0).content != nil }
         try sweep(
             "photos-places",

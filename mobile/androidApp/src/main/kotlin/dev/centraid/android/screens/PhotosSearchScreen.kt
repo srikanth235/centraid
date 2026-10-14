@@ -122,13 +122,13 @@ public fun PhotosSearchScreen(
                     // `SEARCH_COPY.miss`). Centred, as the system draws "No
                     // Results".
                     Column(
-                        Modifier.fillMaxWidth().padding(top = 160.dp),
+                        Modifier.fillMaxWidth().padding(top = 160.dp).testTag("photos-search-no-match"),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(PhotosCopy.PHOTOS_SEARCH_NO_RESULTS, style = centraidType("title"), color = centraidColor("text"))
                         Text(
-                            "Nothing matches “${state.query}”.",
+                            PhotosCopy.PHOTOS_SEARCH_NO_MATCH_QUERY.replace("{query}", state.query),
                             style = centraidType("small"),
                             color = centraidColor("textSoft"),
                             textAlign = TextAlign.Center,

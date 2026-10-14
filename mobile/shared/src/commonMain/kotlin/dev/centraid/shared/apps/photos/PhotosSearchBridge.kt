@@ -1,7 +1,16 @@
 package dev.centraid.shared.apps.photos
 
+import centraid.core.v1.AppQueryRequest
+import centraid.core.v1.PhotosSearch
+import centraid.core.v1.PhotosSearchRequest
 import centraid.screen.v1.PhotosSearchEvent
 import centraid.screen.v1.PhotosSearchState
+import centraid.screen.v1.ReadFailure
+import centraid.screen.v1.SearchTopHit
+import dev.centraid.shared.screen.Reads
+import dev.centraid.shared.sync.AppQueryOutcome
+import dev.centraid.shared.sync.askCore
+import dev.centraid.shared.sync.deniedFailure
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
@@ -110,41 +119,129 @@ public class PhotosSearchBridge {
     }
 
     /**
-     * THE HITS: the entities, their counts, then the page they reach.
+     * THE HITS: the structured entities, the core's answer for the text and the
+     * albums, their counts, then the page they reach.
      *
      * An ENTITY leg that refuses ends the trip with a refusal — a search that
      * silently dropped "people" would answer fewer photographs than the member
      * asked for and say nothing. A COUNT leg that refuses does not: a door
      * with no number is still the door, and the view prints no count for zero.
+     *
+     * **THE CORRECTION (#1097, R-1097-27).** The core corrects only when asked,
+     * and is asked only when every leg here came back empty for the term as
+     * typed. If it hands back corrected words, the structured legs run again at
+     * those words, and the correction is KEPT only if the whole answer is then
+     * not empty; a correction that found nothing is not reported. A later page
+     * of an answer already corrected reads at the words the state holds.
      */
     private suspend fun hits(session: HomeSession, query: String, afterCursor: String?) {
         val core = session.shelf.core()
-        val words = PhotosSearchReads.tokens(query)
+        val settled = if (afterCursor == null) "" else host.state.value.search?.corrected.orEmpty()
+        val searched = settled.ifEmpty { query }
+
+        val exact = when (val read = legs(core, searched, allowCorrection = afterCursor == null)) {
+            is Legs.Refused -> return host.send(PhotosSearchReads.refused(read.failure))
+            is Legs.Answer -> read
+        }
+        var kept = exact
+        var corrected = settled
+        if (exact.corrected.isNotEmpty()) {
+            // The core corrected: the structured legs get the corrected words too.
+            val again = when (val read = legs(core, exact.corrected, allowCorrection = false, core = exact.core)) {
+                is Legs.Refused -> return host.send(PhotosSearchReads.refused(read.failure))
+                is Legs.Answer -> read
+            }
+            if (!again.isEmpty) {
+                kept = again
+                corrected = exact.corrected
+            }
+        }
+
+        val page = kept.reach.let { reach ->
+            PhotosSearchReads.hitsQuery(reach)?.let { statement ->
+                core.photosPage(
+                    statement,
+                    PhotosSearchReads.HIT_LIMIT,
+                    after = ScreenRuntime.decodeCursor(afterCursor),
+                )
+            }
+        }
+        if (page is PhotosPage.Refused) return host.send(PhotosSearchReads.refused(page.failure))
+        host.send(
+            PhotosSearchReads.hitsArrived(
+                query = query,
+                rows = (page as PhotosPage.Rows?)?.rows.orEmpty(),
+                nextCursor = (page as PhotosPage.Rows?)?.nextCursor,
+                topHits = kept.topHits,
+                labels = kept.labels,
+                corrected = corrected,
+            ),
+        )
+    }
+
+    /** What one run of every leg at one term came to. */
+    private sealed interface Legs {
+        data class Refused(val failure: ReadFailure) : Legs
+
+        class Answer(
+            val topHits: List<SearchTopHit>,
+            val labels: List<PhotosSearchReads.Named>,
+            val reach: PhotosSearchReads.Reach,
+            /** The words the core corrected the term to, or empty. */
+            val corrected: String,
+            /** The core's answer, kept so a corrected run does not ask it twice. */
+            val core: PhotosSearch,
+        ) : Legs {
+            /** No door, no label and no photograph: the grid has nothing to read. */
+            val isEmpty: Boolean get() = topHits.isEmpty() && labels.isEmpty() && reach.assetIds.isEmpty()
+        }
+    }
+
+    /**
+     * EVERY LEG AT ONE TERM: the people, places and labels from the page door,
+     * the photographs and albums from the core, then the counts the doors carry.
+     *
+     * With [core] given the core is not asked again: its answer was for these
+     * words already (the corrected run).
+     */
+    private suspend fun legs(
+        handle: dev.centraid.core.CentraidCore?,
+        term: String,
+        allowCorrection: Boolean,
+        core: PhotosSearch? = null,
+    ): Legs {
+        val words = PhotosSearchReads.tokens(term)
         val limit = PhotosSearchReads.ENTITY_LIMIT
 
-        val peopleRows = core.photosPage(PhotosSearchReads.peopleQuery(words), limit)
-        if (peopleRows is PhotosPage.Refused) return host.send(PhotosSearchReads.refused(peopleRows.failure))
-        val placeRows = core.photosPage(PhotosSearchReads.placesQuery(), PhotosSearchReads.PLACE_LIMIT)
-        if (placeRows is PhotosPage.Refused) return host.send(PhotosSearchReads.refused(placeRows.failure))
-        val albumRows = core.photosPage(PhotosSearchReads.albumsQuery(words), limit)
-        if (albumRows is PhotosPage.Refused) return host.send(PhotosSearchReads.refused(albumRows.failure))
-        val labelRows = core.photosPage(PhotosSearchReads.labelsQuery(words), limit)
-        if (labelRows is PhotosPage.Refused) return host.send(PhotosSearchReads.refused(labelRows.failure))
+        val peopleRows = handle.photosPage(PhotosSearchReads.peopleQuery(words), limit)
+        if (peopleRows is PhotosPage.Refused) return Legs.Refused(peopleRows.failure)
+        val placeRows = handle.photosPage(PhotosSearchReads.placesQuery(), PhotosSearchReads.PLACE_LIMIT)
+        if (placeRows is PhotosPage.Refused) return Legs.Refused(placeRows.failure)
+        val labelRows = handle.photosPage(PhotosSearchReads.labelsQuery(words), limit)
+        if (labelRows is PhotosPage.Refused) return Legs.Refused(labelRows.failure)
 
         val people = PhotosSearchReads.people((peopleRows as PhotosPage.Rows).rows)
-        val places = PhotosSearchReads.matchPlaces((placeRows as PhotosPage.Rows).rows, query)
+        val places = PhotosSearchReads.matchPlaces((placeRows as PhotosPage.Rows).rows, term)
             .let { it.copy(places = it.places.take(PhotosSearchReads.PER_KIND_CAP)) }
-        val albums = PhotosSearchReads.albums((albumRows as PhotosPage.Rows).rows)
         val labels = PhotosSearchReads.labels((labelRows as PhotosPage.Rows).rows)
 
-        val personCounts = count(core, PhotosSearchReads.personCountsQuery(people.map { it.id }), 1, 2)
+        // THE CORE, asked to correct only when nothing here found a thing: the
+        // people and the places are the legs the core cannot see.
+        val structuredEmpty = people.isEmpty() && places.places.isEmpty() && !places.unplaced && labels.isEmpty()
+        val answered = core ?: when (val read = askDoor(handle, term, correct = allowCorrection && structuredEmpty)) {
+            is CoreRead.Refused -> return Legs.Refused(read.failure)
+            is CoreRead.Answer -> read.search
+        }
+        val albums = PhotosSearchReads.albums(answered.albums)
+
+        val personCounts = count(handle, PhotosSearchReads.personCountsQuery(people.map { it.id }), 1, 2)
         val placeCounts = count(
-            core,
+            handle,
             PhotosSearchReads.placeCountsQuery(places.places.map { it.id }, places.unplaced),
             1,
             0,
         )
-        val albumCounts = count(core, PhotosSearchReads.albumCountsQuery(albums.map { it.id }), 1, 0)
+        val albumCounts = count(handle, PhotosSearchReads.albumCountsQuery(albums.map { it.id }), 1, 0)
         val topHits = PhotosSearchReads.topHits(
             people = people,
             personCounts = personCounts,
@@ -153,22 +250,41 @@ public class PhotosSearchBridge {
             albums = albums,
             albumCounts = albumCounts,
         )
-
-        val page = core.photosPage(
-            PhotosSearchReads.hitsQuery(words, PhotosSearchReads.reach(topHits, labels)),
-            PhotosSearchReads.HIT_LIMIT,
-            after = ScreenRuntime.decodeCursor(afterCursor),
+        return Legs.Answer(
+            topHits = topHits,
+            labels = labels,
+            reach = PhotosSearchReads.reach(topHits, labels, answered.asset_ids),
+            corrected = if (core == null) answered.corrected else "",
+            core = answered,
         )
-        if (page is PhotosPage.Refused) return host.send(PhotosSearchReads.refused(page.failure))
-        host.send(
-            PhotosSearchReads.hitsArrived(
-                query = query,
-                rows = (page as PhotosPage.Rows).rows,
-                nextCursor = page.nextCursor,
-                topHits = topHits,
-                labels = labels,
+    }
+
+    private sealed interface CoreRead {
+        data class Refused(val failure: ReadFailure) : CoreRead
+
+        data class Answer(val search: PhotosSearch) : CoreRead
+    }
+
+    /** `photos.search` of the core: the text and album legs, and the correction. */
+    private suspend fun askDoor(
+        handle: dev.centraid.core.CentraidCore?,
+        term: String,
+        correct: Boolean,
+    ): CoreRead {
+        val request = AppQueryRequest(
+            photos_search = PhotosSearchRequest(
+                term = term,
+                limit = PhotosSearchReads.TEXT_LIMIT,
+                correct = correct,
             ),
         )
+        return when (val outcome = askCore(handle, listOf(request))) {
+            is AppQueryOutcome.Answered ->
+                outcome.answers.firstOrNull()?.photos_search?.let(CoreRead::Answer)
+                    ?: CoreRead.Refused(Reads.refused("Centraid got no answer. Try again."))
+            is AppQueryOutcome.Denied -> CoreRead.Refused(deniedFailure(outcome.denial))
+            is AppQueryOutcome.Refused -> CoreRead.Refused(outcome.failure)
+        }
     }
 
     /** One count leg, or an empty count when there is nothing to count or it refused. */

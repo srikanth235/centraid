@@ -201,6 +201,7 @@ enum PhotosWords {
     static var photosSaveAsNewExplanation: String { PhotosCopy.shared.PHOTOS_SAVE_AS_NEW_EXPLANATION }
     static var photosSearchHint: String { PhotosCopy.shared.PHOTOS_SEARCH_HINT }
     static var photosSearchLibraryPlaceholder: String { PhotosCopy.shared.PHOTOS_SEARCH_LIBRARY_PLACEHOLDER }
+    static var photosSearchNoMatchQuery: String { PhotosCopy.shared.PHOTOS_SEARCH_NO_MATCH_QUERY }
     static var photosSearchNoMatchScope: String { PhotosCopy.shared.PHOTOS_SEARCH_NO_MATCH_SCOPE }
     static var photosSearchNoResults: String { PhotosCopy.shared.PHOTOS_SEARCH_NO_RESULTS }
     static var photosSearchPlaceholder: String { PhotosCopy.shared.PHOTOS_SEARCH_PLACEHOLDER }
@@ -436,6 +437,7 @@ enum PhotosWords {
     static let photosSaveAsNewExplanation = ""
     static let photosSearchHint = ""
     static let photosSearchLibraryPlaceholder = ""
+    static let photosSearchNoMatchQuery = ""
     static let photosSearchNoMatchScope = ""
     static let photosSearchNoResults = ""
     static let photosSearchPlaceholder = ""

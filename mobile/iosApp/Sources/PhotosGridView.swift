@@ -420,10 +420,11 @@ struct PhotosGridView: View {
         guard !(isLibrary && grid.selecting) else { return nil }
         let searching = state.destination == .search
         return SearchSlot(
-            field: Centraid_Screen_V1_SearchField.with {
-                $0.open = searching
-                $0.term = searching ? PhotosSearchStateView(data: shell.photosSearchState).query : ""
-            },
+            // THE MACHINE'S FIELD (#1097, R-1097-27): its term and the words
+            // its answer corrected, so the shared field draws "Showing results
+            // for". Whether it is OPEN is the grid's destination, which is this
+            // view's to state; none of it is decided here.
+            field: PhotosSearchStateView(data: shell.photosSearchState).field(open: searching),
             placeholder: grid.chrome.searchPlaceholder,
             onOpen: { shell.send(screen: "photos.grid", event: PhotosGridStateView.destinationEvent(.search)) },
             onTerm: { shell.send(screen: "photos.search", event: PhotosSearchStateView.queryEvent($0)) },

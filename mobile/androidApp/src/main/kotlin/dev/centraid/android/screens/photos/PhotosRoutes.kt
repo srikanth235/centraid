@@ -356,7 +356,14 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                             null
                         } else {
                             RoomSearch(
-                                field = SearchField(open_ = searching, term = if (searching) searchState.query else ""),
+                                // THE MACHINE'S FIELD (#1097, R-1097-27): its term and the words its answer
+                                // corrected, so the shared field draws "Showing results for". Whether it is
+                                // open is the grid's destination, stated here; nothing is decided.
+                                field = if (searching) {
+                                    (searchState.search ?: SearchField()).copy(open_ = true, term = searchState.query)
+                                } else {
+                                    SearchField()
+                                },
                                 placeholder = chrome.search_placeholder,
                                 onTerm = { query ->
                                     scope.launch {

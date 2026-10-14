@@ -416,6 +416,13 @@
       "binary": "contracts/screens/photos-places/no-places-but-unplaced.bin"
     },
     {
+      "case": "corrected",
+      "screen": "photos-search",
+      "type": "centraid.screen.v1.PhotosSearchState",
+      "textproto": "contracts/screens/photos-search/corrected.textproto",
+      "binary": "contracts/screens/photos-search/corrected.bin"
+    },
+    {
       "case": "hits-say-why",
       "screen": "photos-search",
       "type": "centraid.screen.v1.PhotosSearchState",

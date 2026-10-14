@@ -409,6 +409,20 @@ class ScreenFixtureSpec : StringSpec({
         (resting == noHits).shouldBeFalse()
     }
 
+    "photos-search: a corrected answer is the field's words, and the hits answer what was typed" {
+        // #1097, R-1097-27. The correction rides the shared field, which the
+        // kit draws as "Showing results for"; the hits still answer the TYPED
+        // words, so a reducer can tell a late page from a current one.
+        val corrected = search("corrected")
+        corrected.query shouldBe "sunscren"
+        corrected.search.shouldNotBeNull().corrected shouldBe "sunscreen"
+        corrected.search.shouldNotBeNull().term shouldBe "sunscren"
+        corrected.hits.shouldNotBeNull().query shouldBe "sunscren"
+        corrected.hits.shouldNotBeNull().cells.size shouldBe 1
+        // An exact answer carries no correction.
+        search("hits-say-why").search shouldBe null
+    }
+
     "photos-search: a match is a KIND and a name, never prose" {
         // Field 4 was `repeated string matched_on` and is now reserved. A
         // prose line made each shell compose its own sentence, which is how

@@ -1,0 +1,39 @@
+# A TYPO THE VAULT CORRECTED (#1097, R-1097-27).
+#
+# `query` is what the member typed and stays the screen's own; `search` is the
+# shared field's state, and `search.corrected` is the words the answer searched
+# instead. The kit's field draws "Showing results for “sunscreen”" from it, so
+# neither shell composes the line. The hits are the ones the corrected words
+# found, and `hits.query` is still the TYPED words: a reducer answers the field
+# it was asked for, and drops a page for a term the field has left.
+#
+# The oneof still holds exactly one of its four arms (`hits`); the correction is
+# not a fifth state and it is not carried by `hits`, because the field outlives
+# a page: a second page, or a re-read after a row moved, keeps the line.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+query: "sunscren"
+hits {
+  cells {
+    asset_id: "ast-0210"
+    thumbnail_path: "thumbs/ast-0210.jpg"
+    captured_at: "2026-03-07T11:05:00Z"
+    kind: KIND_PHOTO
+    held: HELD_ORIGINAL
+    original_hash: "bb22cc33dd44ee55ff6677889900aa11bb22cc33dd44ee55ff6677889900aa11"
+  }
+  matches {
+    kind: KIND_TITLE
+    value: "Sunscreen on the shelf"
+  }
+  query: "sunscren"
+}
+search {
+  open: true
+  term: "sunscren"
+  answered_term: "sunscren"
+  corrected: "sunscreen"
+}
