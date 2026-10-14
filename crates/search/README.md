@@ -34,13 +34,13 @@ A result is a `Target`: five strings and a snippet, every one read from a column
 
 ## What an index holds: the entity's own text and what is folded into it
 
-One probe per domain answers, so Home stays at seven. An index holds the base row's text columns and **columns folded in from other tables** (rung thirteen, [#1097](https://github.com/srikanth235/centraid/issues/1097)): a person's nickname, role, where they met, email and phone and memos; an event's place; a task's project; an expense's category, group, line items and memo. Triggers on the child tables re-index the parent, so a rename or an edit moves the hit, and a trashed parent stays out. A trashed profile's text and an expense's default `general` category are not folded, and a Locker memo reaches no index at all.
+One probe per domain answers, so Home stays at seven. An index holds the base row's text columns and **columns folded in from other tables** (rung thirteen, [#1097](https://github.com/srikanth235/centraid/issues/1097)): a person's nickname, role, where they met, email and phone and memos; an event's place; a task's project; an expense's category, group, line items and memo. Triggers on the child tables re-index the parent, so a rename or an edit moves the hit, and a trashed parent stays out. A trashed profile's text and an expense's default `general` category are not folded, and a Locker memo reaches no index at all. Locker has no index of its own either: `fts_locker_item` is retired, and neither does the People messaging model (`fts_social_thread`, `fts_social_message` are retired; chat history is `chat_*`). The vault keeps one index no door reads, `fts_core_collection`, for the containers follow-up.
 
 | Domain | Index column | Folded from |
 | --- | --- | --- |
 | people | `nickname`, `role`, `met` | `people_profile`, while it is not trashed |
 | people | `channels` | `social_contact_channel` `value` and `normalized_value` |
-| people | `memo` | `knowledge_annotation` on the party |
+| people | `memo` | `knowledge_annotation` on the party, and on every `core.activity` with a live `core_link` to it (an interaction's note, [R-1097-13](../../docs/decisions.md#the-owners-rulings-on-the-open-questions-1097)) |
 | agenda | `location` | `core_place.name` |
 | tasks | `project` | `schedule_project.name` |
 | tally | `category`, `group_name`, `items`, `memo` | the expense's category, `social_circle.name`, `tally_expense_line_item.description`, the expense's `knowledge_annotation` |

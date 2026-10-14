@@ -159,8 +159,9 @@ pub const CHAT_PROPOSALS_SQL: &str =
 /// read (a person's nickname, reach and memos; an event's place; a task's
 /// project; an expense's category, group, items and memo), with child-table
 /// triggers that re-index the parent. The rank weights are the search door's and
-/// not a row in the index (R1d). Five indexes no
-/// one reads leave, and each of the seven domain indexes gains a persistent
+/// not a row in the index (R1d). A note logged on an
+/// interaction folds into the memo of the person it is about (Q-1097-5). Nine
+/// indexes no one reads leave, and each of the seven domain indexes gains a persistent
 /// `fts5vocab` table for the correction pass. Every statement is guarded with
 /// IF EXISTS, because the suites wind a founded file back by pragma and climb
 /// again over this rung's own objects.

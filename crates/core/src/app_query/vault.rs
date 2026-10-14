@@ -418,6 +418,53 @@ mod tests {
         );
     }
 
+    /// A NOTE LOGGED ON AN INTERACTION FINDS ITS PERSON FROM HOME (#1097,
+    /// Q-1097-5): "lunch at Rao's" is the person's memo, so the person is a Home
+    /// hit, opening in People; an unrelated person is not, and a slip in the
+    /// note's word is corrected to it.
+    #[test]
+    fn an_interaction_note_finds_its_person_on_home() {
+        let scratch = Scratch::founded();
+        let ravi = scratch.run(
+            "people.add_person",
+            serde_json::json!({ "display_name": "Ravi Menon", "cadence_days": 30 }),
+        )["party_id"]
+            .as_str()
+            .expect("a party id")
+            .to_owned();
+        let other = scratch.run(
+            "people.add_person",
+            serde_json::json!({ "display_name": "Jake Bennett", "cadence_days": 30 }),
+        )["party_id"]
+            .as_str()
+            .expect("a party id")
+            .to_owned();
+        scratch.run(
+            "people.log_interaction",
+            serde_json::json!({ "party_id": ravi, "kind": "lunch", "text": "lunch at Rao's" }),
+        );
+        let parties = |found: wire::VaultSearch| -> Vec<(String, String)> {
+            found
+                .hits
+                .into_iter()
+                .filter(|hit| hit.entity == "core.party")
+                .map(|hit| (hit.app_id, hit.id))
+                .collect()
+        };
+        assert_eq!(
+            parties(scratch.search("lunch")),
+            [("people".to_owned(), ravi.clone())]
+        );
+        assert!(
+            !parties(scratch.search("rao"))
+                .iter()
+                .any(|(_, id)| *id == other)
+        );
+        let slipped = scratch.search("lnuch");
+        assert_eq!(slipped.corrected, "lunch");
+        assert_eq!(parties(slipped), [("people".to_owned(), ravi)]);
+    }
+
     /// A PHOTO OPENS AS ITS ASSET: the index answers its content item, and the
     /// hit carries the media asset Photos opens by; once that asset is in the
     /// trash the photo is no hit at all.

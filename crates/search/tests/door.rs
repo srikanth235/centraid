@@ -291,6 +291,29 @@ fn planted_rows() -> Vec<(&'static str, &'static str, &'static str)> {
     ]
 }
 
+/// A LOCKER INDEX THIS TEST PLANTS ITSELF.
+///
+/// Rung thirteen retired the vault's own `fts_locker_item` (Q-1097-1 (c)): no
+/// feature read it, and Locker has a walker of its own. The refusal below is
+/// structural, "the entity is not a domain", and a test of that has to be run
+/// against a vault where the entity COULD be answered, or it proves only that
+/// there was nothing to answer from. So the fixture makes the index the vault
+/// used to carry (the baseline's own shape, filled with the planted item's
+/// cleartext label columns) in the one place a test needs it. A door that
+/// listed `locker.item` as a domain would find the row and answer, and the
+/// refusals fail.
+fn with_a_locker_index(connection: &Connection) {
+    connection
+        .execute_batch(
+            "CREATE VIRTUAL TABLE fts_locker_item USING fts5(
+               item_id UNINDEXED, title, username, url,
+               tokenize = \"unicode61 remove_diacritics 2\");
+             INSERT INTO fts_locker_item(item_id, title, username, url)
+               SELECT item_id, title, username, url FROM locker_item;",
+        )
+        .expect("the planted locker index is made");
+}
+
 fn door(connection: &Connection) -> SqliteDoor<'_> {
     SqliteDoor::open(connection).expect("the door opens over the committed model")
 }
@@ -426,6 +449,7 @@ fn secrets_planted_in_every_sealed_column_never_reach_a_target() {
 #[test]
 fn an_entity_with_sealed_columns_is_not_a_domain_and_asking_is_a_refusal() {
     let connection = vault();
+    with_a_locker_index(&connection);
     let door = door(&connection);
     for entity in [
         "locker.item",
@@ -446,6 +470,7 @@ fn an_entity_with_sealed_columns_is_not_a_domain_and_asking_is_a_refusal() {
 #[test]
 fn the_locker_index_is_populated_and_still_unreachable() {
     let connection = vault();
+    with_a_locker_index(&connection);
     let indexed: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM fts_locker_item WHERE fts_locker_item MATCH '\"cabin\"*'",
@@ -745,6 +770,86 @@ fn a_person_is_found_by_nickname_role_where_they_met_email_phone_and_memo() {
     // A Locker memo is an annotation too, and it is in no domain's index.
     for entity in DOMAINS.iter().map(|domain| domain.entity) {
         assert_eq!(found(&door, entity, "zebrafish"), Vec::<String>::new());
+    }
+}
+
+/// An interaction with a note, linked to a person by the live edge
+/// `people.log_interaction` writes (Q-1097-5). The activity's kind concept is a
+/// row of its own because `core_activity.kind_concept_id` is a real reference.
+fn seed_interaction(connection: &Connection, owner: &str, with: &[&str]) -> rusqlite::Result<()> {
+    connection.execute(
+        "INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version, created_at)
+         VALUES ('scheme-act', 'urn:duaility:activity-kinds', 'Activity kinds', 'centraid', '1', ?1),
+                ('scheme-rel', 'urn:duaility:relations', 'Link relation types', 'centraid', '1', ?1)",
+        [NOW],
+    )?;
+    connection.execute(
+        "INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, created_at, updated_at)
+         VALUES ('concept-lunch', 'scheme-act', 'lunch', 'lunch', ?1, ?1),
+                ('concept-about', 'scheme-rel', 'about', 'About', ?1, ?1)",
+        [NOW],
+    )?;
+    connection.execute(
+        "INSERT INTO core_activity (activity_id, actor_party_id, kind_concept_id, started_at, created_at)
+         VALUES ('activity-1', ?1, 'concept-lunch', ?2, ?2)",
+        rusqlite::params![owner, NOW],
+    )?;
+    for (index, party) in with.iter().enumerate() {
+        connection.execute(
+            "INSERT INTO core_link
+               (link_id, from_type, from_id, to_type, to_id, relation_concept_id,
+                valid_from, valid_to, asserted_by, provenance_id, updated_at)
+             VALUES (?1, 'core.activity', 'activity-1', 'core.party', ?2, 'concept-about',
+                     ?3, NULL, 'owner', NULL, ?3)",
+            rusqlite::params![format!("link-{index}"), party, NOW],
+        )?;
+    }
+    connection.execute(
+        "INSERT INTO knowledge_annotation
+           (annotation_id, author_party_id, target_type, target_id, body_text, created_at)
+         VALUES ('annotation-act', ?1, 'core.activity', 'activity-1', 'lunch at Rao''s', ?2)",
+        rusqlite::params![owner, NOW],
+    )?;
+    Ok(())
+}
+
+/// THE NOTE LOGGED ON AN INTERACTION FINDS THE PERSON, through the door, and a
+/// slipped letter in it is corrected to the word the vault holds.
+#[test]
+fn an_interaction_note_finds_the_person_and_a_typo_in_it_is_corrected() {
+    let connection = vault();
+    seed_person(&connection);
+    connection
+        .execute(
+            "INSERT INTO core_party (party_id, kind, display_name, sort_name, created_at)
+             VALUES ('party-3', 'person', 'Asha Rao', 'Rao, Asha', ?1),
+                    ('party-4', 'person', 'Jake Bennett', 'Bennett, Jake', ?1)",
+            [NOW],
+        )
+        .expect("two more people are inserted");
+    seed_interaction(&connection, "party-1", &["party-2", "party-3"])
+        .expect("the interaction is inserted");
+    let door = door(&connection);
+    for query in ["lunch", "lunch at rao", "rao's"] {
+        let mut people = found(&door, "core.party", query);
+        people.sort();
+        assert_eq!(
+            people,
+            ids(["party-2", "party-3"]),
+            "`{query}` finds both participants and no one else"
+        );
+    }
+    // The vocabulary holds the folded word, so a slip in it is corrected.
+    assert_eq!(found(&door, "core.party", "lnuch"), Vec::<String>::new());
+    assert_eq!(
+        corrected(&door, &["core.party"], "lnuch").as_deref(),
+        Some("lunch")
+    );
+    // The note is the person's, so no other domain finds it.
+    for entity in DOMAINS.iter().map(|domain| domain.entity) {
+        if entity != "core.party" {
+            assert_eq!(found(&door, entity, "lunch"), Vec::<String>::new());
+        }
     }
 }
 
@@ -1425,6 +1530,7 @@ fn a_word_any_named_domain_holds_is_known() {
 #[test]
 fn an_entity_that_is_not_a_domain_is_a_refusal_for_a_correction_too() {
     let connection = vault();
+    with_a_locker_index(&connection);
     let door = door(&connection);
     for entity in [
         "locker.item",
@@ -1448,6 +1554,7 @@ fn an_entity_that_is_not_a_domain_is_a_refusal_for_a_correction_too() {
 #[test]
 fn a_word_only_the_locker_index_holds_is_never_offered() {
     let connection = vault();
+    with_a_locker_index(&connection);
     let in_locker: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM fts_locker_item WHERE fts_locker_item MATCH '\"booking\"*'",

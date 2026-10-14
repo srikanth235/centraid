@@ -138,6 +138,62 @@ impl World {
         )
     }
 
+    // --- interactions (Q-1097-5) ---
+
+    /// An interaction logged with the real command, which writes the
+    /// `core_activity`, its live `about` link onto the party and, because there
+    /// is text, a `knowledge_annotation` on the activity. Returns the activity.
+    fn interaction(&self, party: &str, text: &str) -> String {
+        self.id(
+            "people.log_interaction",
+            json!({ "party_id": party, "kind": "lunch", "text": text }),
+            "interaction_id",
+        )
+    }
+
+    /// The live `about` link of an activity onto a party.
+    fn link_of(&self, activity: &str, party: &str) -> String {
+        self.vault()
+            .read(|connection| {
+                Ok(connection.query_row(
+                    "SELECT link_id FROM core_link
+                      WHERE from_type = 'core.activity' AND from_id = ?1
+                        AND to_type = 'core.party' AND to_id = ?2",
+                    [activity, party],
+                    |row| row.get::<_, String>(0),
+                )?)
+            })
+            .expect("the activity is linked to the party")
+    }
+
+    /// A second participant: the same `about` edge onto another party, as an
+    /// import or a group meeting would write it. No command in this crate links
+    /// an activity (`core.link_entities` allow-lists no activity), so the fixture
+    /// writes the row the way `people.log_interaction` does.
+    fn also_about(&self, activity: &str, party: &str) -> String {
+        let first: String = self
+            .vault()
+            .read(|connection| {
+                Ok(connection.query_row(
+                    "SELECT relation_concept_id FROM core_link
+                      WHERE from_type = 'core.activity' AND from_id = ?1",
+                    [activity],
+                    |row| row.get(0),
+                )?)
+            })
+            .expect("the activity has an edge to copy the relation from");
+        let id = self.vault().ids().next();
+        let now = self.vault().clock().now_text();
+        self.execute_sql(
+            "INSERT INTO core_link
+               (link_id, from_type, from_id, to_type, to_id, relation_concept_id,
+                valid_from, valid_to, asserted_by, provenance_id, updated_at)
+             VALUES (?1, 'core.activity', ?2, 'core.party', ?3, ?4, ?5, NULL, 'owner', NULL, ?5)",
+            &[&id, &activity, &party, &first, &now],
+        );
+        id
+    }
+
     // --- agenda ---
 
     /// A calendar and a place have no command in this crate that makes one
@@ -363,10 +419,21 @@ fn expected_parties(connection: &Connection) -> Indexed {
               WHERE party_id = ?1",
             &party,
         );
+        // The party's own memos, and the notes of every interaction with a
+        // live `about` edge onto it (Q-1097-5): an activity counted once per
+        // party however many edges it has.
         let memo = strings(
             connection,
             "SELECT body_text FROM knowledge_annotation
-              WHERE target_type = 'core.party' AND target_id = ?1",
+              WHERE target_type = 'core.party' AND target_id = ?1
+             UNION ALL
+             SELECT an.body_text
+               FROM knowledge_annotation an
+               JOIN (SELECT DISTINCT from_id FROM core_link
+                      WHERE from_type = 'core.activity' AND to_type = 'core.party'
+                        AND to_id = ?1 AND valid_to IS NULL) edge
+                 ON edge.from_id = an.target_id
+              WHERE an.target_type = 'core.activity'",
             &party,
         );
         out.insert(
@@ -606,6 +673,174 @@ fn a_memo_on_a_person_finds_the_person() {
         );
     }
     assert_indexes_match(world.vault());
+}
+
+// ---------------------------------------------------------------------------
+// 1b. An interaction's note is found under the person (Q-1097-5).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_logged_interaction_note_finds_its_person_and_every_participant() {
+    let world = World::new("cov-interaction");
+    let ravi = world.person("Ravi Menon", None, None);
+    let asha = world.person("Asha Rao", None, None);
+    let unrelated = world.person("Jake Bennett", None, None);
+    let lunch = world.interaction(&ravi, "lunch at Rao's, talked about the move");
+    // A note on the party itself stays in the same column beside it.
+    world.run(
+        "people.add_note",
+        json!({ "party_id": ravi, "text": "Allergic to peanuts" }),
+    );
+
+    for word in ["lunch", "rao", "move", "peanuts"] {
+        assert_eq!(
+            world.hits("fts_core_party", &col("memo", word)),
+            set([&ravi]),
+            "`{word}` is in Ravi's memo"
+        );
+    }
+    // The words are Ravi's alone until someone else is on the interaction.
+    assert_eq!(
+        world.hits("fts_core_party", "\"lunch at rao\""),
+        set([&ravi])
+    );
+    assert_indexes_match(world.vault());
+
+    // A SECOND PARTICIPANT finds it too, and an unrelated party never does.
+    world.also_about(&lunch, &asha);
+    assert_eq!(
+        world.hits("fts_core_party", &col("memo", "lunch")),
+        set([&ravi, &asha])
+    );
+    assert!(
+        !world
+            .hits("fts_core_party", &col("memo", "lunch"))
+            .contains(&unrelated)
+    );
+    assert_eq!(world.hits("fts_core_party", "lunch"), set([&ravi, &asha]));
+    assert_indexes_match(world.vault());
+}
+
+#[test]
+fn removing_the_link_or_the_note_or_the_activity_drops_the_hit() {
+    let world = World::new("cov-interaction-drop");
+    let ravi = world.person("Ravi Menon", None, None);
+    let asha = world.person("Asha Rao", None, None);
+
+    // ENDING the link (the command that ends a relationship): only that
+    // participant loses the words.
+    let lunch = world.interaction(&ravi, "lunch at Rao's");
+    let asha_link = world.also_about(&lunch, &asha);
+    assert_eq!(
+        world.hits("fts_core_party", &col("memo", "lunch")),
+        set([&ravi, &asha])
+    );
+    world.run("core.unlink_entities", json!({ "link_id": asha_link }));
+    assert_eq!(
+        world.hits("fts_core_party", &col("memo", "lunch")),
+        set([&ravi]),
+        "an ended link stops contributing"
+    );
+    assert_indexes_match(world.vault());
+
+    // DELETING the link.
+    let ravi_link = world.link_of(&lunch, &ravi);
+    world.execute_sql("DELETE FROM core_link WHERE link_id = ?1", &[&ravi_link]);
+    assert_eq!(world.hits("fts_core_party", &col("memo", "lunch")), none());
+    assert_indexes_match(world.vault());
+
+    // DELETING the annotation (an annotation has no trash column; its removal
+    // is the delete).
+    let dinner = world.interaction(&ravi, "dinner with the Menon cousins");
+    assert_eq!(
+        world.hits("fts_core_party", &col("memo", "cousins")),
+        set([&ravi])
+    );
+    world.execute_sql(
+        "DELETE FROM knowledge_annotation
+          WHERE target_type = 'core.activity' AND target_id = ?1",
+        &[&dinner],
+    );
+    assert_eq!(
+        world.hits("fts_core_party", &col("memo", "cousins")),
+        none()
+    );
+    assert_indexes_match(world.vault());
+
+    // EDITING the annotation moves the words.
+    let brunch = world.interaction(&asha, "brunch at the Lisbon docks");
+    world.execute_sql(
+        "UPDATE knowledge_annotation SET body_text = 'swim at the beach'
+          WHERE target_type = 'core.activity' AND target_id = ?1",
+        &[&brunch],
+    );
+    assert_eq!(world.hits("fts_core_party", &col("memo", "brunch")), none());
+    assert_eq!(
+        world.hits("fts_core_party", &col("memo", "beach")),
+        set([&asha])
+    );
+    assert_indexes_match(world.vault());
+
+    // REMOVING THE ACTIVITY (an activity cannot be trashed; the entity's delete
+    // cascades its link and its note, each firing its own trigger).
+    let walk = world.interaction(&ravi, "walk along the canal");
+    assert_eq!(
+        world.hits("fts_core_party", &col("memo", "canal")),
+        set([&ravi])
+    );
+    world.execute_sql("DELETE FROM core_entity WHERE entity_id = ?1", &[&walk]);
+    assert_eq!(world.hits("fts_core_party", &col("memo", "canal")), none());
+    assert_indexes_match(world.vault());
+}
+
+#[test]
+fn a_merged_persons_interactions_move_to_the_survivor_and_a_purge_clears_them() {
+    let world = World::new("cov-interaction-merge");
+    let survivor = world.person("Ray", None, None);
+    let merged = world.person("Grandpa Ray", None, None);
+    world.interaction(&merged, "fishing at the reservoir");
+    assert_eq!(
+        world.hits("fts_core_party", &col("memo", "fishing")),
+        set([&merged])
+    );
+    world.run(
+        "core.merge_party",
+        json!({ "survivor_party_id": survivor, "merged_party_id": merged }),
+    );
+    assert_eq!(
+        world.hits("fts_core_party", &col("memo", "fishing")),
+        set([&survivor])
+    );
+    assert_indexes_match(world.vault());
+
+    world.run("people.trash_person", json!({ "party_id": survivor }));
+    world.run("people.purge_person", json!({ "party_id": survivor }));
+    assert_eq!(
+        world.hits("fts_core_party", &col("memo", "fishing")),
+        none()
+    );
+    assert_eq!(
+        tables_holding(world.vault(), "fishing"),
+        Vec::<String>::new(),
+        "no index, vocabulary or shadow table keeps a purged person's interaction note"
+    );
+    assert_indexes_match(world.vault());
+}
+
+#[test]
+fn an_interaction_notes_words_are_terms_of_the_party_vocabulary() {
+    // `Search::correct` reads this vocabulary; `crates/search/tests/door.rs`
+    // runs the correction through the door. Here the claim is that the folded
+    // word is a TERM with the document count a correction chooses by.
+    let world = World::new("cov-interaction-vocab");
+    let ravi = world.person("Ravi Menon", None, None);
+    world.interaction(&ravi, "lunch at Rao's");
+    let docs: i64 = world.count("SELECT doc FROM fts_core_party_vocab WHERE term = 'lunch'");
+    assert_eq!(docs, 1);
+    assert_eq!(
+        world.count("SELECT COUNT(*) FROM fts_core_party_vocab WHERE term = 'lnuch'"),
+        0
+    );
 }
 
 #[test]
@@ -1227,9 +1462,12 @@ fn a_locker_memo_is_in_no_index_and_no_vocabulary() {
             "a Locker memo's `{word}` is in an index, a vocabulary or a shadow table"
         );
     }
-    // And the Locker item's own index carries no vocabulary.
+    // And Locker has no index at all, so no vocabulary either: its index was
+    // retired with rung thirteen (Q-1097-1 (c)).
     assert_eq!(
-        world.count("SELECT COUNT(*) FROM sqlite_master WHERE name = 'fts_locker_item_vocab'"),
+        world.count(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'fts\\_locker%' ESCAPE '\\'"
+        ),
         0
     );
     assert_indexes_match(world.vault());
@@ -1276,7 +1514,8 @@ fn no_sealed_column_appears_in_any_fts_object_at_the_ladder_head() {
         "fts_core_party_vocab",
         "fts_core_party_from_knowledge_annotation_ai",
         "fts_tally_expense_from_tally_expense_line_item_au",
-        "fts_locker_item",
+        "fts_core_party_from_core_link_au",
+        "fts_core_collection",
     ] {
         assert!(
             fts_objects.iter().any(|object| object.name == named),
@@ -1338,7 +1577,7 @@ fn baseline_block(kind: &str, name: &str) -> String {
 }
 
 /// WIND A FOUNDED FILE BACK TO RUNG TWELVE: rung thirteen's objects leave, and
-/// the nine indexes it rebuilt or retired come back in the baseline's own text,
+/// the thirteen indexes it rebuilt or retired come back in the baseline's own text,
 /// empty — a file at rung twelve held them in that shape.
 fn wind_back_to_rung_twelve(path: &Path) {
     let raw = Connection::open(path).expect("the file opens");
@@ -1356,7 +1595,7 @@ fn wind_back_to_rung_twelve(path: &Path) {
             .collect::<rusqlite::Result<_>>()
             .expect("the schema reads")
     };
-    assert_eq!(rung_thirteen.len(), 7 + 19, "rung thirteen's own objects");
+    assert_eq!(rung_thirteen.len(), 7 + 22, "rung thirteen's own objects");
     let mut statements = String::from("BEGIN;\n");
     for (kind, name) in &rung_thirteen {
         statements.push_str(&format!("DROP {} {name};\n", kind.to_uppercase()));
@@ -1371,6 +1610,10 @@ fn wind_back_to_rung_twelve(path: &Path) {
         "fts_schedule_project",
         "fts_social_circle",
         "fts_knowledge_annotation",
+        "fts_core_transaction",
+        "fts_locker_item",
+        "fts_social_thread",
+        "fts_social_message",
     ];
     for fts in rebuilt {
         for suffix in ["ai", "au", "ad"] {
@@ -1384,9 +1627,63 @@ fn wind_back_to_rung_twelve(path: &Path) {
             statements.push_str(&baseline_block("trigger", &format!("{fts}_{suffix}")));
         }
     }
+    // The four triggers of other indexes that also wrote `fts_social_message`,
+    // in the baseline's own text.
+    for writer in SOCIAL_WRITERS {
+        statements.push_str(&format!("DROP TRIGGER IF EXISTS {writer};\n"));
+        statements.push_str(&baseline_block("trigger", writer));
+    }
     statements.push_str("PRAGMA user_version = 12;\nCOMMIT;\n");
     raw.execute_batch(&statements)
         .expect("the file is wound back to rung twelve");
+}
+
+/// The nine indexes rung thirteen retires (R2a).
+const RETIRED: [&str; 9] = [
+    "fts_people_profile",
+    "fts_core_place",
+    "fts_schedule_project",
+    "fts_social_circle",
+    "fts_knowledge_annotation",
+    "fts_core_transaction",
+    "fts_locker_item",
+    "fts_social_thread",
+    "fts_social_message",
+];
+
+/// The one index kept, unread, for containers as results of their own
+/// (Q-1097-2). Chat history is `chat_thread` and `chat_message`, not the
+/// People messaging model `fts_social_*` indexed, so those two are retired.
+const KEPT_FOR_FOLLOW_UPS: [&str; 1] = ["fts_core_collection"];
+
+/// The triggers of OTHER indexes that also wrote `fts_social_message`: a body's
+/// text or a representation arriving re-indexes every note, document and
+/// message that owns it. Rung thirteen creates them again without the message.
+const SOCIAL_WRITERS: [&str; 4] = [
+    "trg_fts_content_text_ai",
+    "trg_fts_content_text_au",
+    "trg_fts_representation_ai",
+    "trg_fts_representation_au",
+];
+
+/// Every schema object an index leaves behind if it is not fully gone: its
+/// table, the FTS5 shadow tables (`_data`, `_idx`, `_content`, `_docsize`,
+/// `_config`) and its triggers, which are all named `<index>` or `<index>_…`.
+fn remaining_objects(vault: &Vault, fts: &str) -> Vec<String> {
+    vault
+        .read(|connection| {
+            let mut statement = connection.prepare(
+                r"SELECT name FROM sqlite_master
+                   WHERE name = ?1 OR name LIKE ?2 ESCAPE '\'
+                   ORDER BY name",
+            )?;
+            let like = format!("{}\\_%", fts.replace('_', "\\_"));
+            let names = statement
+                .query_map([fts, &like], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(names)
+        })
+        .expect("the schema reads")
 }
 
 #[test]
@@ -1404,6 +1701,7 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
         "people.add_note",
         json!({ "party_id": ravi, "text": "loves kayaking" }),
     );
+    world.interaction(&ravi, "lunch at Rao's");
     let trashed = world.person("Old Friend", Some("Zed"), None);
     world.run("people.trash_person", json!({ "party_id": trashed }));
     let event = world.event(&calendar, "Team offsite", Some(&place));
@@ -1445,6 +1743,8 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
         ("fts_core_party", "met", "goa", &ravi),
         ("fts_core_party", "channels", "ravi@example.org", &ravi),
         ("fts_core_party", "memo", "kayaking", &ravi),
+        // An interaction's note, logged before the rung, is backfilled too.
+        ("fts_core_party", "memo", "lunch", &ravi),
         ("fts_core_event", "location", "lisbon", &event),
         ("fts_schedule_task", "project", "kitchen", &task),
         ("fts_tally_expense", "category", "utilities", &expense),
@@ -1486,24 +1786,55 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
     // are held to as well.
     assert_indexes_match(&migrated);
 
-    // The retired indexes are gone, with their triggers.
-    for retired in [
-        "fts_people_profile",
-        "fts_core_place",
-        "fts_schedule_project",
-        "fts_social_circle",
-        "fts_knowledge_annotation",
-    ] {
-        let left: i64 = migrated
+    // The retired indexes are gone: the table, its FTS5 shadow tables and its
+    // triggers. Seven were retired (R2a): five whose text is folded, and two
+    // (Q-1097-1 (c)) that nothing read.
+    for retired in RETIRED {
+        assert_eq!(
+            remaining_objects(&migrated, retired),
+            Vec::<String>::new(),
+            "{retired} is still in the file"
+        );
+    }
+    // NO OBJECT AT ALL STILL NAMES A RETIRED INDEX: a trigger of another index
+    // that inserted into one would fail the statement that fired it. The four
+    // that did (`SOCIAL_WRITERS`) were created again without it.
+    for retired in RETIRED {
+        let naming: Vec<String> = migrated
             .read(|connection| {
-                Ok(connection.query_row(
-                    "SELECT COUNT(*) FROM sqlite_master WHERE name = ?1 OR name LIKE ?2",
-                    [retired, &format!("{retired}\\_%")],
-                    |row| row.get(0),
-                )?)
+                let mut statement = connection.prepare(
+                    "SELECT name FROM sqlite_master WHERE instr(sql, ?1) > 0 ORDER BY name",
+                )?;
+                let names = statement
+                    .query_map([retired], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                Ok(names)
             })
             .expect("the schema reads");
-        assert_eq!(left, 0, "{retired} is still in the file");
+        assert_eq!(
+            naming,
+            Vec::<String>::new(),
+            "an object still names {retired}"
+        );
+    }
+    for writer in SOCIAL_WRITERS {
+        assert_eq!(
+            remaining_objects(&migrated, writer)
+                .first()
+                .map(String::as_str),
+            Some(writer),
+            "{writer} is gone"
+        );
+    }
+    // The kept one is whole: the table, its five shadow tables and its three
+    // triggers.
+    for kept in KEPT_FOR_FOLLOW_UPS {
+        let objects = remaining_objects(&migrated, kept);
+        assert_eq!(
+            objects.len(),
+            1 + 5 + 3,
+            "{kept} lost objects at the climb: {objects:?}"
+        );
     }
     // The triggers work on the migrated file as they do on a founded one.
     let registry = Registry::with_system_commands().expect("the registry builds");

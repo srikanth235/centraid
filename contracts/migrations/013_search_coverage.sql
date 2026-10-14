@@ -16,7 +16,7 @@
 -- found nothing, in the app and on Home, because the text lived in a table whose
 -- index nothing read. This rung moves that text into the index the door DOES
 -- read, so one probe per domain still answers (Home stays at seven), and it
--- retires the indexes nothing reads whose text is now folded in.
+-- retires nine indexes nothing reads (R2a).
 --
 -- ## R1 — an entity's index folds in its attribute text
 --
@@ -29,7 +29,11 @@
 --                                             normalized_value of the party
 --                     + memo                  every knowledge_annotation on the
 --                                             party (target_type 'core.party',
---                                             written by `people.add_note`)
+--                                             written by `people.add_note`), and
+--                                             on every activity with a live
+--                                             core_link to the party (target_type
+--                                             'core.activity', written by
+--                                             `people.log_interaction`)
 --   fts_core_event    + location              core_place.name of location_place_id
 --   fts_schedule_task + project               schedule_project.name of project_id
 --   fts_tally_expense + category              the category, unless it is 'general'
@@ -86,17 +90,24 @@
 -- 'locker.item', written in plaintext on purpose (`commands/locker.rs`
 -- `replace_memo`). Locker is not a search domain (D-1020-N1), and
 -- every fold and every trigger here selects its annotations by target_type, so
--- that memo reaches no index and no vocabulary. `fts_locker_item` is untouched.
+-- that memo reaches no index and no vocabulary. `fts_locker_item` is retired
+-- below (R2a): Locker has an index nothing reads and a walker of its own.
 --
 -- ## R2a — what is retired
 --
--- Five indexes had writers and no reader (`rg -l "fts_<name>\b" --glob '!*.sql'`
--- finds nothing for any of them), and the text of each is folded above:
--- `fts_people_profile`, `fts_core_place`, `fts_schedule_project`,
--- `fts_social_circle` and `fts_knowledge_annotation`, with their fifteen
--- triggers. `fts_core_collection`, `fts_core_transaction`, `fts_social_thread`,
--- `fts_social_message` and `fts_locker_item` stay as they were: containers,
--- chat history and Locker are not domains yet.
+-- Nine indexes had writers and no reader (`rg -l "fts_<name>\b" --glob '!*.sql'`
+-- finds nothing for any of them but one test each for two), and the text of the
+-- first five is folded above: `fts_people_profile`, `fts_core_place`,
+-- `fts_schedule_project`, `fts_social_circle` and `fts_knowledge_annotation`,
+-- with their fifteen triggers. The owner chose (Q-1097-1 (c), widened) to retire
+-- four more: `fts_core_transaction` and `fts_locker_item` (no feature is
+-- proposed to read either, and Locker has its own walker) and
+-- `fts_social_thread` and `fts_social_message`, which index the People
+-- messaging model (`social_thread`, `social_message`) that has no screen; the
+-- Chat tab is `chat_thread` and `chat_message`, which a later lane indexes. The
+-- door test that proved `locker.item` is no domain now plants its own table.
+-- `fts_core_collection` stays as it was: containers are the follow-up
+-- (Q-1097-2) that would read it.
 --
 -- ## R3 — a vocabulary for each domain
 --
@@ -144,6 +155,236 @@ DROP TRIGGER IF EXISTS fts_knowledge_annotation_au;
 DROP TRIGGER IF EXISTS fts_knowledge_annotation_ad;
 DROP TABLE IF EXISTS fts_knowledge_annotation;
 
+DROP TRIGGER IF EXISTS fts_core_transaction_ai;
+DROP TRIGGER IF EXISTS fts_core_transaction_au;
+DROP TRIGGER IF EXISTS fts_core_transaction_ad;
+DROP TABLE IF EXISTS fts_core_transaction;
+
+DROP TRIGGER IF EXISTS fts_locker_item_ai;
+DROP TRIGGER IF EXISTS fts_locker_item_au;
+DROP TRIGGER IF EXISTS fts_locker_item_ad;
+DROP TABLE IF EXISTS fts_locker_item;
+
+DROP TRIGGER IF EXISTS fts_social_message_ai;
+DROP TRIGGER IF EXISTS fts_social_message_au;
+DROP TRIGGER IF EXISTS fts_social_message_ad;
+DROP TABLE IF EXISTS fts_social_message;
+
+DROP TRIGGER IF EXISTS fts_social_thread_ai;
+DROP TRIGGER IF EXISTS fts_social_thread_au;
+DROP TRIGGER IF EXISTS fts_social_thread_ad;
+DROP TABLE IF EXISTS fts_social_thread;
+
+-- `fts_social_message` was also written by four triggers that belong to the
+-- other indexes (a body's text or a representation arriving re-indexes every
+-- note, document and message that owns it). Each is created again with the
+-- baseline's own text MINUS its last block, the message's: a trigger that
+-- inserts into a dropped table fails the statement that fired it.
+
+DROP TRIGGER IF EXISTS trg_fts_content_text_ai;
+CREATE TRIGGER trg_fts_content_text_ai AFTER INSERT ON core_content_text
+BEGIN
+  DELETE FROM fts_core_document
+   WHERE rowid IN (SELECT rowid FROM core_document WHERE current_content_id = NEW.content_id);
+  INSERT INTO fts_core_document (rowid, document_id, title, body)
+  SELECT d.rowid, d."document_id", d."title", (CASE WHEN COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")) IS NULL THEN NULL
+                 WHEN length(COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id"))) > 262144
+                 THEN substr(COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")), 1, 262144) || ' ...(truncated for search index)'
+                 ELSE COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")) END)
+    FROM core_document d
+   WHERE d.current_content_id = NEW.content_id AND d."deleted_at" IS NULL;
+  DELETE FROM fts_knowledge_note
+   WHERE rowid IN (SELECT rowid FROM knowledge_note WHERE "body_content_id" = NEW.content_id);
+  INSERT INTO fts_knowledge_note(rowid, note_id, title, body)
+  SELECT b.rowid, b."note_id", b."title", (CASE WHEN (SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id") IS NULL THEN NULL
+                 WHEN length((SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id")) > 262144
+                 THEN substr((SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id"), 1, 262144) || ' ...(truncated for search index)'
+                 ELSE (SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id") END) FROM knowledge_note b
+   WHERE b."body_content_id" = NEW.content_id AND b."deleted_at" IS NULL;
+END;
+
+DROP TRIGGER IF EXISTS trg_fts_content_text_au;
+CREATE TRIGGER trg_fts_content_text_au AFTER UPDATE ON core_content_text
+BEGIN
+  DELETE FROM fts_core_document
+   WHERE rowid IN (SELECT rowid FROM core_document WHERE current_content_id = NEW.content_id);
+  INSERT INTO fts_core_document (rowid, document_id, title, body)
+  SELECT d.rowid, d."document_id", d."title", (CASE WHEN COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")) IS NULL THEN NULL
+                 WHEN length(COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id"))) > 262144
+                 THEN substr(COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")), 1, 262144) || ' ...(truncated for search index)'
+                 ELSE COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")) END)
+    FROM core_document d
+   WHERE d.current_content_id = NEW.content_id AND d."deleted_at" IS NULL;
+  DELETE FROM fts_knowledge_note
+   WHERE rowid IN (SELECT rowid FROM knowledge_note WHERE "body_content_id" = NEW.content_id);
+  INSERT INTO fts_knowledge_note(rowid, note_id, title, body)
+  SELECT b.rowid, b."note_id", b."title", (CASE WHEN (SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id") IS NULL THEN NULL
+                 WHEN length((SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id")) > 262144
+                 THEN substr((SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id"), 1, 262144) || ' ...(truncated for search index)'
+                 ELSE (SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id") END) FROM knowledge_note b
+   WHERE b."body_content_id" = NEW.content_id AND b."deleted_at" IS NULL;
+END;
+
+DROP TRIGGER IF EXISTS trg_fts_representation_ai;
+CREATE TRIGGER trg_fts_representation_ai AFTER INSERT ON core_content_representation
+BEGIN
+  DELETE FROM fts_core_document
+   WHERE rowid IN (SELECT rowid FROM core_document WHERE document_id = NEW.owner_id)
+     AND NEW.owner_type = 'core.document';
+  INSERT INTO fts_core_document (rowid, document_id, title, body)
+  SELECT d.rowid, d."document_id", d."title", (CASE WHEN COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")) IS NULL THEN NULL
+                 WHEN length(COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id"))) > 262144
+                 THEN substr(COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")), 1, 262144) || ' ...(truncated for search index)'
+                 ELSE COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")) END)
+    FROM core_document d
+   WHERE d."document_id" = NEW.owner_id AND NEW.owner_type = 'core.document' AND d."deleted_at" IS NULL;
+  DELETE FROM fts_knowledge_note
+   WHERE rowid IN (SELECT rowid FROM knowledge_note WHERE "note_id" = NEW.owner_id)
+     AND NEW.owner_type = 'knowledge.note';
+  INSERT INTO fts_knowledge_note(rowid, note_id, title, body)
+  SELECT b.rowid, b."note_id", b."title", (CASE WHEN (SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id") IS NULL THEN NULL
+                 WHEN length((SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id")) > 262144
+                 THEN substr((SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id"), 1, 262144) || ' ...(truncated for search index)'
+                 ELSE (SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id") END) FROM knowledge_note b
+   WHERE b."note_id" = NEW.owner_id AND NEW.owner_type = 'knowledge.note' AND b."deleted_at" IS NULL;
+END;
+
+DROP TRIGGER IF EXISTS trg_fts_representation_au;
+CREATE TRIGGER trg_fts_representation_au AFTER UPDATE ON core_content_representation
+BEGIN
+  DELETE FROM fts_core_document
+   WHERE rowid IN (SELECT rowid FROM core_document WHERE document_id = NEW.owner_id)
+     AND NEW.owner_type = 'core.document';
+  INSERT INTO fts_core_document (rowid, document_id, title, body)
+  SELECT d.rowid, d."document_id", d."title", (CASE WHEN COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")) IS NULL THEN NULL
+                 WHEN length(COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id"))) > 262144
+                 THEN substr(COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")), 1, 262144) || ' ...(truncated for search index)'
+                 ELSE COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'text'),
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = d."current_content_id" AND dv.variant = 'transcript'),
+    (SELECT ct."body_text" FROM core_content_text ct
+      WHERE ct.content_id = d."current_content_id")) END)
+    FROM core_document d
+   WHERE d."document_id" = NEW.owner_id AND NEW.owner_type = 'core.document' AND d."deleted_at" IS NULL;
+  DELETE FROM fts_knowledge_note
+   WHERE rowid IN (SELECT rowid FROM knowledge_note WHERE "note_id" = NEW.owner_id)
+     AND NEW.owner_type = 'knowledge.note';
+  INSERT INTO fts_knowledge_note(rowid, note_id, title, body)
+  SELECT b.rowid, b."note_id", b."title", (CASE WHEN (SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id") IS NULL THEN NULL
+                 WHEN length((SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id")) > 262144
+                 THEN substr((SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id"), 1, 262144) || ' ...(truncated for search index)'
+                 ELSE (SELECT body_text FROM core_content_text
+            WHERE content_id = b."body_content_id") END) FROM knowledge_note b
+   WHERE b."note_id" = NEW.owner_id AND NEW.owner_type = 'knowledge.note' AND b."deleted_at" IS NULL;
+END;
+
 -- 2. People (R1): the party's index gains its profile, its reach and its memos.
 
 DROP TABLE IF EXISTS fts_core_party_vocab;
@@ -168,7 +409,11 @@ INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, r
          (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
             FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
          (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-           WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+           WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+              OR (an.target_type = 'core.activity' AND an.target_id IN (
+                    SELECT l.from_id FROM core_link l
+                     WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                       AND l.to_id = p.party_id AND l.valid_to IS NULL)))
     FROM core_party p
     LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL;
 
@@ -192,7 +437,11 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
      WHERE p.rowid = new.rowid;
@@ -213,7 +462,11 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
      WHERE p.rowid = new.rowid;
@@ -236,7 +489,11 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
      WHERE p.party_id = old.party_id;
@@ -259,7 +516,11 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
      WHERE p.party_id = new.party_id;
@@ -282,7 +543,11 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
      WHERE p.party_id = new.party_id;
@@ -300,7 +565,11 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
      WHERE p.party_id = old.party_id
@@ -324,7 +593,11 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
      WHERE p.party_id = old.party_id;
@@ -347,7 +620,11 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
      WHERE p.party_id = new.party_id;
@@ -370,7 +647,11 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
      WHERE p.party_id = new.party_id;
@@ -388,21 +669,39 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
      WHERE p.party_id = old.party_id
        AND old.party_id IS NOT new.party_id;
 END;
 
+-- A note on an INTERACTION is a `knowledge_annotation` with target_type
+-- 'core.activity' (`people.log_interaction`), and the person it is about is on
+-- the activity's live `core_link` to a `core.party` (the same edge the People
+-- sheet draws its interactions from and `people.purge_person` follows). Its
+-- text folds into that party's `memo` (Q-1097-5 (b)): a party is re-indexed by
+-- an annotation on it, by an annotation on any activity linked to it, and by
+-- the link itself being made, re-pointed, ended or deleted below. An activity
+-- cannot be trashed (`core_activity` has no `deleted_at`); its removal
+-- cascades its link and its annotation, each of which fires a trigger here.
+
 DROP TRIGGER IF EXISTS fts_core_party_from_knowledge_annotation_ad;
 CREATE TRIGGER fts_core_party_from_knowledge_annotation_ad
   AFTER DELETE ON knowledge_annotation
-  WHEN old.target_type = 'core.party'
+  WHEN old.target_type IN ('core.party', 'core.activity')
 BEGIN
   DELETE FROM fts_core_party WHERE rowid IN (
-    SELECT p.rowid FROM core_party p WHERE p.party_id = old.target_id
-         AND old.target_type = 'core.party');
+    SELECT p.rowid FROM core_party p
+     WHERE (old.target_type = 'core.party' AND p.party_id = old.target_id)
+        OR (old.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = old.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL)));
   INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
     SELECT p.rowid,
            p.party_id,
@@ -414,21 +713,32 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
-     WHERE p.party_id = old.target_id
-       AND old.target_type = 'core.party';
+     WHERE (old.target_type = 'core.party' AND p.party_id = old.target_id)
+        OR (old.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = old.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL));
 END;
 
 DROP TRIGGER IF EXISTS fts_core_party_from_knowledge_annotation_ai;
 CREATE TRIGGER fts_core_party_from_knowledge_annotation_ai
   AFTER INSERT ON knowledge_annotation
-  WHEN new.target_type = 'core.party'
+  WHEN new.target_type IN ('core.party', 'core.activity')
 BEGIN
   DELETE FROM fts_core_party WHERE rowid IN (
-    SELECT p.rowid FROM core_party p WHERE p.party_id = new.target_id
-         AND new.target_type = 'core.party');
+    SELECT p.rowid FROM core_party p
+     WHERE (new.target_type = 'core.party' AND p.party_id = new.target_id)
+        OR (new.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = new.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL)));
   INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
     SELECT p.rowid,
            p.party_id,
@@ -440,11 +750,18 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
-     WHERE p.party_id = new.target_id
-       AND new.target_type = 'core.party';
+     WHERE (new.target_type = 'core.party' AND p.party_id = new.target_id)
+        OR (new.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = new.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL));
 END;
 
 DROP TRIGGER IF EXISTS fts_core_party_from_knowledge_annotation_au;
@@ -452,8 +769,12 @@ CREATE TRIGGER fts_core_party_from_knowledge_annotation_au
   AFTER UPDATE OF target_type, target_id, body_text ON knowledge_annotation
 BEGIN
   DELETE FROM fts_core_party WHERE rowid IN (
-    SELECT p.rowid FROM core_party p WHERE p.party_id = new.target_id
-         AND new.target_type = 'core.party');
+    SELECT p.rowid FROM core_party p
+     WHERE (new.target_type = 'core.party' AND p.party_id = new.target_id)
+        OR (new.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = new.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL)));
   INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
     SELECT p.rowid,
            p.party_id,
@@ -465,15 +786,25 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
-     WHERE p.party_id = new.target_id
-       AND new.target_type = 'core.party';
+     WHERE (new.target_type = 'core.party' AND p.party_id = new.target_id)
+        OR (new.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = new.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL));
   DELETE FROM fts_core_party WHERE rowid IN (
-    SELECT p.rowid FROM core_party p WHERE p.party_id = old.target_id
-         AND old.target_type = 'core.party'
-         AND (old.target_type IS NOT new.target_type OR old.target_id IS NOT new.target_id));
+    SELECT p.rowid FROM core_party p
+     WHERE (old.target_type = 'core.party' AND p.party_id = old.target_id)
+        OR (old.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = old.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL)));
   INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
     SELECT p.rowid,
            p.party_id,
@@ -485,12 +816,136 @@ BEGIN
            (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
               FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
            (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'core.party' AND an.target_id = p.party_id)
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
       FROM core_party p
       LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
-     WHERE p.party_id = old.target_id
-       AND old.target_type = 'core.party'
-       AND (old.target_type IS NOT new.target_type OR old.target_id IS NOT new.target_id);
+     WHERE (old.target_type = 'core.party' AND p.party_id = old.target_id)
+        OR (old.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = old.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL));
+END;
+
+-- The link: an activity gains, loses or moves the party it is about.
+
+DROP TRIGGER IF EXISTS fts_core_party_from_core_link_ad;
+CREATE TRIGGER fts_core_party_from_core_link_ad
+  AFTER DELETE ON core_link
+  WHEN old.from_type = 'core.activity' AND old.to_type = 'core.party'
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = old.to_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = old.to_id;
+END;
+
+DROP TRIGGER IF EXISTS fts_core_party_from_core_link_ai;
+CREATE TRIGGER fts_core_party_from_core_link_ai
+  AFTER INSERT ON core_link
+  WHEN new.from_type = 'core.activity' AND new.to_type = 'core.party'
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = new.to_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = new.to_id;
+END;
+
+DROP TRIGGER IF EXISTS fts_core_party_from_core_link_au;
+CREATE TRIGGER fts_core_party_from_core_link_au
+  AFTER UPDATE OF from_type, from_id, to_type, to_id, valid_to ON core_link
+  WHEN (old.from_type = 'core.activity' AND old.to_type = 'core.party')
+    OR (new.from_type = 'core.activity' AND new.to_type = 'core.party')
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p
+     WHERE new.from_type = 'core.activity' AND new.to_type = 'core.party'
+       AND p.party_id = new.to_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE new.from_type = 'core.activity' AND new.to_type = 'core.party'
+       AND p.party_id = new.to_id;
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p
+     WHERE old.from_type = 'core.activity' AND old.to_type = 'core.party'
+       AND p.party_id = old.to_id
+       AND NOT (new.from_type = 'core.activity' AND new.to_type = 'core.party'
+                AND new.to_id = old.to_id));
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE old.from_type = 'core.activity' AND old.to_type = 'core.party'
+       AND p.party_id = old.to_id
+       AND NOT (new.from_type = 'core.activity' AND new.to_type = 'core.party'
+                AND new.to_id = old.to_id);
 END;
 
 -- 3. Agenda (R1): an event's index gains its place.

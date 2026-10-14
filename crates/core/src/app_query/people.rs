@@ -798,6 +798,31 @@ mod tests {
         assert!(nothing.people.is_empty() && nothing.corrected.is_empty());
     }
 
+    /// A NOTE LOGGED ON AN INTERACTION FINDS ITS PERSON IN PEOPLE'S OWN SEARCH
+    /// (#1097, Q-1097-5), and the person it was not logged for is not found.
+    #[test]
+    fn an_interaction_note_finds_the_person_it_was_logged_for() {
+        let scratch = Scratch::founded();
+        let ravi = scratch.add("Ravi Menon", 30);
+        let jake = scratch.add("Jake Bennett", 30);
+        scratch.run(
+            "people.log_interaction",
+            serde_json::json!({ "party_id": ravi, "kind": "lunch", "text": "lunch at Rao's" }),
+        );
+        let ids = |found: &wire::PeopleSearch| -> Vec<String> {
+            found
+                .people
+                .iter()
+                .map(|row| row.party_id.clone())
+                .collect()
+        };
+        assert_eq!(ids(&scratch.search("lunch")), std::slice::from_ref(&ravi));
+        assert!(!ids(&scratch.search("rao")).contains(&jake));
+        let slipped = scratch.search("lnuch");
+        assert_eq!(ids(&slipped), [ravi]);
+        assert_eq!(slipped.corrected, "lunch");
+    }
+
     /// RECONNECT IS MOST OVERDUE FIRST: sixty days after everyone was added, a
     /// weekly cadence is 53 days over and a monthly one 30; a cadence of 0 is
     /// never due and a 90-day one is not due yet. The roster's Due chip is the
