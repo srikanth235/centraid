@@ -5,7 +5,6 @@
 //! already holds. Over the same scenario they must answer the same rows, or
 //! the phone and the fine-tuning loop run one runtime over two worlds.
 
-use std::path::Path;
 
 use centraid_assist::native::world::World;
 use centraid_assist::native::{Door, meta::Kind};
@@ -72,10 +71,6 @@ fn pair() -> Pair {
     Pair { dir, core, copy }
 }
 
-fn harness(copy: &Path) -> Harness {
-    Harness::open(copy, SetClock::at(1_800_000_000_000), "door-test").expect("the harness opens")
-}
-
 /// The world each door loads, rendered whole: rows, edges, ledger, everything.
 fn world_of(door: &dyn Door) -> String {
     format!(
@@ -88,7 +83,10 @@ fn world_of(door: &dyn Door) -> String {
 fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
     let pair = pair();
     let core = pair.core.assist_door();
-    let harness = harness(&pair.copy);
+    // On the core's clock: Money's lines are held for the months around "now" (R-1099-81), so
+    // two doors on two clocks would hold two windows of the demo ledger.
+    let harness = Harness::open(&pair.copy, SetClock::at(core.now_ms()), "door-test")
+        .expect("the harness opens");
 
     // THE WHOLE WORLD, Locker off as on the phone: the 25 table reads the runtime makes at open.
     let from_core = world_of(&core);
@@ -296,7 +294,9 @@ fn money_reaches_the_world_through_the_core_door_as_signed_rows_inside_the_windo
     run(
         "money-1:0",
         "money.add_account",
-        serde_json::json!({"account_id": account, "name": "Everyday", "kind": "checking"}),
+        // The demo ledger (`example::seed_money`) already holds an "Everyday"; this account's
+        // lines are told apart from its by the account's own name.
+        serde_json::json!({"account_id": account, "name": "Door test", "kind": "checking"}),
     );
     let line = |id: String, external: &str, back: i64, minor: i64, direction: &str, name: &str| {
         serde_json::json!({
@@ -324,6 +324,12 @@ fn money_reaches_the_world_through_the_core_door_as_signed_rows_inside_the_windo
     let world = World::load_in(&door, false, true, None).expect("a world loads");
     let held: Vec<(&str, String)> = world
         .of_kind(Kind::Transaction)
+        .filter(|row| {
+            row.field("account")
+                == Some(&centraid_assist::native::world::Val::Text(
+                    "Door test".to_owned(),
+                ))
+        })
         .map(|row| {
             (
                 row.name.as_str(),
