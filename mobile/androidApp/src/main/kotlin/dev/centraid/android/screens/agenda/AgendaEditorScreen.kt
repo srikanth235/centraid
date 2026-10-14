@@ -45,6 +45,7 @@ import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.StatusLine
+import dev.centraid.android.kit.kitSwitchColors
 import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.screens.CivilDateDialog
 import dev.centraid.android.screens.CivilTimeDialog
@@ -273,7 +274,7 @@ private fun AllDayRow(label: String, on: Boolean, onToggle: (Boolean) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.weight(1f))
-        Switch(checked = on, onCheckedChange = null)
+        Switch(checked = on, onCheckedChange = null, colors = kitSwitchColors())
     }
 }
 

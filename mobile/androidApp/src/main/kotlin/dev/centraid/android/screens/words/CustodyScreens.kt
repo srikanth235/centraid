@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -37,10 +36,12 @@ import centraid.screen.v1.PairLaptopState
 import centraid.screen.v1.WordsShowEvent
 import centraid.screen.v1.WordsShowState
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.KitSpinner
 import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.screens.locker.LockerSeam
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.android.kit.RowSkeleton
 
 // THE MORE SHEET'S TWO CUSTODY SCREENS, DRAWN (#1047 E6): `words.show`
 // (`WordsShowBridge`) and `pair.laptop` (`PairLaptopBridge`). The Android twins
@@ -60,9 +61,10 @@ import dev.centraid.android.theme.centraidType
 // ---------------------------------------------------------------------------
 
 /**
- * ASK's primary is an INTENT: [onVerify] runs the owner check and the shell
- * answers `Verified` or `VerifyFailed`. This view never sends `Primary` from
- * ASK.
+ * The owner check is [onVerify]'s, answered `Verified` or `VerifyFailed`.
+ * While `check_now` `WordsSheets` runs it before this sheet is up; after a
+ * failed check, ASK is drawn and its primary runs it again. This view never
+ * sends `Primary` from ASK.
  */
 @Composable
 internal fun WordsShowScreen(
@@ -73,10 +75,13 @@ internal fun WordsShowScreen(
     WordsPage(testTag = "words-show", description = state.accessibility_label) {
         WordsHead(state.title, state.body)
         if (state.words.isNotEmpty()) ShownWords(state.words)
+        if (state.save_label.isNotEmpty() && state.words.isNotEmpty()) {
+            SaveCopyButton(state.save_label, state.words.map { it.word })
+        }
         WordsNotice(state.notice)
         if (state.phase == WordsShowState.Phase.PHASE_LOADING) {
             Box(Modifier.fillMaxWidth().testTag("words-show-loading"), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = centraidColor("textSoft"), modifier = Modifier.size(28.dp))
+                RowSkeleton(rows = 2, meta = false)
             }
         }
         WordsControls(
@@ -102,18 +107,24 @@ internal fun WordsShowScreen(
  * Locker's own authenticator table. [onAnswer] is called exactly once: true on
  * success; false on a terminal error or cancel — and a phone with no lock set
  * answers the prompt with `ERROR_NO_DEVICE_CREDENTIAL`, which is a failed
- * check, never a pass. A single unrecognised touch is not an answer: the
- * prompt stays up and says so itself.
+ * check, never a pass. Its second argument says the member dismissed the
+ * prompt themself, which closes words.show rather than drawing why. A single
+ * unrecognised touch is not an answer: the prompt stays up and says so itself.
  */
-internal fun ownerCheck(activity: FragmentActivity?, reason: String, onAnswer: (Boolean) -> Unit) {
+internal fun ownerCheck(activity: FragmentActivity?, reason: String, onAnswer: (Boolean, Boolean) -> Unit) {
     if (activity == null || reason.isEmpty()) {
-        onAnswer(false)
+        onAnswer(false, false)
         return
     }
     val callback = object : BiometricPrompt.AuthenticationCallback() {
-        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onAnswer(true)
+        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onAnswer(true, false)
 
-        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = onAnswer(false)
+        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = onAnswer(
+            false,
+            errorCode == BiometricPrompt.ERROR_USER_CANCELED ||
+                errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
+                errorCode == BiometricPrompt.ERROR_CANCELED,
+        )
     }
     val info = BiometricPrompt.PromptInfo.Builder()
         .setTitle(reason)
@@ -123,7 +134,7 @@ internal fun ownerCheck(activity: FragmentActivity?, reason: String, onAnswer: (
     val raised = runCatching {
         BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback).authenticate(info)
     }
-    if (raised.isFailure) onAnswer(false)
+    if (raised.isFailure) onAnswer(false, false)
 }
 
 // ---------------------------------------------------------------------------
@@ -131,31 +142,34 @@ internal fun ownerCheck(activity: FragmentActivity?, reason: String, onAnswer: (
 // ---------------------------------------------------------------------------
 
 /**
- * WAITING/FAILED: the paste field and, when the phone has a camera, the scan
- * control; PAIRING: a spinner; PAIRED: the safety number in its 12 groups of
+ * WAITING/FAILED: the scan control, then the paste field; PAIRING: a spinner; PAIRED: the safety number in its 12 groups of
  * 5, to compare with the laptop's terminal (W15-D5); NEEDS_WORDS: the door to
  * the words (`words_label`, the intent `WordsTapped` — `WordsSheets` opens the
  * re-key). The ticket is spent on first use and expires, so pasting is
  * allowed and the screen is not shielded (`screen.proto`). [onScan] is the
- * shell's camera, opened after `ScanTapped` is forwarded.
+ * shell's camera, opened after `ScanTapped` is forwarded; [onPhoto] its photo
+ * picker, which Scan opens instead on a phone with no camera.
  */
 @Composable
 internal fun PairLaptopScreen(
     state: PairLaptopState,
     onEvent: (PairLaptopEvent) -> Unit,
     onScan: () -> Unit,
+    onPhoto: () -> Unit,
 ) {
     WordsPage(testTag = "pair-laptop", description = state.accessibility_label) {
         WordsHead(state.title, state.body)
+        // SCAN FIRST, ON EVERY PHONE: the camera, or the photo picker where
+        // there is none (`scan_camera`).
+        if (state.scan_label.isNotEmpty()) {
+            QuietButton(label = state.scan_label, modifier = Modifier.fillMaxWidth(), testTag = "pair-scan") {
+                onEvent(PairLaptopEvent(scan = PairLaptopEvent.ScanTapped()))
+                if (state.scan_camera) onScan() else onPhoto()
+            }
+        }
         if (state.payload_label.isNotEmpty()) {
             PayloadField(state.payload_label, state.payload) { text ->
                 onEvent(PairLaptopEvent(typed = PairLaptopEvent.PayloadTyped(text = text)))
-            }
-        }
-        if (state.scan_label.isNotEmpty()) {
-            QuietButton(label = state.scan_label, testTag = "pair-scan") {
-                onEvent(PairLaptopEvent(scan = PairLaptopEvent.ScanTapped()))
-                onScan()
             }
         }
         if (state.safety_number.isNotEmpty()) {
@@ -184,8 +198,7 @@ internal fun PairLaptopScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CircularProgressIndicator(color = centraidColor("textSoft"), modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                Text(state.progress, style = centraidType("small"), color = centraidColor("textSoft"))
+                KitSpinner(state.progress)
             }
         }
         WordsControls(

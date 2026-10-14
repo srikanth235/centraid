@@ -30,6 +30,7 @@ public object BackupLines {
                 BackupLine(
                     frozen = true,
                     sentence = SharedCopy.BACKUP_LINE_FROZEN,
+                    status = SharedCopy.BACKUP_STATUS_FROZEN,
                     tone = BackupLine.Tone.TONE_URGENT,
                 ),
             )
@@ -42,6 +43,7 @@ public object BackupLines {
                     unpaired = true,
                     total = reading.contentTotal,
                     sentence = SharedCopy.BACKUP_LINE_UNPAIRED,
+                    status = SharedCopy.BACKUP_STATUS_UNPAIRED,
                     tone = BackupLine.Tone.TONE_ATTENTION,
                 ),
             )
@@ -55,6 +57,7 @@ public object BackupLines {
                     total = reading.contentTotal,
                     waiting = waiting,
                     sentence = SharedCopy.BACKUP_LINE_NEVER,
+                    status = SharedCopy.BACKUP_STATUS_NEVER,
                     detail = counts,
                     tone = BackupLine.Tone.TONE_ATTENTION,
                 ),
@@ -72,6 +75,8 @@ public object BackupLines {
                 total = reading.contentTotal,
                 waiting = waiting,
                 sentence = (if (whole) SharedCopy.BACKUP_LINE_DONE else SharedCopy.BACKUP_LINE_RECORDS)
+                    .replace("{when}", ago(acked, nowMs)),
+                status = (if (whole) SharedCopy.BACKUP_STATUS_DONE else SharedCopy.BACKUP_STATUS_CATCHING_UP)
                     .replace("{when}", ago(acked, nowMs)),
                 detail = counts,
                 // A MACHINE THAT IS NOT THE GATEWAY answered at its address

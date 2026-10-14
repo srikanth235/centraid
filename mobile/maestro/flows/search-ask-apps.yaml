@@ -1,0 +1,149 @@
+# An app's own search that finds nothing offers the assistant (#1097,
+# R-1097-28 to 30): Tasks, Notes and Photos draw the kit's one no-match state with
+# "Ask about “…”" (`search-ask-about`), the tap opens the Chat tab, and
+# Locker's search never draws it, because a term there can itself be a secret.
+#
+# A VAULT-HOLDING INSTALL, as `home-search.yaml`. Re-runnable: it relaunches
+# between apps and leaves nothing behind. LOCKER may open on its own gate
+# before it shows a search (a vault with no lock set up offers to make one):
+# the last step runs only once the search opener is on screen, and a locked
+# Locker has no search to draw Ask in, which is the same guarantee.
+#
+# THE ASSISTANT NEEDS A MODEL. On a phone with no model file the Chat tab
+# opens on its download step and the question is not sent (nothing to answer
+# it); on a ready one (a DEBUG build launched with
+# `SIMCTL_CHILD_CENTRAID_DEV_MODEL=<path to the .gguf>`) the question lands in
+# the thread, and the conditional step asserts it. Android has no Chat tab, so
+# its no-match states draw without the action and this flow is iOS only.
+appId: dev.centraid.Centraid
+name: search-ask-apps
+---
+# --- Tasks ----------------------------------------------------------------
+- launchApp
+- tapOn:
+    id: "home-tile-tasks"
+- tapOn:
+    id: "tasks-search-open"
+- inputText: "zzqxv"
+- extendedWaitUntil:
+    visible:
+      id: "search-ask-about"
+    timeout: 5000
+- assertVisible: "Ask about “zzqxv”"
+- tapOn:
+    id: "search-ask-about"
+- extendedWaitUntil:
+    visible:
+      id: "chat"
+    timeout: 5000
+- assertNotVisible:
+    id: "tasks-search"
+- runFlow:
+    when:
+      notVisible:
+        id: "chat-download"
+    commands:
+      - runFlow:
+          when:
+            notVisible: "Chat is not available here."
+          commands:
+            - extendedWaitUntil:
+                visible: "Find zzqxv"
+                timeout: 15000
+# --- Notes ----------------------------------------------------------------
+- launchApp
+- tapOn:
+    id: "home-tile-notes"
+# A first vault opens Notes on its starter note: Cancel goes back to the library.
+- runFlow:
+    when:
+      notVisible:
+        id: "notes-search-open"
+    commands:
+      - tapOn: "Cancel"
+- tapOn:
+    id: "notes-search-open"
+- inputText: "zzqxn"
+- extendedWaitUntil:
+    visible:
+      id: "search-ask-about"
+    timeout: 5000
+- assertVisible: "Ask about “zzqxn”"
+- tapOn:
+    id: "search-ask-about"
+- extendedWaitUntil:
+    visible:
+      id: "chat"
+    timeout: 5000
+- assertNotVisible:
+    id: "notes-search"
+- runFlow:
+    when:
+      notVisible:
+        id: "chat-download"
+    commands:
+      - runFlow:
+          when:
+            notVisible: "Chat is not available here."
+          commands:
+            - extendedWaitUntil:
+                visible: "Find zzqxn"
+                timeout: 15000
+# --- Photos ---------------------------------------------------------------
+# Photos' search is the door's too (R-1097-25..27), and its no-match block is
+# the same kit state with the same one action (R-1097-30).
+- launchApp
+- tapOn:
+    id: "home-tile-photos"
+- tapOn:
+    id: "photos-search-open"
+- inputText: "zzqxp"
+- extendedWaitUntil:
+    visible:
+      id: "search-ask-about"
+    timeout: 8000
+- assertVisible: "Ask about “zzqxp”"
+- tapOn:
+    id: "search-ask-about"
+- extendedWaitUntil:
+    visible:
+      id: "chat"
+    timeout: 5000
+- assertNotVisible:
+    id: "photos-search-no-match"
+- runFlow:
+    when:
+      notVisible:
+        id: "chat-download"
+    commands:
+      - runFlow:
+          when:
+            notVisible: "Chat is not available here."
+          commands:
+            - extendedWaitUntil:
+                visible: "Find zzqxp"
+                timeout: 15000
+# --- Locker: never ----------------------------------------------------------
+- launchApp
+# Locker's tile is last, under the fold.
+- scrollUntilVisible:
+    element:
+      id: "home-tile-locker"
+- tapOn:
+    id: "home-tile-locker"
+- assertNotVisible:
+    id: "search-ask-about"
+- runFlow:
+    when:
+      visible:
+        id: "locker-search-open"
+    commands:
+      - tapOn:
+          id: "locker-search-open"
+      - inputText: "zzqxl"
+      - extendedWaitUntil:
+          visible: "Nothing matches “zzqxl”"
+          timeout: 5000
+      - assertNotVisible:
+          id: "search-ask-about"
+      - assertNotVisible: "Ask about “zzqxl”"

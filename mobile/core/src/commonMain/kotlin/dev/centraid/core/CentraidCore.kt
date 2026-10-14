@@ -37,7 +37,7 @@ import kotlin.jvm.JvmStatic
  * whether that deployment had relays. There is nothing to dial.
  *
  * `crates/core-ffi`'s `config_from_json` reads exactly what is left — `path`,
- * `create`, `uiThreadName`, `expectedIdentity` — and IGNORES a `role` an older
+ * `create`, `uiThreadName`, `expectedIdentity` and the seed — and IGNORES a `role` an older
  * shell still sends rather than refusing the open, which is the version-skew
  * case the handshake exists for.
  */

@@ -5,6 +5,7 @@ import centraid.core.v1.ContentUrlRequest
 import centraid.core.v1.Envelope
 import centraid.core.v1.Request
 import dev.centraid.core.CoreOutcome
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.shell.HomeSession
 
 /**
@@ -89,32 +90,32 @@ public object ShelfCopies {
     // -----------------------------------------------------------------------
 
     /** Nothing of the pick is on this device. */
-    public const val NONE_HERE: String = "The originals are not on this device, so nothing was sent."
+    public const val NONE_HERE: String = "The originals are not on this phone, so nothing was sent."
 
     /** Some of the pick was not here. Said beside what did go. */
     public fun missingSentence(missing: Int): String = when (missing) {
         0 -> ""
-        1 -> "1 original is not on this device, so it was not included."
-        else -> "$missing originals are not on this device, so they were not included."
+        1 -> "1 original is not on this phone, so it was left out."
+        else -> "$missing originals are not on this phone, so they were left out."
     }
 
     /** "Download original" put [count] into the device's photos. */
     public fun savedSentence(count: Int, missing: Int): String {
         val saved = when (count) {
             0 -> ""
-            1 -> "Saved to this device's photos."
-            else -> "$count saved to this device's photos."
+            1 -> PhotosCopy.PHOTOS_EXPORT_SAVED
+            else -> "$count saved to your photos."
         }
         return listOf(saved, missingSentence(missing)).filter { it.isNotEmpty() }.joinToString(" ")
             .ifEmpty { NONE_HERE }
     }
 
     /** The platform refused the save or the copy. v0's words and its retry. */
-    public const val EXPORT_FAILED_SENTENCE: String = "Photographs not exported. Retry."
+    public const val EXPORT_FAILED_SENTENCE: String = "Photos not exported. Try again."
 
     /** A location that could not be taken out stops the whole send. */
     public const val LOCATION_NOT_REMOVABLE: String =
-        "The location could not be taken out of every file, so nothing was sent."
+        "Could not remove the location from every file, so nothing was sent."
 }
 
 /**

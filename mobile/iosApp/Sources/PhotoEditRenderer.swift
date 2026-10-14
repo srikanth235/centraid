@@ -49,7 +49,7 @@ enum PhotoEditRenderer {
     static func render(sourcePath: String, plan: Centraid_Screen_V1_PhotoEditPlan) -> Rendered {
         guard let bytes = try? Data(contentsOf: URL(fileURLWithPath: sourcePath)),
               let decoded = CIImage(data: bytes, options: [.applyOrientationProperty: true])
-        else { return .refused("Centraid could not open the original.") }
+        else { return .refused(PhotosWords.photosEditCannotOpen) }
 
         var image = decoded.transformed(
             by: CGAffineTransform(translationX: -decoded.extent.minX, y: -decoded.extent.minY)
@@ -149,6 +149,6 @@ enum PhotoEditRenderer {
     private static let previewEdge = 2048
     private static let jpegQuality = 0.92
     private static let minCrop = 0.1
-    private static let couldNotDraw = "Centraid could not draw the edit."
+    private static let couldNotDraw = PhotosWords.photosEditCannotDraw
 }
 #endif

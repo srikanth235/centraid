@@ -139,7 +139,7 @@ public object PhotoLightboxReads :
      */
     override fun arrived(rows: List<Row>, nextCursor: String?): PhotoLightboxEvent {
         val row = rows.firstOrNull() ?: return refused(
-            Reads.refused("Centraid could not find this photograph on this device."),
+            Reads.refused("Centraid could not find this photo on this phone."),
         )
         val kind = PhotosReads.kindOf(row.text(KIND))
         return PhotoLightboxEvent(

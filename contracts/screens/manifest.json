@@ -101,13 +101,6 @@
       "binary": "contracts/screens/agenda-event/rsvp-parked.bin"
     },
     {
-      "case": "all-apps-open",
-      "screen": "home",
-      "type": "centraid.screen.v1.HomeState",
-      "textproto": "contracts/screens/home/all-apps-open.textproto",
-      "binary": "contracts/screens/home/all-apps-open.bin"
-    },
-    {
       "case": "content",
       "screen": "home",
       "type": "centraid.screen.v1.HomeState",
@@ -421,6 +414,13 @@
       "type": "centraid.screen.v1.PlacesState",
       "textproto": "contracts/screens/photos-places/no-places-but-unplaced.textproto",
       "binary": "contracts/screens/photos-places/no-places-but-unplaced.bin"
+    },
+    {
+      "case": "corrected",
+      "screen": "photos-search",
+      "type": "centraid.screen.v1.PhotosSearchState",
+      "textproto": "contracts/screens/photos-search/corrected.textproto",
+      "binary": "contracts/screens/photos-search/corrected.bin"
     },
     {
       "case": "hits-say-why",

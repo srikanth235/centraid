@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import centraid.screen.v1.SearchField
 import centraid.screen.v1.TallyChoice
 import centraid.screen.v1.TallyEditorEvent
 import centraid.screen.v1.TallyEditorState
@@ -60,6 +61,7 @@ import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
+import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
@@ -84,20 +86,26 @@ internal fun TallyHomeScreen(state: TallyHomeState, onEvent: (TallyHomeEvent) ->
         trailing = chrome?.add_expense?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "tally-add") { onEvent(TallyHomeEvent(add_expense = TallyHomeEvent.AddExpense())) }
         },
+        // A DOOR, NOT A FIELD (R-CHROME-2): Tally's search is a page of its
+        // own, so the bar never opens here — its tap pushes `tally.search`.
+        search = chrome?.search_placeholder?.takeIf { it.isNotEmpty() && state.denied == null }?.let { placeholder ->
+            RoomSearch(
+                field = SearchField(),
+                placeholder = placeholder,
+                onTerm = {},
+                onClose = {},
+                onOpen = { onEvent(TallyHomeEvent(search_opened = TallyHomeEvent.SearchOpened())) },
+            )
+        },
         status = data?.status_line.orEmpty(),
         band = {
             AppBand(
                 app = "tally",
-                tabs = state.band.filter { it.key != "more" }.map {
+                tabs = state.band.map {
                     AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current)
                 },
                 onSelect = { key -> onEvent(TallyHomeEvent(band = TallyHomeEvent.BandPicked(key = key))) },
                 onHome = onHome,
-                onMore = if (state.band.any { it.key == "more" }) {
-                    { onEvent(TallyHomeEvent(band = TallyHomeEvent.BandPicked(key = "more"))) }
-                } else {
-                    null
-                },
             )
         },
     ) {
@@ -812,8 +820,8 @@ internal fun TallySettleUpScreen(
         SheetRoom(
             title = draft.transfer?.line.orEmpty(),
             onDismiss = dismiss,
-            primary = if (draft.can_record && draft.record_label.isNotEmpty()) {
-                SheetPrimary(label = draft.record_label, testTag = "tally-record") {
+            primary = if (draft.record_label.isNotEmpty()) {
+                SheetPrimary(label = draft.record_label, testTag = "tally-record", enabled = draft.can_record) {
                     onEvent(TallySettleUpEvent(record = TallySettleUpEvent.RecordTapped()))
                 }
             } else {
@@ -955,6 +963,7 @@ internal fun TallySearchScreen(
     state: TallySearchState,
     onEvent: (TallySearchEvent) -> Unit,
     onBack: () -> Unit,
+    onOpenContainer: (centraid.screen.v1.ChatCard) -> Unit = {},
 ) {
     val chrome = state.chrome
     PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back.orEmpty(), onBack = onBack) {
@@ -980,6 +989,10 @@ internal fun TallySearchScreen(
                         EmptyStateView(empty, onAction = null)
                     } else {
                         LazyColumn {
+                            // THE GROUPS WHOSE NAME MATCHED (#1097) come first, through the router.
+                            items(state.field_?.containers.orEmpty(), key = { "c-${it.entity}-${it.id}" }) { container ->
+                                dev.centraid.android.kit.SearchContainerRow(container, onOpen = onOpenContainer)
+                            }
                             item(key = "count") { StatusLine(search.count_label) }
                             items(search.results, key = { it.row_key }) { row ->
                                 TallyLedgerLine(row) {
@@ -1046,10 +1059,11 @@ internal fun TallyExportScreen(
                 } else {
                     item(key = "count") { StatusLine(export.count_label) }
                     item(key = "save") {
-                        if (export.can_save && chrome?.save.orEmpty().isNotEmpty()) {
+                        if (chrome?.save.orEmpty().isNotEmpty()) {
                             InkButton(
                                 label = chrome!!.save,
                                 testTag = "tally-export-save",
+                                enabled = export.can_save,
                                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
                             ) {
                                 if (state.save != TallyExportState.Save.SAVE_OPEN) onSave()

@@ -127,7 +127,7 @@ fn the_same_key_sent_twice_runs_the_command_twice() {
     let title = "Replay pin: water the cabin plants";
     assert!(
         tasks_titled(&sample, title).is_empty(),
-        "the title is new to the sample vault"
+        "the title is new to the scenario"
     );
 
     let first = send(&sample, "pin:1", title).expect("the first send answers");

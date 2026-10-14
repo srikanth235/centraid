@@ -164,7 +164,8 @@ const HASH_COLUMN_WRITERS: &[(&str, &str)] = &[
     ),
     (
         "vault/tests/common/mod.rs",
-        "`content_digest` over the body the fixture wrote",
+        "`content_digest` over the body the fixture wrote, and over the asset id \
+         of a stand-in photograph whose bytes nothing opens",
     ),
     (
         "vault/tests/docs_commands.rs",

@@ -127,6 +127,12 @@ class TasksSpec : StringSpec({
         landed.screen.quick_add.shouldNotBeNull().let {
             it.shown shouldBe true
             it.lands_label shouldBe "Lands in Today"
+            // THE HEADER'S PLUS (R-CHROME-1) is the quick add's door, and says so.
+            it.add_label shouldBe "Add task"
+        }
+        landed.screen.band.last().let {
+            it.key shouldBe "more"
+            it.icon_key shouldBe "MoreHoriz"
         }
     }
 
@@ -233,7 +239,7 @@ class TasksSpec : StringSpec({
         row.task_id shouldBe ID
         row.pending shouldBe true
         row.can_check shouldBe false
-        row.meta shouldBe "not in the vault yet"
+        row.meta shouldBe "not saved yet"
         // A SECOND ADD with nothing typed — the title cleared at the first, and the bridge mints a
         // new id for every gesture — files no second task (#1089).
         TasksHomeMachine.reduce(added.state, TasksHomeInput.Add("another-id")).effects.shouldBeEmpty()
@@ -374,7 +380,76 @@ class TasksSpec : StringSpec({
         closed.state.screen.data_.groups.single().title shouldBe "Today"
     }
 
-    "the band: the tab you are on is nothing; another reads; More is a sheet; its Search opens the field" {
+    "search: the words the core corrected are on the field, a new term clears them, and an answer for a closed search draws none (#1097)" {
+        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
+        val open = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
+        val typed = TasksHomeMachine.reduce(open, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "sunscren")))).state
+        val fixed = TasksHomeMachine.reduce(
+            typed,
+            TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Buy sunscreen")), corrected = "sunscreen")),
+        ).state
+        fixed.screen.search!!.corrected shouldBe "sunscreen"
+        // An exact answer says nothing was corrected.
+        TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Call Ana")))))
+            .state.screen.search!!.corrected shouldBe ""
+        // A NEW TERM clears it; the rows stay until its answer lands.
+        TasksHomeMachine.reduce(fixed, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "sunscree"))))
+            .state.screen.search!!.corrected shouldBe ""
+        // A SEARCH CLOSED WHILE ITS HITS WERE READING draws no correction.
+        val closed = TasksHomeMachine.reduce(typed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed()))).state
+        TasksHomeMachine.reduce(
+            closed,
+            TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Buy sunscreen")), corrected = "sunscreen")),
+        ).state.screen.search!!.corrected shouldBe ""
+        TasksHomeMachine.reduce(fixed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())))
+            .state.screen.search!!.corrected shouldBe ""
+    }
+
+    "search: a project found by name is a container on the field, with no nothing-found over it, cleared by a new term or a close, and a stale answer sets none (#1097)" {
+        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
+        val open = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
+        val typed = TasksHomeMachine.reduce(open, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "garden")))).state
+        val project = centraid.core.v1.ContainerHit(entity = "schedule.project", id = "p-1", title = "Garden", app_id = "tasks")
+        val answer = TasksHomeInput.Answered(search = TasksSearch(today = TODAY, containers = listOf(project)))
+        val found = TasksHomeMachine.reduce(typed, answer).state
+        val container = found.screen.search!!.containers.single()
+        container.kind_label shouldBe "Project"
+        container.target shouldBe centraid.screen.v1.ChatCard(app = "tasks", entity = "project", id = "p-1", title = "Garden")
+        // A project that matched is an answer: no tasks, and no nothing-found.
+        found.screen.data_!!.groups.shouldBeEmpty()
+        found.screen.data_.empty!!.headline shouldBe ""
+        TasksHomeMachine.reduce(found, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "gard"))))
+            .state.screen.search!!.containers.shouldBeEmpty()
+        TasksHomeMachine.reduce(found, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())))
+            .state.screen.search!!.containers.shouldBeEmpty()
+        val closed = TasksHomeMachine.reduce(typed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed()))).state
+        TasksHomeMachine.reduce(closed, answer).state.screen.search!!.containers.shouldBeEmpty()
+    }
+
+    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+        val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY, todayGroup(task("a", "Call Ana", due = TODAY, days = 0, landsToday = true))))
+        val open = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
+        val typed = TasksHomeMachine.reduce(open, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "zzqx")))).state
+        val none = TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY))).state
+        none.screen.search!!.ask shouldBe "Find zzqx"
+        none.screen.data_!!.empty!!.action_label shouldBe "Ask about “zzqx”"
+        // Anything found is no Ask: a task, or a project.
+        TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY, tasks = listOf(task("a", "Call Ana")))))
+            .state.screen.search!!.ask shouldBe ""
+        val project = centraid.core.v1.ContainerHit(entity = "schedule.project", id = "p-1", title = "Garden", app_id = "tasks")
+        TasksHomeMachine.reduce(typed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY, containers = listOf(project))))
+            .state.screen.search!!.ask shouldBe ""
+        // A new term, a close and a denial clear it; an answer for a closed search sets none.
+        TasksHomeMachine.reduce(none, view(TasksHomeEvent(search_term = TasksHomeEvent.SearchTermChanged(term = "zzq"))))
+            .state.screen.search!!.ask shouldBe ""
+        TasksHomeMachine.reduce(none, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed())))
+            .state.screen.search!!.ask shouldBe ""
+        TasksHomeMachine.reduce(none, TasksHomeInput.Denied(AppQueryDenial(code = "rcp_8802"))).state.screen.search!!.ask shouldBe ""
+        val closed = TasksHomeMachine.reduce(typed, view(TasksHomeEvent(search_closed = TasksHomeEvent.SearchClosed()))).state
+        TasksHomeMachine.reduce(closed, TasksHomeInput.Answered(search = TasksSearch(today = TODAY))).state.screen.search!!.ask shouldBe ""
+    }
+
+    "the band: the tab you are on is nothing; another reads; More is a sheet without Search; the search bar opens the field" {
         val landed = homeOn(home, board(TasksView.TASKS_VIEW_TODAY))
         TasksHomeMachine.reduce(landed, view(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = "today")))).effects.shouldBeEmpty()
         val moved = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = "upcoming"))))
@@ -386,14 +461,21 @@ class TasksSpec : StringSpec({
 
         val more = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(band = TasksHomeEvent.BandPicked(key = "more")))).state
         more.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_MORE
-        more.screen.more_rows.map { it.key } shouldBe listOf("anytime", "all", "logbook", "reminders", "catch_up", "search", "trash", "reads")
+        // SEARCH IS THE BAR UNDER THE TITLE, never a More row (R-CHROME-2).
+        more.screen.more_rows.map { it.key } shouldBe listOf("anytime", "all", "logbook", "reminders", "catch_up", "trash", "reads")
+        more.screen.more_rows.none { it.icon_key == "Search" } shouldBe true
         more.screen.band.single { it.current }.key shouldBe "more"
-        val searching = TasksHomeMachine.reduce(more, view(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = "search")))).state
-        searching.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_NONE
+        val searching = TasksHomeMachine.reduce(landed, view(TasksHomeEvent(search_opened = TasksHomeEvent.SearchOpened()))).state
         searching.screen.search!!.open_ shouldBe true
+        searching.screen.quick_add!!.shown shouldBe false
+        // A stale "search" row key is an intent no one routes: the sheet closes, the field stays shut.
+        TasksHomeMachine.reduce(more, view(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = "search")))).state.let {
+            it.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_NONE
+            it.screen.search?.open_ shouldBe false
+        }
         val reads = TasksHomeMachine.reduce(more, view(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = "reads")))).state
         reads.screen.sheet shouldBe TasksHomeState.Sheet.SHEET_READS
-        reads.screen.chrome!!.reads_facts.map { it.label } shouldBe listOf("Reads", "Writes", "Leaves this device")
+        reads.screen.chrome!!.reads_facts.map { it.label } shouldBe listOf("Reads", "Writes", "Leaves this phone")
         // An intent closes the sheet and changes nothing else.
         TasksHomeMachine.reduce(more, view(TasksHomeEvent(more_row = TasksHomeEvent.MoreRowPicked(key = "logbook")))).let {
             it.effects.shouldBeEmpty()
@@ -482,7 +564,7 @@ class TasksSpec : StringSpec({
         listOn(TasksListState.View.VIEW_REMINDERS, board(TasksView.TASKS_VIEW_REMINDERS)).screen.data_!!.empty!!.headline shouldBe "No open task has a reminder."
         val windowed = listOn(TasksListState.View.VIEW_ALL, board(TasksView.TASKS_VIEW_ALL, TasksGroup(kind = TasksGroupKind.TASKS_GROUP_KIND_UNDATED, key = "u", tasks = listOf(task("a", "Idea")))).copy(truncated = true, window = 100))
         windowed.screen.data_!!.let {
-            it.window_label shouldBe "100 tasks · this is a window, not everything open"
+            it.window_label shouldBe "100 tasks · more not shown"
             it.can_show_more shouldBe true
         }
         val wider = TasksListMachine.reduce(windowed, TasksListInput.View(TasksListEvent(next_page = TasksListEvent.NextPageRequested())))
@@ -722,7 +804,7 @@ class TasksSpec : StringSpec({
         val child = detailOn(task("c1", "Boxes").copy(parent_task_id = "a"))
         child.screen.data_!!.let {
             it.can_add_subtask shouldBe false
-            it.subtask_note shouldBe "One level only · a subtask cannot have a subtask"
+            it.subtask_note shouldBe "Subtasks can't have subtasks."
             it.parent_task_id shouldBe "a"
         }
     }

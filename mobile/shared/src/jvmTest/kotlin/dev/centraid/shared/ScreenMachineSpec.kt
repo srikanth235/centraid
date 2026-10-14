@@ -276,7 +276,7 @@ class ScreenMachineSpec : StringSpec({
                 write_settled = WriteSettled(
                     invoke_key = key,
                     committed = false,
-                    failure = Reads.unavailable("Centraid could not reach your gateway."),
+                    failure = Reads.unavailable("Can't reach your backup device."),
                 ),
             ),
         ).state

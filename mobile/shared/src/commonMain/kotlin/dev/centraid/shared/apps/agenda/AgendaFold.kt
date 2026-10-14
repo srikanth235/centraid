@@ -8,6 +8,7 @@ import centraid.screen.v1.AgendaDaySection
 import centraid.screen.v1.AgendaEmpty
 import centraid.screen.v1.AgendaEventRow
 import centraid.screen.v1.AgendaHomeData
+import centraid.screen.v1.ImportSource
 import centraid.screen.v1.AgendaHomeState
 import centraid.screen.v1.AgendaLanding
 import centraid.screen.v1.AgendaNowLine
@@ -16,6 +17,7 @@ import centraid.screen.v1.AgendaRowStatus
 import centraid.screen.v1.Denied
 import dev.centraid.design.copy.AgendaCopy
 import dev.centraid.shared.design.PartyHueWheel
+import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.time.dayOfMonthOf
 import dev.centraid.shared.kit.time.isoWeekdayOf
 import dev.centraid.shared.kit.time.plusDays
@@ -167,8 +169,12 @@ internal object AgendaFold {
                 AgendaCopy.EMPTY_DAY_ONE_BODY,
                 AgendaCopy.NEW_EVENT,
             )
-            AgendaEmpty.AGENDA_EMPTY_NO_MATCH ->
-                Triple(AgendaCopy.EMPTY_NO_MATCH, AgendaCopy.EMPTY_NO_MATCH_BODY, "")
+            // THE ONE ACTION is Ask, when the machine offered it (#1097): the shell draws and sends it.
+            AgendaEmpty.AGENDA_EMPTY_NO_MATCH -> Triple(
+                AgendaCopy.EMPTY_NO_MATCH,
+                AgendaCopy.EMPTY_NO_MATCH_BODY,
+                if (screen.search_ask.isEmpty()) "" else SearchLaw.askLabel(screen.search_term),
+            )
             AgendaEmpty.AGENDA_EMPTY_NOTHING_WAITING -> Triple(AgendaCopy.EMPTY_WAITING, "", "")
             AgendaEmpty.AGENDA_EMPTY_NOTHING_ON_DAY -> Triple(
                 if (span == 1) AgendaCopy.EMPTY_DAY else AgendaCopy.EMPTY_DAYS,
@@ -186,6 +192,16 @@ internal object AgendaFold {
             empty_title = emptyTitle,
             empty_body = emptyBody,
             empty_action = emptyAction,
+            // NO EVENT OF THE MEMBER'S YET, AND THE PHONE ALREADY HOLDS A
+            // CALENDAR: the import is offered, where the shell can read one.
+            // Not "day one" alone: a first vault's starter tasks and an
+            // imported contact's birthday fill the list with marks, and an
+            // offer keyed on an empty screen would never be seen.
+            import_source = if (term == null && hidden.isEmpty() && upcoming.events.isEmpty()) {
+                ImportSource.IMPORT_SOURCE_CALENDAR
+            } else {
+                ImportSource.IMPORT_SOURCE_UNSPECIFIED
+            },
             calendars = upcoming.calendars.map { calendar ->
                 val isHidden = calendar.calendar_id in hidden
                 AgendaCalendarChoice(

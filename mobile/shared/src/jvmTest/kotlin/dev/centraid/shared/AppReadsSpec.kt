@@ -105,6 +105,8 @@ import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.kit.TrashReads
 import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.HomeReads
+import dev.centraid.shared.shell.HomeSearchMachine
+import dev.centraid.shared.shell.HomeSearchReads
 import dev.centraid.shared.apps.tasks.TasksCatchUpMachine
 import dev.centraid.shared.apps.tasks.TasksCatchUpReads
 import dev.centraid.shared.apps.tasks.TasksDetailMachine
@@ -355,6 +357,9 @@ class AppReadsSpec : StringSpec({
         // export and import read the shelf's counts.
         Triple("locker.export", LockerExportReads, LockerExportMachine),
         Triple("locker.import", LockerImportReads, LockerImportMachine),
+        // HOME'S SEARCH (R-CHROME-6). Like the powerbox it declares no table:
+        // a transient screen over search results re-reads on a new term only.
+        Triple("home.search", HomeSearchReads, HomeSearchMachine),
     )
 
     "an app-query screen's tables are exactly the tables its machine re-reads on" {

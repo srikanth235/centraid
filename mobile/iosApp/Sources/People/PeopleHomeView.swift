@@ -4,9 +4,11 @@ import SwiftUI
 ///
 /// **THE VIEW DECIDES NOTHING.** Every word, chip, count, hue and flag is on
 /// `PeopleHomeState`, folded by `PeopleHomeMachine`; this file maps fields to
-/// geometry and taps to events. The intents it sends (`PersonPicked`,
-/// `AddPersonRequested`, `TrashRequested`, `LogTouchRequested`) are routed by
-/// `PeopleScreens`, never here.
+/// geometry and taps to events. The room's grammar is every app's: Add person
+/// top right, the search bar, ONE chip row (the machine's chips, its sort chip
+/// last), More an ordinary band tab whose rows are the machine's. The intents
+/// it sends (`PersonPicked`, `AddPersonRequested`, `MoreRowPicked`,
+/// `LogTouchRequested`) are routed by `PeopleScreens`, never here.
 struct PeopleHomeView: View {
     let data: Data
     let send: (Data) -> Void
@@ -35,28 +37,23 @@ struct PeopleHomeView: View {
         AppPlace(
             app: "people",
             title: chrome.title,
+            trailing: content.isDenied || chrome.addPerson.isEmpty ? nil : RoomAction(
+                iconKey: "Plus",
+                label: chrome.addPerson,
+                identifier: "people-add-person",
+                action: { send(PeopleEvents.home { $0.addPerson = .init() }) }
+            ),
             search: SearchSlot(
                 field: state.search,
                 placeholder: chrome.searchPlaceholder,
                 closeLabel: chrome.searchClose,
+                onOpen: { send(PeopleEvents.home { $0.searchOpened = .init() }) },
                 onTerm: { term in send(PeopleEvents.home { $0.searchTerm = .with { $0.term = term } }) },
                 onClose: { send(PeopleEvents.home { $0.searchClosed = .init() }) }
             ),
+            chips: Self.chips(state, send: send),
             showsBand: !content.isDenied
         ) {
-            if !content.isDenied, !chrome.addPerson.isEmpty {
-                Button {
-                    send(PeopleEvents.home { $0.addPerson = .init() })
-                } label: {
-                    CentraidIconView(iconKey: "UserPlus", tint: Theme.color("text", scheme), size: 18)
-                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(chrome.addPerson)
-                .accessibilityIdentifier("people-add-person")
-            }
-        } band: {
             AppBand(
                 app: "people",
                 tabs: state.band.map { tab in
@@ -96,14 +93,39 @@ struct PeopleHomeView: View {
             }
         }
         .sheet(isPresented: Binding(
-            get: { state.sheet == .more },
+            get: { state.sheet == .more || state.sheet == .order },
             set: { open in
-                guard !open, state.sheet == .more else { return }
+                guard !open, state.sheet == .more || state.sheet == .order else { return }
                 send(PeopleEvents.home { $0.sheetClosed = .init() })
             }
         )) {
-            PeopleMoreSheet(state: state, send: send)
+            PeopleHomeSheet(state: state, send: send)
         }
+    }
+
+    /// THE CHIP ROW (R-CHROME-3): the machine's filters with their counts,
+    /// then its sort chip, last, whose tap opens the order sheet.
+    private static func chips(_ state: Centraid_Screen_V1_PeopleHomeState, send: @escaping (Data) -> Void) -> [RoomChip] {
+        var chips = state.chips.map { chip in
+            RoomChip(
+                identifier: "people-chip-\(chip.label.lowercased())",
+                label: chip.label,
+                count: chip.count > 0 ? "\(chip.count)" : "",
+                selected: chip.selected,
+                spoken: chip.accessibilityLabel,
+                action: { send(PeopleEvents.home { $0.chip = .with { $0.chip = chip.key } }) }
+            )
+        }
+        if state.hasSortChip {
+            chips.append(RoomChip(
+                identifier: "people-chip-sort",
+                label: state.sortChip.label,
+                chevron: true,
+                spoken: state.sortChip.spoken,
+                action: { send(PeopleEvents.home { $0.sheetOpened = .with { $0.sheet = .order } }) }
+            ))
+        }
+        return chips
     }
 }
 
@@ -137,7 +159,6 @@ private struct PeopleRosterList: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PeopleChipStrip(chips: roster.chips, send: send)
             if roster.hasEmpty {
                 EmptyStateView(roster.empty, onAction: { send(PeopleEvents.home { $0.addPerson = .init() }) })
                 Spacer(minLength: 0)
@@ -155,52 +176,6 @@ private struct PeopleRosterList: View {
                 .refreshable { send(PeopleEvents.home { $0.refreshed = .init() }) }
                 .accessibilityIdentifier("people-roster")
             }
-        }
-    }
-}
-
-/// THE CHIPS: All · Starred · Due, each a set choice with its count.
-private struct PeopleChipStrip: View {
-    let chips: [Centraid_Screen_V1_PeopleChip]
-    let send: (Data) -> Void
-
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(chips, id: \.label) { chip in
-                    Button {
-                        send(PeopleEvents.home { $0.chip = .with { $0.chip = chip.key } })
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(chip.label)
-                                .centraidType(chip.selected ? "smallStrong" : "small")
-                            Text("\(chip.count)")
-                                .centraidType("annotLabel")
-                                .monospacedDigit()
-                                .foregroundStyle(Theme.color("textFaint", scheme))
-                        }
-                        .foregroundStyle(Theme.color(chip.selected ? "text" : "textSoft", scheme))
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 32)
-                        .background(Capsule().fill(Theme.color(chip.selected ? "bgSunken" : "bg", scheme)))
-                        .overlay(
-                            Capsule().strokeBorder(
-                                Theme.color(chip.selected ? "lineStrong" : "line", scheme),
-                                lineWidth: CentraidGeometry.hairline
-                            )
-                        )
-                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(chip.accessibilityLabel.isEmpty ? chip.label : chip.accessibilityLabel)
-                    .accessibilityAddTraits(chip.selected ? .isSelected : [])
-                    .accessibilityIdentifier("people-chip-\(chip.label.lowercased())")
-                }
-            }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
         }
     }
 }
@@ -370,7 +345,7 @@ private struct PeopleSearchResults: View {
         if state.hasSearchData {
             let results = state.searchData
             if results.hasEmpty {
-                EmptyStateView(results.empty)
+                SearchEmptyView(results.empty, ask: state.search.ask)
                 Spacer(minLength: 0)
             } else {
                 ScrollView {
@@ -390,22 +365,18 @@ private struct PeopleSearchResults: View {
     }
 }
 
-// MARK: - More
+// MARK: - Sheets
 
-private struct PeopleMoreSheet: View {
+/// More (the machine's rows: Trash — never search, sort or a filter) and the
+/// sort chip's order sheet.
+private struct PeopleHomeSheet: View {
     let state: Centraid_Screen_V1_PeopleHomeState
     let send: (Data) -> Void
 
     var body: some View {
         let chrome = state.chrome
-        OptionSheet(title: chrome.moreTitle) {
-            SheetRow(iconKey: "Search", label: chrome.searchLabel, identifier: "people-more-search") {
-                send(PeopleEvents.home { $0.sheetClosed = .init() })
-                send(PeopleEvents.home { $0.searchOpened = .init() })
-            }
-            if !state.orderChoices.isEmpty {
-                SectionHeader(title: chrome.sortHeading)
-                    .padding(.horizontal, -CentraidGeometry.pageMargin)
+        if state.sheet == .order {
+            OptionSheet(title: chrome.sortHeading) {
                 ForEach(state.orderChoices, id: \.label) { choice in
                     SheetRow(
                         label: choice.label,
@@ -416,9 +387,13 @@ private struct PeopleMoreSheet: View {
                     }
                 }
             }
-            SheetRow(iconKey: "Trash", label: chrome.trashLabel, identifier: "people-more-trash") {
-                send(PeopleEvents.home { $0.sheetClosed = .init() })
-                send(PeopleEvents.home { $0.trash = .init() })
+        } else {
+            OptionSheet(title: chrome.moreTitle) {
+                ForEach(state.moreRows, id: \.key) { row in
+                    SheetRow(iconKey: row.iconKey, label: row.label, identifier: "people-more-\(row.key)") {
+                        send(PeopleEvents.home { $0.moreRow = .with { $0.key = row.key } })
+                    }
+                }
             }
         }
     }
@@ -459,18 +434,15 @@ struct PeopleStarButton: View {
     let identifier: String
     let onTap: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
-        Button(action: onTap) {
-            CentraidIconView(iconKey: "Star", tint: Theme.color(starred ? "warning" : "textFaint", scheme), size: 18)
-                .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
+        KitIconKey(
+            iconKey: "Star",
+            label: label,
+            tint: starred ? "warning" : "textFaint",
+            identifier: identifier,
+            action: onTap
+        )
         .accessibilityAddTraits(starred ? .isSelected : [])
-        .accessibilityIdentifier(identifier)
     }
 }
 

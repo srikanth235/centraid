@@ -442,5 +442,5 @@ public object DocsDocumentReads :
     override fun settled(status: CommandStatus, sentence: String, invokeKey: String): DocsDocumentEvent =
         DocsDocumentEvent(write_settled = WriteLaw.settledOf(status, sentence, invokeKey))
 
-    private const val NO_ANSWER: String = "The vault answered without the document."
+    private const val NO_ANSWER: String = "This document didn't load."
 }

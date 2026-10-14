@@ -27,15 +27,16 @@ use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::money::{Money, MoneyBag, Valuation, money, valuate};
 use centraid_apps_kit::reads::{PageDoor, read_pages, read_window};
 use centraid_apps_kit::row::{integer_or_zero, text_of};
+use centraid_apps_kit::spelling::WalkedWords;
 use serde_json::Value;
 
 use crate::balance::{
     attribute_expense, expense_payers, group_net, group_pair_nets, simplification,
 };
 use crate::queries::{
-    ExpenseRow, LEDGER_FAN_OUT, Person, SettlementRow, TRASH_ROWS, TallyData,
+    ExpenseRow, LEDGER_FAN_OUT, LEDGER_ROWS, Person, SettlementRow, TRASH_ROWS, TallyData,
     expense_by_id_statement, export_revisions_statement, history_statement, load_tally,
-    memo_statement, parties_statement, recurring_statement, trash_statement,
+    memo_statement, memos_statement, parties_statement, recurring_statement, trash_statement,
 };
 use crate::views::{balance_expense, export_limit, owner_stance, pairwise, person_of};
 
@@ -319,6 +320,10 @@ pub struct Spending {
 pub struct SearchResults {
     pub results: Vec<Entry>,
     pub total_matches: usize,
+    /// The words the rows answer, when the typed term found nothing and a
+    /// correction against the walked expenses' own words did (#1097, R4, R6).
+    /// `None` for an exact answer, and when the correction found nothing.
+    pub corrected: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1178,31 +1183,125 @@ pub fn spending_of(data: &TallyData, month: &str) -> Spending {
     }
 }
 
-/// Live expenses whose description contains `term`, case-insensitively, at
-/// most `limit`. An empty term reads nothing.
+/// Live expenses whose description, category (unless it is the default
+/// `general`), group name, line-item descriptions or memo contain `term`,
+/// case-insensitively, at most `limit` (#1097, R6). An empty term reads nothing.
+///
+/// When the exact walk finds nothing, the typed words are corrected against the
+/// words of the very expenses just walked ([`WalkedWords`]) and the walk is run
+/// again with the corrected words; `corrected` says so only if that run found
+/// something.
 pub fn load_search(door: &dyn PageDoor, term: &str, limit: usize) -> KitResult<SearchResults> {
+    load_search_with(door, term, limit, true)
+}
+
+/// [`load_search`], with the correction switched by the caller.
+///
+/// **A caller whose answer holds more than these expenses decides.** Tally's
+/// search also answers the groups whose name matched (#1097, R-1097-19..21), and
+/// the term is corrected only when the expenses AND the groups are both empty:
+/// when the groups matched exactly, the expense walk must not correct the term
+/// behind them, so the caller passes `correct = false`.
+pub fn load_search_with(
+    door: &dyn PageDoor,
+    term: &str,
+    limit: usize,
+    correct: bool,
+) -> KitResult<SearchResults> {
     let needle = term.trim().to_lowercase();
     if needle.is_empty() {
         return Ok(SearchResults {
             results: Vec::new(),
             total_matches: 0,
+            corrected: None,
         });
     }
     let data = loaded(door)?;
     let names = group_names(&data);
-    let matched: Vec<&ExpenseRow> = data
+    let mut memos: BTreeMap<String, String> = BTreeMap::new();
+    for row in read_window(door, &memos_statement(), LEDGER_ROWS)?.rows {
+        if let (Some(expense), Some(body)) =
+            (text_of(&row, "target_id"), text_of(&row, "body_text"))
+            && !body.is_empty()
+        {
+            memos.entry(expense).or_insert(body);
+        }
+    }
+    let haystacks: Vec<Vec<String>> = data
         .expenses
         .iter()
-        .filter(|expense| expense.description.to_lowercase().contains(&needle))
+        .map(|expense| searchable(&data, expense, &names, &memos))
         .collect();
+    let find = |needle: &str| -> Vec<usize> {
+        haystacks
+            .iter()
+            .enumerate()
+            .filter(|(_, texts)| texts.iter().any(|text| text.contains(needle)))
+            .map(|(at, _)| at)
+            .collect()
+    };
+    let mut matched = find(&needle);
+    let mut corrected = None;
+    if correct && matched.is_empty() {
+        let mut words = WalkedWords::new();
+        for texts in &haystacks {
+            words.add_row(texts.iter().map(String::as_str));
+        }
+        if let Some(words) = words.correct(term) {
+            let again = find(&words.to_lowercase());
+            if !again.is_empty() {
+                matched = again;
+                corrected = Some(words);
+            }
+        }
+    }
     Ok(SearchResults {
         total_matches: matched.len(),
         results: matched
             .into_iter()
             .take(limit)
-            .map(|expense| entry(&data, expense, &names))
+            .map(|at| entry(&data, &data.expenses[at], &names))
             .collect(),
+        corrected,
     })
+}
+
+/// The lowercased texts a search reads on one expense: its description, its
+/// category unless that is the default `general` (which every uncategorised
+/// expense has, and which would make a search for "general" find them all), its
+/// group's name, each line item's description and its memo.
+fn searchable(
+    data: &TallyData,
+    expense: &ExpenseRow,
+    names: &BTreeMap<String, String>,
+    memos: &BTreeMap<String, String>,
+) -> Vec<String> {
+    let mut texts = vec![expense.description.to_lowercase()];
+    if !expense.category.eq_ignore_ascii_case("general") {
+        texts.push(expense.category.to_lowercase());
+    }
+    if let Some(group) = expense
+        .group_id
+        .as_deref()
+        .and_then(|id| names.get(id))
+        .filter(|name| !name.is_empty())
+    {
+        texts.push(group.to_lowercase());
+    }
+    texts.extend(
+        data.lines
+            .get(&expense.expense_id)
+            .into_iter()
+            .flatten()
+            .filter(|line| !line.description.is_empty())
+            .map(|line| line.description.to_lowercase()),
+    );
+    texts.extend(
+        memos
+            .get(&expense.expense_id)
+            .map(|memo| memo.to_lowercase()),
+    );
+    texts
 }
 
 /// The trash shelf, newest first, at most [`TRASH_ROWS`].

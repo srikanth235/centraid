@@ -28,7 +28,7 @@ import kotlin.math.sin
  *
  * ## The editor's one promise
  *
- * **NOTHING IS WRITTEN UNTIL "Save as a new photograph", AND THEN IT IS A NEW
+ * **NOTHING IS WRITTEN UNTIL "Save new photo", AND THEN IT IS A NEW
  * PHOTOGRAPH.** The original is never touched: v0's whole argument for having
  * an editor at all was that it is non-destructive and says so, and its test
  * drove every other control and proved the save port was never reached. Here
@@ -472,7 +472,7 @@ public object PhotoEditorMachine : ScreenMachine<PhotoEditorState, PhotoEditorEv
             " · " + flipLabel(plan.flip).lowercase()
         }
         return "Crop " + ratioName(plan.ratio) + " · rotation " +
-            signedDegrees(totalRotation(plan)) + flip + " · nothing written yet"
+            signedDegrees(totalRotation(plan)) + flip
     }
 
     public fun isEdited(plan: PhotoEditPlan): Boolean {
@@ -526,19 +526,19 @@ public object PhotoEditorMachine : ScreenMachine<PhotoEditorState, PhotoEditorEv
     // The words — v0's, unchanged
     // -----------------------------------------------------------------------
 
-    public const val EDITOR_TITLE: String = "Crop and rotate"
+    public const val EDITOR_TITLE: String = PhotosCopy.PHOTOS_EDITOR_TITLE
     public const val EDITOR_CANCEL: String = "Cancel"
     /** v0's shared words, from the one copy table (`copy/photos.json`). */
     public const val SAVE_AS_NEW: String = PhotosCopy.PHOTOS_SAVE_AS_NEW
     public const val SAVE_AS_NEW_EXPLANATION: String =
         PhotosCopy.PHOTOS_SAVE_AS_NEW_EXPLANATION
-    public const val SAVING: String = "Rendering the new photograph · the original is not touched"
-    public const val EDIT_NOT_SAVED: String = "Photograph not saved."
+    public const val SAVING: String = PhotosCopy.PHOTOS_EDIT_SAVING
+    public const val EDIT_NOT_SAVED: String = PhotosCopy.PHOTOS_ERROR_EDIT_NOT_SAVED
     public const val RETRY: String = "Try again."
-    public const val DISCARD_QUESTION: String = "Discard this edit?"
+    public const val DISCARD_QUESTION: String = PhotosCopy.PHOTOS_EDIT_DISCARD_QUESTION
     public const val DISCARD: String = "Discard"
-    public const val KEEP_EDITING: String = "Keep editing"
-    public const val NOT_LOADED: String = "The photograph has not loaded."
+    public const val KEEP_EDITING: String = PhotosCopy.PHOTOS_EDIT_KEEP_EDITING
+    public const val NOT_LOADED: String = PhotosCopy.PHOTOS_EDIT_NOT_LOADED
     public const val NOT_A_PHOTOGRAPH: String =
-        "Crop and rotate work on photographs, not on this kind of media"
+        PhotosCopy.PHOTOS_EDIT_NOT_A_PHOTO
 }

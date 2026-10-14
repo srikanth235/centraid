@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -33,9 +32,11 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import centraid.screen.v1.EmptyState
 import centraid.screen.v1.PhotoCell
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.design.copy.PhotosCopy
 import kotlin.math.roundToInt
 
 /**
@@ -218,8 +219,8 @@ private fun cellLabel(cell: PhotoCell, packAbsent: Boolean): String {
     }
     return when {
         !cell.thumbnail_path.isNullOrEmpty() -> noun
-        packAbsent -> "$noun, preview not downloaded to this device"
-        else -> "$noun, preview no longer on this device"
+        packAbsent -> PhotosCopy.PHOTOS_CELL_NOT_DOWNLOADED.replace("{noun}", noun)
+        else -> PhotosCopy.PHOTOS_CELL_PREVIEW_GONE.replace("{noun}", noun)
     }
 }
 
@@ -431,7 +432,7 @@ public fun PhotoGridSkeleton(containerWidth: Int, targetHeight: Int, viewportHei
     }
     val rows = justify(placeholders, containerWidth, targetHeight)
     Column(
-        modifier.semantics { contentDescription = "Opening your library" },
+        modifier.semantics { contentDescription = PhotosCopy.PHOTOS_OPENING_LIBRARY },
         verticalArrangement = Arrangement.spacedBy(GAP.dp),
     ) {
         rows.forEach { row ->
@@ -471,28 +472,38 @@ private const val RADIUS_SM: Int = 4
 private const val TARGET_MIN: Int = 44
 
 /**
- * THE THREE-STATE READ LAW, DRAWN ONCE.
- *
- * Every screen in this app has the same three shapes and the same two lines for
- * a failure, and a per-screen copy is a per-screen chance to leave the remedy
- * out — which is the half of a refusal a member can act on.
+ * THE THREE-STATE READ LAW, DRAWN ONCE — by the kit's [FailureView], so a
+ * photo screen's failure reads like every other app's: the sentence, the remedy
+ * (the half of a refusal a member can act on) and, when the screen has a
+ * member-initiated re-read, its retry. Null [onRetry] draws no button.
  */
 @Composable
-public fun ScreenFailure(sentence: String, remedy: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Text(text = sentence)
-        if (remedy.isNotEmpty()) Text(text = remedy)
-    }
+public fun ScreenFailure(
+    sentence: String,
+    remedy: String,
+    modifier: Modifier = Modifier,
+    onRetry: (() -> Unit)? = null,
+) {
+    FailureView(sentence = sentence, remedy = remedy, onRetry = onRetry, modifier = modifier)
 }
 
 /**
  * NOTHING HERE, AND WHY. An empty shelf is a screen with a sentence, never a
- * blank frame — and the sentence differs per shelf, so it is a parameter.
+ * blank frame — and the sentence differs per shelf, so it is a parameter. Drawn
+ * by the kit's [EmptyStateView]; [actionLabel] and [onAction] are the empty
+ * state's one action slot, left empty by a shelf that has nothing to do.
  */
 @Composable
-public fun ScreenEmpty(sentence: String, modifier: Modifier = Modifier, remedy: String = "") {
-    Column(modifier.padding(vertical = 32.dp).fillMaxWidth()) {
-        Text(text = sentence)
-        if (remedy.isNotEmpty()) Text(text = remedy)
-    }
+public fun ScreenEmpty(
+    sentence: String,
+    modifier: Modifier = Modifier,
+    remedy: String = "",
+    actionLabel: String = "",
+    onAction: (() -> Unit)? = null,
+) {
+    EmptyStateView(
+        empty = EmptyState(headline = sentence, body = remedy, action_label = actionLabel),
+        onAction = onAction,
+        modifier = modifier,
+    )
 }

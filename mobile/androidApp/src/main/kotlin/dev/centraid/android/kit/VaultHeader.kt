@@ -3,19 +3,17 @@ package dev.centraid.android.kit
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,15 +21,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import centraid.screen.v1.BackupLine
 import centraid.screen.v1.VaultLockup
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
+import dev.centraid.android.theme.centraidDark
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.PhotosCopy
+import dev.centraid.design.copy.SharedCopy
+import dev.centraid.shared.shell.Appearance
 import dev.centraid.shared.shell.TransferRuleChoice
 
 /**
@@ -48,7 +53,7 @@ import dev.centraid.shared.shell.TransferRuleChoice
  * says the vault is here and whole — the phone is the vault. "Connected"
  * would promise a live link this state has not checked, and "synced" claimed
  * a backup over a vault that was never paired (#1047 walk); what a gateway
- * holds is the backup line's to say (`BackupLineRow`, #1080), not this one's.
+ * holds is the backup's status to say (`BackupLine.status`, drawn in its place on Home, #1080).
  *
  * EXHAUSTIVE and with no `else`, deliberately: a case added to `State` must
  * fail to compile here rather than fall quietly into somebody else's sentence,
@@ -65,13 +70,13 @@ import dev.centraid.shared.shell.TransferRuleChoice
  */
 public fun stateLine(state: VaultLockup.State): String = when (state) {
     VaultLockup.State.STATE_UNSPECIFIED -> ""
-    VaultLockup.State.STATE_ONLINE -> "on this phone"
+    VaultLockup.State.STATE_ONLINE -> PhotosCopy.VAULT_ONLINE
     // THE VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1, W5). A STATE and
     // not an incident: it is drawn in place under the vault's name like the
     // other one, in the same mono line, because a banner would make a
     // deliberate hand-over look like a fault. The COUNT of what this phone is
     // still holding rides beside it in `VaultLockup.frozen_line`.
-    VaultLockup.State.STATE_FROZEN -> "moved to your other phone"
+    VaultLockup.State.STATE_FROZEN -> PhotosCopy.VAULT_MOVED
 }
 
 /**
@@ -90,7 +95,9 @@ public fun stateLine(state: VaultLockup.State): String = when (state) {
  * with a VAULT — so there was no name to fill in and [VaultLockup.State] is the
  * fact that can be told.
  *
- * Exactly the band's two verbs beside it, never a third.
+ * One trailing verb, and only when there is something to say: Settings, the
+ * door to the transfer rules, drawn beside the originals-waiting line. A key
+ * with no destination is not drawn (DESIGN.md, HomeRoom).
  */
 @Composable
 public fun VaultHeader(
@@ -102,10 +109,29 @@ public fun VaultHeader(
      * fixture render this header without one.
      */
     onDownloadSettings: () -> Unit = {},
+    /**
+     * THE VAULT'S BACKUP, said as the second line (R-ONBOARD-11):
+     * `BackupLine.status` in place of "on this phone". Null — an example, or a
+     * preview — keeps the vault's own state line. A vault that MOVED keeps its
+     * own line too: that is the fact.
+     */
+    backup: BackupLine? = null,
+    /** The status line's door: the Backup tab. */
+    onOpenBackup: () -> Unit = {},
+    /**
+     * HOME'S SEARCH (R-CHROME-6): a framed key at the lockup's trailing edge,
+     * the one way into search over every app but Locker. Null draws none.
+     */
+    onSearch: (() -> Unit)? = null,
+    searchLabel: String = "",
+    /** THE APPEARANCE KEY (R-CHROME-7), right of search: one tap flips light and dark. */
+    onAppearance: (() -> Unit)? = null,
 ) {
     // No name is a REAL STATE; never render a blank lockup.
-    val name = vault?.vault_name?.trim().orEmpty().ifEmpty { "No vault yet" }
+    val name = vault?.vault_name?.trim().orEmpty().ifEmpty { PhotosCopy.VAULT_NONE_YET }
     val line = stateLine(vault?.state ?: VaultLockup.State.STATE_UNSPECIFIED)
+    val status = backup?.status.orEmpty().takeIf { vault?.state != VaultLockup.State.STATE_FROZEN }.orEmpty()
+    val loud = backup?.tone == BackupLine.Tone.TONE_ATTENTION || backup?.tone == BackupLine.Tone.TONE_URGENT
     // THE MEMBER'S OWN RULE, SAID IN PLACE (#1025 S4, D-1025-S7-61). A grid of
     // thumbnails with no full-size files is a DECISION and not a failure, and a
     // header that says nothing is how a working byte plane looks broken. A
@@ -115,8 +141,8 @@ public fun VaultHeader(
     val withheld = vault?.originals_withheld ?: 0
     val waiting = when {
         withheld <= 0 -> ""
-        withheld == 1 -> "1 original waiting for Wi-Fi"
-        else -> "$withheld originals waiting for Wi-Fi"
+        withheld == 1 -> PhotosCopy.TRANSFER_ORIGINAL_WAITING_ONE
+        else -> PhotosCopy.TRANSFER_ORIGINAL_WAITING_MANY.replace("{count}", "$withheld")
     }
     val hue = vaultHue(vault?.color)
     Row(
@@ -132,13 +158,13 @@ public fun VaultHeader(
                 .weight(1f)
                 .clickable(onClick = onSwitchVault)
                 .testTag("home-vault-switch")
-                // The label REPLACES the two lines for assistive tech, so a
-                // screen reader hears one sentence rather than a name and an
-                // orphan line.
+                // The label REPLACES the lines for assistive tech, so a screen
+                // reader hears one sentence rather than a name and an orphan
+                // line. The backup status is a door of its own, below.
                 .semantics(mergeDescendants = true) {
                     contentDescription =
-                        listOf(name, line, waiting).filter { it.isNotEmpty() }
-                            .joinToString(", ") + ". Switch vault" 
+                        listOf(name, if (status.isEmpty()) line else "", waiting).filter { it.isNotEmpty() }
+                            .joinToString(", ") + ". Switch vault"
                 },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -146,9 +172,9 @@ public fun VaultHeader(
             Box(
                 Modifier
                     .size(30.dp)
-                    // A static control rung, not the chip ratio — that is for
-                    // app marks.
-                    .clip(RoundedCornerShape(7.dp))
+                    // The control rung from the token scale, not the chip
+                    // ratio — that is for app marks.
+                    .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["md"] ?: 0).dp))
                     .background(hue.ground),
                 contentAlignment = Alignment.Center,
             ) {
@@ -166,7 +192,41 @@ public fun VaultHeader(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (line.isNotEmpty()) {
+                if (status.isNotEmpty()) {
+                    // THE BACKUP STATUS (R-ONBOARD-11): a dot in the tone's
+                    // colour when it wants the member, then the few words, in
+                    // the same mono line the state line was; the Backup tab's
+                    // door (iOS `VaultHeader.statusLine`).
+                    Row(
+                        Modifier
+                            .heightIn(min = 18.dp)
+                            .clickable(onClick = onOpenBackup)
+                            .testTag("home-backup-status")
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = status + ". " + SharedCopy.BACKUP_STATUS_OPEN
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (loud) {
+                            Box(
+                                Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        centraidColor(if (backup?.tone == BackupLine.Tone.TONE_URGENT) "danger" else "attention"),
+                                    ),
+                            )
+                        }
+                        Text(
+                            status,
+                            style = centraidType("mono"),
+                            color = centraidColor(if (loud) "text" else "textFaint"),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                } else if (line.isNotEmpty()) {
                     Text(
                         line,
                         style = centraidType("mono"),
@@ -187,84 +247,31 @@ public fun VaultHeader(
                 }
             }
         }
-        // THE DOOR TO THE TRANSFER RULES (#1025 S4). Beside the line that
-        // reports them rather than buried in settings: a member reads
-        // "12 originals waiting for Wi-Fi" and the next thing they want is the
-        // control that decided it.
-        if (waiting.isNotEmpty()) {
-            Box(Modifier.clickable(onClick = onDownloadSettings).testTag("home-transfer-rules")) {
-                HeaderAction(iconKey = "Settings", spoken = "Download settings")
+        // THE TRAILING KEYS AS ONE GROUP: their 44dp targets touch, so the
+        // 36dp plates stand 8dp apart and read as a pair, not as two
+        // strays across the lockup's 12dp rhythm. The last plate's edge sits
+        // on the page margin: the target overhangs by its inset, (44 - 36) / 2.
+        Row(Modifier.offset(x = 4.dp)) {
+            // THE DOOR TO THE TRANSFER RULES (#1025 S4). Beside the line that
+            // reports them rather than buried in settings: a member reads
+            // "12 originals waiting for Wi-Fi" and the next thing they want is the
+            // control that decided it.
+            if (waiting.isNotEmpty()) {
+                IconKey(
+                    iconKey = "Settings",
+                    label = "Download settings",
+                    testTag = "home-transfer-rules",
+                    onPress = onDownloadSettings,
+                )
+            }
+            if (onSearch != null) {
+                IconKey(iconKey = "Search", label = searchLabel, testTag = "home-search-open", onPress = onSearch)
+            }
+            if (onAppearance != null) {
+                val key = Appearance.key(dark = centraidDark())
+                IconKey(iconKey = key.iconKey, label = key.label, testTag = "home-appearance", onPress = onAppearance)
             }
         }
-        // BOUNDED, never borderless.
-        HeaderAction(iconKey = "Search", spoken = "Search everything")
-        // Outlined here; filled only inside the band.
-        HeaderAction(iconKey = "NewChat", spoken = "New chat")
-    }
-}
-
-@Composable
-private fun HeaderAction(iconKey: String, spoken: String) {
-    Box(
-        Modifier
-            .size(34.dp)
-            .clip(RoundedCornerShape(7.dp))
-            .border(
-                CentraidGeometry.HAIRLINE.dp,
-                centraidColor("lineStrong"),
-                RoundedCornerShape(7.dp),
-            )
-            .semantics { contentDescription = spoken },
-        contentAlignment = Alignment.Center,
-    ) {
-        CentraidIcon(iconKey = iconKey, tint = centraidColor("textSoft"), size = 16.dp)
-    }
-}
-
-/**
- * The route's own name and the ONE control the row carries.
- *
- * Search belongs to the lockup and All apps to the band's More tab, so the title
- * row carries Settings alone — which in v0 had no door from Home at all and sat
- * behind All apps, a sheet a member on the springboard has no reason to open.
- */
-@Composable
-public fun HomeTitleRow(
-    modifier: Modifier = Modifier,
-    onSettings: () -> Unit = {},
-) {
-    Column(modifier.fillMaxWidth()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
-                .padding(bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                "Home",
-                style = centraidType("title"),
-                color = centraidColor("text"),
-                modifier = Modifier.weight(1f),
-            )
-            Box(
-                Modifier
-                    .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
-                    .clickable(onClick = onSettings)
-                    .testTag("home-settings")
-                    .semantics { contentDescription = "Settings" },
-                contentAlignment = Alignment.Center,
-            ) {
-                CentraidIcon(iconKey = "Settings", tint = centraidColor("text"), size = 22.dp)
-            }
-        }
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(CentraidGeometry.HAIRLINE.dp)
-                .background(centraidColor("line")),
-        )
     }
 }
 
@@ -284,7 +291,7 @@ public fun HomeTitleRow(
 private fun vaultHue(color: String?): VaultMark {
     val parsed = parseHex(color)
         ?: return VaultMark(centraidColor("bgSunken"), centraidColor("text"))
-    val share = if (isSystemInDarkTheme()) {
+    val share = if (centraidDark()) {
         CentraidGeometry.ICON_CHIP_TINT_DARK
     } else {
         CentraidGeometry.ICON_CHIP_TINT_LIGHT
@@ -328,56 +335,34 @@ private fun parseHex(value: String?): Color? {
  * **It sets the rule and starts nothing.** A member who has just chosen to
  * spend less must not be answered by a pass that spends; the new rule governs
  * the next window.
+ *
+ * A choice is a sheet of [SheetRow]s (#1015 D4); the chosen one is ticked.
  */
 @Composable
 public fun TransferRulesSheet(
     choices: List<TransferRuleChoice>,
     selected: String,
     onPick: (String) -> Unit,
-    modifier: Modifier = Modifier,
+    onDismiss: () -> Unit,
 ) {
-    Column(
-        modifier.padding(CentraidGeometry.PAGE_MARGIN.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    SheetRoom(title = PhotosCopy.TRANSFER_TITLE, onDismiss = onDismiss) {
         Text(
-            "Downloads",
-            style = centraidType("title"),
-            color = centraidColor("text"),
-        )
-        Text(
-            "This is set for this phone, not for one vault. Thumbnails always arrive.",
+            PhotosCopy.TRANSFER_SUBTITLE,
             style = centraidType("small"),
             color = centraidColor("textSoft"),
+            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
         )
         choices.forEach { choice ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 44.dp)
-                    .clickable { onPick(choice.stored) }
-                    .testTag("transfer-rule-" + choice.stored)
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = choice.sentence
-                        if (choice.stored == selected) this.selected = true
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                RadioButton(
-                    // THE SELECTION IS THE STORE'S ANSWER, not the tap: an
-                    // unknown word settles to the conservative default, and a
-                    // tick on a row the next launch would not tick is worse
-                    // than a tap that appears to do nothing.
-                    selected = choice.stored == selected,
-                    onClick = { onPick(choice.stored) },
-                )
-                Text(
-                    choice.sentence,
-                    style = centraidType("small"),
-                    color = centraidColor("text"),
-                )
-            }
+            SheetRow(
+                label = choice.sentence,
+                // THE SELECTION IS THE STORE'S ANSWER, not the tap: an
+                // unknown word settles to the conservative default, and a
+                // tick on a row the next launch would not tick is worse
+                // than a tap that appears to do nothing.
+                selected = choice.stored == selected,
+                testTag = "transfer-rule-" + choice.stored,
+                onTap = { onPick(choice.stored) },
+            )
         }
     }
 }

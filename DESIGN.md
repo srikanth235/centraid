@@ -503,8 +503,8 @@ A mobile screen is one of seven rooms, and nothing else. The recipes above say w
 
 | Room | Anatomy | Examples |
 | --- | --- | --- |
-| `HomeRoom` | cover grid of app marks, one status line, no floating key, one trailing verb (Settings) | Home |
-| `AppPlace` | `AppHeader` (mark + name + ≤1 trailing action), optional search under it, app band as a render prop | Photos grid, Tasks list, Tally ledger |
+| `HomeRoom` | the vault lockup with a framed search key at its trailing edge (every app but Locker, [R-CHROME-6](docs/decisions.md#app-chrome-one-grammar-for-every-app-root)) and, right of it, the appearance key ([R-CHROME-7](docs/decisions.md#app-chrome-one-grammar-for-every-app-root)), cover grid of app marks, one status line, no floating key, one trailing verb (Settings) | Home |
+| `AppPlace` | the platform navigation bar (back to Home, the app's name, ≤1 trailing action: the app's create verb as `Plus` — glass on iOS, so every app's header is Photos' and Agenda's), the search bar under it, one chip row of filters then sort, app band (places, then More) as a render prop | Photos grid, Tasks list, Tally ledger |
 | `PushedPage` | `PlaceHeader`, back to the **named parent** (a computed `PlaceRef`, never a string), ≤1 trailing action | album, contact, document, settings sub-page |
 | `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside | note, document, expense, event |
 | `SheetRoom` | grabber, title carrying the noun, ≤1 ink button, status line hosted inside | confirm delete, pick date, add to album |
@@ -513,9 +513,54 @@ A mobile screen is one of seven rooms, and nothing else. The recipes above say w
 
 The room owns the header, the back control, search, the empty/loading/error states, the status host, selection and the gutter; the app supplies content and copy. A screen that hand-rolls any of those is a finding, not a variant.
 
+**Every app root arranges its verbs the same way** ([decisions.md, App chrome](docs/decisions.md#app-chrome-one-grammar-for-every-app-root)), top to bottom:
+
+| Slot | Holds | Never |
+| --- | --- | --- |
+| Header, trailing | the app's create verb as one `Plus` glyph; Select where the app makes nothing | a word, a second item, search, a menu |
+| Under the title | the search bar; tapped, the field in place (or the app's search page) | a More row, a bar glyph, a band tab |
+| Chip row | filters, then the sort chip last — the current order and a chevron | a toggle in More, a private pill |
+| Band | two to four places, then More | Search, a filter |
+| More | Trash, Import, Export, alternate views, "What X may read" — machine rows | Search, Sort, a filter |
+
+**Search says what it searched for, and offers the assistant when it found nothing** ([#1097](https://github.com/srikanth235/centraid/issues/1097)):
+
+| Moment | Draws | Never |
+| --- | --- | --- |
+| The core corrected a typo (the exact answer was empty and a vocabulary word one slip away found rows) | one line directly under the open field, in the secondary text style — "Showing results for “sunscreen”" (`SEARCH_CORRECTED`, id `search-corrected`). It lives in the field component every search slot, Home's search page and Tally's search page share, so it is drawn once per platform; the machine puts `SearchField.corrected` in state and the view draws it | a banner, a toast, a second row of results, the line over an exact answer, the line over rows for a term since changed |
+| Home's search found nothing | the no-match sentence and its one action, "Ask about “zzqx”" (`SEARCH_ASK_ABOUT`, id `search-ask-about`): the shell's router switches to the Chat tab and sends "Find zzqx" (`SEARCH_ASK_QUESTION`, finished by the machine in `HomeSearchData.ask_question`). The action is drawn only where the shell has a Chat tab — iOS today | a second sentence, a button inside a row |
+| An app's own search found nothing (Notes, People, Tasks, Docs, Agenda, Tally, Photos) | the same kit empty state with the same one action, id `search-ask-about`, whenever the machine put a question in `SearchField.ask` (`AgendaHomeState.search_ask`; Photos' no-match state is `SearchHits.empty`): the answer is current, not denied, and wholly empty (rows and containers). One `SearchEmptyView` per shell draws it, the tap goes to the shell's `askChat`, and Android, with no Chat tab, draws the sentence without it. **Locker's search never offers it** — its term can itself be a secret — | a second presentation, a hand-drawn empty column, an action the view decides to add, Ask in Locker, the action over rows or over a term since changed |
+| A search matched the NAME of a notebook, album, project, Tally group or Docs folder | one container row per match, above that app's result rows — its kit glyph (`Book`, `Image`, `List`, `Users`, `Folder`), the title on one line and the kind in a soft word ("Notebook", "Album", "Project", "Group", "Folder"; `SEARCH_KIND_*`), id `search-container-<entity>-<id>`. It is ONE component per platform (`SearchContainerRow`) drawn by Home's search page (inside the app's group, before its rows, counted with them) and by Notes', Tasks', Docs' and Tally's own search results; the machine finished the words, the glyph and the reference (`SearchContainer`, in `SearchField.containers` for an app and `HomeSearchGroup.containers` on Home) and a tap opens the reference through the shell's one row router, so a chat card for a notebook opens too. A container that matched is an answer: the no-match sentence is not drawn over it. A new term, a close and a stale answer clear or never set it, as for `corrected` | a second router, a row of the view's own, the container among the rows, a count that leaves it out, "nothing found" over a notebook that was found |
+
 `StageRoom` is the one room that takes none of those, and that is the point rather than an omission: one piece of media edge to edge has nothing to be empty of, nothing to search, and no list to select from, and a strip across the top of a photograph is a second ground. What it owes a member instead is a way out, so the room owns the swipe-down dismiss and hands the caller's chrome the same close act — a stage that brings no chrome gets the room's own close key, because a stage with no visible way out is a black screen.
 
 Six product rulings sit behind the rooms and are not re-decided per screen — trash, casing, editors, push-versus-sheet, the band under a selection, and where Settings is reachable from: [docs/decisions.md § Mobile UX consistency (#1015)](docs/decisions.md#mobile-ux-consistency-1015), D1–D6.
+
+### The controls (mobile)
+
+**Chrome is the platform's; content is the kit's.** The navigation bar — its back, its title, its trailing verb — and a sheet's grabber and detents are drawn by the platform (glass on iOS), never by a screen. Everything under the bar is drawn from the kit, never hand-rolled. The root carries the `link` ink as its tint, so a platform control is on-palette rather than system blue.
+
+| Control | Kit (iOS · Android) | Recipe |
+| --- | --- | --- |
+| Ink button | `KitInkButton` · `InkButton` | the ONE thing to do: full width, 44, `md`, `accent` fill; destructive is a `net` outline. At most one per view. |
+| Outline button | `KitOutlineButton` · `QuietButton` | a secondary verb: 44, `md`, `lineStrong` hairline, `smallStrong`; tone `net` when it destroys. |
+| Link | `KitLink` · `KitLink` | a verb that reads as words: `link` ink, 44 target always; `annotLabelOn` inside a row, `smallStrong` standing alone. |
+| Icon key | `KitIconKey` · `IconKey` | 44 target, 18 glyph in `text`; framed (in content) is a 36 plate, `md`, `lineStrong`. |
+| Toolbar verb | `ToolbarVerb` / `ToolbarIcon` · `RoomAction` | a word or an 18 glyph; the bar draws it. |
+| Chip | `KitChip` · `KitChip` | a filter or a choice among several: capsule, 32 visible in a 44 target; selected is `bgSunken` + `lineStrong` + `text`, never `accent` — accent is the ink button's alone. |
+| Segmented | `KitSegmented` · `KitSegmented` | one of two to four views: the band plate's grammar. |
+| Stepper | `KitStepper` · `KitStepper` | previous / next: two framed icon keys, each carrying its own id. |
+| Check · Switch | `KitCheckBox`, `.kitToggle()` · `KitCheckBox`, `kitSwitchColors()` | `accent` when on; a check has four states — off, on, mixed (a dash: won't do) and partial (half filled: started). |
+
+Rulings that hold for every control:
+
+- **Destructive** confirms through `ConfirmSheet` (D1) — never an alert, never a confirmation dialog — and its ink is `net`, never `danger`.
+- **Disabled** is the `textDisabled` ink on the leaf, never a faded container — and a disabled verb is still drawn, never hidden, so the member sees what becomes possible.
+- **Targets** are 44. A 34 target exists only inside a dense row, and only through the named constant.
+- **Strokes**: `lineStrong` outlines a control, `line` divides content. **Radii** come from the token scale; a literal radius is a finding.
+- **Rows** press with `KitRowPress`; a tappable row is a `Button`, never a tap gesture.
+- **Loading, empty and failure** go through `ReadStateView`; a bare spinner outside the kit is a finding, and an empty state with something to do carries its action.
+- **More and Reads** sheets are `OptionSheet`s; a `NavigationStack` inside a sheet is for a sheet that pushes.
 
 ## Copy
 
@@ -530,7 +575,7 @@ Every string has a budget, and the budget is the contract. Copy lives in `copy/<
 | Button, action, menu row | 1–2 words, verb first. Never "Click here to…" |
 | Toast / success | A fragment — "Photo deleted". Never "successfully". |
 | StatusLine | One clause |
-| Empty state | One sentence and at most one action. No feature explanation, no healthy-state essay. |
+| Empty state | One sentence and at most one action. No feature explanation, no healthy-state essay. An app's day-one empty may also carry the shell's "See an example" link — a quiet text link, never a second button ([R-ONBOARD-3](docs/decisions.md#onboarding-without-sample-data)) — and where the phone holds the data its import is the one action ([R-ONBOARD-4](docs/decisions.md#onboarding-without-sample-data)). |
 | Banner (offline, degraded) | One sentence: the state, plus one action or one consequence |
 | Error | What happened and what to do, ≤ ~12 words. No apology, no "Please try again." |
 | Settings label + description | The label carries the meaning; the description is one sentence or absent |
@@ -538,6 +583,24 @@ Every string has a budget, and the budget is the contract. Copy lives in `copy/<
 | Consent, destructive confirm, security or privacy disclosure | Full sentences. The one home for reassurance. |
 
 **Banned everywhere**: "please", "successfully", "simply", "in order to", "you can", "we're sorry". Each of them is a word the sentence works without, and every one of them is a tell that the string is talking rather than labelling.
+
+**Vocabulary.** One noun per thing in member-facing copy; the left column is the word, the right column is every synonym it retires. A vault is never the actor ("People can't read this vault", not "The vault did not let People read").
+
+| Say | Never |
+| --- | --- |
+| backup device | gateway, laptop, machine, NAS, server |
+| recovery key | 24 words, your words, seed, phrase, passphrase |
+| QR code (button: "Scan QR code"), pairing code (the text form) | square, payload |
+| this phone | this device |
+| photo | photograph |
+| backed up | synced, sealed, drained, copied to the gateway |
+| Try again | Retry |
+
+A literal command the member types stays as written (`centraid-gateway pair`), and where the member types the key, "the 24 words of your recovery key" is fine. Internals are not copy either: never seal/unseal, receipt, ledger, drain, "derived", "in memory", "at rest", "by design" or `core.*` — say what the member can do or what happened. Do not hard-code counts that rot ("Eight apps").
+
+**Hard caps.** The surface budgets above are the target; these are the ceiling, by key suffix, in words (a `{placeholder}` is one word): `_LABEL`, `_ACTION`, `_PRIMARY`, `_SECONDARY`, `_BUTTON` 4; `_NOTE`, `_DETAIL`, `_LEDE`, `_STATUS`, `_HINT` 12; `_BODY`, `_LEAD`, `_NOTICE` and errors (`_FAILED`, `_ERROR`, `_REFUSED`, `_DENIED`) 25; `_TITLE` 6. A `·` never joins two thoughts in one string — split it or cut one; it survives only between short metadata facts ("Edited · 3 days ago", six words or fewer).
+
+`bun run lint:copy` ([scripts/lint-copy.mjs](scripts/lint-copy.mjs)) enforces the banned words, the vocabulary's retired terms, the `·` rule and the caps over every `copy/*.json` string. It is a shrink-only ratchet like the controls gate: a per-file budget that only goes down, so fix the string rather than raise it.
 
 The reassurance rule cuts both ways, and the second half is as binding as the first. Photos' faces disclosure keeps its full sentence — "Faces are proposed on a photograph you open, and a name is only ever yours to confirm. Nobody is named until you name them." — because it sits exactly where a member decides whether to let recognition name people. A toast, an empty state, or a shelf header making the same promise a fourth time is not more trustworthy; it is noise the disclosure has to compete with.
 
@@ -549,7 +612,7 @@ Voice survives compression. The evocative half of a line is usually the short ha
 | --- | --- | --- |
 | Needs-you screen empty state | "Staged writes, lapsed connections and requests for wider access appear here. This page is empty most of the time, and that is the healthy state." | "Anything that needs your OK — a message waiting to send, an account to reconnect, an app asking for access — shows up here." |
 | Docs offline banner (v0; the key and the gateway it spoke of were removed in [#1029](https://github.com/srikanth235/centraid/issues/1029) and [#1047](https://github.com/srikanth235/centraid/issues/1047)) | "The gateway is unreachable. Titles, folders, filing, tags and stars are read from this device, so the drive still lists everything — but most documents cannot be opened, and search is not available on this surface. Anything you write stays here, in order, until the gateway is back." | "Gateway unreachable — filing works from this device, opening and search do not." |
-| Photos Memories empty state | "Memories appear here on their own: a day that has an earlier year behind it, a run of days away from home, or a burst of near-identical photographs. Nothing is generated — they are your own photographs, noticed." | "Your own photographs, noticed — a year behind a day, a trip, a burst." |
+| Photos Memories empty state | "Memories appear here on their own: a day that has an earlier year behind it, a run of days away from home, or a burst of near-identical photographs. Nothing is generated — they are your own photographs, noticed." | "Your own photos, noticed — a year behind a day, a trip, a burst." |
 | Write failure outcome | "&lt;title&gt;: Please try again." | "&lt;title&gt;. Retry." |
 
 The first two lose a whole sentence of reassurance about what still works; the third keeps the image and drops the defence in front of it; the fourth deletes an apology that told a member nothing they could act on. Audit everything, churn nothing — a string already inside its budget is left alone.

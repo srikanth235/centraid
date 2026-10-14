@@ -11,8 +11,8 @@ destination: DESTINATION_LIBRARY
 permission: MEDIA_PERMISSION_GRANTED
 failure {
   kind: READ_FAILURE_KIND_NO_COPY_YET
-  sentence: "This device has not copied these yet."
-  remedy: "Stay on Wi-Fi while Centraid catches up."
+  sentence: "Not on this phone yet."
+  remedy: "Stay on Wi-Fi while it catches up."
 }
 backup { phase: PHASE_IDLE }
 sheet: SHEET_NONE

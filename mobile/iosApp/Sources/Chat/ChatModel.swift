@@ -150,7 +150,14 @@ final class ChatModel: ObservableObject {
     /// foreground vault's name. A tab appearing never changes a chat that has
     /// something in it; `scopeChosen` is the composer's menu, which starts a
     /// new chat when the scope differs.
-    func open(app: String, vaultName: String, scopeChosen: Bool = false) {
+    func open(
+        app: String,
+        vaultName: String,
+        scopeChosen: Bool = false,
+        asking question: String? = nil,
+        thread: String? = nil,
+        title: String = ""
+    ) {
         opened = true
         #if DEBUG
         if let preview = ChatPreview.mode {
@@ -159,12 +166,34 @@ final class ChatModel: ObservableObject {
         }
         #endif
         #if canImport(CentraidShared)
-        bridge.open(
-            app: app,
-            modelBytes: ChatModelStore.expectedBytes,
-            vaultName: vaultName,
-            scopeChosen: scopeChosen
-        )
+        if let thread {
+            // Opened and then that past chat opened, in that order, on the bridge
+            // (search's chat row): the thread is opened against the chat `open`
+            // made. The hit's title is the header until the thread is read.
+            bridge.openThreadFrom(
+                app: app,
+                modelBytes: ChatModelStore.expectedBytes,
+                vaultName: vaultName,
+                threadId: thread,
+                title: title
+            )
+        } else if let question {
+            // Opened and then asked, in that order, on the bridge: the question
+            // is sent the moment the chat can take it, never before.
+            bridge.openAsking(
+                app: app,
+                modelBytes: ChatModelStore.expectedBytes,
+                vaultName: vaultName,
+                text: question
+            )
+        } else {
+            bridge.open(
+                app: app,
+                modelBytes: ChatModelStore.expectedBytes,
+                vaultName: vaultName,
+                scopeChosen: scopeChosen
+            )
+        }
         // A model that was mid-download when the app was killed is still
         // arriving: say so, so the tab draws its progress and not the offer.
         ChatModelDownloader.shared.reportRunning()
@@ -205,11 +234,35 @@ final class ChatModel: ObservableObject {
         #endif
     }
 
-    func openThread(_ id: String) {
+    func openThread(_ id: String, title: String = "") {
         #if canImport(CentraidShared)
-        bridge.openThread(threadId: id)
+        bridge.openThread(threadId: id, title: title)
         #endif
         AttachmentFiles.sweep()
+    }
+
+    // MARK: The drawer's search (#1097, R-1097-24)
+
+    /// The drawer's search opener was tapped.
+    func openDrawerSearch() {
+        #if canImport(CentraidShared)
+        bridge.openDrawerSearch()
+        #endif
+    }
+
+    /// The drawer's field changed; the machine reads the core and drops what a
+    /// newer term has overtaken.
+    func drawerSearch(_ term: String) {
+        #if canImport(CentraidShared)
+        bridge.drawerSearch(term: term)
+        #endif
+    }
+
+    /// The drawer's field was closed.
+    func closeDrawerSearch() {
+        #if canImport(CentraidShared)
+        bridge.closeDrawerSearch()
+        #endif
     }
 
     func renameThread(_ id: String, title: String) {

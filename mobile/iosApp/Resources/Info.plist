@@ -31,14 +31,20 @@
 	<array>
 		<string>_centraid-gateway._tcp</string>
 	</array>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Centraid copies your calendar's events into Agenda, in your own vault on this phone.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Centraid uses the camera to scan paper documents into Docs, and to read the square your laptop shows when you pair it.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Centraid copies the contacts you choose into People, in your own vault on this phone.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Centraid uses Face ID to unlock Locker.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Centraid finds and reaches your laptop on this network to back up your vault and to bring it back.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Centraid backs up your camera roll into your own vault.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Centraid copies your open reminders into Tasks, in your own vault on this phone.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>InstrumentSans_470Book.ttf</string>

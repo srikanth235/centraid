@@ -3,6 +3,7 @@ package dev.centraid.shared.apps.notes
 import centraid.screen.v1.Confirm
 import centraid.screen.v1.EmptyState
 import centraid.screen.v1.Loading
+import centraid.screen.v1.NotesChip
 import centraid.screen.v1.NotesChoice
 import centraid.screen.v1.NotesLibraryChrome
 import centraid.screen.v1.NotesLibraryData
@@ -10,6 +11,7 @@ import centraid.screen.v1.NotesLibraryEvent
 import centraid.screen.v1.NotesLibrarySection
 import centraid.screen.v1.NotesLibrarySort
 import centraid.screen.v1.NotesLibraryState
+import centraid.screen.v1.NotesMoreRow
 import centraid.screen.v1.NotesNoteRow
 import centraid.screen.v1.NotesRowMenu
 import centraid.screen.v1.NotesSearchResults
@@ -35,6 +37,11 @@ import dev.centraid.shared.screen.Step
  * a field over it, sort and filters as the read's parameters, and a row menu
  * that pins, files into a notebook and trashes.
  *
+ * THE ROOM'S GRAMMAR (R-CHROME-1…4): New note is the header's one action,
+ * search the bar under it, the filters and the sort ONE chip row ([chips]:
+ * the notebook it was opened on, Pinned, the tags, the sort last), and More
+ * holds Trash alone ([MORE_ROWS]) — never search, sort or a filter.
+ *
  * - **Reads** are the core's `notes.library` beside `notes.notebooks` (the
  *   file-into sheet's choices), or `notes.search` while a term is typed
  *   ([NotesLibraryReads]). Search results live beside the library, so closing
@@ -42,8 +49,9 @@ import dev.centraid.shared.screen.Step
  *   search was answering (`library_stale`).
  * - **Writes** are one at a time ([WriteLaw]); the vault's change event
  *   re-reads the shelf, which never moves a row on a guess.
- * - **Views decide nothing**: the band, the chrome, the heading, the filter
- *   line and every empty sentence are recomputed on every step ([decorate]).
+ * - **Views decide nothing**: the band, the chrome, the heading, the chips,
+ *   More's rows and every empty sentence are recomputed on every step
+ *   ([decorate]).
  */
 public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibraryEvent> {
     public const val SCREEN_ID: String = "notes.library"
@@ -163,9 +171,10 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
             if (current >= MAX_WINDOW) Step(state) else readLibrary(state.copy(window = minOf(current * 2, MAX_WINDOW)))
         }
 
-        event.filter_cleared != null -> readLibrary(
-            state.copy(pinned_only = false, unfiled_only = false, notebook_id = "", heading = "", tag_concept_ids = emptyList()),
-        )
+        event.chip != null -> chip(state, event.chip.key)
+
+        // A MORE ROW CLOSES THE SHEET; where it leads (`trash`) is the shell's.
+        event.more_row != null -> Step(closeSheet(state))
 
         event.sheet_opened != null -> when (event.sheet_opened.sheet) {
             NotesLibraryState.Sheet.SHEET_SORT -> Step(
@@ -293,13 +302,29 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
                 Step(state)
             } else {
                 val rows = event.search_arrived.rows
+                val answered = SearchLaw.answered(
+                    Search,
+                    state,
+                    term,
+                    event.search_arrived.corrected,
+                    event.search_arrived.containers,
+                    rows = rows.size,
+                )
                 Step(
-                    SearchLaw.answered(Search, state, term).copy(
+                    answered.copy(
                         results = NotesSearchResults(
                             term = term,
                             rows = rows,
-                            empty = if (rows.isEmpty()) {
-                                EmptyState(headline = NotesCopy.SEARCH_NO_MATCH_HEADLINE, body = NotesCopy.SEARCH_NO_MATCH_BODY)
+                            // A NOTEBOOK THAT MATCHED IS AN ANSWER: no "nothing found" over it.
+                            // The one action is Ask, when the law offered it (#1097).
+                            empty = if (rows.isEmpty() && event.search_arrived.containers.isEmpty()) {
+                                SearchLaw.asking(
+                                    EmptyState(
+                                        headline = NotesCopy.SEARCH_NO_MATCH_HEADLINE,
+                                        body = NotesCopy.SEARCH_NO_MATCH_BODY,
+                                    ),
+                                    answered.search ?: SearchField(),
+                                )
                             } else {
                                 null
                             },
@@ -317,7 +342,9 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
                 .copy(first_page_pending = false, results = state.results?.copy(loading = false)),
         )
 
-        event.denied != null -> Step(Content.with(state, ReadContent.Denied(event.denied)).copy(first_page_pending = false))
+        event.denied != null -> Step(
+            Content.with(SearchLaw.unasked(Search, state), ReadContent.Denied(event.denied)).copy(first_page_pending = false),
+        )
 
         event.rows_changed != null ->
             if (event.rows_changed.table !in TABLES) {
@@ -338,6 +365,22 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
     // ---------------------------------------------------------------------
 
     private fun read(): ScreenEffect = ScreenEffect.ReadPage(SCREEN_ID, afterCursor = null)
+
+    /**
+     * A CHIP, by its key ([chips]): the notebook chip widens to every note,
+     * Pinned and a tag toggle themselves, and the sort opens its sheet.
+     */
+    private fun chip(state: NotesLibraryState, key: String): Step<NotesLibraryState> = when {
+        key == CHIP_NOTEBOOK -> readLibrary(state.copy(notebook_id = "", unfiled_only = false, heading = ""))
+        key == CHIP_PINNED -> step(state, NotesLibraryEvent(pinned_only = NotesLibraryEvent.PinnedOnlyToggled()))
+        key == CHIP_SORT -> step(
+            state,
+            NotesLibraryEvent(sheet_opened = NotesLibraryEvent.SheetOpened(sheet = NotesLibraryState.Sheet.SHEET_SORT)),
+        )
+        key.startsWith(CHIP_TAG) ->
+            step(state, NotesLibraryEvent(tag = NotesLibraryEvent.TagToggled(concept_id = key.removePrefix(CHIP_TAG))))
+        else -> Step(state)
+    }
 
     /** Is a term being answered? Then a read is a search. */
     internal fun searchActive(state: NotesLibraryState): Boolean =
@@ -375,11 +418,58 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
         listOf(NotesChoice(id = "", label = NotesCopy.NO_NOTEBOOK, selected = current.isEmpty())) +
             notebooks.map { it.copy(selected = it.id == current) }
 
-    private fun sortChoices(current: NotesLibrarySort): List<NotesChoice> = listOf(
+    private val SORTS: List<Pair<NotesLibrarySort, String>> = listOf(
         NotesLibrarySort.NOTES_LIBRARY_SORT_UPDATED to NotesCopy.SORT_UPDATED,
         NotesLibrarySort.NOTES_LIBRARY_SORT_CREATED to NotesCopy.SORT_CREATED,
         NotesLibrarySort.NOTES_LIBRARY_SORT_TITLE to NotesCopy.SORT_TITLE_AZ,
-    ).map { (sort, label) -> NotesChoice(id = sort.name, label = label, selected = sort == current, sort = sort) }
+    )
+
+    private fun sortChoices(current: NotesLibrarySort): List<NotesChoice> =
+        SORTS.map { (sort, label) -> NotesChoice(id = sort.name, label = label, selected = sort == current, sort = sort) }
+
+    /** The current order's name, which the sort chip wears. */
+    private fun sortName(current: NotesLibrarySort): String =
+        SORTS.firstOrNull { it.first == current }?.second ?: NotesCopy.SORT_UPDATED
+
+    /** Chip keys: what `ChipPicked` sends back. A tag's is `tag-<concept_id>`. */
+    internal const val CHIP_NOTEBOOK: String = "notebook"
+    internal const val CHIP_PINNED: String = "pinned"
+    internal const val CHIP_TAG: String = "tag-"
+    internal const val CHIP_SORT: String = "sort"
+
+    /** More's rows: secondary places only (R-CHROME-4). `trash` is the shell's. */
+    public const val MORE_TRASH: String = "trash"
+    private val MORE_ROWS: List<NotesMoreRow> = listOf(
+        NotesMoreRow(key = MORE_TRASH, label = NotesCopy.TRASH_LABEL, icon_key = "Trash"),
+    )
+
+    /**
+     * THE CHIP ROW, in draw order: the notebook the library was opened on
+     * (selected — a tap widens to every note), Pinned, the tags the window
+     * saw, then the sort, last, wearing the current order's name. None while
+     * denied, and none over search, whose results no filter narrows.
+     */
+    private fun chips(state: NotesLibraryState, heading: String): List<NotesChip> {
+        if (state.denied != null || state.search?.open_ == true) return emptyList()
+        return buildList {
+            if (state.notebook_id.isNotEmpty() || state.unfiled_only) {
+                add(NotesChip(key = CHIP_NOTEBOOK, label = heading, selected = true))
+            }
+            add(NotesChip(key = CHIP_PINNED, label = NotesCopy.CHIP_PINNED, selected = state.pinned_only))
+            state.data_?.tags?.forEach { tag ->
+                add(NotesChip(key = CHIP_TAG + tag.concept_id, label = tag.label, selected = tag.concept_id in state.tag_concept_ids))
+            }
+            val order = sortName(state.sort)
+            add(
+                NotesChip(
+                    key = CHIP_SORT,
+                    label = order,
+                    chevron = true,
+                    spoken = NotesCopy.SORT_CHIP_SPOKEN.replace("{order}", order),
+                ),
+            )
+        }
+    }
 
     private fun searchPrompt(): EmptyState = EmptyState(headline = "", body = NotesCopy.SEARCH_EMPTY)
 
@@ -394,16 +484,12 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
             state.unfiled_only -> NotesCopy.UNFILED_ROW
             else -> NotesCopy.TITLE
         }
-        val filters = buildList {
-            if (state.pinned_only) add(NotesCopy.PINNED_ONLY)
-            if (state.notebook_id.isNotEmpty() || state.unfiled_only) add(heading)
-            state.data_?.tags?.filter { it.concept_id in state.tag_concept_ids }?.forEach { add(it.label) }
-        }
         return state.copy(
             band = if (denied) emptyList() else NotesBand.tabs(NotesBand.NOTES),
             chrome = CHROME,
             heading = heading,
-            filter_label = filters.joinToString(" · "),
+            chips = chips(state, heading),
+            more_rows = if (denied) emptyList() else MORE_ROWS,
             data_ = state.data_?.let { decorateData(state, it) },
         )
     }
@@ -460,14 +546,10 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
         retry = NotesCopy.RETRY,
         loading = NotesCopy.LOADING,
         more_title = NotesCopy.MORE_TITLE,
-        trash_label = NotesCopy.TRASH_LABEL,
-        sort_label = NotesCopy.SORT_LABEL,
-        pinned_only_label = NotesCopy.PINNED_ONLY,
         file_title = NotesCopy.FILE_TITLE,
         sort_title = NotesCopy.SORT_TITLE,
         home = NotesCopy.HOME,
         row_menu_label = NotesCopy.ROW_MENU,
-        filter_clear_label = NotesCopy.CLEAR_FILTER,
     )
 
     override fun rowsChanged(table: String, keys: List<String>): NotesLibraryEvent? =
@@ -500,6 +582,7 @@ public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibrar
 
     private object Search : SearchLens<NotesLibraryState> {
         override val screenId: String = SCREEN_ID
+        override val asks: Boolean = true
 
         override fun field(state: NotesLibraryState): SearchField = state.search ?: SearchField()
 

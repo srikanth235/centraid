@@ -47,6 +47,8 @@ export const PRODUCT_GATES = Object.freeze([
   "test:accessibility",
   "security:lifecycle",
   "lint:container-opacity",
+  "lint:native-controls",
+  "lint:copy",
   "lint:design-md",
   "lint:aria-labels",
   "lint:site-tokens",

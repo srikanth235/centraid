@@ -33,10 +33,12 @@ import kotlinx.coroutines.sync.withLock
  *   has an index to key, the screen offers the restore instead, keeping what
  *   was typed and drawing the pairing code's field (#1080 A23).
  * * **PURPOSE_RESTORE_HELD** — the phone already holds a seed the
- *   synchronised keychain carried here (words.make's RESTORE_FIRST): no grid,
- *   only the gateway's pairing code, and the restore runs from that seed once
- *   it is pasted
- *   ([Enrollment.restoreHeld], Q-1047-18).
+ *   synchronised keychain carried here (words.make's RESTORE_FIRST, or any
+ *   restore opened while a seed is held — see [WordsEntryFlow.send]): no
+ *   grid, only the gateway's pairing code, and the restore runs from that
+ *   seed once it is pasted ([Enrollment.restoreHeld], Q-1047-18).
+ *   `words_label` leaves it for the grid, for a member whose keychain key is
+ *   not the one their backup was sealed with.
  *
  * Every cell is judged by the CORE as it is typed (`PhraseRequest.check`): a
  * list word or not, suggestions for a prefix, and the phrase's verdict — count,
@@ -65,6 +67,13 @@ public object WordsEntryMachine {
             is EntryInput.Checked -> checked(model, input)
             is EntryInput.Restored -> restored(model, input.outcome)
             is EntryInput.Rekeyed -> rekeyed(model, input.outcome)
+            is EntryInput.HeldKeys -> EntryStep(
+                if (model.purpose == WordsEntryState.Purpose.PURPOSE_RESTORE_HELD && model.phase == WordsEntryState.Phase.PHASE_ENTERING) {
+                    render(model.copy(heldKeys = input.labels))
+                } else {
+                    model
+                },
+            )
         }
     }
 
@@ -93,6 +102,9 @@ public object WordsEntryMachine {
             event.primary != null -> primary(model)
             event.secondary != null -> EntryStep(closed())
             event.retry != null -> retry(model)
+            // THE KEYCHAIN'S KEY IS NOT THE BACKUP'S: draw the grid, keep the code.
+            event.use_words != null && entering && model.purpose == WordsEntryState.Purpose.PURPOSE_RESTORE_HELD ->
+                EntryStep(render(model.copy(purpose = WordsEntryState.Purpose.PURPOSE_RESTORE, notice = "")))
             else -> EntryStep(model)
         }
     }
@@ -184,7 +196,8 @@ public object WordsEntryMachine {
                         endpoint = model.endpoint,
                     ),
                     outcome.answer.vaults,
-                    outcome.answer.unclaimed.map { it.index },
+                    outcome.answer.unclaimed,
+                    outcome.missing,
                 ),
             )
             Enrollment.Restored.Unreachable -> back(model, WordsCopy.RESTORE_UNREACHABLE)
@@ -218,11 +231,11 @@ public object WordsEntryMachine {
         return EntryStep(
             when (outcome) {
                 is Enrollment.Restored.Done -> {
-                    val back = outcome.answer.vaults.map { it.index }.toSet()
+                    val back = outcome.answer.vaults.map { it.own to it.index }.toSet()
                     settled(
                         done.copy(notice = ""),
-                        (model.restoredAt.filter { it.index !in back } + outcome.answer.vaults).sortedBy { it.index },
-                        model.stayedAt.filter { it !in back },
+                        model.restoredAt.filter { (it.own to it.index) !in back } + outcome.answer.vaults,
+                        model.stayedAt.filter { (it.own to it.index) !in back },
                     )
                 }
                 Enrollment.Restored.Unreachable -> render(done.copy(notice = WordsCopy.RESTORE_UNREACHABLE))
@@ -237,17 +250,27 @@ public object WordsEntryMachine {
      * "VAULT N" IS ONE SEQUENCE over both, ordered by derivation index
      * (R-1047-R5), so a vault that stayed is never given the number of one
      * that came back. Never the index itself: a member made "Vault 1", not
-     * "index 0".
+     * "index 0". The member's vaults come first; each vault on its own words
+     * (R-1047-E18) follows, its seed's vaults in index order — two vaults at
+     * index 0 under two seeds are two numbers, never one.
      */
-    private fun settled(model: Entry, restoredAt: List<RestoredVaultAt>, stayedAt: List<Int>): Entry {
-        val sequence = (restoredAt.map { it.index } + stayedAt).sorted()
-        fun ordinal(index: Int): Int = sequence.indexOf(index) + 1
+    private fun settled(
+        model: Entry,
+        restoredAt: List<RestoredVaultAt>,
+        stayedAt: List<UnclaimedVaultAt>,
+        missing: List<String> = emptyList(),
+    ): Entry {
+        val order = compareBy<Pair<String?, Int>>({ it.first != null }, { it.first.orEmpty() }, { it.second })
+        val sequence = (restoredAt.map { it.own to it.index } + stayedAt.map { it.own to it.index }).distinct().sortedWith(order)
+        fun ordinal(own: String?, index: Int): Int = sequence.indexOf(own to index) + 1
+        val sortedRestored = restoredAt.sortedWith(compareBy(order) { it.own to it.index })
         return render(
             model.copy(
-                restoredAt = restoredAt,
+                restoredAt = sortedRestored,
                 stayedAt = stayedAt,
-                restored = restoredAt.map { vault -> line(ordinal(vault.index), vault) },
-                stayed = stayedAt.map { index -> WordsCopy.RESTORED_STAYED.replace("{index}", "${ordinal(index)}") },
+                restored = sortedRestored.map { vault -> line(ordinal(vault.own, vault.index), vault) },
+                stayed = stayedAt.map { vault -> WordsCopy.RESTORED_STAYED.replace("{index}", "${ordinal(vault.own, vault.index)}") } +
+                    missing.map { name -> WordsCopy.RESTORED_MISSING.replace("{name}", name.ifBlank { WordsCopy.RESTORE_HELD_OWN_UNNAMED }) },
             ),
         )
     }
@@ -405,6 +428,13 @@ public object WordsEntryMachine {
                 restored = model.restored,
                 stayed = model.stayed,
                 retry_label = if (done && !rekey && model.stayedAt.isNotEmpty()) WordsCopy.RESTORED_STAYED_RETRY else "",
+                words_label = if (held && phase == WordsEntryState.Phase.PHASE_ENTERING) WordsCopy.RESTORE_HELD_WORDS else "",
+                held_keys_label = if (held && phase == WordsEntryState.Phase.PHASE_ENTERING && model.heldKeys.isNotEmpty()) WordsCopy.RESTORE_HELD_OWN_LABEL else "",
+                held_keys = if (held && phase == WordsEntryState.Phase.PHASE_ENTERING) {
+                    model.heldKeys.map { it.ifBlank { WordsCopy.RESTORE_HELD_OWN_UNNAMED } }
+                } else {
+                    emptyList()
+                },
                 accessibility_label = listOf(title, notice).filter { it.isNotEmpty() }.joinToString(". "),
             ),
         )
@@ -432,8 +462,10 @@ public data class Entry(
     public val stayed: List<String> = emptyList(),
     /** DONE after a restore: every vault here, as the core answered it. Carries no secret. */
     internal val restoredAt: List<RestoredVaultAt> = emptyList(),
-    /** DONE after a restore: the index of every vault that stayed (R-1047-R6). */
-    internal val stayedAt: List<Int> = emptyList(),
+    /** DONE after a restore: every vault that stayed, by seed and index (R-1047-R6). */
+    internal val stayedAt: List<UnclaimedVaultAt> = emptyList(),
+    /** A held-seed restore: the name of each vault on its own words it will also ask for (R-1047-E18). */
+    public val heldKeys: List<String> = emptyList(),
     /** WORKING on a retry of what stayed, over DONE's lists (R-1047-R6). */
     public val retrying: Boolean = false,
 ) {
@@ -466,6 +498,9 @@ public sealed interface EntryInput {
     public data class Restored(public val outcome: Enrollment.Restored) : EntryInput
 
     public data class Rekeyed(public val outcome: Enrollment.Rekeyed) : EntryInput
+
+    /** The vaults on their own words a held-seed restore will also ask for, by name (R-1047-E18). */
+    public data class HeldKeys(public val labels: List<String>) : EntryInput
 }
 
 public sealed interface EntryEffect {
@@ -485,7 +520,7 @@ public sealed interface EntryEffect {
     public data class RestoreHeld(val endpoint: String) : EntryEffect
 
     /** Ask again for the vaults that stayed, by index (R-1047-R6); no words. */
-    public data class RestoreStayed(val indices: List<Int>, val endpoint: String) : EntryEffect
+    public data class RestoreStayed(val stayed: List<UnclaimedVaultAt>, val endpoint: String) : EntryEffect
 }
 
 public data class EntryStep(public val model: Entry, public val effects: List<EntryEffect> = emptyList())
@@ -506,7 +541,35 @@ public class WordsEntryFlow(
     public val current: Entry get() = model.value
 
     public fun send(event: WordsEntryEvent) {
-        scope.launch { reduce(EntryInput.View(event)) }
+        scope.launch {
+            val opened = held(event)
+            reduce(EntryInput.View(opened))
+            if (opened.opened?.purpose == WordsEntryState.Purpose.PURPOSE_RESTORE_HELD) {
+                val labels = runCatching { enrollment()?.heldKeys() }.getOrNull().orEmpty()
+                if (labels.isNotEmpty()) reduce(EntryInput.HeldKeys(labels))
+            }
+        }
+    }
+
+    /**
+     * A RESTORE OPENED WHILE A SEED IS HELD RESTORES FROM IT. iCloud Keychain,
+     * or Block Store inside Android's setup wizard, may have put the key on
+     * this phone before the app first ran; asking for 24 words the member
+     * need not have kept would hide the restore that needs none. The first
+     * launch's Restore and the empty shelf's both open PURPOSE_RESTORE, so the
+     * question is answered here, once, rather than at each door.
+     */
+    private suspend fun held(event: WordsEntryEvent): WordsEntryEvent {
+        val opened = event.opened ?: return event
+        val restore = opened.purpose == WordsEntryState.Purpose.PURPOSE_RESTORE ||
+            opened.purpose == WordsEntryState.Purpose.PURPOSE_UNSPECIFIED
+        if (!restore) return event
+        val enrolled = enrollment() ?: return event
+        val standing = runCatching { enrolled.standing() }.getOrNull() ?: return event
+        // A VAULT ON ITS OWN WORDS the keychain carried counts as held too (R-1047-E18).
+        val ownHeld = runCatching { enrolled.heldKeys() }.getOrNull().orEmpty().isNotEmpty()
+        if (standing == Enrollment.Standing.NO_SEED && !ownHeld) return event
+        return event.copy(opened = opened.copy(purpose = WordsEntryState.Purpose.PURPOSE_RESTORE_HELD))
     }
 
     public suspend fun reduce(input: EntryInput) {
@@ -531,7 +594,7 @@ public class WordsEntryFlow(
                     ?: Enrollment.Restored.Unreachable,
             )
             is EntryEffect.RestoreStayed -> EntryInput.Restored(
-                enrollment()?.restoreStayed(effect.indices, effect.endpoint.trim().ifEmpty { null })
+                enrollment()?.restoreStayed(effect.stayed, effect.endpoint.trim().ifEmpty { null })
                     ?: Enrollment.Restored.Unreachable,
             )
             is EntryEffect.Rekey -> EntryInput.Rekeyed(

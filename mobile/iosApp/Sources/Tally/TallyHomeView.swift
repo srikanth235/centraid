@@ -38,22 +38,23 @@ struct TallyHomeView: View {
     var body: some View {
         let state = state
         let content = content(state)
-        AppPlace(app: "tally", title: state.chrome.title, showsBand: !content.isDenied) {
-            if !content.isDenied, !state.chrome.addExpense.isEmpty {
-                Button {
-                    addExpense()
-                } label: {
-                    Text(state.chrome.addExpense)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .padding(.horizontal, 8)
-                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("tally-add-expense")
-            }
-        } band: {
+        AppPlace(
+            app: "tally",
+            title: state.chrome.title,
+            trailing: !content.isDenied && !state.chrome.addExpense.isEmpty
+                ? RoomAction(iconKey: "Plus", label: state.chrome.addExpense, identifier: "tally-add-expense", action: addExpense)
+                : nil,
+            // A DOOR, NOT A FIELD (R-CHROME-2): Tally's search is a page of its
+            // own, so the bar never opens here — its tap pushes `tally.search`.
+            search: content.isDenied || state.chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
+                field: .init(),
+                placeholder: state.chrome.searchPlaceholder,
+                onOpen: openSearch,
+                onTerm: { _ in },
+                onClose: {}
+            ),
+            showsBand: !content.isDenied
+        ) {
             AppBand(
                 app: "tally",
                 tabs: state.band.map { tab in
@@ -190,6 +191,11 @@ struct TallyHomeView: View {
         push(TallyScreens.addRoute())
     }
 
+    private func openSearch() {
+        send(Self.event { $0.searchOpened = .init() })
+        push(TallyScreens.searchRoute)
+    }
+
     private func openRow(_ row: Centraid_Screen_V1_TallyLedgerRow) {
         guard !row.expenseID.isEmpty else { return }
         send(Self.event { $0.expense = .with { $0.expenseID = row.expenseID } })
@@ -209,7 +215,6 @@ struct TallyHomeView: View {
         case "settle": push(TallyScreens.settleUpRoute(parent: state.chrome.title))
         case "recurring": push(TallyScreens.recurringRoute)
         case "spending": push(TallyScreens.spendingRoute)
-        case "search": push(TallyScreens.searchRoute)
         case "trash": push(TallyScreens.trashRoute)
         case "export": push(TallyScreens.exportRoute(parent: state.chrome.title))
         default: break

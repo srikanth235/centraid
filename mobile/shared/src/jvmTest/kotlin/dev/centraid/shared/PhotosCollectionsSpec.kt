@@ -12,7 +12,6 @@ import dev.centraid.shared.apps.photos.AlbumChoice
 import dev.centraid.shared.apps.photos.PhotosCollectionsMachine
 import dev.centraid.shared.apps.photos.PhotosCollectionsReads
 import dev.centraid.shared.apps.photos.PhotosCollectionsReads.Scan
-import dev.centraid.shared.apps.photos.PhotosSearchReads
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import io.kotest.assertions.withClue
@@ -218,7 +217,6 @@ class PhotosCollectionsSpec : StringSpec({
         listOf(
             PhotosCollectionsReads.albumsQuery(),
             AlbumChoice.albumsQuery(),
-            PhotosSearchReads.albumsQuery(listOf("port")),
         ).forEach { query ->
             withClue(query.name) {
                 query.from shouldBe PhotosCollectionsReads.TABLE
@@ -227,10 +225,6 @@ class PhotosCollectionsSpec : StringSpec({
             }
         }
         PhotosCollectionsReads.ALBUM_KIND shouldBe "album"
-        // Search keeps its words AFTER the kind: one bind per placeholder, in order.
-        val search = PhotosSearchReads.albumsQuery(listOf("port", "lis"))
-        search.where_ shouldBe "kind = ? AND (name LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')"
-        search.bind.map { it.text } shouldBe listOf("album", "%port%", "%lis%")
     }
 
     "only the three shelf statements ask the byte store anything" {
@@ -365,7 +359,7 @@ class PhotosCollectionsSpec : StringSpec({
         // THE DOOR HAS NO `COUNT(*)`, so every number on this screen is rows
         // read and counted — and a page that filled has more behind it. A bare
         // number over a full page would be a total nobody counted, which is
-        // what `HomeState.ThingCount.capped` exists to prevent and what the
+        // what `HomeTile.count.capped` exists to prevent and what the
         // views render as "at least N".
         val data = fold(
             albums = Scan(rows = listOf(albumRow("col-1", "Portugal"))),

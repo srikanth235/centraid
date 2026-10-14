@@ -17,17 +17,13 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -61,10 +57,19 @@ import centraid.screen.v1.PhotoLightboxEvent
 import centraid.screen.v1.PhotoLightboxState
 import dev.centraid.android.kit.AlbumChoiceSheet
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.IconKey
+import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.KitProgressBar
 import dev.centraid.android.kit.ScreenFailure
+import dev.centraid.android.kit.SheetRoom
+import dev.centraid.android.kit.SheetRow
+import dev.centraid.android.kit.StageKey
+import dev.centraid.android.kit.StageSpinner
+import dev.centraid.android.kit.StageVerb
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PhotoLightboxMachine
 import dev.centraid.shared.apps.photos.SHARE_PLACE_TITLE
 import dev.centraid.shared.apps.photos.sharePlaceOptions
@@ -155,7 +160,7 @@ public fun PhotoLightboxScreen(
             loading != null -> {
                 LightboxStage(state, reduceMotion, player, live, onEvent, onClose)
                 if (state.film.none { it.asset_id == state.asset_id }) {
-                    CircularProgressIndicator(Modifier.align(Alignment.Center))
+                    StageSpinner(modifier = Modifier.align(Alignment.Center))
                 }
             }
 
@@ -228,9 +233,9 @@ private fun Chrome(
             }
             if (state.slideshow) {
                 // THE ONE WAY OUT OF THE SLIDESHOW, named for what it does.
-                TextButton(onClick = {
+                StageVerb(label = "Leave", onClick = {
                     onEvent(PhotoLightboxEvent(slideshow = PhotoLightboxEvent.SlideshowChanged(false)))
-                }) { Text(text = "Leave", color = ink, style = centraidType("control")) }
+                })
             } else {
                 Chip(icon = "more", label = "More") {
                     onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_MORE))
@@ -261,12 +266,13 @@ private fun Chrome(
                 // HOW FAR IT HAS GOT, WHEN ANYONE CAN SAY (`fetch_percent`).
                 if (!state.slideshow && detail.held == PhotoCell.Held.HELD_FETCHING) {
                     if (detail.fetch_percent > 0) {
-                        CircularProgressIndicator(
-                            progress = { detail.fetch_percent / 100f },
-                            modifier = Modifier.size(16.dp),
+                        KitProgressBar(
+                            fraction = detail.fetch_percent / 100f,
+                            modifier = Modifier.width(48.dp),
+                            onStage = true,
                         )
                     } else {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                        StageSpinner()
                     }
                 }
                 Text(text = status, color = soft, style = centraidType("small"))
@@ -276,7 +282,8 @@ private fun Chrome(
                     detail.held == PhotoCell.Held.HELD_WITHHELD_BY_RULE &&
                     detail.original_hash.isNotEmpty()
                 ) {
-                    TextButton(
+                    StageVerb(
+                        label = PhotosCopy.PHOTOS_LOAD_ORIGINAL,
                         onClick = {
                             onEvent(
                                 PhotoLightboxEvent(
@@ -287,7 +294,7 @@ private fun Chrome(
                                 ),
                             )
                         },
-                    ) { Text(text = "Load the original", color = ink) }
+                    )
                 }
             }
         }
@@ -309,8 +316,8 @@ private fun Chrome(
             // THE FILMSTRIP SITS DIRECTLY ABOVE THE PAGER AND THE ROW, and
             // goes away with the rest of the chrome.
             LightboxFilmstrip(state, onEvent)
-            Pager(state, onEvent, ink, soft)
-            Toolbar(state, detail, onEvent, ink, soft)
+            Pager(state, onEvent)
+            Toolbar(state, detail, onEvent, soft)
         }
     }
 }
@@ -347,8 +354,6 @@ private fun Chip(icon: String, label: String, onClick: () -> Unit) {
 private fun Pager(
     state: PhotoLightboxState,
     onEvent: (PhotoLightboxEvent) -> Unit,
-    ink: Color,
-    soft: Color,
 ) {
     val neighbours = state.neighbour_asset_ids
     if (neighbours.size <= 1) return
@@ -359,28 +364,18 @@ private fun Pager(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        IconButton(
+        StageKey(
+            iconKey = "ChevronLeft",
+            label = PhotosCopy.PHOTOS_PREVIOUS,
             onClick = { previous?.let { onEvent(lightboxMovedEvent(it)) } },
             enabled = previous != null,
-        ) {
-            CentraidIcon(
-                iconKey = "ChevronLeft",
-                tint = if (previous != null) ink else soft,
-                size = 20.dp,
-                modifier = Modifier.semantics { contentDescription = "Previous photograph" },
-            )
-        }
-        IconButton(
+        )
+        StageKey(
+            iconKey = "ChevronRight",
+            label = PhotosCopy.PHOTOS_NEXT,
             onClick = { next?.let { onEvent(lightboxMovedEvent(it)) } },
             enabled = next != null,
-        ) {
-            CentraidIcon(
-                iconKey = "ChevronRight",
-                tint = if (next != null) ink else soft,
-                size = 20.dp,
-                modifier = Modifier.semantics { contentDescription = "Next photograph" },
-            )
-        }
+        )
     }
 }
 
@@ -400,7 +395,6 @@ private fun Toolbar(
     state: PhotoLightboxState,
     detail: PhotoDetail,
     onEvent: (PhotoLightboxEvent) -> Unit,
-    ink: Color,
     soft: Color,
 ) {
     val table = PhotoLightboxMachine.toolbar(state)
@@ -410,7 +404,7 @@ private fun Toolbar(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            Verb("share", "Send a copy", true, ink, soft) {
+            Verb("share", PhotosCopy.PHOTOS_SEND_COPY, true) {
                 onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_SHARE))
             }
             val favorite = table[PhotoLightboxMachine.Verb.FAVORITE]
@@ -418,10 +412,8 @@ private fun Toolbar(
                 iconKey = "heart",
                 // A TOGGLE'S LABEL SAYS WHAT THE NEXT PRESS DOES, not what is
                 // currently true.
-                label = if (detail.favorite) "Remove from favourites" else "Favourite",
+                label = if (detail.favorite) PhotosCopy.PHOTOS_UNFAVORITE else PhotosCopy.PHOTOS_FAVORITE,
                 enabled = favorite?.enabled == true,
-                ink = ink,
-                soft = soft,
             ) {
                 onEvent(
                     PhotoLightboxEvent(
@@ -429,12 +421,12 @@ private fun Toolbar(
                     ),
                 )
             }
-            Verb("info", "Info", true, ink, soft) {
+            Verb("info", "Info", true) {
                 onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_INFO))
             }
             // EDIT, in v0's place after Info. Its gate and its route live with
             // the editor (`PhotoEditorScreen.kt`), not in this bar.
-            PhotoEditButton(state, detail, ink, soft)
+            PhotoEditButton(state, detail)
             // ARCHIVE IS NOT ONE OF v0'S FIVE — on the desktop it lives in
             // the `···` menu — so it is gated on the SAME ladder directly. It
             // is on the bar here because a phone's overflow is a sheet away and
@@ -444,8 +436,6 @@ private fun Toolbar(
                 iconKey = "Archive",
                 label = if (detail.archived) "Unarchive" else "Archive",
                 enabled = refusal == null,
-                ink = ink,
-                soft = soft,
             ) {
                 onEvent(
                     PhotoLightboxEvent(
@@ -454,7 +444,7 @@ private fun Toolbar(
                 )
             }
             val trash = table[PhotoLightboxMachine.Verb.TRASH]
-            Verb("trash", "Delete", trash?.enabled == true, ink, soft) {
+            Verb("trash", "Delete", trash?.enabled == true) {
                 // INTO THE TRASH, NEVER OUT OF THE VAULT. `permanent` is a
                 // separate decision with its own confirmation, and the trash
                 // shelf is where it is made.
@@ -479,22 +469,12 @@ private fun Verb(
     iconKey: String,
     label: String,
     enabled: Boolean,
-    ink: Color,
-    soft: Color,
     onClick: () -> Unit,
 ) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
-        CentraidIcon(
-            iconKey = iconKey,
-            tint = if (enabled) ink else soft,
-            size = 24.dp,
-            modifier = Modifier.semantics { contentDescription = label },
-        )
-    }
+    StageKey(iconKey = iconKey, label = label, onClick = onClick, enabled = enabled)
 }
 
 /** The sheets: info, share, more, the place picker, and the album choice. */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun Sheets(
     state: PhotoLightboxState,
@@ -523,39 +503,31 @@ private fun Sheets(
     }
     when (state.sheet) {
         PhotoLightboxState.Sheet.SHEET_INFO ->
-            ModalBottomSheet(onDismissRequest = close) {
+            SheetRoom(title = detail.title.ifEmpty { PhotosCopy.PHOTOGRAPH }, onDismiss = close) {
                 LightboxInfoSheet(state, detail, onEvent) {
                     handOff { PhotoHandOff.copyLocation(context, detail) }
                 }
             }
 
-        PhotoLightboxState.Sheet.SHEET_SHARE -> ModalBottomSheet(onDismissRequest = close) {
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
-                    .padding(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(text = SHARE_PLACE_TITLE, style = centraidType("title"), color = centraidColor("text"))
-                // THE ROWS ARE THE SHARED MODULE'S, and the words with them:
-                // what leaves the vault is not a per-platform decision.
-                sharePlaceOptions(detail.place_name, detail.place_has_coordinate).forEach { option ->
-                    SheetRow(label = option.label, detail = option.detail) {
-                        close()
-                        handOff { PhotoHandOff.send(context, detail, option.precision) }
-                    }
-                }
+        PhotoLightboxState.Sheet.SHEET_SHARE -> SheetRoom(title = SHARE_PLACE_TITLE, onDismiss = close) {
+            // THE ROWS ARE THE SHARED MODULE'S, and the words with them:
+            // what leaves the vault is not a per-platform decision.
+            sharePlaceOptions(detail.place_name, detail.place_has_coordinate).forEach { option ->
+                SheetRow(label = option.label, detail = option.detail, onTap = {
+                    close()
+                    handOff { PhotoHandOff.send(context, detail, option.precision) }
+                })
             }
         }
 
-        PhotoLightboxState.Sheet.SHEET_MORE -> ModalBottomSheet(onDismissRequest = close) {
+        PhotoLightboxState.Sheet.SHEET_MORE -> SheetRoom(title = "", onDismiss = close) {
             LightboxMoreSheet(state, detail, onEvent, close) {
                 close()
                 handOff { PhotoHandOff.saveToDevice(context, detail) }
             }
         }
 
-        PhotoLightboxState.Sheet.SHEET_PLACE -> ModalBottomSheet(onDismissRequest = close) {
+        PhotoLightboxState.Sheet.SHEET_PLACE -> SheetRoom(title = PhotosCopy.PHOTOS_ADJUST_LOCATION, onDismiss = close) {
             LightboxPlaceSheet(state, detail, onEvent)
         }
 
@@ -599,11 +571,7 @@ private fun LightboxMoreSheet(
     onDownload: () -> Unit,
 ) {
     val refusal = PhotoLightboxMachine.writeRefusal(state)
-    Column(
-        modifier = Modifier
-            .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
-            .padding(bottom = 24.dp),
-    ) {
+    Column {
         MoreRow("Archive", if (detail.archived) "Unarchive" else "Archive", refusal) {
             close()
             onEvent(PhotoLightboxEvent(archive = PhotoLightboxEvent.ArchiveToggled(!detail.archived)))
@@ -613,20 +581,20 @@ private fun LightboxMoreSheet(
                 onEvent(PhotoLightboxEvent(slideshow = PhotoLightboxEvent.SlideshowChanged(true)))
             }
         }
-        MoreRow("FolderPlus", "Add to album", refusal) {
+        MoreRow("FolderPlus", PhotosCopy.PHOTOS_ADD_TO_ALBUM, refusal) {
             onEvent(PhotoLightboxEvent(album_choice_opened = AlbumChoiceOpened()))
         }
         if (state.album_id.isNotEmpty()) {
-            MoreRow("Star", "Make key photo", refusal) {
+            MoreRow("Star", PhotosCopy.PHOTOS_MAKE_KEY, refusal) {
                 close()
                 onEvent(PhotoLightboxEvent(key_photo = PhotoLightboxEvent.KeyPhotoRequested()))
             }
         }
-        MoreRow("MapPin", "Adjust location", refusal) {
+        MoreRow("MapPin", PhotosCopy.PHOTOS_ADJUST_LOCATION, refusal) {
             onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_PLACE))
         }
         MoreRow("Download", "Download", null, onClick = onDownload)
-        MoreRow("Send", "Send a copy", null) {
+        MoreRow("Send", PhotosCopy.PHOTOS_SEND_COPY, null) {
             onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_SHARE))
         }
         MoreRow("trash", "Delete", refusal, destructive = true) {
@@ -637,9 +605,9 @@ private fun LightboxMoreSheet(
 }
 
 /**
- * ONE TEXT SLOT, so a refusal rides after an em dash rather than becoming a
- * second, shorter phrasing of the same truth. Destructive is `net` ink, never
- * a fill (DESIGN.md §3).
+ * ONE KIT ROW, so a refusal rides as the row's detail under its label rather
+ * than becoming a second, shorter phrasing of the same truth. A refused row is
+ * still drawn, disabled. Destructive is `net` ink, never a fill (DESIGN.md §3).
  */
 @Composable
 private fun MoreRow(
@@ -649,45 +617,14 @@ private fun MoreRow(
     destructive: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val enabled = refusal == null
-    val ink = when {
-        !enabled -> centraidColor("textSoft")
-        destructive -> centraidColor("net")
-        else -> centraidColor("text")
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clickable(enabled = enabled, onClick = onClick)
-            .semantics(mergeDescendants = true) { role = Role.Button },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        CentraidIcon(iconKey = icon, tint = ink, size = 20.dp)
-        Text(
-            text = if (enabled) label else "$label — $refusal",
-            color = ink,
-            style = centraidType("control"),
-        )
-    }
-}
-
-@Composable
-private fun SheetRow(label: String, detail: String, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clickable(onClick = onClick)
-            .semantics(mergeDescendants = true) { role = Role.Button },
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(text = label, style = centraidType("control"), color = centraidColor("text"))
-        if (detail.isNotEmpty()) {
-            Text(text = detail, style = centraidType("small"), color = centraidColor("textSoft"))
-        }
-    }
+    SheetRow(
+        label = label,
+        onTap = onClick,
+        iconKey = icon,
+        detail = refusal.orEmpty(),
+        destructive = destructive,
+        enabled = refusal == null,
+    )
 }
 
 /**
@@ -708,30 +645,32 @@ private fun LightboxPlaceSheet(
         onEvent(PhotoLightboxEvent(place_chosen = PhotoLightboxEvent.PlaceChosen(place_id = placeId)))
     }
     Column(
-        modifier = Modifier
-            .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
-            .padding(bottom = 24.dp)
-            .verticalScroll(rememberScrollState()),
+        modifier = Modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(text = "Adjust location", style = centraidType("title"), color = centraidColor("text"))
         lightboxRefusedLine(state)?.let {
-            Text(text = it, style = centraidType("small"), color = centraidColor("net"))
+            Text(
+                text = it,
+                style = centraidType("small"),
+                color = centraidColor("net"),
+                modifier = Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp),
+            )
         }
         if (detail.place_id.isNotEmpty()) {
-            SheetRow(label = "No place", detail = "Clear where this was taken.") { choose("") }
+            SheetRow(label = "No place", detail = PhotosCopy.PHOTOS_CLEAR_PLACE_DETAIL, onTap = { choose("") })
         }
         state.place_choices.forEach { place ->
             val here = place.place_id == detail.place_id
-            SheetRow(label = place.name, detail = if (here) "Where this was taken" else "") {
+            SheetRow(label = place.name, detail = if (here) PhotosCopy.PHOTOS_PLACE_HERE else "", onTap = {
                 if (!here) choose(place.place_id)
-            }
+            })
         }
         if (state.place_choices.isEmpty()) {
             Text(
-                text = "No places in this vault yet.",
+                text = PhotosCopy.PHOTOS_NO_PLACES,
                 style = centraidType("small"),
                 color = centraidColor("textSoft"),
+                modifier = Modifier.padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp),
             )
         }
     }
@@ -775,12 +714,9 @@ private fun LightboxInfoSheet(
     Column(
         modifier = Modifier
             .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
-            .padding(bottom = 24.dp)
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(text = detail.title.ifEmpty { "Photograph" }, style = centraidType("title"), color = ink)
-
         // A REFUSED EDIT IS SAID HERE, where the member made it — the chrome's
         // line is behind this sheet.
         lightboxRefusedLine(state)?.let {
@@ -791,7 +727,7 @@ private fun LightboxInfoSheet(
         TextField(
             value = caption,
             onValueChange = { caption = it },
-            placeholder = { Text("Say what this is") },
+            placeholder = { Text(PhotosCopy.PHOTOS_CAPTION_PLACEHOLDER) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { commitCaption() }),
@@ -819,24 +755,25 @@ private fun LightboxInfoSheet(
                 text = when {
                     detail.place_name.isNotEmpty() -> detail.place_name
                     PhotoDetail.Part.PART_PLACE in detail.unread_parts ->
-                        "Centraid could not read where this was taken."
-                    detail.place_id.isNotEmpty() -> "A place with no name yet"
+                        PhotosCopy.PHOTOS_PLACE_UNREADABLE
+                    detail.place_id.isNotEmpty() -> PhotosCopy.PLACE_UNNAMED
                     else -> "No place"
                 },
                 style = centraidType("body"),
                 color = ink,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_PLACE)) }) {
-                    Text(text = if (detail.place_id.isEmpty()) "Add place" else "Change", color = ink)
-                }
+                KitLink(
+                    label = if (detail.place_id.isEmpty()) PhotosCopy.PHOTOS_ADD_PLACE else "Change",
+                    onClick = { onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_PLACE)) },
+                )
                 if (detail.place_id.isNotEmpty()) {
-                    TextButton(onClick = {
+                    KitLink(label = "Remove", onClick = {
                         onEvent(PhotoLightboxEvent(place_chosen = PhotoLightboxEvent.PlaceChosen(place_id = "")))
-                    }) { Text(text = "Remove", color = ink) }
+                    })
                 }
                 if (detail.place_has_coordinate) {
-                    TextButton(onClick = onCopyLocation) { Text(text = "Copy exact location", color = ink) }
+                    KitLink(label = PhotosCopy.PHOTOS_COPY_EXACT_LOCATION, onClick = onCopyLocation)
                 }
             }
         }
@@ -844,13 +781,13 @@ private fun LightboxInfoSheet(
         // CONFIRMED FACES ONLY, and only the ones with a NAME: a party id is
         // not a person, and a proposal belongs to face review.
         Column {
-            InfoLabel("Who is in it")
+            InfoLabel(PhotosCopy.PHOTOS_WHO_IN_IT)
             Text(
                 text = lightboxSection(
                     values = detail.people.map { it.display_name }.filter { it.isNotEmpty() },
                     unread = PhotoDetail.Part.PART_PEOPLE in detail.unread_parts,
-                    unreadSentence = "Centraid could not read who is in this photograph.",
-                    emptySentence = "Nobody is named in this photograph.",
+                    unreadSentence = PhotosCopy.PHOTOS_PEOPLE_UNREADABLE,
+                    emptySentence = PhotosCopy.PHOTOS_PEOPLE_NONE,
                 ),
                 style = centraidType("body"),
                 color = ink,
@@ -865,9 +802,9 @@ private fun LightboxInfoSheet(
             if (labels.isEmpty()) {
                 Text(
                     text = if (PhotoDetail.Part.PART_LABELS in detail.unread_parts) {
-                        "Centraid could not read this photograph's labels."
+                        PhotosCopy.PHOTOS_LABELS_UNREADABLE
                     } else {
-                        "No labels on this photograph."
+                        PhotosCopy.PHOTOS_LABELS_NONE
                     },
                     style = centraidType("small"),
                     color = soft,
@@ -878,36 +815,32 @@ private fun LightboxInfoSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier
-                        .clip(RoundedCornerShape(7.dp))
+                        .clip(tokenShape("md"))
                         .background(centraidColor("bgSunken"))
                         .padding(start = 10.dp),
                 ) {
                     Text(text = label.label, style = centraidType("small"), color = ink)
                     if (label.tag_id.isNotEmpty()) {
-                        IconButton(
-                            onClick = {
+                        IconKey(
+                            iconKey = "X",
+                            label = "Remove ${label.label}",
+                            testTag = "lightbox-tag-remove",
+                            bordered = false,
+                            onPress = {
                                 onEvent(
                                     PhotoLightboxEvent(
                                         tag_removed = PhotoLightboxEvent.TagRemoved(label.tag_id),
                                     ),
                                 )
                             },
-                            modifier = Modifier.size(34.dp),
-                        ) {
-                            CentraidIcon(
-                                iconKey = "X",
-                                tint = soft,
-                                size = 14.dp,
-                                modifier = Modifier.semantics { contentDescription = "Remove ${label.label}" },
-                            )
-                        }
+                        )
                     }
                 }
             }
             TextField(
                 value = tag,
                 onValueChange = { tag = it },
-                placeholder = { Text("Add a label") },
+                placeholder = { Text(PhotosCopy.PHOTOS_ADD_LABEL) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = {
@@ -916,7 +849,7 @@ private fun LightboxInfoSheet(
                         tag = ""
                     }
                 }),
-                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Add a label" },
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = PhotosCopy.PHOTOS_ADD_LABEL },
             )
         }
 
@@ -980,8 +913,8 @@ private fun lightboxDrawnPath(detail: PhotoDetail): String? =
  * never a broken image.
  */
 private fun lightboxStageLabel(detail: PhotoDetail): String = when (detail.held) {
-    PhotoCell.Held.HELD_ABSENT -> "This photograph is not on this device yet."
-    else -> "Preview no longer on this device"
+    PhotoCell.Held.HELD_ABSENT -> PhotosCopy.PHOTOS_NOT_ON_PHONE
+    else -> PhotosCopy.PHOTOS_PREVIEW_GONE
 }
 
 /**
@@ -991,19 +924,19 @@ private fun lightboxStageLabel(detail: PhotoDetail): String = when (detail.held)
  */
 private fun lightboxStatusLine(detail: PhotoDetail, playing: Boolean): String = when {
     detail.held == PhotoCell.Held.HELD_WITHHELD_BY_RULE ->
-        "Original not fetched — your transfer rule is holding it back."
+        PhotosCopy.PHOTOS_ORIGINAL_HELD_BACK
     // A PERCENTAGE ONLY WHEN THERE IS ONE: "0%" would read as "nothing has
     // crossed".
     detail.held == PhotoCell.Held.HELD_FETCHING ->
         if (detail.fetch_percent > 0) {
-            "Fetching the original — ${detail.fetch_percent}%"
+            PhotosCopy.PHOTOS_ORIGINAL_DOWNLOADING_PERCENT.replace("{percent}", "${detail.fetch_percent}")
         } else {
-            "Fetching the original…"
+            PhotosCopy.PHOTOS_ORIGINAL_DOWNLOADING
         }
     detail.held == PhotoCell.Held.HELD_ABSENT ->
-        "Nothing of this photograph has reached this device yet."
+        PhotosCopy.PHOTOS_NOTHING_ON_PHONE
     detail.kind == PhotoCell.Kind.KIND_VIDEO && !playing ->
-        "This video's file is not on this device — showing a still from it."
+        PhotosCopy.PHOTOS_VIDEO_STILL_ONLY
     else -> ""
 }
 
@@ -1012,14 +945,13 @@ private fun lightboxStatusLine(detail: PhotoDetail, playing: Boolean): String = 
  * choice" is only honest if the choice is described before it is offered.
  */
 private fun lightboxWhereabouts(detail: PhotoDetail): String = when (detail.held) {
-    PhotoCell.Held.HELD_ORIGINAL -> "The original is on this device."
+    PhotoCell.Held.HELD_ORIGINAL -> PhotosCopy.PHOTOS_ORIGINAL_ON_PHONE
     PhotoCell.Held.HELD_WITHHELD_BY_RULE ->
-        "The original has not been fetched — your transfer rule is holding it, " +
-            "and fetching it is your choice."
-    PhotoCell.Held.HELD_FETCHING -> "Centraid is fetching the original now."
-    PhotoCell.Held.HELD_ABSENT -> "Nothing of this photograph is on this device yet."
+        PhotosCopy.PHOTOS_ORIGINAL_YOUR_CHOICE
+    PhotoCell.Held.HELD_FETCHING -> PhotosCopy.PHOTOS_ORIGINAL_DOWNLOADING_NOW
+    PhotoCell.Held.HELD_ABSENT -> PhotosCopy.PHOTOS_NOTHING_ON_PHONE
     PhotoCell.Held.HELD_THUMBNAIL_ONLY, PhotoCell.Held.HELD_UNSPECIFIED ->
-        "This device holds a smaller copy; the original has not been fetched."
+        PhotosCopy.PHOTOS_SMALLER_COPY_ONLY
 }
 
 /**
@@ -1041,7 +973,7 @@ private fun lightboxFacts(context: Context, detail: PhotoDetail, camera: String)
         if (detail.byte_size > 0L) {
             add("File" to lightboxBytes(detail.byte_size))
         } else if (PhotoDetail.Part.PART_CONTENT in detail.unread_parts) {
-            add("File" to "Centraid could not read this file's size.")
+            add("File" to PhotosCopy.PHOTOS_FILE_SIZE_UNREADABLE)
         }
         if (camera.isNotEmpty()) add("Camera" to camera)
     }

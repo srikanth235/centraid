@@ -222,6 +222,18 @@
     "door": "hook",
     "why": "The container-opacity rule from DESIGN.md; opacity on a container flattens everything inside it."
   },
+  "lint:native-controls": {
+    "class": "contract",
+    "rung": 1,
+    "door": "hook",
+    "why": "The mobile controls rulings from DESIGN.md: a screen draws every control from the kit, so a platform alert, Material button, bare spinner or literal radius outside the kit is a ratcheted finding."
+  },
+  "lint:copy": {
+    "class": "contract",
+    "rung": 1,
+    "door": "hook",
+    "why": "The Copy rulebook from DESIGN.md: banned words, the vocabulary table, the ' · ' rule and the per-key word caps are a ratcheted finding in every copy/*.json string."
+  },
   "lint:motion-rule": {
     "class": "contract",
     "rung": 1,

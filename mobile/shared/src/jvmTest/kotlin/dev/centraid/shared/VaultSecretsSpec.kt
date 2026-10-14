@@ -51,6 +51,42 @@ class VaultSecretsSpec : StringSpec({
         }
     }
 
+    "the key moves into and out of the keychain, and a saved copy is a claim kept apart (R-ONBOARD-10)" {
+        runTest {
+            val (_, vault) = secrets()
+            vault.setSeedSync(true) shouldBe false
+            vault.rememberSeed("ab".repeat(64))
+            vault.seedSynced() shouldBe true
+            vault.setSeedSync(false) shouldBe false
+            vault.seedSynced() shouldBe false
+            // STILL ON THIS PHONE: off the keychain is not forgotten.
+            vault.seed() shouldBe "ab".repeat(64)
+            vault.wordsSaved() shouldBe false
+            vault.markWordsSaved()
+            vault.setSeedSync(true) shouldBe true
+            vault.seedSynced() shouldBe true
+            vault.wordsSaved() shouldBe true
+            vault.forgetSeed()
+            vault.wordsSaved() shouldBe false
+        }
+    }
+
+    "a vault's own key waits to be filed until it is filed or forgotten (R-ONBOARD-10)" {
+        runTest {
+            val (_, vault) = secrets()
+            val family = vault.keepOwnSeed("cd".repeat(64), "Family")
+            val work = vault.keepOwnSeed("ef".repeat(64), "Work")
+            vault.addPendingFiling(family, "Family")
+            vault.addPendingFiling(work, "Work\tTeam")
+            vault.addPendingFiling(family, "Family")
+            vault.pendingFilings() shouldBe listOf(work to "Work Team", family to "Family")
+            vault.clearPendingFiling(work)
+            vault.pendingFilings() shouldBe listOf(family to "Family")
+            vault.forgetOwnSeed(family)
+            vault.pendingFilings() shouldBe emptyList()
+        }
+    }
+
     "writing a malformed secret is refused at the call, not at the ABI" {
         runTest {
             val (_, vault) = secrets()
@@ -79,6 +115,17 @@ class VaultSecretsSpec : StringSpec({
             services.syncedSecrets.seed().shouldBeNull()
             vault.forgetSeed()
             vault.seed().shouldBeNull()
+        }
+    }
+
+    "a member who unticks the sync keeps the seed on THIS phone only, even where the platform syncs" {
+        runTest {
+            val services = FakePlatformServices()
+            val vault = VaultSecrets(services.secureStore, services.syncedSecrets)
+            val seed = "ef".repeat(64)
+            vault.rememberSeed(seed, sync = false) shouldBe false
+            vault.seed() shouldBe seed
+            services.syncedSecrets.seed().shouldBeNull()
         }
     }
 

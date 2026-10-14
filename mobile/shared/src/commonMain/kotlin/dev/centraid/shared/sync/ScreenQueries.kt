@@ -244,8 +244,9 @@ internal fun AppQueryRequest.zone(): String? =
         ?: people_roster?.tz ?: people_touch?.tz ?: people_person?.tz ?: people_search?.tz ?: people_trash?.tz
         ?: tally_dashboard?.tz ?: tally_expense?.tz ?: tally_spending?.tz ?: tally_trash?.tz ?: tally_export?.tz
         ?: locker_items?.tz ?: locker_item?.tz ?: locker_search?.tz ?: locker_review?.tz ?: locker_access?.tz
+        ?: vault_search?.tz
 
-private const val NOTHING_TO_READ = "Centraid does not know what to read here."
-private const val NO_ZONE = "This device did not say which time zone it is in."
-private const val NEITHER = "The vault answered with neither an answer nor a reason."
+private const val NOTHING_TO_READ = "Nothing to read here."
+private const val NO_ZONE = "This phone did not report its time zone."
+private const val NEITHER = "No answer came back. Try again."
 private const val DENIED = "You do not have access to this."

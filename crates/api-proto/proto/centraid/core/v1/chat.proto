@@ -22,14 +22,24 @@ package centraid.core.v1;
 
 import "centraid/core/v1/assist.proto";
 
-// `chat.threads`: the drawer's list, newest activity first.
+// `chat.threads`: the drawer's list, newest activity first — or, with a `term`,
+// the threads that term finds, best match first (#1097, R-1097-22, R-1097-24).
 message ChatThreadsRequest {
   // At most this many; 0 is 100.
   uint32 limit = 1;
+  // THE WORDS TO SEARCH FOR. Blank (the default) is the plain list. A thread is
+  // found by its title and by the text of the member's OWN messages in it,
+  // never by what the assistant said or by a card; a typo is corrected only
+  // when the exact words found nothing, and `ChatThreads.corrected` says so.
+  string term = 2;
 }
 
 message ChatThreads {
   repeated ChatThreadRow threads = 1;
+  // THE WORDS THE ROWS ANSWER (#1097, R4, R8), as `VaultSearch.corrected`: set
+  // only when `term` as typed found nothing and a correction of its words did;
+  // EMPTY for a plain list, an exact answer, and a correction that found nothing.
+  string corrected = 2;
 }
 
 message ChatThreadRow {

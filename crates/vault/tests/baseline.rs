@@ -50,7 +50,15 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 /// changes, rung seven's index that makes a second Locker generation
 /// unrepresentable (R-1047-D2), rung eleven's chat: four tables, their
 /// three entity triggers and the indexes (R-CHAT-1), and rung twelve's two
-/// guards on a proposal's life (#1088). Rungs three and four
+/// guards on a proposal's life (#1088), and rung thirteen's eleven `_vocab`
+/// tables, the folder index `fts_core_concept` with its shadow tables and four
+/// triggers, the three triggers that re-index a Tally circle from its group, and
+/// the twenty-two triggers that re-index a party, event, task or
+/// expense from the child table that feeds it, including the one edge that
+/// carries an interaction's note to the person (#1097), and its chat index
+/// `fts_chat_thread` with its five shadow tables, its vocabulary and the six
+/// triggers that keep it to a thread's title and what the member said
+/// (R-1097-22). Rungs three and four
 /// added the old backup plane's index and blob custody (#1029 §2, §4); rung
 /// ten drops all eight objects again (#1080), so they are founded and gone.
 ///
@@ -59,7 +67,7 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 /// Named here rather than filtered by prefix: a guard that stopped being
 /// created, or an object arriving from somewhere, both have to show up as a
 /// failure.
-const LADDER_OBJECTS: [&str; 19] = [
+const LADDER_OBJECTS: [&str; 78] = [
     "chat_message",
     "chat_message_attachment",
     "chat_message_card",
@@ -75,6 +83,65 @@ const LADDER_OBJECTS: [&str; 19] = [
     "core_entity_revision_parent_is_immutable",
     "core_entity_revision_parent_is_same_object",
     "core_link_no_revises_edge",
+    "fts_chat_thread",
+    "fts_chat_thread_ad",
+    "fts_chat_thread_ai",
+    "fts_chat_thread_au",
+    "fts_chat_thread_config",
+    "fts_chat_thread_content",
+    "fts_chat_thread_data",
+    "fts_chat_thread_docsize",
+    "fts_chat_thread_from_chat_message_ad",
+    "fts_chat_thread_from_chat_message_ai",
+    "fts_chat_thread_from_chat_message_au",
+    "fts_chat_thread_idx",
+    "fts_chat_thread_vocab",
+    "fts_core_collection_vocab",
+    "fts_core_concept",
+    "fts_core_concept_ad",
+    "fts_core_concept_ai",
+    "fts_core_concept_au",
+    "fts_core_concept_config",
+    "fts_core_concept_content",
+    "fts_core_concept_data",
+    "fts_core_concept_docsize",
+    "fts_core_concept_from_core_concept_scheme_au",
+    "fts_core_concept_idx",
+    "fts_core_concept_vocab",
+    "fts_core_content_item_vocab",
+    "fts_core_document_vocab",
+    "fts_core_event_from_core_place_au",
+    "fts_core_event_vocab",
+    "fts_core_party_from_core_link_ad",
+    "fts_core_party_from_core_link_ai",
+    "fts_core_party_from_core_link_au",
+    "fts_core_party_from_knowledge_annotation_ad",
+    "fts_core_party_from_knowledge_annotation_ai",
+    "fts_core_party_from_knowledge_annotation_au",
+    "fts_core_party_from_people_profile_ad",
+    "fts_core_party_from_people_profile_ai",
+    "fts_core_party_from_people_profile_au",
+    "fts_core_party_from_social_contact_channel_ad",
+    "fts_core_party_from_social_contact_channel_ai",
+    "fts_core_party_from_social_contact_channel_au",
+    "fts_core_party_vocab",
+    "fts_knowledge_note_vocab",
+    "fts_schedule_project_vocab",
+    "fts_schedule_task_from_schedule_project_au",
+    "fts_schedule_task_vocab",
+    "fts_social_circle_from_tally_group_ad",
+    "fts_social_circle_from_tally_group_ai",
+    "fts_social_circle_from_tally_group_au",
+    "fts_social_circle_vocab",
+    "fts_tally_expense_from_knowledge_annotation_ad",
+    "fts_tally_expense_from_knowledge_annotation_ai",
+    "fts_tally_expense_from_knowledge_annotation_au",
+    "fts_tally_expense_from_social_circle_au",
+    "fts_tally_expense_from_tally_expense_line_item_ad",
+    "fts_tally_expense_from_tally_expense_line_item_ai",
+    "fts_tally_expense_from_tally_expense_line_item_au",
+    "fts_tally_expense_from_tally_group_au",
+    "fts_tally_expense_vocab",
     "idx_chat_attachment_asset",
     "idx_chat_attachment_document",
     "idx_chat_attachment_thumb",
@@ -90,13 +157,20 @@ const LADDER_OBJECTS: [&str; 19] = [
 /// on `share_authority` — and, from rung seven, `locker_key_live_idx`, the
 /// predicate index whose `retired_at` had no writer once rotation went
 /// (R-1047-D2) — and, from rung nine, `notifications_notice` with its two
-/// indexes, a table no plane has written or read since #1029.
+/// indexes, a table no plane has written or read since #1029 — and, from rung
+/// thirteen, the seven full-text indexes nothing read (`fts_people_profile`,
+/// `fts_core_place`, `fts_knowledge_annotation`, and by the owner's ruling
+/// `fts_core_transaction`, `fts_locker_item`, `fts_social_thread` and
+/// `fts_social_message`) with their shadow tables and twenty-one triggers
+/// (#1097, R2a, R-1097-12). `fts_schedule_project` and `fts_social_circle` are
+/// kept for containers (R-1097-19), so they are not dropped; their triggers are
+/// rewritten with a liveness guard and are in `ALTERED_OBJECTS`.
 ///
 /// `access_device` and `access_device_secret` are NOT here, and that is an
 /// open item rather than a ruling: their writer (`Vault::enrol_device`, the
 /// gateway's peer allowlist) left with the iroh plane in #1080, and no rung
 /// drops them yet.
-const DROPPED_OBJECTS: [&str; 123] = [
+const DROPPED_OBJECTS: [&str; 186] = [
     "access_agent",
     "access_agent_secret",
     "attachments",
@@ -130,6 +204,69 @@ const DROPPED_OBJECTS: [&str; 123] = [
     "fts_conversation_item_ad",
     "fts_conversation_item_ai",
     "fts_conversation_turn_ad",
+    "fts_core_place",
+    "fts_core_place_ad",
+    "fts_core_place_ai",
+    "fts_core_place_au",
+    "fts_core_place_config",
+    "fts_core_place_content",
+    "fts_core_place_data",
+    "fts_core_place_docsize",
+    "fts_core_place_idx",
+    "fts_core_transaction",
+    "fts_core_transaction_ad",
+    "fts_core_transaction_ai",
+    "fts_core_transaction_au",
+    "fts_core_transaction_config",
+    "fts_core_transaction_content",
+    "fts_core_transaction_data",
+    "fts_core_transaction_docsize",
+    "fts_core_transaction_idx",
+    "fts_knowledge_annotation",
+    "fts_knowledge_annotation_ad",
+    "fts_knowledge_annotation_ai",
+    "fts_knowledge_annotation_au",
+    "fts_knowledge_annotation_config",
+    "fts_knowledge_annotation_content",
+    "fts_knowledge_annotation_data",
+    "fts_knowledge_annotation_docsize",
+    "fts_knowledge_annotation_idx",
+    "fts_locker_item",
+    "fts_locker_item_ad",
+    "fts_locker_item_ai",
+    "fts_locker_item_au",
+    "fts_locker_item_config",
+    "fts_locker_item_content",
+    "fts_locker_item_data",
+    "fts_locker_item_docsize",
+    "fts_locker_item_idx",
+    "fts_people_profile",
+    "fts_people_profile_ad",
+    "fts_people_profile_ai",
+    "fts_people_profile_au",
+    "fts_people_profile_config",
+    "fts_people_profile_content",
+    "fts_people_profile_data",
+    "fts_people_profile_docsize",
+    "fts_people_profile_idx",
+    "fts_social_message",
+    "fts_social_message_ad",
+    "fts_social_message_ai",
+    "fts_social_message_au",
+    "fts_social_message_config",
+    "fts_social_message_content",
+    "fts_social_message_data",
+    "fts_social_message_docsize",
+    "fts_social_message_idx",
+    "fts_social_thread",
+    "fts_social_thread_ad",
+    "fts_social_thread_ai",
+    "fts_social_thread_au",
+    "fts_social_thread_config",
+    "fts_social_thread_content",
+    "fts_social_thread_data",
+    "fts_social_thread_docsize",
+    "fts_social_thread_idx",
     "harness_health",
     "idx_attachments_hash",
     "idx_attachments_item",
@@ -239,11 +376,54 @@ const DROPPED_OBJECTS: [&str; 123] = [
 ///   corpus's by those two columns.
 /// - `locker_item_address` (rung eight): `match_policy` goes with the matcher
 ///   nothing ran (Q-1047-15).
-const ALTERED_OBJECTS: [&str; 4] = [
+/// - the three sync triggers of `fts_schedule_project` and of `fts_social_circle`
+///   (rung thirteen): an archived project and a circle with no live Tally group
+///   are not indexed (R-1097-19), so the triggers carry that guard.
+/// - `fts_core_party`, `fts_core_event`, `fts_schedule_task` and
+///   `fts_tally_expense` (rung thirteen): each index is dropped and created
+///   again with the attribute columns it folds in, so the virtual table, its
+///   `_content` shadow (one column per indexed column) and its three sync
+///   triggers differ from the corpus's. The other shadows (`_config`, `_data`,
+///   `_docsize`, `_idx`) have the same DDL whatever the columns (#1097).
+/// - the four `trg_fts_content_text_*` and `trg_fts_representation_*` triggers
+///   (rung thirteen): they re-index notes, documents and messages when a body
+///   or a representation arrives, and rung thirteen creates them again without
+///   the message block, because `fts_social_message` is retired (#1097).
+const ALTERED_OBJECTS: [&str; 34] = [
     "core_collection",
+    "fts_core_event",
+    "fts_core_event_ad",
+    "fts_core_event_ai",
+    "fts_core_event_au",
+    "fts_core_event_content",
+    "fts_core_party",
+    "fts_core_party_ad",
+    "fts_core_party_ai",
+    "fts_core_party_au",
+    "fts_core_party_content",
+    "fts_schedule_project_ad",
+    "fts_schedule_project_ai",
+    "fts_schedule_project_au",
+    "fts_schedule_task",
+    "fts_schedule_task_ad",
+    "fts_schedule_task_ai",
+    "fts_schedule_task_au",
+    "fts_schedule_task_content",
+    "fts_social_circle_ad",
+    "fts_social_circle_ai",
+    "fts_social_circle_au",
+    "fts_tally_expense",
+    "fts_tally_expense_ad",
+    "fts_tally_expense_ai",
+    "fts_tally_expense_au",
+    "fts_tally_expense_content",
     "locker_item",
     "locker_item_address",
     "locker_key",
+    "trg_fts_content_text_ai",
+    "trg_fts_content_text_au",
+    "trg_fts_representation_ai",
+    "trg_fts_representation_au",
 ];
 
 /// Every schema object of a file, keyed by `(type, name)`.
@@ -365,9 +545,12 @@ fn the_three_excluded_classes_are_created_by_sqlite_itself() {
             ))
         })
         .expect("the counts read");
-    // 17 virtual tables × 5 shadow tables each: rung five drops
-    // `fts_conversation` with the ledger band it indexed (#1029).
-    assert_eq!(shadows, 85);
+    // 12 FTS5 tables × 5 shadow tables each: rung five drops `fts_conversation`
+    // with the ledger band it indexed (#1029), rung thirteen drops the seven
+    // indexes nothing read (#1097, R2a, R-1097-12) and adds the folder index
+    // (R-1097-19) and the chat index (R-1097-22). The `_vocab` tables rung thirteen adds are virtual tables over
+    // those, with no shadow tables of their own.
+    assert_eq!(shadows, 60);
     assert_eq!(sequence, 1);
     assert!(autoindexes > 0, "no implicit index was created");
     // And none of the three appears in the baseline's own text.
@@ -393,8 +576,16 @@ fn the_fifty_seven_fts_sync_triggers_survive_the_baseline() {
         })
         .expect("the count reads");
     // 57 in the corpus, less the six `fts_conversation_*` sync triggers rung
-    // five drops with the conversation ledger band (#1029).
-    assert_eq!(triggers, 51);
+    // five drops with the conversation ledger band (#1029) is 51: seventeen
+    // indexes, three each. Rung thirteen retires seven indexes (21 triggers) and
+    // adds the triggers that re-index a parent from a child table (#1097): 12 for
+    // a party (profile, channel, memo, and the link of an interaction's note), 1
+    // for an event (place), 1 for a task (project) and 8 for an expense (line
+    // item, memo, circle, group); and for the containers (R-1097-19) the folder
+    // index's three and its one from the scheme, and the circle's three from its
+    // Tally group; and for the chat (R-1097-22) the thread index's three and the
+    // three that re-index a thread from its messages.
+    assert_eq!(triggers, 51 - 21 + 12 + 1 + 1 + 8 + 4 + 3 + 3 + 3);
 }
 
 #[test]
@@ -483,10 +674,11 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     // match policy (Q-1047-15); rung nine drops the notices no plane writes;
     // rung ten drops rungs three and four's backup index (#1080); rung eleven
     // founds the chat (R-CHAT-1); rung twelve gives a proposal its life
-    // (#1088).
+    // (#1088); rung thirteen folds attribute text into the search indexes
+    // (#1097).
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above.
-    assert_eq!(user_version, 12);
+    assert_eq!(user_version, 13);
     assert_eq!(journal, "wal");
 }
 

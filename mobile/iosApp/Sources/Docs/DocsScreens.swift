@@ -135,7 +135,8 @@ enum DocsScreens: AppScreens {
                     send: sender(shell, drive),
                     push: push(shell),
                     onBack: pop(shell),
-                    onHome: { [weak shell] in shell?.path.removeAll() }
+                    onHome: { [weak shell] in shell?.path.removeAll() },
+                    openContainer: { [weak shell] in shell?.openRow($0, parent: $1) }
                 ))
             }
         )
@@ -151,7 +152,8 @@ enum DocsScreens: AppScreens {
                     send: sender(shell, folder),
                     push: push(shell),
                     onBack: pop(shell),
-                    onHome: { [weak shell] in shell?.path.removeAll() }
+                    onHome: { [weak shell] in shell?.path.removeAll() },
+                    openContainer: { [weak shell] in shell?.openRow($0, parent: $1) }
                 ))
             }
         )

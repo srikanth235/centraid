@@ -1,5 +1,6 @@
 package dev.centraid.shared.apps.photos
 
+import centraid.core.v1.ContainerHit
 import centraid.core.v1.PageOrder
 import centraid.core.v1.PageQuery
 import centraid.core.v1.Row
@@ -27,11 +28,22 @@ import kotlin.math.sqrt
  *
  * v0's `search-hits.ts` is the spec: a query reaches **people** (confirmed
  * parties), **places** (the member's name, the gazetteer's, and the home band),
- * **albums**, **labels** (concepts tagged on a photograph) and **captions**, and
- * the answer is two things — the people, places and albums it NAMED, as doors
- * above the grid, and the photographs all of them REACH, as the grid. Typing
- * "Tahoe" returns the album's photographs, not an empty grid under a row
- * saying the album exists (#712).
+ * **albums**, **labels** (concepts tagged on a photograph) and **text** (the
+ * caption, and now the words recognised in the picture and a video's
+ * transcript), and the answer is two things — the people, places and albums it
+ * NAMED, as doors above the grid, and the photographs all of them REACH, as the
+ * grid. Typing "Tahoe" returns the album's photographs, not an empty grid under
+ * a row saying the album exists (#712).
+ *
+ * ## WHAT THE CORE ANSWERS AND WHAT STAYS HERE (#1097, R-1097-25, R-1097-26)
+ *
+ * The TEXT leg and the ALBUM leg are the full-text door's: the core answers
+ * `photos.search` (`photos.proto`) with the live photographs whose caption, text
+ * or transcript hold the words, in rank order, and the albums whose name does,
+ * and it corrects a typo when asked ([PhotosSearchBridge] asks only when every
+ * leg here found nothing). This object holds the STRUCTURED legs — the people
+ * confirmed on a face, the places, the labels — and the folds, none of which
+ * has a full-text index to ask.
  *
  * ## WHY THESE ARE LEGS AND NOT ONE STATEMENT
  *
@@ -40,19 +52,15 @@ import kotlin.math.sqrt
  * words the vault does not store as a column (the home band is arithmetic on
  * two coordinates). So `PhotosSearchBridge` runs the legs here in order — the
  * entities, their counts, then ONE `media_asset` page whose predicate reaches
- * every entity it matched through `IN (SELECT …)` — and folds them into one
- * `DataArrived`. Everything that is DATA stays in this file, provable with no
- * vault; the bridge is only the trip.
- *
- * `crates/search`'s FTS index is still not reachable: `centraid.core.v1.Request`
- * has no search arm. A caption is matched with `LIKE`, which is v0's own
- * `captionHits` over the words the member themself wrote.
+ * every entity it matched through `IN (SELECT …)`, and the photographs the core
+ * named by id — and folds them into one `DataArrived`. Everything that is DATA
+ * stays in this file, provable with no vault; the bridge is only the trip.
  *
  * ## THE QUERY IS WORDS, NOT A STRING
  *
  * v0's `queryTokens`: lower-cased, split on anything that is not a letter or a
  * digit, one-letter words and a short stop-list dropped — without it "the coast
- * road" pulls every album containing "the". A name matches when it contains ANY
+ * road" pulls every place containing "the". A name matches when it contains ANY
  * of the words. A query that is nothing BUT short words is matched whole, which
  * is where this departs from v0 on purpose: v0 answered a first keystroke with
  * "Nothing matches", and a search that re-reads as the member types must not
@@ -61,6 +69,9 @@ import kotlin.math.sqrt
 public object PhotosSearchReads {
     /** How many of each kind stand above the grid (v0's `PER_KIND_CAP`). */
     public const val PER_KIND_CAP: Int = 3
+
+    /** The photographs the core names by text: the best of them by rank (`photos.proto`). */
+    public const val TEXT_LIMIT: Int = 500
 
     /** A mosaic's page, the same size the library's is, and for its reason. */
     public const val HIT_LIMIT: Int = 120
@@ -201,23 +212,6 @@ public object PhotosSearchReads {
     )
 
     /**
-     * `photos.search.albums` — albums whose name holds a word of the query.
-     * `kind = 'album'` first: a notebook called "Portugal" is Notes', and is
-     * never an album hit here (rung six).
-     */
-    public fun albumsQuery(words: List<String>): PageQuery {
-        val (names, binds) = anyWord("name", words)
-        return PageQuery(
-            name = "photos.search.albums",
-            select = listOf("collection_id", "name"),
-            from = "core_collection",
-            where_ = "kind = ? AND $names",
-            bind = listOf(Value(text = PhotosCollectionsReads.ALBUM_KIND)) + binds,
-            order = PageOrder(sort_column = "name", pk_column = "collection_id"),
-        )
-    }
-
-    /**
      * FLAGS ARE NOT LABELS. The star is the `starred` concept in the flags
      * scheme (#916), and a member searching "star" meant a word, not every
      * favourite they own.
@@ -302,8 +296,9 @@ public object PhotosSearchReads {
     // -----------------------------------------------------------------------
 
     /**
-     * WHAT THE QUERY MATCHED, BY ID — the doors above the grid and the labels
-     * under it, which together say what the grid may reach.
+     * WHAT THE QUERY MATCHED, BY ID — the doors above the grid, the labels under
+     * it and the photographs the core named by text, which together say what the
+     * grid may reach.
      */
     public data class Reach(
         val partyIds: List<String> = emptyList(),
@@ -311,22 +306,37 @@ public object PhotosSearchReads {
         val unplaced: Boolean = false,
         val albumIds: List<String> = emptyList(),
         val conceptIds: List<String> = emptyList(),
-    )
+        /** The photographs whose caption, text or transcript the core's door found. */
+        val assetIds: List<String> = emptyList(),
+    ) {
+        /** Nothing reached: the grid has nothing to read, and no statement is made. */
+        val isEmpty: Boolean
+            get() = partyIds.isEmpty() && placeIds.isEmpty() && !unplaced &&
+                albumIds.isEmpty() && conceptIds.isEmpty() && assetIds.isEmpty()
+    }
 
     /**
-     * `photos.search.hits` — the grid: every live photograph whose CAPTION
-     * holds a word of the query, UNIONED with every one a matched person,
-     * place, album or label reaches.
+     * `photos.search.hits` — the grid: every live photograph the core's door
+     * named by its text (caption, recognised text, transcript), UNIONED with
+     * every one a matched person, place, album or label reaches. **Null when
+     * nothing was reached**: a statement with no arm would read the whole shelf.
      *
      * One statement, so one keyset walk and one order — the library's,
      * `captured_at DESC, asset_id DESC` — and a photograph two reasons reach is
-     * one cell, not two. A NULL `captured_at` rides the first window and no
-     * other, for the reason `PhotosReads` states.
+     * one cell, not two. The text leg's RANK decides which photographs are in
+     * (the core names the best of them) and not where they sit: a mosaic that
+     * reordered itself by relevance would not be the shelf the library draws. A
+     * NULL `captured_at` rides the first window and no other, for the reason
+     * `PhotosReads` states.
      */
-    public fun hitsQuery(words: List<String>, reach: Reach): PageQuery {
-        val (captions, captionBinds) = anyWord("title", words)
-        val arms = mutableListOf("(title IS NOT NULL AND $captions)")
-        val binds = captionBinds.toMutableList()
+    public fun hitsQuery(reach: Reach): PageQuery? {
+        if (reach.isEmpty) return null
+        val arms = mutableListOf<String>()
+        val binds = mutableListOf<Value>()
+        if (reach.assetIds.isNotEmpty()) {
+            arms += inList("asset_id", reach.assetIds.size)
+            binds += reach.assetIds.map { Value(text = it) }
+        }
         if (reach.partyIds.isNotEmpty()) {
             arms += "asset_id IN (SELECT asset_id FROM media_face_region WHERE review_state = ? " +
                 "AND ${inList("party_id", reach.partyIds.size)})"
@@ -393,8 +403,17 @@ public object PhotosSearchReads {
         .sortedWith(compareBy({ it.label.lowercase() }, { it.id }))
         .take(PER_KIND_CAP)
 
-    /** The albums leg, the same way. */
-    public fun albums(rows: List<Row>): List<Named> = people(rows)
+    /**
+     * The albums leg: the core's container hits (`photos.search`, narrowed to
+     * the rows that open in Photos), IN THE DOOR'S RANK ORDER and three at most.
+     * An album with no title is no door.
+     */
+    public fun albums(hits: List<ContainerHit>): List<Named> = hits
+        .mapNotNull { hit ->
+            val name = hit.title.trim()
+            if (hit.id.isEmpty() || name.isEmpty()) null else Named(hit.id, name)
+        }
+        .take(PER_KIND_CAP)
 
     /** The labels leg. Not capped: a label is a reason, and reasons are the view's to clamp. */
     public fun labels(rows: List<Row>): List<Named> = rows.mapNotNull { row ->
@@ -620,7 +639,12 @@ public object PhotosSearchReads {
      * Only the KEPT doors: a fourth person the member cannot see above the
      * grid must not be why photographs are in it (v0's `reachableAssetIds`).
      */
-    public fun reach(topHits: List<SearchTopHit>, labels: List<Named>): Reach = Reach(
+    public fun reach(
+        topHits: List<SearchTopHit>,
+        labels: List<Named>,
+        assetIds: List<String> = emptyList(),
+    ): Reach = Reach(
+        assetIds = assetIds,
         partyIds = topHits.mapNotNull { it.shelf?.state_view?.person?.party_id },
         placeIds = topHits.mapNotNull { hit ->
             hit.shelf?.place?.takeIf { !it.unplaced }?.place_id
@@ -639,11 +663,16 @@ public object PhotosSearchReads {
      * still an answer (an empty album the member named).
      *
      * `matches` says WHY, deduped: the doors' names, the labels, and the
-     * captions the page landed on, in the page's own order. How many of them
+     * captions the page landed on, in the page's own order. A photograph the
+     * core found by the text recognised in it or by its transcript carries no
+     * reason here: the caption is the one text the row holds. How many of them
      * FIT is the view's decision, not this one.
      *
      * [query] is the query the legs were run for, carried so a reducer whose
-     * field has moved on can tell a late page from a current one.
+     * field has moved on can tell a late page from a current one. [corrected]
+     * is the words the answer searched when the typed ones were corrected
+     * (#1097, R-1097-27), else empty; the captions are matched against THOSE
+     * words, because they are what the page was read for.
      */
     public fun hitsArrived(
         query: String,
@@ -651,8 +680,9 @@ public object PhotosSearchReads {
         nextCursor: String?,
         topHits: List<SearchTopHit>,
         labels: List<Named>,
+        corrected: String = "",
     ): PhotosSearchEvent {
-        val words = tokens(query)
+        val words = tokens(corrected.ifEmpty { query })
         val doors = topHits.map { SearchMatch(kind = it.kind, value_ = it.label) }
         val labelled = labels.map { SearchMatch(kind = SearchMatch.Kind.KIND_LABEL, value_ = it.label) }
         val captions = rows
@@ -668,6 +698,7 @@ public object PhotosSearchReads {
                     top_hits = topHits,
                     query = query,
                 ),
+                corrected = corrected,
             ),
         )
     }

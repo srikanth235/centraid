@@ -117,6 +117,7 @@ public class TasksRoutes : AppRoutes {
                 routeHome(event, screen, nav)
             },
             onHome = { nav.home() },
+            onOpenContainer = { card -> nav.open(card, parent = screen.chrome?.title.orEmpty()) },
         )
     }
 

@@ -43,8 +43,9 @@ fn the_registry_carries_every_command_this_build_has() {
         // `core.find_duplicate_parties`. Plus this build's own two for Docs on
         // the phone (#1047): `core.purge_document`, the destroy ruling D-1 of
         // 2026-09-25 gave Docs' trash, and `core.create_text_document`, the Add
-        // sheet's "Text".
-        ("core.", 27_usize),
+        // sheet's "Text". And the vault switcher's `core.rename_vault`, the
+        // one writer of `core_vault.display_name` after founding.
+        ("core.", 28_usize),
         // The whole 9-command `knowledge.*` schema (wave 4 slot 4c).
         ("knowledge.", 9),
         // The 23 `tally.*`, real since the Tally-finish lane.
@@ -103,6 +104,7 @@ fn the_registry_carries_every_command_this_build_has() {
     assert!(registry.get("knowledge.create_note").is_some());
     assert!(registry.get("knowledge.restore_note_version").is_some());
     assert!(registry.get("core.merge_party").is_some());
+    assert!(registry.get("core.rename_vault").is_some());
     assert!(registry.get("people.add_person").is_some());
     assert!(registry.get("people.save_contact_channel").is_some());
     assert!(registry.get("social.send_message").is_some());

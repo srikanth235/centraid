@@ -20,6 +20,7 @@ import dev.centraid.android.kit.TrashListScreen
 import dev.centraid.design.copy.PeopleCopy
 import dev.centraid.shared.apps.people.PeopleEditorBridge
 import dev.centraid.shared.apps.people.PeopleHomeBridge
+import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonBridge
 import dev.centraid.shared.apps.people.PeopleTrashBridge
 import dev.centraid.shared.nav.Destination
@@ -89,7 +90,7 @@ public class PeopleRoutes : AppRoutes {
                 if (event.add_person != null) {
                     stack = stack.push(Destination.PeopleEditor(editor.openNew(), isNew = true))
                 }
-                if (event.trash != null) stack = stack.push(Destination.PeopleTrash)
+                if (event.more_row?.key == PeopleHomeMachine.MORE_TRASH) stack = stack.push(Destination.PeopleTrash)
             },
             onHome = { nav.home() },
         )

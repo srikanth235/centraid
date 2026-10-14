@@ -43,17 +43,9 @@ struct PeoplePersonView: View {
             onBack: onBack
         ) {
             if person != nil, !chrome.edit.isEmpty {
-                Button {
+                ToolbarVerb(label: chrome.edit, identifier: "people-person-edit") {
                     send(PeopleEvents.person { $0.edit = .init() })
-                } label: {
-                    Text(chrome.edit)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("people-person-edit")
             }
         } content: {
             if case let .gone(gone) = state.content {
@@ -133,21 +125,15 @@ private struct PeoplePersonBody: View {
                             accessibility: date.accessibilityLabel,
                             identifier: "people-date-\(date.dateID)"
                         )
-                        Button {
+                        KitIconKey(
+                            iconKey: "Bell",
+                            label: date.toggleLabel,
+                            tint: date.reminderOn ? "text" : "textFaint",
+                            identifier: "people-reminder-\(date.dateID)"
+                        ) {
                             send(PeopleEvents.person { $0.reminder = .with { $0.dateID = date.dateID } })
-                        } label: {
-                            CentraidIconView(
-                                iconKey: "Bell",
-                                tint: Theme.color(date.reminderOn ? "text" : "textFaint", scheme),
-                                size: 18
-                            )
-                            .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(date.toggleLabel)
                         .accessibilityAddTraits(date.reminderOn ? .isSelected : [])
-                        .accessibilityIdentifier("people-reminder-\(date.dateID)")
                         .padding(.trailing, 8)
                     }
                 }
@@ -258,29 +244,23 @@ private struct PeoplePersonBody: View {
                 onTap: { send(PeopleEvents.person { $0.channel = .with { $0.channelID = channel.channelID } }) }
             )
             if !channel.actionLabel.isEmpty {
-                Button {
+                KitLink(
+                    label: channel.actionLabel,
+                    dense: true,
+                    identifier: "people-channel-action-\(channel.channelID)"
+                ) {
                     send(PeopleEvents.person { $0.channel = .with { $0.channelID = channel.channelID } })
-                } label: {
-                    Text(channel.actionLabel)
-                        .centraidType("annotLabelOn")
-                        .foregroundStyle(Theme.color("link", scheme))
-                        .frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("people-channel-action-\(channel.channelID)")
             }
             if !channel.removeLabel.isEmpty {
-                Button {
+                KitIconKey(
+                    iconKey: "X",
+                    label: channel.removeLabel,
+                    tint: "textFaint",
+                    identifier: "people-channel-remove-\(channel.channelID)"
+                ) {
                     send(PeopleEvents.person { $0.removeChannel = .with { $0.channelID = channel.channelID } })
-                } label: {
-                    CentraidIconView(iconKey: "X", tint: Theme.color("textFaint", scheme), size: 14)
-                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(channel.removeLabel)
-                .accessibilityIdentifier("people-channel-remove-\(channel.channelID)")
             }
         }
         .padding(.trailing, 8)
@@ -435,16 +415,9 @@ private struct PeoplePersonSheetView: View {
     @ViewBuilder
     private func cancel(_ label: String) -> some View {
         if !label.isEmpty {
-            Button {
+            KitOutlineButton(label: label, fullWidth: true) {
                 send(PeopleEvents.person { $0.sheetClosed = .init() })
-            } label: {
-                Text(label)
-                    .centraidType("labelOn")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .accessibilityIdentifier("people-sheet-cancel")
         }
     }
@@ -455,33 +428,13 @@ private struct PeopleKindChips: View {
     let kinds: [Centraid_Screen_V1_PeopleKindChoice]
     let send: (Data) -> Void
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(kinds, id: \.key) { kind in
-                    Button {
+                    KitChip(label: kind.label, selected: kind.selected, identifier: "people-kind-\(kind.key)") {
                         send(PeopleEvents.person { $0.kindPicked = .with { $0.key = kind.key } })
-                    } label: {
-                        Text(kind.label)
-                            .centraidType(kind.selected ? "smallStrong" : "small")
-                            .foregroundStyle(Theme.color(kind.selected ? "text" : "textSoft", scheme))
-                            .padding(.horizontal, 12)
-                            .frame(minHeight: 32)
-                            .background(Capsule().fill(Theme.color(kind.selected ? "bgSunken" : "bgElev", scheme)))
-                            .overlay(
-                                Capsule().strokeBorder(
-                                    Theme.color(kind.selected ? "lineStrong" : "line", scheme),
-                                    lineWidth: CentraidGeometry.hairline
-                                )
-                            )
-                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(kind.selected ? .isSelected : [])
-                    .accessibilityIdentifier("people-kind-\(kind.key)")
                 }
             }
         }
@@ -529,6 +482,7 @@ private struct PeopleFlagRow: View {
                 .centraidType("body")
                 .foregroundStyle(Theme.color("text", scheme))
         }
+        .kitToggle()
         .frame(minHeight: CentraidGeometry.targetMinCoarse)
         .accessibilityIdentifier(identifier)
     }

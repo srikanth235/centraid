@@ -9,10 +9,12 @@ import centraid.screen.v1.AgendaChrome
 import centraid.screen.v1.AgendaFact
 import centraid.screen.v1.AgendaHomeEvent
 import centraid.screen.v1.AgendaHomeState
+import centraid.screen.v1.AgendaMoreRow
 import centraid.screen.v1.AgendaToolbar
 import centraid.screen.v1.Loading
 import centraid.screen.v1.SeatState
 import dev.centraid.design.copy.AgendaCopy
+import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -91,9 +93,12 @@ public sealed interface AgendaInput {
  * AGENDA'S HOME ON THE PHONE (#1046): Day, Schedule and Waiting, with Search
  * as a mode and More as a sheet.
  *
- * The band is v0's (A-touchviews, #882) — Day, Schedule, Waiting, Search,
- * More; there is no month or hour grid. Opening lands on Day, anchored on the
- * `today` the core answers, never on a device-clock guess.
+ * The band holds places only (R-CHROME-5) — Day, Schedule, Waiting, then
+ * More; there is no month or hour grid. Search is the bar under the title
+ * (R-CHROME-2), opened by `SearchOpened`, and the More sheet's rows are
+ * computed here ([moreRows]) so both platforms draw one list. Opening lands on
+ * Day, anchored on the `today` the core answers, never on a device-clock
+ * guess.
  *
  * ## What re-reads and what re-folds
  *
@@ -215,6 +220,8 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                             anchor_day = "",
                             search_open = false,
                             search_term = "",
+                            search_corrected = "",
+                            search_ask = "",
                             sheet = AgendaHomeState.Sheet.SHEET_NONE,
                             due_open_days = emptyList(),
                             loading = Loading(first_load = true),
@@ -240,7 +247,6 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                 BAND_DAY -> moveTo(state, AgendaHomeState.Destination.DESTINATION_DAY)
                 BAND_SCHEDULE -> moveTo(state, AgendaHomeState.Destination.DESTINATION_SCHEDULE)
                 BAND_WAITING -> moveTo(state, AgendaHomeState.Destination.DESTINATION_WAITING)
-                BAND_SEARCH -> refold(openSearch(state))
                 BAND_MORE -> Step(
                     state.copy(screen = screen.copy(sheet = AgendaHomeState.Sheet.SHEET_MORE)),
                 )
@@ -267,7 +273,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             event.search_term != null -> {
                 val opened = openSearch(state)
                 val typed = opened.copy(
-                    screen = opened.screen.copy(search_term = event.search_term.term),
+                    screen = opened.screen.copy(search_term = event.search_term.term, search_corrected = "", search_ask = ""),
                 )
                 if (activeTerm(typed.screen) == null) {
                     // NO TERM, NO SEARCH: the window's own list, re-folded.
@@ -281,16 +287,21 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
 
             event.search_closed != null -> closeSearch(state)
 
-            event.calendar_toggled != null -> {
-                val id = event.calendar_toggled.calendar_id
-                val hidden = screen.hidden_calendar_ids
-                refold(
-                    state.copy(
-                        screen = screen.copy(
-                            hidden_calendar_ids = if (id in hidden) hidden - id else hidden + id,
-                        ),
-                    ),
-                )
+            event.calendar_toggled != null -> toggleCalendar(state, event.calendar_toggled.calendar_id)
+
+            // A MORE ROW, BY ITS KEY: the machine named every row, so it is
+            // the one that knows what a key does. A key the sheet does not
+            // hold now (a calendar gone since it was drawn) does nothing.
+            event.more_row != null -> {
+                val row = screen.more_rows.firstOrNull { it.key == event.more_row.key }
+                when {
+                    row == null -> Step(state)
+                    row.key == MORE_READS ->
+                        Step(state.copy(screen = screen.copy(sheet = AgendaHomeState.Sheet.SHEET_READS)))
+                    row.key.startsWith(MORE_CALENDAR) ->
+                        toggleCalendar(state, row.key.removePrefix(MORE_CALENDAR))
+                    else -> Step(state)
+                }
             }
 
             event.sheet_opened != null -> {
@@ -349,8 +360,8 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
 
     /**
      * A destination, by the band or by the shell. Picking one LEAVES SEARCH —
-     * the band has one current tab, and a destination picked is the member
-     * choosing the list over the hits.
+     * even the lit tab: a destination picked is the member choosing the list
+     * over the hits.
      */
     private fun moveTo(state: AgendaHome, destination: AgendaHomeState.Destination): Step<AgendaHome> {
         if (destination == AgendaHomeState.Destination.DESTINATION_UNSPECIFIED) return Step(state)
@@ -362,6 +373,18 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             ),
         )
         return if (holdsWindow(moved)) refold(moved) else newWindow(moved)
+    }
+
+    /** A calendar shown or hidden, for the session: a re-fold, never a read. */
+    private fun toggleCalendar(state: AgendaHome, id: String): Step<AgendaHome> {
+        val hidden = state.screen.hidden_calendar_ids
+        return refold(
+            state.copy(
+                screen = state.screen.copy(
+                    hidden_calendar_ids = if (id in hidden) hidden - id else hidden + id,
+                ),
+            ),
+        )
     }
 
     /** A new anchor day: a new window, always. */
@@ -390,7 +413,7 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
 
     /** Search shut, and its term CLEARED (v0 kept it — a defect not carried). */
     private fun closedSearch(state: AgendaHome): AgendaHome = state.copy(
-        screen = state.screen.copy(search_open = false, search_term = ""),
+        screen = state.screen.copy(search_open = false, search_term = "", search_corrected = "", search_ask = ""),
         answers = state.answers?.copy(search = null),
     )
 
@@ -451,7 +474,20 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
             )
         }
         val today = context.today.ifEmpty { upcoming.today }
-        val screen = state.screen.copy(anchor_day = state.screen.anchor_day.ifEmpty { today })
+        val searching = activeTerm(state.screen) != null
+        val screen = state.screen.copy(
+            anchor_day = state.screen.anchor_day.ifEmpty { today },
+            // THE WORDS THE HITS ANSWER: kept only while a term is, and only
+            // when this answer is a search's.
+            search_corrected = if (searching) answer.search?.corrected ?: "" else "",
+            // THE QUESTION THE NO-MATCH STATE OFFERS (#1097, R-1097-28): for a search's own answer to the
+            // term on screen, with no event in it. Agenda keeps flat fields, so this is the law by hand.
+            search_ask = if (searching && answer.search != null && answer.search.events.isEmpty()) {
+                SearchLaw.question(state.screen.search_term)
+            } else {
+                ""
+            },
+        )
         val held = AgendaAnswers(
             upcoming = upcoming,
             context = context,
@@ -481,6 +517,8 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                     denied = AgendaFold.denied(denial),
                     search_open = false,
                     search_term = "",
+                    search_corrected = "",
+                    search_ask = "",
                     sheet = AgendaHomeState.Sheet.SHEET_NONE,
                 ),
             ),
@@ -521,19 +559,47 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                 band = if (screen.denied != null) emptyList() else band(screen),
                 toolbar = toolbar(screen, heldToday(state)),
                 chrome = CHROME,
+                more_rows = if (screen.denied != null) emptyList() else moreRows(screen),
             ),
+        )
+    }
+
+    /**
+     * THE MORE SHEET, AS ROWS (R-1046-5): every calendar the answer named, as
+     * a show/hide toggle under the Calendars heading, then "What Agenda may
+     * read". Never Search, never a sort or a filter (R-CHROME-4).
+     */
+    private fun moreRows(screen: AgendaHomeState): List<AgendaMoreRow> {
+        val calendars = screen.data_?.calendars.orEmpty().mapIndexed { index, calendar ->
+            AgendaMoreRow(
+                key = MORE_CALENDAR + calendar.calendar_id,
+                label = calendar.name,
+                meta = calendar.state_label,
+                hue_key = calendar.hue_key,
+                toggle = true,
+                on = !calendar.hidden,
+                section = if (index == 0) AgendaCopy.RAIL_CALENDARS else "",
+                spoken = "${calendar.name}, ${calendar.state_label}",
+            )
+        }
+        return calendars + AgendaMoreRow(
+            key = MORE_READS,
+            label = AgendaCopy.READS_TITLE,
+            spoken = AgendaCopy.READS_TITLE,
         )
     }
 
     private fun band(screen: AgendaHomeState): List<AgendaBandTab> {
         val sheetUp = screen.sheet == AgendaHomeState.Sheet.SHEET_MORE ||
             screen.sheet == AgendaHomeState.Sheet.SHEET_READS
+        // SEARCH IS A MODE OVER THE PLACE, not a place: the destination's tab
+        // stays lit while the field is open.
         fun tab(key: String, label: String, icon: String, of: AgendaHomeState.Destination) =
             AgendaBandTab(
                 key = key,
                 label = label,
                 icon_key = icon,
-                current = screen.destination == of && !screen.search_open,
+                current = screen.destination == of,
             )
         return listOf(
             tab(BAND_DAY, AgendaCopy.BAND_DAY, "Clock", AgendaHomeState.Destination.DESTINATION_DAY),
@@ -550,15 +616,9 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
                 AgendaHomeState.Destination.DESTINATION_WAITING,
             ),
             AgendaBandTab(
-                key = BAND_SEARCH,
-                label = AgendaCopy.BAND_SEARCH,
-                icon_key = "Search",
-                current = screen.search_open,
-            ),
-            AgendaBandTab(
                 key = BAND_MORE,
                 label = AgendaCopy.BAND_MORE,
-                icon_key = "more",
+                icon_key = "MoreHoriz",
                 current = sheetUp,
             ),
         )
@@ -604,7 +664,6 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
         retry = AgendaCopy.RETRY,
         loading = AgendaCopy.LOADING,
         more_title = AgendaCopy.MORE_TITLE,
-        calendars_heading = AgendaCopy.RAIL_CALENDARS,
         reads_title = AgendaCopy.READS_TITLE,
         reads_facts = listOf(
             AgendaFact(
@@ -628,6 +687,9 @@ public object AgendaHomeMachine : ScreenMachine<AgendaHome, AgendaInput> {
     public const val BAND_DAY: String = "day"
     public const val BAND_SCHEDULE: String = "schedule"
     public const val BAND_WAITING: String = "waiting"
-    public const val BAND_SEARCH: String = "search"
     public const val BAND_MORE: String = "more"
+
+    /** `AgendaMoreRow.key`s — what `MoreRowPicked` carries. */
+    public const val MORE_READS: String = "reads"
+    public const val MORE_CALENDAR: String = "calendar-"
 }

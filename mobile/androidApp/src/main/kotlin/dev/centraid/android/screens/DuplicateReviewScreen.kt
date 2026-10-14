@@ -9,8 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import dev.centraid.android.kit.RowSkeleton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,10 +23,12 @@ import centraid.screen.v1.DuplicateReviewState
 import centraid.screen.v1.PhotoCell
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.PhotoCellSquare
+import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.design.copy.PhotosCopy
 
 /**
  * ONE CLUSTER, AND THE DECISION THAT DELETES A MEMBER'S PHOTOGRAPHS
@@ -68,7 +69,7 @@ public fun DuplicateReviewScreen(
         val failure = state.failure
         val data = state.data_
         when {
-            loading != null -> CircularProgressIndicator()
+            loading != null -> RowSkeleton()
 
             failure != null -> ScreenFailure(failure.sentence, failure.remedy)
 
@@ -78,8 +79,8 @@ public fun DuplicateReviewScreen(
                     // copies were trashed here or somewhere else — and the read
                     // that says so was refused by nobody.
                     ScreenEmpty(
-                        sentence = "There are no copies left in this set.",
-                        remedy = "Anything trashed here is still in the trash.",
+                        sentence = PhotosCopy.PHOTOS_REVIEW_NONE,
+                        remedy = PhotosCopy.PHOTOS_REVIEW_NONE_CAPTION,
                     )
                 } else {
                     ReviewHeader(placementsChecked = data.placements_checked)
@@ -148,9 +149,9 @@ public fun DuplicateReviewScreen(
 @Composable
 private fun ReviewHeader(placementsChecked: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(text = "Pick the copy to keep.", style = centraidType("body"))
+        Text(text = PhotosCopy.PHOTOS_REVIEW_PICK, style = centraidType("body"))
         Text(
-            text = "The others go to the trash, where you can still get them back.",
+            text = PhotosCopy.PHOTOS_REVIEW_PICK_CAPTION,
             style = centraidType("small"),
             color = centraidColor("textSoft"),
         )
@@ -170,11 +171,9 @@ private fun ReviewHeader(placementsChecked: Boolean) {
         // only" would be making the narrower claim in the broader words.
         NoteLine(
             if (placementsChecked) {
-                "Centraid checked which of these are in an album. " +
-                    "Favourites are not checked here."
+                PhotosCopy.PHOTOS_REVIEW_CHECKED
             } else {
-                "Centraid has not been able to check whether these are in an album " +
-                    "or favourited."
+                PhotosCopy.PHOTOS_REVIEW_UNCHECKED
             },
         )
     }
@@ -220,14 +219,14 @@ private fun DuplicateMemberRow(
     val dimensions = listOf(pixels, member.byte_phrase)
         .filter { it.isNotEmpty() }
         .joinToString(" · ")
-        .ifEmpty { "This copy" }
-    val captured = member.captured_at.ifEmpty { "No capture time on this copy" }
+        .ifEmpty { PhotosCopy.PHOTOS_REVIEW_THIS_COPY }
+    val captured = member.captured_at.ifEmpty { PhotosCopy.PHOTOS_REVIEW_NO_CAPTURE_TIME }
     val spoken = listOf(
         dimensions,
         captured,
-        if (member.member_placed) "In an album" else "",
+        if (member.member_placed) PhotosCopy.PHOTOS_REVIEW_IN_ALBUM else "",
         suggestionReason,
-        if (isKept) "Keeping this copy" else "",
+        if (isKept) PhotosCopy.PHOTOS_REVIEW_KEEPING else "",
     ).filter { it.isNotEmpty() }.joinToString(". ")
     Row(
         modifier = Modifier
@@ -289,7 +288,7 @@ private fun PlacedLine() {
     ) {
         CentraidIcon(iconKey = "album", tint = centraidColor("textSoft"), size = 16.dp)
         Text(
-            text = "In an album",
+            text = PhotosCopy.PHOTOS_REVIEW_IN_ALBUM,
             style = centraidType("small"),
             color = centraidColor("textSoft"),
         )
@@ -317,23 +316,17 @@ private fun ResolveControl(keptAssetId: String, memberCount: Int, onResolve: () 
     val picked = keptAssetId.isNotEmpty()
     val doomed = if (picked) memberCount - 1 else 0
     val label = when {
-        !picked -> "Trash the other copies"
-        doomed == 1 -> "Trash the other copy"
-        else -> "Trash the other $doomed copies"
+        !picked -> PhotosCopy.PHOTOS_REVIEW_TRASH_OTHERS
+        doomed == 1 -> PhotosCopy.PHOTOS_REVIEW_TRASH_OTHER
+        else -> PhotosCopy.PHOTOS_REVIEW_TRASH_MANY.replace("{count}", "$doomed")
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Button(onClick = onResolve, enabled = picked) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CentraidIcon(iconKey = "trash", tint = centraidColor("danger"), size = 18.dp)
-                Text(text = label)
-            }
-        }
+        // TRASHING IS DESTRUCTIVE, so the one ink button is the OUTLINED `net`
+        // one; while no copy is picked it is the same outline in `textDisabled`.
+        InkButton(label = label, destructive = true, testTag = "duplicates-resolve", enabled = picked, onPress = onResolve)
         if (!picked) {
             Text(
-                text = "Choose the copy to keep first — nothing is trashed until you do.",
+                text = PhotosCopy.PHOTOS_REVIEW_CHOOSE_FIRST,
                 style = centraidType("small"),
                 color = centraidColor("textSoft"),
             )

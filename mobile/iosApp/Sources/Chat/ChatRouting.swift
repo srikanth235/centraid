@@ -24,15 +24,28 @@ import CentraidShared
 /// | people | `person` | the person page |
 /// | agenda | `event` | the event's detail (`qualifier` is the occurrence) |
 /// | photos | `photo` | the lightbox, with the answer's other photos as neighbours |
+/// | notes | `notebook` | the library under that notebook (a container found by name, #1097) |
+/// | photos | `album` | the album's shelf |
+/// | tally | `group` | the group's ledger; `id` is the `tally_group` id |
+/// | docs | `folder` | the folder's page |
+/// | chat | `thread` | not a route: Chat is a tab. `ShellModel.openChatThread` switches to it and opens the thread (Home's search, #1097) |
+///
+/// A notebook, album, group or folder arrives with its id and its name (the
+/// card's `title`), which is all each route needs.
 ///
 /// An entity this table has no row for opens the app's home instead
 /// ([appHome]); a tap that reached nothing would read as a broken card.
+///
+/// HOME'S SEARCH ROUTES THROUGH HERE TOO (R-CHROME-6): its rows carry the same
+/// reference (`HomeSearchRow.target`), so a hit opens exactly where a card does,
+/// with `parent` naming the page a pushed page's back returns to.
 enum ChatRouting {
     static func route(
         for card: Centraid_Screen_V1_ChatCard,
-        among cards: [Centraid_Screen_V1_ChatCard]
+        among cards: [Centraid_Screen_V1_ChatCard],
+        parent: String? = nil
     ) -> ShellModel.Route? {
-        let parent = chatTitle
+        let parent = parent ?? chatTitle
         switch (card.app, card.entity) {
         case ("tally", "expense"):
             return TallyScreens.expenseRoute(card.id, parent: parent)
@@ -44,6 +57,14 @@ enum ChatRouting {
             return TasksScreens.projectRoute(card.id, title: card.title)
         case ("notes", "note"):
             return NotesScreens.editorRoute(card.id)
+        case ("notes", "notebook"):
+            return NotesScreens.libraryRoute(notebookID: card.id, notebookName: card.title)
+        case ("photos", "album"):
+            return .photoShelf(albumShelf(card.id, card.title))
+        case ("tally", "group"):
+            return TallyScreens.groupRoute(card.id, card.title, parent: parent)
+        case ("docs", "folder"):
+            return DocsScreens.folderRoute(card.id, card.title, parent: parent)
         case ("docs", "document"):
             return DocsScreens.documentRoute(card.id, card.title, parent: parent)
         case ("people", "person"):
@@ -63,6 +84,24 @@ enum ChatRouting {
         default:
             return appHome(card.app)
         }
+    }
+
+    /// An album's shelf: the library under that album, its name riding along so
+    /// the head has words before the page read lands (`ShellModel.placeShelf`'s rule).
+    static func albumShelf(_ identifier: String, _ name: String) -> Data {
+        var shelf = Centraid_Screen_V1_PhotoShelf()
+        shelf.album = .with {
+            $0.collectionID = identifier
+            $0.name = name
+        }
+        return (try? shelf.serializedData()) ?? Data()
+    }
+
+    /// Whether a reference names one of the member's conversations (Home's
+    /// search offers them, #1097, R-1097-24). A thread opens in the Chat tab
+    /// and is no `Route`, so a caller asks this before it asks `route(for:)`.
+    static func isThread(_ card: Centraid_Screen_V1_ChatCard) -> Bool {
+        card.app == "chat" && card.entity == "thread"
     }
 
     /// An app's own front door, for a card whose entity has no row route.
@@ -107,5 +146,21 @@ enum ChatRouting {
         #else
         ""
         #endif
+    }
+}
+
+extension ShellModel {
+    /// OPEN ONE ROW BY ITS REFERENCE: the shell's one router for a row reference
+    /// (`ChatRouting`), pushed over the stack. A search result that is a container
+    /// (#1097) opens through here; `parent` is the pushing page's title.
+    @MainActor
+    func openRow(_ card: Centraid_Screen_V1_ChatCard, parent: String) {
+        // A CONVERSATION OPENS IN THE CHAT TAB, not as a page pushed over this one.
+        if ChatRouting.isThread(card) {
+            openChatThread(card.id, title: card.title)
+            return
+        }
+        guard let route = ChatRouting.route(for: card, among: [], parent: parent) else { return }
+        path.append(route)
     }
 }

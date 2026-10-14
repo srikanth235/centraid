@@ -230,12 +230,11 @@ public class HomeSession private constructor(
 
     /**
      * Bind the iOS mover's loop to this session's vaults (`HomeBridge`). A
-     * frozen vault hands nothing off: the gateway would refuse its writes. Nor
-     * does the sample, which is never backed up (R-SAMPLE-5).
+     * frozen vault hands nothing off: the gateway would refuse its writes.
      */
     public fun attachUploads(loop: UploadLoop) {
         uploads = loop
-        fun drainable() = shelf.all().filter { it.core != null && it.moved == null && !it.sample }
+        fun drainable() = shelf.all().filter { it.core != null && it.moved == null }
         loop.attach(
             UploadLoop.Binding(
                 vaults = { drainable().map { it.vaultId } },
@@ -378,7 +377,7 @@ public class HomeSession private constructor(
             // READ OFF THE SHELF AT THE MOMENT OF THE WRITE (#1029 F1). A
             // vault frozen while the member was mid-edit must refuse the save
             // they then press, and a value read at attach would not.
-            readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+            readOnly = { shelf.readOnlySentence() },
             zone = { services.clock.read().zone },
         ).start()
     }
@@ -448,7 +447,7 @@ public class HomeSession private constructor(
         reads = reads,
         scope = scope,
         writes = null,
-        readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+        readOnly = { shelf.readOnlySentence() },
         zone = { services.clock.read().zone },
     ).start()
 
@@ -486,7 +485,7 @@ public class HomeSession private constructor(
             writes = writes,
             left = left,
             stranded = strand,
-            readOnly = { if (shelf.foregroundHolding()?.readOnly == true) Shelf.MOVED_SENTENCE else null },
+            readOnly = { shelf.readOnlySentence() },
         ).start()
     }
 
@@ -504,30 +503,28 @@ public class HomeSession private constructor(
      * showed a member a Rust error's `Display` — and a sentence a member reads
      * is the shell's to write.
      *
-     * **THE MEMBER'S FIRST VAULT COMES WITH COMPANY.** When the shelf holds
-     * no vault of the member's own, the new one gets two starter rows (a note
-     * and a task) and, once it is in front, the SAMPLE VAULT is founded beside
-     * it ([Shelf.foundSample]) — in the background, best-effort, and without
-     * taking the front. A sample that fails to seed is deleted by the shelf
-     * and the member's vault is untouched; "Add sample" ([addSample]) is the
-     * way back. A second vault of their own gets neither. A restore is not a
-     * found and gets neither either.
+     * **THE MEMBER'S FIRST VAULT GETS THE TEACHING STARTER ROWS** — a few
+     * notes and tasks of their own that each teach one gesture and are done by
+     * doing it (docs/decisions.md, "Onboarding without sample data"). A second
+     * vault of their own gets none, and a restore is not a found.
      */
     public suspend fun found(
         name: String = Shelf.DEFAULT_VAULT_NAME,
         ownerName: String = Shelf.DEFAULT_OWNER_NAME,
+        /** The entry a vault on its own words is founded on (R-1047-E18). */
+        own: String? = null,
     ): FoundResult {
-        val first = shelf.all().none { !it.sample }
-        return when (val outcome = shelf.found(name = name, ownerName = ownerName, starters = first)) {
+        val first = shelf.all().isEmpty()
+        val outcome = shelf.found(name = name, ownerName = ownerName, starters = first, own = own)
+        rebind()
+        return when (outcome) {
             is Shelf.FoundOutcome.Founded -> {
-                rebind()
-                if (first) scope.launch { shelf.foundSample() }
                 FoundResult.Made(outcome.holding.name)
             }
             is Shelf.FoundOutcome.Refused -> FoundResult.Refused(
                 when (outcome.because) {
                     Shelf.FoundRefusal.NO_CORE ->
-                        "Centraid could not make a vault on this device."
+                        "Couldn't make a vault on this phone."
                     // THE SENTENCE NO LONGER NAMES A MISSING DOOR (#1029 W5).
                     // It said "this build cannot make a new vault yet", which
                     // was true while nothing over the ABI wrote `core_vault`
@@ -536,35 +533,12 @@ public class HomeSession private constructor(
                     // remedy a member has is to try again — the shelf picks a
                     // different fresh file each time.
                     Shelf.FoundRefusal.NOT_FOUNDED ->
-                        "Centraid made the file and could not make it a vault. Try again."
+                        "Couldn't make the vault. Try again."
                     Shelf.FoundRefusal.ALREADY_HELD ->
-                        "This device already holds that vault."
+                        "This phone already holds that vault."
                 },
             )
         }
-    }
-
-    /**
-     * ADD THE SAMPLE VAULT BACK ("Add sample"). [Shelf.foundSample]: founded
-     * and seeded beside whatever is in front, which stays in front. Answers
-     * whether the device holds the sample afterwards.
-     */
-    public suspend fun addSample(): Boolean {
-        shelf.foundSample()
-        return shelf.hasSample.value
-    }
-
-    /**
-     * REMOVE THE SAMPLE VAULT ("Remove sample"). [Shelf.forget] on the sample's
-     * holding: its directory is deleted whole and the member's own vault is in
-     * front afterwards. Nothing of the member's is touched, but it still
-     * deletes a vault, so the shell confirms before calling this
-     * (`HomeWords.SAMPLE_REMOVE_BODY`). A device holding no sample is left as
-     * it is.
-     */
-    public suspend fun removeSample() {
-        val sample = shelf.sampleHolding() ?: return
-        forget(sample.vaultId)
     }
 
     /**
@@ -646,6 +620,17 @@ public class HomeSession private constructor(
     public suspend fun forget(vaultId: String) {
         shelf.forget(vaultId)
         rebind()
+    }
+
+    /**
+     * RENAME A VAULT (the switcher's Rename): written into the vault's own
+     * file by [Shelf.renameVault], then the header and the roster redrawn from
+     * the shelf. False when the name was blank or refused.
+     */
+    public suspend fun renameVault(vaultId: String, name: String): Boolean {
+        val renamed = shelf.renameVault(vaultId, name)
+        if (renamed) rebind()
+        return renamed
     }
 
     /**
@@ -740,7 +725,6 @@ public class HomeSession private constructor(
         if (open != null && open === bound) {
             publishSeat()
             publishLockup()
-            publishFoundingDay()
             return@withLock
         }
         changeReader?.cancelAndJoin()
@@ -771,7 +755,6 @@ public class HomeSession private constructor(
         val front = shelf.foregroundHolding()?.vaultId
         val reading = backupStatus.refreshForeground()
         if (front != null) freezeIfMoved(front, reading, movedAtMs = null)
-        publishFoundingDay()
     }
 
     /**
@@ -816,21 +799,6 @@ public class HomeSession private constructor(
     private suspend fun publishLockup() {
         val lockup = shelf.foregroundHolding()?.lockup() ?: VaultLockup()
         host.send(HomeEvent(vault_changed = HomeEvent.VaultChanged(vault = lockup)))
-    }
-
-    /**
-     * WHETHER THE VAULT IN FRONT WAS FOUNDED TODAY, the notice slot's one told
-     * input (R-SAMPLE-8). Read here, at every rebind, because the zone is the
-     * platform's and the machine is pure; sent after the lockup, so a switch
-     * resets what Home holds right before this arrives.
-     */
-    private suspend fun publishFoundingDay() {
-        val holding = shelf.foregroundHolding()
-        val foundedToday = holding != null &&
-            FoundingDay.isToday(holding.foundedAt, services.clock.read())
-        host.send(
-            HomeEvent(founding_day = HomeEvent.FoundingDayKnown(founded_today = foundedToday)),
-        )
     }
 
     /**
@@ -885,7 +853,7 @@ public class HomeSession private constructor(
      * something real.
      */
     private suspend fun switchTo(vaultId: String) {
-        shelf.bringToFront(vaultId) ?: return
+        shelf.bringToFront(vaultId)
         // THE LOCKUP IS WHAT STARTS THE RELOAD: the machine sees a vault whose
         // id differs from the one it is holding, throws away every tile it read
         // out of the old vault, and asks for the new one's — which the

@@ -141,6 +141,12 @@ public abstract class TallyQueryMachine<S, E, D>(
      */
     protected open fun absorb(held: TallyHeld<S>): TallyHeld<S> = held
 
+    /**
+     * The read was REFUSED or DENIED: what the last answer left on the state is
+     * no longer on screen. A search takes back the Ask it offered (#1097).
+     */
+    protected open fun unanswered(held: TallyHeld<S>): TallyHeld<S> = held
+
     /** A write's settle. Screens with no write keep the default. */
     protected open fun settled(held: TallyHeld<S>, settled: WriteSettled): Step<TallyHeld<S>> = Step(held)
 
@@ -221,14 +227,15 @@ public abstract class TallyQueryMachine<S, E, D>(
     /** A refusal or a denial: the state, unless a newer read is queued. */
     private fun ended(held: TallyHeld<S>, content: ReadContent<D>): Step<TallyHeld<S>> {
         if (held.readQueued) return reissue(held)
-        return Step(held.copy(reading = false, screen = lens.with(held.screen, content)))
+        val cleared = unanswered(held)
+        return Step(cleared.copy(reading = false, screen = lens.with(cleared.screen, content)))
     }
 
     public companion object {
         /** The gate's words (the handoff's denied state, less the sharing line). */
         public fun denied(): Denied = Denied(
             title = TallyCopy.DENIED_TITLE,
-            body = "${TallyCopy.DENIED_BODY} ${TallyCopy.DENIED_REGRANT}",
+            body = TallyCopy.DENIED_REGRANT,
             receipt = TallyCopy.DENIED_SCOPE,
         )
 

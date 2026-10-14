@@ -6,6 +6,6 @@
 # inventing eight empty apps out of one failure.
 failure {
   kind: READ_FAILURE_KIND_NO_COPY_YET
-  sentence: "This device has not copied these yet."
-  remedy: "Stay on Wi-Fi while Centraid catches up."
+  sentence: "Not on this phone yet."
+  remedy: "Stay on Wi-Fi while it catches up."
 }

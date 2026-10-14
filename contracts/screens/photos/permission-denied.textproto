@@ -26,3 +26,13 @@ backup {
   paused_reason: "Photo access is off. Turn it on in Settings to import your camera roll."
 }
 sheet: SHEET_NONE
+# THE BANNER IS THE MACHINE'S (`PhotosGridMachine.importBanner`): the grant's
+# remedy over a full library, and no "Import now" — there are photographs.
+import_banner {
+  reason: "Photo access is off. Turn it on in Settings to import your camera roll."
+  remedy: REMEDY_SETTINGS
+  allow_label: "Allow photo access"
+  settings_label: "Open Settings"
+  manage_label: "Manage selection"
+  import_now_label: "Import now"
+}

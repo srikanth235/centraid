@@ -1,0 +1,77 @@
+# A container is a search result of its own (#1097): the project a member
+# typed the name of is a row in Home's Tasks group, before the tasks, and in
+# Tasks' own search results; a tap opens it where its app opens it.
+#
+# THE FLOW MAKES ITS OWN PROJECT. The onboarding starters hold no notebook,
+# project, group or folder, so the first run creates a Tasks project called
+# "Orchard" (Projects band -> New project) and every later run finds it there
+# and skips the step. Re-runnable: it leaves that one project and a recent
+# search. The seed step expects an install with NO other project (the empty
+# Projects state offers "New project"); on a vault that already holds projects
+# but not this one, create "Orchard" by hand first.
+#
+# The container's id is `search-container-<entity>-<id>`; a project's entity is
+# `schedule.project`, so the id is matched by its stem (Maestro matches an id as
+# a regular expression, `.` standing for the dot).
+appId: dev.centraid.Centraid
+name: search-containers
+---
+- launchApp
+- tapOn:
+    id: "home-tile-tasks"
+- tapOn: "Projects"
+- runFlow:
+    when:
+      notVisible: "Orchard"
+    commands:
+      - tapOn: "New project"
+      - tapOn:
+          id: "tasks-new-project-field"
+      - inputText: "Orchard"
+      - tapOn: "Create project"
+- assertVisible: "Orchard"
+# Home's search: the project is a hit of the Tasks group, kind named, above the
+# tasks (none here, so it stands alone), and counted.
+- launchApp
+- tapOn:
+    id: "home-search-open"
+- tapOn:
+    id: "home-search-field"
+- inputText: "orchard"
+- extendedWaitUntil:
+    visible:
+      id: "home-search-group-tasks"
+    timeout: 5000
+- assertVisible:
+    id: "search-container-schedule.project-.*"
+- assertVisible: "Project"
+- assertVisible: "Orchard"
+# A tap opens the project's list through the one router; the search is behind it.
+- tapOn:
+    id: "search-container-schedule.project-.*"
+- extendedWaitUntil:
+    visible:
+      id: "tasks-project"
+    timeout: 5000
+- assertNotVisible:
+    id: "home-search-field"
+# Tasks' own search finds it too.
+- launchApp
+- tapOn:
+    id: "home-tile-tasks"
+- tapOn:
+    id: "tasks-search-open"
+- inputText: "orchard"
+- extendedWaitUntil:
+    visible:
+      id: "search-container-schedule.project-.*"
+    timeout: 5000
+- assertVisible: "Project"
+# A project that matched is an answer: no "nothing found" over it.
+- assertNotVisible: "No task matches."
+- tapOn:
+    id: "search-container-schedule.project-.*"
+- extendedWaitUntil:
+    visible:
+      id: "tasks-project"
+    timeout: 5000

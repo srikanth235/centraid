@@ -50,6 +50,9 @@ centraid-apps-notes = { path = "../apps/notes" }
 # Tally's ten phone queries (#1046) — the ledger folded once through its one
 # balance engine, every figure with its currency's exponent — the same way.
 centraid-apps-tally = { path = "../apps/tally" }
+# Photos' own search (#1097, R-1097-25..27): the photographs the full-text door
+# names, opened as live assets.
+centraid-apps-photos = { path = "../apps/photos" }
 # The door an app crate reads through (`PageDoor`), and the rows it answers.
 centraid-apps-kit = { path = "../apps/kit" }
 # THE ON-DEVICE CHAT PLANE: the native tool runtime, its turn loop, the attached
@@ -115,8 +118,8 @@ serde_json.workspace = true
 # crate's own test harness, the whole server, spawned on 127.0.0.1:0.
 centraid-gateway = { path = "../gateway" }
 # THE HARNESS'S DOOR for the chat's native runtime (#1088): the read-equality
-# test opens a copy of the sample vault through it and asks the core's door the
-# same questions.
+# test opens a copy of a vault seeded with the example scenario through it and
+# asks the core's door the same questions.
 centraid-nativetools = { path = "../nativetools" }
 tempfile.workspace = true
 

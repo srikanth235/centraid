@@ -23,7 +23,8 @@
 use centraid_apps_kit::contract_vault::open_contract_vault;
 use centraid_apps_kit::page::PageRequest;
 use centraid_search::{
-    Answer, DOMAINS, Principal, Search, SearchError, SearchRequest, SqliteDoor, Target,
+    Answer, DOMAINS, MAX_VOCAB_SCAN, NAMED, Principal, Search, SearchError, SearchRequest,
+    SqliteDoor, Target,
 };
 use centraid_vault::custody::locker_key::{
     LOCKER_CIPHERTEXT_PREFIX, encrypt_under_locker_key, is_locker_ciphertext, locker_aad,
@@ -290,6 +291,29 @@ fn planted_rows() -> Vec<(&'static str, &'static str, &'static str)> {
     ]
 }
 
+/// A LOCKER INDEX THIS TEST PLANTS ITSELF.
+///
+/// Rung thirteen retired the vault's own `fts_locker_item` (Q-1097-1 (c)): no
+/// feature read it, and Locker has a walker of its own. The refusal below is
+/// structural, "the entity is not a domain", and a test of that has to be run
+/// against a vault where the entity COULD be answered, or it proves only that
+/// there was nothing to answer from. So the fixture makes the index the vault
+/// used to carry (the baseline's own shape, filled with the planted item's
+/// cleartext label columns) in the one place a test needs it. A door that
+/// listed `locker.item` as a domain would find the row and answer, and the
+/// refusals fail.
+fn with_a_locker_index(connection: &Connection) {
+    connection
+        .execute_batch(
+            "CREATE VIRTUAL TABLE fts_locker_item USING fts5(
+               item_id UNINDEXED, title, username, url,
+               tokenize = \"unicode61 remove_diacritics 2\");
+             INSERT INTO fts_locker_item(item_id, title, username, url)
+               SELECT item_id, title, username, url FROM locker_item;",
+        )
+        .expect("the planted locker index is made");
+}
+
 fn door(connection: &Connection) -> SqliteDoor<'_> {
     SqliteDoor::open(connection).expect("the door opens over the committed model")
 }
@@ -392,14 +416,18 @@ fn secrets_planted_in_every_sealed_column_never_reach_a_target() {
             |row| row.get(0),
         )
         .expect("the cell reads");
+    // THE NAMED TOO (R-1097-20): a second registry is held to the same
+    // property, and its entities are asked for the marker by name as well.
+    let entities: Vec<&str> = DOMAINS
+        .iter()
+        .map(|domain| domain.entity)
+        .chain(NAMED.iter().map(|container| container.entity))
+        .collect();
     for marker in [PLAINTEXT, ciphertext.as_str()] {
-        for domain in DOMAINS {
+        for entity in &entities {
             let answer = door
-                .query(
-                    &Principal::Owner,
-                    &SearchRequest::new(domain.entity, marker, 50),
-                )
-                .unwrap_or_else(|error| panic!("{} answered {error}", domain.entity));
+                .query(&Principal::Owner, &SearchRequest::new(*entity, marker, 50))
+                .unwrap_or_else(|error| panic!("{entity} answered {error}"));
             for target in targets(&answer) {
                 for field in [
                     &target.entity,
@@ -411,8 +439,7 @@ fn secrets_planted_in_every_sealed_column_never_reach_a_target() {
                 ] {
                     assert!(
                         !field.contains(marker),
-                        "{} answered a target carrying {marker}: {target:?}",
-                        domain.entity
+                        "{entity} answered a target carrying {marker}: {target:?}"
                     );
                 }
             }
@@ -425,6 +452,7 @@ fn secrets_planted_in_every_sealed_column_never_reach_a_target() {
 #[test]
 fn an_entity_with_sealed_columns_is_not_a_domain_and_asking_is_a_refusal() {
     let connection = vault();
+    with_a_locker_index(&connection);
     let door = door(&connection);
     for entity in [
         "locker.item",
@@ -445,6 +473,7 @@ fn an_entity_with_sealed_columns_is_not_a_domain_and_asking_is_a_refusal() {
 #[test]
 fn the_locker_index_is_populated_and_still_unreachable() {
     let connection = vault();
+    with_a_locker_index(&connection);
     let indexed: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM fts_locker_item WHERE fts_locker_item MATCH '\"cabin\"*'",
@@ -590,6 +619,7 @@ fn a_window_continues_by_keyset_and_ends_without_a_cursor() {
                 query: "cabin".to_owned(),
                 page: PageRequest::after(1, cursor),
                 excluded_ids: Vec::new(),
+                app: None,
             },
         )
         .expect("notes answer");
@@ -652,4 +682,2060 @@ fn an_operator_a_member_typed_matches_nothing_rather_than_running() {
         Vec::<Target>::new(),
         "the three words are ANDed as literals, and no note carries all three"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Folded columns (#1097): text from another table, found through the parent
+// ---------------------------------------------------------------------------
+
+/// The ids one search finds in one domain.
+fn found(door: &SqliteDoor<'_>, entity: &str, query: &str) -> Vec<String> {
+    let answer = door
+        .query(&Principal::Owner, &SearchRequest::new(entity, query, 50))
+        .unwrap_or_else(|error| panic!("{entity} answered {error}"));
+    targets(&answer)
+        .into_iter()
+        .map(|target| target.id)
+        .collect()
+}
+
+fn ids<const N: usize>(ids: [&str; N]) -> Vec<String> {
+    ids.into_iter().map(str::to_owned).collect()
+}
+
+/// One person with the profile and reach a member typed, and a memo. The
+/// fixture's triggers fire as the product's do, so each row below re-indexes
+/// the party it belongs to.
+fn seed_person(connection: &Connection) {
+    connection
+        .execute(
+            "INSERT INTO core_party (party_id, kind, display_name, sort_name, created_at)
+             VALUES ('party-2', 'person', 'Ravi Menon', 'Menon, Ravi', ?1)",
+            [NOW],
+        )
+        .expect("a person is inserted");
+    connection
+        .execute(
+            "INSERT INTO people_profile
+               (profile_id, party_id, role, nickname, cadence_days, met, created_at)
+             VALUES ('profile-2', 'party-2', 'Cousin', 'Chotu', 30, 'at the Goa wedding', ?1)",
+            [NOW],
+        )
+        .expect("a profile is inserted");
+    connection
+        .execute(
+            "INSERT INTO social_contact_channel
+               (channel_id, party_id, kind, value, normalized_value, created_at)
+             VALUES ('channel-2', 'party-2', 'email', 'Ravi.Menon@Example.org',
+                     'ravi.menon@example.org', ?1),
+                    ('channel-3', 'party-2', 'phone', '+44 20 7946 0958', '+442079460958', ?1)",
+            [NOW],
+        )
+        .expect("channels are inserted");
+    connection
+        .execute(
+            "INSERT INTO knowledge_annotation
+               (annotation_id, author_party_id, target_type, target_id, body_text, created_at)
+             VALUES ('annotation-2', 'party-1', 'core.party', 'party-2', 'loves kayaking', ?1),
+                    ('annotation-3', 'party-1', 'locker.item', 'item-1', 'zebrafish memo', ?1)",
+            [NOW],
+        )
+        .expect("memos are inserted");
+}
+
+#[test]
+fn a_person_is_found_by_nickname_role_where_they_met_email_phone_and_memo() {
+    let connection = vault();
+    seed_person(&connection);
+    let door = door(&connection);
+    for query in [
+        "chotu",
+        "cousin",
+        "goa",
+        "ravi.menon@example.org",
+        "442079460958",
+        "7946",
+        "kayaking",
+    ] {
+        assert_eq!(
+            found(&door, "core.party", query),
+            ids(["party-2"]),
+            "`{query}` finds the person"
+        );
+    }
+    // The snippet is the index's own highlight, so it shows the folded word.
+    let answer = door
+        .query(
+            &Principal::Owner,
+            &SearchRequest::new("core.party", "chotu", 8),
+        )
+        .expect("people answer");
+    assert!(targets(&answer)[0].snippet.contains("⟦"));
+    // A Locker memo is an annotation too, and it is in no domain's index.
+    for entity in DOMAINS.iter().map(|domain| domain.entity) {
+        assert_eq!(found(&door, entity, "zebrafish"), Vec::<String>::new());
+    }
+}
+
+/// An interaction with a note, linked to a person by the live edge
+/// `people.log_interaction` writes (Q-1097-5). The activity's kind concept is a
+/// row of its own because `core_activity.kind_concept_id` is a real reference.
+fn seed_interaction(connection: &Connection, owner: &str, with: &[&str]) -> rusqlite::Result<()> {
+    connection.execute(
+        "INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version, created_at)
+         VALUES ('scheme-act', 'urn:duaility:activity-kinds', 'Activity kinds', 'centraid', '1', ?1),
+                ('scheme-rel', 'urn:duaility:relations', 'Link relation types', 'centraid', '1', ?1)",
+        [NOW],
+    )?;
+    connection.execute(
+        "INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, created_at, updated_at)
+         VALUES ('concept-lunch', 'scheme-act', 'lunch', 'lunch', ?1, ?1),
+                ('concept-about', 'scheme-rel', 'about', 'About', ?1, ?1)",
+        [NOW],
+    )?;
+    connection.execute(
+        "INSERT INTO core_activity (activity_id, actor_party_id, kind_concept_id, started_at, created_at)
+         VALUES ('activity-1', ?1, 'concept-lunch', ?2, ?2)",
+        rusqlite::params![owner, NOW],
+    )?;
+    for (index, party) in with.iter().enumerate() {
+        connection.execute(
+            "INSERT INTO core_link
+               (link_id, from_type, from_id, to_type, to_id, relation_concept_id,
+                valid_from, valid_to, asserted_by, provenance_id, updated_at)
+             VALUES (?1, 'core.activity', 'activity-1', 'core.party', ?2, 'concept-about',
+                     ?3, NULL, 'owner', NULL, ?3)",
+            rusqlite::params![format!("link-{index}"), party, NOW],
+        )?;
+    }
+    connection.execute(
+        "INSERT INTO knowledge_annotation
+           (annotation_id, author_party_id, target_type, target_id, body_text, created_at)
+         VALUES ('annotation-act', ?1, 'core.activity', 'activity-1', 'lunch at Rao''s', ?2)",
+        rusqlite::params![owner, NOW],
+    )?;
+    Ok(())
+}
+
+/// THE NOTE LOGGED ON AN INTERACTION FINDS THE PERSON, through the door, and a
+/// slipped letter in it is corrected to the word the vault holds.
+#[test]
+fn an_interaction_note_finds_the_person_and_a_typo_in_it_is_corrected() {
+    let connection = vault();
+    seed_person(&connection);
+    connection
+        .execute(
+            "INSERT INTO core_party (party_id, kind, display_name, sort_name, created_at)
+             VALUES ('party-3', 'person', 'Asha Rao', 'Rao, Asha', ?1),
+                    ('party-4', 'person', 'Jake Bennett', 'Bennett, Jake', ?1)",
+            [NOW],
+        )
+        .expect("two more people are inserted");
+    seed_interaction(&connection, "party-1", &["party-2", "party-3"])
+        .expect("the interaction is inserted");
+    let door = door(&connection);
+    for query in ["lunch", "lunch at rao", "rao's"] {
+        let mut people = found(&door, "core.party", query);
+        people.sort();
+        assert_eq!(
+            people,
+            ids(["party-2", "party-3"]),
+            "`{query}` finds both participants and no one else"
+        );
+    }
+    // The vocabulary holds the folded word, so a slip in it is corrected.
+    assert_eq!(found(&door, "core.party", "lnuch"), Vec::<String>::new());
+    assert_eq!(
+        corrected(&door, &["core.party"], "lnuch").as_deref(),
+        Some("lunch")
+    );
+    // The note is the person's, so no other domain finds it.
+    for entity in DOMAINS.iter().map(|domain| domain.entity) {
+        if entity != "core.party" {
+            assert_eq!(found(&door, entity, "lunch"), Vec::<String>::new());
+        }
+    }
+}
+
+#[test]
+fn an_event_is_found_by_its_place() {
+    let connection = vault();
+    connection
+        .execute(
+            "INSERT INTO core_place (place_id, name, created_at) VALUES ('place-1', 'Lisbon Docks', ?1)",
+            [NOW],
+        )
+        .expect("a place is inserted");
+    connection
+        .execute(
+            "INSERT INTO core_event
+               (event_id, summary, dtstart, start_tz, status, sequence, location_place_id, created_at)
+             VALUES ('event-2', 'Team offsite', '2099-06-12T09:00:00.000Z', 'Europe/London',
+                     'confirmed', 0, 'place-1', ?1)",
+            [NOW],
+        )
+        .expect("an event is inserted");
+    let door = door(&connection);
+    assert_eq!(found(&door, "core.event", "lisbon"), ids(["event-2"]));
+    // The place's own rename reaches the event's row.
+    connection
+        .execute(
+            "UPDATE core_place SET name = 'Porto Riverside' WHERE place_id = 'place-1'",
+            [],
+        )
+        .expect("the place is renamed");
+    assert_eq!(found(&door, "core.event", "lisbon"), Vec::<String>::new());
+    assert_eq!(found(&door, "core.event", "porto"), ids(["event-2"]));
+}
+
+#[test]
+fn a_task_is_found_by_its_project() {
+    let connection = vault();
+    connection
+        .execute(
+            "INSERT INTO schedule_project (project_id, owner_party_id, name, created_at)
+             VALUES ('project-1', 'party-1', 'Kitchen refit', ?1)",
+            [NOW],
+        )
+        .expect("a project is inserted");
+    connection
+        .execute(
+            "INSERT INTO schedule_task
+               (task_id, owner_party_id, title, status, priority, created_at, updated_at, project_id)
+             VALUES ('task-2', 'party-1', 'Order tiles', 'needs-action', 0, ?1, ?1, 'project-1')",
+            [NOW],
+        )
+        .expect("a task is inserted");
+    let door = door(&connection);
+    assert_eq!(found(&door, "schedule.task", "kitchen"), ids(["task-2"]));
+}
+
+#[test]
+fn an_expense_is_found_by_category_group_line_item_and_memo() {
+    let connection = vault();
+    connection
+        .execute(
+            "INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
+             VALUES ('circle-1', 'party-1', 'Sitwell Road', 'custom')",
+            [],
+        )
+        .expect("a circle is inserted");
+    connection
+        .execute(
+            "INSERT INTO tally_group (group_id, circle_id, icon, color, currency, created_at)
+             VALUES ('group-1', 'circle-1', 'x', 'blue', 'GBP', ?1)",
+            [NOW],
+        )
+        .expect("a group is inserted");
+    connection
+        .execute(
+            "INSERT INTO tally_expense
+               (expense_id, group_id, description, amount_minor, currency, paid_by, spent_on,
+                category, created_at)
+             VALUES ('expense-2', 'group-1', 'Hardware shop', 3000, 'GBP', 'party-1',
+                     '2099-05-04', 'utilities', ?1)",
+            [NOW],
+        )
+        .expect("an expense is inserted");
+    connection
+        .execute(
+            "INSERT INTO tally_expense_line_item
+               (line_item_id, expense_id, kind, description, amount_minor, sort_order, created_at)
+             VALUES ('line-1', 'expense-2', 'item', 'Paint', 2000, 0, ?1),
+                    ('line-2', 'expense-2', 'item', 'Brushes', 1000, 1, ?1)",
+            [NOW],
+        )
+        .expect("line items are inserted");
+    connection
+        .execute(
+            "INSERT INTO knowledge_annotation
+               (annotation_id, author_party_id, target_type, target_id, body_text, created_at)
+             VALUES ('annotation-4', 'party-1', 'tally.expense', 'expense-2', 'the red folder', ?1)",
+            [NOW],
+        )
+        .expect("a memo is inserted");
+    let door = door(&connection);
+    for query in ["utilities", "sitwell", "paint", "brushes", "folder"] {
+        assert_eq!(
+            found(&door, "tally.expense", query),
+            ids(["expense-2"]),
+            "`{query}` finds the expense"
+        );
+    }
+    // The seeded expense's own category is a column of its index too.
+    assert_eq!(found(&door, "tally.expense", "travel"), ids(["expense-1"]));
+}
+
+// ---------------------------------------------------------------------------
+// The weight of a folded column, in a replayed vault and in a founded one
+// ---------------------------------------------------------------------------
+
+/// A project and five tasks: the word `gutters` is the title of one task and
+/// the project of another.
+///
+/// The title hit sits in a longer row than the project hit, so equal weights
+/// rank the shorter row first — which is what makes the order below the
+/// WEIGHTS' doing. Three rows without the word keep its idf positive.
+fn plant_gutters(connection: &Connection, owner: &str) -> rusqlite::Result<()> {
+    connection.execute(
+        "INSERT INTO schedule_project (project_id, owner_party_id, name, created_at)
+         VALUES ('project-gutters', ?1, 'Gutters', ?2)",
+        rusqlite::params![owner, NOW],
+    )?;
+    for (id, title, description, project) in [
+        ("task-title", "Gutters", Some("clean before"), None),
+        ("task-project", "Errands", None, Some("project-gutters")),
+        ("task-a", "Milk", None, None),
+        ("task-b", "Eggs", None, None),
+        ("task-c", "Bread", None, None),
+    ] {
+        connection.execute(
+            "INSERT INTO schedule_task
+               (task_id, owner_party_id, title, description, status, priority,
+                created_at, updated_at, project_id)
+             VALUES (?1, ?2, ?3, ?4, 'needs-action', 0, ?5, ?5, ?6)",
+            rusqlite::params![id, owner, title, description, NOW, project],
+        )?;
+    }
+    Ok(())
+}
+
+/// The door's order for `gutters`, and the order the same index gives with equal
+/// weights.
+fn gutters_ranked(connection: &Connection) -> (Vec<String>, Vec<String>) {
+    let door = door(connection);
+    let by_door = found(&door, "schedule.task", "gutters");
+    let mut statement = connection
+        .prepare(
+            "SELECT task_id FROM fts_schedule_task
+              WHERE fts_schedule_task MATCH 'gutters'
+              ORDER BY bm25(fts_schedule_task, 1.0, 1.0, 1.0, 1.0)",
+        )
+        .expect("the control prepares");
+    let equal = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .expect("the control runs")
+        .collect::<rusqlite::Result<Vec<String>>>()
+        .expect("the control reads");
+    (by_door, equal)
+}
+
+fn assert_a_title_outranks_a_project(by_door: &[String], by_equal_weights: &[String]) {
+    let rows = |all: &[String]| -> Vec<String> {
+        all.iter()
+            .filter(|id| id.starts_with("task-title") || id.starts_with("task-project"))
+            .cloned()
+            .collect()
+    };
+    assert_eq!(
+        rows(by_equal_weights),
+        ids(["task-project", "task-title"]),
+        "with equal weights the shorter row wins, so this test discriminates"
+    );
+    assert_eq!(
+        rows(by_door),
+        ids(["task-title", "task-project"]),
+        "the folded project weighs less than the title"
+    );
+}
+
+/// THE WEIGHTS ARE THE DOOR'S, so a vault built by replaying the DDL ranks as a
+/// founded one does (#1097, R1d). This is the replayed one.
+#[test]
+fn a_title_hit_ranks_above_a_project_hit_in_a_replayed_vault() {
+    let connection = vault();
+    plant_gutters(&connection, "party-1").expect("the tasks are written");
+    let (by_door, equal) = gutters_ranked(&connection);
+    assert_a_title_outranks_a_project(&by_door, &equal);
+}
+
+/// And the founded one: `Vault::create`, every rung run, no weights stored.
+#[test]
+fn a_title_hit_ranks_above_a_project_hit_in_a_founded_vault() {
+    let founded = founded_vault("door-rank");
+    let owner = owner_of(&founded);
+    founded
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            plant_gutters(tx.connection(), &owner)?;
+            Ok(())
+        })
+        .expect("the tasks are written");
+    let (by_door, equal) = founded
+        .read(|connection| Ok(gutters_ranked(connection)))
+        .expect("the ranking reads");
+    assert_a_title_outranks_a_project(&by_door, &equal);
+}
+
+fn founded_vault(seed: &str) -> centraid_vault::Vault {
+    use centraid_vault::clock::{FixedClock, SeededIds};
+
+    let dir = centraid_ontology::golden::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("a scratch directory");
+    let vault = centraid_vault::Vault::create_with(
+        dir.join("vault.db"),
+        Box::new(FixedClock::frozen()),
+        Box::new(SeededIds::new(seed)),
+    )
+    .expect("a vault is created");
+    vault
+        .found("Test", "Test Owner")
+        .expect("a vault is founded");
+    vault
+}
+
+fn owner_of(vault: &centraid_vault::Vault) -> String {
+    vault
+        .read(|connection| {
+            Ok(
+                connection.query_row(
+                    "SELECT self_party_id FROM core_vault LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )?,
+            )
+        })
+        .expect("an owner")
+}
+
+/// The index columns rung thirteen folded in, which are the ones that weigh half.
+/// Written out here, apart from the list in `domains.rs`, so a weight that sits
+/// on the wrong column is a difference between two statements of one fact.
+const HALF_WEIGHT: [(&str, &str); 12] = [
+    ("core.party", "nickname"),
+    ("core.party", "role"),
+    ("core.party", "met"),
+    ("core.party", "channels"),
+    ("core.party", "memo"),
+    ("core.event", "location"),
+    ("schedule.task", "project"),
+    ("tally.expense", "category"),
+    ("tally.expense", "group_name"),
+    ("tally.expense", "items"),
+    ("tally.expense", "memo"),
+    ("chat.thread", "said"),
+];
+
+fn assert_weights_sit_on_their_columns(connection: &Connection) {
+    // THE DOMAINS' AND THE NAMED KINDS': one list of (entity, index, weights).
+    let indexes = DOMAINS
+        .iter()
+        .map(|domain| (domain.entity, domain.fts, domain.weights))
+        .chain(
+            NAMED
+                .iter()
+                .map(|named| (named.entity, named.fts, named.weights)),
+        );
+    for (entity, fts, weights) in indexes {
+        let live: Vec<String> = connection
+            .prepare("SELECT name FROM pragma_table_info(?1) ORDER BY cid")
+            .expect("the columns prepare")
+            .query_map([fts], |row| row.get::<_, String>(0))
+            .expect("the columns read")
+            .collect::<rusqlite::Result<_>>()
+            .expect("the columns read");
+        assert_eq!(
+            live.len(),
+            weights.len(),
+            "{fts} has {} columns and {} weights",
+            live.len(),
+            weights.len()
+        );
+        for (column, weight) in live.iter().zip(weights) {
+            let expected = if HALF_WEIGHT.contains(&(entity, column.as_str())) {
+                0.5
+            } else {
+                1.0
+            };
+            assert!(
+                (weight - expected).abs() < f64::EPSILON,
+                "{fts}.{column} weighs {weight}, not {expected}"
+            );
+        }
+    }
+}
+
+#[test]
+fn every_weight_sits_on_the_column_it_names_in_both_kinds_of_vault() {
+    assert_weights_sit_on_their_columns(&vault());
+    let founded = founded_vault("door-weights");
+    founded
+        .read(|connection| {
+            assert_weights_sit_on_their_columns(connection);
+            Ok(())
+        })
+        .expect("the founded schema reads");
+}
+
+/// No index stores a rank: a stored override would make the two kinds of vault
+/// disagree again.
+#[test]
+fn no_index_stores_a_rank_override() {
+    let founded = founded_vault("door-no-rank");
+    founded
+        .read(|connection| {
+            let indexes = DOMAINS
+                .iter()
+                .map(|domain| domain.fts)
+                .chain(NAMED.iter().map(|named| named.fts));
+            for fts in indexes {
+                let stored: i64 = connection.query_row(
+                    &format!("SELECT COUNT(*) FROM {fts}_config WHERE k = 'rank'"),
+                    [],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(stored, 0, "{fts} stores a rank");
+            }
+            Ok(())
+        })
+        .expect("the config reads");
+}
+
+// ---------------------------------------------------------------------------
+// The open-time check over a real model
+// ---------------------------------------------------------------------------
+
+/// A DEMONSTRATED RED over the committed model: an index that grew a column
+/// nobody listed does not open, whatever the column is called.
+#[test]
+fn an_index_that_grew_an_unlisted_column_fails_to_open_over_the_committed_model() {
+    let connection = vault();
+    assert!(SqliteDoor::open(&connection).is_ok());
+    connection
+        .execute_batch(
+            "DROP TABLE fts_core_party;
+             CREATE VIRTUAL TABLE fts_core_party USING fts5(
+               party_id UNINDEXED, display_name, sort_name, nickname, role, met, channels, memo,
+               scratchpad, tokenize = \"unicode61 remove_diacritics 2\");",
+        )
+        .expect("the index is rebuilt with one more column");
+    match SqliteDoor::open(&connection) {
+        Err(SearchError::IndexUnusable { entity, detail }) => {
+            assert_eq!(entity, "core.party");
+            assert!(detail.contains("scratchpad"), "{detail}");
+        }
+        other => panic!(
+            "the door opened over an unlisted fold: {:?}",
+            other.map(|_| ())
+        ),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The correction (#1097, R4, R4a): a word the vault does not hold, replaced by
+// one it does
+// ---------------------------------------------------------------------------
+
+/// A task of this owner. The trigger fires as the product's do, so the title is in
+/// the vocabulary of `schedule.task` the moment it is written.
+fn add_task(connection: &Connection, owner: &str, id: &str, title: &str) -> rusqlite::Result<()> {
+    connection.execute(
+        "INSERT INTO schedule_task
+           (task_id, owner_party_id, title, status, priority, created_at, updated_at)
+         VALUES (?1, ?2, ?3, 'needs-action', 0, ?4, ?4)",
+        rusqlite::params![id, owner, title, NOW],
+    )?;
+    Ok(())
+}
+
+fn add_event(connection: &Connection, id: &str, summary: &str) -> rusqlite::Result<()> {
+    connection.execute(
+        "INSERT INTO core_event
+           (event_id, summary, dtstart, start_tz, status, sequence, created_at)
+         VALUES (?1, ?2, '2099-06-10T17:00:00.000Z', 'UTC', 'confirmed', 0, ?3)",
+        rusqlite::params![id, summary, NOW],
+    )?;
+    Ok(())
+}
+
+/// Seeds a vault, then runs `check` over it: once on the contract fixture (the
+/// committed DDL replayed, owner `party-1`) and once on a founded vault
+/// (`Vault::create`, every rung run). The vocabularies are the same tables, but
+/// only the second is the file the product writes, so a correction is proved on
+/// both.
+fn on_both_vaults(
+    seed: impl Fn(&Connection, &str) -> rusqlite::Result<()>,
+    check: impl Fn(&Connection),
+) {
+    let fixture = vault();
+    seed(&fixture, "party-1").expect("the fixture is seeded");
+    check(&fixture);
+
+    let founded = founded_vault("door-correct");
+    let owner = owner_of(&founded);
+    founded
+        .commit(|tx| {
+            tx.set_producer("test.fixture");
+            seed(tx.connection(), &owner)?;
+            Ok(())
+        })
+        .expect("the founded vault is seeded");
+    founded
+        .read(|connection| {
+            check(connection);
+            Ok(())
+        })
+        .expect("the founded vault is read");
+}
+
+/// What `correct` says for one query over the named entities.
+fn corrected(door: &SqliteDoor<'_>, entities: &[&str], query: &str) -> Option<String> {
+    door.correct(&Principal::Owner, entities, query)
+        .unwrap_or_else(|error| panic!("`{query}` over {entities:?} answered {error}"))
+}
+
+const TASKS: [&str; 1] = ["schedule.task"];
+
+fn seed_budget(connection: &Connection, owner: &str) -> rusqlite::Result<()> {
+    add_task(connection, owner, "task-budget", "Quarterly budget review")?;
+    add_task(
+        connection,
+        owner,
+        "task-parcel",
+        "Package received at the office",
+    )?;
+    add_task(connection, owner, "task-roof", "Replace the roof tiles")?;
+    Ok(())
+}
+
+/// THE HEADLINE, on both kinds of vault: one slipped letter, each way a letter
+/// slips, lands on the word the vault holds.
+#[test]
+fn a_slipped_word_is_corrected_to_the_word_the_vault_holds() {
+    on_both_vaults(seed_budget, |connection| {
+        let door = door(connection);
+        // Two neighbours swapped, in the middle of the word.
+        assert_eq!(
+            corrected(&door, &TASKS, "budegt").as_deref(),
+            Some("budget")
+        );
+        // A letter different.
+        assert_eq!(
+            corrected(&door, &TASKS, "budhet").as_deref(),
+            Some("budget")
+        );
+        // A letter too many.
+        assert_eq!(
+            corrected(&door, &TASKS, "budgget").as_deref(),
+            Some("budget")
+        );
+        // A letter dropped: the answer is the whole word the vault holds (R4b),
+        // `received`, not the prefix `receive` the index would also match.
+        assert_eq!(
+            corrected(&door, &TASKS, "recive").as_deref(),
+            Some("received")
+        );
+        // The classic: `ie` and `ei`.
+        assert_eq!(
+            corrected(&door, &TASKS, "recieve").as_deref(),
+            Some("received")
+        );
+        // Mid-word as you type: the slip is in the letters typed so far, and the
+        // word is the whole term (R4b), not the five letters the slip was read in.
+        assert_eq!(corrected(&door, &TASKS, "budeg").as_deref(), Some("budget"));
+        // The case and the accent a member typed are the index's to forgive.
+        assert_eq!(
+            corrected(&door, &TASKS, "BUDEGT").as_deref(),
+            Some("budget")
+        );
+        // A swap of the first two letters is the one first-letter slip (R4a).
+        assert_eq!(
+            corrected(&door, &TASKS, "ubdget").as_deref(),
+            Some("budget")
+        );
+    });
+}
+
+/// R4B: the correction is the WHOLE term the vault holds, and the member is told
+/// that word. `sunscren` is one edit from the prefix `sunscree`; the answer is
+/// `sunscreen`, and the re-search finds the row with it.
+#[test]
+fn a_correction_is_the_whole_word_the_vault_holds() {
+    on_both_vaults(
+        |connection, owner| {
+            seed_budget(connection, owner)?;
+            add_task(connection, owner, "task-sun", "Buy sunscreen for the trip")
+        },
+        |connection| {
+            let door = door(connection);
+            assert_eq!(
+                corrected(&door, &TASKS, "sunscren").as_deref(),
+                Some("sunscreen")
+            );
+            let answer = door
+                .query(
+                    &Principal::Owner,
+                    &SearchRequest::new("schedule.task", "sunscreen", 8),
+                )
+                .expect("the search answers");
+            assert_eq!(
+                targets(&answer)
+                    .into_iter()
+                    .map(|target| target.id)
+                    .collect::<Vec<String>>(),
+                ids(["task-sun"])
+            );
+        },
+    );
+}
+
+/// THE POINT OF IT: the typed query finds nothing, and the corrected one finds the
+/// row. A demonstrated red for the correction is this test without it.
+#[test]
+fn the_corrected_query_finds_the_row_the_typed_one_could_not() {
+    on_both_vaults(seed_budget, |connection| {
+        let door = door(connection);
+        let ask = |query: &str| {
+            let answer = door
+                .query(
+                    &Principal::Owner,
+                    &SearchRequest::new("schedule.task", query, 8),
+                )
+                .expect("the search answers");
+            targets(&answer)
+                .into_iter()
+                .map(|target| target.id)
+                .collect::<Vec<String>>()
+        };
+        assert!(ask("budegt").is_empty(), "the slip finds nothing");
+        let query = corrected(&door, &TASKS, "budegt").expect("the slip is corrected");
+        assert_eq!(ask(&query), ids(["task-budget"]));
+        // And `recieve` finds `received` through the word it was corrected to.
+        assert!(ask("recieve").is_empty());
+        let query = corrected(&door, &TASKS, "recieve").expect("the slip is corrected");
+        assert_eq!(ask(&query), ids(["task-parcel"]));
+    });
+}
+
+/// Only the unknown word changes: a known word keeps the case it was typed in.
+#[test]
+fn in_a_query_of_several_words_only_the_unknown_one_changes() {
+    on_both_vaults(seed_budget, |connection| {
+        let door = door(connection);
+        assert_eq!(
+            corrected(&door, &TASKS, "Quarterly budegt").as_deref(),
+            Some("Quarterly budget")
+        );
+        assert_eq!(
+            corrected(&door, &TASKS, "roof budegt recieve").as_deref(),
+            Some("roof budget received")
+        );
+        // Nothing unknown, nothing to say.
+        assert_eq!(corrected(&door, &TASKS, "Quarterly budget"), None);
+    });
+}
+
+/// Documents are summed across the entities named, and only across those.
+#[test]
+fn the_documents_of_a_term_add_across_the_entities_named() {
+    let seed = |connection: &Connection, owner: &str| -> rusqlite::Result<()> {
+        // `budgat` is one edit from `budget` and from `budgit`. In the tasks
+        // `budgit` is in more documents; in the events `budget` is.
+        add_task(connection, owner, "task-a", "budget")?;
+        add_task(connection, owner, "task-b", "budgit")?;
+        add_task(connection, owner, "task-c", "budgit")?;
+        add_event(connection, "event-a", "budget")?;
+        add_event(connection, "event-b", "budget")?;
+        Ok(())
+    };
+    on_both_vaults(seed, |connection| {
+        let door = door(connection);
+        let events = ["core.event"];
+        assert_eq!(
+            corrected(&door, &TASKS, "budgat").as_deref(),
+            Some("budgit")
+        );
+        assert_eq!(
+            corrected(&door, &events, "budgat").as_deref(),
+            Some("budget")
+        );
+        // 1 + 2 documents of `budget` beat 2 of `budgit`: they add.
+        assert_eq!(
+            corrected(&door, &["schedule.task", "core.event"], "budgat").as_deref(),
+            Some("budget")
+        );
+        // The same entity named twice is one entity, not double the documents.
+        assert_eq!(
+            corrected(&door, &["schedule.task", "schedule.task"], "budgat").as_deref(),
+            Some("budgit")
+        );
+    });
+}
+
+/// EVERYTHING THAT IS LEFT ALONE, and why each one is.
+#[test]
+fn a_word_that_is_not_a_slip_is_left_alone() {
+    on_both_vaults(seed_budget, |connection| {
+        let door = door(connection);
+        // A word the vault holds, whole or as the start of one.
+        assert_eq!(corrected(&door, &TASKS, "budget"), None);
+        assert_eq!(corrected(&door, &TASKS, "budg"), None);
+        assert_eq!(corrected(&door, &TASKS, "Quarterly"), None);
+        // Under four letters: `roc` is one edit from `roof`, and is not a typo.
+        assert_eq!(corrected(&door, &TASKS, "roc"), None);
+        assert_eq!(corrected(&door, &TASKS, "rof"), None);
+        // A digit: a number is not a misspelling of another number.
+        assert_eq!(corrected(&door, &TASKS, "budg3t"), None);
+        assert_eq!(corrected(&door, &TASKS, "2026"), None);
+        // A slip in the FIRST letter (R4a): the scan reads the terms that start
+        // like the word, and `gudget` does not start like `budget`.
+        assert_eq!(corrected(&door, &TASKS, "gudget"), None);
+        assert_eq!(corrected(&door, &TASKS, "pecieve"), None);
+        // A word two edits away.
+        assert_eq!(corrected(&door, &TASKS, "bugdte"), None);
+        // Nothing near it at all.
+        assert_eq!(corrected(&door, &TASKS, "zzyzx"), None);
+        // No searchable word is nothing to correct, not an error.
+        assert_eq!(corrected(&door, &TASKS, "   --- "), None);
+        assert_eq!(corrected(&door, &TASKS, ""), None);
+    });
+}
+
+/// The word's near term lives in a domain the caller did not name: the caller is
+/// about to search the ones it named, so a term only another holds is no help.
+#[test]
+fn a_term_in_a_domain_that_is_not_named_is_not_offered() {
+    on_both_vaults(seed_budget, |connection| {
+        let door = door(connection);
+        assert_eq!(corrected(&door, &["core.event"], "budegt"), None);
+        assert_eq!(
+            corrected(&door, &["core.party", "core.event"], "budegt"),
+            None
+        );
+        assert_eq!(corrected(&door, &[], "budegt"), None);
+        assert_eq!(
+            corrected(&door, &["core.event", "schedule.task"], "budegt").as_deref(),
+            Some("budget")
+        );
+    });
+}
+
+/// A slip in a word that no longer fits the exact answer of ONE domain but is the
+/// word of another is the caller's call: `correct` says `known` as soon as any
+/// named domain holds the word, so a Home search is not rewritten by a domain that
+/// has no such word.
+#[test]
+fn a_word_any_named_domain_holds_is_known() {
+    on_both_vaults(
+        |connection, owner| {
+            add_task(connection, owner, "task-a", "budgat")?;
+            add_event(connection, "event-a", "budget")?;
+            Ok(())
+        },
+        |connection| {
+            let door = door(connection);
+            // `budgat` is a term of the tasks, so over both it is held...
+            assert_eq!(
+                corrected(&door, &["core.event", "schedule.task"], "budgat"),
+                None
+            );
+            // ...and over the events alone it is a slip of `budget`.
+            assert_eq!(
+                corrected(&door, &["core.event"], "budgat").as_deref(),
+                Some("budget")
+            );
+        },
+    );
+}
+
+/// LOCKER IS NOT A DOMAIN, FOR A CORRECTION AS FOR A SEARCH. Asking is a refusal,
+/// even beside entities that are domains, and nothing answers before it.
+#[test]
+fn an_entity_that_is_not_a_domain_is_a_refusal_for_a_correction_too() {
+    let connection = vault();
+    with_a_locker_index(&connection);
+    let door = door(&connection);
+    for entity in [
+        "locker.item",
+        "locker.item_field",
+        "locker.item_passkey",
+        "sync.connection_credential",
+    ] {
+        for entities in [vec![entity], vec!["schedule.task", entity]] {
+            let refused = door.correct(&Principal::Owner, &entities, "budegt");
+            assert!(
+                matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+                "{entities:?} answered {refused:?} rather than refusing"
+            );
+        }
+    }
+}
+
+/// A word that lives only in Locker's index is not offered to any search: the
+/// index is populated, the vocabulary of a domain is not Locker's, and the typo of
+/// the title of a login is corrected to nothing.
+#[test]
+fn a_word_only_the_locker_index_holds_is_never_offered() {
+    let connection = vault();
+    with_a_locker_index(&connection);
+    let in_locker: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM fts_locker_item WHERE fts_locker_item MATCH '\"booking\"*'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("the locker index answers");
+    assert_eq!(in_locker, 1, "the control: Locker holds `booking`");
+    let no_vocabulary: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name = 'fts_locker_item_vocab'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("the schema answers");
+    assert_eq!(no_vocabulary, 0, "Locker has no vocabulary");
+    let door = door(&connection);
+    let every_domain: Vec<&str> = DOMAINS.iter().map(|domain| domain.entity).collect();
+    assert_eq!(corrected(&door, &every_domain, "bookign"), None);
+}
+
+/// A vault from before the vocabulary says so, as the unusable index it is,
+/// rather than answering that nothing needed correcting.
+#[test]
+fn a_vault_without_the_vocabulary_is_an_unusable_index() {
+    let connection = vault();
+    connection
+        .execute_batch("DROP TABLE fts_schedule_task_vocab;")
+        .expect("the vocabulary is dropped");
+    let door = door(&connection);
+    match door.correct(&Principal::Owner, &TASKS, "budegt") {
+        Err(SearchError::IndexUnusable { entity, detail }) => {
+            assert_eq!(entity, "schedule.task");
+            assert!(detail.contains("fts_schedule_task_vocab"), "{detail}");
+        }
+        other => panic!("a missing vocabulary answered {other:?}"),
+    }
+}
+
+/// `n` distinct terms, each `q` and five letters, in term order: `qaaaaa`,
+/// `qaaaab`, ...
+fn filler_term(n: usize) -> String {
+    let mut letters = [b'a'; 5];
+    let mut rest = n;
+    for slot in letters.iter_mut().rev() {
+        *slot = b'a' + u8::try_from(rest % 26).expect("a base-26 digit");
+        rest /= 26;
+    }
+    format!("q{}", String::from_utf8_lossy(&letters))
+}
+
+/// THE SCAN HAS A HARD BOUND, AND IT IS DETERMINISTIC (doctrine: nothing whose
+/// cost scales with the vault runs unbounded on the request path).
+///
+/// More terms than the bound under one first letter, in term order. A typo of the
+/// last term the scan reads is corrected; a typo of the first it does not read is
+/// not, though its target is right there in the vocabulary. The plan check is the
+/// other half: the vocabulary honours the range on `term` and hands the rows over
+/// in term order, so the limit stops the walk and does not sort a bucket.
+#[test]
+fn the_vocabulary_scan_stops_at_its_bound() {
+    let terms: Vec<String> = (0..MAX_VOCAB_SCAN + 10).map(filler_term).collect();
+    let seed = |connection: &Connection, owner: &str| -> rusqlite::Result<()> {
+        for (index, chunk) in terms.chunks(200).enumerate() {
+            add_task(
+                connection,
+                owner,
+                &format!("bound-{index}"),
+                &chunk.join(" "),
+            )?;
+        }
+        Ok(())
+    };
+    on_both_vaults(seed, |connection| {
+        let door = door(connection);
+        let slip = |term: &str| format!("q{term}"); // one letter too many
+        let last_read = &terms[MAX_VOCAB_SCAN - 1];
+        let first_unread = &terms[MAX_VOCAB_SCAN];
+        // The control: inside the bound the typo is corrected...
+        assert_eq!(
+            corrected(&door, &TASKS, &slip(last_read)).as_deref(),
+            Some(last_read.as_str())
+        );
+        assert_eq!(
+            corrected(&door, &TASKS, &slip(&terms[0])).as_deref(),
+            Some(terms[0].as_str())
+        );
+        // ...and past it, it is not: the bound, not the vocabulary, decides.
+        assert_eq!(corrected(&door, &TASKS, &slip(first_unread)), None);
+        assert_eq!(
+            corrected(&door, &TASKS, &slip(terms.last().expect("terms"))),
+            None
+        );
+
+        // The plan: a range scan on `term` that returns its rows in order.
+        let plan: Vec<String> = connection
+            .prepare(
+                "EXPLAIN QUERY PLAN SELECT term, doc FROM fts_schedule_task_vocab
+                  WHERE term >= ?1 AND term < ?2 ORDER BY term LIMIT ?3",
+            )
+            .expect("the plan prepares")
+            .query_map(rusqlite::params!["q", "r", 10], |row| {
+                row.get::<_, String>(3)
+            })
+            .expect("the plan reads")
+            .collect::<rusqlite::Result<_>>()
+            .expect("the plan rows read");
+        let plan = plan.join("; ");
+        assert!(plan.contains("VIRTUAL TABLE INDEX"), "{plan}");
+        assert!(
+            !plan.contains("TEMP B-TREE"),
+            "the bucket is sorted: {plan}"
+        );
+
+        // And the walk is the limit's: a bucket of ten thousand terms costs the
+        // virtual machine steps for the rows it returned, not for the bucket.
+        let steps = |limit: i64| -> i32 {
+            let mut statement = connection
+                .prepare(
+                    "SELECT term, doc FROM fts_schedule_task_vocab
+                      WHERE term >= 'q' AND term < 'r' ORDER BY term LIMIT ?1",
+                )
+                .expect("the scan prepares");
+            let rows = statement
+                .query_map([limit], |row| row.get::<_, String>(0))
+                .expect("the scan reads")
+                .count();
+            assert_eq!(i64::try_from(rows).expect("a count"), limit.min(10_000));
+            statement.get_status(rusqlite::StatementStatus::VmStep)
+        };
+        let (small, large) = (steps(100), steps(2_000));
+        assert!(
+            small < 100 * 20 && large < 2_000 * 20,
+            "the scan costs more than its rows: {small} steps for 100, {large} for 2000"
+        );
+    });
+}
+
+// ---------------------------------------------------------------------------
+// The cost of a correction, measured
+// ---------------------------------------------------------------------------
+
+/// A small deterministic generator (xorshift64*): the same vault on every machine.
+struct Random(u64);
+
+impl Random {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_F491_4F6C_DD1D)
+    }
+
+    fn below(&mut self, bound: usize) -> usize {
+        usize::try_from(self.next() % u64::try_from(bound).expect("a bound")).expect("an index")
+    }
+}
+
+/// English initial letters by weight (per mille), so the busiest buckets are as
+/// busy as a real vocabulary's: `s` is a ninth of it.
+const INITIALS: [(char, usize); 26] = [
+    ('a', 60),
+    ('b', 55),
+    ('c', 90),
+    ('d', 50),
+    ('e', 30),
+    ('f', 40),
+    ('g', 25),
+    ('h', 35),
+    ('i', 30),
+    ('j', 8),
+    ('k', 8),
+    ('l', 30),
+    ('m', 55),
+    ('n', 20),
+    ('o', 25),
+    ('p', 75),
+    ('q', 5),
+    ('r', 50),
+    ('s', 110),
+    ('t', 50),
+    ('u', 15),
+    ('v', 15),
+    ('w', 25),
+    ('x', 1),
+    ('y', 4),
+    ('z', 3),
+];
+
+/// A pronounceable word of four to eleven letters.
+fn pseudo_word(random: &mut Random) -> String {
+    let total: usize = INITIALS.iter().map(|(_, weight)| weight).sum();
+    let mut pick = random.below(total);
+    let mut word = String::new();
+    for (letter, weight) in INITIALS {
+        if pick < weight {
+            word.push(letter);
+            break;
+        }
+        pick -= weight;
+    }
+    let length = 4 + random.below(8);
+    let (vowels, consonants) = ("aeiou", "bcdfghjklmnprstvwy");
+    while word.chars().count() < length {
+        let pool = if word.ends_with(|c| vowels.contains(c)) {
+            consonants
+        } else {
+            vowels
+        };
+        let at = random.below(pool.len());
+        word.push(pool.as_bytes()[at] as char);
+    }
+    word
+}
+
+/// One slip in a word, never in its first letter.
+fn slipped(random: &mut Random, word: &str) -> String {
+    let mut letters: Vec<char> = word.chars().collect();
+    let at = 1 + random.below(letters.len() - 1);
+    match random.below(4) {
+        0 if at + 1 < letters.len() && letters[at] != letters[at + 1] => letters.swap(at, at + 1),
+        1 => {
+            letters.remove(at);
+        }
+        2 => letters.insert(at, 'z'),
+        _ => letters[at] = if letters[at] == 'x' { 'y' } else { 'x' },
+    }
+    letters.into_iter().collect()
+}
+
+/// THE LATENCY OF A CORRECTION, on a vault of about 50,000 distinct terms. Not run
+/// by the suite — wall time is a machine's, not a build's — and the receipt holds
+/// the figures:
+///
+/// ```sh
+/// cargo test -p centraid-search --test door correction_latency_on_fifty_thousand_terms \
+///     -- --ignored --nocapture
+/// ```
+///
+/// The terms are spread over four domains (tasks, events, people, expenses) as a
+/// Home search would read them, with English initial letters so the busiest bucket
+/// is the busiest a real vocabulary has. Each of 100 calls is one word with one
+/// slip in it (never in the first letter), asked over the four domains and over
+/// the tasks alone; then 100 calls of a three-word query with two slips.
+#[test]
+#[ignore = "a measurement, run by hand: the command is in the doc comment"]
+fn correction_latency_on_fifty_thousand_terms() {
+    const TERMS: usize = 50_000;
+    let connection = vault();
+    let mut random = Random(0x9E37_79B9_7F4A_7C15);
+    let mut seen = std::collections::HashSet::new();
+    let mut terms: Vec<String> = Vec::with_capacity(TERMS);
+    while terms.len() < TERMS {
+        let word = pseudo_word(&mut random);
+        if seen.insert(word.clone()) {
+            terms.push(word);
+        }
+    }
+    connection.execute_batch("BEGIN").expect("a transaction");
+    for (index, chunk) in terms.chunks(8).enumerate() {
+        let text = chunk.join(" ");
+        // Half the terms in tasks, a fifth in events, the rest in people and expenses.
+        match index % 20 {
+            0..=9 => add_task(&connection, "party-1", &format!("synthetic-task-{index}"), &text),
+            10..=13 => add_event(&connection, &format!("synthetic-event-{index}"), &text),
+            14..=16 => connection
+                .execute(
+                    "INSERT INTO core_party (party_id, kind, display_name, sort_name, created_at)
+                     VALUES (?1, 'person', ?2, ?2, ?3)",
+                    rusqlite::params![format!("synthetic-party-{index}"), text, NOW],
+                )
+                .map(|_| ()),
+            _ => connection
+                .execute(
+                    "INSERT INTO tally_expense
+                       (expense_id, description, amount_minor, currency, paid_by, spent_on, category, created_at)
+                     VALUES (?1, ?2, 100, 'USD', 'party-1', '2099-05-30', 'general', ?3)",
+                    rusqlite::params![format!("synthetic-expense-{index}"), text, NOW],
+                )
+                .map(|_| ()),
+        }
+        .expect("a synthetic row is inserted");
+    }
+    // The bound itself: a bucket of the tasks' vocabulary past `MAX_VOCAB_SCAN`, so
+    // a word that starts with `q` makes the scan read every row it may.
+    let fillers: Vec<String> = (0..MAX_VOCAB_SCAN + 10).map(filler_term).collect();
+    for (index, chunk) in fillers.chunks(200).enumerate() {
+        add_task(
+            &connection,
+            "party-1",
+            &format!("synthetic-filler-{index}"),
+            &chunk.join(" "),
+        )
+        .expect("a filler row is inserted");
+    }
+    connection.execute_batch("COMMIT").expect("the rows commit");
+
+    for domain in ["schedule_task", "core_event", "core_party", "tally_expense"] {
+        let (distinct, busiest, letter): (i64, i64, String) = connection
+            .query_row(
+                &format!(
+                    "SELECT (SELECT COUNT(*) FROM fts_{domain}_vocab),
+                            MAX(n), c FROM (SELECT substr(term, 1, 1) c, COUNT(*) n
+                                              FROM fts_{domain}_vocab GROUP BY c)"
+                ),
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("the vocabulary counts");
+        eprintln!("{domain}: {distinct} terms, the busiest first letter `{letter}` has {busiest}");
+    }
+
+    let door = door(&connection);
+    let home = ["schedule.task", "core.event", "core.party", "tally.expense"];
+    let measure = |label: &str, entities: &[&str], words: usize| {
+        let mut random = Random(0xD1B5_4A32_D192_ED03);
+        let mut micros: Vec<u128> = Vec::new();
+        let mut corrected = 0;
+        for call in 0..100 {
+            // One word with a slip; the others as the vault holds them, so the
+            // call costs what a correction costs and not a refusal.
+            let query: Vec<String> = (0..words)
+                .map(|n| {
+                    let term = &terms[random.below(terms.len())];
+                    if n + 1 == words || n == call % words {
+                        slipped(&mut random, term)
+                    } else {
+                        term.clone()
+                    }
+                })
+                .collect();
+            let started = std::time::Instant::now();
+            let answer = door
+                .correct(&Principal::Owner, entities, &query.join(" "))
+                .expect("the correction answers");
+            micros.push(started.elapsed().as_micros());
+            corrected += usize::from(answer.is_some());
+        }
+        micros.sort_unstable();
+        eprintln!(
+            "{label}: p50 {:.2} ms, p95 {:.2} ms, max {:.2} ms; {corrected} of 100 corrected",
+            micros[50] as f64 / 1000.0,
+            micros[95] as f64 / 1000.0,
+            micros[99] as f64 / 1000.0,
+        );
+    };
+    measure("one word, four domains ", &home, 1);
+    measure("one word, tasks only   ", &TASKS, 1);
+    measure("three words, four domains", &home, 3);
+
+    // THE BOUND ITSELF: a typo of the first term the scan does not read, so it
+    // reads all `MAX_VOCAB_SCAN` rows of the bucket and corrects nothing.
+    let mut micros: Vec<u128> = Vec::new();
+    let query = format!("q{}", fillers[MAX_VOCAB_SCAN]);
+    for _ in 0..100 {
+        let started = std::time::Instant::now();
+        let answer = door
+            .correct(&Principal::Owner, &TASKS, &query)
+            .expect("the correction answers");
+        micros.push(started.elapsed().as_micros());
+        assert_eq!(answer, None, "the bound did not hold");
+    }
+    micros.sort_unstable();
+    eprintln!(
+        "the bound ({MAX_VOCAB_SCAN} rows), tasks only: p50 {:.2} ms, max {:.2} ms",
+        micros[50] as f64 / 1000.0,
+        micros[99] as f64 / 1000.0,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The containers (#1097, R-1097-19..21): a second registry beside the domains
+// ---------------------------------------------------------------------------
+
+const FOLDERS_URI: &str = "https://centraid.dev/schemes/folders";
+
+/// One of each container, as the product writes them, plus the rows that must
+/// NOT be found: an archived project, a circle with an archived group, a circle
+/// no group stands on, the folders scheme's root and a tag.
+fn seed_containers(connection: &Connection, owner: &str) -> rusqlite::Result<()> {
+    for (id, kind, name) in [
+        ("nb-1", "notebook", "Reading list"),
+        ("al-1", "album", "Reading trip"),
+    ] {
+        connection.execute(
+            "INSERT INTO core_collection
+               (collection_id, owner_party_id, kind, name, sort_order, created_at)
+             VALUES (?1, ?2, ?3, ?4, 0, ?5)",
+            rusqlite::params![id, owner, kind, name, NOW],
+        )?;
+    }
+    for (id, name, archived) in [
+        ("pr-1", "Kitchen refit", None),
+        ("pr-2", "Kitchen archive", Some(NOW)),
+    ] {
+        connection.execute(
+            "INSERT INTO schedule_project (project_id, owner_party_id, name, archived_at, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![id, owner, name, archived, NOW],
+        )?;
+    }
+    for (circle, group, name, archived) in [
+        ("ci-1", Some("gr-1"), "Kitchen flat", None),
+        ("ci-2", Some("gr-2"), "Kitchen old flat", Some(NOW)),
+        ("ci-3", None, "Kitchen cousins", None),
+    ] {
+        connection.execute(
+            "INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
+             VALUES (?1, ?2, ?3, 'custom')",
+            rusqlite::params![circle, owner, name],
+        )?;
+        if let Some(group) = group {
+            connection.execute(
+                "INSERT INTO tally_group
+                   (group_id, circle_id, icon, color, currency, archived_at, created_at)
+                 VALUES (?1, ?2, 'x', 'blue', 'GBP', ?3, ?4)",
+                rusqlite::params![group, circle, archived, NOW],
+            )?;
+        }
+    }
+    connection.execute(
+        "INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
+         VALUES ('sch-f', ?1, 'Folders', '1'), ('sch-t', 'https://centraid.dev/schemes/tags', 'Tags', '1')",
+        [FOLDERS_URI],
+    )?;
+    for (id, scheme, notation, label) in [
+        ("cn-root", "sch-f", "root", "Kitchen root"),
+        ("cn-1", "sch-f", "kitchen-docs", "Kitchen documents"),
+        ("cn-tag", "sch-t", "kitchen", "Kitchen tag"),
+    ] {
+        connection.execute(
+            "INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![id, scheme, notation, label],
+        )?;
+    }
+    Ok(())
+}
+
+fn app_of_each(door: &SqliteDoor<'_>, entity: &str, query: &str) -> Vec<(String, String)> {
+    let answer = door
+        .query(&Principal::Owner, &SearchRequest::new(entity, query, 50))
+        .unwrap_or_else(|error| panic!("{entity} answered {error}"));
+    targets(&answer)
+        .into_iter()
+        .map(|target| (target.id, target.app_id))
+        .collect()
+}
+
+fn pairs<const N: usize>(rows: [(&str, &str); N]) -> Vec<(String, String)> {
+    rows.into_iter()
+        .map(|(id, app)| (id.to_owned(), app.to_owned()))
+        .collect()
+}
+
+/// EACH CONTAINER IS FOUND BY ITS NAME, on the replayed DDL and on a founded
+/// vault, with the app it opens in, and only while it is live.
+#[test]
+fn each_container_is_found_by_name_with_the_app_it_opens_in_and_only_while_live() {
+    on_both_vaults(seed_containers, |connection| {
+        let door = door(connection);
+        // One index, two apps: the kind decides, in id order within one rank.
+        let mut both = app_of_each(&door, "core.collection", "reading");
+        both.sort();
+        assert_eq!(both, pairs([("al-1", "photos"), ("nb-1", "notes")]));
+        assert_eq!(
+            app_of_each(&door, "schedule.project", "kitchen"),
+            pairs([("pr-1", "tasks")]),
+            "an archived project is not found"
+        );
+        assert_eq!(
+            app_of_each(&door, "social.circle", "kitchen"),
+            pairs([("ci-1", "tally")]),
+            "a circle with an archived group, and a circle no group stands on, are not found"
+        );
+        assert_eq!(
+            app_of_each(&door, "core.concept", "kitchen"),
+            pairs([("cn-1", "docs")]),
+            "the root and a tag are not folders"
+        );
+        // A title is the name; the subtitle is never empty (the app).
+        let answer = door
+            .query(
+                &Principal::Owner,
+                &SearchRequest::new("schedule.project", "kitchen", 50),
+            )
+            .expect("projects answer");
+        let project = &targets(&answer)[0];
+        assert_eq!(
+            (
+                project.entity.as_str(),
+                project.title.as_str(),
+                project.subtitle.as_str()
+            ),
+            ("schedule.project", "Kitchen refit", "tasks")
+        );
+        assert!(project.snippet.contains('⟦'), "{}", project.snippet);
+    });
+}
+
+/// A QUERY MAY BE NARROWED TO ONE APP: the kinds of the shared index that open
+/// there, and nothing for an entity that opens elsewhere.
+#[test]
+fn a_query_narrowed_to_an_app_answers_that_apps_containers_only() {
+    on_both_vaults(seed_containers, |connection| {
+        let door = door(connection);
+        let narrowed = |entity: &str, query: &str, app: &str| -> Vec<(String, String)> {
+            let answer = door
+                .query(
+                    &Principal::Owner,
+                    &SearchRequest::new(entity, query, 50).in_app(app),
+                )
+                .unwrap_or_else(|error| panic!("{entity} in {app} answered {error}"));
+            targets(&answer)
+                .into_iter()
+                .map(|target| (target.id, target.app_id))
+                .collect()
+        };
+        assert_eq!(
+            narrowed("core.collection", "reading", "notes"),
+            pairs([("nb-1", "notes")])
+        );
+        assert_eq!(
+            narrowed("core.collection", "reading", "photos"),
+            pairs([("al-1", "photos")])
+        );
+        assert_eq!(narrowed("core.collection", "reading", "tally"), Vec::new());
+        assert_eq!(
+            narrowed("schedule.project", "kitchen", "tasks"),
+            pairs([("pr-1", "tasks")])
+        );
+        assert_eq!(narrowed("schedule.project", "kitchen", "notes"), Vec::new());
+        // A domain narrowed to another app answers nothing either.
+        assert_eq!(narrowed("schedule.task", "budget", "notes"), Vec::new());
+    });
+}
+
+/// A TYPO IN A CONTAINER'S NAME IS CORRECTED from the container's own
+/// vocabulary, and a container's words are not offered to a search that named
+/// only domains.
+#[test]
+fn a_typo_in_a_container_name_is_corrected_from_its_vocabulary() {
+    on_both_vaults(seed_containers, |connection| {
+        let door = door(connection);
+        for (entity, typo, word) in [
+            ("core.collection", "raeding", "reading"),
+            ("schedule.project", "kithcen", "kitchen"),
+            ("social.circle", "kithcen", "kitchen"),
+            ("core.concept", "documnets", "documents"),
+        ] {
+            assert_eq!(
+                corrected(&door, &[entity], typo).as_deref(),
+                Some(word),
+                "{entity}"
+            );
+        }
+        // Not named, not offered.
+        assert_eq!(corrected(&door, &TASKS, "raeding"), None);
+        assert_eq!(corrected(&door, &["schedule.task"], "kithcen"), None);
+        // Mixed with a domain, either's words are known.
+        assert_eq!(
+            corrected(&door, &["schedule.task", "core.collection"], "raeding").as_deref(),
+            Some("reading")
+        );
+        // The archived project's words are not in the vocabulary.
+        assert_eq!(corrected(&door, &["schedule.project"], "archvie"), None);
+    });
+}
+
+/// LOCKER IS NEVER NAMED, for a query or a correction, alone or beside a
+/// container or the chat history; and the domains stay seven.
+#[test]
+fn locker_is_refused_beside_the_named_kinds_and_the_domains_stay_seven() {
+    let connection = vault();
+    with_a_locker_index(&connection);
+    let door = door(&connection);
+    assert_eq!(DOMAINS.len(), 7);
+    assert_eq!(NAMED.len(), 5);
+    for entity in [
+        "locker.item",
+        "locker.item_field",
+        "locker.item_passkey",
+        "sync.connection_credential",
+    ] {
+        let refused = door.query(&Principal::Owner, &SearchRequest::new(entity, "cabin", 8));
+        assert!(
+            matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+            "{entity} answered {refused:?}"
+        );
+        for entities in [
+            vec![entity],
+            vec!["core.collection", entity],
+            vec!["chat.thread", entity],
+        ] {
+            let refused = door.correct(&Principal::Owner, &entities, "raeding");
+            assert!(
+                matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+                "{entities:?} answered {refused:?}"
+            );
+        }
+    }
+}
+
+/// THE REGISTRIES ARE DISJOINT, and a domain's entity does not become a
+/// container's by being asked for narrowed.
+#[test]
+fn the_two_registries_share_no_entity_index_or_table() {
+    for container in NAMED {
+        assert!(
+            centraid_search::domain_of(container.entity).is_none(),
+            "{} is a domain",
+            container.entity
+        );
+        assert!(DOMAINS.iter().all(|domain| domain.fts != container.fts));
+    }
+    for domain in DOMAINS {
+        assert!(
+            centraid_search::named_of(domain.entity).is_none(),
+            "{} is a container",
+            domain.entity
+        );
+    }
+}
+
+/// THE FOLDER SCHEME THE DOOR TESTS IS THE ONE THE COMMANDS WRITE.
+#[test]
+fn the_folders_scheme_is_the_one_the_vault_writes() {
+    assert_eq!(
+        centraid_search::named::FOLDERS_SCHEME_URI,
+        centraid_vault::commands::core::FOLDER_SCHEME_URI
+    );
+}
+
+/// A DEMONSTRATED RED for the open checks over the committed model: a container
+/// index with a column the table lacks does not open, and neither does a file
+/// without a container's vocabulary correct.
+#[test]
+fn a_container_index_that_grew_a_column_fails_to_open_and_a_missing_vocabulary_is_unusable() {
+    let connection = vault();
+    assert!(SqliteDoor::open(&connection).is_ok());
+    connection
+        .execute_batch(
+            "DROP TABLE fts_core_collection_vocab;
+             DROP TABLE fts_core_collection;
+             CREATE VIRTUAL TABLE fts_core_collection USING fts5(
+               collection_id UNINDEXED, name, scratchpad,
+               tokenize = \"unicode61 remove_diacritics 2\");",
+        )
+        .expect("the index is rebuilt with one more column");
+    match SqliteDoor::open(&connection) {
+        Err(SearchError::IndexUnusable { entity, detail }) => {
+            assert_eq!(entity, "core.collection");
+            assert!(detail.contains("scratchpad"), "{detail}");
+        }
+        other => panic!(
+            "the door opened over a stray column: {:?}",
+            other.map(|_| ())
+        ),
+    }
+
+    let connection = vault();
+    connection
+        .execute_batch("DROP TABLE fts_schedule_project_vocab;")
+        .expect("the vocabulary is dropped");
+    let door = door(&connection);
+    match door.correct(&Principal::Owner, &["schedule.project"], "kithcen") {
+        Err(SearchError::IndexUnusable { entity, detail }) => {
+            assert_eq!(entity, "schedule.project");
+            assert!(detail.contains("fts_schedule_project_vocab"), "{detail}");
+        }
+        other => panic!("a missing vocabulary answered {other:?}"),
+    }
+}
+
+/// THE DOOR'S OWN BELT, apart from the triggers' braces: the three rows the rung
+/// keeps out of the indexes are written into them by hand, and the door still
+/// does not find them. A guard that lived only in a trigger would answer them.
+#[test]
+fn the_door_does_not_find_a_dead_container_that_got_into_an_index() {
+    let connection = vault();
+    seed_containers(&connection, "party-1").expect("containers are seeded");
+    connection
+        .execute_batch(
+            "INSERT INTO fts_schedule_project(rowid, project_id, name)
+               SELECT rowid, project_id, name FROM schedule_project WHERE project_id = 'pr-2';
+             INSERT INTO fts_social_circle(rowid, circle_id, name)
+               SELECT rowid, circle_id, name FROM social_circle WHERE circle_id IN ('ci-2', 'ci-3');
+             INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+               SELECT rowid, concept_id, pref_label FROM core_concept
+                WHERE concept_id IN ('cn-root', 'cn-tag');",
+        )
+        .expect("the dead rows are written into the indexes");
+    // The control: the index really does hold them now.
+    for (fts, expected) in [
+        ("fts_schedule_project", 2_i64),
+        ("fts_social_circle", 3),
+        ("fts_core_concept", 3),
+    ] {
+        let held: i64 = connection
+            .query_row(
+                &format!("SELECT COUNT(*) FROM {fts} WHERE {fts} MATCH 'kitchen'"),
+                [],
+                |row| row.get(0),
+            )
+            .expect("the index answers");
+        assert_eq!(held, expected, "{fts} holds the poison");
+    }
+    let door = door(&connection);
+    assert_eq!(
+        app_of_each(&door, "schedule.project", "kitchen"),
+        pairs([("pr-1", "tasks")])
+    );
+    assert_eq!(
+        app_of_each(&door, "social.circle", "kitchen"),
+        pairs([("ci-1", "tally")])
+    );
+    assert_eq!(
+        app_of_each(&door, "core.concept", "kitchen"),
+        pairs([("cn-1", "docs")])
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The chat history (#1097, R-1097-22..24): a thread is found by its title and by
+// what the member said, and by nothing the assistant or a card said
+// ---------------------------------------------------------------------------
+
+/// A founded vault and the command plane, so a thread is written the way the
+/// product writes one: `chat.save_turn`, `chat.rename_thread`,
+/// `chat.settle_proposal`, `chat.delete_thread` and `chat.clear`.
+struct Chats {
+    vault: centraid_vault::Vault,
+    registry: centraid_vault::commands::Registry,
+}
+
+/// Words that exist in one place each, so a hit names where the door looked.
+const IN_THE_TITLE: &str = "marmalade";
+const SAID_LATER: &str = "persimmon";
+const ASSISTANT_SAID: &str = "flibbertigibbet";
+const A_CARD_SAID: &str = "kumquatcard";
+const AN_ATTACHMENT_SAID: &str = "quokkalabel";
+const THE_ROUTING_SAID: &str = "recordjsonzed";
+
+impl Chats {
+    fn open(seed: &str) -> Self {
+        let vault = founded_vault(seed);
+        let registry = centraid_vault::commands::Registry::with_system_commands()
+            .expect("the registry builds");
+        registry.install(&vault).expect("the record installs");
+        Self { vault, registry }
+    }
+
+    fn run(&self, command: &str, input: serde_json::Value) -> serde_json::Value {
+        let outcome = self
+            .vault
+            .execute(
+                &self.registry,
+                &centraid_vault::access::Principal::owner("phone"),
+                &centraid_vault::Command::new(command, input),
+            )
+            .unwrap_or_else(|error| panic!("`{command}` errored: {error}"));
+        assert_eq!(
+            outcome.status,
+            centraid_vault::CommandStatus::Executed,
+            "`{command}` refused: {:?} / {:?}",
+            outcome.predicate,
+            outcome.reason
+        );
+        outcome.output
+    }
+
+    /// One turn: the member's question and the assistant's answer, which carries
+    /// a card and a routing record. Returns the thread's id.
+    fn turn(&self, thread: Option<&str>, question: &str, answer: &str, replace: bool) -> String {
+        let mut input = serde_json::json!({
+            "turn": {
+                "question": {
+                    "text": question,
+                    "attachments": [{ "kind": "image", "label": AN_ATTACHMENT_SAID }]
+                },
+                "answer": {
+                    "outcome": "answered",
+                    "text": answer,
+                    "record_json": format!("{{\"routing\":\"{THE_ROUTING_SAID}\"}}"),
+                    "cards": [{
+                        "app": "notes", "entity": "note", "id": "n-1", "title": A_CARD_SAID
+                    }]
+                }
+            }
+        });
+        if let Some(thread) = thread {
+            input["thread_id"] = serde_json::json!(thread);
+        }
+        if replace {
+            input["replace_last"] = serde_json::json!(true);
+        }
+        self.run("chat.save_turn", input)["thread_id"]
+            .as_str()
+            .expect("a turn names its thread")
+            .to_owned()
+    }
+
+    /// A turn that parks a write behind a card, so there is a proposal to settle.
+    fn propose(&self, thread: Option<&str>, question: &str, line: &str) -> String {
+        let mut input = serde_json::json!({
+            "turn": {
+                "question": { "text": question },
+                "answer": { "outcome": "proposed", "text": line }
+            }
+        });
+        if let Some(thread) = thread {
+            input["thread_id"] = serde_json::json!(thread);
+        }
+        self.run("chat.save_turn", input)["thread_id"]
+            .as_str()
+            .expect("a turn names its thread")
+            .to_owned()
+    }
+
+    /// The thread ids the door answers for `entity`'s `query`, best first.
+    fn found(&self, query: &str) -> Vec<String> {
+        self.vault
+            .read(|connection| {
+                let door = SqliteDoor::open(connection).expect("the door opens");
+                Ok(found(&door, "chat.thread", query))
+            })
+            .expect("the vault reads")
+    }
+
+    /// The door's targets, whole.
+    fn targets(&self, query: &str) -> Vec<Target> {
+        self.vault
+            .read(|connection| {
+                let door = SqliteDoor::open(connection).expect("the door opens");
+                Ok(targets(
+                    &door
+                        .query(
+                            &Principal::Owner,
+                            &SearchRequest::new("chat.thread", query, 20),
+                        )
+                        .expect("the door answers"),
+                ))
+            })
+            .expect("the vault reads")
+    }
+
+    /// What the index holds, one `(thread_id, title, said)` per row.
+    fn index(&self) -> Vec<(String, String, Option<String>)> {
+        self.vault
+            .read(|connection| {
+                let mut statement = connection.prepare(
+                    "SELECT thread_id, title, said FROM fts_chat_thread ORDER BY thread_id",
+                )?;
+                let rows = statement
+                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                Ok(rows)
+            })
+            .expect("the index reads")
+    }
+
+    fn count(&self, sql: &str) -> i64 {
+        self.vault
+            .read(|connection| Ok(connection.query_row(sql, [], |row| row.get(0))?))
+            .expect("the count reads")
+    }
+}
+
+/// R-1097-22: what the member typed is found, in the title and in the messages
+/// after the first, and the hit is the thread, in the Chat tab, with a title.
+#[test]
+fn a_thread_is_found_by_its_title_and_by_what_the_member_said() {
+    let chats = Chats::open("door-chat-found");
+    let first = chats.turn(
+        None,
+        &format!("Where did I leave the {IN_THE_TITLE} recipe?"),
+        "On the shelf.",
+        false,
+    );
+    chats.turn(
+        Some(&first),
+        &format!("And the {SAID_LATER} jam? Same recipe."),
+        "In the cellar.",
+        false,
+    );
+    let other = chats.turn(None, "Unrelated: when is the dentist?", "Tuesday.", false);
+
+    assert_eq!(chats.found(IN_THE_TITLE), std::slice::from_ref(&first));
+    // A word the member said in a later message, and in no title.
+    assert_eq!(chats.found(SAID_LATER), std::slice::from_ref(&first));
+    assert_eq!(chats.found("dentist"), [other]);
+    // The hit is the thread: one row for a word in the title and in two messages.
+    assert_eq!(chats.found("recipe"), std::slice::from_ref(&first));
+
+    let hit = chats.targets(SAID_LATER).pop().expect("one hit");
+    assert_eq!(hit.entity, "chat.thread");
+    assert_eq!(hit.app_id, "chat");
+    assert_eq!(hit.id, first);
+    assert_eq!(
+        hit.title,
+        format!("Where did I leave the {IN_THE_TITLE} recipe?")
+    );
+    // The highlight is the member's own word, not the assistant's.
+    assert!(
+        hit.snippet.contains(&format!("⟦{SAID_LATER}⟧")),
+        "{}",
+        hit.snippet
+    );
+}
+
+/// R-1097-22, the reason for the rule: what the assistant said, a card's title,
+/// an attachment's label, the routing record and the assistant's refusal are
+/// copies of other apps' rows or not text, and are found by nothing.
+#[test]
+fn what_the_assistant_and_its_cards_said_is_never_found() {
+    let chats = Chats::open("door-chat-never");
+    let thread = chats.turn(
+        None,
+        &format!("Remind me about {IN_THE_TITLE}"),
+        &format!("Sure: {ASSISTANT_SAID}."),
+        false,
+    );
+    // The control: the member's word is found, so the empty answers below are
+    // the door looking and finding nothing, not the door not looking.
+    assert_eq!(chats.found(IN_THE_TITLE), std::slice::from_ref(&thread));
+    for planted in [
+        ASSISTANT_SAID,
+        A_CARD_SAID,
+        AN_ATTACHMENT_SAID,
+        THE_ROUTING_SAID,
+        "answered",
+    ] {
+        assert!(
+            chats.found(planted).is_empty(),
+            "{planted} found a thread: the index holds more than the member said"
+        );
+    }
+    // The planted words really are in the vault, which is what makes the empty
+    // answers a proof: the assistant's text, the card, the label and the record.
+    assert_eq!(
+        chats.count(&format!(
+            "SELECT COUNT(*) FROM chat_message WHERE role = 'assistant' AND text LIKE '%{ASSISTANT_SAID}%'"
+        )),
+        1
+    );
+    assert_eq!(
+        chats.count(&format!(
+            "SELECT COUNT(*) FROM chat_message_card WHERE title = '{A_CARD_SAID}'"
+        )),
+        1
+    );
+    assert_eq!(
+        chats.count(&format!(
+            "SELECT COUNT(*) FROM chat_message_attachment WHERE label = '{AN_ATTACHMENT_SAID}'"
+        )),
+        1
+    );
+    assert_eq!(
+        chats.count(&format!(
+            "SELECT COUNT(*) FROM chat_message WHERE record_json LIKE '%{THE_ROUTING_SAID}%'"
+        )),
+        1
+    );
+    // And the index holds exactly the title and the question.
+    assert_eq!(
+        chats.index(),
+        [(
+            thread,
+            format!("Remind me about {IN_THE_TITLE}"),
+            Some(format!("Remind me about {IN_THE_TITLE}")),
+        )]
+    );
+}
+
+/// A title outranks the same word said: the folded column weighs half.
+#[test]
+fn a_title_hit_ranks_above_a_said_hit() {
+    let chats = Chats::open("door-chat-rank");
+    let said = chats.turn(None, "Plan the weekend", "Ok.", false);
+    chats.turn(Some(&said), &format!("buy {IN_THE_TITLE}"), "Ok.", false);
+    let titled = chats.turn(
+        None,
+        &format!("{IN_THE_TITLE} for the weekend"),
+        "Ok.",
+        false,
+    );
+    assert_eq!(chats.found(IN_THE_TITLE), [titled, said]);
+}
+
+/// Every write that moves what a thread is found by moves the hit, through the
+/// commands: a rename, a regenerated turn, a settled proposal, a delete and a
+/// clear (and the cascade that carries the last two to the messages).
+#[test]
+fn a_rename_a_replaced_turn_a_settled_proposal_a_delete_and_a_clear_move_the_hit() {
+    let chats = Chats::open("door-chat-moves");
+
+    // RENAME: the old title's word goes, the new one comes.
+    let thread = chats.turn(None, "alpha question", "Ok.", false);
+    assert_eq!(chats.found("alpha"), std::slice::from_ref(&thread));
+    chats.run(
+        "chat.rename_thread",
+        serde_json::json!({ "thread_id": thread, "title": "bravo plans" }),
+    );
+    // The title moved; the member's question still says "alpha".
+    assert_eq!(chats.found("bravo"), std::slice::from_ref(&thread));
+    assert_eq!(chats.found("alpha"), std::slice::from_ref(&thread));
+    assert_eq!(chats.index()[0].1, "bravo plans");
+
+    // REPLACE_LAST: the regenerated turn's old question leaves and the new one
+    // is in, and the thread has one row.
+    chats.turn(Some(&thread), "charlie question", "Ok.", false);
+    assert_eq!(chats.found("charlie"), std::slice::from_ref(&thread));
+    chats.turn(Some(&thread), "delta question", "Ok.", true);
+    assert_eq!(chats.found("delta"), std::slice::from_ref(&thread));
+    assert!(
+        chats.found("charlie").is_empty(),
+        "the replaced question stayed"
+    );
+    assert_eq!(chats.found("alpha"), std::slice::from_ref(&thread));
+    assert_eq!(chats.index().len(), 1);
+
+    // SETTLE_PROPOSAL rewrites an assistant message's text: the proposal's words
+    // and the settled line are found by nothing, and the row is untouched.
+    let proposed = chats.propose(None, "echo question", "Proposed: pencil it in.");
+    assert!(chats.found("pencil").is_empty());
+    let before = chats.index();
+    chats.run(
+        "chat.settle_proposal",
+        serde_json::json!({
+            "thread_id": proposed, "outcome": "applied", "text": "Done: ink it in."
+        }),
+    );
+    assert!(chats.found("ink").is_empty());
+    assert!(chats.found("pencil").is_empty());
+    assert_eq!(chats.index(), before, "settling a proposal moved the index");
+    assert_eq!(chats.found("echo"), std::slice::from_ref(&proposed));
+    assert_eq!(
+        chats.count("SELECT COUNT(*) FROM chat_message WHERE text = 'Done: ink it in.'"),
+        1,
+        "the settled line was not written, so the empty answer above proves nothing"
+    );
+
+    // DELETE_THREAD: the thread, its messages (the foreign key's cascade) and its
+    // index row go; the other thread stays.
+    chats.run(
+        "chat.delete_thread",
+        serde_json::json!({ "thread_id": proposed }),
+    );
+    assert!(chats.found("echo").is_empty());
+    assert_eq!(
+        chats.count(&format!(
+            "SELECT COUNT(*) FROM chat_message WHERE thread_id = '{proposed}'"
+        )),
+        0
+    );
+    assert_eq!(chats.found("alpha"), std::slice::from_ref(&thread));
+
+    // CLEAR: every thread, every message, every index row.
+    chats.turn(None, "foxtrot question", "Ok.", false);
+    assert_eq!(chats.found("foxtrot").len(), 1);
+    chats.run("chat.clear", serde_json::json!({}));
+    for word in ["alpha", "bravo", "delta", "foxtrot"] {
+        assert!(chats.found(word).is_empty(), "{word} survived a clear");
+    }
+    assert_eq!(chats.count("SELECT COUNT(*) FROM chat_message"), 0);
+    assert_eq!(chats.count("SELECT COUNT(*) FROM fts_chat_thread"), 0);
+    assert_eq!(
+        chats.count("SELECT COUNT(*) FROM fts_chat_thread_vocab WHERE term = 'foxtrot'"),
+        0
+    );
+}
+
+/// A TYPO IN A MEMBER'S OWN WORDS IS CORRECTED from the chat vocabulary, and
+/// the chat's words are not offered to a search that did not name the chat.
+#[test]
+fn a_typo_in_a_thread_is_corrected_from_the_chat_vocabulary() {
+    let chats = Chats::open("door-chat-typo");
+    let thread = chats.turn(
+        None,
+        "What did the surveyor say about the boundary?",
+        "Ok.",
+        false,
+    );
+    chats
+        .vault
+        .read(|connection| {
+            let door = door(connection);
+            // The exact word finds nothing; the correction is the whole word the
+            // vault holds, and the corrected query finds the thread.
+            assert!(found(&door, "chat.thread", "surveyer").is_empty());
+            let words = corrected(&door, &["chat.thread"], "surveyer")
+                .expect("a slip in a chat word is corrected");
+            assert_eq!(words, "surveyor");
+            assert_eq!(
+                found(&door, "chat.thread", &words),
+                std::slice::from_ref(&thread)
+            );
+            // Not named, not offered.
+            assert_eq!(corrected(&door, &["schedule.task"], "surveyer"), None);
+            Ok(())
+        })
+        .expect("the vault reads");
+}
+
+/// The chat is a registry entry and not a domain: the domains stay seven, the
+/// chat's entity is refused as a domain by name, and Locker is still refused
+/// beside it.
+#[test]
+fn the_chat_is_named_not_a_domain_and_locker_is_still_refused() {
+    assert_eq!(DOMAINS.len(), 7);
+    assert!(centraid_search::domain_of("chat.thread").is_none());
+    assert!(centraid_search::named_of("chat.thread").is_some());
+    assert!(DOMAINS.iter().all(|domain| domain.app_id != "chat"));
+    let chats = Chats::open("door-chat-registry");
+    chats
+        .vault
+        .read(|connection| {
+            let door = door(connection);
+            for entity in ["locker.item", "locker.item_field"] {
+                let refused =
+                    door.query(&Principal::Owner, &SearchRequest::new(entity, "cabin", 8));
+                assert!(
+                    matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+                    "{entity} answered {refused:?}"
+                );
+            }
+            Ok(())
+        })
+        .expect("the vault reads");
+}
+
+/// A DEMONSTRATED RED for the open checks over the committed model: a chat
+/// index with a column nobody listed does not open, and a file without the
+/// chat's vocabulary cannot correct.
+#[test]
+fn a_chat_index_that_grew_a_column_fails_to_open_and_a_missing_vocabulary_is_unusable() {
+    let connection = vault();
+    assert!(SqliteDoor::open(&connection).is_ok());
+    connection
+        .execute_batch(
+            "DROP TABLE fts_chat_thread_vocab;
+             DROP TABLE fts_chat_thread;
+             CREATE VIRTUAL TABLE fts_chat_thread USING fts5(
+               thread_id UNINDEXED, title, said, assistant,
+               tokenize = \"unicode61 remove_diacritics 2\");",
+        )
+        .expect("the index is rebuilt with one more column");
+    match SqliteDoor::open(&connection) {
+        Err(SearchError::IndexUnusable { entity, detail }) => {
+            assert_eq!(entity, "chat.thread");
+            assert!(detail.contains("assistant"), "{detail}");
+        }
+        other => panic!(
+            "the door opened over a stray column: {:?}",
+            other.map(|_| ())
+        ),
+    }
+
+    let connection = vault();
+    connection
+        .execute_batch("DROP TABLE fts_chat_thread_vocab;")
+        .expect("the vocabulary is dropped");
+    let door = door(&connection);
+    match door.correct(&Principal::Owner, &["chat.thread"], "surveyer") {
+        Err(SearchError::IndexUnusable { entity, detail }) => {
+            assert_eq!(entity, "chat.thread");
+            assert!(detail.contains("fts_chat_thread_vocab"), "{detail}");
+        }
+        other => panic!("a missing vocabulary answered {other:?}"),
+    }
 }

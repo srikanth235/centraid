@@ -1,0 +1,102 @@
+# Onboarding without sample data (docs/decisions.md, "Onboarding without sample
+# data"): a fresh install makes ONE vault — the member's, with its teaching
+# starter rows — and every empty app is a tile that opens on its own day one.
+#
+# THE POINT OF THIS FLOW is what the shared specs cannot see: that Get started
+# lands on Home with one vault, that Notes and Tasks open on the starter rows,
+# that an empty app opens on its own empty state with nothing borrowed, and
+# that People offers the phone's contacts at the point of use (the OS prompt
+# itself is not tapped here).
+#
+# THE RECOVERY KEY (R-1047-E15, R-ONBOARD-10). Where the keychain synchronises,
+# Get started keeps the key without showing it and goes straight to Home.
+# Elsewhere — the simulator, signed out of iCloud — the key shows once and
+# "I've saved it" founds the vault. There is no framing screen and no word
+# check, so the flow answers the one screen when it appears and nothing else.
+#
+# A FRESH INSTALL WITH NO KEY HELD. `clearState` does not clear the simulator
+# keychain, and a phone that already holds a seed makes the next vault from it
+# without showing anything. Reset it first:
+#   xcrun simctl keychain <udid> reset
+appId: dev.centraid.Centraid
+name: onboarding
+---
+# EVERY GRANT DENIED. Maestro grants all by default, and a made vault asks for
+# what the phone holds — the camera roll, contacts, the calendar (R-ONBOARD-8)
+# — and imports what it is given: People would not be empty and the flow
+# would test a returning phone. Denied, nothing is asked and nothing comes in.
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible:
+    id: "first-launch"
+- tapOn:
+    id: "first-launch-skip"
+- tapOn:
+    id: "first-launch-primary"
+
+# THE KEY, SHOWN ONCE where it stays on this phone alone.
+- runFlow:
+    when:
+      visible:
+        id: "words-shown"
+    commands:
+      - assertVisible:
+          id: "words-save-copy"
+      - tapOn:
+          id: "words-make-primary"
+
+# ONE VAULT, THE MEMBER'S. No sample beside it. (The lockup reads as one
+# element, "My vault, Not backed up", so it is selected by id.)
+- extendedWaitUntil:
+    visible:
+      id: "home-grid"
+    timeout: 30000
+- assertVisible:
+    id: "home-vault-switch"
+# THE LOCKUP'S SECOND LINE IS THE BACKUP'S STATUS (R-ONBOARD-11).
+- assertVisible:
+    id: "home-backup-status"
+
+# THE TEACHING STARTERS are the member's own notes and tasks, on Home
+# (`crates/core/src/starters.rs`).
+- assertVisible: "Link with \\[\\[.*"
+- assertVisible: "Tap the circle to.*"
+
+# AN EMPTY APP IS STILL A TILE, one tap from Home, and opens on its own day
+# one: its add, and no example (R-ONBOARD-12).
+- scrollUntilVisible:
+    element:
+      id: "home-tile-docs"
+    direction: UP
+- tapOn:
+    id: "home-tile-docs"
+- extendedWaitUntil:
+    visible:
+      id: "kit-empty"
+    timeout: 10000
+- assertNotVisible: "See an example"
+# Back: the navigation bar's on iOS (`back` is Android's system key only).
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          id: "BackButton"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+
+# PEOPLE OFFERS THE PHONE'S CONTACTS in place of its add, at the point of use.
+- scrollUntilVisible:
+    element:
+      id: "home-tile-people"
+- tapOn:
+    id: "home-tile-people"
+- extendedWaitUntil:
+    visible:
+      id: "kit-empty-import"
+    timeout: 10000

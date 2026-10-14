@@ -28,6 +28,10 @@ import SwiftUI
 /// that means. The closures are defaulted so the view renders in isolation.
 struct PhotosCollectionsView: View {
     let data: Data
+    /// The bulk fold's two words, from the grid's chrome. The fold itself is
+    /// where the member's eye is and stays this view's; the words do not.
+    var showAllLabel: String = ""
+    var collapseAllLabel: String = ""
     var send: (Data) -> Void = { _ in }
     /// A shelf was tapped — the parameter for `photos.shelf`, whole.
     var onOpenShelf: (Centraid_Screen_V1_PhotoShelf) -> Void = { _ in }
@@ -53,15 +57,28 @@ struct PhotosCollectionsView: View {
         VStack(alignment: .leading, spacing: 0) {
             switch state.content {
             case .loading:
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 40)
+                RowSkeleton()
             case let .denied(denied):
                 DeniedGate(denied)
             case let .failure(sentence, remedy):
                 ScreenFailureView(sentence: sentence, remedy: remedy)
             case let .data(shelves, doors):
                 let layout = CollectionsLayout(shelves: shelves, doors: doors)
+                // SHOW ALL / COLLAPSE ALL, ONE LINK — v0's Collections menu
+                // (`photos-collections-menu.ts`) without the menu: a bulk fold
+                // is a command over this list, not a header verb, and the
+                // room's one trailing slot is New album's (R-CHROME-1).
+                if !showAllLabel.isEmpty {
+                    let everyFolded = folded.isSuperset(of: CollectionsSection.allCases)
+                    HStack {
+                        Spacer(minLength: 0)
+                        KitLink(
+                            label: everyFolded ? showAllLabel : collapseAllLabel,
+                            identifier: "photos.collections.fold-all"
+                        ) { fold(nothing: everyFolded) }
+                    }
+                    .padding(.top, 4)
+                }
                 if let memories = layout.memories {
                     section(.memories) {
                         MemoriesCard(door: memories, onOpen: onOpenDoor)
@@ -87,52 +104,29 @@ struct PhotosCollectionsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, 24)
-        .navigationTitle("Collections")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    send(state.sheetEvent(.newAlbum))
-                } label: {
-                    CentraidIconView(iconKey: "add", tint: Theme.color("link", scheme))
-                }
-                .accessibilityLabel("New album")
-                .accessibilityIdentifier("photos.collections.new-album")
-            }
-            // SHOW ALL / COLLAPSE ALL — v0's Collections menu, and only that
-            // (`photos-collections-menu.ts`): no reorder row, because no order
-            // is kept, and neither row is checked, because a bulk fold is a
-            // command and not a setting.
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button("Show all") { fold(nothing: true) }
-                        .accessibilityIdentifier("photos.collections.show-all")
-                    Button("Collapse all") { fold(nothing: false) }
-                        .accessibilityIdentifier("photos.collections.collapse-all")
-                } label: {
-                    CentraidIconView(iconKey: "MoreHoriz", tint: Theme.color("link", scheme))
-                }
-                .accessibilityLabel("Collections options")
-                .accessibilityIdentifier("photos.collections.menu")
-            }
-        }
+        // THE HEADER IS THE ROOM'S: "Photos" and New album's `Plus` are drawn
+        // by `AppPlace` in `PhotosGridView`, so this body adds no title and no
+        // toolbar of its own.
         // DELETING AN ALBUM DELETES THE GROUPING, and the confirm says so in
         // v0's one sentence. The reducer's `album_deleted` arm was wired and
         // nothing sent it.
-        .confirmationDialog(
-            "Delete this album?",
-            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-            titleVisibility: .visible,
-            presenting: deleting
-        ) { row in
-            Button("Delete album", role: .destructive) {
-                if case let .album(album) = row.shelf.of {
-                    send(PhotosCollectionsStateView.deleteEvent(album.collectionID))
-                }
-                deleting = nil
-            }
-            Button("Keep it", role: .cancel) { deleting = nil }
-        } message: { _ in
-            Text("Photos stay in the library.")
+        .sheet(isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            ConfirmSheet(
+                Centraid_Screen_V1_Confirm.with {
+                    $0.title = PhotosWords.photosDeleteAlbumTitle
+                    $0.body = PhotosWords.photosDeleteAlbumBody
+                    $0.confirmLabel = PhotosWords.photosDeleteAlbum
+                    $0.destructive = true
+                },
+                cancelLabel: PhotosWords.photosKeepIt,
+                onConfirm: {
+                    if let row = deleting, case let .album(album) = row.shelf.of {
+                        send(PhotosCollectionsStateView.deleteEvent(album.collectionID))
+                    }
+                    deleting = nil
+                },
+                onDismiss: { deleting = nil }
+            )
         }
         // NAMING A NEW ALBUM IS A SHEET AND THE STATE SAYS WHICH SHEET IS OPEN.
         // `isPresented` is derived from the state rather than held here,
@@ -175,24 +169,16 @@ struct PhotosCollectionsView: View {
                     .foregroundStyle(Theme.color("text", scheme))
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
-                Button {
+                KitIconKey(
+                    iconKey: "ChevronDown",
+                    label: isFolded ? "Show \(section.title)" : "Hide \(section.title)",
+                    framed: true
+                ) {
                     withAnimation(.easeInOut(duration: CentraidGeometry.durationOne / 1000)) {
                         if isFolded { folded.remove(section) } else { folded.insert(section) }
                     }
-                } label: {
-                    CentraidIconView(iconKey: "ChevronDown", tint: Theme.color("link", scheme))
-                        .rotationEffect(.degrees(isFolded ? -90 : 0))
-                        .frame(width: foldControl, height: foldControl)
-                        .background(Circle().fill(Theme.color("bgElev", scheme)))
-                        .frame(
-                            minWidth: CentraidGeometry.targetMinCoarse,
-                            minHeight: CentraidGeometry.targetMinCoarse,
-                            alignment: .trailing
-                        )
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isFolded ? "Show \(section.title)" : "Hide \(section.title)")
+                .rotationEffect(.degrees(isFolded ? -90 : 0))
             }
             if !isFolded { content() }
         }
@@ -225,8 +211,8 @@ struct PhotosCollectionsView: View {
         if rows.isEmpty {
             EmptySectionCard(
                 iconKey: "album",
-                title: "No albums yet",
-                caption: "Albums you make appear here.",
+                title: PhotosWords.photosCollectionsNoAlbums,
+                caption: PhotosWords.photosCollectionsNoAlbumsCaption,
                 verb: "Create",
                 onVerb: { send(state.sheetEvent(.newAlbum)) }
             )
@@ -246,8 +232,9 @@ struct PhotosCollectionsView: View {
 
 // MARK: - the measures, and where each came from
 
-/// Home's tile radius: one card corner in the product, not one per screen.
-private let cardRadius: CGFloat = 12
+/// Home's tile radius: one card corner in the product, not one per screen —
+/// the `lg` container rung.
+private func cardRadius(_ scheme: ColorScheme) -> CGFloat { Theme.radius("lg", scheme) }
 /// The gap between cards in a strip — the system's, measured on its Pinned row.
 private let cardGap: CGFloat = 12
 /// A Pinned card's side. The system shows three and a sliver on a 402pt phone.
@@ -255,8 +242,6 @@ private let pinnedSide: CGFloat = 110
 /// An album cover's side: larger than Pinned's, because an album is read by
 /// its picture and a pinned shelf by its name.
 private let albumSide: CGFloat = 150
-/// The round fold control's drawn diameter; the hit area is the coarse target.
-private let foldControl: CGFloat = 30
 /// The Memories and People cards' height — the system's Memories card.
 private let wideCardHeight: CGFloat = 150
 
@@ -368,7 +353,7 @@ private enum Counted {
     /// leave a member with an album they made and cannot find; a blank caption
     /// would leave them with one they cannot recognise.
     static func title(_ row: Centraid_Screen_V1_ShelfRow) -> String {
-        row.title.isEmpty ? "Untitled album" : row.title
+        row.title.isEmpty ? PhotosWords.photosUntitledAlbum : row.title
     }
 }
 
@@ -410,6 +395,7 @@ private struct PinnedCard: View {
     let item: CollectionsItem
     let onOpenShelf: (Centraid_Screen_V1_PhotoShelf) -> Void
     let onOpenDoor: (Centraid_Screen_V1_CollectionsDoor.Kind) -> Void
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Button(action: open) {
@@ -427,8 +413,8 @@ private struct PinnedCard: View {
                     .padding(10)
             }
             .frame(width: pinnedSide, height: pinnedSide)
-            .clipShape(RoundedRectangle(cornerRadius: cardRadius))
-            .contentShape(RoundedRectangle(cornerRadius: cardRadius))
+            .clipShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
+            .contentShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(spoken)
@@ -494,7 +480,7 @@ private struct AlbumCard: View {
                     iconKey: "album"
                 )
                 .frame(width: albumSide, height: albumSide)
-                .clipShape(RoundedRectangle(cornerRadius: cardRadius))
+                .clipShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
                 VStack(alignment: .leading, spacing: 0) {
                     Text(Counted.title(row))
                         .centraidType("smallStrong")
@@ -512,12 +498,12 @@ private struct AlbumCard: View {
         // THE SYSTEM'S LONG-PRESS ON AN ALBUM. Only an album: a standing shelf
         // is not `member_owned`, and never reaches this card.
         .contextMenu {
-            Button("Delete album", role: .destructive, action: onDelete)
+            Button(PhotosWords.photosDeleteAlbum, role: .destructive, action: onDelete)
                 .accessibilityIdentifier("photos.collections.delete-album")
         }
         .accessibilityLabel("\(Counted.title(row)), \(Counted.shelf(row).spoken)")
         .accessibilityIdentifier("photos.collections.shelf")
-        .accessibilityAction(named: "Delete album", onDelete)
+        .accessibilityAction(named: PhotosWords.photosDeleteAlbum, onDelete)
     }
 }
 
@@ -550,9 +536,9 @@ private struct WideCard: View {
             .padding(18)
             .frame(maxWidth: .infinity, minHeight: wideCardHeight, alignment: .topLeading)
             .background(
-                RoundedRectangle(cornerRadius: cardRadius).fill(Theme.color("bgElev", scheme))
+                RoundedRectangle(cornerRadius: cardRadius(scheme)).fill(Theme.color("bgElev", scheme))
             )
-            .contentShape(RoundedRectangle(cornerRadius: cardRadius))
+            .contentShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(spoken)
@@ -574,8 +560,8 @@ private struct MemoriesCard: View {
         let count = Counted.door(door)
         WideCard(
             iconKey: "Sparkle",
-            title: count.map { "\($0.shown) memories" } ?? "No memories yet",
-            caption: count == nil ? "Memories appear here once this vault has made some." : nil,
+            title: count.map { "\($0.shown) memories" } ?? PhotosWords.photosCollectionsNoMemories,
+            caption: count == nil ? PhotosWords.photosCollectionsNoMemoriesCaption : nil,
             urgent: count?.urgent ?? false,
             spoken: count.map { "Memories, \($0.spoken)" } ?? "Memories, none yet",
             action: { onOpen(.memories) }
@@ -595,7 +581,7 @@ private struct PeopleCard: View {
         WideCard(
             iconKey: "Users",
             title: count.map { $0.urgent ? $0.shown : "\($0.shown) people" } ?? "People",
-            caption: "The faces in your photographs, and who they are.",
+            caption: PhotosWords.photosCollectionsPeopleCaption,
             urgent: count?.urgent ?? false,
             spoken: count.map { "People, \($0.spoken)" } ?? "People",
             action: { onOpen(.people) }
@@ -619,16 +605,8 @@ private struct EmptySectionCard: View {
             HStack(alignment: .top) {
                 CentraidIconView(iconKey: iconKey, tint: Theme.color("textFaint", scheme), size: 28)
                 Spacer()
-                Button(action: onVerb) {
-                    Text(verb)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("link", scheme))
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: CentraidGeometry.targetMinFine)
-                        .background(Capsule().fill(Theme.color("bgPress", scheme)))
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("photos.collections.create-album-card")
+                KitOutlineButton(label: verb, action: onVerb)
+                    .accessibilityIdentifier("photos.collections.create-album-card")
             }
             Spacer(minLength: 12)
             Text(title)
@@ -640,7 +618,7 @@ private struct EmptySectionCard: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, minHeight: wideCardHeight, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: cardRadius).fill(Theme.color("bgElev", scheme)))
+        .background(RoundedRectangle(cornerRadius: cardRadius(scheme)).fill(Theme.color("bgElev", scheme)))
     }
 }
 
@@ -665,7 +643,7 @@ private struct UtilitiesGroup: View {
                 row(item)
             }
         }
-        .background(RoundedRectangle(cornerRadius: cardRadius).fill(Theme.color("bgElev", scheme)))
+        .background(RoundedRectangle(cornerRadius: cardRadius(scheme)).fill(Theme.color("bgElev", scheme)))
     }
 
     private func row(_ item: CollectionsItem) -> some View {
@@ -739,35 +717,42 @@ private struct NewAlbumSheet: View {
 
     @Environment(\.colorScheme) private var scheme
     @State private var name = ""
+    @FocusState private var focused: Bool
+
+    // AN EMPTY NAME IS NOT A WRITE. `media.create_album`'s schema has
+    // `"title": { "minLength": 1 }`, so the vault would refuse it — and a
+    // control that submits a command known to be refused is a control that
+    // wastes a round trip to tell a member what the field already knew. The
+    // sheet's one ink button is therefore greyed until there is a name.
+    private var trimmed: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                TextField("Album name", text: $name)
-                    .accessibilityIdentifier("photos.collections.album-name")
-                if let failure {
-                    Text(failure)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("textSoft", scheme))
-                        .accessibilityIdentifier("photos.collections.write-failure")
+        SheetRoom(
+            title: PhotosWords.photosNewAlbum,
+            primary: SheetPrimary(
+                label: "Create",
+                enabled: !trimmed.isEmpty,
+                identifier: "photos.collections.create-album"
+            ) { send(PhotosCollectionsStateView.createEvent(name)) }
+        ) {
+            TextField(PhotosWords.photosAlbumName, text: $name)
+                .centraidType("body")
+                .focused($focused)
+                .submitLabel(.done)
+                .onSubmit {
+                    guard !trimmed.isEmpty else { return }
+                    send(PhotosCollectionsStateView.createEvent(name))
                 }
-            }
-            .navigationTitle("New album")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        send(PhotosCollectionsStateView.createEvent(name))
-                    }
-                    // AN EMPTY NAME IS NOT A WRITE. `media.create_album`'s
-                    // schema has `"title": { "minLength": 1 }`, so the vault
-                    // would refuse it — and a control that submits a command
-                    // known to be refused is a control that wastes a round trip
-                    // to tell a member what the field already knew.
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityIdentifier("photos.collections.create-album")
-                }
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .accessibilityIdentifier("photos.collections.album-name")
+            if let failure {
+                Text(failure)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .accessibilityIdentifier("photos.collections.write-failure")
             }
         }
+        .onAppear { focused = true }
     }
 }
 

@@ -10,7 +10,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,14 +22,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import dev.centraid.android.kit.RowSkeleton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,17 +46,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.CollectionsDoor
+import centraid.screen.v1.Confirm
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosCollectionsEvent
 import centraid.screen.v1.PhotosCollectionsState
 import centraid.screen.v1.ShelfRow
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.ContentImage
+import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.PhotosCopy
 
 /**
  * COLLECTIONS (#1029, the photos port).
@@ -97,11 +94,16 @@ public fun PhotosCollectionsScreen(
      */
     onOpenShelf: (PhotoShelf) -> Unit = {},
     onOpenDoor: (CollectionsDoor.Kind) -> Unit = {},
+    /**
+     * The bulk fold's two words, from the grid's chrome. The fold itself is
+     * where the member's eye is and stays this screen's; the words do not.
+     */
+    showAllLabel: String = "",
+    collapseAllLabel: String = "",
 ) {
     // WHICH SECTIONS ARE FOLDED — where the member's eye is, like a scroll
     // offset, and not a fact about the vault. Nothing reads it back.
     var folded by remember { mutableStateOf(setOf<String>()) }
-    var menuOpen by remember { mutableStateOf(false) }
     // The album a member asked to delete, while the confirm is up.
     var deleting by remember { mutableStateOf<ShelfRow?>(null) }
     val openNewAlbum = {
@@ -118,41 +120,20 @@ public fun PhotosCollectionsScreen(
             .padding(horizontal = MARGIN)
             .padding(bottom = 24.dp),
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "Collections",
-                style = centraidType("display"),
-                color = centraidColor("text"),
-                modifier = Modifier.weight(1f).semantics { heading() },
-            )
-            // NAMING A NEW ALBUM IS A SHEET, NOT A ROUTE: one field and a verb.
-            RoundControl("add", "New album", onClick = openNewAlbum)
-            Spacer(Modifier.width(8.dp))
-            // SHOW ALL / COLLAPSE ALL — v0's Collections menu, and only that
-            // (`photos-collections-menu.ts`): no reorder row, because no order
-            // is kept, and neither row is checked, because a bulk fold is a
-            // command and not a setting.
-            Box {
-                RoundControl("MoreHoriz", "Collections options") { menuOpen = true }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Show all") },
-                        onClick = {
-                            menuOpen = false
-                            folded = emptySet()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Collapse all") },
-                        onClick = {
-                            menuOpen = false
-                            folded = SECTION_KEYS
-                        },
-                    )
-                }
+        // THE HEADER IS THE ROOM'S (R-CHROME-1): "Photos" and New album's
+        // `Plus` are drawn by `AppPlace` in `PhotosRoutes`, so this body
+        // starts at its content. SHOW ALL / COLLAPSE ALL is one link here —
+        // v0's Collections menu (`photos-collections-menu.ts`) without the
+        // menu: a bulk fold is a command over this list, not a header verb,
+        // and the room's one trailing slot is New album's.
+        if (state.data_ != null && showAllLabel.isNotEmpty()) {
+            val everyFolded = folded.containsAll(SECTION_KEYS)
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                Spacer(Modifier.weight(1f))
+                KitLink(
+                    label = if (everyFolded) showAllLabel else collapseAllLabel,
+                    onClick = { folded = if (everyFolded) emptySet() else SECTION_KEYS },
+                )
             }
         }
 
@@ -169,9 +150,7 @@ public fun PhotosCollectionsScreen(
         val failure = state.failure
         val data = state.data_
         when {
-            loading != null -> Box(Modifier.fillMaxWidth().padding(top = 40.dp), Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            loading != null -> RowSkeleton()
 
             failure != null -> ScreenFailure(failure.sentence, failure.remedy)
 
@@ -194,8 +173,8 @@ public fun PhotosCollectionsScreen(
                     if (layout.albums.isEmpty()) {
                         EmptySectionCard(
                             iconKey = "album",
-                            title = "No albums yet",
-                            caption = "Albums you make appear here.",
+                            title = PhotosCopy.PHOTOS_COLLECTIONS_NO_ALBUMS,
+                            caption = PhotosCopy.PHOTOS_COLLECTIONS_NO_ALBUMS_CAPTION,
                             verb = "Create",
                             onVerb = openNewAlbum,
                         )
@@ -223,25 +202,25 @@ public fun PhotosCollectionsScreen(
     val pending = deleting
     val pendingAlbum = pending?.shelf?.album
     if (pending != null && pendingAlbum != null) {
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            title = { Text("Delete this album?") },
-            text = { Text("Photos stay in the library.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        deleting = null
-                        onEvent(
-                            PhotosCollectionsEvent(
-                                album_deleted = PhotosCollectionsEvent.AlbumDeleted(
-                                    collection_id = pendingAlbum.collection_id,
-                                ),
-                            ),
-                        )
-                    },
-                ) { Text("Delete album", color = centraidColor("danger")) }
+        ConfirmSheet(
+            confirm = Confirm(
+                title = PhotosCopy.PHOTOS_DELETE_ALBUM_TITLE,
+                body = PhotosCopy.PHOTOS_DELETE_ALBUM_BODY,
+                confirm_label = PhotosCopy.PHOTOS_DELETE_ALBUM,
+                destructive = true,
+            ),
+            cancelLabel = PhotosCopy.PHOTOS_KEEP_IT,
+            onConfirm = {
+                deleting = null
+                onEvent(
+                    PhotosCollectionsEvent(
+                        album_deleted = PhotosCollectionsEvent.AlbumDeleted(
+                            collection_id = pendingAlbum.collection_id,
+                        ),
+                    ),
+                )
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Keep it") } },
+            onDismiss = { deleting = null },
         )
     }
 }
@@ -330,7 +309,7 @@ private fun doorCount(door: CollectionsDoor): Triple<String, String, Boolean>? =
 }
 
 /** An album with no name is still a card, and says so. */
-private fun shelfTitle(row: ShelfRow): String = row.title.ifEmpty { "Untitled album" }
+private fun shelfTitle(row: ShelfRow): String = row.title.ifEmpty { PhotosCopy.PHOTOS_UNTITLED_ALBUM }
 
 // --- the section, the strip and the controls ---
 
@@ -385,21 +364,6 @@ private fun Strip(content: @Composable () -> Unit) {
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
     ) { content() }
-}
-
-@Composable
-private fun RoundControl(iconKey: String, spoken: String, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .background(centraidColor("bgElev"))
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = spoken; role = Role.Button },
-        contentAlignment = Alignment.Center,
-    ) {
-        CentraidIcon(iconKey = iconKey, tint = centraidColor("link"), size = 18.dp)
-    }
 }
 
 // --- the cards ---
@@ -485,7 +449,7 @@ private fun AlbumCard(row: ShelfRow, onOpen: (PhotoShelf) -> Unit, onDelete: () 
             .semantics(mergeDescendants = true) {
                 contentDescription = "$title, $spoken"
                 role = Role.Button
-                customActions = listOf(CustomAccessibilityAction("Delete album") { onDelete(); true })
+                customActions = listOf(CustomAccessibilityAction(PhotosCopy.PHOTOS_DELETE_ALBUM) { onDelete(); true })
             },
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -528,8 +492,8 @@ private fun MemoriesCard(door: CollectionsDoor, onOpen: (CollectionsDoor.Kind) -
     val count = doorCount(door)
     WideCard(
         iconKey = "Sparkle",
-        title = count?.let { "${it.first} memories" } ?: "No memories yet",
-        caption = if (count == null) "Memories appear here once this vault has made some." else null,
+        title = count?.let { "${it.first} memories" } ?: PhotosCopy.PHOTOS_COLLECTIONS_NO_MEMORIES,
+        caption = if (count == null) PhotosCopy.PHOTOS_COLLECTIONS_NO_MEMORIES_CAPTION else null,
         urgent = count?.third ?: false,
         spoken = count?.let { "Memories, ${it.second}" } ?: "Memories, none yet",
         onClick = { onOpen(CollectionsDoor.Kind.KIND_MEMORIES) },
@@ -543,7 +507,7 @@ private fun PeopleCard(door: CollectionsDoor, onOpen: (CollectionsDoor.Kind) -> 
     WideCard(
         iconKey = "Users",
         title = count?.let { if (it.third) it.first else "${it.first} people" } ?: "People",
-        caption = "The faces in your photographs, and who they are.",
+        caption = PhotosCopy.PHOTOS_COLLECTIONS_PEOPLE_CAPTION,
         urgent = count?.third ?: false,
         spoken = count?.let { "People, ${it.second}" } ?: "People",
         onClick = { onOpen(CollectionsDoor.Kind.KIND_PEOPLE) },
@@ -564,17 +528,7 @@ private fun EmptySectionCard(iconKey: String, title: String, caption: String, ve
         Row(verticalAlignment = Alignment.Top) {
             CentraidIcon(iconKey = iconKey, tint = centraidColor("textFaint"), size = 28.dp)
             Spacer(Modifier.weight(1f))
-            Box(
-                Modifier
-                    .heightIn(min = 34.dp)
-                    .clip(CircleShape)
-                    .background(centraidColor("bgPress"))
-                    .clickable(onClick = onVerb)
-                    .padding(PaddingValues(horizontal = 14.dp, vertical = 7.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(verb, style = centraidType("smallStrong"), color = centraidColor("link"))
-            }
+            KitLink(label = verb, onClick = onVerb)
         }
         Spacer(Modifier.weight(1f).heightIn(min = 12.dp))
         Text(title, style = centraidType("smallStrong"), color = centraidColor("textSoft"))
@@ -665,56 +619,42 @@ private fun UtilitiesGroup(
  * Closing on the press would be the shell claiming an album exists because a
  * button was tapped — and would leave the sentence nowhere to be read.
  *
- * Drawn INLINE rather than as a `ModalBottomSheet`, which is this module's own
- * convention on Android (`MakeVaultSheet`): the state says which sheet is open
- * and the screen draws it, so there is no second place the answer lives.
+ * A `SheetRoom` the state opens: the state says which sheet is open and the
+ * screen draws it, so there is no second place the answer lives.
  */
 @Composable
 private fun NewAlbumSheet(onEvent: (PhotosCollectionsEvent) -> Unit, failure: String?) {
     var name by remember { mutableStateOf("") }
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(text = "New album")
-        TextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text(text = "Album name") },
-            modifier = Modifier.fillMaxWidth(),
-        )
+    NameSheet(
+        title = PhotosCopy.PHOTOS_NEW_ALBUM,
+        fieldLabel = PhotosCopy.PHOTOS_ALBUM_NAME,
+        name = name,
+        onName = { name = it },
+        primaryLabel = "Create",
         // BESIDE THE FIELD AND NEVER INSTEAD OF IT: the member's typed name is
         // the only copy of it, and a sheet that swapped it for an error would
         // have thrown that away.
-        if (!failure.isNullOrEmpty()) Text(text = failure)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                // AN EMPTY NAME IS NOT A WRITE. `media.create_album`'s schema
-                // has `"title": { "minLength": 1 }`, so the vault would refuse
-                // it — and a control that submits a command known to be refused
-                // wastes a round trip to tell a member what the field knew.
-                enabled = name.isNotBlank(),
-                onClick = {
-                    onEvent(
-                        PhotosCollectionsEvent(
-                            album_created = PhotosCollectionsEvent.AlbumCreated(name = name),
-                        ),
-                    )
-                },
-            ) { Text(text = "Create") }
-            TextButton(
-                onClick = {
-                    onEvent(
-                        PhotosCollectionsEvent(
-                            sheet = PhotosCollectionsEvent.SheetChanged(
-                                PhotosCollectionsState.Sheet.SHEET_NONE,
-                            ),
-                        ),
-                    )
-                },
-            ) { Text(text = "Cancel") }
-        }
-    }
+        status = failure.orEmpty(),
+        onDismiss = {
+            onEvent(
+                PhotosCollectionsEvent(
+                    sheet = PhotosCollectionsEvent.SheetChanged(
+                        PhotosCollectionsState.Sheet.SHEET_NONE,
+                    ),
+                ),
+            )
+        },
+        // AN EMPTY NAME IS NOT A WRITE. `media.create_album`'s schema has
+        // `"title": { "minLength": 1 }`, so the vault would refuse it — and
+        // `NameSheet` does not offer the verb while the name is blank.
+        onSave = {
+            onEvent(
+                PhotosCollectionsEvent(
+                    album_created = PhotosCollectionsEvent.AlbumCreated(name = name),
+                ),
+            )
+        },
+    )
 }
 
 /**

@@ -796,30 +796,7 @@ impl Handle {
         )
     }
 
-    /// WHETHER THE VAULT THIS CORE HOLDS IS A SAMPLE VAULT, finished or not
-    /// (`centraid_vault::bootstrap::SampleMark`). False for a core holding no
-    /// vault, and for a vault whose mark will not read — a refusal below is a
-    /// guard, and a vault that cannot answer is not one this guard owns.
-    #[must_use]
-    pub fn holds_a_sample(&self) -> bool {
-        self.vault
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .as_ref()
-            .and_then(|vault| vault.sample_mark().ok().flatten())
-            .is_some()
-    }
-
     // ------------------------------------------------------------ internals --
-
-    /// Refuse `what` when this core holds a sample vault. See
-    /// [`CoreError::SampleVault`].
-    fn refuse_a_sample(&self, what: &'static str) -> Result<()> {
-        if self.holds_a_sample() {
-            return Err(CoreError::SampleVault { what });
-        }
-        Ok(())
-    }
 
     fn check_open(&self) -> Result<()> {
         if let Some(diagnostic_id) = self.poisoned_as() {
@@ -898,27 +875,8 @@ impl Handle {
             // `CoreError::Unpaired` when there is no file at all, which is the
             // correct refusal: founding needs a file, and a path that opened is
             // what `create` produced.
-            //
-            // A SAMPLE FOUND SEALS ITS LOCKER UNDER THIS CORE'S OWN KEYS: the
-            // ones derived at open from the member's seed and this vault's
-            // index, lent for the length of the found. A core opened with no
-            // seed lends none, and the sample has no Locker.
             K::Found(request) => Ok(response(wire::response::Kind::Found(self.with_vault(
-                |vault| {
-                    let changes = crate::events::ChangeFeed::new(self.events());
-                    let sealing = self.keys.as_ref().map(|keys| crate::sample::Sealing {
-                        keys,
-                        cell: &self.locker,
-                        changes: &changes,
-                    });
-                    crate::api::found(
-                        vault,
-                        &self.registry,
-                        &self.owner(),
-                        request,
-                        sealing.as_ref(),
-                    )
-                },
+                |vault| crate::api::found(vault, &self.registry, &self.owner(), request),
             )?))),
             K::Command(command) => {
                 let changes = crate::events::ChangeFeed::new(self.events());
@@ -961,20 +919,10 @@ impl Handle {
             // the vault is held for the snapshot's copy and the reads a pass
             // makes, never across the network, so a screen's reads go on while
             // a backup runs.
-            //
-            // A SAMPLE VAULT NEVER DRAINS: no row of the scenario may reach the
-            // member's gateway (R-SAMPLE). Asked before the pass starts, so a
-            // refusal costs nothing.
-            K::Drain(request) => {
-                self.refuse_a_sample("back up")?;
-                Ok(response(wire::response::Kind::Drain(self.drain(request)?)))
-            }
+            K::Drain(request) => Ok(response(wire::response::Kind::Drain(self.drain(request)?))),
             // PAIRING NEEDS NO VAULT TO BE OPEN: it needs the vault's keys,
             // and keeps the gateway in the ledger beside the file.
-            // A SAMPLE VAULT NEVER PAIRS, for the drain's reason: a paired
-            // vault is one the next pass would back up.
             K::PairPhone(request) => {
-                self.refuse_a_sample("pair")?;
                 let runtime = self.runtime_handle()?;
                 Ok(response(wire::response::Kind::PairPhone(
                     crate::phone::pair::pair(&self.plane, self.keys.as_ref(), request, &runtime)?,
@@ -1022,9 +970,7 @@ impl Handle {
             )))),
             // THE BACKUP PLANE'S DOORS BESIDE THE PASS (#1080). See
             // `phone.proto` and `crate::phone`.
-            // A sample's objects are handed to no upload, for the drain's reason.
             K::Handoff(request) => {
-                self.refuse_a_sample("back up")?;
                 let runtime = self.runtime_handle()?;
                 Ok(response(wire::response::Kind::Handoff(
                     crate::phone::drain::handoff(&self.plane, self.keyring()?, request, &runtime)?,

@@ -2,11 +2,13 @@ package dev.centraid.shared.apps.locker
 
 import centraid.screen.v1.HomeEvent
 import centraid.screen.v1.LockerBiometry
-import centraid.screen.v1.LockerFact
 import centraid.screen.v1.LockerLockEvent
 import centraid.screen.v1.LockerLockState
 import centraid.screen.v1.LockerPrompt
 import dev.centraid.design.copy.LockerCopy
+import dev.centraid.shared.custody.OwnKeyFiling
+import dev.centraid.shared.custody.VaultSecrets
+import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
@@ -94,6 +96,16 @@ public object LockerLockMachine {
             // NO WORDS ON THIS PHONE FOR THIS VAULT: a passcode does not help,
             // so the wall stays unavailable with the words' sentence.
             !next.keyed -> GateStep(to(next.copy(asking = 0L), LockerLockState.Phase.PHASE_UNAVAILABLE))
+            // OPENING LOCKER IS THE ASK: no wall before the prompt. Only on
+            // entering — a return to the foreground re-reads and asks nothing,
+            // and a cancel leaves the wall and its button.
+            attached.entered && (
+                gate.state.phase == LockerLockState.Phase.PHASE_LOCKED ||
+                    gate.state.phase == LockerLockState.Phase.PHASE_UNAVAILABLE
+                ) -> {
+                val token = next.tokens + 1
+                GateStep(to(next.copy(tokens = token, asking = token), LockerLockState.Phase.PHASE_UNLOCKING))
+            }
             gate.state.phase == LockerLockState.Phase.PHASE_UNAVAILABLE ->
                 GateStep(to(next, LockerLockState.Phase.PHASE_LOCKED))
             // Re-read the core: idle may have ended a session this machine
@@ -216,7 +228,6 @@ public object LockerLockMachine {
                 title = title,
                 body = body,
                 unlock_label = unlockLabel,
-                facts = FACTS,
                 notice = notice,
                 prompt = prompt,
                 // THE WAY OUT OF THE NO-WORDS WALL (#1047 E1): an intent the
@@ -245,12 +256,6 @@ public object LockerLockMachine {
         else -> LockerCopy.LOCK_FAILED
     }
 
-    private val FACTS: List<LockerFact> = listOf(
-        LockerFact(label = LockerCopy.FACT_SESSION, detail = LockerCopy.FACT_SESSION_DETAIL),
-        LockerFact(label = LockerCopy.FACT_LEAVING, detail = LockerCopy.FACT_LEAVING_DETAIL),
-        LockerFact(label = LockerCopy.FACT_REVEAL, detail = LockerCopy.FACT_REVEAL_DETAIL),
-        LockerFact(label = LockerCopy.FACT_KEY, detail = LockerCopy.FACT_KEY_DETAIL),
-    )
 }
 
 /** The gate's whole state: what a view draws, and what it never sees. */
@@ -314,7 +319,7 @@ public data class GateStep(public val gate: Gate, public val effects: List<GateE
  */
 public class LockerGate(
     private val door: LockerDoor,
-    private val scope: CoroutineScope,
+    internal val scope: CoroutineScope,
     /** Whether the foreground core is keyed, read fresh before every view event. */
     private val keyed: () -> Boolean = { true },
 ) {
@@ -409,7 +414,24 @@ public class LockerGate(
                 // of it: the shell asks through a slot it owns, and a change
                 // redraws Home.
                 HomeReads.lockerOpen = { gate.open.value }
-                gate.changed = { bound?.send(HomeEvent(refreshed = HomeEvent.Refreshed())) }
+                gate.changed = { open ->
+                    bound?.send(HomeEvent(refreshed = HomeEvent.Refreshed()))
+                    // AN UNLOCK IS WHEN A VAULT'S OWN KEY CAN BE FILED
+                    // (R-ONBOARD-10): the core seals a Locker secret only
+                    // while the session is open.
+                    val session = bound
+                    if (open && session != null) {
+                        gate.scope.launch {
+                            val services = platformServices()
+                            runCatching {
+                                OwnKeyFiling.filePending(
+                                    session,
+                                    VaultSecrets(services.secureStore, services.syncedSecrets),
+                                ) { services.secureRandom.bytes(16) }
+                            }
+                        }
+                    }
+                }
             }
         }
 

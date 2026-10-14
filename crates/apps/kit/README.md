@@ -2,7 +2,7 @@
 
 Every Centraid app is a **manifest** plus two sets of pure functions: queries that hold statements as data, and actions that invoke one typed vault command each. This crate is everything those functions may import, and there is deliberately not much of it.
 
-It is the read vocabulary — pages, money, paged reads and the statement grammar — with the rules below, each listed with the defect it prevents.
+It is the read vocabulary — pages, money, paged reads, the statement grammar and the one spelling rule — with the rules below, each listed with the defect it prevents.
 
 ## What the kit guarantees
 
@@ -18,6 +18,7 @@ It is the read vocabulary — pages, money, paged reads and the statement gramma
 | **NULL, MISSING and a value are three claims.** A `Row`'s absent key is an absent column and `Cell::Null` is SQL NULL, because `Option<T>` collapses two of them and the collapse is how "0 instead of unknown" comes back | `row.rs` |
 | **`states` is a closed partition.** A manifest that forgets one of the seven canonical designed states fails to parse rather than reading as "it does not apply here" | `manifest.rs` |
 | **Anything wider reruns.** The live-query matching rule skips only when dependency and invalidation both name rows, and different ones | `changes.rs` |
+| **One spelling rule** ([#1097](https://github.com/srikanth235/centraid/issues/1097), R5). A typo is one edit (a letter more, fewer or different, or two neighbours swapped) in a word of four letters or more and nothing but letters, and the assistant's name resolver, the `where` language and search's correction all read it from `within_one` and `one_edit`. `words` is the one tokenization of a typed query, `fold_like_index` what the full-text index stores for a word (proved against an FTS5 table), and `correct_words` the correction itself: a replacement is a whole term the caller's vocabulary holds (the one the most documents hold in the winning prefix group, R4b), never a guess, and punctuation stuck to a typed word (`budegt?`) is read around and left out of the replacement. `WalkedWords` is that vocabulary for a walker that has no index (Locker, Tally): the words of the rows it just walked, each counted once per row. The assistant's Levenshtein `word_score` is a different measure and stays in `crates/assist` (R5a) | `spelling.rs` |
 
 ## What an app may not do, and what stops it
 

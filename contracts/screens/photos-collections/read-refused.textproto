@@ -17,7 +17,7 @@ seat {
 }
 failure {
   kind: READ_FAILURE_KIND_NO_COPY_YET
-  sentence: "This device has not copied your albums yet."
-  remedy: "Stay on Wi-Fi while Centraid catches up."
+  sentence: "Your albums aren't on this phone yet."
+  remedy: "Stay on Wi-Fi while it catches up."
 }
 sheet: SHEET_NONE

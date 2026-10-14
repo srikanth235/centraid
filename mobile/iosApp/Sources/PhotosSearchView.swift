@@ -16,10 +16,9 @@ import UIKit
 /// `PhotosSearchEmptyState.tsx`) and a third for the hits; they are one screen
 /// with a oneof, and this view is the oneof drawn.
 ///
-/// **THE FIELD IS NOT HERE.** It is `PhotosSearchBar`, at the foot of the
-/// screen where the band would be — the system Photos app's search, which
-/// takes the tab bar's place rather than adding a second bar over it. This
-/// view is only what the query found.
+/// **THE FIELD IS NOT HERE.** It is the room's search field, under the title
+/// where every app's search stands (R-CHROME-2). This view is only what the
+/// query found.
 ///
 /// **It takes bytes and a closure, not a `ShellModel`.** Where a tapped cell
 /// GOES is the navigator's business and this file routes nothing.
@@ -43,34 +42,18 @@ struct PhotosSearchView: View {
             case let .resting(resting):
                 RestingView(resting: resting, onOpenShelf: onOpenShelf)
             case .loading:
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 40)
+                RowSkeleton()
             case let .failure(sentence, remedy):
                 ScreenFailureView(sentence: sentence, remedy: remedy)
-            case let .hits(cells, packAbsent, matches, topHits):
+            case let .hits(cells, packAbsent, matches, topHits, empty):
                 if cells.isEmpty, topHits.isEmpty {
-                    // NOTHING MATCHED IS NOT NOTHING TYPED. The query is quoted
-                    // back, because the one thing a member wants to check first
-                    // is whether the words they see are the words they meant —
-                    // and the line under it says everywhere search looked (v0's
-                    // `SEARCH_COPY.miss`). Centred, as the system draws "No
-                    // Results".
-                    VStack(spacing: 6) {
-                        Text("No results")
-                            .centraidType("title")
-                            .foregroundStyle(Theme.color("text", scheme))
-                        Text("Nothing matches \u{201C}\(state.query)\u{201D}.")
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
-                            .multilineTextAlignment(.center)
-                        Text(PhotosSearchStateView.missBody)
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textFaint", scheme))
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 160)
+                    // NOTHING MATCHED IS NOT NOTHING TYPED. The machine quotes the
+                    // query back and says everywhere search looked (v0's
+                    // `SEARCH_COPY.miss`), and offers Ask as the one action when
+                    // the field names a question (#1097, R-1097-30): the kit's
+                    // search empty view draws it, as every app's search does.
+                    SearchEmptyView(empty, ask: state.ask)
+                        .accessibilityIdentifier("photos-search-no-match")
                 } else {
                     // THE DOORS FIRST (v0 §9: "each one tap from the surface
                     // that owns it"), then why the grid matched, then the grid.
@@ -103,7 +86,6 @@ struct PhotosSearchView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .navigationTitle("Search")
     }
 }
 
@@ -146,140 +128,6 @@ private struct TopHitRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Open \(hit.label), \(sub)")
         .accessibilityAddTraits(.isButton)
-    }
-}
-
-/// THE SEARCH FIELD, WHERE THE BAND WAS — the system Photos app's search, in
-/// both of its states (measured off its view hierarchy on iOS 26).
-///
-/// **TYPING:** the field and a round close control, 8 from the screen's sides
-/// and 8 above the keyboard — nothing else competes for the row.
-///
-/// **NOT TYPING** (the keyboard's Search key, or a scroll through the hits):
-/// the row drops into the band's own slot — the same 62 box, 21 from the
-/// screen's edges — and gains, on its leading end, a circle carrying the mark
-/// of the place the member came from. That circle goes back there with the
-/// query kept, as leaving a tab keeps it; the close control goes back with the
-/// query cleared. Two ways out, one per intent, both a thumb's reach away.
-///
-/// **THE FIELD IS A UIKIT FIELD** (`BareSearchField`) for one reason: SwiftUI's
-/// `TextField` cannot turn off the keyboard's suggestion strip, and a strip of
-/// guesses over a query for your own photographs is 44 points of noise between
-/// the member's thumb and their results. The system app shows none.
-///
-/// **THE ONLY PLACE A KEYSTROKE EXISTS BEFORE THE REDUCER HAS IT.** The machine
-/// holds the query it last reduced; a character the member has just typed is
-/// in neither until this view hands it over.
-struct PhotosSearchBar: View {
-    /// The query as the reducer last published it.
-    let query: String
-    /// The mark and the name of the place the member came from.
-    let returnIconKey: String
-    let returnLabel: String
-    let send: (Data) -> Void
-    /// Back to that place, the query kept.
-    let onReturn: () -> Void
-    /// Back to it with the query cleared.
-    let onClose: () -> Void
-
-    @State private var typed = ""
-    @State private var focused = false
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        HStack(spacing: focused ? BandMetrics.searchInset : BandMetrics.searchRestGap) {
-            if !focused {
-                SearchCircle(
-                    iconKey: returnIconKey,
-                    spoken: KitWords.shared.backTo(parent: returnLabel),
-                    identifier: "photos.search.return",
-                    action: onReturn
-                )
-                .transition(.opacity)
-            }
-            field
-            SearchCircle(
-                iconKey: "X",
-                spoken: "Close search",
-                identifier: "photos.search.close",
-                action: onClose
-            )
-        }
-        .padding(.horizontal, focused
-            ? BandMetrics.searchInset
-            : BandMetrics.inset + BandMetrics.searchRestPad)
-        .padding(.vertical, focused ? 0 : BandMetrics.searchRestPad)
-        .padding(.top, BandMetrics.topGap)
-        // Over the keyboard while typing; in the band's slot, `floor` from the
-        // glass, when not.
-        .padding(.bottom, focused ? BandMetrics.searchInset : BandMetrics.floorPadding)
-        .animation(
-            reduceMotion
-                ? nil
-                : .timingCurve(0.3, 0, 0.4, 1, duration: CentraidGeometry.durationOne / 1000),
-            value: focused
-        )
-        .onAppear {
-            // THE FIELD OPENS READY: a member who pressed Search wants to type,
-            // and a search page that needs a second tap to take a keystroke is
-            // a page that makes them ask twice.
-            typed = query
-            focused = true
-        }
-        .onChange(of: typed) { _, query in
-            // A QUERY CHANGE IS A DIFFERENCE FROM THE STATE, not an assignment
-            // to it. Comparing is what keeps this from re-sending the query the
-            // reducer just published back to it, which would be a read per
-            // round trip for as long as the screen was open.
-            guard query != self.query else { return }
-            send(PhotosSearchStateView.queryEvent(query))
-        }
-    }
-
-    private var field: some View {
-        HStack(spacing: BandMetrics.searchTextLead - BandMetrics.searchGlyphLead - BandMetrics.searchGlyph) {
-            CentraidIconView(
-                iconKey: "Search",
-                tint: Theme.color("textSoft", scheme),
-                size: BandMetrics.searchGlyph
-            )
-            .frame(width: BandMetrics.searchGlyph, height: BandMetrics.searchGlyph)
-            BareSearchField(
-                text: $typed,
-                focused: $focused,
-                placeholder: "Search your library\u{2026}",
-                font: Theme.uiFont("body", scheme),
-                color: UIColor(Theme.color("text", scheme)),
-                placeholderColor: UIColor(Theme.color("textFaint", scheme))
-            )
-            .accessibilityIdentifier("photos.search.field")
-            if !typed.isEmpty {
-                Button {
-                    typed = ""
-                } label: {
-                    CentraidIconView(iconKey: "XCircle", tint: Theme.color("textFaint", scheme), size: 18)
-                        .frame(
-                            minWidth: CentraidGeometry.targetMinFine,
-                            minHeight: CentraidGeometry.targetMinFine
-                        )
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.leading, BandMetrics.searchGlyphLead)
-        .padding(.trailing, 4)
-        .frame(height: BandMetrics.searchHeight)
-        .background(Capsule().fill(Theme.color("bgElev", scheme)))
-        .overlay(
-            Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-        )
-        .contentShape(Capsule())
-        // A tap anywhere on the capsule, not only on the text run, starts
-        // typing again — the system's field is one target, glyph and all.
-        .onTapGesture { focused = true }
     }
 }
 
@@ -334,7 +182,7 @@ private struct RestingView: View {
                     Text(words.joined(separator: " \u{00B7} "))
                         .centraidType("body")
                         .foregroundStyle(Theme.color("text", scheme))
-                        .accessibilityLabel("Labels you can search for: \(words.joined(separator: ", "))")
+                        .accessibilityLabel("Labels to search: \(words.joined(separator: ", "))")
                 }
             }
         }
@@ -407,18 +255,36 @@ struct PhotosSearchStateView {
     /// What the member has typed, as the reducer last published it.
     var query: String { state.query }
 
+    /// The question the no-match state offers to send to the assistant, or empty
+    /// for no Ask (#1097, R-1097-28).
+    var ask: String { state.search.ask }
+
+    /// THE SHARED SEARCH FIELD, as the machine holds it (#1097, R-1097-27): the
+    /// term and the words the answer corrected, which the kit's field draws as
+    /// "Showing results for". [open] is the grid's destination and the caller's
+    /// to state; a field that is not open carries no term and no correction.
+    func field(open: Bool) -> Centraid_Screen_V1_SearchField {
+        guard open else { return Centraid_Screen_V1_SearchField() }
+        var field = state.search
+        field.open = true
+        field.term = state.query
+        return field
+    }
+
     /// Four cases, always.
     enum Content {
         case resting(Centraid_Screen_V1_SearchResting)
         case loading(Bool)
         case failure(String, String)
         /// The cells as the wire holds them, whether this device has a
-        /// thumbnail pack, why these matched, and the doors above them.
+        /// thumbnail pack, why these matched, the doors above them, and the
+        /// no-match state of an answer with none of those.
         case hits(
             [Centraid_Screen_V1_PhotoCell],
             Bool,
             [Centraid_Screen_V1_SearchMatch],
-            [Centraid_Screen_V1_SearchTopHit]
+            [Centraid_Screen_V1_SearchTopHit],
+            Centraid_Screen_V1_EmptyState
         )
     }
 
@@ -429,7 +295,7 @@ struct PhotosSearchStateView {
         case let .failure(failure):
             return .failure(failure.sentence, failure.remedy)
         case let .hits(hits):
-            return .hits(hits.cells, hits.thumbnailPackAbsent, hits.matches, hits.topHits)
+            return .hits(hits.cells, hits.thumbnailPackAbsent, hits.matches, hits.topHits, hits.empty)
         case let .loading(loading):
             return .loading(loading.firstLoad)
         // A MESSAGE WITH NO CONTENT SET IS A SCREEN THAT HAS NOT READ, which
@@ -485,12 +351,10 @@ struct PhotosSearchStateView {
     /// What a search reaches, true of every vault. `PhotosSearchScreen.kt`
     /// says the same.
     static let restingNote =
-        "Search finds people, places, albums, labels and the captions you have written."
+        PhotosWords.photosSearchHint
 
-    /// v0's `SEARCH_COPY.miss.body`, in this build's words for what search reaches.
-    static let missBody = "Nothing in captions, people, places, labels or album names."
 
-    /// "Person · 12 photographs", or "Album · at least 500 photographs". A zero
+    /// "Person · 12 photos", or "Album · at least 500 photos". A zero
     /// is "not counted" on this door, so it prints the kind alone.
     static func topHitSub(_ hit: Centraid_Screen_V1_SearchTopHit) -> String {
         let kind: String
@@ -502,7 +366,7 @@ struct PhotosSearchStateView {
         }
         let count = hit.photoCount
         guard count > 0 else { return kind }
-        let noun = count == 1 ? "photograph" : "photographs"
+        let noun = count == 1 ? PhotosWords.tileCountOne : PhotosWords.tileCountMany
         let phrase = hit.photoCountCapped ? "at least \(count) \(noun)" : "\(count) \(noun)"
         return kind.isEmpty ? phrase : "\(kind) \u{00B7} \(phrase)"
     }

@@ -3,6 +3,7 @@ package dev.centraid.shared.sync
 import centraid.screen.v1.BackupLine
 import centraid.screen.v1.BackupScreenEvent
 import centraid.screen.v1.BackupScreenState
+import dev.centraid.shared.custody.VaultSecrets
 import dev.centraid.shared.platform.BackgroundTasks
 import dev.centraid.shared.platform.PlatformServices
 import dev.centraid.shared.platform.platformServices
@@ -29,7 +30,8 @@ import kotlinx.coroutines.launch
  *    under `rule_label`, the include-videos switch, and the back-up-now button
  *    by its label — or `progress` while `backing_up_now`;
  * 3. forwards `BackUpNow`, `SetIncludeVideos`, `ForgetDestination(row's
- *    gateway_id)` and `Dismissed` on close; "add a gateway" opens `pair.laptop`.
+ *    gateway_id)`, `SetKeySync` and `Dismissed` on close; "add a gateway"
+ *    opens `pair.laptop`, and `key_show_label` opens `words.show`.
  */
 public class BackupBridge {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -112,4 +114,21 @@ internal class SessionBackupDoors(
     override suspend fun forget(gatewayId: String): ForgetAnswer? = session()?.forgetDestination(gatewayId)
 
     override fun nowMs(): Long = services.clock.read().epochMillis
+
+    private val secrets get() = VaultSecrets(services.secureStore, services.syncedSecrets)
+
+    override suspend fun key(): KeyCustody {
+        val store = secrets
+        val availability = runCatching { services.syncedSecrets.availability() }.getOrNull()
+        return KeyCustody(
+            held = store.seed() != null,
+            synced = store.seedSynced(),
+            saved = store.wordsSaved(),
+            wordsHere = store.words() != null,
+            sentence = availability?.sentence.orEmpty(),
+            place = availability?.takeIf { it.synchronizing }?.place.orEmpty(),
+        )
+    }
+
+    override suspend fun setKeySync(on: Boolean): Boolean = secrets.setSeedSync(on)
 }

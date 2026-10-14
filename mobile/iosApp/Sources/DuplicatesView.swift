@@ -47,7 +47,7 @@ struct DuplicatesView: View {
             VStack(alignment: .leading, spacing: 12) {
                 switch state.content {
                 case .loading:
-                    ProgressView()
+                    RowSkeleton()
                 case let .denied(denied):
                     DeniedGate(denied)
                 case let .failure(sentence, remedy):
@@ -66,15 +66,13 @@ struct DuplicatesView: View {
                         // and a member who reads it stops looking.
                         if shelf.scanComplete {
                             ScreenEmptyView(
-                                sentence: "No near-identical photographs in your library.",
-                                remedy: "Centraid has looked through everything on this device."
+                                sentence: PhotosWords.photosEmptyDuplicates,
+                                remedy: PhotosWords.photosDuplicatesNoneCaption
                             )
                         } else {
                             ScreenEmptyView(
-                                sentence: "Centraid has not finished looking for near-identical "
-                                    + "photographs.",
-                                remedy: "That is not the same as there being none — "
-                                    + "nothing here has been ruled out yet."
+                                sentence: PhotosWords.photosDuplicatesLooking,
+                                remedy: PhotosWords.photosDuplicatesLookingCaption
                             )
                         }
                     } else {
@@ -112,7 +110,7 @@ struct DuplicatesView: View {
                             // that went quiet once it had something to show
                             // would only be honest while it was empty.
                             Label {
-                                Text("Centraid is still looking; more sets may appear.")
+                                Text(PhotosWords.photosDuplicatesStillLooking)
                                     .centraidType("small")
                                     .foregroundStyle(Theme.color("textSoft", scheme))
                             } icon: {
@@ -128,7 +126,7 @@ struct DuplicatesView: View {
                             } label: {
                                 DuplicateClusterRow(cluster: cluster)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(KitRowPress())
                             .accessibilityIdentifier("photos.duplicates.\(cluster.clusterID)")
                         }
                     }
@@ -194,6 +192,7 @@ private struct DuplicateClusterRow: View {
                 tint: Theme.color("textSoft", scheme)
             )
         }
+        .frame(minHeight: CentraidGeometry.targetMinCoarse)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(headline). \(subhead)")
@@ -202,8 +201,8 @@ private struct DuplicateClusterRow: View {
     /// THE COUNT, AND "AT LEAST" WHENEVER IT IS A FLOOR.
     ///
     /// The door has no `COUNT(*)`, so a count off a page that filled is a
-    /// floor — which `HomeState.ThingCount.capped` says the same way, and
-    /// `HomeView` spells as "at least N things". This view honours the FLAG and
+    /// floor — which `HomeTile.count.capped` says the same way, and
+    /// Home's tiles say the same way. This view honours the FLAG and
     /// does not assume: `DuplicatesReads` happens to avoid the cap rather than
     /// report it — a cluster the page edge cut is dropped whole rather than
     /// counted short — so today the flag is false and this says "4 copies" and
@@ -230,7 +229,7 @@ private struct DuplicateClusterRow: View {
     /// read saw, so a count that is a floor makes the sum a floor by the same
     /// arithmetic and in the same rows.
     private var subhead: String {
-        guard !cluster.reclaimablePhrase.isEmpty else { return "Pick the one to keep." }
+        guard !cluster.reclaimablePhrase.isEmpty else { return PhotosWords.photosDuplicatesPickOne }
         return cluster.memberCountCapped
             ? "At least \(cluster.reclaimablePhrase) to reclaim."
             : "\(cluster.reclaimablePhrase) to reclaim."
@@ -276,8 +275,8 @@ struct DuplicatesStateView {
     var lede: String {
         let count = state.data.clusters.count
         return count == 1
-            ? "1 set of near-identical photographs."
-            : "\(count) sets of near-identical photographs."
+            ? PhotosWords.photosDuplicatesSetOne
+            : PhotosWords.fill(PhotosWords.photosDuplicatesSetMany, "count", "\(count)")
     }
 
     var openedEvent: Data {

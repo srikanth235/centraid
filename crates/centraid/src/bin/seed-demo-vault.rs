@@ -24,9 +24,8 @@
 //! `Item 1, Item 2`.
 //!
 //! **SEVEN OF THE EIGHT ARE THE LIBRARY'S.** The scenario lives in
-//! `centraid_core::sample`, which is also what a phone seeds its SAMPLE VAULT
-//! from, so a fixture and a member's sample are one set of rows. This binary is
-//! the thin caller: the command line, the guard below, the byte store, the
+//! `centraid_core::example`, which the chat's tests seed too, so a fixture and
+//! the rows those tests read are one set. This binary is the thin caller: the command line, the guard below, the byte store, the
 //! count it prints — and Locker, which is the one app that stays here because
 //! it is sealed under the public demo words and must never reach a product
 //! vault.
@@ -248,13 +247,13 @@ fn main() {
 
     // THE SCENARIO, OUT OF THE LIBRARY. Every app but Locker, in the order the
     // library seeds them, through `Vault::execute`.
-    let now = centraid_core::sample::now_ms();
+    let now = centraid_core::example::now_ms();
     let mut report = handle
         .with_vault(|vault| {
             let founded = vault.found(&vault_name, "Owner")?;
             let registry = Registry::with_system_commands()?;
             let principal = Principal::owner("demo-device");
-            centraid_core::sample::seed(
+            centraid_core::example::seed(
                 vault,
                 &registry,
                 &principal,

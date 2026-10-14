@@ -155,6 +155,55 @@ class PeopleSpec : StringSpec({
             PeopleRosterSort.PEOPLE_ROSTER_SORT_NAME
     }
 
+    "ONE chip row: the roster's chips, then the sort, last, wearing the current order (R-CHROME-3)" {
+        val landed = home(opened(), roster(person("p1", "Dana Reyes"), person("p2", "Sam"), all = 2, due = 1, starred = 1)).state
+        landed.chips.map { it.label to it.count } shouldBe listOf("All" to 2, "Starred" to 1, "Overdue" to 1)
+        landed.chips.single { it.selected }.key shouldBe PeopleChipKey.PEOPLE_CHIP_KEY_ALL
+        landed.sort_chip.shouldNotBeNull().let {
+            it.label shouldBe PeopleCopy.SORT_RECENT
+            it.spoken shouldBe "Sort, ${PeopleCopy.SORT_RECENT}"
+        }
+
+        // The sort chip's sheet is the orders; a pick closes it, re-reads and renames the chip.
+        val sheet = PeopleHomeMachine.reduce(
+            landed,
+            PeopleHomeEvent(sheet_opened = PeopleHomeEvent.SheetOpened(sheet = PeopleHomeState.Sheet.SHEET_ORDER)),
+        ).state
+        sheet.sheet shouldBe PeopleHomeState.Sheet.SHEET_ORDER
+        sheet.order_choices.map { it.label } shouldBe listOf(PeopleCopy.SORT_RECENT, PeopleCopy.SORT_NAME)
+        val byName = PeopleHomeMachine.reduce(sheet, PeopleHomeEvent(order = PeopleHomeEvent.OrderPicked(order = PeopleOrder.PEOPLE_ORDER_NAME)))
+        byName.effects shouldBe listOf(ScreenEffect.ReadPage("people.home", null))
+        byName.state.sheet shouldBe PeopleHomeState.Sheet.SHEET_NONE
+        byName.state.sort_chip.shouldNotBeNull().label shouldBe PeopleCopy.SORT_NAME
+
+        // THE ROW HOLDS over a chip's re-read, the new chip selected at once.
+        val starred = PeopleHomeMachine.reduce(landed, PeopleHomeEvent(chip = PeopleHomeEvent.ChipPicked(chip = PeopleChipKey.PEOPLE_CHIP_KEY_STARRED))).state
+        starred.data_.shouldBeNull()
+        starred.chips.map { it.label } shouldBe listOf("All", "Starred", "Overdue")
+        starred.chips.single { it.selected }.key shouldBe PeopleChipKey.PEOPLE_CHIP_KEY_STARRED
+        starred.sort_chip.shouldNotBeNull()
+
+        // No row over search, whose names no chip narrows.
+        val searching = PeopleHomeMachine.reduce(landed, PeopleHomeEvent(search_opened = PeopleHomeEvent.SearchOpened())).state
+        searching.chips.shouldBeEmpty()
+        searching.sort_chip.shouldBeNull()
+    }
+
+    "More holds Trash alone — never search or sort — and is an ordinary band tab, last" {
+        val landed = home(opened(), roster(person("p1", "Dana"))).state
+        landed.band.last().let {
+            it.key shouldBe "more"
+            it.icon_key shouldBe "MoreHoriz"
+        }
+        val more = PeopleHomeMachine.reduce(landed, PeopleHomeEvent(band = PeopleHomeEvent.BandPicked(key = "more"))).state
+        more.sheet shouldBe PeopleHomeState.Sheet.SHEET_MORE
+        more.more_rows.map { it.key to it.label } shouldBe listOf(PeopleHomeMachine.MORE_TRASH to PeopleCopy.TRASH_LABEL)
+        // A row closes the sheet; where it leads is the shell's.
+        val picked = PeopleHomeMachine.reduce(more, PeopleHomeEvent(more_row = PeopleHomeEvent.MoreRowPicked(key = "trash")))
+        picked.effects.shouldBeEmpty()
+        picked.state.sheet shouldBe PeopleHomeState.Sheet.SHEET_NONE
+    }
+
     "a roster row says who, when last in touch, overdue and the next reminder — as finished words" {
         val row = home(
             opened(),
@@ -208,7 +257,7 @@ class PeopleSpec : StringSpec({
     "day one is its own empty with one action; a chip with nobody says so in one sentence" {
         val dayOne = home(opened(), roster(all = 0)).state.data_.shouldNotBeNull().roster.shouldNotBeNull()
         val empty = dayOne.empty.shouldNotBeNull()
-        empty.headline shouldBe "Add the people you keep up with"
+        empty.headline shouldBe "Add people you keep up with"
         empty.action_label shouldBe "Add person"
 
         val onStarred = home(
@@ -240,6 +289,8 @@ class PeopleSpec : StringSpec({
         denied.denied.shouldNotBeNull().title shouldBe PeopleCopy.DENIED_TITLE
         denied.denied.shouldNotBeNull().receipt shouldBe "No grant for people."
         denied.band.shouldBeEmpty()
+        denied.chips.shouldBeEmpty()
+        denied.more_rows.shouldBeEmpty()
     }
 
     "a change to a table the answers are folded from re-reads; any other table is not ours" {
@@ -283,6 +334,56 @@ class PeopleSpec : StringSpec({
         closed.effects.shouldBeEmpty()
         closed.state.search.shouldNotBeNull().term shouldBe ""
         closed.state.search_data.shouldBeNull()
+    }
+
+    "search: the words the core corrected are on the field, a new term clears them, and an answer for a closed search draws none (#1097)" {
+        val landed = home(opened(), roster(person("p1", "Dana"))).state
+        val typed = run(
+            PeopleHomeMachine,
+            landed,
+            PeopleHomeEvent(search_opened = PeopleHomeEvent.SearchOpened()),
+            PeopleHomeEvent(search_term = PeopleHomeEvent.SearchTermChanged(term = "danna")),
+        ).state
+        val corrected = PeopleHomeReads.arrived(listOf(AppQueryResponse(people_search = PeopleSearch(corrected = "dana"))))
+        val fixed = PeopleHomeMachine.reduce(typed, corrected).state
+        fixed.search.shouldNotBeNull().corrected shouldBe "dana"
+        // An exact answer says nothing was corrected.
+        PeopleHomeMachine.reduce(typed, PeopleHomeReads.arrived(listOf(AppQueryResponse(people_search = PeopleSearch()))))
+            .state.search.shouldNotBeNull().corrected shouldBe ""
+        // A NEW TERM clears it.
+        PeopleHomeMachine.reduce(fixed, PeopleHomeEvent(search_term = PeopleHomeEvent.SearchTermChanged(term = "dann")))
+            .state.search.shouldNotBeNull().corrected shouldBe ""
+        // AN ANSWER FOR A SEARCH CLOSED SINCE draws none.
+        val closed = PeopleHomeMachine.reduce(typed, PeopleHomeEvent(search_closed = PeopleHomeEvent.SearchClosed())).state
+        PeopleHomeMachine.reduce(closed, corrected).state.search.shouldNotBeNull().corrected shouldBe ""
+        PeopleHomeMachine.reduce(fixed, PeopleHomeEvent(search_closed = PeopleHomeEvent.SearchClosed()))
+            .state.search.shouldNotBeNull().corrected shouldBe ""
+    }
+
+    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+        val landed = home(opened(), roster(person("p1", "Dana"))).state
+        val typed = run(
+            PeopleHomeMachine,
+            landed,
+            PeopleHomeEvent(search_opened = PeopleHomeEvent.SearchOpened()),
+            PeopleHomeEvent(search_term = PeopleHomeEvent.SearchTermChanged(term = "zzqx")),
+        ).state
+        fun answer(search: PeopleSearch) = PeopleHomeReads.arrived(listOf(AppQueryResponse(people_search = search)))
+        val none = PeopleHomeMachine.reduce(typed, answer(PeopleSearch())).state
+        none.search.shouldNotBeNull().ask shouldBe "Find zzqx"
+        none.search_data.shouldNotBeNull().empty.shouldNotBeNull().action_label shouldBe "Ask about “zzqx”"
+        // A person found is no Ask.
+        val found = PeopleHomeMachine.reduce(typed, answer(PeopleSearch(people = listOf(centraid.core.v1.PeopleRosterRow(party_id = "p1", name = "Dana"))))).state
+        found.search.shouldNotBeNull().ask shouldBe ""
+        // A new term, a close and a denial clear it; an answer for a closed search sets none.
+        PeopleHomeMachine.reduce(none, PeopleHomeEvent(search_term = PeopleHomeEvent.SearchTermChanged(term = "zzq")))
+            .state.search.shouldNotBeNull().ask shouldBe ""
+        PeopleHomeMachine.reduce(none, PeopleHomeEvent(search_closed = PeopleHomeEvent.SearchClosed()))
+            .state.search.shouldNotBeNull().ask shouldBe ""
+        PeopleHomeMachine.reduce(none, PeopleHomeReads.denied(AppQueryDenial(message = "No grant for people.")))
+            .state.search.shouldNotBeNull().ask shouldBe ""
+        val closed = PeopleHomeMachine.reduce(typed, PeopleHomeEvent(search_closed = PeopleHomeEvent.SearchClosed())).state
+        PeopleHomeMachine.reduce(closed, answer(PeopleSearch())).state.search.shouldNotBeNull().ask shouldBe ""
     }
 
     // --- Home: Touch -----------------------------------------------------
@@ -351,6 +452,9 @@ class PeopleSpec : StringSpec({
         val more = PeopleHomeMachine.reduce(state, PeopleHomeEvent(band = PeopleHomeEvent.BandPicked(key = "more"))).state
         more.sheet shouldBe PeopleHomeState.Sheet.SHEET_MORE
         more.destination shouldBe PeopleHomeState.Destination.DESTINATION_TOUCH
+        // Touch filters nothing: no chip row.
+        state.chips.shouldBeEmpty()
+        state.sort_chip.shouldBeNull()
     }
 
     "Touch on an empty vault is day one, and each empty rail says one sentence" {

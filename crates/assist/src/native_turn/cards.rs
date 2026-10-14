@@ -7,19 +7,21 @@
 //! | kind | app | entity | a tap opens |
 //! |---|---|---|---|
 //! | person | people | `person` | the person |
-//! | group | tally | `group` | Tally's home |
+//! | group | tally | `group` | the group's ledger |
 //! | event | agenda | `event` | the event |
 //! | task | tasks | `task` | the task |
 //! | note | notes | `note` | the note |
 //! | document | docs | `document` | the document |
 //! | photo | photos | `photo` | the lightbox |
-//! | album | photos | `album` | Photos' home |
+//! | album | photos | `album` | the album's shelf |
 //! | debt | tally | `debt` | Tally's home |
-//! | notebook | notes | `notebook` | Notes' home |
-//! | folder | docs | `folder` | Docs' home |
+//! | notebook | notes | `notebook` | the library under that notebook |
+//! | folder | docs | `folder` | the folder's page |
 //! | list | tasks | `project` | the project |
 //! | locker item | none | none | never drawn: the Locker is off on the phone (R-1088-3) |
 //!
+//! The group, album, notebook and folder routes are the shell's since the containers became search results
+//! (#1097, `ChatRouting.swift`): the card's `id` is the container's id and its `title` the name the route needs.
 //! The kinds with no row route open their app's home, which is what the shell does with any entity
 //! it has no route for (`ChatRouting.appHome`): a tap that reached nothing would read as a broken
 //! card. Giving one a route is a shell change and no schema change: `chat_message_card.entity` holds
@@ -71,16 +73,16 @@ const fn home(kind: Kind, app: App, entity: &'static str) -> CardKind {
 /// THE TABLE. Every kind but the Locker item.
 pub const TABLE: [CardKind; 12] = [
     row(Kind::Person, App::People, "person"),
-    home(Kind::Group, App::Tally, "group"),
+    row(Kind::Group, App::Tally, "group"),
     row(Kind::Event, App::Agenda, "event"),
     row(Kind::Task, App::Tasks, "task"),
     row(Kind::Note, App::Notes, "note"),
     row(Kind::Document, App::Docs, "document"),
     row(Kind::Photo, App::Photos, "photo"),
-    home(Kind::Album, App::Photos, "album"),
+    row(Kind::Album, App::Photos, "album"),
     home(Kind::Debt, App::Tally, "debt"),
-    home(Kind::Notebook, App::Notes, "notebook"),
-    home(Kind::Folder, App::Docs, "folder"),
+    row(Kind::Notebook, App::Notes, "notebook"),
+    row(Kind::Folder, App::Docs, "folder"),
     row(Kind::List, App::Tasks, "project"),
 ];
 

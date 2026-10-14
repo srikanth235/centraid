@@ -5,6 +5,7 @@ import centraid.screen.v1.PhotoPickerEvent
 import centraid.screen.v1.PhotoPickerState
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.SeatState
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -40,11 +41,11 @@ public object PhotoPickerMachine : ScreenMachine<PhotoPickerState, PhotoPickerEv
 
     /** v0's sentence, verbatim. The one thing this screen tells a member. */
     public const val REFERS_NOT_COPIES: String =
-        "An album refers to a photograph where it lives."
+        PhotosCopy.PHOTOS_ALBUM_REFERS
 
     /** Also v0's, and it is not the library's empty sentence: the library HAS rows. */
     public const val NOTHING_LEFT: String =
-        "Everything in your library is already in this album."
+        PhotosCopy.PHOTOS_PICKER_NOTHING_LEFT
 
     override fun initial(): PhotoPickerState = PhotoPickerState(
         loading = Loading(first_load = true),

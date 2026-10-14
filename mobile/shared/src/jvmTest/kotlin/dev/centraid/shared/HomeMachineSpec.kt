@@ -13,7 +13,6 @@ import centraid.screen.v1.TileStatus
 import centraid.screen.v1.VaultLockup
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
-import dev.centraid.shared.shell.FirstMoves
 import dev.centraid.shared.shell.HomeMachine
 import dev.centraid.shared.shell.HomeReads
 import dev.centraid.shared.shell.SpringboardPolicy
@@ -187,8 +186,7 @@ class HomeMachineSpec : StringSpec({
         val data = state.data_!!
         data.every_tile_unreadable.shouldBeTrue()
         data.springboard shouldBe Springboard.SPRINGBOARD_CONTENT
-        SpringboardPolicy.gridMembership(data.tiles).earned.size shouldBe
-            SpringboardPolicy.SPRINGBOARD_ORDER.size
+        data.grid_rows.sumOf { it.app_ids.size } shouldBe SpringboardPolicy.SPRINGBOARD_ORDER.size
     }
 
     "a still-loading vault has not earned the first-run claim" {
@@ -210,11 +208,12 @@ class HomeMachineSpec : StringSpec({
 
     "a read in flight holds its slot at full geometry" {
         // Demoting and re-promoting a beat later is a relayout the member
-        // watches, so `LOADING` earns the grid.
-        opened().data_!!.tiles.all { it.earns_grid }.shouldBeTrue()
+        // watches, so every loading tile is on the grid.
+        val data = opened().data_!!
+        data.grid_rows.flatMap { it.app_ids }.toSet() shouldBe data.tiles.map { it.app_id }.toSet()
     }
 
-    "Locker always earns the grid: its body is a STATE, not a query result" {
+    "Locker is on the grid while EMPTY: its body is a STATE, not a query result" {
         val state = arrive(
             settleAllEmpty(opened()),
             "locker",
@@ -225,9 +224,7 @@ class HomeMachineSpec : StringSpec({
         locker.status shouldBe TileStatus.TILE_STATUS_EMPTY
         // Empty, and still on the grid — it has something true to say and is
         // never an invitation to fill it.
-        locker.earns_grid.shouldBeTrue()
-        SpringboardPolicy.gridMembership(state.data_.tiles)
-            .idleAppIds.contains("locker").shouldBeFalse()
+        state.data_.grid_rows.flatMap { it.app_ids }.contains("locker").shouldBeTrue()
     }
 
     "a lockup already read SURVIVES the open that follows it" {
@@ -336,19 +333,17 @@ class HomeMachineSpec : StringSpec({
         )
     }
 
-    "the grid rows carry only the tiles that earned the grid" {
-        // `tiles` is still all eight — the sheet lists them — but the grid
-        // draws what grading let in.
+    "the grid rows carry every tile, in springboard order, empty ones included" {
+        // An app with nothing in it is still a tile that says what to do
+        // (R-ONBOARD-11), so one app's content demotes no other.
         val filled = arrive(
             settleAllEmpty(opened()),
             "notes",
             TileStatus.TILE_STATUS_CONTENT,
         )
-        // Locker is absent because this fixture settles it EMPTY with no body:
-        // what earns Locker the grid is having a state to show, not being
-        // Locker. A tile with nothing to say is an invitation like any other.
         val drawn = filled.data_!!.grid_rows.flatMap { it.app_ids }
-        drawn shouldContainExactly listOf("notes")
+        drawn.toSet() shouldBe SpringboardPolicy.SPRINGBOARD_ORDER.toSet()
+        drawn.size shouldBe SpringboardPolicy.SPRINGBOARD_ORDER.size
         filled.data_.tiles.size shouldBe SpringboardPolicy.SPRINGBOARD_ORDER.size
     }
 
@@ -384,61 +379,6 @@ class HomeMachineSpec : StringSpec({
         packed.forEach { it.wide shouldBe SpringboardPolicy.isWide(it.app_id) }
     }
 
-    // --- the one number ---------------------------------------------------
-
-    "a withheld count is omitted from the total, never counted as zero" {
-        var state = opened()
-        state = arrive(state, "docs", TileStatus.TILE_STATUS_CONTENT, TileCount(value_ = 4))
-        // Locker withholds: it hands over no count at all.
-        state = arrive(state, "locker", TileStatus.TILE_STATUS_CONTENT, count = null)
-        for (appId in SpringboardPolicy.SPRINGBOARD_ORDER.filterNot { it in setOf("docs", "locker") }) {
-            state = arrive(state, appId, TileStatus.TILE_STATUS_EMPTY)
-        }
-        val things = state.data_!!.things!!
-        things.total shouldBe 4
-        things.settled.shouldBeTrue()
-        things.capped.shouldBeFalse()
-    }
-
-    "a capped count contributes its ceiling and says the total is 'at least'" {
-        var state = settleAllEmpty(opened())
-        state = arrive(
-            state,
-            "photos",
-            TileStatus.TILE_STATUS_CONTENT,
-            TileCount(value_ = 500, capped = true),
-        )
-        val things = state.data_!!.things!!
-        things.total shouldBe 500
-        things.capped.shouldBeTrue()
-    }
-
-    "an unsettled total says so, so nothing renders a moving number as final" {
-        val state = arrive(opened(), "docs", TileStatus.TILE_STATUS_CONTENT, TileCount(value_ = 9))
-        state.data_!!.things!!.settled.shouldBeFalse()
-    }
-
-    // --- first moves ------------------------------------------------------
-
-    "an idle app becomes a first move, capped at three" {
-        val moves = settleAllEmpty(opened()).data_!!.first_moves
-        // A nudge as tall as its grid is no nudge.
-        moves.size shouldBe FirstMoves.LIMIT
-        // Leverage order, not springboard order. `connectors` led it until
-        // #1029 §8 deleted the connector plane; the head of the order is now
-        // the first app in it.
-        moves.first().id shouldBe FirstMoves.FIRST_MOVE_ORDER.first()
-        moves.all { it.label.isNotEmpty() && it.hint.isNotEmpty() }.shouldBeTrue()
-    }
-
-    "a vault with nothing idle offers no moves" {
-        var state = opened()
-        for (appId in SpringboardPolicy.SPRINGBOARD_ORDER) {
-            state = arrive(state, appId, TileStatus.TILE_STATUS_CONTENT)
-        }
-        state.data_!!.first_moves.shouldBeEmpty()
-    }
-
     // --- refresh and the sheet -------------------------------------------
 
     "a refresh over a filled Home does not blank it" {
@@ -451,14 +391,14 @@ class HomeMachineSpec : StringSpec({
         refreshed.effects.size shouldBe 1
     }
 
-    "the all-apps listing is a sheet, and toggling it disturbs no tile" {
-        val filled = arrive(opened(), "docs", TileStatus.TILE_STATUS_CONTENT)
-        val open = HomeMachine.reduce(
-            filled,
-            HomeEvent(all_apps = HomeEvent.AllAppsSheetToggled(open_ = true)),
-        ).state
-        open.all_apps_sheet_open.shouldBeTrue()
-        open.data_ shouldBe filled.data_
+    "every app is a tile on the grid, empty or not (R-ONBOARD-11)" {
+        val filled = arrive(opened(), "docs", TileStatus.TILE_STATUS_CONTENT, TileCount(value_ = 3))
+        val data = settleAllEmpty(filled).data_!!
+        val onGrid = data.grid_rows.flatMap { it.app_ids }
+        onGrid.toSet() shouldBe SpringboardPolicy.SPRINGBOARD_ORDER.toSet()
+        onGrid.size shouldBe SpringboardPolicy.SPRINGBOARD_ORDER.size
+        // The empty ones say what to do in their own tile.
+        data.tiles.first { it.app_id == "agenda" }.empty_copy shouldBe "Put something on the calendar"
     }
 
     "a refused tile emits no retry effect" {

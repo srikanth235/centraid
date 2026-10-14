@@ -124,6 +124,7 @@ public class FakeSyncedSecrets(
         synchronizing = true,
         sentence = SyncedSecrets.IOS_SENTENCE,
         restoresAfterSetup = true,
+        place = SyncedSecrets.IOS_PLACE,
     ),
 ) : SyncedSecrets {
     private var held: String? = null
@@ -140,6 +141,21 @@ public class FakeSyncedSecrets(
 
     override suspend fun forgetSeed() {
         held = null
+    }
+
+    /** Every keyed value, for specs that look at what synchronised. */
+    public val values: MutableMap<String, String> = mutableMapOf()
+
+    override suspend fun put(key: String, value: String): Boolean {
+        if (!availability.synchronizing) return false
+        values[key] = value
+        return true
+    }
+
+    override suspend fun get(key: String): String? = values[key]
+
+    override suspend fun remove(key: String) {
+        values.remove(key)
     }
 }
 

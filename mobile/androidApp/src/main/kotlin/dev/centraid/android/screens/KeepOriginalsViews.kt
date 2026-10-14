@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -18,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import centraid.screen.v1.FreeUpSpace
 import centraid.screen.v1.KeepOriginalsRow
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.kitSwitchColors
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.shared.apps.photos.KeepOriginals
@@ -53,10 +54,7 @@ internal fun KeepOriginalsRowView(row: KeepOriginalsRow, onToggle: (Boolean) -> 
             checked = row.keep,
             onCheckedChange = onToggle,
             enabled = row.ready && !row.saving,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = centraidColor("accent"),
-                uncheckedTrackColor = centraidColor("bgSunken"),
-            ),
+            colors = kitSwitchColors(),
             modifier = Modifier.semantics {
                 contentDescription = KeepOriginals.LABEL
                 stateDescription = row.meta
@@ -80,7 +78,7 @@ internal fun FreeUpSpaceRowView(freeUp: FreeUpSpace?) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
             // ONE SPOKEN ELEMENT: the title and the census's line.
             .semantics(mergeDescendants = true) {},
         verticalArrangement = Arrangement.spacedBy(4.dp),

@@ -159,7 +159,6 @@ struct AgendaEventView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .disabled(!action.enabled)
-                        .opacity(action.enabled ? 1 : 0.5)
                         .accessibilityLabel(action.accessibilityLabel.isEmpty ? action.label : action.accessibilityLabel)
                         .accessibilityIdentifier("agenda-action-\(action.key)")
                     }
@@ -175,18 +174,18 @@ struct AgendaEventView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(detail.title)
                     .centraidType("title")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .foregroundStyle(Theme.color(detail.isPast ? "textSoft" : "text", scheme))
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
                 if detail.hasChip { StatusChipView(detail.chip) }
             }
             Text(detail.dateLabel)
                 .centraidType("body")
-                .foregroundStyle(Theme.color("text", scheme))
+                .foregroundStyle(Theme.color(detail.isPast ? "textSoft" : "text", scheme))
             Text(detail.whenLabel)
                 .centraidType("smallStrong")
                 .monospacedDigit()
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                .foregroundStyle(Theme.color(detail.isPast ? "textFaint" : "textSoft", scheme))
             HStack(spacing: 6) {
                 Circle()
                     .fill(Theme.color(KitHue.role(detail.calendarHueKey) ?? "cSlate", scheme))
@@ -204,7 +203,6 @@ struct AgendaEventView: View {
                 .frame(width: 2)
                 .padding(.vertical, 12)
         }
-        .opacity(detail.isPast ? 0.7 : 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(detail.accessibilityLabel)
         .accessibilityIdentifier("agenda-event-head")
@@ -215,33 +213,18 @@ struct AgendaEventView: View {
             Text(rsvp.question)
                 .centraidType("smallStrong")
                 .foregroundStyle(Theme.color("text", scheme))
+            // A CHOICE AMONG SEVERAL, each answer able to be unavailable on its
+            // own: chips (a selected one is never accent).
             HStack(spacing: 8) {
                 ForEach(rsvp.choices, id: \.partstat) { choice in
-                    Button {
+                    KitChip(
+                        label: choice.label,
+                        selected: choice.selected,
+                        identifier: "agenda-rsvp-\(choice.partstat)"
+                    ) {
                         send(event { $0.rsvp = .with { $0.partstat = choice.partstat } })
-                    } label: {
-                        Text(choice.label)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color(choice.selected ? "onAccent" : "text", scheme))
-                            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                            .background {
-                                if choice.selected {
-                                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme)).fill(Theme.color("accent", scheme))
-                                }
-                            }
-                            .overlay {
-                                if !choice.selected {
-                                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                                        .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-                                }
-                            }
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
                     .disabled(!choice.enabled)
-                    .opacity(choice.enabled ? 1 : 0.5)
-                    .accessibilityAddTraits(choice.selected ? .isSelected : [])
-                    .accessibilityIdentifier("agenda-rsvp-\(choice.partstat)")
                 }
             }
             if !rsvp.note.isEmpty {
@@ -321,7 +304,6 @@ struct AgendaScopeRows: View {
                         onPick(scope.scope)
                     }
                     .disabled(!scope.enabled)
-                    .opacity(scope.enabled ? 1 : 0.5)
                     if !scope.note.isEmpty {
                         Text(scope.note)
                             .centraidType("annotLabel")

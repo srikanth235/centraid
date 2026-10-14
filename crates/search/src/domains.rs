@@ -17,7 +17,7 @@ use crate::SearchError;
 
 /// One searchable domain: what it is, how to read a row of it, and what an app
 /// would open it in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Domain {
     /// The app a member would open this in, by id (#883, ruling O-label: the
     /// product catalogue owns the NAME).
@@ -39,9 +39,33 @@ pub struct Domain {
     /// index the moment it is trashed (#916, R11), and this is the door's own
     /// belt to that trigger's braces.
     pub deleted_column: Option<&'static str>,
+    /// What each column of the index weighs in a match's rank, ONE PER COLUMN IN
+    /// THE INDEX'S ORDER, the UNINDEXED id first (#1097, R1a, R1d).
+    ///
+    /// A column the index always had weighs 1.0 and a column folded in from
+    /// another table by rung thirteen 0.5, so a word in a title or a name
+    /// outranks the same word in a project, a nickname or a memo. The weights
+    /// are not stored in the index (`INSERT INTO fts(fts, rank) VALUES('rank',
+    /// …)` is data, and `contracts/schema/vault-ddl.sql` carries none): the door
+    /// passes them with every query, so a vault built by replaying the DDL and a
+    /// vault the product founded rank alike. [`crate::SqliteDoor::open`] refuses
+    /// an index whose column count is not this list's length.
+    pub weights: &'static [f64],
 }
 
 impl Domain {
+    /// The `bm25(…)` string FTS5's rank override takes: `AND <fts>.rank MATCH ?`
+    /// bound to this, for every query the door runs over the domain.
+    #[must_use]
+    pub fn rank_function(&self) -> String {
+        let weights: Vec<String> = self
+            .weights
+            .iter()
+            .map(|weight| format!("{weight:.1}"))
+            .collect();
+        format!("bm25({})", weights.join(", "))
+    }
+
     /// Every base column this domain reads. The sealed check runs over exactly
     /// this list, so a domain that grows a projection grows its check with it.
     #[must_use]
@@ -74,6 +98,8 @@ pub const DOMAINS: &[Domain] = &[
         labels: &["title"],
         subtitles: &[],
         deleted_column: Some("deleted_at"),
+        // note_id, title, body
+        weights: &[1.0, 1.0, 1.0],
     },
     Domain {
         app_id: "people",
@@ -84,6 +110,8 @@ pub const DOMAINS: &[Domain] = &[
         labels: &["display_name"],
         subtitles: &[],
         deleted_column: None,
+        // party_id, display_name, sort_name, then the folds: nickname, role, met, channels, memo
+        weights: &[1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.5, 0.5],
     },
     Domain {
         app_id: "agenda",
@@ -94,6 +122,8 @@ pub const DOMAINS: &[Domain] = &[
         labels: &["summary"],
         subtitles: &["dtstart"],
         deleted_column: Some("deleted_at"),
+        // event_id, summary, description, then the fold: location
+        weights: &[1.0, 1.0, 1.0, 0.5],
     },
     Domain {
         app_id: "tasks",
@@ -104,6 +134,8 @@ pub const DOMAINS: &[Domain] = &[
         labels: &["title"],
         subtitles: &["due_at"],
         deleted_column: Some("deleted_at"),
+        // task_id, title, description, then the fold: project
+        weights: &[1.0, 1.0, 1.0, 0.5],
     },
     Domain {
         app_id: "tally",
@@ -114,6 +146,8 @@ pub const DOMAINS: &[Domain] = &[
         labels: &["description"],
         subtitles: &["spent_on"],
         deleted_column: Some("deleted_at"),
+        // expense_id, description, then the folds: category, group_name, items, memo
+        weights: &[1.0, 1.0, 0.5, 0.5, 0.5, 0.5],
     },
     Domain {
         app_id: "photos",
@@ -128,6 +162,8 @@ pub const DOMAINS: &[Domain] = &[
         labels: &[],
         subtitles: &[],
         deleted_column: Some("deleted_at"),
+        // content_id, title
+        weights: &[1.0, 1.0],
     },
     Domain {
         app_id: "docs",
@@ -138,6 +174,8 @@ pub const DOMAINS: &[Domain] = &[
         labels: &["title"],
         subtitles: &[],
         deleted_column: Some("deleted_at"),
+        // document_id, title, body
+        weights: &[1.0, 1.0, 1.0],
     },
 ];
 
@@ -164,14 +202,132 @@ pub const PREVIEW_FROM_TEXT: &[&str] = &["knowledge.note"];
 /// (`queries/library.ts:96`).
 pub const PREVIEW_CHARS: usize = 200;
 
+/// One column of a domain's index that the base table does not have, and the
+/// table columns its text is read from.
+///
+/// An index folds attribute text into the entity's own row so that one probe per
+/// domain answers (#1097, R1): a person's nickname and email, an event's place, a
+/// task's project, an expense's group, line items and memo. Each fold is a
+/// column the base table lacks, so a column check against the base table cannot
+/// vouch for it. This list can: it names the source of every one, and
+/// [`assert_no_sealed_column`] reads the sources against the sealed registry.
+/// [`crate::SqliteDoor::open`] refuses an index with a column that is neither the
+/// base table's nor listed here, so a fold cannot reach the index unseen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Folded {
+    /// The logical entity whose index carries the column.
+    pub entity: &'static str,
+    /// The column of the index (`fts_<table>`).
+    pub column: &'static str,
+    /// `(table, column)` pairs whose text the column holds.
+    pub sources: &'static [(&'static str, &'static str)],
+}
+
+/// EVERY INDEX COLUMN THAT IS FOLDED FROM ANOTHER TABLE, with its sources.
+///
+/// The first three are older than #1097 (a note's and a document's decoded body,
+/// a photo's asset title and recognised text); the rest are rung thirteen's. A
+/// Locker memo is a `knowledge_annotation` too, and no entry here names it: the
+/// party and expense memos are selected by their `target_type` in the triggers
+/// (R1c).
+///
+/// `category` is a column of `tally_expense` itself and is listed because rung
+/// thirteen folds it deliberately (not when it is `general`, R1b).
+pub const FOLDED: &[Folded] = &[
+    Folded {
+        entity: "knowledge.note",
+        column: "body",
+        sources: &[("core_content_text", "body_text")],
+    },
+    Folded {
+        entity: "core.party",
+        column: "nickname",
+        sources: &[("people_profile", "nickname")],
+    },
+    Folded {
+        entity: "core.party",
+        column: "role",
+        sources: &[("people_profile", "role")],
+    },
+    Folded {
+        entity: "core.party",
+        column: "met",
+        sources: &[("people_profile", "met")],
+    },
+    Folded {
+        entity: "core.party",
+        column: "channels",
+        sources: &[
+            ("social_contact_channel", "value"),
+            ("social_contact_channel", "normalized_value"),
+        ],
+    },
+    Folded {
+        entity: "core.party",
+        column: "memo",
+        sources: &[("knowledge_annotation", "body_text")],
+    },
+    Folded {
+        entity: "core.event",
+        column: "location",
+        sources: &[("core_place", "name")],
+    },
+    Folded {
+        entity: "schedule.task",
+        column: "project",
+        sources: &[("schedule_project", "name")],
+    },
+    Folded {
+        entity: "tally.expense",
+        column: "category",
+        sources: &[("tally_expense", "category")],
+    },
+    Folded {
+        entity: "tally.expense",
+        column: "group_name",
+        sources: &[("social_circle", "name")],
+    },
+    Folded {
+        entity: "tally.expense",
+        column: "items",
+        sources: &[("tally_expense_line_item", "description")],
+    },
+    Folded {
+        entity: "tally.expense",
+        column: "memo",
+        sources: &[("knowledge_annotation", "body_text")],
+    },
+    Folded {
+        entity: "core.content_item",
+        column: "title",
+        sources: &[
+            ("media_asset", "title"),
+            ("core_content_derivative", "text_content"),
+        ],
+    },
+    Folded {
+        entity: "core.document",
+        column: "body",
+        sources: &[
+            ("core_content_derivative", "text_content"),
+            ("core_content_text", "body_text"),
+        ],
+    },
+];
+
+/// The folded columns of one domain's index.
+pub fn folded_columns(entity: &str) -> impl Iterator<Item = &'static Folded> + '_ {
+    FOLDED.iter().filter(move |folded| folded.entity == entity)
+}
+
 /// The domain a logical entity names, or `None`.
 #[must_use]
 pub fn domain_of(entity: &str) -> Option<&'static Domain> {
     DOMAINS.iter().find(|domain| domain.entity == entity)
 }
 
-/// EVERY COLUMN EVERY DOMAIN PROJECTS IS UNSEALED. Checked at door
-/// construction, not at review.
+/// EVERY COLUMN EVERY DOMAIN PROJECTS IS UNSEALED, AND SO IS EVERY SOURCE OF
+/// EVERY FOLD ([`FOLDED`]). Checked at door construction, not at review.
 ///
 /// The registry is `contracts/schema/v0-registries.json`'s `sealedColumns`,
 /// read through [`centraid_ontology::registries::sealed_physical_columns`] —
@@ -194,6 +350,29 @@ pub fn assert_no_sealed_column() -> Result<(), SearchError> {
                     entity: domain.entity.to_owned(),
                     table: domain.table.to_owned(),
                     column: column.to_owned(),
+                });
+            }
+        }
+    }
+    // AND NO FOLDED COLUMN IS READ FROM ONE (#1097): the index text a domain
+    // folds in comes from other tables, and each source is held to the same
+    // registry.
+    assert_folds_unsealed(FOLDED)
+}
+
+/// Every source of every fold in `folded` is unsealed.
+fn assert_folds_unsealed(folded: &[Folded]) -> Result<(), SearchError> {
+    let sealed = sealed_physical_columns();
+    for fold in folded {
+        for (table, column) in fold.sources {
+            if sealed
+                .iter()
+                .any(|(sealed_table, name)| sealed_table == table && name == column)
+            {
+                return Err(SearchError::SealedColumnReachable {
+                    entity: fold.entity.to_owned(),
+                    table: (*table).to_owned(),
+                    column: (*column).to_owned(),
                 });
             }
         }
@@ -229,8 +408,56 @@ mod tests {
         assert_eq!(assert_no_sealed_column(), Ok(()));
     }
 
-    /// A DEMONSTRATED RED for the check above: the registry really does carry
-    /// the columns this is defending against, so a green run is not vacuous.
+    #[test]
+    fn every_folded_column_belongs_to_a_domain_and_names_a_source() {
+        for folded in FOLDED {
+            assert!(
+                domain_of(folded.entity).is_some(),
+                "{} is not a domain",
+                folded.entity
+            );
+            assert!(
+                !folded.sources.is_empty(),
+                "{}.{} names no source",
+                folded.entity,
+                folded.column
+            );
+        }
+        let mut keys: Vec<(&str, &str)> = FOLDED
+            .iter()
+            .map(|folded| (folded.entity, folded.column))
+            .collect();
+        keys.sort_unstable();
+        keys.dedup();
+        assert_eq!(keys.len(), FOLDED.len(), "a folded column is listed twice");
+    }
+
+    /// A DEMONSTRATED RED for the folded sources: they are read against the
+    /// registry, so a fold from a sealed column is a refusal. The domain check
+    /// above cannot see one — the column is not on the base table.
+    #[test]
+    fn a_folded_source_that_is_sealed_is_refused() {
+        let leaky = [Folded {
+            entity: "core.party",
+            column: "memo",
+            sources: &[
+                ("knowledge_annotation", "body_text"),
+                ("locker_item", "password"),
+            ],
+        }];
+        assert_eq!(
+            assert_folds_unsealed(&leaky),
+            Err(SearchError::SealedColumnReachable {
+                entity: "core.party".to_owned(),
+                table: "locker_item".to_owned(),
+                column: "password".to_owned(),
+            })
+        );
+        assert_eq!(assert_folds_unsealed(FOLDED), Ok(()));
+    }
+
+    /// A DEMONSTRATED RED for the checks above: the registry really does carry
+    /// the columns they are defending against, so a green run is not vacuous.
     #[test]
     fn the_sealed_registry_is_not_empty_and_names_lockers_columns() {
         let sealed = sealed_physical_columns();

@@ -1,6 +1,6 @@
 # A TERM THAT MATCHED NOTHING. Search results are not a window, so the day
-# bar is hidden while the term answers, and the band's Search tab is the
-# current one.
+# bar is hidden while the term answers. Search is the bar under the title and
+# a mode over the place, so the place's tab (Day) stays lit.
 seat {
   availability: AVAILABILITY_READY
   durability: DURABILITY_AUTHORITATIVE
@@ -21,10 +21,9 @@ data {
   event_count_label: "0 events"
 }
 sheet: SHEET_NONE
-band { key: "day" label: "Day" icon_key: "Clock" current: false }
+band { key: "day" label: "Day" icon_key: "Clock" current: true }
 band { key: "schedule" label: "Schedule" icon_key: "List" current: false }
 band { key: "waiting" label: "Waiting" icon_key: "Inbox" current: false }
-band { key: "search" label: "Search" icon_key: "Search" current: true }
-band { key: "more" label: "More" icon_key: "more" current: false }
+band { key: "more" label: "More" icon_key: "MoreHoriz" current: false }
 toolbar { shown: false }
 chrome { title: "Agenda" search_placeholder: "Search events" search_label: "Search agenda" }

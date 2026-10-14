@@ -52,8 +52,8 @@ public object BackupClaim {
      * unsent changes is the claim this whole object exists to prevent.
      */
     public fun behind(unacked: Int, relative: String): String = when (unacked) {
-        1 -> "1 change not backed up. Records last backed up $relative."
-        else -> "$unacked changes not backed up. Records last backed up $relative."
+        1 -> "1 change not backed up. Last backup $relative."
+        else -> "$unacked changes not backed up. Last backup $relative."
     }
 
     /**
@@ -64,9 +64,9 @@ public object BackupClaim {
      * two things.
      */
     public fun frozen(unacked: Int, since: String): String = when (unacked) {
-        0 -> "This vault moved to another phone. Nothing is waiting here."
-        1 -> "This vault moved to another phone. 1 change since $since is only here."
-        else -> "This vault moved to another phone. $unacked changes since $since are only here."
+        0 -> "Moved to another phone. Nothing unsent here."
+        1 -> "Moved to another phone. 1 change since $since is only here."
+        else -> "Moved to another phone. $unacked changes since $since are only here."
     }
 
     /**

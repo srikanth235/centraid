@@ -12,8 +12,12 @@ struct TasksHomeView: View {
     let data: Data
     let send: (Data) -> Void
     let onHome: () -> Void
+    /// Open a project found by name (#1097) through the shell's one row router.
+    var openContainer: (Centraid_Screen_V1_ChatCard, String) -> Void = { _, _ in }
 
     @Environment(\.colorScheme) private var scheme
+    /// The header's Plus asks the quick add for the keyboard (R-CHROME-1).
+    @State private var quickAddFocus = false
 
     private var state: Centraid_Screen_V1_TasksHomeState {
         (try? Centraid_Screen_V1_TasksHomeState(serializedBytes: data)) ?? .init()
@@ -30,28 +34,21 @@ struct TasksHomeView: View {
         AppPlace(
             app: "tasks",
             title: chrome.title,
-            search: SearchSlot(
+            // THE PLUS IS THE QUICK ADD'S DOOR: the bar at the foot stays the
+            // one place a task is typed, and the Plus puts the keyboard in it.
+            trailing: state.quickAdd.shown && !state.quickAdd.addLabel.isEmpty
+                ? RoomAction(iconKey: "Plus", label: state.quickAdd.addLabel, identifier: "tasks-add", action: { quickAddFocus = true })
+                : nil,
+            search: content.isDenied ? nil : SearchSlot(
                 field: state.search,
                 placeholder: chrome.searchPlaceholder,
                 closeLabel: chrome.searchClose,
+                onOpen: { send(event { $0.searchOpened = .init() }) },
                 onTerm: { term in send(event { $0.searchTerm = .with { $0.term = term } }) },
                 onClose: { send(event { $0.searchClosed = .init() }) }
             ),
             showsBand: !content.isDenied && !state.band.isEmpty
         ) {
-            if !content.isDenied, !state.search.open {
-                Button {
-                    send(event { $0.searchOpened = .init() })
-                } label: {
-                    CentraidIconView(iconKey: "Search", tint: Theme.color("textSoft", scheme), size: 18)
-                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(chrome.searchLabel)
-                .accessibilityIdentifier("tasks-search-open")
-            }
-        } band: {
             AppBand(
                 app: "tasks",
                 tabs: state.band.map { tab in
@@ -80,6 +77,7 @@ struct TasksHomeView: View {
                         quickAdd: state.quickAdd,
                         placeholder: chrome.quickAddPlaceholder,
                         verb: chrome.quickAddVerb,
+                        focusRequested: $quickAddFocus,
                         onChange: { title in send(event { $0.quickAddChanged = .with { $0.title = title } }) },
                         onSubmit: { send(event { $0.quickAddSubmitted = .init() }) }
                     )
@@ -144,15 +142,24 @@ struct TasksHomeView: View {
 
     @ViewBuilder
     private func homeList(_ home: Centraid_Screen_V1_TasksHomeData, chrome: Centraid_Screen_V1_TasksChrome) -> some View {
-        let nothing = home.groups.isEmpty && home.projects.isEmpty
+        let containers = state.search.containers
+        let nothing = home.groups.isEmpty && home.projects.isEmpty && containers.isEmpty
         ScrollView {
+          VStack(alignment: .leading, spacing: 0) {
+            // THE PROJECTS WHOSE NAME MATCHED come first (#1097), through the router.
+            SearchContainerList(containers: containers) { openContainer($0, chrome.title) }
             LazyVStack(alignment: .leading, spacing: 0) {
                 if home.hasNotice {
                     noticeView(home.notice)
                 }
                 TasksCountLine(count: home.countLabel, window: home.windowLabel)
                 if nothing, !home.empty.headline.isEmpty {
-                    EmptyStateView(home.empty, onAction: { send(event { $0.emptyActed = .init() }) })
+                    if home.searching {
+                        // A SEARCH THAT FOUND NOTHING: the kit's one no-match state, with Ask (#1097).
+                        SearchEmptyView(home.empty, ask: state.search.ask)
+                    } else {
+                        EmptyStateView(home.empty, onAction: { send(event { $0.emptyActed = .init() }) })
+                    }
                 }
                 ForEach(home.groups, id: \.key) { group in
                     TasksGroupView(
@@ -185,7 +192,8 @@ struct TasksHomeView: View {
                     send(event { $0.nextPage = .init() })
                 }
             }
-            .padding(.bottom, 16)
+          }
+          .padding(.bottom, 16)
         }
         .refreshable { send(event { $0.refreshed = .init() }) }
         .accessibilityIdentifier("tasks-home-list")

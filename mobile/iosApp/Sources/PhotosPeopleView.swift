@@ -32,7 +32,7 @@ struct PhotosPeopleView: View {
             VStack(alignment: .leading, spacing: 12) {
                 switch state.content {
                 case .loading:
-                    ProgressView()
+                    RowSkeleton()
 
                 case let .denied(denied):
                     DeniedGate(denied)
@@ -48,7 +48,7 @@ struct PhotosPeopleView: View {
                     if let sentence = state.writeFailure {
                         Text(sentence)
                             .centraidType("small")
-                            .foregroundStyle(Theme.color("danger", scheme))
+                            .foregroundStyle(Theme.color("net", scheme))
                             .accessibilityIdentifier("photos.people.write-failure")
                     }
 
@@ -72,7 +72,7 @@ struct PhotosPeopleView: View {
                         // member who cannot see it should not have to wonder
                         // whether it is hidden or finished.
                         if screen.proposedFaceCount == 0 {
-                            Text("Every face this library has found is matched.")
+                            Text(PhotosWords.photosPeopleAllMatched)
                                 .centraidType("small")
                                 .foregroundStyle(Theme.color("textFaint", scheme))
                         }
@@ -105,7 +105,7 @@ struct PhotosPeopleView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(count == 1 ? "1 face to name" : "\(count) faces to name")
                         .centraidType("body")
-                    Text("Centraid found these and is waiting for you to say who they are.")
+                    Text(PhotosWords.photosPeopleToNameCaption)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                 }
@@ -134,6 +134,7 @@ private struct PersonRowView: View {
 
     @State private var renaming = false
     @State private var typedName = ""
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
         HStack(spacing: 10) {
@@ -153,34 +154,50 @@ private struct PersonRowView: View {
             .accessibilityIdentifier("photos.people.person.\(person.partyID)")
             .accessibilityLabel("\(person.displayName), \(countSentence)")
 
-            Button {
+            KitIconKey(iconKey: "Pencil", label: "Rename \(person.displayName)") {
                 typedName = person.displayName
                 renaming = true
-            } label: {
-                CentraidIconView(iconKey: "Pencil", tint: Theme.color("textSoft", scheme))
             }
-            .accessibilityLabel("Rename \(person.displayName)")
         }
-        .alert("Rename", isPresented: $renaming) {
-            TextField("Name", text: $typedName)
-            Button("Cancel", role: .cancel) {}
-            Button("Save") {
+        .sheet(isPresented: $renaming) {
+            SheetRoom(
+                title: "Rename",
                 // AN EMPTY NAME IS NOT A RENAME. `core.update_party` puts
                 // `minLength: 1` on the column, so the vault would refuse it —
                 // and the reducer drops it too, so this is the third guard and
-                // the cheapest one.
-                let trimmed = typedName.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty, trimmed != person.displayName { onRename(trimmed) }
+                // the cheapest one: the ink button is greyed until the name is
+                // one the vault would take.
+                primary: SheetPrimary(label: "Save", enabled: canSave) {
+                    onRename(trimmedName)
+                    renaming = false
+                }
+            ) {
+                TextField("Name", text: $typedName)
+                    .centraidType("body")
+                    .focused($nameFocused)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        guard canSave else { return }
+                        onRename(trimmedName)
+                        renaming = false
+                    }
+                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                    .accessibilityIdentifier("photos.people.rename-field")
             }
+            .onAppear { nameFocused = true }
         }
     }
+
+    private var trimmedName: String { typedName.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var canSave: Bool { !trimmedName.isEmpty && trimmedName != person.displayName }
 
     /// THE COUNT IS A FLOOR WHEN THE PAGE FILLED, AND SAYS SO.
     ///
     /// The read door has no `COUNT(*)`, so the number is counted off the rows
     /// one page returned. "at least 84" is the honest phrasing and a bare
     /// number over a full page would be a total nobody counted
-    /// (`HomeState.ThingCount.capped`).
+    /// (`HomeTile.count.capped`).
     private var countSentence: String {
         let count = person.photoCount
         let noun = count == 1 ? "photo" : "photos"
@@ -247,16 +264,16 @@ struct PhotosPeopleStateView {
         case let .data(data):
             switch data.emptyReason {
             case .recognitionOff:
-                return "Face recognition is off."
+                return PhotosWords.photosPeopleOff
             case .notRunYet:
-                return "Centraid has not looked for faces yet."
+                return PhotosWords.photosPeopleNotLooked
             case .noneNamed:
-                return "Centraid found faces, and none of them has a name yet."
+                return PhotosWords.photosPeopleNoneNamed
             case .none, .unspecified, .UNRECOGNIZED:
-                return "No one here yet."
+                return PhotosWords.photosPeopleNoOne
             }
         default:
-            return "No one here yet."
+            return PhotosWords.photosPeopleNoOne
         }
     }
 
@@ -265,11 +282,11 @@ struct PhotosPeopleStateView {
         case let .data(data):
             switch data.emptyReason {
             case .recognitionOff:
-                return "Turn it on in Settings and Centraid starts finding people in your photos."
+                return PhotosWords.photosPeopleOffCaption
             case .notRunYet:
-                return "It looks through your library in the background."
+                return PhotosWords.photosPeopleNotLookedCaption
             case .noneNamed:
-                return "Open the faces above and tell Centraid who they are."
+                return PhotosWords.photosPeopleNoneNamedCaption
             case .none, .unspecified, .UNRECOGNIZED:
                 return ""
             }

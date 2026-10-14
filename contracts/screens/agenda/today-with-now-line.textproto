@@ -2,6 +2,8 @@
 # an event awaiting the member's reply, and one whose write this device still
 # holds — a row status from `pending_event_ids`, never a separate list. The
 # landing is today's section, at its now line.
+# The More sheet's rows ride on the state, so both platforms draw one list:
+# each calendar a toggle under the Calendars heading, then the reads row.
 seat {
   availability: AVAILABILITY_READY
   durability: DURABILITY_AUTHORITATIVE
@@ -82,8 +84,7 @@ sheet: SHEET_NONE
 band { key: "day" label: "Day" icon_key: "Clock" current: true }
 band { key: "schedule" label: "Schedule" icon_key: "List" current: false }
 band { key: "waiting" label: "Waiting" icon_key: "Inbox" current: false }
-band { key: "search" label: "Search" icon_key: "Search" current: false }
-band { key: "more" label: "More" icon_key: "more" current: false }
+band { key: "more" label: "More" icon_key: "MoreHoriz" current: false }
 toolbar {
   shown: true
   range_label: "Today"
@@ -92,3 +93,23 @@ toolbar {
 }
 chrome { title: "Agenda" new_event: "New event" today: "Today" }
 pending_event_ids: "event-0002"
+more_rows {
+  key: "calendar-calendar-home"
+  label: "Home"
+  meta: "Shown"
+  hue_key: "cTeal"
+  toggle: true
+  on: true
+  section: "Calendars"
+  spoken: "Home, Shown"
+}
+more_rows {
+  key: "calendar-calendar-health"
+  label: "Health"
+  meta: "Shown"
+  hue_key: "cPlum"
+  toggle: true
+  on: true
+  spoken: "Health, Shown"
+}
+more_rows { key: "reads" label: "What Agenda may read" spoken: "What Agenda may read" }

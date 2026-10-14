@@ -28,14 +28,12 @@ enum PhotoHandOff {
         let sentence: String
     }
 
-    /// `PhotoLightboxBridge.kt`'s sentences, mirrored for the reason
-    /// `PhotoLightboxView.swift` mirrors the share rows: Swift cannot call the
-    /// Kotlin constants without a bridging layer this screen does not have.
-    static let notRemovable = "The location could not be taken out of this file, so nothing was sent."
-    static let originalNotHere = "The original is not on this device, so nothing was sent."
-    static let exportFailed = "Photograph not exported. Retry."
-    static let exportSaved = "Saved to this device's photos."
-    static let locationCopied = "Exact location copied."
+    /// `PhotoLightboxBridge.kt`'s sentences, read from the same copy table.
+    static let notRemovable = PhotosWords.photosSendNotRemovable
+    static let originalNotHere = PhotosWords.photosSendOriginalNotHere
+    static let exportFailed = PhotosWords.photosErrorExportFailed + " Try again."
+    static let exportSaved = PhotosWords.photosExportSaved
+    static let locationCopied = PhotosWords.photosLocationCopied
 
     // MARK: - Send a copy
 
@@ -89,12 +87,12 @@ enum PhotoHandOff {
     /// words are `sharePlaceReceipt`'s.
     static func receipt(_ precision: PhotoLightboxSharePlace, _ placeName: String) -> String {
         switch precision {
-        case .exact: return "Sent with the exact location."
+        case .exact: return PhotosWords.photosSentExact
         case .name:
             return placeName.isEmpty
-                ? "Sent with no location."
-                : "Sent with the place name only — \(placeName)."
-        case .none: return "Sent with no location."
+                ? PhotosWords.photosSentNone
+                : PhotosWords.photosSentNameOnly
+        case .none: return PhotosWords.photosSentNone
         }
     }
 

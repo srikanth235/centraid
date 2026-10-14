@@ -1,14 +1,20 @@
-"¬.
+"×,
 photosô"photos(0B
 
 	
-asset-1H%
+asset-1%
 docs(0:Add your first document$
 notes(0:Write your first note+
 agenda(:Put something on the calendar)
 tasks(:Capture the next thing to do"
 people(:Add someone you know#
-tally(:Log your first expense.
-locker(:Unlock to see your itemsB:H"ô*=-Your gateway has not answered since yesterdayCheck it :
-photos:
+tally(:Log your first expense,
+locker(:Unlock to see your itemsB:*B2Your backup device hasn't answered since yesterdayCheck it :
+photos:
+docs:
+notes:
+agenda
+tasks:
+people
+tally:
 locker

@@ -189,5 +189,5 @@ public object Staging {
     private fun refusal(answer: CoreOutcome.Failed): Outcome.No =
         Outcome.No(Refused(answer.failure.sentence.ifEmpty { UNANSWERED }))
 
-    private const val UNANSWERED = "Centraid could not take those bytes."
+    private const val UNANSWERED = "Couldn't add that file. Try again."
 }

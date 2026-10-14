@@ -124,34 +124,24 @@ struct TallySpendingView: View {
 
     private func stepper(_ state: Centraid_Screen_V1_TallySpendingState) -> some View {
         HStack(spacing: 8) {
-            step("ChevronLeft", state.chrome.previous, -1, enabled: state.previousEnabled, "tally-month-previous")
             Text(state.monthLabel)
                 .centraidType("title")
                 .foregroundStyle(Theme.color("text", scheme))
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
-            step("ChevronRight", state.chrome.next, 1, enabled: state.nextEnabled, "tally-month-next")
+            KitStepper(
+                previousLabel: state.chrome.previous,
+                nextLabel: state.chrome.next,
+                canPrevious: state.previousEnabled,
+                canNext: state.nextEnabled,
+                previousIdentifier: "tally-month-previous",
+                nextIdentifier: "tally-month-next",
+                onPrevious: { send(Self.event { $0.monthStepped = .with { $0.months = -1 } }) },
+                onNext: { send(Self.event { $0.monthStepped = .with { $0.months = 1 } }) }
+            )
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .padding(.vertical, 8)
-    }
-
-    private func step(_ icon: String, _ label: String, _ months: Int32, enabled: Bool, _ identifier: String) -> some View {
-        Button {
-            send(Self.event { $0.monthStepped = .with { $0.months = months } })
-        } label: {
-            CentraidIconView(iconKey: icon, tint: Theme.color(enabled ? "text" : "textFaint", scheme), size: 16)
-                .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
-                        .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .accessibilityLabel(label)
-        .accessibilityIdentifier(identifier)
     }
 
     @ViewBuilder
@@ -215,6 +205,8 @@ struct TallySearchView: View {
     let send: (Data) -> Void
     let push: (ShellModel.Route) -> Void
     let onBack: () -> Void
+    /// Open a group found by name (#1097) through the shell's one row router.
+    var openContainer: (Centraid_Screen_V1_ChatCard, String) -> Void = { _, _ in }
 
     @Environment(\.colorScheme) private var scheme
 
@@ -271,9 +263,12 @@ struct TallySearchView: View {
                         EmptyStateView(empty)
                     case let .results(results):
                         if results.hasEmpty {
-                            EmptyStateView(results.empty)
+                            SearchEmptyView(results.empty, ask: state.field.ask)
                         } else {
                             ScrollView {
+                              VStack(alignment: .leading, spacing: 0) {
+                                // THE GROUPS WHOSE NAME MATCHED come first (#1097), through the router.
+                                SearchContainerList(containers: state.field.containers) { openContainer($0, state.chrome.title) }
                                 LazyVStack(alignment: .leading, spacing: 0) {
                                     TallyNote(text: results.countLabel)
                                     ForEach(results.results, id: \.rowKey) { row in
@@ -284,6 +279,7 @@ struct TallySearchView: View {
                                         }
                                     }
                                 }
+                              }
                             }
                             .scrollDismissesKeyboard(.interactively)
                         }

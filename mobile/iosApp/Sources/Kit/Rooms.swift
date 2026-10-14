@@ -16,28 +16,143 @@ import CentraidShared
 // `SystemPlace` is the vault/settings sheets; the four every app port needs
 // live here.
 
-/// THE SEARCH SLOT an `AppPlace` opens under its header. The field's state is
+/// THE SEARCH SLOT an `AppPlace` draws under its header. The field's state is
 /// the machine's `SearchField`; the words are the app's copy.
+///
+/// **SEARCH IS ALWAYS IN THE SAME PLACE** (R-CHROME-2): closed, the slot is a
+/// field-shaped bar reading the placeholder, and a tap sends `onOpen`; open,
+/// it is the field. Never a More row, a bar glyph or a band tab. An app whose
+/// search is a page of its own (Photos, Tally) pushes it from `onOpen` and
+/// never sets `field.open`.
 struct SearchSlot {
     let field: Centraid_Screen_V1_SearchField
     let placeholder: String
     var closeLabel: String = KitWords.shared.CLOSE_SEARCH
+    let onOpen: () -> Void
     let onTerm: (String) -> Void
     let onClose: () -> Void
 }
 
-/// AN APP'S ROOT: `AppHeader` (mark + name + at most one trailing action), the
-/// optional search under it, the content, and the app's band at the foot as a
-/// render prop.
+/// THE HEADER'S ONE TRAILING ACTION (R-CHROME-1): a glyph from the catalog and
+/// the words a screen reader says for it — the app's create verb ("Plus") on
+/// every app that makes things, and Photos' Select on the one that does not.
+/// A value, not a view, so an `AppPlace` cannot carry two; the twin of
+/// Android's `RoomAction`.
+struct RoomAction {
+    let iconKey: String
+    let label: String
+    var identifier: String = "room-action"
+    var enabled: Bool = true
+    let action: () -> Void
+}
+
+/// ONE CHIP IN THE ROOM'S FILTER ROW (R-CHROME-3): a filter (`selected` says
+/// whether it narrows the list now) or the sort, which carries `chevron` and
+/// opens an `OptionSheet` of its choices. The row sits under search, before
+/// the content, in every app.
+struct RoomChip: Identifiable {
+    let identifier: String
+    let label: String
+    var count: String = ""
+    var selected: Bool = false
+    var chevron: Bool = false
+    var spoken: String = ""
+    let action: () -> Void
+
+    var id: String { identifier }
+}
+
+/// The search bar while search is closed: field-shaped, so it reads as the
+/// place to type before it is one.
+struct SearchOpener: View {
+    let placeholder: String
+    var identifier: String = "search-opener"
+    let onOpen: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: 8) {
+                CentraidIconView(iconKey: "Search", tint: Theme.color("textFaint", scheme), size: 16)
+                Text(placeholder)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+            .background(
+                Theme.color("bgSunken", scheme),
+                in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                    .strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(placeholder)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// The filter row: chips in one line, scrolling sideways when they overflow.
+struct RoomChipRow: View {
+    let app: String
+    let chips: [RoomChip]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(chips) { chip in
+                    KitChip(
+                        label: chip.label,
+                        count: chip.count,
+                        selected: chip.selected,
+                        chevron: chip.chevron,
+                        spoken: chip.spoken,
+                        identifier: chip.identifier,
+                        action: chip.action
+                    )
+                }
+            }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("\(app)-chips")
+    }
+}
+
+/// THE TRAILING SLOT, drawn: the bar's glyph for the one action, or nothing.
+struct RoomTrailing: View {
+    let action: RoomAction?
+
+    var body: some View {
+        if let action {
+            ToolbarIcon(iconKey: action.iconKey, label: action.label, identifier: action.identifier, action: action.action)
+                .disabled(!action.enabled)
+        }
+    }
+}
+
+/// AN APP'S ROOT: the app's name in the system navigation bar with at most one
+/// trailing action, search under it, the filter row under that, the content,
+/// and the app's band at the foot as a render prop. The order is the same in
+/// every app (R-CHROME-1…4): add top right, search, chips, list, band.
 ///
-/// The system navigation bar is hidden: an app place has no back — the band's
-/// Home capsule is the way out — and a second header over the app's own would
-/// be two grounds for one title. `showsBand` is false for a denied room, which
-/// has nowhere in the app to go.
+/// **THE SYSTEM BAR, NOT A DRAWN HEADER** — the same bar Photos and Agenda
+/// stand under, so every app's back and trailing verb are the platform's glass
+/// controls in the same place. A drawn header put Docs' "Add" as bare text
+/// where Photos' "Select" sat in glass: two apps, two grammars for one slot.
+/// `showsBand` is false for a denied room, which has nowhere in the app to go.
 struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     let app: String
     let title: String
     var search: SearchSlot? = nil
+    var chips: [RoomChip] = []
     var showsBand: Bool = true
     let trailing: () -> Trailing
     let band: () -> Band
@@ -45,10 +160,13 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    init(
+    /// File-private: an app passes its one action as a `RoomAction` value
+    /// (R-CHROME-1), through the init below.
+    fileprivate init(
         app: String,
         title: String,
         search: SearchSlot? = nil,
+        chips: [RoomChip] = [],
         showsBand: Bool = true,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder band: @escaping () -> Band,
@@ -57,6 +175,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         self.app = app
         self.title = title
         self.search = search
+        self.chips = chips
         self.showsBand = showsBand
         self.trailing = trailing
         self.band = band
@@ -65,43 +184,70 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                AppMark(appID: app, size: 28)
-                Text(title)
-                    .centraidType("title")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
-                trailing()
-            }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .frame(minHeight: 52)
-            .accessibilityIdentifier("\(app)-app-header")
-            if let search, search.field.open {
-                CentraidSearchField(
-                    field: search.field,
-                    placeholder: search.placeholder,
-                    closeLabel: search.closeLabel,
-                    identifier: "\(app)-search",
-                    onTerm: search.onTerm,
-                    onClose: search.onClose
-                )
+            if let search {
+                Group {
+                    if search.field.open {
+                        CentraidSearchField(
+                            field: search.field,
+                            placeholder: search.placeholder,
+                            closeLabel: search.closeLabel,
+                            identifier: "\(app)-search",
+                            onTerm: search.onTerm,
+                            onClose: search.onClose
+                        )
+                    } else {
+                        SearchOpener(placeholder: search.placeholder, identifier: "\(app)-search-open", onOpen: search.onOpen)
+                    }
+                }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.top, 4)
                 .padding(.bottom, 8)
+            }
+            if !chips.isEmpty {
+                RoomChipRow(app: app, chips: chips)
+                    .padding(.bottom, 4)
             }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.color("bg", scheme).ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) { trailing() }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if showsBand {
                 band()
                     .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom))
             }
         }
+    }
+}
+
+extension AppPlace where Trailing == RoomTrailing {
+    /// The room with its one trailing action as a value (R-CHROME-1).
+    init(
+        app: String,
+        title: String,
+        trailing: RoomAction?,
+        search: SearchSlot? = nil,
+        chips: [RoomChip] = [],
+        showsBand: Bool = true,
+        @ViewBuilder band: @escaping () -> Band,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.init(
+            app: app,
+            title: title,
+            search: search,
+            chips: chips,
+            showsBand: showsBand,
+            trailing: { RoomTrailing(action: trailing) },
+            band: band,
+            content: content
+        )
     }
 }
 
@@ -235,6 +381,9 @@ struct EditorRoom<Trailing: View, Content: View>: View {
 struct SheetPrimary {
     let label: String
     var destructive: Bool = false
+    /// False draws the button greyed and inert — never hidden.
+    var enabled: Bool = true
+    var identifier: String = ""
     let action: () -> Void
 }
 
@@ -283,7 +432,13 @@ struct SheetRoom<Content: View>: View {
                     .accessibilityIdentifier("kit-sheet-status")
             }
             if let primary {
-                KitInkButton(label: primary.label, destructive: primary.destructive, action: primary.action)
+                KitInkButton(
+                    label: primary.label,
+                    destructive: primary.destructive,
+                    identifier: primary.identifier,
+                    action: primary.action
+                )
+                .disabled(!primary.enabled)
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -320,31 +475,38 @@ struct SheetPresentation: ViewModifier {
 struct KitInkButton: View {
     let label: String
     var destructive: Bool = false
+    /// When non-empty, replaces the default `kit-primary` / `kit-destructive` id.
+    var identifier: String = ""
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var enabled
+
+    /// Disabled is still drawn: a `bgSunken` slab with a `textDisabled` label
+    /// (a destructive one, a `textDisabled` outline) — never hidden, never faded.
+    private var ink: String { enabled ? (destructive ? "net" : "onAccent") : "textDisabled" }
 
     var body: some View {
         Button(action: action) {
             Text(label)
                 .centraidType("labelOn")
-                .foregroundStyle(Theme.color(destructive ? "net" : "onAccent", scheme))
+                .foregroundStyle(Theme.color(ink, scheme))
                 .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
                 .background {
                     if !destructive {
                         RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                            .fill(Theme.color("accent", scheme))
+                            .fill(Theme.color(enabled ? "accent" : "bgSunken", scheme))
                     }
                 }
                 .overlay {
                     if destructive {
                         RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                            .strokeBorder(Theme.color("net", scheme), lineWidth: 1.5)
+                            .strokeBorder(Theme.color(enabled ? "net" : "textDisabled", scheme), lineWidth: 1.5)
                     }
                 }
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier(destructive ? "kit-destructive" : "kit-primary")
+        .accessibilityIdentifier(identifier.isEmpty ? (destructive ? "kit-destructive" : "kit-primary") : identifier)
     }
 }

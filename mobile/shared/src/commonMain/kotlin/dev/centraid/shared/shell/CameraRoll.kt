@@ -7,6 +7,7 @@ import centraid.screen.v1.BackupState
 import centraid.screen.v1.MediaPermission
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.platform.MediaLibrary
 import dev.centraid.shared.platform.NetworkStatus
 import dev.centraid.shared.platform.PlatformServices
@@ -169,7 +170,7 @@ public class CameraRoll(
         val handle = core() ?: return Report(
             state = BackupState(
                 phase = BackupState.Phase.PHASE_IDLE,
-                paused_reason = "No vault is open on this device.",
+                paused_reason = "No vault is open.",
             ),
         ).also { onState(it.state) }
 
@@ -333,7 +334,7 @@ public class CameraRoll(
                 // for exactly this reason — a truncated original staged as if
                 // it were whole would be committed, under the truncation's own
                 // hash, as the member's photograph.
-                return Offered.Refused(why.message ?: "Centraid could not read that photograph.")
+                return Offered.Refused(why.message ?: "Couldn't read that photo.")
             } finally {
                 opened.close()
             }
@@ -376,7 +377,7 @@ public class CameraRoll(
         )
         return when (answer) {
             is CoreOutcome.Failed -> Offered.Refused(
-                answer.failure.sentence.ifEmpty { "Centraid could not queue that photograph." },
+                answer.failure.sentence.ifEmpty { "Couldn't add that photo." },
             )
             is CoreOutcome.Answered -> null
         }
@@ -469,13 +470,13 @@ public class CameraRoll(
     internal fun permissionSentence(permission: MediaPermission): String = when (permission) {
         MediaPermission.MEDIA_PERMISSION_GRANTED -> ""
         MediaPermission.MEDIA_PERMISSION_LIMITED ->
-            "Centraid imports the photos you selected."
+            PhotosCopy.PHOTOS_PERMISSION_LIMITED
         MediaPermission.MEDIA_PERMISSION_NOT_ASKED ->
-            "Centraid needs access to your photos to back them up."
+            PhotosCopy.PHOTOS_PERMISSION_NOT_ASKED
         MediaPermission.MEDIA_PERMISSION_DENIED ->
-            "Photo access is off. Turn it on in Settings to import your camera roll."
+            PhotosCopy.PHOTOS_PERMISSION_DENIED
         MediaPermission.MEDIA_PERMISSION_RESTRICTED ->
-            "This device does not allow photo access."
+            PhotosCopy.PHOTOS_PERMISSION_RESTRICTED
         MediaPermission.MEDIA_PERMISSION_UNSPECIFIED -> ""
     }
 

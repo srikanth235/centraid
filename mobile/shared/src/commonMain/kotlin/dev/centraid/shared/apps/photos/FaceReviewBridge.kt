@@ -195,7 +195,7 @@ public class FaceReviewBridge {
             host.send(
                 FaceReviewReads.settledFor(
                     CommandStatus.COMMAND_STATUS_DENIED,
-                    "No vault is open on this device.",
+                    "No vault is open on this phone.",
                     region,
                 ),
             )

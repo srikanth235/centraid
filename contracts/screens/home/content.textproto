@@ -6,7 +6,7 @@
 data {
   springboard: SPRINGBOARD_CONTENT
   tiles {
-    app_id: "photos" status: TILE_STATUS_CONTENT size: TILE_SIZE_LARGE wide: true earns_grid: true
+    app_id: "photos" status: TILE_STATUS_CONTENT size: TILE_SIZE_LARGE wide: true
     count { value: 1284 } count_label: "photos"
     body { photos {
       offline_pack: true
@@ -16,12 +16,12 @@ data {
     } }
   }
   tiles {
-    app_id: "docs" status: TILE_STATUS_CONTENT size: TILE_SIZE_MEDIUM wide: true earns_grid: true
+    app_id: "docs" status: TILE_STATUS_CONTENT size: TILE_SIZE_MEDIUM wide: true
     count { value: 42 } count_label: "documents"
     body { docs { rows { document_id: "doc-1" name: "Lease.pdf" size: "1.2 MB" } } }
   }
   tiles {
-    app_id: "notes" status: TILE_STATUS_CONTENT size: TILE_SIZE_MEDIUM wide: true earns_grid: true
+    app_id: "notes" status: TILE_STATUS_CONTENT size: TILE_SIZE_MEDIUM wide: true
     count { value: 7 } count_label: "notes"
     body { notes { note_id: "note-1" title: "Roof" excerpt: "Ring the surveyor back before Friday." } }
   }
@@ -31,18 +31,16 @@ data {
   tiles { app_id: "tally" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Log your first expense" }
   # LOCKER WITHHOLDS ITS COUNT. No `count` field at all — absent is the withheld
   # glyph, and a `0` here would be a lie about how many secrets a member has.
-  tiles { app_id: "locker" status: TILE_STATUS_CONTENT size: TILE_SIZE_SMALL earns_grid: true count_label: "items" body { locker { locked: true } } }
-  first_moves { id: "connectors" label: "Connect an account" hint: "Mail, calendar and contacts arrive on their own." icon_key: "Plug" }
-  first_moves { id: "agenda" label: "Add an event" hint: "Your week, on the front page." icon_key: "Calendar" }
-  first_moves { id: "tasks" label: "Add a task" hint: "The next thing to do." icon_key: "Check" }
+  tiles { app_id: "locker" status: TILE_STATUS_CONTENT size: TILE_SIZE_SMALL count_label: "items" body { locker { locked: true } } }
   # 1284 + 42 + 7. Locker contributes NOTHING, not a zero.
-  things { total: 1333 settled: true }
-  status { tone: TONE_QUIET copy: "Everything is on your gateway" destination: DESTINATION_NONE }
+  status { tone: TONE_QUIET copy: "Backed up" destination: DESTINATION_NONE }
   # THE PACKED GRID, decided by the machine so the two shells cannot pack it
   # differently. A wide tile takes a whole line; smalls pair. A lone small at
   # the end is not a hole.
   grid_rows { app_ids: "photos" }
   grid_rows { app_ids: "docs" }
   grid_rows { app_ids: "notes" }
+  grid_rows { app_ids: "agenda" app_ids: "tasks" }
+  grid_rows { app_ids: "people" app_ids: "tally" }
   grid_rows { app_ids: "locker" }
 }

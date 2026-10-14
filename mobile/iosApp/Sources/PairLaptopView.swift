@@ -1,6 +1,9 @@
 import AVFoundation
+import CoreImage
+import PhotosUI
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 #if canImport(CentraidShared)
 import CentraidShared
@@ -14,8 +17,10 @@ import CentraidShared
 // is the view's is what only a platform can do: the paste field's keystrokes,
 // and the camera — `ScanTapped` is an intent the machine ignores, so the view
 // opens its scanner and sends back what it read as `Scanned`, which pairs at
-// once. The ticket is spent on first use and expires, so the screen is not
-// shielded and pasting is allowed (`screen.proto`).
+// once. `PhotoTapped` is the same for the photo picker: the view reads the
+// square out of the photo chosen and sends `Scanned`, or `PhotoUnread` when it
+// holds none. The ticket is spent on first use and expires, so the screen is
+// not shielded and pasting is allowed (`screen.proto`).
 
 /// `PairLaptopState`: the paste field and the scan control while WAITING or
 /// FAILED, a spinner while PAIRING, the safety number to compare once PAIRED
@@ -27,6 +32,8 @@ struct PairLaptopView: View {
 
     @Environment(\.colorScheme) private var scheme
     @State private var scanning = false
+    @State private var choosingPhoto = false
+    @State private var photo: PhotosPickerItem?
 
     private var state: Centraid_Screen_V1_PairLaptopState {
         (try? Centraid_Screen_V1_PairLaptopState(serializedBytes: data)) ?? .init()
@@ -37,6 +44,16 @@ struct PairLaptopView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 WordsHead(title: state.title, lead: state.body)
+
+                // SCAN FIRST, ON EVERY PHONE: the camera, or the photo picker
+                // where there is none (`scan_camera`).
+                if !state.scanLabel.isEmpty {
+                    KitOutlineButton(label: state.scanLabel, fullWidth: true) {
+                        send(Self.event { $0.scan = .init() })
+                        if state.scanCamera { scanning = true } else { choosingPhoto = true }
+                    }
+                    .accessibilityIdentifier("pair-scan")
+                }
 
                 if !state.payloadLabel.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
@@ -60,14 +77,6 @@ struct PairLaptopView: View {
                         .accessibilityLabel(state.payloadLabel)
                         .accessibilityIdentifier("pair-payload")
                     }
-                }
-
-                if !state.scanLabel.isEmpty {
-                    KitOutlineButton(label: state.scanLabel) {
-                        send(Self.event { $0.scan = .init() })
-                        scanning = true
-                    }
-                    .accessibilityIdentifier("pair-scan")
                 }
 
                 if !state.safetyNumber.isEmpty {
@@ -97,14 +106,8 @@ struct PairLaptopView: View {
                 }
 
                 if !state.progress.isEmpty {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text(state.progress)
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("pair-progress")
+                    KitSpinner(label: state.progress)
+                        .accessibilityIdentifier("pair-progress")
                 }
 
                 WordsControls(
@@ -125,13 +128,40 @@ struct PairLaptopView: View {
         .accessibilityIdentifier("pair-laptop")
         .fullScreenCover(isPresented: $scanning) {
             PairScanner(
+                photoLabel: state.photoLabel,
                 onRead: { payload in
                     scanning = false
                     send(Self.event { $0.scanned = .with { $0.payload = payload } })
                 },
+                onPhoto: { send(Self.event { $0.photo = .init() }) },
+                onUnread: {
+                    scanning = false
+                    send(Self.event { $0.unread = .init() })
+                },
                 onCancel: { scanning = false }
             )
             .ignoresSafeArea()
+        }
+        // WITHOUT A CAMERA, SCAN IS THE PHOTO PICKER. The system picker needs
+        // no grant: it hands back only the one photo chosen. Backing out sends
+        // nothing.
+        .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
+        .onChange(of: photo) { _, item in
+            guard let item else { return }
+            photo = nil
+            Task {
+                let data = try? await item.loadTransferable(type: Data.self)
+                let code = data.flatMap(PairPhotoReader.read)
+                await MainActor.run {
+                    send(Self.event {
+                        if let code {
+                            $0.scanned = .with { $0.payload = code }
+                        } else {
+                            $0.unread = .init()
+                        }
+                    })
+                }
+            }
         }
     }
 
@@ -139,6 +169,26 @@ struct PairLaptopView: View {
         var event = Centraid_Screen_V1_PairLaptopEvent()
         build(&event)
         return event.encoded
+    }
+}
+
+// MARK: - the photo
+
+/// THE SQUARE, READ OUT OF A PHOTO — the camera-less scan, which is what a
+/// phone with no camera (and the simulator) still has. Core Image's QR
+/// detector over the image's data; nil when it holds no code.
+enum PairPhotoReader {
+    static func read(_ data: Data) -> String? {
+        guard let image = CIImage(data: data, options: [.applyOrientationProperty: true]),
+              let detector = CIDetector(
+                  ofType: CIDetectorTypeQRCode,
+                  context: nil,
+                  options: [CIDetectorAccuracy: CIDetectorAccuracyHigh]
+              )
+        else { return nil }
+        return detector.features(in: image)
+            .compactMap { ($0 as? CIQRCodeFeature)?.messageString }
+            .first { !$0.isEmpty }
     }
 }
 
@@ -150,7 +200,13 @@ struct PairLaptopView: View {
 /// phones below it; a metadata output reads a QR on every camera iOS 17 runs
 /// on. The first frame's code is the answer — a scan is a deliberate act.
 struct PairScanner: UIViewControllerRepresentable {
+    /// The camera screen's "Choose a photo" — a screenshot of the square.
+    let photoLabel: String
     let onRead: (String) -> Void
+    /// `PhotoTapped`, the intent, as the picker opens.
+    let onPhoto: () -> Void
+    /// The photo chosen held no square.
+    let onUnread: () -> Void
     let onCancel: () -> Void
 
     /// Whether this phone has a camera to scan with — what `Opened.camera`
@@ -159,7 +215,10 @@ struct PairScanner: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> PairScannerController {
         let controller = PairScannerController()
+        controller.photoLabel = photoLabel
         controller.onRead = onRead
+        controller.onPhoto = onPhoto
+        controller.onUnread = onUnread
         controller.onCancel = onCancel
         return controller
     }
@@ -167,8 +226,12 @@ struct PairScanner: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: PairScannerController, context: Context) {}
 }
 
-final class PairScannerController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
+final class PairScannerController: UIViewController, AVCaptureMetadataOutputObjectsDelegate,
+    PHPickerViewControllerDelegate {
+    var photoLabel = ""
     var onRead: ((String) -> Void)?
+    var onPhoto: (() -> Void)?
+    var onUnread: (() -> Void)?
     var onCancel: (() -> Void)?
 
     private let session = AVCaptureSession()
@@ -187,6 +250,26 @@ final class PairScannerController: UIViewController, AVCaptureMetadataOutputObje
             close.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
             close.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
         ])
+        // A SCREENSHOT OF THE SQUARE, from the camera screen: the picker is
+        // presented over the camera, and backing out of it returns here.
+        if !photoLabel.isEmpty {
+            var look = UIButton.Configuration.filled()
+            look.title = photoLabel
+            look.baseBackgroundColor = .white
+            look.baseForegroundColor = .black
+            look.cornerStyle = .capsule
+            look.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20)
+            let photo = UIButton(configuration: look)
+            photo.accessibilityIdentifier = "pair-scan-photo"
+            photo.addAction(UIAction { [weak self] _ in self?.choosePhoto() }, for: .touchUpInside)
+            photo.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(photo)
+            NSLayoutConstraint.activate([
+                photo.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                photo.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -24),
+                photo.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            ])
+        }
         // THE GRANT IS ASKED FOR HERE, when the member tapped Scan — never at
         // launch. A refusal closes the camera; the paste field is still there.
         AVCaptureDevice.requestAccess(for: .video) { granted in
@@ -235,6 +318,29 @@ final class PairScannerController: UIViewController, AVCaptureMetadataOutputObje
         else { return }
         answered = true
         onRead?(code)
+    }
+
+    private func choosePhoto() {
+        onPhoto?()
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = self
+        present(picker, animated: true)
+    }
+
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        picker.dismiss(animated: true)
+        guard let provider = results.first?.itemProvider else { return }
+        provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+            let code = data.flatMap(PairPhotoReader.read)
+            DispatchQueue.main.async {
+                guard !self.answered else { return }
+                self.answered = true
+                if let code { self.onRead?(code) } else { self.onUnread?() }
+            }
+        }
     }
 
     private func cancel() {

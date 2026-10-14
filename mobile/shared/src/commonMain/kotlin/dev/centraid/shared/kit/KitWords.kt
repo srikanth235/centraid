@@ -26,6 +26,15 @@ public object KitWords {
     public const val CLOSE_SEARCH: String = SharedCopy.KIT_CLOSE_SEARCH
     public const val REFRESH: String = SharedCopy.KIT_REFRESH
 
+    /**
+     * THE LINE UNDER A SEARCH FIELD when the core corrected a typo (#1097):
+     * "Showing results for “sunscreen”". [corrected] is the words the rows
+     * answer (`SearchField.corrected`); a shell draws this only when it is
+     * not empty.
+     */
+    public fun searchCorrected(corrected: String): String =
+        SharedCopy.SEARCH_CORRECTED.replace("{corrected}", corrected)
+
     /** A pushed page's back control, spoken: "Back to People"; "Back" with no parent. */
     public fun backTo(parent: String): String =
         if (parent.isBlank()) SharedCopy.BACK else SharedCopy.BACK_TO.replace("{parent}", parent)

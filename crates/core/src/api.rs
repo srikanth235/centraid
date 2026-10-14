@@ -458,27 +458,16 @@ pub fn resolve(_handle: &str) -> Result<serde_json::Value> {
 ///
 /// **WHAT THE NEW VAULT HOLDS is the request's `content`** (`vault.proto`'s
 /// `FoundContent`). `UNSPECIFIED` — a found that names no content — is the
-/// found and nothing else. `STARTERS` adds a note and a task to the member's
-/// own vault through the command plane, and a refused starter leaves the vault
-/// founded and empty rather than failing it.
-/// `SAMPLE` founds the SAMPLE vault — the mark, the Tahoe scenario across seven
-/// apps, its Locker when the core holds keys, the mark finished last
-/// ([`crate::sample::found`]) — and any refusal fails the whole found, so the
-/// shell deletes the directory rather than holding half a scenario.
-///
-/// `sealing` is the open core's keys and Locker session, which only a sample
-/// found reads: it seals the sample's Locker under the member's own `K`. `None`
-/// (a core opened with no seed) founds the sample without Locker.
+/// found and nothing else. `STARTERS` adds the teaching rows of
+/// [`crate::starters`] to the member's own vault through the command plane, and
+/// a refused starter leaves the vault founded rather than failing it. A
+/// content this build does not know is refused before the file is read.
 pub fn found(
     vault: &Vault,
     registry: &Registry,
     principal: &Principal,
     request: &wire::FoundRequest,
-    sealing: Option<&crate::sample::Sealing<'_>>,
 ) -> Result<wire::FoundResponse> {
-    if let Some(vault_id) = vault.vault_id()? {
-        return Err(CoreError::VaultAlreadyHeld { vault_id });
-    }
     let content =
         wire::FoundContent::try_from(request.content).map_err(|_| CoreError::InvalidRequest {
             detail: format!(
@@ -486,27 +475,17 @@ pub fn found(
                 request.content
             ),
         })?;
-    let founded = match content {
-        wire::FoundContent::Sample => crate::sample::found(
-            vault,
-            registry,
-            principal,
-            &request.display_name,
-            &request.owner_name,
-            crate::sample::now_ms(),
-            sealing,
-        )?,
-        wire::FoundContent::Unspecified | wire::FoundContent::Starters => {
-            let founded = vault.found(&request.display_name, &request.owner_name)?;
-            if content == wire::FoundContent::Starters {
-                let report = crate::sample::starters(vault, registry, principal);
-                if !report.is_whole() {
-                    tracing::warn!(refused = ?report.refused, "a starter row was refused");
-                }
-            }
-            founded
+    if let Some(vault_id) = vault.vault_id()? {
+        return Err(CoreError::VaultAlreadyHeld { vault_id });
+    }
+    let founded = vault.found(&request.display_name, &request.owner_name)?;
+    if content == wire::FoundContent::Starters {
+        let today = crate::starters::local_today(&request.tz, crate::example::now_ms());
+        let report = crate::starters::write(vault, registry, principal, &today);
+        if !report.is_whole() {
+            tracing::warn!(refused = ?report.refused, "a starter row was refused");
         }
-    };
+    }
     Ok(wire::FoundResponse {
         vault_id: founded.vault_id,
         owner_party_id: founded.owner_party_id,
@@ -528,13 +507,7 @@ mod tests {
     /// [`found`] with the registry and the owner a handle would pass.
     fn found_here(vault: &Vault, request: &wire::FoundRequest) -> Result<wire::FoundResponse> {
         let registry = Registry::with_system_commands().expect("the registry builds");
-        found(
-            vault,
-            &registry,
-            &Principal::owner("test-device"),
-            request,
-            None,
-        )
+        found(vault, &registry, &Principal::owner("test-device"), request)
     }
 
     fn query(select: &[&str], sort: &str, pk: &str) -> wire::PageQuery {

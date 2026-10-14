@@ -31,20 +31,17 @@ struct NotesNotebooksView: View {
         let state = state
         let content = content
         let chrome = state.chrome
-        AppPlace(app: "notes", title: chrome.title, showsBand: !content.isDenied) {
-            if !content.isDenied, !chrome.newNotebook.isEmpty {
-                Button {
-                    send(NotesEvents.notebooks { $0.createOpened = .init() })
-                } label: {
-                    CentraidIconView(iconKey: "FolderPlus", tint: Theme.color("text", scheme), size: 18)
-                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(chrome.newNotebook)
-                .accessibilityIdentifier("notes-new-notebook")
-            }
-        } band: {
+        AppPlace(
+            app: "notes",
+            title: chrome.title,
+            trailing: content.isDenied || chrome.newNotebook.isEmpty ? nil : RoomAction(
+                iconKey: "Plus",
+                label: chrome.newNotebook,
+                identifier: "notes-new-notebook",
+                action: { send(NotesEvents.notebooks { $0.createOpened = .init() }) }
+            ),
+            showsBand: !content.isDenied
+        ) {
             NotesBandView(tabs: state.band, event: { key in NotesEvents.notebooks { $0.band = .with { $0.key = key } } }, send: send, onHome: onHome)
         } content: {
             ReadStateView(
@@ -117,16 +114,9 @@ private struct NotesCreateNotebookSheet: View {
                 send(NotesEvents.notebooks { $0.name = .with { $0.name = typed } })
             }
             .padding(.horizontal, -CentraidGeometry.pageMargin)
-            Button {
+            KitOutlineButton(label: chrome.cancel, fullWidth: true) {
                 send(NotesEvents.notebooks { $0.createDismissed = .init() })
-            } label: {
-                Text(chrome.cancel)
-                    .centraidType("labelOn")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .accessibilityIdentifier("notes-notebook-cancel")
         }
         .onAppear { name = state.draftName }
@@ -164,20 +154,17 @@ struct NotesJournalView: View {
             if case let .data(data) = state.content { return data.today }
             return ""
         }()
-        AppPlace(app: "notes", title: chrome.title, showsBand: !content.isDenied) {
-            if !content.isDenied, !chrome.newEntry.isEmpty {
-                Button {
-                    send(NotesEvents.journal { $0.newEntry = .with { $0.day = today } })
-                } label: {
-                    CentraidIconView(iconKey: "Plus", tint: Theme.color("text", scheme), size: 18)
-                        .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(chrome.newEntry)
-                .accessibilityIdentifier("notes-new-entry")
-            }
-        } band: {
+        AppPlace(
+            app: "notes",
+            title: chrome.title,
+            trailing: content.isDenied || chrome.newEntry.isEmpty ? nil : RoomAction(
+                iconKey: "Plus",
+                label: chrome.newEntry,
+                identifier: "notes-new-entry",
+                action: { send(NotesEvents.journal { $0.newEntry = .with { $0.day = today } }) }
+            ),
+            showsBand: !content.isDenied
+        ) {
             NotesBandView(tabs: state.band, event: { key in NotesEvents.journal { $0.band = .with { $0.key = key } } }, send: send, onHome: onHome)
         } content: {
             ReadStateView(
@@ -350,18 +337,14 @@ struct NotesHistoryView: View {
                                             identifier: "notes-version-\(row.contentID)"
                                         )
                                         if !row.current, !row.restoreLabel.isEmpty {
-                                            Button {
+                                            KitLink(
+                                                label: row.restoreLabel,
+                                                dense: true,
+                                                identifier: "notes-restore-\(row.contentID)"
+                                            ) {
                                                 send(NotesEvents.history { $0.restore = .with { $0.contentID = row.contentID } })
-                                            } label: {
-                                                Text(row.restoreLabel)
-                                                    .centraidType("annotLabelOn")
-                                                    .foregroundStyle(Theme.color("link", scheme))
-                                                    .frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
-                                                    .contentShape(Rectangle())
                                             }
-                                            .buttonStyle(.plain)
                                             .disabled(!state.restoringContentID.isEmpty)
-                                            .accessibilityIdentifier("notes-restore-\(row.contentID)")
                                             .padding(.trailing, 8)
                                         }
                                     }

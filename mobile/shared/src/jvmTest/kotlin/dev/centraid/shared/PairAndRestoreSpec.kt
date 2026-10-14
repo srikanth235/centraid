@@ -98,12 +98,50 @@ class PairAndRestoreSpec : StringSpec({
         reduce(waiting(), words).model.state.phase shouldBe PairLaptopState.Phase.PHASE_WAITING
     }
 
-    "a phone with no camera is paste-only: no scan control is drawn" {
+    "Scan is drawn on every phone: the camera, with a photo beside it, or the photo picker without one" {
+        val camera = waiting().state
+        camera.scan_label shouldBe CustodyCopy.PAIR_SCAN
+        camera.scan_camera shouldBe true
+        camera.photo_label shouldBe CustodyCopy.PAIR_PHOTO
+
+        // THE SIMULATOR HAS NO CAMERA: Scan still shows, and reads a photo.
         val open = reduce(PairLaptopMachine.initial(), event(PairLaptopEvent(opened = PairLaptopEvent.Opened(camera = false)))).model
-        val ready = reduce(open, PairInput.Readiness(Readiness.READY)).model.state
-        ready.phase shouldBe PairLaptopState.Phase.PHASE_WAITING
-        ready.scan_label shouldBe ""
-        ready.payload_label shouldBe CustodyCopy.PAIR_PASTE_LABEL
+        val none = reduce(open, PairInput.Readiness(Readiness.READY)).model
+        none.state.phase shouldBe PairLaptopState.Phase.PHASE_WAITING
+        none.state.scan_label shouldBe CustodyCopy.PAIR_SCAN
+        none.state.scan_camera shouldBe false
+        none.state.photo_label shouldBe ""
+        none.state.payload_label shouldBe CustodyCopy.PAIR_PASTE_LABEL
+
+        // `ScanTapped` and `PhotoTapped` ARE INTENTS: the shell opens its
+        // camera or picker, and the machine moves only on what comes back.
+        val scan = reduce(none, event(PairLaptopEvent(scan = PairLaptopEvent.ScanTapped())))
+        scan.model shouldBe none
+        scan.effects shouldBe emptyList()
+        reduce(none, event(PairLaptopEvent(photo = PairLaptopEvent.PhotoTapped()))).model shouldBe none
+
+        val read = reduce(none, event(PairLaptopEvent(scanned = PairLaptopEvent.Scanned(payload = "eyJ2IjoyfQ"))))
+        read.model.state.phase shouldBe PairLaptopState.Phase.PHASE_PAIRING
+        read.effects.single().shouldBeInstanceOf<PairEffect.Pair>()
+    }
+
+    "a photo with no square in it says so and keeps the field; nothing is spent" {
+        val typed = reduce(waiting(), typed("half a code")).model
+        val unread = reduce(typed, event(PairLaptopEvent(unread = PairLaptopEvent.PhotoUnread())))
+        unread.effects shouldBe emptyList()
+        unread.model.state.phase shouldBe PairLaptopState.Phase.PHASE_WAITING
+        unread.model.state.notice shouldBe CustodyCopy.PAIR_PHOTO_UNREAD
+        unread.model.state.payload shouldBe "half a code"
+        unread.model.state.scan_label shouldBe CustodyCopy.PAIR_SCAN
+
+        // Typing again clears the sentence, as it clears every other one.
+        reduce(unread.model, typed("half a code.")).model.state.notice shouldBe ""
+
+        // Heard only while the field is drawn.
+        val pairing = reduce(reduce(waiting(), typed("abc")).model, primary).model
+        pairing.state.phase shouldBe PairLaptopState.Phase.PHASE_PAIRING
+        reduce(pairing, event(PairLaptopEvent(unread = PairLaptopEvent.PhotoUnread()))).model shouldBe pairing
+        pairing.state.scan_label shouldBe ""
     }
 
     "the code is trimmed, the terminal's `pair` label is dropped, and nothing else is judged here" {
@@ -203,14 +241,14 @@ class PairAndRestoreSpec : StringSpec({
         line shouldContain "safety number"
         line shouldContain "centraid-gateway"
         line shouldContain "the kitchen laptop at 192.168.1.20:7443"
-        line shouldContain "do not carry on"
+        line shouldContain "pair again on a network you trust"
         // The digits are the state's own field, drawn apart.
         line shouldNotContain number
     }
 
     "a gateway with no label is still named, and no address is left out rather than blank" {
         val line = CustodyCopy.pairedLine(PairAnswer(safetyNumber = number))
-        line shouldContain "Paired with your laptop."
+        line shouldContain "Paired with your backup device."
         line shouldNotContain " at ."
     }
 })

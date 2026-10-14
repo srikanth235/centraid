@@ -70,7 +70,7 @@ fn the_leaf_carries_its_sentences_and_names_what_did_not_cross() {
     );
     assert_eq!(
         people.text("WRITE_FAILED"),
-        Some("That write did not land.")
+        Some("Couldn’t save. Try again.")
     );
     assert_eq!(people.text("EMPTY_NO_MATCH"), Some("Nothing matches."));
 

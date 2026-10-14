@@ -7,6 +7,7 @@ import centraid.screen.v1.PhotoShelfEvent
 import centraid.screen.v1.PhotoShelfState
 import centraid.screen.v1.PhotosGridEvent
 import centraid.screen.v1.PhotosGridState
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.screen.ScreenHost
 import dev.centraid.shared.shell.HomeSession
 import dev.centraid.shared.sync.CoreFreeUpDoors
@@ -54,20 +55,20 @@ import kotlinx.coroutines.launch
 public object KeepOriginals {
 
     /** The switch's own words. */
-    public const val TITLE: String = "Keep originals on this phone"
+    public const val TITLE: String = PhotosCopy.PHOTOS_KEEP_ORIGINALS_TITLE
 
     /** Its spoken label, which says what the switch acts on. */
-    public const val LABEL: String = "Keep this album's originals on this phone"
+    public const val LABEL: String = PhotosCopy.PHOTOS_KEEP_ORIGINALS_LABEL
 
     /** Before the keep list has answered for this album (v0's `pinsReady`). */
     public const val CHECKING: String = "Checking this album's originals"
 
     /** A list the core would not read or write. The switch stays disabled. */
     public const val UNREADABLE: String =
-        "This phone's keep list could not be read, so this album's setting is not shown."
+        "This album's setting could not be read."
 
     /** The More sheet row's title. */
-    public const val FREE_UP_TITLE: String = "Free up space"
+    public const val FREE_UP_TITLE: String = PhotosCopy.PHOTOS_FREE_UP_TITLE
 
     /** While the census runs. */
     public const val COUNTING: String = "Counting the originals on this phone…"
@@ -77,29 +78,29 @@ public object KeepOriginals {
 
     /** WHY NOTHING CAN BE FREED YET: no original is whole on a gateway. */
     public const val NOTHING_SAFE: String =
-        "None can be freed yet. An original can be freed once a gateway holds every part of it."
+        "None can be freed yet. Originals free up once a backup device holds them."
 
     /** The core could not say what is safe, so nothing is offered. */
     public const val NOT_CHECKED: String =
-        "Centraid could not check which originals are safe on your gateways, so none is offered."
+        "Centraid could not check which originals are backed up, so none is offered."
 
     /** The action: "Free up 2 GB". */
     public const val FREE_UP_ACTION: String = "Free up {size}"
 
     /** The notice after a free-up. */
     public const val FREED: String =
-        "Freed {size}. Those photos stay in Centraid and come back from your gateways when you open one."
+        "Freed {size}. Photos download again from your backup device when you open them."
 
     /** The member said no in the system's dialog, or nothing could go. */
-    public const val NOTHING_REMOVED: String = "Nothing was removed."
+    public const val NOTHING_REMOVED: String = "Nothing removed."
 
     /** The library let them go and the core did not record it. */
     public const val NOT_RECORDED: String =
-        "The photos were removed from this phone. Centraid shows them as fetchable once it catches up."
+        "Photos removed from this phone. They show as downloadable once Centraid catches up."
 
     /** How many originals a gateway holds whole, in the row's words. */
     public fun safe(count: Int): String =
-        if (count == 1) "1 photo is safe on your gateways." else "$count photos are safe on your gateways."
+        if (count == 1) "1 photo is backed up." else "$count photos are backed up."
 
     // -----------------------------------------------------------------------
     // The album shelf's switch — reducer halves

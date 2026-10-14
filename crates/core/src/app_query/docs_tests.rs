@@ -567,6 +567,45 @@ fn activity_answers_and_an_unknown_zone_is_refused() {
     assert_eq!(zero.code(), wire::ErrorCode::InvalidRequest);
 }
 
+/// A TYPO FINDS THE DOCUMENT AND SAYS WHAT WAS SEARCHED (#1097, R4, R8).
+#[test]
+fn a_typo_finds_the_document_and_says_what_it_searched() {
+    let scratch = Scratch::founded();
+    let lease = scratch.add("Lease agreement", "rent is paid monthly", None);
+    scratch.add("Recipe", "flour and eggs", None);
+    let search = |term: &str| {
+        let wire::app_query_response::Answer::DocsSearch(found) = scratch
+            .ask(wire::app_query_request::Query::DocsSearch(
+                wire::DocsSearchRequest {
+                    term: term.to_owned(),
+                    limit: 10,
+                    tz: TZ.to_owned(),
+                },
+            ))
+            .expect("search answers")
+        else {
+            panic!("search answered as something else");
+        };
+        found
+    };
+    let slipped = search("leasae");
+    assert_eq!(titles_of(&slipped), ["Lease agreement"]);
+    assert_eq!(slipped.documents[0].document_id, lease);
+    assert_eq!(slipped.corrected, "lease");
+    let exact = search("lease");
+    assert_eq!(exact.documents.len(), 1);
+    assert!(exact.corrected.is_empty());
+    assert!(search("zeppelin").corrected.is_empty());
+}
+
+fn titles_of(found: &wire::DocsSearch) -> Vec<&str> {
+    found
+        .documents
+        .iter()
+        .map(|document| document.title.as_str())
+        .collect()
+}
+
 impl Scratch {
     /// Stage bytes the way a shell does: begin, one chunk, end — the handle's
     /// hash is what `core.add_document` names as `staged_sha`.
@@ -705,4 +744,58 @@ fn a_purged_document_is_gone_from_the_drive_and_its_bytes_released() {
     let all = scratch.shelf(wire::DocsShelf::All);
     assert_eq!(all.trash_count, 0);
     assert_eq!(titles(&all), ["Lease"], "the live document is untouched");
+}
+
+/// A FOLDER IS A SEARCH RESULT OF ITS OWN (#1097, R-1097-19..21): its name finds
+/// it, the drive's root never is one, it opens by its concept id, a deleted
+/// folder is gone, and a slip in a word only a folder holds is corrected.
+#[test]
+fn a_folder_is_found_by_name_and_the_root_is_not() {
+    let scratch = Scratch::founded();
+    let folder = scratch.run(
+        "core.create_folder",
+        serde_json::json!({ "name": "Leases" }),
+    )["folder_id"]
+        .as_str()
+        .expect("a folder id")
+        .to_owned();
+    let search = |term: &str| {
+        let wire::app_query_response::Answer::DocsSearch(found) = scratch
+            .ask(wire::app_query_request::Query::DocsSearch(
+                wire::DocsSearchRequest {
+                    term: term.to_owned(),
+                    limit: 10,
+                    tz: TZ.to_owned(),
+                },
+            ))
+            .expect("search answers")
+        else {
+            panic!("search answered as something else");
+        };
+        found
+    };
+    let found = search("leases");
+    assert_eq!(found.containers.len(), 1);
+    let hit = &found.containers[0];
+    assert_eq!(
+        (
+            hit.entity.as_str(),
+            hit.id.as_str(),
+            hit.app_id.as_str(),
+            hit.open_id.as_str()
+        ),
+        ("core.concept", folder.as_str(), "docs", "")
+    );
+    assert_eq!(hit.title, "Leases");
+    // The drive's top level is a concept of the same scheme, labelled
+    // `Documents`, and is not a folder anyone named.
+    assert!(search("documents").containers.is_empty());
+    let slipped = search("laeses");
+    assert_eq!(slipped.corrected, "leases");
+    assert_eq!(slipped.containers.len(), 1);
+    scratch.run(
+        "core.delete_folder",
+        serde_json::json!({ "folder_id": folder }),
+    );
+    assert!(search("leases").containers.is_empty());
 }

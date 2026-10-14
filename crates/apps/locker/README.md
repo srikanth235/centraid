@@ -10,7 +10,7 @@ The phone is the vault ([#1029](https://github.com/srikanth235/centraid/issues/1
 | --- | --- |
 | `load_items` | one shelf (live or archived), newest first, with stars, tags, the vault's own counts and whether the window filled |
 | `load_item` | one item — trashed too — with its sidecars and, for each sealed cell its type carries, **whether it holds a value** |
-| `load_search` | title, username and address, case-insensitively; never a note, never a secret, never the trash |
+| `load_search` | title, username, address, note, full name, email, phone, card brand, aliases and the memo, case-insensitively, over every item not in the trash; never a sealed cell (the walk projects none). When the exact walk is empty, a typo is corrected against the words of the very rows walked (`spelling::WalkedWords`; Locker has no index and no vocabulary) and walked again, and `SearchData::corrected` says so ([#1097](https://github.com/srikanth235/centraid/issues/1097), R4, R6) |
 | `load_review` | what metadata can show: compromised, `http://` addresses, expired and expiring cards against the device's day |
 | `load_access` | one item's receipts (`locker_access` 64): reveals, copies and one-time codes, refusals included — metadata only (#1047 T2) |
 | `load_export` / `load_import_targets` | what an export writes (live and archived, without their secrets, which the core opens) and what an import plans against (each item's plain columns and which sealed cells hold a value) |

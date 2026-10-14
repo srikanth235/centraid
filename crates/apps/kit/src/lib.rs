@@ -46,6 +46,7 @@ pub mod page;
 pub mod reads;
 pub mod representations;
 pub mod row;
+pub mod spelling;
 pub mod statement;
 pub mod testdoor;
 

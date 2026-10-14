@@ -170,6 +170,39 @@ pub fn insert_note(vault: &Vault, title: &str) -> Result<String> {
     Ok(note_id)
 }
 
+/// A photograph's byte row and its asset, with the title the asset carries.
+///
+/// The bytes are stand-ins — the one hash over the asset id, which nothing
+/// opens — as `collection_kind.rs`'s photograph is. The index row for a byte
+/// row is written with it, and the asset comes after, so the byte row is
+/// touched once more and the index is written again with the asset's title.
+pub fn insert_photograph(vault: &Vault, asset_id: &str, title: &str) -> Result<()> {
+    let content_id = format!("content-{asset_id}");
+    let hash = centraid_vault::content::content_digest(asset_id.as_bytes());
+    vault.commit(|tx| {
+        tx.set_producer("test.insert_photograph");
+        tx.connection().execute(
+            "INSERT INTO core_content_item
+               (content_id, content_uri, content_hash, byte_size, created_at)
+             VALUES (?1, ?2, ?3, 1024, '2026-01-01T00:00:00.000Z')",
+            rusqlite::params![content_id, format!("blob:{hash}"), hash],
+        )?;
+        tx.connection().execute(
+            "INSERT INTO media_asset
+               (asset_id, content_id, kind, title, captured_at, created_at, updated_at)
+             VALUES (?1, ?2, 'photo', ?3, '2026-01-01T00:00:00.000Z',
+                     '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+            rusqlite::params![asset_id, content_id, title],
+        )?;
+        tx.connection().execute(
+            "UPDATE core_content_item SET byte_size = byte_size WHERE content_id = ?1",
+            [&content_id],
+        )?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
 /// The vault's own owner party, for a test that needs a real party id.
 pub fn owner_party(vault: &Vault) -> Result<String> {
     vault.read(|connection| {

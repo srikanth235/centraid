@@ -248,7 +248,7 @@ public object Reads {
      * state, and a member who sees "No vault yet" on Home and then something
      * else in an app is being told two things about one fact.
      */
-    public const val NO_VAULT: String = "No vault is open on this device."
+    public const val NO_VAULT: String = "No vault is open."
 
     /** There is no vault to read. Not a fault, and never an empty `data`. */
     public fun noVault(): ReadFailure = refused(NO_VAULT)
@@ -256,8 +256,8 @@ public object Reads {
     /** This seat has no copy yet. A first sync, not a refusal. */
     public fun noCopyYet(): ReadFailure = ReadFailure(
         kind = ReadFailureKind.READ_FAILURE_KIND_NO_COPY_YET,
-        sentence = "This device has not copied these yet.",
-        remedy = "Stay on Wi-Fi while Centraid catches up.",
+        sentence = "Not on this phone yet.",
+        remedy = "Stay on Wi-Fi while it catches up.",
     )
 
     /**
@@ -268,19 +268,19 @@ public object Reads {
      */
     public fun lowDiskParked(): ReadFailure = ReadFailure(
         kind = ReadFailureKind.READ_FAILURE_KIND_LOW_DISK_PARKED,
-        sentence = "This device is out of space, so Centraid has paused.",
-        remedy = "Free up space and Centraid picks up where it stopped.",
+        sentence = "This phone is out of space.",
+        remedy = "Free up space to resume.",
     )
 
     public fun unavailable(sentence: String): ReadFailure = ReadFailure(
         kind = ReadFailureKind.READ_FAILURE_KIND_UNAVAILABLE,
         sentence = sentence,
-        remedy = "Centraid tries again when it can reach your gateway.",
+        remedy = "Will retry when your backup device is reachable.",
     )
 
     public fun coreRestarted(): ReadFailure = ReadFailure(
         kind = ReadFailureKind.READ_FAILURE_KIND_CORE_RESTARTED,
-        sentence = "Centraid hit a problem and restarted.",
+        sentence = "Something went wrong. Centraid restarted.",
     )
 
     /**

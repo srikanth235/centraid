@@ -24,3 +24,14 @@ backup {
   paused_reason: "Centraid imports the photos you selected."
 }
 sheet: SHEET_NONE
+# The import's progress and the selection's remedy; no "Import now" over a
+# library that has photographs, and none while a pass is running.
+import_banner {
+  sentence: "Importing: 38 done, 12 to go"
+  reason: "Centraid imports the photos you selected."
+  remedy: REMEDY_MANAGE_SELECTION
+  allow_label: "Allow photo access"
+  settings_label: "Open Settings"
+  manage_label: "Manage selection"
+  import_now_label: "Import now"
+}

@@ -14,10 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
+import dev.centraid.android.kit.RowSkeleton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,10 +34,15 @@ import centraid.screen.v1.FaceReviewEvent
 import centraid.screen.v1.FaceReviewState
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ContentImage
+import dev.centraid.android.kit.InkButton
+import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.FaceReviewMachine
 
 /**
@@ -77,7 +80,7 @@ public fun FaceReviewScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         when {
-            loading != null -> CircularProgressIndicator()
+            loading != null -> RowSkeleton()
 
             failure != null -> ScreenFailure(failure.sentence, failure.remedy)
 
@@ -94,13 +97,13 @@ public fun FaceReviewScreen(
                     // off, never "nobody asked".
                     if (state.recognition_enabled) {
                         ScreenEmpty(
-                            sentence = "No faces waiting.",
-                            remedy = "Centraid asks again when it finds someone new.",
+                            sentence = PhotosCopy.PHOTOS_FACES_NONE,
+                            remedy = PhotosCopy.PHOTOS_FACES_NONE_CAPTION,
                         )
                     } else {
                         ScreenEmpty(
-                            sentence = "Face recognition is off.",
-                            remedy = "Turn it on in Settings and Centraid starts finding faces.",
+                            sentence = PhotosCopy.PHOTOS_PEOPLE_OFF,
+                            remedy = PhotosCopy.PHOTOS_FACES_OFF_CAPTION,
                         )
                     }
                 } else {
@@ -165,9 +168,13 @@ private fun Question(
 @Composable
 private fun Answers(candidate: FaceCandidate, onEvent: (FaceReviewEvent) -> Unit) {
     // THE PROPOSAL IS A ONE-TAP YES ONLY WHEN THERE IS ONE. A model with no
-    // guess offers no shortcut rather than a button that means nothing.
-    if (candidate.proposed_party_id.isNotEmpty() && candidate.proposed_name.isNotEmpty()) {
-        AnswerButton("CheckCircle", "Yes, this is ${candidate.proposed_name}") {
+    // guess offers no shortcut rather than a button that means nothing. The
+    // ONE ink button is whichever answer is the likeliest: the proposal's yes,
+    // or, with no guess, naming the face.
+    val proposed = candidate.proposed_party_id.isNotEmpty() && candidate.proposed_name.isNotEmpty()
+    val name = { onEvent(FaceReviewEvent(naming = FaceReviewEvent.NamingChanged(naming = true))) }
+    if (proposed) {
+        InkButton(label = "Yes, this is ${candidate.proposed_name}", testTag = "face-yes", onPress = {
             onEvent(
                 FaceReviewEvent(
                     confirmed = FaceReviewEvent.Confirmed(
@@ -176,43 +183,31 @@ private fun Answers(candidate: FaceCandidate, onEvent: (FaceReviewEvent) -> Unit
                     ),
                 ),
             )
-        }
+        })
+        SheetRow(
+            label = PhotosCopy.PHOTOS_FACES_SOMEONE_ELSE,
+            iconKey = "UserPlus",
+            testTag = "face-name",
+            onTap = name,
+        )
+    } else {
+        InkButton(label = PhotosCopy.PHOTOS_FACES_SAY_WHO, testTag = "face-name", onPress = name)
     }
-    AnswerButton(
-        "UserPlus",
-        if (candidate.proposed_name.isEmpty()) "Say who this is" else "Someone else",
-    ) {
-        onEvent(FaceReviewEvent(naming = FaceReviewEvent.NamingChanged(naming = true)))
-    }
-    AnswerButton("XCircle", "Not this person") {
+    SheetRow(label = PhotosCopy.PHOTOS_FACES_NOT_THIS, iconKey = "XCircle", testTag = "face-not", onTap = {
         onEvent(
             FaceReviewEvent(rejected = FaceReviewEvent.Rejected(region_id = candidate.region_id)),
         )
-    }
-    AnswerButton("EyeOff", "Keep unnamed") {
+    })
+    SheetRow(label = PhotosCopy.PHOTOS_FACES_KEEP_UNNAMED, iconKey = "EyeOff", testTag = "face-unnamed", onTap = {
         onEvent(
             FaceReviewEvent(dismissed = FaceReviewEvent.Dismissed(region_id = candidate.region_id)),
         )
-    }
-    AnswerButton("Skip", "Skip for now") {
+    })
+    SheetRow(label = PhotosCopy.PHOTOS_FACES_SKIP_FOR_NOW, iconKey = "Skip", testTag = "face-skip", onTap = {
         onEvent(
             FaceReviewEvent(skipped = FaceReviewEvent.Skipped(region_id = candidate.region_id)),
         )
-    }
-}
-
-@Composable
-private fun AnswerButton(iconKey: String, label: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CentraidIcon(iconKey = iconKey, tint = centraidColor("text"), size = 16.dp)
-            Text(text = label, style = centraidType("control"), color = centraidColor("text"))
-        }
-    }
+    })
 }
 
 /**
@@ -237,13 +232,15 @@ private fun NamePicker(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        OutlinedTextField(
+        NameField(
             value = typed,
             onValueChange = { typed = it },
+            label = PhotosCopy.PHOTOS_FACES_NEW_NAME,
             modifier = Modifier.weight(1f),
-            label = { Text(text = "New name") },
         )
-        TextButton(
+        KitLink(
+            label = "Add",
+            enabled = typed.isNotBlank(),
             onClick = {
                 val trimmed = typed.trim()
                 if (trimmed.isNotEmpty()) {
@@ -257,7 +254,7 @@ private fun NamePicker(
                     )
                 }
             },
-        ) { Text(text = "Add") }
+        )
     }
     data.known_people.forEach { person ->
         Row(
@@ -285,11 +282,13 @@ private fun NamePicker(
             )
         }
     }
-    TextButton(
-        onClick = {
+    QuietButton(
+        label = "Cancel",
+        testTag = "face-name-cancel",
+        onPress = {
             onEvent(FaceReviewEvent(naming = FaceReviewEvent.NamingChanged(naming = false)))
         },
-    ) { Text(text = "Cancel") }
+    )
 }
 
 /**
@@ -321,14 +320,14 @@ private fun FaceCrop(candidate: FaceCandidate) {
             .fillMaxWidth()
             .aspectRatio(1f)
             .clip(RectangleShape)
-            .semantics { contentDescription = "A face in one of your photographs" },
+            .semantics { contentDescription = PhotosCopy.PHOTOS_FACES_A_FACE },
     ) {
         val path = candidate.thumbnail_path
         if (!path.isNullOrEmpty()) {
             ContentImage(path)
         } else {
             Text(
-                text = "This photograph is not on this device.",
+                text = PhotosCopy.PHOTOS_NOT_ON_PHONE_SHORT,
                 style = centraidType("small"),
                 color = centraidColor("textSoft"),
                 modifier = Modifier.align(Alignment.Center).padding(8.dp),
@@ -373,7 +372,7 @@ private fun position(state: FaceReviewState, data: FaceReviewData): String {
  * simply asks.
  */
 private fun prompt(candidate: FaceCandidate): String {
-    if (candidate.proposed_name.isEmpty()) return "Who is this?"
+    if (candidate.proposed_name.isEmpty()) return PhotosCopy.PHOTOS_FACES_WHO
     val word = FaceReviewMachine.confidenceWord(candidate.confidence)
     return if (word.isEmpty()) {
         "Is this ${candidate.proposed_name}?"

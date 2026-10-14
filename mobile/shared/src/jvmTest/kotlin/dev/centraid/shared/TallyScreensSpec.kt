@@ -131,8 +131,20 @@ class TallyScreensSpec : StringSpec({
         val more = TallyHomeMachine.reduce(groups.state, view(TallyHomeEvent(band = TallyHomeEvent.BandPicked(key = "more"))))
         more.state.screen.sheet shouldBe TallyHomeState.Sheet.SHEET_MORE
         more.state.screen.band.single { it.current }.key shouldBe "more"
+        // SEARCH IS THE BAR UNDER THE TITLE, never a More row (R-CHROME-2).
         more.state.screen.chrome?.more_rows?.map { it.key } shouldBe
-            listOf("settle", "recurring", "spending", "search", "export", "trash", "reads")
+            listOf("settle", "recurring", "spending", "export", "trash", "reads")
+        more.state.screen.band.last().icon_key shouldBe "MoreHoriz"
+    }
+
+    "the search bar is a door: it reads Tally's placeholder and its tap changes nothing here" {
+        val home = answered(TallyHomeMachine, open(TallyHomeMachine, TallyHomeEvent(opened = TallyHomeEvent.Opened())), dashboard())
+        home.screen.chrome?.search_placeholder shouldBe "Search expense descriptions"
+        home.screen.chrome?.add_expense shouldBe "Add expense"
+        // The shell pushes `tally.search`; the machine neither reads nor moves.
+        val opened = TallyHomeMachine.reduce(home, view(TallyHomeEvent(search_opened = TallyHomeEvent.SearchOpened())))
+        opened.state shouldBe home
+        opened.effects.shouldBeEmpty()
     }
 
     "Activity draws a window, and Show more widens it without a read" {
@@ -660,7 +672,7 @@ class TallyScreensSpec : StringSpec({
         typed.effects shouldBe listOf(ScreenEffect.ReadPage("tally.search", afterCursor = null))
         TallySearchReads.requests(typed.state, CLOCK)!!.single().tally_search?.term shouldBe "ferry"
         val none = TallySearchMachine.reduce(typed.state, TallyInput.Answered(listOf(AppQueryResponse(tally_search = TallySearch())))).state
-        none.screen.data_?.empty?.headline shouldBe "${TallyCopy.NOTHING_MATCHES} “ferry”."
+        none.screen.data_?.empty?.headline shouldBe "Nothing matches “ferry”."
         none.screen.field_?.answered_term shouldBe "ferry"
         val hits = TallySearchMachine.reduce(
             typed.state,
@@ -671,6 +683,73 @@ class TallyScreensSpec : StringSpec({
         cleared.screen.field_?.term shouldBe ""
         cleared.screen.resting.shouldNotBeNull()
         cleared.screen.data_.shouldBeNull()
+    }
+
+    "search: the words the core corrected are on the field, a new term clears them, and an answer for a cleared field draws none (#1097)" {
+        val typed = TallySearchMachine.reduce(
+            TallySearchMachine.initial(),
+            view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "feery"))),
+        ).state
+        val corrected = TallyInput.Answered(
+            listOf(AppQueryResponse(tally_search = TallySearch(results = listOf(expenseRow("e1")), total_matches = 1, corrected = "ferry"))),
+        )
+        val fixed = TallySearchMachine.reduce(typed, corrected).state
+        fixed.screen.field_?.corrected shouldBe "ferry"
+        // An exact answer says nothing was corrected.
+        TallySearchMachine.reduce(typed, TallyInput.Answered(listOf(AppQueryResponse(tally_search = TallySearch(results = listOf(expenseRow("e1"))))))).state
+            .screen.field_?.corrected shouldBe ""
+        // A NEW TERM clears it.
+        TallySearchMachine.reduce(fixed, view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "feer")))).state
+            .screen.field_?.corrected shouldBe ""
+        // AN ANSWER THAT LANDS AFTER THE FIELD WAS CLEARED draws none.
+        val cleared = TallySearchMachine.reduce(fixed, view(TallySearchEvent(cleared = TallySearchEvent.Cleared()))).state
+        cleared.screen.field_?.corrected shouldBe ""
+        TallySearchMachine.reduce(cleared, corrected).state.screen.field_?.corrected shouldBe ""
+    }
+
+    "search: a group found by name is a container opening by its group id, with no nothing-found over it, cleared by a new term or a clear, and a stale answer sets none (#1097)" {
+        val typed = TallySearchMachine.reduce(
+            TallySearchMachine.initial(),
+            view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "lisbon"))),
+        ).state
+        val group = centraid.core.v1.ContainerHit(entity = "social.circle", id = "circle-1", title = "Lisbon trip", app_id = "tally", open_id = "group-1")
+        val answer = TallyInput.Answered(listOf(AppQueryResponse(tally_search = TallySearch(containers = listOf(group)))))
+        val found = TallySearchMachine.reduce(typed, answer).state
+        val container = found.screen.field_!!.containers.single()
+        container.kind_label shouldBe "Group"
+        container.id shouldBe "circle-1"
+        // It opens by the tally_group id, never by the circle's.
+        container.target shouldBe centraid.screen.v1.ChatCard(app = "tally", entity = "group", id = "group-1", title = "Lisbon trip")
+        found.screen.data_!!.results.shouldBeEmpty()
+        found.screen.data_.empty.shouldBeNull()
+        TallySearchMachine.reduce(found, view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "lisb")))).state
+            .screen.field_!!.containers.shouldBeEmpty()
+        val cleared = TallySearchMachine.reduce(found, view(TallySearchEvent(cleared = TallySearchEvent.Cleared()))).state
+        cleared.screen.field_!!.containers.shouldBeEmpty()
+        TallySearchMachine.reduce(cleared, answer).state.screen.field_!!.containers.shouldBeEmpty()
+    }
+
+    "search: Ask is the no-match question: set by a wholly empty current answer, cleared by a new term, a close, a denial or a stale answer, and never set when anything was found (#1097, R-1097-28)" {
+        val typed = TallySearchMachine.reduce(
+            TallySearchMachine.initial(),
+            view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "zzqx"))),
+        ).state
+        fun answer(search: TallySearch) = TallyInput.Answered(listOf(AppQueryResponse(tally_search = search)))
+        val none = TallySearchMachine.reduce(typed, answer(TallySearch())).state
+        none.screen.field_!!.ask shouldBe "Find zzqx"
+        none.screen.data_!!.empty!!.action_label shouldBe "Ask about “zzqx”"
+        // Anything found is no Ask: an expense, or a group.
+        TallySearchMachine.reduce(typed, answer(TallySearch(results = listOf(expenseRow("e1")), total_matches = 1)))
+            .state.screen.field_!!.ask shouldBe ""
+        val group = centraid.core.v1.ContainerHit(entity = "social.circle", id = "circle-1", title = "Lisbon trip", app_id = "tally", open_id = "group-1")
+        TallySearchMachine.reduce(typed, answer(TallySearch(containers = listOf(group)))).state.screen.field_!!.ask shouldBe ""
+        // A new term, a clear and a denial clear it; an answer for a cleared field sets none.
+        TallySearchMachine.reduce(none, view(TallySearchEvent(term = TallySearchEvent.TermChanged(term = "zzq")))).state
+            .screen.field_!!.ask shouldBe ""
+        val cleared = TallySearchMachine.reduce(none, view(TallySearchEvent(cleared = TallySearchEvent.Cleared()))).state
+        cleared.screen.field_!!.ask shouldBe ""
+        TallySearchMachine.reduce(none, TallyInput.Denied(AppQueryDenial())).state.screen.field_!!.ask shouldBe ""
+        TallySearchMachine.reduce(cleared, answer(TallySearch())).state.screen.field_!!.ask shouldBe ""
     }
 
     "Tally's trash restores and never offers to destroy" {

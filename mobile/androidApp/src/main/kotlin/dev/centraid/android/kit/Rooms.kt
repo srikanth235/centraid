@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -15,12 +17,17 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalBottomSheetProperties
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,12 +37,14 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.SecureFlagPolicy
 import centraid.screen.v1.Autosave
 import centraid.screen.v1.SearchField
 import centraid.screen.v1.StatusLine as StatusLineMessage
@@ -63,7 +72,15 @@ public data class RoomAction(
     val onPress: () -> Unit,
 )
 
-/** Search on an [AppPlace]: the kit `SearchField` and its two events. */
+/**
+ * Search on an [AppPlace]: the kit `SearchField` and its events.
+ *
+ * SEARCH IS ALWAYS IN THE SAME PLACE (R-CHROME-2): closed, the slot is a
+ * field-shaped bar reading [placeholder], and a tap sends [onOpen]; open, it
+ * is the field. Never a More row, a header glyph or a band tab. An app whose
+ * search is a page of its own (Photos, Tally) pushes it from [onOpen] and
+ * never sets `field.open_`.
+ */
 public data class RoomSearch(
     val field: SearchField,
     val placeholder: String,
@@ -71,11 +88,87 @@ public data class RoomSearch(
     val onClose: () -> Unit,
     val label: String = KitWords.SEARCH,
     val closeLabel: String = KitWords.CLOSE_SEARCH,
+    val onOpen: () -> Unit = {},
 )
 
 /**
+ * One chip in the room's filter row (R-CHROME-3): a filter ([selected] says
+ * whether it narrows the list now) or the sort, which carries [chevron] and
+ * opens an `OptionSheet` of its choices. The row sits under search, before
+ * the content, in every app.
+ */
+public data class RoomChip(
+    val testTag: String,
+    val label: String,
+    val count: String = "",
+    val selected: Boolean = false,
+    val chevron: Boolean = false,
+    val spoken: String = "",
+    val onPress: () -> Unit,
+)
+
+/** The search bar while search is closed: field-shaped, so it reads as the place to type. */
+@Composable
+public fun RoomSearchOpener(placeholder: String, testTag: String = "search-opener", onOpen: () -> Unit) {
+    val shape = RoundedCornerShape(KitGeometry.RADIUS)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 4.dp, bottom = 8.dp)
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .clip(shape)
+            .background(centraidColor("bgSunken"))
+            .border(KitGeometry.HAIRLINE, centraidColor("line"), shape)
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 12.dp)
+            .testTag(testTag)
+            .clearAndSetSemantics {
+                contentDescription = placeholder
+                role = Role.Button
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CentraidIcon(iconKey = "Search", tint = centraidColor("textFaint"), size = 16.dp)
+        Text(
+            placeholder,
+            style = centraidType("body"),
+            color = centraidColor("textFaint"),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+    }
+}
+
+/** The filter row: chips in one line, scrolling sideways when they overflow. */
+@Composable
+public fun RoomChipRow(app: String, chips: List<RoomChip>) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
+            .testTag("$app-chips"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        chips.forEach { chip ->
+            val spoken = chip.spoken.ifEmpty { chip.label }
+            KitChip(
+                label = chip.label,
+                count = chip.count,
+                selected = chip.selected,
+                chevron = chip.chevron,
+                modifier = Modifier.testTag(chip.testTag).semantics { contentDescription = spoken },
+                onClick = chip.onPress,
+            )
+        }
+    }
+}
+
+/**
  * `AppPlace`: an app's root. `AppHeader` (mark + name + ≤1 trailing action),
- * the search field under it while [search] is open, [content], the status line
+ * search under it (the bar, or the field while open), the filter row of
+ * [chips], [content], the status line
  * and the app's band at the foot — a render prop, so the band stays the app's.
  * [statusLine] is the status host's second form, for a line that carries a
  * verb or a bar ([ProgressStatusLine]); it docks where [status] does.
@@ -88,6 +181,7 @@ public fun AppPlace(
     meta: String = "",
     trailing: RoomAction? = null,
     search: RoomSearch? = null,
+    chips: List<RoomChip> = emptyList(),
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     band: (@Composable () -> Unit)? = null,
@@ -107,16 +201,21 @@ public fun AppPlace(
             }
             if (trailing != null) IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
         }
-        if (search != null && search.field.open_) {
-            CentraidSearchField(
-                field = search.field,
-                placeholder = search.placeholder,
-                onTerm = search.onTerm,
-                onClose = search.onClose,
-                label = search.label,
-                closeLabel = search.closeLabel,
-            )
+        if (search != null) {
+            if (search.field.open_) {
+                CentraidSearchField(
+                    field = search.field,
+                    placeholder = search.placeholder,
+                    onTerm = search.onTerm,
+                    onClose = search.onClose,
+                    label = search.label,
+                    closeLabel = search.closeLabel,
+                )
+            } else {
+                RoomSearchOpener(search.placeholder, testTag = "$app-search-open", onOpen = search.onOpen)
+            }
         }
+        if (chips.isNotEmpty()) RoomChipRow(app, chips)
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         StatusLine(status)
         statusLine?.invoke()
@@ -235,6 +334,7 @@ public data class SheetPrimary(
     val label: String,
     val destructive: Boolean = false,
     val testTag: String = "sheet-primary",
+    val enabled: Boolean = true,
     val onPress: () -> Unit,
 )
 
@@ -242,6 +342,19 @@ public data class SheetPrimary(
  * `SheetRoom`: the grabber (Material's drag handle), a title carrying the
  * noun, [content], the status line, and ≤1 ink button. A destructive primary
  * is the OUTLINED `net` button, never a filled one.
+ *
+ * **[swipeable] false is a sheet nobody can walk out of**: no drag, no back
+ * press, no tap outside, and the dismiss request is dropped. It is for a sheet
+ * whose screen is mid-write (a vault being made, a laptop being paired), where
+ * a way out would leave the machine behind the view. Read live, so a screen
+ * flips it with its phase without the sheet being rebuilt.
+ *
+ * **[secure] true makes the sheet's own window `FLAG_SECURE`.** A sheet is a
+ * dialog window, and the activity's flag does not reach one made before it was
+ * set, so a sheet holding the 24 words carries the flag itself.
+ *
+ * **[expanded] true opens at full height** and skips the half detent, for a
+ * screen that is a page in a sheet. Defaults leave a sheet as Material draws it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -251,9 +364,27 @@ public fun SheetRoom(
     modifier: Modifier = Modifier,
     primary: SheetPrimary? = null,
     status: String = "",
+    swipeable: Boolean = true,
+    secure: Boolean = false,
+    expanded: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = centraidColor("bg")) {
+    val canLeave by rememberUpdatedState(swipeable)
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = expanded,
+        confirmValueChange = { target -> target != SheetValue.Hidden || canLeave },
+    )
+    ModalBottomSheet(
+        onDismissRequest = { if (canLeave) onDismiss() },
+        sheetState = sheetState,
+        sheetGesturesEnabled = swipeable,
+        containerColor = centraidColor("bg"),
+        properties = ModalBottomSheetProperties(
+            securePolicy = if (secure) SecureFlagPolicy.SecureOn else SecureFlagPolicy.Inherit,
+            shouldDismissOnBackPress = swipeable,
+            shouldDismissOnClickOutside = swipeable,
+        ),
+    ) {
         Column(modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp).testTag("sheet-room")) {
             if (title.isNotEmpty()) RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp))
             content()
@@ -263,6 +394,7 @@ public fun SheetRoom(
                     label = primary.label,
                     destructive = primary.destructive,
                     testTag = primary.testTag,
+                    enabled = primary.enabled,
                     modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
                     onPress = primary.onPress,
                 )
@@ -274,7 +406,10 @@ public fun SheetRoom(
 /**
  * A full-width button. Ink (`accent` fill) for the one act a sheet offers;
  * a destructive act is outlined in `net` with `net` words and no fill
- * (the hand-off's "destructive outline").
+ * (the hand-off's "destructive outline"). [enabled] false is still drawn, never
+ * hidden: the `textDisabled` ink on the leaf (a `bgSunken` plate for ink, a
+ * `textDisabled` outline for destructive), and nothing to press. [testTag]
+ * overrides the default id.
  */
 @Composable
 public fun InkButton(
@@ -282,6 +417,7 @@ public fun InkButton(
     modifier: Modifier = Modifier,
     destructive: Boolean = false,
     testTag: String = "kit-ink-button",
+    enabled: Boolean = true,
     onPress: () -> Unit,
 ) {
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
@@ -291,21 +427,31 @@ public fun InkButton(
             .heightIn(min = KitGeometry.ROW_MIN)
             .clip(shape)
             .then(
-                if (destructive) {
-                    Modifier.border(KitGeometry.HAIRLINE, centraidColor("net"), shape)
-                } else {
-                    Modifier.background(centraidColor("accent"))
+                when {
+                    !enabled && destructive -> Modifier.border(KitGeometry.HAIRLINE, centraidColor("textDisabled"), shape)
+                    !enabled -> Modifier.background(centraidColor("bgSunken"))
+                    destructive -> Modifier.border(KitGeometry.HAIRLINE, centraidColor("net"), shape)
+                    else -> Modifier.background(centraidColor("accent"))
                 },
             )
-            .clickable(onClick = onPress)
+            .clickable(enabled = enabled, onClick = onPress)
             .testTag(testTag)
-            .semantics { role = Role.Button },
+            .semantics {
+                role = Role.Button
+                if (!enabled) disabled()
+            },
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
             style = centraidType("control"),
-            color = centraidColor(if (destructive) "net" else "onAccent"),
+            color = centraidColor(
+                when {
+                    !enabled -> "textDisabled"
+                    destructive -> "net"
+                    else -> "onAccent"
+                },
+            ),
         )
     }
 }
@@ -399,18 +545,11 @@ public fun ProgressStatusLine(
             if (closeLabel.isNotEmpty()) IconKey("X", closeLabel, "$testTag-close", bordered = false, onPress = onClose)
         }
         if (permille != null) {
-            val fraction = permille.coerceIn(0, 1000) / 1000f
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-                    .heightIn(min = 2.dp)
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(centraidColor("bgSunken"))
-                    .semantics { progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f) },
-            ) {
-                Box(Modifier.fillMaxWidth(fraction).heightIn(min = 2.dp).background(centraidColor("textSoft")))
-            }
+            KitProgressBar(
+                fraction = permille.coerceIn(0, 1000) / 1000f,
+                ink = "textSoft",
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
     }
 }
@@ -426,17 +565,19 @@ public fun IconKey(
     testTag: String,
     modifier: Modifier = Modifier,
     bordered: Boolean = true,
+    enabled: Boolean = true,
     onPress: () -> Unit,
 ) {
     Box(
         modifier
             .size(KitGeometry.ROW_MIN)
             .clip(RoundedCornerShape(KitGeometry.RADIUS))
-            .clickable(onClick = onPress)
+            .clickable(enabled = enabled, onClick = onPress)
             .testTag(testTag)
             .clearAndSetSemantics {
                 contentDescription = label
                 role = Role.Button
+                if (!enabled) disabled()
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -445,14 +586,14 @@ public fun IconKey(
                 .size(36.dp)
                 .then(
                     if (bordered) {
-                        Modifier.border(KitGeometry.HAIRLINE, centraidColor("line"), RoundedCornerShape(KitGeometry.RADIUS))
+                        Modifier.border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), RoundedCornerShape(KitGeometry.RADIUS))
                     } else {
                         Modifier
                     },
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            CentraidIcon(iconKey = iconKey, tint = centraidColor("textSoft"), size = 18.dp)
+            CentraidIcon(iconKey = iconKey, tint = centraidColor(if (enabled) "textSoft" else "textDisabled"), size = 18.dp)
         }
     }
 }

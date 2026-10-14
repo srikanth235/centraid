@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 23] = [
+const PROTOS: [&str; 26] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/command.proto",
@@ -61,6 +61,15 @@ const PROTOS: [&str; 23] = [
     // The chat's history, as reads (R-CHAT-1): threads, one thread's messages
     // and whether a card's row is still there.
     "proto/centraid/core/v1/chat.proto",
+    // Home's search (R-CHROME-6): the powerbox's loader over every domain but
+    // Locker, asked from Home. Its own file because Home is not an app.
+    "proto/centraid/core/v1/vault_search.proto",
+    // A container as a search result (#1097): the one message the four owning
+    // apps' own search answers share.
+    "proto/centraid/core/v1/container.proto",
+    // Photos' own search (#1097, R-1097-25..27): the text and album legs, asked of
+    // the full-text door, and the correction.
+    "proto/centraid/core/v1/photos.proto",
     "proto/centraid/core/v1/app_query.proto",
     // The on-device chat: a session, a question and a stream of events, over
     // reads an app already answers. Its own file because a turn is neither a
@@ -95,6 +104,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.PeopleHomeEvent.kind.data")
         .boxed(".centraid.screen.v1.PeoplePersonState.content.data")
         .boxed(".centraid.screen.v1.PeoplePersonEvent.kind.data")
+        .boxed(".centraid.screen.v1.TasksHomeState.content.data")
         .boxed(".centraid.screen.v1.TasksDetailState.content.data")
         .boxed(".centraid.screen.v1.DocsDriveEvent.kind.data")
         .boxed(".centraid.screen.v1.DocsDocumentState.content.data")

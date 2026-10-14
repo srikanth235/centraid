@@ -26,6 +26,7 @@ import dev.centraid.shared.chat.ChatDoor
 import dev.centraid.shared.chat.ChatFlow
 import dev.centraid.shared.chat.Pending
 import dev.centraid.shared.chat.ThreadRow
+import dev.centraid.shared.chat.ThreadSearch
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
@@ -33,6 +34,7 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.runTest
@@ -148,6 +150,14 @@ internal class ScriptedChatDoor : ChatDoor {
         return if (failingThreadRead) null else storedRows.toList()
     }
 
+    /** What the core answers to a drawer search; the default finds nothing. */
+    var searchAnswer: (String) -> ThreadSearch? = { ThreadSearch(rows = emptyList()) }
+
+    override suspend fun searchThreads(term: String): ThreadSearch? {
+        history += "search:$term"
+        return searchAnswer(term)
+    }
+
     override suspend fun thread(threadId: String): ChatThread? {
         history += "thread:$threadId"
         return storedThreads[threadId] ?: ChatThread(found = false)
@@ -247,6 +257,40 @@ class ChatFlowSpec : StringSpec({
         rig.open()
         rig.door.calls shouldBe listOf("status", "load", "start:", "suggest:")
         rig.state.phase shouldBe ChatState.Phase.PHASE_READY
+    }
+
+    "asking on the member's behalf waits for the chat to take the question, then sends it once (#1097)" {
+        val rig = Rig()
+        // The Chat tab is not open yet: the question is asked the moment it is.
+        // (A real dispatcher: the waiter must not resume inside the reducer's lock.)
+        val asked = CoroutineScope(Dispatchers.Default).async { rig.flow.askWhenReady("Find sunscren") }
+        rig.door.sends.shouldBeEmpty()
+        rig.open()
+        asked.await() shouldBe true
+        val send = rig.door.sends.single()
+        (send.session to send.text) shouldBe (7L to "Find sunscren")
+        rig.state.messages.first().text shouldBe "Find sunscren"
+    }
+
+    "asking over a chat that holds a thread starts a new one first, and a chat that never gets ready drops the question (#1097)" {
+        val rig = Rig()
+        rig.open()
+        rig.say("What is due today?")
+        rig.door.sends.single().reply.complete(
+            AssistSent(session_id = 7, turn_id = 1, answered = AssistAnswer(text = "Nothing.")),
+        )
+        rig.state.messages shouldHaveSize 2
+        rig.flow.askWhenReady("Find sunscren") shouldBe true
+        rig.door.clears shouldBe listOf(7L)
+        rig.door.sends.map { it.text } shouldBe listOf("What is due today?", "Find sunscren")
+        rig.state.messages.first().text shouldBe "Find sunscren"
+
+        // No model on the phone: the chat is not ready, so nothing is asked.
+        val absent = Rig()
+        absent.door.statusAnswer = AssistModelState.ASSIST_MODEL_STATE_ABSENT
+        absent.open(bytes = 530_000_000)
+        absent.flow.askWhenReady("Find sunscren", patienceMs = 200) shouldBe false
+        absent.door.sends.shouldBeEmpty()
     }
 
     "a question streams into the thread as the core streams it, and settles once" {

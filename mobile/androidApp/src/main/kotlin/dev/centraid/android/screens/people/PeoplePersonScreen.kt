@@ -366,13 +366,9 @@ private fun FramedSheet(
         title = f.title,
         onDismiss = { onEvent(PeoplePersonEvent(sheet_closed = PeoplePersonEvent.SheetClosed())) },
         status = f.failure?.sentence.orEmpty(),
-        // THE ONE INK BUTTON is drawn only while the machine says it can act.
-        primary = if (f.submit_enabled && !f.sending) {
-            SheetPrimary(label = f.submit_label, testTag = "people-sheet-submit") {
-                onEvent(PeoplePersonEvent(submitted = PeoplePersonEvent.SheetSubmitted()))
-            }
-        } else {
-            null
+        // THE ONE INK BUTTON is drawn always, and pressable only while the machine says it can act.
+        primary = SheetPrimary(label = f.submit_label, testTag = "people-sheet-submit", enabled = f.submit_enabled && !f.sending) {
+            onEvent(PeoplePersonEvent(submitted = PeoplePersonEvent.SheetSubmitted()))
         },
     ) { content() }
 }

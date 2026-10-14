@@ -173,7 +173,7 @@ public class TallyRoutes : AppRoutes {
                 LaunchedEffect(destination) { search.open() }
                 val held by search.host.state.collectAsStateWithLifecycle()
                 val state = held.screen
-                TallySearchScreen(state, onBack = nav::pop, onEvent = { event: TallySearchEvent ->
+                TallySearchScreen(state, onBack = nav::pop, onOpenContainer = { card -> nav.open(card, parent = state.chrome?.title.orEmpty()) }, onEvent = { event: TallySearchEvent ->
                     search.forward(event)
                     event.expense?.let { push(nav, Destination.TallyExpense(it.expense_id, parent = state.chrome?.title.orEmpty())) }
                 })
@@ -219,11 +219,12 @@ public class TallyRoutes : AppRoutes {
                     push(nav, Destination.TallyGroup(id, name, parent = here))
                 }
                 event.expense != null -> push(nav, Destination.TallyExpense(event.expense!!.expense_id, parent = here))
+                // THE SEARCH BAR IS A DOOR: Tally's search is a page of its own.
+                event.search_opened != null -> push(nav, Destination.TallySearch)
                 event.more != null -> when (event.more!!.key) {
                     TallyHomeMachine.MORE_SETTLE -> push(nav, Destination.TallySettleUp(parent = here))
                     TallyHomeMachine.MORE_RECURRING -> push(nav, Destination.TallyRecurring)
                     TallyHomeMachine.MORE_SPENDING -> push(nav, Destination.TallySpending)
-                    TallyHomeMachine.MORE_SEARCH -> push(nav, Destination.TallySearch)
                     TallyHomeMachine.MORE_TRASH -> push(nav, Destination.TallyTrash)
                     TallyHomeMachine.MORE_EXPORT -> push(nav, Destination.TallyExport(parent = here))
                     else -> Unit

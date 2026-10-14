@@ -32,7 +32,7 @@ chrome {
   title: "Event"
   back: "Agenda"
   loading: "Opening your calendar"
-  retry: "Retry"
+  retry: "Try again"
   scope_title: "Cancel a repeating event"
   scope_body: "Pick which occurrences to cancel."
   scope_commit: "Cancel event"

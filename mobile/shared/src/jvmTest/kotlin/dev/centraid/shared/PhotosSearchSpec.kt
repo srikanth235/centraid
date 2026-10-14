@@ -1,5 +1,6 @@
 package dev.centraid.shared
 
+import centraid.core.v1.ContainerHit
 import centraid.core.v1.Row
 import centraid.core.v1.Value
 import centraid.screen.v1.PhotoCell
@@ -297,8 +298,8 @@ class PhotosSearchSpec : StringSpec({
         PhotosSearchReads.tokens("a") shouldContainExactly listOf("a")
     }
 
-    "the hits read is the library's shelf, and the member's words are binds" {
-        val query = PhotosSearchReads.hitsQuery(PhotosSearchReads.tokens("harbour"), Reach())
+    "the hits read is the library's shelf, and what it reaches is binds" {
+        val query = PhotosSearchReads.hitsQuery(Reach(assetIds = listOf("a-1", "a-2"))).shouldNotBeNull()
         query.from shouldBe "media_asset"
         val order = query.order.shouldNotBeNull()
         query.select.contains(order.sort_column) shouldBe true
@@ -307,20 +308,26 @@ class PhotosSearchSpec : StringSpec({
         // trashed photographs would hand a member back what they put away.
         query.where_.shouldNotBeNull() shouldContain "deleted_at IS NULL"
         query.where_.shouldNotBeNull() shouldContain "archived_at IS NULL"
-        // THE MEMBER'S WORDS ARE A BIND AND NEVER TEXT IN THE PREDICATE.
-        query.where_.shouldNotBeNull().contains("harbour") shouldBe false
-        query.bind.map { it.text } shouldBe listOf("%harbour%")
+        // THE PHOTOGRAPHS THE CORE NAMED BY TEXT ARE BINDS AND NEVER TEXT IN THE
+        // PREDICATE, and they are the only arm: the caption `LIKE` is the
+        // door's now (#1097, R-1097-25).
+        query.where_.shouldNotBeNull() shouldContain "asset_id IN (?, ?)"
+        query.where_.shouldNotBeNull().contains("LIKE") shouldBe false
+        query.where_.shouldNotBeNull().contains("a-1") shouldBe false
+        query.bind.map { it.text } shouldBe listOf("a-1", "a-2")
         query.with_held_thumbnail shouldBe true
+        query.order.shouldNotBeNull().descending shouldBe true
 
         // WHAT THE DOORS MATCHED WIDENS THE GRID, by id and as binds: typing
         // "Tahoe" returns the album's photographs, not an empty grid under a
         // row saying the album exists (#712).
-        val reached = PhotosSearchReads.hitsQuery(
-            PhotosSearchReads.tokens("tahoe"),
-            Reach(albumIds = listOf("al-1")),
-        )
+        val reached = PhotosSearchReads.hitsQuery(Reach(albumIds = listOf("al-1"))).shouldNotBeNull()
         reached.where_.shouldNotBeNull() shouldContain "core_collection_entry"
         reached.bind.map { it.text }.contains("al-1") shouldBe true
+
+        // NOTHING REACHED IS NO STATEMENT: an `OR` of no arms would read the
+        // whole shelf.
+        PhotosSearchReads.hitsQuery(Reach()) shouldBe null
     }
 
     "a wildcard the member typed is a character, not a wildcard" {
@@ -334,9 +341,10 @@ class PhotosSearchSpec : StringSpec({
         // into an escaped backslash followed by a live wildcard.
         PhotosSearchReads.escapeLike("a\\%") shouldBe "a\\\\\\%"
 
-        // `a_b` IS SHORT WORDS ONLY, so it is matched whole — and escaped.
-        val query = PhotosSearchReads.hitsQuery(PhotosSearchReads.tokens("a_b"), Reach())
-        query.bind.map { it.text } shouldBe listOf("%a\\_b%")
+        // `a_b` IS SHORT WORDS ONLY, so it is matched whole — and escaped. The
+        // structured legs still match by `LIKE`; the text leg is the door's.
+        val query = PhotosSearchReads.peopleQuery(PhotosSearchReads.tokens("a_b"))
+        query.bind.map { it.text }.contains("%a\\_b%") shouldBe true
         query.where_.shouldNotBeNull() shouldContain "ESCAPE"
     }
 
@@ -380,5 +388,127 @@ class PhotosSearchSpec : StringSpec({
         ).state
         second.hits.shouldNotBeNull().cells.map { it.asset_id } shouldContainExactly
             listOf("a-1", "a-2")
+    }
+
+    "the field is the machine's: a corrected answer sets it, a new term or a clear takes it away" {
+        // #1097, R-1097-27: the shared field draws "Showing results for" from
+        // `search.corrected`, so the machine has to own it through `SearchLaw`.
+        val typing = machine.reduce(machine.initial(), typed("sunscren")).state
+        typing.search.shouldNotBeNull().term shouldBe "sunscren"
+        typing.search.shouldNotBeNull().corrected shouldBe ""
+
+        val answered = machine.reduce(
+            typing,
+            PhotosSearchReads.hitsArrived(
+                query = "sunscren",
+                rows = listOf(assetRow("a-1", "2026-02-03T10:00:00Z", title = "Sunscreen on the shelf")),
+                nextCursor = null,
+                topHits = emptyList(),
+                labels = emptyList(),
+                corrected = "sunscreen",
+            ),
+        ).state
+        answered.search.shouldNotBeNull().corrected shouldBe "sunscreen"
+        // The typed words stay the screen's own, and the page is still for them.
+        answered.query shouldBe "sunscren"
+        // THE CAPTION IS A REASON FOR THE WORDS THE PAGE WAS READ FOR, not for
+        // the typo: "sunscren" is not in the caption, "sunscreen" is.
+        answered.hits.shouldNotBeNull().matches.map { it.value_ } shouldContainExactly
+            listOf("Sunscreen on the shelf")
+
+        // A NEW TERM SAYS WHAT THE LAST ANSWER CORRECTED NO MORE.
+        machine.reduce(answered, typed("sunscreen")).state.search.shouldNotBeNull().corrected shouldBe ""
+        // A CLEARED FIELD IS A CLOSED ONE.
+        val cleared = machine.reduce(answered, typed("")).state
+        cleared.search.shouldNotBeNull().corrected shouldBe ""
+        cleared.search.shouldNotBeNull().term shouldBe ""
+    }
+
+    "Ask is the no-match question: a wholly empty current answer sets it and carries the action, and anything found, a new term, a denial or a clear takes it away (#1097, R-1097-28, R-1097-30)" {
+        val typing = machine.reduce(machine.initial(), typed("zzqx")).state
+        val none = machine.reduce(typing, hits("zzqx", emptyList())).state
+        none.search.shouldNotBeNull().ask shouldBe "Find zzqx"
+        // The no-match state is the machine's: the sentence and everywhere search looked, with Ask as its action.
+        val empty = none.hits.shouldNotBeNull().empty.shouldNotBeNull()
+        empty.headline shouldBe "No results"
+        empty.body shouldBe "Nothing matches “zzqx”. Search covers captions, text in photos, people, places, labels and albums."
+        empty.action_label shouldBe "Ask about “zzqx”"
+
+        // A photograph is a result: no Ask, no no-match state.
+        val found = machine.reduce(
+            typing,
+            hits("zzqx", listOf(assetRow("a-1", "2026-02-03T10:00:00Z"))),
+        ).state
+        found.search.shouldNotBeNull().ask shouldBe ""
+        found.hits.shouldNotBeNull().empty shouldBe null
+        // A new term, a clear and a refusal take the question away.
+        machine.reduce(none, typed("zzq")).state.search.shouldNotBeNull().ask shouldBe ""
+        machine.reduce(none, typed("")).state.search.shouldNotBeNull().ask shouldBe ""
+        machine.reduce(
+            none,
+            PhotosSearchReads.refused(Reads.refused("The access plane said no.")),
+        ).state.search.shouldNotBeNull().ask shouldBe ""
+        // A late answer for a term the field has left sets none.
+        val moved = machine.reduce(none, typed("zzqy")).state
+        machine.reduce(moved, hits("zzqx", emptyList())).state.search.shouldNotBeNull().ask shouldBe ""
+    }
+
+    "a late corrected answer sets no correction, and a second page keeps it" {
+        val asking = machine.reduce(machine.initial(), typed("sunscren")).state
+        val corrected = PhotosSearchReads.hitsArrived(
+            query = "sunscren",
+            rows = listOf(assetRow("a-1", "2026-02-03T10:00:00Z")),
+            nextCursor = "2026-02-03T10:00:00Z|a-1",
+            topHits = emptyList(),
+            labels = emptyList(),
+            corrected = "sunscreen",
+        )
+        // The field has moved on: the page is dropped, and so is its correction.
+        val moved = machine.reduce(asking, typed("sunscreen")).state
+        machine.reduce(moved, corrected).state shouldBe moved
+
+        val first = machine.reduce(asking, corrected).state
+        first.search.shouldNotBeNull().corrected shouldBe "sunscreen"
+        // The next page answers the same words and the line stays.
+        val second = machine.reduce(
+            first,
+            PhotosSearchReads.hitsArrived(
+                query = "sunscren",
+                rows = listOf(assetRow("a-2", "2026-02-02T10:00:00Z")),
+                nextCursor = null,
+                topHits = emptyList(),
+                labels = emptyList(),
+                corrected = "sunscreen",
+            ),
+        ).state
+        second.search.shouldNotBeNull().corrected shouldBe "sunscreen"
+        second.hits.shouldNotBeNull().cells.size shouldBe 2
+    }
+
+    "albums are the core's container hits, in the door's rank order, three at most" {
+        fun album(id: String, title: String) = ContainerHit(
+            entity = "core.collection",
+            id = id,
+            title = title,
+            app_id = "photos",
+        )
+        PhotosSearchReads.albums(
+            listOf(
+                album("al-2", "Tahoe 2025"),
+                album("al-1", "Lake Tahoe"),
+                album("al-3", "Tahoe winter"),
+                album("al-4", "Tahoe spring"),
+                album("", "No id"),
+            ),
+        ).map { it.id } shouldContainExactly listOf("al-2", "al-1", "al-3")
+        // An album with no name is not a door.
+        PhotosSearchReads.albums(listOf(album("al-9", "  "))).shouldBeEmpty()
+    }
+
+    "the photographs the core named reach the grid with the doors" {
+        val reach = PhotosSearchReads.reach(emptyList(), emptyList(), assetIds = listOf("a-7", "a-8"))
+        reach.assetIds shouldContainExactly listOf("a-7", "a-8")
+        reach.isEmpty shouldBe false
+        PhotosSearchReads.reach(emptyList(), emptyList()).isEmpty shouldBe true
     }
 })

@@ -9,12 +9,12 @@ import SwiftUI
 /// neither shell read `state.sheet`, so it was a button that did nothing a
 /// member could see.
 ///
-/// **ONE ROW.** v0's sheet carries only what Collections does not — a row for a
-/// shelf Collections already shows would be two doors, one hidden — and its
+/// **What Collections does not carry.** v0's sheet holds no row for a shelf
+/// Collections already shows — that would be two doors, one hidden — and its
 /// foot names what is actually behind this door
-/// (`photos-band.ts`: "The rest of Photos is in Collections."). Tile size
-/// belongs to the Library's own header menu and photo access to the grid's
-/// slot; neither is here.
+/// (`photos-band.ts`: "The rest of Photos is in Collections."). The tile size
+/// is here since the header lost its menu (R-CHROME-3); never Search, never
+/// the filter, and photo access stays in the grid's slot.
 ///
 /// **WHERE THE BACKUP ROW LANDS IS NOT WHERE v0 SENT IT.** v0 deep-linked to a
 /// FRAME screen, `Settings → BackupHealth`, and kept a link rather than a copy
@@ -26,59 +26,33 @@ import SwiftUI
 /// editing a policy that has no screen yet. The deep link comes back when the
 /// frame screen does.
 struct PhotosMoreSheet: View {
-    @Environment(\.colorScheme) private var scheme
     @ObservedObject var shell: ShellModel
     let state: PhotosGridStateView
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Button {
-                        shell.send(screen: "photos.grid", event: state.sheetEvent(.backupDetail))
-                    } label: {
-                        Label {
-                            // A ROW THAT OPENS A PAGE READS AS TEXT, not as the
-                            // system tint: the rulebook emits no such blue.
-                            Text("Camera roll").centraidType("body")
-                                .foregroundStyle(Theme.color("text", scheme))
-                        } icon: {
-                            CentraidIconView(iconKey: "Archive", tint: Theme.color("text", scheme))
-                        }
-                    }
-                } footer: {
-                    // ONE CLAUSE ONLY. It said "Everything Photos can show."
-                    // over one row, and Photos has a dozen other surfaces —
-                    // People, Places, Memories, Duplicates, Trash, Archive,
-                    // Favorites, Albums — every one of them reached from
-                    // Collections, so the claim was false as printed.
-                    Text("The rest of Photos is in Collections.").centraidType("small")
-                }
-                // "FREE UP SPACE" — A STATEMENT, NOT A BUTTON (`KeepOriginals.kt`).
-                // v0's row deleted originals whose copy elsewhere was proved.
-                // An original is evictable only once a gateway has
-                // acknowledged it (#1080 ruling 6), and the census that says
-                // which is the machine's, so the row draws what `free_up`
-                // says — the count, the size and why — and offers no verb.
-                Section {
-                    FreeUpSpaceRow(freeUp: state.freeUp)
-                } footer: {
-                    if !state.freeUp.reason.isEmpty {
-                        Text(state.freeUp.reason).centraidType("small")
-                    }
+        // ONE CLAUSE ONLY in the foot. It said "Everything Photos can show."
+        // over one row, and Photos has a dozen other surfaces — People, Places,
+        // Memories, Duplicates, Trash, Archive, Favorites, Albums — every one of
+        // them reached from Collections, so the claim was false as printed.
+        OptionSheet(title: PhotosWords.photosMoreTitle, status: PhotosWords.photosMoreFoot) {
+            SheetRow(iconKey: "Archive", label: PhotosWords.photosCameraRoll, identifier: "photos.more.cameraRoll") {
+                shell.send(screen: "photos.grid", event: state.sheetEvent(.backupDetail))
+            }
+            // THE TILE SIZE, A CHOICE AND NOT A HEADER MENU (R-CHROME-3): only
+            // where a size acts on something on screen, which the machine says.
+            if state.chrome.tileSizeOffered {
+                SheetRow(iconKey: "Grid", label: state.chrome.tileSizeLabel, identifier: "photos.more.tileSize") {
+                    shell.send(screen: "photos.grid", event: state.sheetEvent(.tileSize))
                 }
             }
-            .navigationTitle("More in Photos")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
-                        shell.send(screen: "photos.grid", event: state.sheetEvent(.none))
-                    }
-                }
-            }
+            // "FREE UP SPACE" — A STATEMENT, NOT A BUTTON (`KeepOriginals.kt`).
+            // v0's row deleted originals whose copy elsewhere was proved.
+            // An original is evictable only once a gateway has
+            // acknowledged it (#1080 ruling 6), and the census that says
+            // which is the machine's, so the row draws what `free_up`
+            // says — the count, the size and why — and offers no verb.
+            FreeUpSpaceRow(freeUp: state.freeUp)
         }
-        .presentationDetents([.medium])
     }
 }
 
@@ -88,22 +62,38 @@ private struct FreeUpSpaceRow: View {
     let freeUp: Centraid_Screen_V1_FreeUpSpace
 
     var body: some View {
-        Label {
+        HStack(alignment: .top, spacing: 12) {
+            CentraidIconView(iconKey: "Gauge", tint: Theme.color("text", scheme), size: 18)
+                .frame(width: 24, height: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Free up space").centraidType("body")
+                Text(PhotosWords.photosFreeUpTitle)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
                 Text(freeUp.meta)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
+                if !freeUp.reason.isEmpty {
+                    Text(freeUp.reason)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                }
             }
-        } icon: {
-            CentraidIconView(iconKey: "Gauge", tint: Theme.color("text", scheme))
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+        .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("photos.more.freeUp")
     }
 }
 
 extension PhotosGridStateView {
+    /// The root's words (`PhotosGridChrome`) — the More sheet reads "Tile
+    /// size" and whether it is offered here.
+    var chrome: Centraid_Screen_V1_PhotosGridChrome {
+        ((try? Centraid_Screen_V1_PhotosGridState(serializedBytes: data)) ?? .init()).chrome
+    }
+
     /// The More sheet's "Free up space" row, as the census last found it.
     /// Decoded here rather than in `StateViews.swift` so this sheet's one
     /// field does not grow the shared state view.
@@ -125,45 +115,29 @@ extension PhotosGridStateView {
 /// and a gateway's copy is never claimed here.
 struct PhotosBackupDetailSheet: View {
     @ObservedObject var shell: ShellModel
-    @Environment(\.colorScheme) private var scheme
     let state: PhotosGridStateView
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section("This device") {
-                    LabeledContent("Status", value: state.backupSentence)
-                    if !state.pausedReason.isEmpty {
-                        // WHY IT IS NOT MOVING, and never inferred from a
-                        // radio: the pass asks the platform for the real
-                        // answer.
-                        LabeledContent("Paused", value: state.pausedReason)
-                    }
-                }
-                Section {
-                    Button("Import now") { shell.backUpCameraRoll() }
-                        .centraidType("control")
-                        .tint(Theme.color("link", scheme))
-                        .disabled(state.backupIsRunning)
-                } footer: {
-                    Text(
-                        state.backupIsRunning
-                            ? "A pass is already running."
-                            : "Centraid also imports on its own, on Wi-Fi and on a charger."
-                    )
-                    .centraidType("small")
-                }
+        SheetRoom(
+            title: PhotosWords.photosCameraRoll,
+            status: state.backupIsRunning
+                ? PhotosWords.photosImportRunning
+                : PhotosWords.photosImportAuto,
+            // AN IMPORT ALREADY RUNNING HAS NOTHING TO START, so the ink button is
+            // drawn greyed, not hidden.
+            primary: SheetPrimary(label: PhotosWords.photosImportNow, enabled: !state.backupIsRunning) {
+                shell.backUpCameraRoll()
             }
-            .navigationTitle("Camera roll")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
-                        shell.send(screen: "photos.grid", event: state.sheetEvent(.none))
-                    }
+        ) {
+            VStack(spacing: 0) {
+                FieldRow(key: "Status", value: state.backupSentence)
+                if !state.pausedReason.isEmpty {
+                    // WHY IT IS NOT MOVING, and never inferred from a
+                    // radio: the pass asks the platform for the real
+                    // answer.
+                    FieldRow(key: "Paused", value: state.pausedReason)
                 }
             }
         }
-        .presentationDetents([.medium])
     }
 }

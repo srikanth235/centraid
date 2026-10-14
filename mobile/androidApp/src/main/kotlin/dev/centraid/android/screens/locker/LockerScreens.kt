@@ -84,6 +84,7 @@ import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.InkButton
+import dev.centraid.android.kit.KitChip
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.NoAutofill
@@ -92,6 +93,7 @@ import dev.centraid.android.kit.PushedPage
 import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
+import dev.centraid.android.kit.RoomChip
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
@@ -100,9 +102,11 @@ import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.StatusLine
+import dev.centraid.android.kit.kitSwitchColors
 import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.android.theme.LocalCentraidTokens
 
 // Locker's Compose views (#1047, D-5). THEY DECIDE NOTHING: every word, mask,
 // verb, chip and empty state is the shared machines' (`apps/locker/*`); a view
@@ -167,12 +171,11 @@ internal fun LockerWall(wall: LockerLockState, onUnlock: () -> Unit, onWords: ()
                 }
             }
         }
-        items(wall.facts, key = { "fact-" + it.label }) { fact -> FieldRow(key = fact.label, value = fact.detail) }
     }
 }
 
 // ---------------------------------------------------------------------------
-// locker.home — Items · Review · Generate · Search, More as a sheet
+// locker.home — Items · Review · Generate, More as a sheet; search the bar
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -192,24 +195,37 @@ internal fun LockerHomeScreen(
         trailing = chrome?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "locker-add") { onEvent(LockerHomeEvent(add = LockerHomeEvent.AddItem())) }
         },
-        search = if (field != null && field.open_) {
+        // SEARCH IS THE ROOM'S BAR (R-CHROME-2), never a tab: its open lands
+        // on the search surface, its close goes back to Items.
+        search = if (state.denied == null) {
             RoomSearch(
-                field = field,
+                field = field ?: centraid.screen.v1.SearchField(),
                 placeholder = chrome?.search_placeholder.orEmpty(),
                 onTerm = { onEvent(LockerHomeEvent(search_typed = LockerHomeEvent.SearchTyped(term = it))) },
                 onClose = { onEvent(LockerHomeEvent(search_closed = LockerHomeEvent.SearchClosed())) },
                 closeLabel = chrome?.close_label.orEmpty().ifEmpty { KitWords.CLOSE_SEARCH },
+                onOpen = { onEvent(LockerHomeEvent(search_opened = LockerHomeEvent.SearchOpened())) },
             )
         } else {
             null
+        },
+        // THE ITEMS FILTERS AS THE ROOM'S CHIP ROW (R-CHROME-3): only Items'
+        // data carries them, so the row is there on Items and nowhere else.
+        chips = data?.filters.orEmpty().map { choice ->
+            RoomChip(
+                testTag = "locker-filter-${choice.key}",
+                label = choice.label,
+                count = choice.detail,
+                selected = choice.selected,
+            ) { onEvent(LockerHomeEvent(filter = LockerHomeEvent.FilterPicked(key = choice.key))) }
         },
         status = if (generating) "" else data?.status_line.orEmpty(),
         band = if (state.band.isEmpty()) {
             null
         } else {
             {
-                // MORE IS ONE OF THE MACHINE'S FIVE TABS, with its own word and
-                // mark, so it is drawn as a tab and not as the kit's More.
+                // MORE IS ONE OF THE MACHINE'S TABS (R-CHROME-4), with its own
+                // word and mark, so it is drawn as a tab and not as the kit's More.
                 AppBand(
                     app = "locker",
                     tabs = state.band.map {
@@ -261,6 +277,7 @@ private fun AppPlace(
     title: String,
     trailing: RoomAction?,
     search: RoomSearch?,
+    chips: List<RoomChip>,
     status: String,
     band: (@Composable () -> Unit)?,
     content: @Composable () -> Unit,
@@ -270,6 +287,7 @@ private fun AppPlace(
         title = title,
         trailing = trailing,
         search = search,
+        chips = chips,
         status = status,
         band = band,
         content = content,
@@ -277,13 +295,6 @@ private fun AppPlace(
 }
 
 private fun LazyListScope.items(home: centraid.screen.v1.LockerHomeData, onEvent: (LockerHomeEvent) -> Unit) {
-    if (home.filters.isNotEmpty()) {
-        item(key = "filters") {
-            LockerChoices(home.filters, testTag = "locker-filter") { key ->
-                onEvent(LockerHomeEvent(filter = LockerHomeEvent.FilterPicked(key = key)))
-            }
-        }
-    }
     val empty = home.items_empty
     if (home.rows.isEmpty() && empty != null) {
         item(key = "empty") {
@@ -391,7 +402,7 @@ internal fun LockerNote(text: String, modifier: Modifier = Modifier, ink: String
     )
 }
 
-/** A row of the machine's choices as outlined chips; the selected one is filled. */
+/** A row of the machine's choices as kit chips; the selected one is `bgSunken`, never accent. */
 @Composable
 internal fun LockerChoices(choices: List<LockerChoice>, testTag: String, onPick: (String) -> Unit) {
     Row(
@@ -407,30 +418,12 @@ internal fun LockerChoices(choices: List<LockerChoice>, testTag: String, onPick:
 
 @Composable
 private fun ChoiceChip(choice: LockerChoice, testTag: String, onPick: () -> Unit) {
-    val shape = RoundedCornerShape(KitGeometry.RADIUS)
-    val words = if (choice.detail.isEmpty()) choice.label else "${choice.label} ${choice.detail}"
-    Text(
-        words,
-        style = centraidType("annotLabelOn"),
-        color = centraidColor(if (choice.selected) "onAccent" else "text"),
-        maxLines = 1,
-        modifier = Modifier
-            .heightIn(min = 36.dp)
-            .clip(shape)
-            .then(
-                if (choice.selected) {
-                    Modifier.background(centraidColor("accent"))
-                } else {
-                    Modifier.border(KitGeometry.HAIRLINE, centraidColor("line"), shape)
-                },
-            )
-            .clickable(onClick = onPick)
-            .padding(horizontal = 12.dp, vertical = 9.dp)
-            .testTag(testTag)
-            .semantics {
-                role = Role.Tab
-                selected = choice.selected
-            },
+    KitChip(
+        label = choice.label,
+        count = choice.detail,
+        selected = choice.selected,
+        modifier = Modifier.testTag(testTag),
+        onClick = onPick,
     )
 }
 
@@ -656,7 +649,7 @@ internal fun LockerItemScreen(
                                     style = centraidType("annotLabel"),
                                     color = centraidColor("textSoft"),
                                     modifier = Modifier
-                                        .border(KitGeometry.HAIRLINE, centraidColor("line"), RoundedCornerShape(4.dp))
+                                        .border(KitGeometry.HAIRLINE, centraidColor("line"), RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp))
                                         .padding(horizontal = 6.dp, vertical = 2.dp),
                                 )
                             }
@@ -767,10 +760,8 @@ private fun LockerFieldSheetView(sheet: LockerFieldSheet, onEvent: (LockerItemEv
         title = sheet.title,
         onDismiss = close,
         status = sheet.blocked,
-        primary = if (sheet.can_save) {
-            SheetPrimary(label = sheet.save_label, testTag = "locker-field-save") { onEvent(LockerItemEvent(field_saved = LockerItemEvent.FieldSaved())) }
-        } else {
-            null
+        primary = SheetPrimary(label = sheet.save_label, testTag = "locker-field-save", enabled = sheet.can_save) {
+            onEvent(LockerItemEvent(field_saved = LockerItemEvent.FieldSaved()))
         },
     ) {
         LockerTextField(
@@ -1038,7 +1029,7 @@ private fun LockerCompromisedRow(label: String, on: Boolean, note: String, onTog
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(label, style = centraidType("body"), color = centraidColor("text"), modifier = Modifier.weight(1f))
-            Switch(checked = on, onCheckedChange = null)
+            Switch(checked = on, onCheckedChange = null, colors = kitSwitchColors())
         }
         if (note.isNotEmpty()) {
             Text(

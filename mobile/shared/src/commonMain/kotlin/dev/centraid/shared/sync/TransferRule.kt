@@ -1,6 +1,7 @@
 package dev.centraid.shared.sync
 
 import centraid.core.v1.TransferRule as Wire
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.platform.SecureStore
 
 /**
@@ -70,13 +71,13 @@ public enum class TransferRule(
     /** THE DEFAULT. Its failure mode is a late photograph, not a bill. */
     WIFI_ONLY(
         "wifi-only",
-        "Back up and download full-size photos and videos on Wi-Fi only.",
+        "Full-size photos and videos back up and download on Wi-Fi only.",
     ),
 
     /** A photograph's original on cellular; a video's still waits for Wi-Fi. */
     WIFI_AND_CELLULAR_PHOTOS(
         "wifi-and-cellular-photos",
-        "Back up and download full-size photos on Wi-Fi and cellular. Videos wait for Wi-Fi.",
+        "Full-size photos back up and download on Wi-Fi or cellular; videos wait for Wi-Fi.",
     ),
 
     /**
@@ -87,7 +88,7 @@ public enum class TransferRule(
      */
     MANUAL(
         "manual",
-        "Download full-size photos only when you tap one. Backups of full-size photos and videos wait for Wi-Fi.",
+        "Full-size photos download when you tap one; backups wait for Wi-Fi.",
     ),
 
     ;
@@ -104,20 +105,20 @@ public enum class TransferRule(
 
     public companion object {
         /** The heading the sheet draws. */
-        public const val TITLE: String = "Wi-Fi and cellular"
+        public const val TITLE: String = PhotosCopy.TRANSFER_TITLE
 
         /**
          * What the sheet says under the heading, once, rather than repeating
-         * "on this device" in all three sentences.
+         * "on this phone" in all three sentences.
          */
         public const val SUBTITLE: String =
-            "This is set for this phone, not for one vault. Thumbnails cross on any network."
+            PhotosCopy.TRANSFER_SUBTITLE
 
         /** The line the header draws when a rule is holding originals back. */
         public fun waitingSentence(count: Int): String = when {
             count <= 0 -> ""
-            count == 1 -> "1 original waiting for Wi-Fi"
-            else -> "$count originals waiting for Wi-Fi"
+            count == 1 -> PhotosCopy.TRANSFER_ORIGINAL_WAITING_ONE
+            else -> PhotosCopy.TRANSFER_ORIGINAL_WAITING_MANY.replace("{count}", "$count")
         }
 
         public val DEFAULT: TransferRule = WIFI_ONLY

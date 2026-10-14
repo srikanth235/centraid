@@ -1,5 +1,6 @@
 package dev.centraid.shared
 
+import io.kotest.matchers.types.shouldBeInstanceOf
 import centraid.core.v1.Envelope
 import centraid.core.v1.FoundResponse
 import centraid.core.v1.Page
@@ -433,6 +434,52 @@ class KeyedOpenSpec : StringSpec({
             keyed = true
             gate.reduce(attached)
             gate.state.value.phase shouldBe LockerLockState.Phase.PHASE_LOCKED
+        }
+    }
+
+    // --- a vault on its own words (R-1047-E18) ---------------------------------
+
+    "a vault on its own words is founded on its entry's seed at index 0, and the member's mark does not move" {
+        runTest {
+            val phone = Phone()
+            phone.secrets.rememberSeed(seed)
+            phone.secrets.rememberVaultIndex("v-a", 3)
+            phone.shelf.load()
+            val own = phone.secrets.keepOwnSeed("cd".repeat(64), "Family")
+            phone.shelf.found(name = "Family", own = own).shouldBeInstanceOf<Shelf.FoundOutcome.Founded>()
+
+            val founding = phone.opens.single { it.create }
+            founding.vaultSeedHex shouldBe "cd".repeat(64)
+            founding.vaultIndex shouldBe 0
+            phone.secrets.vaultKey("v-founded") shouldBe VaultSecrets.VaultKey(0, own)
+            phone.secrets.pendingFound().shouldBeNull()
+            // THE MEMBER'S NEXT VAULT is still one past 3, not past the entry's 0.
+            phone.secrets.nextVaultIndex() shouldBe 4
+
+            // FORGETTING IT takes its keychain entry with it.
+            phone.shelf.forget("v-founded")
+            phone.secrets.ownSeeds().shouldBeEmpty()
+            phone.secrets.ownSeed(own).shouldBeNull()
+        }
+    }
+
+    "a vault on its own words reopens with its own seed at launch, and a found that died before its file gives the entry back" {
+        runTest {
+            val phone = Phone("f.sqlite3" to "v-f")
+            phone.secrets.rememberSeed(seed)
+            val own = phone.secrets.keepOwnSeed("cd".repeat(64), "Family")
+            phone.secrets.bindOwnVault("v-f", own)
+            phone.shelf.load()
+            val keyed = phone.opensOf("f.sqlite3").last()
+            keyed.vaultSeedHex shouldBe "cd".repeat(64)
+            keyed.vaultIndex shouldBe 0
+
+            val dead = Phone()
+            val orphan = dead.secrets.keepOwnSeed("ef".repeat(64), "Work")
+            dead.secrets.reserveOwnFound(dead.fileOf("gone.sqlite3").path, orphan)
+            dead.shelf.load()
+            dead.secrets.pendingFound().shouldBeNull()
+            dead.secrets.ownSeed(orphan).shouldBeNull()
         }
     }
 })

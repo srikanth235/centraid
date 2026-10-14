@@ -33,7 +33,8 @@ struct TasksRowView: View {
 
     private var line: some View {
         HStack(alignment: .top, spacing: 10) {
-            TasksCheckBox(check: row.check, label: row.checkLabel, enabled: row.canCheck) { onCheck(row.taskID) }
+            KitCheckBox(state: row.check.kitState, label: row.checkLabel) { onCheck(row.taskID) }
+                .disabled(!row.canCheck)
             Button { onPick(row.taskID) } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -70,21 +71,15 @@ struct TasksRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(KitRowPress())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.title : row.accessibilityLabel)
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("tasks-row-\(row.taskID)")
             if row.canFile, let onFile, !fileVerb.isEmpty {
-                Button { onFile(row.taskID) } label: {
-                    Text(fileVerb)
-                        .centraidType("annotLabelOn")
-                        .foregroundStyle(Theme.color("link", scheme))
-                        .frame(minHeight: CentraidGeometry.targetMinFine)
-                        .contentShape(Rectangle())
+                KitLink(label: fileVerb, dense: true, identifier: "tasks-row-file-\(row.taskID)") {
+                    onFile(row.taskID)
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("tasks-row-file-\(row.taskID)")
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -100,44 +95,6 @@ struct TasksRowView: View {
             }
         }
         .overlay(alignment: .bottom) { KitHairline() }
-    }
-}
-
-/// The box: open, done (a check), won't do (a dash) or started (half). The
-/// label is the row's own sentence ("Mark Buy milk done").
-struct TasksCheckBox: View {
-    let check: Centraid_Screen_V1_TasksCheck
-    let label: String
-    var enabled: Bool = true
-    let action: () -> Void
-
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(Theme.color(check == .open || check == .unspecified ? "lineStrong" : "textSoft", scheme), lineWidth: 1.5)
-                switch check {
-                case .done:
-                    CentraidIconView(iconKey: "Check", tint: Theme.color("textSoft", scheme), size: 14)
-                case .wontDo:
-                    Rectangle().fill(Theme.color("textSoft", scheme)).frame(width: 10, height: 1.5)
-                case .inProcess:
-                    Rectangle().fill(Theme.color("textSoft", scheme)).frame(width: 10, height: 10)
-                        .mask(alignment: .leading) { Rectangle().frame(width: 5) }
-                default:
-                    EmptyView()
-                }
-            }
-            .frame(width: 20, height: 20)
-            .frame(width: CentraidGeometry.targetMinFine, height: CentraidGeometry.targetMinFine)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.4)
-        .accessibilityLabel(label)
     }
 }
 
@@ -181,6 +138,10 @@ struct TasksQuickAddBar: View {
     let quickAdd: Centraid_Screen_V1_TasksQuickAdd
     let placeholder: String
     let verb: String
+    /// The header's Plus asking for the keyboard (Tasks' home). Set true by the
+    /// asker and handed back to false here once the field has it, so the next
+    /// tap asks again.
+    var focusRequested: Binding<Bool> = .constant(false)
     let onChange: (String) -> Void
     let onSubmit: () -> Void
 
@@ -196,7 +157,7 @@ struct TasksQuickAddBar: View {
                     MachineTextField(
                         placeholder: placeholder,
                         value: quickAdd.title,
-                        focusOnAppear: quickAdd.focused,
+                        focusOnAppear: quickAdd.focused || focusRequested.wrappedValue,
                         onEdit: onChange,
                         onSubmit: { if quickAdd.canSubmit { onSubmit() } }
                     )
@@ -204,16 +165,11 @@ struct TasksQuickAddBar: View {
                     .submitLabel(.done)
                     .accessibilityLabel(placeholder)
                     .accessibilityIdentifier("tasks-quick-add-field")
-                    Button(action: onSubmit) {
-                        Text(verb)
-                            .centraidType("smallStrong")
-                            .foregroundStyle(Theme.color(quickAdd.canSubmit ? "link" : "textFaint", scheme))
-                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                            .contentShape(Rectangle())
+                    .onChange(of: focusRequested.wrappedValue) { _, asked in
+                        if asked { DispatchQueue.main.async { focusRequested.wrappedValue = false } }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!quickAdd.canSubmit)
-                    .accessibilityIdentifier("tasks-quick-add-verb")
+                    KitLink(label: verb, identifier: "tasks-quick-add-verb", action: onSubmit)
+                        .disabled(!quickAdd.canSubmit)
                 }
                 .padding(.horizontal, 12)
                 .background(Theme.color("bgSunken", scheme))
@@ -300,6 +256,18 @@ extension Centraid_Screen_V1_TasksCatchUpState {
         case let .denied(denied)?: return .denied(denied)
         case let .data(data)?: return .data(data)
         case nil: return .loading(true)
+        }
+    }
+}
+
+extension Centraid_Screen_V1_TasksCheck {
+    /// The box's face: open, done (a check), won't do (a dash) or started (half).
+    var kitState: KitCheckState {
+        switch self {
+        case .done: .on
+        case .wontDo: .mixed
+        case .inProcess: .partial
+        default: .off
         }
     }
 }

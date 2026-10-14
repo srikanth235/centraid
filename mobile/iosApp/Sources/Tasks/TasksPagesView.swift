@@ -73,16 +73,9 @@ struct TasksProjectView: View {
         let content = state.readContent
         PushedPage(title: state.title, parentTitle: state.chrome.back, onBack: onBack) {
             if case let .data(project) = content, project.found, !project.addSectionLabel.isEmpty {
-                Button {
+                ToolbarVerb(label: project.addSectionLabel, identifier: "tasks-add-section") {
                     send(event { $0.addSection = .init() })
-                } label: {
-                    Text(project.addSectionLabel)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("link", scheme))
-                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("tasks-add-section")
             }
         } content: {
             VStack(spacing: 0) {

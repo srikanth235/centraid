@@ -14,6 +14,7 @@ import centraid.screen.v1.DocsDriveEvent
 import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.DocsQuery
 import centraid.screen.v1.ReadFailure
+import dev.centraid.shared.kit.SearchContainers
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
@@ -75,7 +76,13 @@ public object DocsDriveReads :
     /** By arm, not by position: the request depends on the state. */
     override fun arrived(answers: List<AppQueryResponse>): DocsDriveEvent {
         answers.firstNotNullOfOrNull { it.docs_search }?.let { search ->
-            return DocsDriveEvent(data_ = DocsDriveEvent.DataArrived(data_ = DocsFold.search(search)))
+            return DocsDriveEvent(
+                data_ = DocsDriveEvent.DataArrived(
+                    data_ = DocsFold.search(search),
+                    corrected = search.corrected,
+                    containers = SearchContainers.fold(search.containers),
+                ),
+            )
         }
         val drive = answers.firstNotNullOfOrNull { it.docs_drive }
             ?: return refused(Reads.refused(NO_ANSWER))
@@ -120,5 +127,5 @@ public object DocsDriveReads :
         else -> DocsSort.DOCS_SORT_CHANGED
     }
 
-    private const val NO_ANSWER: String = "The vault answered without the drive."
+    private const val NO_ANSWER: String = "Docs didn't load. Try again."
 }

@@ -249,7 +249,7 @@ class PhotosMemoriesSpec : StringSpec({
         ) shouldBe PhotosMemoriesMachine.AWAY_FROM_HOME
         PhotosMemoriesMachine.titleOf(
             MemoryRow(kind = MemoryRow.Kind.KIND_SIMILAR, member_count = 4),
-        ) shouldBe "4 similar photographs"
+        ) shouldBe "4 similar photos"
         PhotosMemoriesMachine.titleOf(
             MemoryRow(kind = MemoryRow.Kind.KIND_SIMILAR),
         ) shouldBe PhotosMemoriesMachine.SIMILAR

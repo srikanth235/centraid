@@ -228,7 +228,7 @@ class PhotosPeopleSpec : StringSpec({
     "a count off a FULL page is capped, and off a finished one is not" {
         // THE DOOR HAS NO `COUNT(*)`. A page with a cursor behind it has more
         // rows this person may be in, so the honest phrasing is "at least"
-        // (`HomeState.ThingCount.capped`). A bare number over a full page would
+        // (`HomeTile.count.capped`). A bare number over a full page would
         // state a total nobody counted.
         val rows = listOf(region("r-1", "a-1", "p-ada", PhotosPeopleReads.CONFIRMED))
         val names = listOf(party("p-ada", "Ada"))

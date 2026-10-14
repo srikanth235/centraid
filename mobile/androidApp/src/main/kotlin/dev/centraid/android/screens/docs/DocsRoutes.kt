@@ -319,6 +319,7 @@ public class DocsRoutes : AppRoutes {
             ingest = adding,
             onIngestRetry = ingest::retry,
             onIngestDismiss = ingest::dismiss,
+            onOpenContainer = { card -> nav.open(card, parent = state.chrome?.title.orEmpty()) },
             onEvent = { event ->
                 val sheet = state.sheet?.kind
                 val key = event.action?.key

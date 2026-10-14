@@ -27,11 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -68,14 +64,20 @@ import androidx.compose.ui.unit.dp
 import centraid.screen.v1.PhotoDetail
 import centraid.screen.v1.PhotoEditPlan
 import centraid.screen.v1.PhotoEditSource
+import centraid.screen.v1.Confirm
 import centraid.screen.v1.PhotoEditorEvent
 import centraid.screen.v1.PhotoEditorState
 import centraid.screen.v1.PhotoLightboxState
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.ConfirmSheet
+import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ScreenFailure
+import dev.centraid.android.kit.StageKey
+import dev.centraid.android.kit.StageSpinner
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PhotoEditorMachine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -153,42 +155,39 @@ public fun PhotoEditorScreen(
         when {
             // A STALE STATE FROM THE LAST EDIT IS NOT DRAWN: until this screen
             // has seen its own editor, it is loading.
-            loading != null || !armed -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+            loading != null || !armed -> StageSpinner(modifier = Modifier.align(Alignment.Center))
 
             failure != null -> Column(
                 modifier = Modifier.align(Alignment.Center).padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 ScreenFailure(sentence = failure.sentence, remedy = failure.remedy)
-                TextButton(
-                    onClick = {
+                QuietButton(
+                    label = PhotoEditorMachine.EDITOR_CANCEL,
+                    testTag = "editor-failure-cancel",
+                    ink = "onStage",
+                    onPress = {
                         onEvent(PhotoEditorEvent(cancel = PhotoEditorEvent.CancelRequested()))
                     },
-                ) { Text(text = PhotoEditorMachine.EDITOR_CANCEL, color = ink) }
+                )
             }
 
             source != null -> Editor(state, source, onEvent, ink, soft)
         }
     }
     if (state.discard_open) {
-        AlertDialog(
-            onDismissRequest = {
+        ConfirmSheet(
+            confirm = Confirm(
+                title = PhotoEditorMachine.DISCARD_QUESTION,
+                confirm_label = PhotoEditorMachine.DISCARD,
+                destructive = true,
+            ),
+            cancelLabel = PhotoEditorMachine.KEEP_EDITING,
+            onConfirm = {
+                onEvent(PhotoEditorEvent(discard = PhotoEditorEvent.DiscardAnswered(true)))
+            },
+            onDismiss = {
                 onEvent(PhotoEditorEvent(discard = PhotoEditorEvent.DiscardAnswered(false)))
-            },
-            title = { Text(text = PhotoEditorMachine.DISCARD_QUESTION) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onEvent(PhotoEditorEvent(discard = PhotoEditorEvent.DiscardAnswered(true)))
-                    },
-                ) { Text(text = PhotoEditorMachine.DISCARD, color = centraidColor("net")) }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        onEvent(PhotoEditorEvent(discard = PhotoEditorEvent.DiscardAnswered(false)))
-                    },
-                ) { Text(text = PhotoEditorMachine.KEEP_EDITING) }
             },
         )
     }
@@ -229,7 +228,7 @@ private fun Editor(
             if (image == null) {
                 Text(
                     text = if (path == null) {
-                        "This photograph is not on this device yet."
+                        PhotosCopy.PHOTOS_NOT_ON_PHONE
                     } else {
                         PhotoEditorMachine.EDITOR_TITLE
                     },
@@ -297,8 +296,8 @@ private fun Stage(
         modifier = Modifier
             .size(frameW.dp, frameH.dp)
             .semantics {
-                contentDescription = "Crop area"
-                stateDescription = "Drag to move the crop, pinch to resize it"
+                contentDescription = PhotosCopy.PHOTOS_CROP_AREA
+                stateDescription = PhotosCopy.PHOTOS_CROP_HINT
                 // NOTHING IS REACHABLE BY GESTURE ALONE (§15). The drag and the
                 // pinch have spoken equivalents, one step at a time.
                 if (editing) customActions = cropActions(onEvent)
@@ -398,12 +397,12 @@ private fun cropActions(onEvent: (PhotoEditorEvent) -> Unit): List<CustomAccessi
         true
     }
     return listOf(
-        move("Move crop left", -STEP, 0.0),
-        move("Move crop right", STEP, 0.0),
-        move("Move crop up", 0.0, -STEP),
-        move("Move crop down", 0.0, STEP),
-        scale("Make crop larger", GROW),
-        scale("Make crop smaller", 1.0 / GROW),
+        move(PhotosCopy.PHOTOS_CROP_LEFT, -STEP, 0.0),
+        move(PhotosCopy.PHOTOS_CROP_RIGHT, STEP, 0.0),
+        move(PhotosCopy.PHOTOS_CROP_UP, 0.0, -STEP),
+        move(PhotosCopy.PHOTOS_CROP_DOWN, 0.0, STEP),
+        scale(PhotosCopy.PHOTOS_CROP_LARGER, GROW),
+        scale(PhotosCopy.PHOTOS_CROP_SMALLER, 1.0 / GROW),
     )
 }
 
@@ -595,25 +594,18 @@ private fun Tool(
  * status line already carries "Load the original" for the second.
  */
 @Composable
-internal fun PhotoEditButton(state: PhotoLightboxState, detail: PhotoDetail, ink: Color, soft: Color) {
+internal fun PhotoEditButton(state: PhotoLightboxState, detail: PhotoDetail) {
     val open = LocalPhotoEditOpener.current
     val refusal = PhotoEditorMachine.editRefusal(detail)
     val enabled = refusal == null && open != null
-    IconButton(
+    StageKey(
+        iconKey = "Sliders",
+        label = "Edit",
         onClick = { open?.invoke(detail.asset_id, state.neighbour_asset_ids) },
         enabled = enabled,
-        modifier = Modifier.size(48.dp),
-    ) {
-        CentraidIcon(
-            iconKey = "Sliders",
-            tint = if (enabled) ink else soft,
-            size = 24.dp,
-            modifier = Modifier.semantics {
-                contentDescription = "Edit"
-                if (refusal != null) stateDescription = refusal
-            },
-        )
-    }
+        // THE REFUSAL RIDES OUTSIDE THE KEY'S OWN SEMANTICS, which the key clears.
+        modifier = Modifier.semantics { if (refusal != null) stateDescription = refusal },
+    )
 }
 
 /**
@@ -635,14 +627,14 @@ private fun ratioEvent(ratio: PhotoEditPlan.Ratio, frameRatio: Double): PhotoEdi
  * viewer file the photograph under; no offset is UTC, as there.
  */
 private fun editorMeta(capturedAt: String, offsetMinutes: Int): String {
-    if (capturedAt.length < 19) return "from a photograph"
+    if (capturedAt.length < 19) return PhotosCopy.PHOTOS_EDIT_FROM_UNDATED
     val parsed = runCatching {
         java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).apply {
             timeZone = java.util.TimeZone.getTimeZone("UTC")
         }.parse(capturedAt.substring(0, 19))
-    }.getOrNull() ?: return "from a photograph"
+    }.getOrNull() ?: return PhotosCopy.PHOTOS_EDIT_FROM_UNDATED
     val zone = java.util.TimeZone.getTimeZone("UTC").apply { rawOffset = offsetMinutes * 60_000 }
-    return "from a photograph taken " +
+    return "from a photo taken " +
         java.text.DateFormat.getDateInstance(java.text.DateFormat.LONG).apply { timeZone = zone }.format(parsed)
 }
 
@@ -703,7 +695,7 @@ internal object PhotoEditRenderer {
             BitmapFactory.decodeFile(sourcePath)
         } catch (tooLarge: OutOfMemoryError) {
             null
-        } ?: return Rendered.Refused("Centraid could not open the original.")
+        } ?: return Rendered.Refused(PhotosCopy.PHOTOS_EDIT_CANNOT_OPEN)
         return try {
             val source = oriented(decoded, sourcePath)
             val rotation = PhotoEditorMachine.totalRotation(plan).toFloat()
@@ -775,7 +767,7 @@ internal object PhotoEditRenderer {
 
     private const val PREVIEW_EDGE: Int = 2048
     private const val JPEG_QUALITY: Int = 92
-    private const val COULD_NOT_DRAW: String = "Centraid could not draw the edit."
+    private const val COULD_NOT_DRAW: String = PhotosCopy.PHOTOS_EDIT_CANNOT_DRAW
 }
 
 /**

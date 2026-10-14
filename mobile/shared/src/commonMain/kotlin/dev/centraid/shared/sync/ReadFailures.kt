@@ -30,7 +30,7 @@ import dev.centraid.shared.shell.Shelf
  * difference between two bugs rather than between two things to do.
  */
 internal fun sentenceFor(code: ErrorCode): ReadFailure = when (code) {
-    ErrorCode.ERROR_CODE_UNAUTHORIZED -> Reads.refused("You do not have access to this.")
+    ErrorCode.ERROR_CODE_UNAUTHORIZED -> Reads.refused("This phone no longer has access.")
     // A SUPERSEDED PHONE IS NOT A STRANGER (#1029 F1, W5). `UNAUTHORIZED` means
     // "whoever you are, not here"; this means "you held this vault and a higher
     // epoch took it", and the two are different sentences because they are
@@ -41,14 +41,14 @@ internal fun sentenceFor(code: ErrorCode): ReadFailure = when (code) {
     ErrorCode.ERROR_CODE_VAULT_MOVED -> Reads.refused(Shelf.MOVED_SENTENCE)
     ErrorCode.ERROR_CODE_NO_RELAY_REACHABLE,
     ErrorCode.ERROR_CODE_PEER_UNREACHABLE,
-    -> Reads.unavailable("Centraid could not reach your gateway.")
-    ErrorCode.ERROR_CODE_TIMEOUT -> Reads.unavailable("That read took too long to answer.")
+    -> Reads.unavailable("Can't reach your backup device.")
+    ErrorCode.ERROR_CODE_TIMEOUT -> Reads.unavailable("Timed out. Try again.")
     ErrorCode.ERROR_CODE_VERSION_WINDOW -> ReadFailure(
         kind = ReadFailureKind.READ_FAILURE_KIND_REFUSED,
-        sentence = "This copy of Centraid and this vault no longer speak the same version.",
+        sentence = "Centraid and this vault are out of step.",
         remedy = "Update Centraid.",
     )
-    else -> Reads.refused("That read did not answer.")
+    else -> Reads.refused("Couldn't read this.")
 }
 
 /**

@@ -111,26 +111,17 @@ public fun HomeBand(
                 modifier = Modifier.weight(1f),
             )
         }
-        // More is NOT a place — three dots in a bordered square, outside the
-        // loop, because it opens a sheet and a destination mark would promise a
-        // destination. The SQUARE carries that argument, not the mark inside
-        // it, which is why `bordered` is its own flag and not an absent icon:
-        // More draws the catalog's `more` silhouette through the very same
-        // `CentraidIcon` the places use, at the same size, stroke and ink.
-        //
-        // It was a literal "···" until Instrument Sans was bundled: the face
-        // sets MIDDLE DOT with sidebearings tight enough that three of them
-        // fuse into one dash at the band's 11pt rung. A glyph whose shape
-        // depends on which face happens to be loaded is not a mark; the catalog
-        // path is.
+        // BACKUP, the band's last place: a tab drawn in place of the
+        // springboard — where the backup stands, the backup devices and the 24
+        // words — so a member never hunts for the one thing that brings the
+        // vault back. Every app is a tile on Home.
         BandTab(
-            iconKey = "more",
-            bordered = true,
-            label = HomeWords.BAND_MORE,
-            spoken = HomeWords.BAND_MORE_SPOKEN,
-            selected = false,
-            testTag = "home-band-more",
-            onPress = { onSelect("more") },
+            iconKey = "Backup",
+            label = HomeWords.BAND_BACKUP,
+            spoken = HomeWords.BAND_BACKUP_SPOKEN + if (active == "backup") ", current place" else "",
+            selected = active == "backup",
+            testTag = "home-band-backup",
+            onPress = { onSelect("backup") },
             modifier = Modifier.weight(1f),
         )
     }
@@ -353,7 +344,7 @@ public fun AppBand(
                 }
                 if (onMore != null) {
                     AppBandTabView(
-                        iconKey = "MoreVert",
+                        iconKey = "MoreHoriz",
                         label = HomeWords.BAND_MORE,
                         selected = false,
                         testTag = "$app-band-more",

@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Home, the graded springboard, in SwiftUI (#1020, wave A).
 ///
-/// **THIS VIEW DECIDES NOTHING.** `earns_grid`, `springboard`, `things`,
-/// `every_tile_unreadable` and `grid_rows` all arrive decided by `HomeMachine`;
+/// **THIS VIEW DECIDES NOTHING.** `springboard`, `every_tile_unreadable`
+/// and `grid_rows` all arrive decided by `HomeMachine`;
 /// the switch below reads them. That is what makes it possible for this file and
 /// `HomeScreen.kt` to draw the same Home — not discipline, but the absence of
 /// anywhere for the two to disagree.
@@ -41,6 +41,18 @@ struct HomeView: View {
                     onOpenCard: { card, among in shell.openChatCard(card, among: among) },
                     onSetScope: { shell.setChatScope($0) }
                 )
+            } else if shell.tab == .backup {
+                // THE BACKUP TAB DRAWS IN PLACE OF THE SPRINGBOARD, as Chat
+                // does, under the vault's lockup: the backup it describes is
+                // that vault's, and the band stays where it is.
+                VaultHeader(vault: home.vault, shell: shell, backup: home.backupLine)
+                BackupView(
+                    data: shell.backupState,
+                    shell: shell,
+                    send: { shell.sendBackup($0) },
+                    onAddDestination: { shell.addBackupDestination() },
+                    onShowWords: { shell.backupShowWords() }
+                )
             } else {
                 homeContent(home)
             }
@@ -49,7 +61,7 @@ struct HomeView: View {
             // scrolled away, so it cannot live in the scroll view, and nothing
             // subtracts its height from the page because it is a flex peer.
             if !(shell.tab == .chat && chatTyping) {
-                HomeBand(active: shell.tab == .chat ? "chat" : "home") { target in
+                HomeBand(active: shell.tab == .chat ? "chat" : shell.tab == .backup ? "backup" : "home") { target in
                     switch target {
                     case "home": shell.openHomeTab()
                     // PRESSED WHILE CHAT IS SHOWING it only shuts the drawer: it
@@ -61,8 +73,10 @@ struct HomeView: View {
                         } else {
                             shell.openChatTab()
                         }
-                    // `more` opens the one other thing that exists.
-                    case "more": shell.send(screen: "home", event: HomeEvents.allApps(open: true))
+                    // BACKUP is a tab like Chat: where this vault's backup
+                    // stands, the backup devices, and the 24 words. The apps
+                    // are tiles on Home.
+                    case "backup": shell.openBackup()
                     default: break
                     }
                 }
@@ -78,28 +92,11 @@ struct HomeView: View {
         .onChange(of: home.vault.vaultID, initial: true) { _, id in
             shell.vaultChanged(to: id)
         }
-        .sheet(isPresented: $shell.vaultSheetOpen) {
-            MakeVaultSheet(shell: shell)
-        }
         // THE TRANSFER RULES (#1025 S4). Reached from the header's own
         // "N originals waiting for Wi-Fi" line, because the control a member
         // wants next is the one that decided the line they just read.
         .sheet(isPresented: $shell.transferRulesOpen) {
             TransferRulesSheet(shell: shell)
-        }
-        // A REAL BINDING, and the setter is the only way this sheet closes. It
-        // was `.constant` once: the swipe had nothing to write "closed" into,
-        // so the sheet would not move, and with no row a member could tap and
-        // no close control it was a screen the app could only be killed out of.
-        .sheet(
-            isPresented: Binding(
-                get: { home.allAppsSheetOpen },
-                set: { open in
-                    if !open { shell.send(screen: "home", event: HomeEvents.allApps(open: false)) }
-                }
-            )
-        ) {
-            AllAppsSheet(tiles: home.data.tiles, shell: shell)
         }
         // A REAL BINDING here too, for the same reason: a constant binding
         // would leave the state saying it is open over a sheet that is gone —
@@ -119,24 +116,29 @@ struct HomeView: View {
         }
     }
 
-    /// HOME'S OWN PLACE: the lockup, the title row, the ribbon and the three
+    /// HOME'S OWN PLACE: the lockup, the ribbon and the three
     /// branches. Chat takes the place of all but the lockup.
     @ViewBuilder
     private func homeContent(_ home: Centraid_Screen_V1_HomeState) -> some View {
             // THE LOCKUP FIRST, ALWAYS. It is chrome for every route, and it is
             // drawn above the three-branch switch on purpose: a Home that
             // failed to read still has to say which vault failed.
-            VaultHeader(vault: home.vault, shell: shell)
-            // THE BACKUP LINE (#1080): where this vault's backup stands, in
-            // the machine's words, and the door to the Backup screen. It is
-            // the backup's and not the lockup's: the lockup says where the
-            // VAULT is, and the phone is the vault. It yields Home's one
-            // notice slot to the sample line while the machine says so
-            // (R-SAMPLE-8), so the two are never drawn together.
-            if !home.data.sampleNotice {
-                BackupLineView(line: home.backupLine) { shell.openBackup() }
-            }
-            HomeTitleRow { shell.vaultSheetOpen = true }
+            // THE LOCKUP'S SECOND LINE IS THE BACKUP'S STATUS (R-ONBOARD-11),
+            // and the door to the Backup tab. Nothing between it and the
+            // grid: no backup sentence, no "Home" title (the band says where
+            // the member is), no settings gear — making or restoring a vault
+            // is the vault switcher's, the transfer rule the Backup tab's.
+            VaultHeader(
+                vault: home.vault,
+                shell: shell,
+                backup: home.backupLine,
+                onOpenBackup: { shell.openBackup() },
+                // HOME'S SEARCH KEY (R-CHROME-6), at the lockup's trailing
+                // edge; a tap pushes the search over every app but Locker.
+                onSearch: { HomeSearchScreens.open(shell) },
+                searchLabel: HomeSearchBar.placeholder(shell),
+                onAppearance: { shell.toggleAppearance() }
+            )
             StatusRibbon(status: home.data.status, shell: shell)
 
             // THREE BRANCHES, NEVER TWO. A Home that could not load renders its
@@ -149,14 +151,6 @@ struct HomeView: View {
                 FailureBody(failure: failure)
             case let .data(data):
                 VStack(alignment: .leading, spacing: 0) {
-                    // ONE NOTICE SLOT, SETTLED BY THE MACHINE (R-SAMPLE-8).
-                    // The sample line has it on the sample vault, and on the
-                    // member's own vault for the day it was founded; the
-                    // backup line under the lockup has it otherwise. This view
-                    // reads one flag and decides nothing.
-                    if data.sampleNotice {
-                        SampleNoticeRow(shell: shell)
-                    }
                     if data.springboard == .firstRun {
                         DayOne(data: data, shell: shell)
                     } else {
@@ -164,6 +158,16 @@ struct HomeView: View {
                     }
                 }
             }
+    }
+}
+
+/// The bar's words are the search screen's own (`HomeSearchChrome`), so the
+/// placeholder on Home and the field it opens cannot say two things.
+enum HomeSearchBar {
+    @MainActor
+    static func placeholder(_ shell: ShellModel) -> String {
+        ((try? Centraid_Screen_V1_HomeSearchState(serializedBytes: shell.state(HomeSearchScreens.screen))) ?? .init())
+            .chrome.placeholder
     }
 }
 
@@ -239,10 +243,32 @@ private struct StatusRibbon: View {
     private var loud: Bool { status.tone == .attention || status.tone == .urgent }
 
     var body: some View {
+        // A RIBBON WITH NOTHING TO SAY IS NOT DRAWN AT ALL: an empty band
+        // above the grid reads as something that failed to render, and since
+        // All apps left it (R-ONBOARD-11) the ribbon carries nothing else.
+        if !status.copy.isEmpty || !status.action.isEmpty {
+            ribbon
+        }
+    }
+
+    /// THE ACTION'S DOOR, by the machine's `destination`: the Backup tab, or
+    /// this app's page in Settings where the phone's own grant is changed.
+    private var opener: (() -> Void)? {
+        switch status.destination {
+        case .backup:
+            return { shell.openBackup() }
+        case .phone, .notifications:
+            return {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(url)
+            }
+        case .none, .unspecified, .UNRECOGNIZED:
+            return nil
+        }
+    }
+
+    private var ribbon: some View {
         HStack(spacing: 8) {
-            // A ribbon with nothing to say does not reserve a row: on first load
-            // the status is quiet and empty, and an empty 32pt band above the
-            // grid reads as something that failed to render.
             if loud {
                 // ONE RULE in the tone's colour, and nothing else. A filled
                 // plate behind a sentence is a second chrome.
@@ -259,71 +285,30 @@ private struct StatusRibbon: View {
             }
             Spacer(minLength: 0)
             if !status.action.isEmpty {
-                Text(status.action)
-                    .centraidType("control")
-                    .foregroundStyle(Theme.color("link", scheme))
-                    .underline()
+                if let open = opener {
+                    KitLink(label: status.action, action: open)
+                } else {
+                    // NO DOOR (`DESTINATION_NONE`) IS PLAIN TEXT: a true
+                    // sentence, not a button that does nothing.
+                    Text(status.action)
+                        .centraidType("smallStrong")
+                        .foregroundStyle(Theme.color("link", scheme))
+                }
             }
-            // The all-apps listing is a SHEET, opened here and never routed to.
-            Button {
-                shell.send(screen: "home", event: HomeEvents.allApps(open: true))
-            } label: {
-                Text(ShellWords.allApps)
-                    .centraidType("control")
-                    .foregroundStyle(Theme.color("link", scheme))
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("home-all-apps")
         }
         .padding(.horizontal, pageMargin)
         .frame(minHeight: loud ? 40 : 32)
         .accessibilityIdentifier("home-status")
         // A quiet signal with nowhere to go is still a true sentence, so it is
         // read as text rather than offered as a button that does nothing.
-        .accessibilityElement(children: .combine)
+        // WITH A DOOR the action is its own element (a link a member can
+        // activate); without one the ribbon reads as a single sentence.
+        .accessibilityElement(children: opener == nil ? .combine : .contain)
         .accessibilityLabel(
-            [status.copy, status.action].filter { !$0.isEmpty }.joined(separator: ". ")
+            opener == nil
+                ? [status.copy, status.action].filter { !$0.isEmpty }.joined(separator: ". ")
+                : status.copy
         )
-    }
-}
-
-/// THE SAMPLE VAULT'S ONE LINE (R-SAMPLE-1): a sentence and one secondary
-/// action, outlined and never filled — the springboard below keeps the view's
-/// one ink element. Removing deletes a vault, so the action asks first.
-private struct SampleNoticeRow: View {
-    @ObservedObject var shell: ShellModel
-    @Environment(\.colorScheme) private var scheme
-    @State private var asking = false
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(ShellWords.sampleLine)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("text", scheme))
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            KitOutlineButton(label: ShellWords.sampleRemove) { asking = true }
-                .accessibilityIdentifier("home-sample-remove")
-        }
-        .padding(.horizontal, pageMargin)
-        .padding(.vertical, 8)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("home-sample-notice")
-        .sampleRemoveConfirm(isPresented: $asking, shell: shell)
-    }
-}
-
-extension View {
-    /// "Remove sample"'s confirmation, the one both doors raise (Home's notice
-    /// and Settings): the destructive verb, Cancel, and one sentence.
-    func sampleRemoveConfirm(isPresented: Binding<Bool>, shell: ShellModel) -> some View {
-        alert(ShellWords.sampleRemove, isPresented: isPresented) {
-            Button(ShellWords.sampleRemoveConfirm, role: .destructive) { shell.removeSample() }
-                .accessibilityIdentifier("sample-remove-confirm")
-            Button(ShellWords.cancel, role: .cancel) {}
-        } message: {
-            Text(ShellWords.sampleRemoveBody)
-        }
     }
 }
 
@@ -357,56 +342,61 @@ private struct Springboard: View {
     let data: Centraid_Screen_V1_HomeData
     @ObservedObject var shell: ShellModel
 
-    /// WHICH tiles are drawn and in WHICH rows both arrive decided.
-    ///
-    /// `grid_rows` is `HomeMachine`'s packing over the tiles that earned the
-    /// grid, so this view looks each id up and draws it. The first build of this
-    /// screen packed rows here and let Compose's span logic pack them on
-    /// Android, which is two packers for one grid — `.gridCellColumns` being
-    /// silently ignored outside a `Grid` is what made that visible, but the
-    /// duplication was the defect and one packer in the machine is the fix.
+    var body: some View {
+        ScrollView {
+            TileGrid(data: data, shell: shell)
+                .padding(.horizontal, pageMargin)
+                .padding(.top, 10)
+                .padding(.bottom, 24)
+        }
+    }
+}
+
+/// EVERY APP IS A TILE (R-ONBOARD-11), in the rows the machine packed: an app
+/// with nothing in it draws what to do, so Docs, Agenda, People and Tally are
+/// always here to open. Shared by the springboard and day one.
+private struct TileGrid: View {
+    let data: Centraid_Screen_V1_HomeData
+    @ObservedObject var shell: ShellModel
+
+    /// `grid_rows` is `HomeMachine`'s packing, so this view looks each id up
+    /// and draws it. The first build packed rows here and let Compose's span
+    /// logic pack them on Android — two packers for one grid, and
+    /// `.gridCellColumns` is silently ignored outside a `Grid`. One packer, in
+    /// the machine, is the fix.
     private var byID: [String: Centraid_Screen_V1_HomeTile] {
         Dictionary(data.tiles.map { ($0.appID, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     var body: some View {
         let tiles = byID
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                VStack(spacing: tileGap) {
-                    ForEach(Array(data.gridRows.enumerated()), id: \.offset) { _, row in
-                        let drawn = row.appIds.compactMap { tiles[$0] }
-                        HStack(spacing: tileGap) {
-                            ForEach(drawn, id: \.appID) { tile in
-                                TileCard(tile: tile, shell: shell)
-                            }
-                            // A lone small keeps its column rather than
-                            // stretching over both: a tile that changed width
-                            // with its neighbours' arrival would be layout
-                            // overruling the body rule that chose its size.
-                            if drawn.count == 1 && !drawn[0].wide { Color.clear }
-                        }
-                        .frame(maxWidth: .infinity)
-                        // THE ROW HUGS ITS TALLEST TILE. Without this each card's
-                        // foot-pinning `Spacer` is flexible all the way up
-                        // through the scroll view, which proposes its own
-                        // height — so three rows split a screen between them and
-                        // every tile came out three times its floor.
-                        .fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: tileGap) {
+            ForEach(Array(data.gridRows.enumerated()), id: \.offset) { _, row in
+                let drawn = row.appIds.compactMap { tiles[$0] }
+                HStack(spacing: tileGap) {
+                    ForEach(drawn, id: \.appID) { tile in
+                        TileCard(tile: tile, shell: shell)
                     }
+                    // A lone small keeps its column rather than
+                    // stretching over both: a tile that changed width
+                    // with its neighbours' arrival would be layout
+                    // overruling the body rule that chose its size.
+                    if drawn.count == 1 && !drawn[0].wide { Color.clear }
                 }
-                .accessibilityIdentifier("home-grid")
-
-                if !data.firstMoves.isEmpty {
-                    Spacer().frame(height: 16)
-                    FirstMovesBand(moves: data.firstMoves, shell: shell)
-                }
-                ThingsFoot(things: data.things)
+                .frame(maxWidth: .infinity)
+                // THE ROW HUGS ITS TALLEST TILE. Without this each card's
+                // foot-pinning `Spacer` is flexible all the way up
+                // through the scroll view, which proposes its own
+                // height — so three rows split a screen between them and
+                // every tile came out three times its floor.
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.horizontal, pageMargin)
-            .padding(.top, 4)
-            .padding(.bottom, 24)
         }
+        // A CONTAINER, OR THE ID LEAKS: on a plain stack SwiftUI hands its
+        // identifier down to every child, so each tile read `home-grid` and no
+        // `home-tile-<appId>` could be selected.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("home-grid")
     }
 }
 
@@ -930,180 +920,13 @@ private struct DayOne: View {
                 Text(ShellWords.dayOneBody)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
-                ForEach(data.firstMoves, id: \.id) { move in
-                    MoveRow(move: move, shell: shell)
-                }
-                ThingsFoot(things: data.things)
+                TileGrid(data: data, shell: shell)
+                    .padding(.top, 12)
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .padding(pageMargin)
         }
         .accessibilityIdentifier("home-day-one")
-    }
-}
-
-/// Deliberately absent: dashed placeholder cards. They scale to identical
-/// apologies and they open empty apps. Every move here lands somewhere that can
-/// TAKE content.
-private struct FirstMovesBand: View {
-    let moves: [Centraid_Screen_V1_FirstMove]
-    @ObservedObject var shell: ShellModel
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(ShellWords.firstMoves)
-                .centraidType("eyebrow")
-                .foregroundStyle(Theme.color("textFaint", scheme))
-            ForEach(moves, id: \.id) { MoveRow(move: $0, shell: shell) }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityIdentifier("home-first-moves")
-    }
-}
-
-private struct MoveRow: View {
-    let move: Centraid_Screen_V1_FirstMove
-    @ObservedObject var shell: ShellModel
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        Button {
-            shell.send(screen: "home", event: HomeEvents.movePicked(move.id))
-            // Agenda's move ("Add an event") opens the composer on the core's
-            // today (#1046 wave 5): Agenda's home under it, the editor on top.
-            if move.id == "agenda" {
-                shell.path.append(AgendaScreens.homeRoute)
-                shell.path.append(AgendaScreens.newEventRoute(day: ""))
-            }
-            if move.id == "tasks" { shell.path.append(TasksScreens.homeRoute) }
-            // "Write a note" is a NEW note (`NotesRouting.target(null)`);
-            // "Add someone" is a new person's editor.
-            if move.id == "notes" { shell.path.append(NotesScreens.newNoteRoute()) }
-            if move.id == "people" { shell.path.append(PeopleScreens.newPersonRoute) }
-            // "File a document" lands on the drive, "Log a shared expense" on
-            // the composer over Tally, "Save a secret" on Locker — whose wall
-            // asks first (#1047).
-            if move.id == "docs" { shell.path.append(DocsScreens.driveRoute) }
-            if move.id == "tally" {
-                shell.path.append(TallyScreens.homeRoute)
-                shell.path.append(TallyScreens.addRoute())
-            }
-            if move.id == "locker" { shell.path.append(LockerScreens.homeRoute) }
-        } label: {
-            HStack(spacing: 8) {
-                // A move carries its OWN icon key: `connectors` is a move and
-                // not an app, so there is no mark to look up for it.
-                CentraidIconView(
-                    iconKey: move.iconKey,
-                    tint: Theme.color("textSoft", scheme),
-                    size: 16
-                )
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(move.label)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                    Text(move.hint)
-                        .centraidType("mono")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                }
-                Spacer(minLength: 0)
-            }
-            // The coarse target minimum, from the table — a nudge you cannot hit
-            // is not a nudge.
-            .frame(
-                maxWidth: .infinity,
-                minHeight: CentraidGeometry.targetMinCoarse,
-                alignment: .leading
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(move.label). \(move.hint)")
-    }
-}
-
-/// The one number describing the whole vault, assembled from numbers each true.
-///
-/// It says "at least" when anything is capped, and says nothing at all until
-/// every tile has settled — a moving total rendered as final is a number a
-/// member would quote back.
-private struct ThingsFoot: View {
-    let things: Centraid_Screen_V1_ThingCount
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        if things.settled {
-            Text("\(things.capped ? "at least " : "")\(things.total) \(things.total == 1 ? "thing" : "things")")
-                .centraidType("mono")
-                .foregroundStyle(Theme.color("textFaint", scheme))
-                .padding(.top, 16)
-        }
-    }
-}
-
-/// The all-apps listing is a SHEET and never a destination.
-private struct AllAppsSheet: View {
-    let tiles: [Centraid_Screen_V1_HomeTile]
-    @ObservedObject var shell: ShellModel
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        List {
-            ForEach(tiles, id: \.appID) { tile in
-                row(tile)
-            }
-            // THE CUSTODY ROWS (#1047 E5): the words again, and the laptop.
-            // Each opens its own screen over its own machine; the rows are
-            // intents and decide nothing.
-            Section {
-                custodyRow(ShellWords.showWords, identifier: "home-more-show-words") { shell.openShowWords() }
-                custodyRow(ShellWords.pairLaptop, identifier: "home-more-pair-laptop") { shell.openPairLaptop() }
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("home-all-apps-sheet")
-    }
-
-    private func custodyRow(_ label: String, identifier: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Text(label)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
-                Spacer(minLength: 0)
-            }
-            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(identifier)
-    }
-
-    private func row(_ tile: Centraid_Screen_V1_HomeTile) -> some View {
-        // A ROW DOES WHAT ITS TILE DOES — the same pick, the same route —
-        // so the listing and the springboard cannot disagree about where an
-        // app goes. The sheet closes only when there is somewhere to go: an
-        // app with no screen yet leaves the member where they are, as its
-        // tile does, rather than dropping them back on Home with nothing
-        // opened.
-        Button {
-            shell.send(screen: "home", event: HomeEvents.movePicked(tile.appID))
-            guard let route = TileCard.route(for: tile) else { return }
-            shell.send(screen: "home", event: HomeEvents.allApps(open: false))
-            shell.path.append(route)
-        } label: {
-            HStack(spacing: 8) {
-                AppMark(appID: tile.appID, size: 22)
-                Text(CentraidCatalog.byID[tile.appID]?.name ?? tile.appID.capitalized)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("home-all-apps-row-\(tile.appID)")
-        .accessibilityLabel(tile.openLabel)
     }
 }
 
@@ -1127,16 +950,34 @@ private struct VaultSheet: View {
     /// "Forget this vault?" over a list of four is the dialogue a member taps
     /// through and then regrets.
     @State private var forgetting: Centraid_Screen_V1_VaultLockup?
+    /// THE VAULT BEING RENAMED and the name typed so far. The field starts on
+    /// the vault's own name, so a small fix is a small edit.
+    @State private var renaming: Centraid_Screen_V1_VaultLockup?
+    @State private var newName = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(ShellWords.vaultsTitle)
-                .centraidType("title")
-                .foregroundStyle(Theme.color("text", scheme))
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.top, 20)
-                .padding(.bottom, 12)
+        // A SHEETROOM: the room owns the grabber, the title and the gutter,
+        // and the roster scrolls inside it.
+        SheetRoom(title: ShellWords.vaultsTitle, titleIdentifier: "home-vault-sheet") {
+            roster
+        }
+        .sheet(item: Binding(get: { forgetting.map(VaultPick.init) }, set: { if $0 == nil { forgetting = nil } })) { pick in
+            forgetConfirm(pick.vault)
+        }
+        .sheet(item: Binding(get: { renaming.map(VaultPick.init) }, set: { if $0 == nil { renaming = nil } })) { pick in
+            renameSheet(pick.vault)
+        }
+    }
 
+    /// A vault a sheet is about, as `.sheet(item:)` needs it (which also keeps
+    /// the sheet's words through its dismissal).
+    private struct VaultPick: Identifiable {
+        let vault: Centraid_Screen_V1_VaultLockup
+        var id: String { vault.vaultID }
+    }
+
+    private var roster: some View {
+        VStack(alignment: .leading, spacing: 0) {
             // ZERO VAULTS NEVER REACHES THIS SHEET: a device that holds none
             // opens onto `FirstLaunchView` instead of Home (`CentraidApp`),
             // which is where "make" and "restore" live now. One vault keeps
@@ -1146,12 +987,13 @@ private struct VaultSheet: View {
                 Text(ShellWords.vaultsOne)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.bottom, 8)
             }
 
-            // THE ROSTER IS DRAWN AS THE SHELF LISTS IT, the sample last
-            // (R-SAMPLE-1): the order is `Shelf`'s, and this view sorts nothing.
-            List(vaults, id: \.vaultID) { vault in
+            // THE ROSTER IS DRAWN AS THE SHELF LISTS IT: the order is
+            // `Shelf`'s, and this view sorts nothing.
+            List {
+            ForEach(vaults, id: \.vaultID) { vault in
                 Button {
                     if vault.vaultID != active.vaultID {
                         shell.clearStaleGatewayStatus()
@@ -1168,23 +1010,13 @@ private struct VaultSheet: View {
                             .frame(width: 30, height: 30)
                             .background(
                                 Theme.color("bgSunken", scheme),
-                                in: RoundedRectangle(cornerRadius: 7)
+                                in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
                             )
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 8) {
                                 Text(ShellWords.vaultName(vault.vaultName))
                                     .centraidType("smallStrong")
                                     .foregroundStyle(Theme.color("text", scheme))
-                                // THE SAMPLE'S MARK, from the lockup's own
-                                // `sample` and never from its name: a member
-                                // may call a vault of their own "Sample". It
-                                // is dropped while the vault's name already
-                                // says it ("Sample [Sample]" is one word
-                                // twice) and kept once the member renamed it.
-                                if vault.sample, vault.vaultName != ShellWords.sampleMark {
-                                    StatusChipView(.with { $0.label = ShellWords.sampleMark; $0.tone = .neutral })
-                                        .accessibilityIdentifier("vault-sample-mark")
-                                }
                             }
                             // THE SAME SECOND LINE THE HEADER DRAWS, from the
                             // same `stateLine` and the same `RosterChanged`
@@ -1220,6 +1052,11 @@ private struct VaultSheet: View {
                 // swipe is where iOS puts a delete, and `allowsFullSwipe` is
                 // off because this deletes the device's copy and a full swipe
                 // is a gesture a thumb makes by accident.
+                //
+                // RENAME SITS BESIDE IT, and in the row's long-press menu,
+                // because a swipe is a gesture nobody finds by looking: the
+                // menu is the discoverable door, the swipe the quick one. A
+                // vault that moved is read-only and offers no rename.
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         forgetting = vault
@@ -1227,37 +1064,135 @@ private struct VaultSheet: View {
                         Label(ShellWords.vaultsForget, systemImage: "trash")
                     }
                     .accessibilityIdentifier("vault-forget-\(vault.vaultID)")
+                    if vault.state != .frozen {
+                        Button {
+                            startRename(vault)
+                        } label: {
+                            Label(ShellWords.vaultsRename, systemImage: "pencil")
+                        }
+                        .tint(Theme.color("link", scheme))
+                        .accessibilityIdentifier("vault-rename-\(vault.vaultID)")
+                    }
+                }
+                .contextMenu {
+                    if vault.state != .frozen {
+                        Button {
+                            startRename(vault)
+                        } label: {
+                            Label(ShellWords.vaultsRename, systemImage: "pencil")
+                        }
+                    }
+                    // DELETE, behind the same confirmation the swipe opens.
+                    Button(role: .destructive) {
+                        forgetting = vault
+                    } label: {
+                        Label(ShellWords.vaultsForget, systemImage: "trash")
+                    }
                 }
             }
+
+            // MAKING AND RESTORING A VAULT LIVE HERE (R-ONBOARD-11): this is
+            // the sheet about the vaults this phone holds, and Home has no
+            // settings gear to hide them behind. In the same list, so a long
+            // roster scrolls them with it rather than clipping either.
+            Section {
+                switcherAction(ShellWords.vaultsMake, icon: "Plus", id: "vault-found-button") { shell.makeVault() }
+                switcherAction(ShellWords.wordsRestore, icon: "Refresh", id: "vault-restore-button") { shell.openRestore() }
+                    .listRowSeparator(.hidden)
+                // THE LAST OUTCOME, IN A MEMBER'S WORDS (what a make or a
+                // restore came to).
+                if !shell.gatewayStatus.isEmpty {
+                    Text(shell.gatewayStatus)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                        .listRowSeparator(.hidden)
+                        .accessibilityIdentifier("vault-status")
+                }
+            }
+            .listSectionSeparator(.hidden, edges: .bottom)
+            }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
         }
-        .background(Theme.color("bg", scheme).ignoresSafeArea())
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("home-vault-sheet")
-        // THE ALERT NAMES THE VAULT, and what it says changed with the
-        // product (#1029 §1). Forgetting used to delete this device's COPY —
-        // the replica and its bytes — and the gateway kept the vault and kept
-        // this device enrolled, so the sentence could truthfully say the way
-        // back was a fresh ticket. **The phone is the vault.** There is no
-        // copy elsewhere and no ticket, so Forget destroys the vault, and an
-        // alert that still offered a way back would be the one place this
-        // shell lies about what a destructive button does.
-        .alert(
-            ShellWords.forgetTitle(forgetting?.vaultName ?? ""),
-            isPresented: Binding(
-                get: { forgetting != nil },
-                set: { if !$0 { forgetting = nil } }
-            ),
-            presenting: forgetting
-        ) { vault in
-            Button(ShellWords.vaultsForget, role: .destructive) {
+    }
+
+    /// THE CONFIRM NAMES THE VAULT, and what it says changed with the
+    /// product (#1029 §1). Forgetting used to delete this device's COPY —
+    /// the replica and its bytes — and the gateway kept the vault and kept
+    /// this device enrolled, so the sentence could truthfully say the way
+    /// back was a fresh ticket. **The phone is the vault.** There is no
+    /// copy elsewhere and no ticket, so Forget destroys the vault, and a
+    /// confirm that still offered a way back would be the one place this
+    /// shell lies about what a destructive button does.
+    private func forgetConfirm(_ vault: Centraid_Screen_V1_VaultLockup) -> some View {
+        ConfirmSheet(
+            .with {
+                $0.title = ShellWords.forgetTitle(vault.vaultName)
+                $0.body = ShellWords.vaultsForgetBody
+                $0.confirmLabel = ShellWords.vaultsForget
+                $0.destructive = true
+            },
+            cancelLabel: ShellWords.cancel,
+            onConfirm: {
                 shell.forget(vaultID: vault.vaultID)
                 forgetting = nil
+            },
+            onDismiss: { forgetting = nil }
+        )
+    }
+
+    /// A RENAME IS A SHEET HOLDING THE FIELD, with Save as its one ink button.
+    private func renameSheet(_ vault: Centraid_Screen_V1_VaultLockup) -> some View {
+        SheetRoom(
+            title: ShellWords.vaultsRenameTitle,
+            primary: SheetPrimary(
+                label: ShellWords.vaultsRenameSave,
+                enabled: !newName.trimmingCharacters(in: .whitespaces).isEmpty,
+                identifier: "vault-rename-save"
+            ) {
+                shell.renameVault(vaultID: vault.vaultID, name: newName)
+                renaming = nil
             }
-            Button(ShellWords.cancel, role: .cancel) { forgetting = nil }
-        } message: { _ in
-            Text(ShellWords.vaultsForgetBody)
+        ) {
+            TextField(ShellWords.vaultsRenameField, text: $newName)
+                .textInputAutocapitalization(.words)
+                .centraidType("body")
+                .foregroundStyle(Theme.color("text", scheme))
+                .padding(.horizontal, 12)
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                        .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                )
+                .accessibilityIdentifier("vault-rename-field")
         }
+    }
+
+    private func startRename(_ vault: Centraid_Screen_V1_VaultLockup) {
+        newName = vault.vaultName
+        renaming = vault
+    }
+
+    /// One of the switcher's two acts: a mark and a label, a full-width row.
+    private func switcherAction(_ label: String, icon: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                CentraidIconView(iconKey: icon, tint: Theme.color("text", scheme), size: 18)
+                    .frame(width: 30, height: 30)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                            .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                    )
+                Text(label)
+                    .centraidType("smallStrong")
+                    .foregroundStyle(Theme.color("text", scheme))
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
     }
 }
 
@@ -1294,9 +1229,4 @@ enum HomeEvents {
         return (try? event.serializedBytes()) ?? Data()
     }
 
-    static func allApps(open: Bool) -> Data {
-        var event = Centraid_Screen_V1_HomeEvent()
-        event.allApps = .with { $0.open = open }
-        return (try? event.serializedBytes()) ?? Data()
-    }
 }

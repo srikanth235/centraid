@@ -43,6 +43,14 @@ public sealed interface Destination {
 
     public data object Capture : Destination
 
+    /**
+     * HOME'S SEARCH (R-CHROME-6): one field over every app but Locker, pushed
+     * from Home's search bar. A shell forwards `HomeSearchEvent.Opened` at the
+     * push, never on re-appearance, so a member coming back from a row finds
+     * the results they left.
+     */
+    public data object HomeSearch : Destination
+
     public data object Settings : Destination
 
     /** Activity. The alias v0 keeps for Insights (`navigation.ts:1-3`). */

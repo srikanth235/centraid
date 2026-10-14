@@ -49,41 +49,48 @@ struct PhotosGridStateView {
         (try? Centraid_Screen_V1_PhotosGridState(serializedBytes: data)) ?? .init()
     }
 
-    /// v0's three places, in v0's order and with v0's marks
-    /// (`photos-band.ts`): Library first, because the band is judged by how
-    /// few taps the timeline costs. More is not among them — it opens a sheet,
-    /// so the band draws it as its own bordered square.
-    ///
-    /// **"Collections", not "Albums".** The label once said Albums over a page
-    /// titled Collections that has an Albums section of its own, so one word
-    /// named two different things on one screen.
-    /// The event that moves the grid to `destination` — the band's own, and
-    /// the one the search bar's close sends to put the band back.
+    /// The event that moves the grid to `destination` — the band's own, the
+    /// search bar's open, and the one the search row's close sends to put the
+    /// band back.
     static func destinationEvent(_ destination: Centraid_Screen_V1_PhotosGridState.Destination) -> Data {
         var event = Centraid_Screen_V1_PhotosGridEvent()
         event.destination = .with { $0.destination = destination }
         return event.encoded
     }
 
+    /// THE BAND, AS THE MACHINE DECORATES IT (R-CHROME-4/5): Library and
+    /// Collections, then More — an ordinary tab whose press opens the sheet,
+    /// lit while the sheet is up. Search is not a place; the bar under the
+    /// title opens it. Labels, marks and which tab is lit are the state's.
+    ///
+    /// **"Collections", not "Albums".** The label once said Albums over a page
+    /// titled Collections that has an Albums section of its own, so one word
+    /// named two different things on one screen.
     var bands: [BandView] {
-        let current = destination
-        return [
-            (Centraid_Screen_V1_PhotosGridState.Destination.library, "Library", "Image"),
-            (.collections, "Collections", "Layers"),
-            (.search, "Search", "Search"),
-        ].map { destination, label, iconKey in
-            var event = Centraid_Screen_V1_PhotosGridEvent()
-            event.destination = .with { $0.destination = destination }
-            return BandView(
-                label: label,
-                event: event.encoded,
-                iconKey: iconKey,
-                // `unspecified` IS the library: the machine opens there, and a
-                // band with nothing lit would be a band saying "nowhere".
-                selected: destination == current
-                    || (destination == .library && current == .unspecified)
+        state.band.map { tab in
+            BandView(
+                label: tab.label,
+                event: Self.bandEvent(tab.key, more: moreSheetEvent),
+                iconKey: tab.iconKey,
+                selected: tab.current
             )
         }
+    }
+
+    /// What a band key sends: `more` opens the sheet (never a destination),
+    /// a place moves the grid.
+    private static func bandEvent(_ key: String, more: Data) -> Data {
+        switch key {
+        case "more": return more
+        case "collections": return destinationEvent(.collections)
+        default: return destinationEvent(.library)
+        }
+    }
+
+    /// The band tab a destination is — what the search row's way back wears.
+    func bandTab(for destination: Centraid_Screen_V1_PhotosGridState.Destination) -> Centraid_Screen_V1_PhotosBandTab? {
+        let key = destination == .collections ? "collections" : "library"
+        return state.band.first { $0.key == key }
     }
 
     /// The cells, AS THE WIRE HOLDS THEM, and whether this device has a
@@ -136,21 +143,22 @@ struct PhotosGridStateView {
             // member watching a roll upload saw a number shrink with nothing to
             // say how much had been done, and a backup near the end and a backup
             // that had barely started both read as a small number.
-            return "Importing: \(done) done, \(left) to go"
+            return PhotosWords.fill(
+                PhotosWords.fill(PhotosWords.photosImportProgress, "done", "\(done)"), "left", "\(left)")
         case .enumerating:
-            return "Looking through your camera roll."
+            return PhotosWords.photosImportLooking
         case .waitingForPower:
-            return waiting(done: done, left: left, "Centraid imports these when this phone is charging.")
+            return waiting(done: done, left: left, PhotosWords.photosImportWaitPower)
         case .waitingForUnmetered:
-            return waiting(done: done, left: left, "Centraid imports these on Wi-Fi.")
+            return waiting(done: done, left: left, PhotosWords.photosImportWaitWifi)
         case .parkedLowDisk:
-            return "Centraid has paused the import."
+            return PhotosWords.photosImportPausedDisk
         case .done:
             return done > 0
-                ? "Your camera roll is in your vault \u{2014} \(done) this time."
-                : "Your camera roll is in your vault."
+                ? PhotosWords.fill(PhotosWords.photosImportDoneCount, "done", "\(done)")
+                : PhotosWords.photosImportDone
         case .idle, .unspecified, .UNRECOGNIZED:
-            return "Camera roll import is off."
+            return PhotosWords.photosImportOff
         }
     }
 
@@ -159,7 +167,10 @@ struct PhotosGridStateView {
     /// A member who moved off Wi-Fi mid-roll is told the work is not lost, which
     /// is the whole difference between a pause and a failure.
     private func waiting(done: UInt32, left: UInt32, _ sentence: String) -> String {
-        done == 0 ? sentence : "\(sentence) \(done) done, \(left) waiting."
+        done == 0
+            ? sentence
+            : sentence + " " + PhotosWords.fill(
+                PhotosWords.fill(PhotosWords.photosImportWaitCounts, "done", "\(done)"), "left", "\(left)")
     }
 
     var pausedReason: String { state.backup.pausedReason }

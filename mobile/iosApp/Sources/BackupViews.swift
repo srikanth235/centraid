@@ -1,6 +1,7 @@
 import SwiftUI
 
-// THE BACKUP SCREEN AND THE HOME LINE (#1080, the shells; seam contract A11).
+// THE BACKUP SCREEN (#1080, the shells; seam contract A11). Home's half of the
+// backup is the vault lockup's status line (`VaultHeader`, R-ONBOARD-11).
 //
 // **THESE VIEWS DECIDE NOTHING** (R-1047-K1). Every sentence — the line and
 // its detail, each reason something waits, each gateway's last word, every
@@ -13,9 +14,9 @@ import SwiftUI
 // core's own `backlog` hook (`IosBackgroundTasks`), so leaving this screen
 // mid-run does not let the phone lock on it.
 //
-// **EVERY PROTO NAME THIS FILE READS IS IN [BackupScreenModel.init],
-// [BackupLineView] AND [BackupEvents]** — and `HomeView` reads one more, the
-// `backup_line` it hands the line — so a change to `screen.proto`'s
+// **EVERY PROTO NAME THIS FILE READS IS IN [BackupScreenModel.init] AND
+// [BackupEvents]** — and `VaultHeader` reads `BackupLine.status` and `tone`
+// from Home's `backup_line` — so a change to `screen.proto`'s
 // `// --- Backup ---` block is an edit to those places. The Android twin is
 // `BackupScreens.kt`; the two read the same names.
 //
@@ -55,6 +56,14 @@ struct BackupScreenModel: Equatable {
     var backUpNowEnabled = false
     /// Non-empty only while a run is in progress.
     var progress = ""
+    /// THE RECOVERY KEY (R-ONBOARD-10): empty heading draws no section.
+    var keyHeading = ""
+    var keyLine = ""
+    /// The key is on this phone alone and no copy was saved: drawn as a warning.
+    var keyWarning = false
+    var keyShowLabel = ""
+    var keySyncLabel = ""
+    var keySynced = false
 
     init() {}
 
@@ -82,6 +91,12 @@ struct BackupScreenModel: Equatable {
         backUpNowLabel = state.backUpNowLabel
         backUpNowEnabled = state.backUpNowEnabled
         progress = state.progress
+        keyHeading = state.keyHeading
+        keyLine = state.keyLine
+        keyWarning = state.keyWarning
+        keyShowLabel = state.keyShowLabel
+        keySyncLabel = state.keySyncLabel
+        keySynced = state.keySynced
     }
 }
 
@@ -107,59 +122,15 @@ enum BackupEvents {
         event { $0.dismissed = .init() }
     }
 
+    /// Move the recovery key into the keychain, or out of it.
+    static func setKeySync(_ on: Bool) -> Data {
+        event { $0.setKeySync = .with { $0.on = on } }
+    }
+
     private static func event(_ build: (inout Centraid_Screen_V1_BackupScreenEvent) -> Void) -> Data {
         var event = Centraid_Screen_V1_BackupScreenEvent()
         build(&event)
         return (try? event.serializedBytes()) ?? Data()
-    }
-}
-
-/// THE HOME LINE: one sentence under the vault, its second clause, and the
-/// door to the screen. Empty draws nothing.
-///
-/// The tone is drawn the way Home's status ribbon draws its own: a quiet line
-/// is ignorable and earns no rule; one that wants the member gets one rule in
-/// the tone's colour, never a filled plate.
-struct BackupLineView: View {
-    let line: Centraid_Screen_V1_BackupLine
-    let onOpen: () -> Void
-    @Environment(\.colorScheme) private var scheme
-
-    private var loud: Bool { line.tone == .attention || line.tone == .urgent }
-
-    var body: some View {
-        if !line.sentence.isEmpty {
-            Button(action: onOpen) {
-                HStack(spacing: 8) {
-                    if loud {
-                        Rectangle()
-                            .fill(Theme.color(line.tone == .urgent ? "danger" : "attention", scheme))
-                            .frame(width: 2, height: 24)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(line.sentence)
-                            .centraidType(loud ? "small" : "mono")
-                            .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
-                            .lineLimit(2)
-                        if !line.detail.isEmpty {
-                            Text(line.detail)
-                                .centraidType("mono")
-                                .foregroundStyle(Theme.color("textFaint", scheme))
-                                .lineLimit(1)
-                        }
-                    }
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            // THE LINE READ ALOUD is the machine's: sentence, detail, then
-            // what waits.
-            .accessibilityLabel(line.accessibilityLabel.isEmpty ? line.sentence : line.accessibilityLabel)
-            .accessibilityIdentifier("home-backup-line")
-        }
     }
 }
 
@@ -171,73 +142,202 @@ struct BackupView: View {
     let send: (Data) -> Void
     /// Pairing another gateway is `pair.laptop`'s scan or paste.
     let onAddDestination: () -> Void
+    /// THE RECOVERY KEY, from the screen that is about getting the vault
+    /// back: `words.show`, over the passcode.
+    let onShowWords: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let model = BackupScreenModel(decoding: data)
+        let paired = !model.destinations.isEmpty
+        // ONE INK BUTTON AT A TIME: the recovery key's warning is the page's
+        // first concern, then adding a backup device; a verb that would be a
+        // second ink is drawn as the outline.
+        let keyInk = model.keyWarning && !model.keyHeading.isEmpty && !model.keyShowLabel.isEmpty
+        let addShown = !paired && !model.addLabel.isEmpty
+        ScrollViewReader { proxy in
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                WordsHead(title: model.title, lead: model.line)
-
-                if !model.lineDetail.isEmpty {
-                    sentence(model.lineDetail)
-                }
-                ForEach(model.waiting, id: \.self) { reason in
-                    sentence(reason)
-                }
-                // WHY THE PHONE WILL NOT WAKE CENTRAID, when it will not: a
-                // reason the backup waits for the app to be opened.
-                if !model.backgroundNotice.isEmpty {
-                    sentence(model.backgroundNotice, id: "backup-background-notice")
-                }
-
-                // BACK UP NOW, pressable when the machine says so — the
-                // shared primary control's dimmed form otherwise. While a run
-                // goes, its progress sentence stands beside it.
-                if !model.backUpNowLabel.isEmpty {
-                    KitInkButton(label: model.backUpNowLabel) { send(BackupEvents.backUpNow()) }
-                        .disabled(!model.backUpNowEnabled)
-                        .opacity(model.backUpNowEnabled ? 1 : 0.4)
-                        .accessibilityIdentifier("backup-now")
-                }
-                if !model.progress.isEmpty {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text(model.progress)
-                            .centraidType("small")
-                            .foregroundStyle(Theme.color("textSoft", scheme))
+            VStack(alignment: .leading, spacing: 0) {
+                // WHERE THE BACKUP STANDS, and the one act that moves it: with
+                // nothing paired that act is adding a backup device, drawn as
+                // the page's primary; once one is paired it is "Back up now".
+                VStack(alignment: .leading, spacing: 12) {
+                    WordsHead(title: model.title, lead: model.line)
+                    if !model.lineDetail.isEmpty {
+                        sentence(model.lineDetail)
                     }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("backup-progress")
+                    ForEach(model.waiting, id: \.self) { reason in
+                        sentence(reason)
+                    }
+                    // WHY THE PHONE WILL NOT WAKE CENTRAID, when it will not.
+                    if !model.backgroundNotice.isEmpty {
+                        sentence(model.backgroundNotice, id: "backup-background-notice")
+                    }
+                    if addShown {
+                        if keyInk {
+                            KitOutlineButton(label: model.addLabel, fullWidth: true, action: onAddDestination)
+                                .padding(.top, 8)
+                                .accessibilityIdentifier("backup-add-destination")
+                        } else {
+                            KitInkButton(label: model.addLabel, action: onAddDestination)
+                                .padding(.top, 8)
+                                .accessibilityIdentifier("backup-add-destination")
+                        }
+                    }
+                    // BACK UP NOW, only once there is somewhere to back up to
+                    // (the machine draws no label before). Pressable when the
+                    // machine says so; while a run goes, its progress stands
+                    // beside it.
+                    if !model.backUpNowLabel.isEmpty {
+                        if keyInk || addShown {
+                            KitOutlineButton(label: model.backUpNowLabel, fullWidth: true) { send(BackupEvents.backUpNow()) }
+                                .disabled(!model.backUpNowEnabled)
+                                .padding(.top, 8)
+                                .accessibilityIdentifier("backup-now")
+                        } else {
+                            KitInkButton(label: model.backUpNowLabel) { send(BackupEvents.backUpNow()) }
+                                .disabled(!model.backUpNowEnabled)
+                                .padding(.top, 8)
+                                .accessibilityIdentifier("backup-now")
+                        }
+                    }
+                    if !model.progress.isEmpty {
+                        KitSpinner(label: model.progress)
+                            .accessibilityIdentifier("backup-progress")
+                    }
+                    // WHAT THE LAST ACT DID, in place: one clause, never a toast.
+                    if !model.notice.isEmpty {
+                        sentence(model.notice, id: "backup-notice")
+                    }
                 }
-                // WHAT THE LAST ACT DID, in place: one clause, never a toast.
-                if !model.notice.isEmpty {
-                    sentence(model.notice, id: "backup-notice")
+                .padding(.bottom, 24)
+
+                // A KEY ON THIS PHONE ALONE IS THE PAGE'S FIRST CONCERN: a lost
+                // phone takes every vault with it, whatever is backed up.
+                if model.keyWarning {
+                    recoveryKey(model)
                 }
 
-                destinations(model)
+                if paired {
+                    section(ShellWords.backupDevices) { destinations(model) }
+                }
 
-                rule(model)
+                if !shell.transferRuleChoices.isEmpty {
+                    section(model.ruleLabel) { rule(model) }
+                }
 
                 if !model.videosLabel.isEmpty {
+                    divider
                     Toggle(isOn: Binding(
                         get: { model.includeVideos },
                         set: { send(BackupEvents.setIncludeVideos($0)) }
                     )) {
                         Text(model.videosLabel)
-                            .centraidType("small")
+                            .centraidType("body")
                             .foregroundStyle(Theme.color("text", scheme))
                     }
-                    .tint(Theme.color("link", scheme))
+                    .kitToggle()
+                    .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                    .padding(.vertical, 8)
                     .accessibilityIdentifier("backup-include-videos")
+                }
+
+                // THE RECOVERY KEY BELONGS HERE: it is the other half of
+                // getting a vault back, beside the backup device that holds
+                // the copy.
+                if !model.keyWarning {
+                    recoveryKey(model)
                 }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 24)
+            .padding(.top, 16)
+            .padding(.bottom, 32)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .id(Self.top)
+        }
+        // THE PAGE OPENS AT ITS TOP AND STAYS ANCHORED THERE as the read fills
+        // it in: a section that arrives late (the recovery key, the backup
+        // devices) grows the page downwards and never pushes the title up
+        // under the vault's lockup.
+        .defaultScrollAnchor(.top)
+        .onAppear { proxy.scrollTo(Self.top, anchor: .top) }
+        .onChange(of: shell.backupScrollTop) { _, _ in
+            withAnimation { proxy.scrollTo(Self.top, anchor: .top) }
+        }
         }
         .background(Theme.color("bg", scheme).ignoresSafeArea())
         .accessibilityIdentifier("backup-screen")
+    }
+
+    private static let top = "backup-top"
+
+    /// WHERE THE RECOVERY KEY IS, and what can be done about it. A warning
+    /// carries the attention mark Home's line uses and makes "Show recovery
+    /// key" the primary; otherwise it is one quiet sentence and an outline
+    /// button. Moving the key into or out of the keychain is a plain link: it
+    /// is a choice made once, not a thing to do.
+    @ViewBuilder
+    private func recoveryKey(_ model: BackupScreenModel) -> some View {
+        if !model.keyHeading.isEmpty {
+            section(model.keyHeading) {
+                VStack(alignment: .leading, spacing: 12) {
+                    if model.keyWarning {
+                        HStack(alignment: .top, spacing: 10) {
+                            Rectangle()
+                                .fill(Theme.color("attention", scheme))
+                                .frame(width: 2)
+                            Text(model.keyLine)
+                                .centraidType("body")
+                                .foregroundStyle(Theme.color("text", scheme))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("backup-key-line")
+                        if !model.keyShowLabel.isEmpty {
+                            KitInkButton(label: model.keyShowLabel, action: onShowWords)
+                                .accessibilityIdentifier("backup-show-key")
+                        }
+                    } else {
+                        sentence(model.keyLine, id: "backup-key-line")
+                        if !model.keyShowLabel.isEmpty {
+                            KitOutlineButton(label: model.keyShowLabel, action: onShowWords)
+                                .accessibilityIdentifier("backup-show-key")
+                        }
+                    }
+                    if !model.keySyncLabel.isEmpty {
+                        KitLink(label: model.keySyncLabel, identifier: "backup-key-sync") {
+                            send(BackupEvents.setKeySync(!model.keySynced))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// A HAIRLINE between groups: the page is already inset, so the plain
+    /// rule and not `KitHairline`, which insets again.
+    private var divider: some View {
+        Rectangle()
+            .fill(Theme.color("line", scheme))
+            .frame(height: CentraidGeometry.hairline)
+    }
+
+    /// ONE GROUP: a rule above, its name in the page's strong small type
+    /// (sentence case, never an eyebrow), then its rows.
+    @ViewBuilder
+    private func section<Content: View>(_ heading: String, @ViewBuilder content: () -> Content) -> some View {
+        divider
+        VStack(alignment: .leading, spacing: 8) {
+            if !heading.isEmpty {
+                Text(heading)
+                    .centraidType("smallStrong")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .accessibilityAddTraits(.isHeader)
+            }
+            content()
+        }
+        .padding(.vertical, 20)
     }
 
     /// One of the machine's sentences, drawn quietly.
@@ -277,12 +377,10 @@ struct BackupView: View {
                     // it forgets this phone's pairing and nothing the gateway
                     // holds, and pairing again undoes it.
                     if !model.forgetLabel.isEmpty {
-                        Button(model.forgetLabel) { send(BackupEvents.forget(row.id)) }
-                            .centraidType("control")
-                            .tint(Theme.color("link", scheme))
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("\(model.forgetLabel) \(row.label)")
-                            .accessibilityIdentifier("backup-forget-\(row.id)")
+                        KitLink(label: model.forgetLabel, dense: true, identifier: "backup-forget-\(row.id)") {
+                            send(BackupEvents.forget(row.id))
+                        }
+                        .accessibilityLabel("\(model.forgetLabel) \(row.label)")
                     }
                 }
                 .padding(.vertical, 10)
@@ -293,6 +391,7 @@ struct BackupView: View {
                     .fill(Theme.color("line", scheme))
                     .frame(height: CentraidGeometry.hairline)
             }
+            // ANOTHER BACKUP DEVICE, once one is paired: the secondary form.
             if !model.addLabel.isEmpty {
                 KitOutlineButton(label: model.addLabel, action: onAddDestination)
                     .padding(.top, 12)
@@ -302,37 +401,54 @@ struct BackupView: View {
     }
 
     /// THE MEMBER'S RULE, the same three sentences the Home header's sheet
-    /// draws, from the same store.
+    /// draws, from the same store. Its heading is the section's.
     @ViewBuilder
     private func rule(_ model: BackupScreenModel) -> some View {
-        if !shell.transferRuleChoices.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                if !model.ruleLabel.isEmpty {
-                    Text(model.ruleLabel)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                }
-                ForEach(shell.transferRuleChoices, id: \.stored) { choice in
-                    let picked = shell.transferRule == choice.stored
-                    Button {
-                        shell.setTransferRule(choice.stored)
-                    } label: {
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Image(systemName: picked ? "largecircle.fill.circle" : "circle")
-                                .accessibilityHidden(true)
-                            Text(choice.sentence)
-                                .centraidType("small")
-                                .foregroundStyle(Theme.color("text", scheme))
-                                .multilineTextAlignment(.leading)
-                            Spacer(minLength: 0)
-                        }
-                        .frame(minHeight: 44)
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(shell.transferRuleChoices, id: \.stored) { choice in
+                let picked = shell.transferRule == choice.stored
+                Button {
+                    shell.setTransferRule(choice.stored)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        RuleMark(picked: picked)
+                            .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
+                        Text(choice.sentence)
+                            .centraidType("small")
+                            .foregroundStyle(Theme.color(picked ? "text" : "textSoft", scheme))
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(picked ? [.isSelected] : [])
-                    .accessibilityIdentifier("backup-rule-\(choice.stored)")
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(KitRowPress())
+                .accessibilityAddTraits(picked ? [.isSelected] : [])
+                .accessibilityIdentifier("backup-rule-\(choice.stored)")
             }
         }
+    }
+}
+
+/// THE RULE'S CHOICE MARK, in the theme's ink rather than the system's glyph:
+/// a hairline ring, and a filled centre for the one picked.
+private struct RuleMark: View {
+    let picked: Bool
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(Theme.color(picked ? "text" : "lineStrong", scheme), lineWidth: 1.5)
+            if picked {
+                Circle()
+                    .fill(Theme.color("text", scheme))
+                    .padding(5)
+            }
+        }
+        .frame(width: 20, height: 20)
+        .accessibilityHidden(true)
     }
 }

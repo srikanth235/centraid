@@ -12,11 +12,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
+import dev.centraid.android.kit.RowSkeleton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,10 +31,12 @@ import centraid.screen.v1.PhotosPeopleEvent
 import centraid.screen.v1.PhotosPeopleState
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ContentImage
+import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PhotosPeopleMachine
 
 /**
@@ -79,7 +78,7 @@ public fun PhotosPeopleScreen(
     val data = state.data_
     Column(modifier = Modifier.padding(16.dp)) {
         when {
-            loading != null -> CircularProgressIndicator()
+            loading != null -> RowSkeleton()
 
             failure != null -> ScreenFailure(failure.sentence, failure.remedy)
 
@@ -172,7 +171,7 @@ private fun FaceReviewDoor(count: Int, onOpen: () -> Unit) {
         Column {
             Text(text = label, style = centraidType("body"), color = centraidColor("text"))
             Text(
-                text = "Centraid found these and is waiting for you to say who they are.",
+                text = PhotosCopy.PHOTOS_PEOPLE_TO_NAME_CAPTION,
                 style = centraidType("small"),
                 color = centraidColor("textSoft"),
             )
@@ -195,7 +194,6 @@ private fun PersonRowItem(
     onRename: (String) -> Unit,
 ) {
     var renaming by remember { mutableStateOf(false) }
-    var typed by remember { mutableStateOf(person.display_name) }
     val count = countSentence(person)
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -237,42 +235,31 @@ private fun PersonRowItem(
                 Text(text = count, style = centraidType("small"), color = centraidColor("textSoft"))
             }
         }
-        TextButton(
-            onClick = {
-                typed = person.display_name
-                renaming = true
-            },
-            modifier = Modifier.semantics {
-                contentDescription = "Rename ${person.display_name}"
-            },
-        ) {
-            CentraidIcon(iconKey = "Pencil", tint = centraidColor("textSoft"), size = 16.dp)
-        }
+        IconKey(
+            iconKey = "Pencil",
+            label = "Rename ${person.display_name}",
+            testTag = "people-rename",
+            bordered = false,
+            onPress = { renaming = true },
+        )
     }
     if (renaming) {
-        AlertDialog(
-            onDismissRequest = { renaming = false },
-            title = { Text(text = "Rename", style = centraidType("body")) },
-            text = { OutlinedTextField(value = typed, onValueChange = { typed = it }) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        renaming = false
-                        // AN EMPTY NAME IS NOT A RENAME. `core.update_party`
-                        // puts `minLength: 1` on the column, so the vault would
-                        // refuse it — and the reducer drops it too, so this is
-                        // the cheapest of three guards rather than the only one.
-                        val trimmed = typed.trim()
-                        if (trimmed.isNotEmpty() && trimmed != person.display_name) {
-                            onRename(trimmed)
-                        }
-                    },
-                ) { Text(text = "Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { renaming = false }) { Text(text = "Cancel") }
-            },
-        )
+        RenameSheet(
+            title = "Rename",
+            fieldLabel = "Name",
+            current = person.display_name,
+            onDismiss = { renaming = false },
+        ) { name ->
+            renaming = false
+            // AN EMPTY NAME IS NOT A RENAME. `core.update_party` puts
+            // `minLength: 1` on the column, so the vault would refuse it — and
+            // the reducer drops it too, so this is the cheapest of three
+            // guards rather than the only one.
+            val trimmed = name.trim()
+            if (trimmed.isNotEmpty() && trimmed != person.display_name) {
+                onRename(trimmed)
+            }
+        }
     }
 }
 
@@ -281,7 +268,7 @@ private fun PersonRowItem(
  *
  * The read door has no `COUNT(*)`, so the number is counted off the rows one
  * page returned. "at least 84" is the honest phrasing; a bare number over a
- * full page would be a total nobody counted (`HomeState.ThingCount.capped`).
+ * full page would be a total nobody counted (`HomeTile.count.capped`).
  */
 private fun countSentence(person: PersonRow): String {
     val noun = if (person.photo_count == 1) "photo" else "photos"
@@ -301,27 +288,27 @@ private fun countSentence(person: PersonRow): String {
  * which is the whole point of `PhotosPeopleData.empty_reason`.
  */
 private fun emptySentence(reason: PhotosPeopleData.EmptyReason): String = when (reason) {
-    PhotosPeopleData.EmptyReason.EMPTY_REASON_RECOGNITION_OFF -> "Face recognition is off."
+    PhotosPeopleData.EmptyReason.EMPTY_REASON_RECOGNITION_OFF -> PhotosCopy.PHOTOS_PEOPLE_OFF
     PhotosPeopleData.EmptyReason.EMPTY_REASON_NOT_RUN_YET ->
-        "Centraid has not looked for faces yet."
+        PhotosCopy.PHOTOS_PEOPLE_NOT_LOOKED
     PhotosPeopleData.EmptyReason.EMPTY_REASON_NONE_NAMED ->
-        "Centraid found faces, and none of them has a name yet."
+        PhotosCopy.PHOTOS_PEOPLE_NONE_NAMED
     PhotosPeopleData.EmptyReason.EMPTY_REASON_NONE,
     PhotosPeopleData.EmptyReason.EMPTY_REASON_UNSPECIFIED,
-    -> "No one here yet."
+    -> PhotosCopy.PHOTOS_PEOPLE_NO_ONE
 }
 
 private fun emptyRemedy(reason: PhotosPeopleData.EmptyReason): String = when (reason) {
     PhotosPeopleData.EmptyReason.EMPTY_REASON_RECOGNITION_OFF ->
-        "Turn it on in Settings and Centraid starts finding people in your photos."
+        PhotosCopy.PHOTOS_PEOPLE_OFF_CAPTION
     PhotosPeopleData.EmptyReason.EMPTY_REASON_NOT_RUN_YET ->
-        "It looks through your library in the background."
+        PhotosCopy.PHOTOS_PEOPLE_NOT_LOOKED_CAPTION
     PhotosPeopleData.EmptyReason.EMPTY_REASON_NONE_NAMED ->
-        "Open the faces above and tell Centraid who they are."
+        PhotosCopy.PHOTOS_PEOPLE_NONE_NAMED_CAPTION
     PhotosPeopleData.EmptyReason.EMPTY_REASON_NONE,
     PhotosPeopleData.EmptyReason.EMPTY_REASON_UNSPECIFIED,
     -> ""
 }
 
 /** v0's roster foot, and `PhotosPeopleView.swift`'s. */
-private const val ALL_MATCHED: String = "Every face this library has found is matched."
+private const val ALL_MATCHED: String = PhotosCopy.PHOTOS_PEOPLE_ALL_MATCHED

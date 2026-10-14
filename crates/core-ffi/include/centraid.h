@@ -77,6 +77,7 @@ extern "C" {
  *
  * `vault` is the seed the 24 words derive and this vault's index, out of the
  * shell's secure store and borrowed for this call (`CONTRACT.md` §4b).
+ *
  * `role`, `pairing` and `device` are ignored: there is one kind of core, and
  * a gateway knows this phone by the token its pairing minted (#1080).
  *

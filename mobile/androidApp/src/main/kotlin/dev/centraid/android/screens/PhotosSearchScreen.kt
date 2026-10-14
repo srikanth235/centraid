@@ -21,7 +21,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
+import dev.centraid.android.kit.RowSkeleton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,8 +43,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import centraid.screen.v1.EmptyState
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosSearchEvent
@@ -53,12 +53,14 @@ import centraid.screen.v1.SearchMatch
 import centraid.screen.v1.SearchResting
 import centraid.screen.v1.SearchTopHit
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.PhotoCellsGrid
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.bandFloor
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.shell.BandPolicy
 
 /**
@@ -70,9 +72,9 @@ import dev.centraid.shared.shell.BandPolicy
  * sentences for those and a third for the hits; they are one screen with a
  * oneof, and this is the oneof drawn.
  *
- * **THE FIELD IS NOT HERE.** It is [PhotosSearchBar], at the foot of the
- * screen where the band would be — the system Photos app's search. This screen
- * is only what the query found.
+ * **THE FIELD IS NOT HERE.** It is the room's search field, under the title
+ * where every app's search stands (R-CHROME-2). This screen is only what the
+ * query found.
  *
  * The SwiftUI twin is `mobile/iosApp/Sources/PhotosSearchView.swift`.
  */
@@ -107,39 +109,20 @@ public fun PhotosSearchScreen(
         when {
             resting != null -> RestingPanel(resting, onOpenShelf)
 
-            loading != null -> Box(Modifier.fillMaxWidth().padding(top = 40.dp), Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            loading != null -> RowSkeleton()
 
             failure != null -> ScreenFailure(failure.sentence, failure.remedy)
 
             hits != null -> {
                 val cells = hits.cells
                 if (cells.isEmpty() && hits.top_hits.isEmpty()) {
-                    // NOTHING MATCHED IS NOT NOTHING TYPED. The query is quoted
-                    // back, because the first thing a member wants to check is
-                    // whether the words they see are the words they meant — and
-                    // the line under it says everywhere search looked (v0's
-                    // `SEARCH_COPY.miss`). Centred, as the system draws "No
-                    // Results".
-                    Column(
-                        Modifier.fillMaxWidth().padding(top = 160.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text("No results", style = centraidType("title"), color = centraidColor("text"))
-                        Text(
-                            "Nothing matches “${state.query}”.",
-                            style = centraidType("small"),
-                            color = centraidColor("textSoft"),
-                            textAlign = TextAlign.Center,
-                        )
-                        Text(
-                            MISS_BODY,
-                            style = centraidType("small"),
-                            color = centraidColor("textFaint"),
-                            textAlign = TextAlign.Center,
-                        )
+                    // NOTHING MATCHED IS NOT NOTHING TYPED. The machine quotes the
+                    // query back and says everywhere search looked (v0's
+                    // `SEARCH_COPY.miss`) in the kit's empty state. Its one action is
+                    // Ask (#1097, R-1097-30), drawn only where the shell has a Chat
+                    // tab; Android has none, so the sentence draws alone.
+                    Box(Modifier.fillMaxWidth().padding(top = 160.dp).testTag("photos-search-no-match")) {
+                        EmptyStateView(hits.empty ?: EmptyState(), onAction = null)
                     }
                 } else {
                     PhotoCellsGrid(
@@ -219,7 +202,7 @@ private fun TopHitRow(hit: SearchTopHit, onOpenShelf: (PhotoShelf) -> Unit) {
 }
 
 /**
- * "Person · 12 photographs", or "Album · at least 500 photographs". A zero is
+ * "Person · 12 photos", or "Album · at least 500 photos". A zero is
  * "not counted" on this door, so it prints the kind alone rather than a "0".
  */
 private fun topHitSub(hit: SearchTopHit): String {
@@ -231,7 +214,7 @@ private fun topHitSub(hit: SearchTopHit): String {
     }
     val count = hit.photo_count
     if (count == 0) return kind
-    val noun = if (count == 1) "photograph" else "photographs"
+    val noun = if (count == 1) PhotosCopy.TILE_COUNT_ONE else PhotosCopy.TILE_COUNT_MANY
     val phrase = if (hit.photo_count_capped) "at least $count $noun" else "$count $noun"
     return if (kind.isEmpty()) phrase else "$kind · $phrase"
 }
@@ -241,127 +224,6 @@ private fun kindIcon(kind: SearchMatch.Kind): String = when (kind) {
     SearchMatch.Kind.KIND_PLACE -> "place"
     SearchMatch.Kind.KIND_ALBUM -> "album"
     else -> "Search"
-}
-
-/** v0's `SEARCH_COPY.miss.body`, in this build's words for what search reaches. */
-private const val MISS_BODY: String = "Nothing in captions, people, places, labels or album names."
-
-/**
- * THE SEARCH FIELD, WHERE THE BAND WAS — the system Photos app's search, in
- * both of its states; the twin of iOS's `PhotosSearchBar`, which carries the
- * full argument and the measures.
- *
- * **TYPING:** the field and a round close control, 8 from the screen's sides
- * and 8 above the keyboard. **NOT TYPING** (the keyboard's Search action, or a
- * scroll through the hits): the row drops into the band's slot, 21 from the
- * edges, and gains a circle carrying the mark of the place the member came
- * from — back there with the query kept; the close control goes back with it
- * cleared.
- *
- * **THE ONLY PLACE A KEYSTROKE EXISTS BEFORE THE REDUCER HAS IT.** The machine
- * holds the query it last reduced; a character the member has just typed is in
- * neither until this field hands it over.
- */
-@Composable
-public fun PhotosSearchBar(
-    query: String,
-    onQuery: (String) -> Unit,
-    returnIconKey: String,
-    returnLabel: String,
-    onReturn: () -> Unit,
-    onClose: () -> Unit,
-) {
-    var typed by remember { mutableStateOf(query) }
-    var focused by remember { mutableStateOf(false) }
-    val focus = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
-    // THE FIELD OPENS READY: a member who pressed Search wants to type.
-    LaunchedEffect(Unit) { focus.requestFocus() }
-
-    val inset = if (focused) SEARCH_INSET else BandPolicy.BAND_INSET.dp + REST_PAD
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = inset, end = inset, top = BandPolicy.BAND_TOP_GAP.dp)
-            .then(
-                if (focused) {
-                    Modifier.padding(bottom = SEARCH_INSET)
-                } else {
-                    Modifier.bandFloor().padding(vertical = REST_PAD)
-                },
-            ),
-        horizontalArrangement = Arrangement.spacedBy(if (focused) SEARCH_INSET else 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (!focused) {
-            SearchCircle(returnIconKey, "Back to $returnLabel", "photos.search.return", onReturn)
-        }
-        Row(
-            Modifier
-                .weight(1f)
-                .height(SEARCH_HEIGHT)
-                .background(centraidColor("bgElev"), CircleShape)
-                .border(CentraidGeometry.HAIRLINE.dp, centraidColor("lineStrong"), CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) { focus.requestFocus() }
-                .padding(start = 10.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CentraidIcon(iconKey = "Search", tint = centraidColor("textSoft"), size = 17.dp)
-            Box(Modifier.width(9.dp))
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                if (typed.isEmpty()) {
-                    Text(
-                        "Search your library…",
-                        style = centraidType("body"),
-                        color = centraidColor("textFaint"),
-                        maxLines = 1,
-                    )
-                }
-                BasicTextField(
-                    value = typed,
-                    onValueChange = { next ->
-                        typed = next
-                        // A QUERY CHANGE IS A DIFFERENCE FROM THE STATE, not an
-                        // assignment to it: re-sending the query the reducer just
-                        // published would be a read per round trip.
-                        if (next != query) onQuery(next)
-                    },
-                    singleLine = true,
-                    textStyle = centraidType("body").copy(color = centraidColor("text")),
-                    cursorBrush = SolidColor(centraidColor("text")),
-                    // NOTHING OVER THE KEYBOARD that the IME can be talked out
-                    // of: no autocorrection, no capitals. The Search action puts
-                    // the keyboard away — the query is already live.
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.None,
-                        autoCorrectEnabled = false,
-                        imeAction = ImeAction.Search,
-                    ),
-                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focus)
-                        .onFocusChanged { focused = it.isFocused }
-                        .testTag("photos.search.field"),
-                )
-            }
-            if (typed.isNotEmpty()) {
-                Box(
-                    Modifier
-                        .size(34.dp)
-                        .clickable { typed = ""; onQuery("") }
-                        .semantics { contentDescription = "Clear search"; role = Role.Button },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CentraidIcon(iconKey = "XCircle", tint = centraidColor("textFaint"), size = 18.dp)
-                }
-            }
-        }
-        SearchCircle("X", "Close search", "photos.search.close", onClose)
-    }
 }
 
 @Composable
@@ -441,7 +303,7 @@ private fun RestingPanel(resting: SearchResting, onOpenShelf: (PhotoShelf) -> Un
                     style = centraidType("body"),
                     color = centraidColor("text"),
                     modifier = Modifier.semantics {
-                        contentDescription = "Labels you can search for: " +
+                        contentDescription = "Labels to search: " +
                             resting.suggested_labels.joinToString(", ") { it.label }
                     },
                 )
@@ -493,7 +355,7 @@ private fun RestingDoor(label: String, iconKey: String, onOpen: () -> Unit) {
 
 /** What a search reaches, true of every vault. `PhotosSearchView.swift` says the same. */
 private const val RESTING_NOTE: String =
-    "Search finds people, places, albums, labels and the captions you have written."
+    PhotosCopy.PHOTOS_SEARCH_HINT
 
 /**
  * `matches`, as a sentence.

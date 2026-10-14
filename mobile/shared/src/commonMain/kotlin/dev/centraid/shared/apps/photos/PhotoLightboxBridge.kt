@@ -296,27 +296,27 @@ public fun sharePlaceOptions(placeName: String, located: Boolean): List<SharePla
     add(
         SharePlaceOption(
             SharePlacePrecision.NONE,
-            "No place",
-            "The copy leaves with no location in it.",
+            PhotosCopy.PHOTOS_SEND_NO_LOCATION,
+            PhotosCopy.PHOTOS_SEND_NONE_DETAIL,
         ),
     )
     if (placeName.isNotEmpty()) {
         add(
             SharePlaceOption(
                 SharePlacePrecision.NAME,
-                "Place name only",
-                placeName + " travels as words; the location still comes out of the file.",
+                PhotosCopy.PHOTOS_SEND_PLACE_NAME_ONLY,
+                PhotosCopy.PHOTOS_SEND_NAME_DETAIL.replace("{place}", placeName),
             ),
         )
     }
     add(
         SharePlaceOption(
             SharePlacePrecision.EXACT,
-            "Exact location",
+            PhotosCopy.PHOTOS_SEND_EXACT_LOCATION,
             if (located) {
-                "The original file, with the spot it was taken."
+                PhotosCopy.PHOTOS_SEND_EXACT_DETAIL_LOCATED
             } else {
-                "The original file, with whatever the camera recorded."
+                PhotosCopy.PHOTOS_SEND_EXACT_DETAIL_UNLOCATED
             },
         ),
     )
@@ -342,20 +342,20 @@ public fun sharePlaceStripsLocation(precision: SharePlacePrecision): Boolean =
  * place it carries.
  */
 public const val SHARE_PLACE_NOT_REMOVABLE: String =
-    "The location could not be taken out of this file, so nothing was sent."
+    PhotosCopy.PHOTOS_SEND_NOT_REMOVABLE
 
 /** The copy cannot be made because the original is not on this device. */
 public const val SHARE_ORIGINAL_NOT_HERE: String =
-    "The original is not on this device, so nothing was sent."
+    PhotosCopy.PHOTOS_SEND_ORIGINAL_NOT_HERE
 
 /** `PHOTOS_ERROR_EXPORT_FAILED` out of `copy/photos.json`, and its retry word. */
-public const val EXPORT_FAILED: String = PhotosCopy.PHOTOS_ERROR_EXPORT_FAILED + " Retry."
+public const val EXPORT_FAILED: String = PhotosCopy.PHOTOS_ERROR_EXPORT_FAILED + " Try again."
 
 /** What "Download" says when the original went into the device's photos. */
-public const val EXPORT_SAVED: String = "Saved to this device's photos."
+public const val EXPORT_SAVED: String = PhotosCopy.PHOTOS_EXPORT_SAVED
 
 /** "Copy exact location" — a copy the member asked for, and only then. */
-public const val EXACT_LOCATION_COPIED: String = "Exact location copied."
+public const val EXACT_LOCATION_COPIED: String = PhotosCopy.PHOTOS_LOCATION_COPIED
 
 /**
  * `51.72340, -2.93810` — v0's `exactLocation`, five places, and the ONE
@@ -375,17 +375,13 @@ private fun fivePlaces(value: Double): String {
 }
 
 /** The sheet's one question, asked EVERY time (#816). */
-public const val SHARE_PLACE_TITLE: String = "Send a copy — how much of the place?"
+public const val SHARE_PLACE_TITLE: String = PhotosCopy.PHOTOS_SEND_PLACE_TITLE
 
 /** What a member is told AFTERWARDS, `NONE` included. */
 public fun sharePlaceReceipt(precision: SharePlacePrecision, placeName: String): String =
     when (precision) {
-        SharePlacePrecision.EXACT -> "Sent with the exact location."
+        SharePlacePrecision.EXACT -> PhotosCopy.PHOTOS_SENT_EXACT
         SharePlacePrecision.NAME ->
-            if (placeName.isEmpty()) {
-                "Sent with no location."
-            } else {
-                "Sent with the place name only — " + placeName + "."
-            }
-        SharePlacePrecision.NONE -> "Sent with no location."
+            if (placeName.isEmpty()) PhotosCopy.PHOTOS_SENT_NONE else PhotosCopy.PHOTOS_SENT_NAME_ONLY
+        SharePlacePrecision.NONE -> PhotosCopy.PHOTOS_SENT_NONE
     }

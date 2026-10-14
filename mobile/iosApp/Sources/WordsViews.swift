@@ -38,7 +38,6 @@ struct VaultWordsView: View {
     let send: (Data) -> Void
 
     @Environment(\.colorScheme) private var scheme
-    @State private var focus: UInt32?
 
     private var state: Centraid_Screen_V1_VaultWordsState {
         (try? Centraid_Screen_V1_VaultWordsState(serializedBytes: data)) ?? .init()
@@ -51,6 +50,33 @@ struct VaultWordsView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     WordsHead(title: state.title, lead: state.body)
 
+                    // CHOOSE (R-1047-E18): the vault's name, and whether it is
+                    // kept on its own 24 words.
+                    if !state.nameLabel.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(state.nameLabel)
+                                .centraidType("small")
+                                .foregroundStyle(Theme.color("textSoft", scheme))
+                            MachineTextField(placeholder: "", value: state.name) { text in
+                                send(Self.event { $0.name = .with { $0.text = text } })
+                            }
+                            .textInputAutocapitalization(.words)
+                            .centraidType("body")
+                            .padding(10)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                                    .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                            )
+                            .accessibilityLabel(state.nameLabel)
+                            .accessibilityIdentifier("words-make-name")
+                        }
+                    }
+                    if !state.ownLabel.isEmpty {
+                        WordsCheckbox(label: state.ownLabel, on: state.ownOn, identifier: "words-make-own") { on in
+                            send(Self.event { $0.own = .with { $0.on = on } })
+                        }
+                    }
+
                     if !state.words.isEmpty {
                         ShownWords(cells: state.words)
                     }
@@ -60,38 +86,14 @@ struct VaultWordsView: View {
                             .foregroundStyle(Theme.color("textSoft", scheme))
                             .accessibilityIdentifier("words-custody")
                     }
-
-                    ForEach(state.asks, id: \.position) { ask in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(ask.prompt)
-                                .centraidType("annotLabel")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
-                                .accessibilityHidden(true)
-                            WordBox(tone: Self.tone(ask.mark)) {
-                                WordField(
-                                    value: ask.typed,
-                                    position: ask.position,
-                                    spoken: ask.prompt,
-                                    identifier: "words-ask-\(ask.position)",
-                                    focus: $focus,
-                                    font: Theme.uiFont("body", scheme),
-                                    color: UIColor(Theme.color("text", scheme)),
-                                    onEdit: { text in
-                                        send(Self.event { $0.typed = .with { $0.position = ask.position; $0.text = text } })
-                                    },
-                                    onReturn: {
-                                        let later = state.asks.map(\.position).filter { $0 > ask.position }
-                                        focus = later.first
-                                    }
-                                )
-                            }
-                        }
+                    if !state.saveLabel.isEmpty, !state.words.isEmpty {
+                        WordsSaveCopyButton(label: state.saveLabel, words: state.words.map(\.word))
                     }
 
                     WordsNotice(notice: state.notice)
 
                     if state.phase == .checking || state.phase == .making {
-                        ProgressView()
+                        KitSpinner()
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("words-making")
                     }
@@ -105,36 +107,28 @@ struct VaultWordsView: View {
                         onSecondary: { send(Self.event { $0.secondary = .init() }) }
                     )
 
+                    // ONE INK BUTTON: with the primary drawn, restoring is the
+                    // outline.
                     if !state.restoreLabel.isEmpty {
-                        KitInkButton(label: state.restoreLabel) {
-                            send(Self.event { $0.restore = .init() })
+                        if state.primaryLabel.isEmpty {
+                            KitInkButton(label: state.restoreLabel) {
+                                send(Self.event { $0.restore = .init() })
+                            }
+                            .accessibilityIdentifier("words-make-restore")
+                        } else {
+                            KitOutlineButton(label: state.restoreLabel, fullWidth: true) {
+                                send(Self.event { $0.restore = .init() })
+                            }
+                            .accessibilityIdentifier("words-make-restore")
                         }
-                        .accessibilityIdentifier("words-make-restore")
                     }
                 }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.vertical, 24)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .scrollDismissesKeyboard(.interactively)
             .background(Theme.color("bg", scheme).ignoresSafeArea())
             .accessibilityIdentifier("words-make")
-        }
-        .onAppear { focusFirstAsk(state) }
-        .onChange(of: state.phase) { _, _ in focusFirstAsk(self.state) }
-    }
-
-    /// CONFIRM opens with the keyboard on the first word asked.
-    private func focusFirstAsk(_ state: Centraid_Screen_V1_VaultWordsState) {
-        if state.phase == .confirm, focus == nil { focus = state.asks.first?.position }
-        if state.phase != .confirm { focus = nil }
-    }
-
-    static func tone(_ mark: Centraid_Screen_V1_WordAsk.Mark) -> String {
-        switch mark {
-        case .right: return "success"
-        case .wrong: return "net"
-        default: return "lineStrong"
         }
     }
 
@@ -200,6 +194,23 @@ struct WordsEntryView: View {
                         .disabled(working)
                     }
 
+                    // A HELD RESTORE NAMES the vaults on their own words it
+                    // will also bring back (R-1047-E18).
+                    if !state.heldKeysLabel.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(state.heldKeysLabel)
+                                .centraidType("small")
+                                .foregroundStyle(Theme.color("textSoft", scheme))
+                            ForEach(Array(state.heldKeys.enumerated()), id: \.offset) { _, name in
+                                Text(name)
+                                    .centraidType("bodyStrong")
+                                    .foregroundStyle(Theme.color("text", scheme))
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("words-held-keys")
+                    }
+
                     if !state.endpointLabel.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(state.endpointLabel)
@@ -226,14 +237,8 @@ struct WordsEntryView: View {
                     WordsNotice(notice: state.notice)
 
                     if !state.progress.isEmpty {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                            Text(state.progress)
-                                .centraidType("small")
-                                .foregroundStyle(Theme.color("textSoft", scheme))
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier("words-progress")
+                        KitSpinner(label: state.progress)
+                            .accessibilityIdentifier("words-progress")
                     }
 
                     ForEach(Array(state.restored.enumerated()), id: \.offset) { _, line in
@@ -247,6 +252,12 @@ struct WordsEntryView: View {
                     if !state.retryLabel.isEmpty {
                         StayedRetry(label: state.retryLabel) {
                             send(Self.event { $0.retry = .init() })
+                        }
+                    }
+
+                    if !state.wordsLabel.isEmpty {
+                        StayedRetry(label: state.wordsLabel, identifier: "words-use-words") {
+                            send(Self.event { $0.useWords = .init() })
                         }
                     }
 
@@ -321,17 +332,11 @@ private struct EntryCell: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(cell.suggestions, id: \.self) { word in
-                            Button { onPick(word) } label: {
-                                Text(word)
-                                    .centraidType("small")
-                                    .foregroundStyle(Theme.color("text", scheme))
-                                    .padding(.horizontal, 12)
-                                    .frame(minHeight: CentraidGeometry.targetMinFine)
-                                    .background(Capsule().fill(Theme.color("bgSunken", scheme)))
-                                    .contentShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("words-suggestion-\(cell.position)-\(word)")
+                            KitChip(
+                                label: word,
+                                selected: false,
+                                identifier: "words-suggestion-\(cell.position)-\(word)"
+                            ) { onPick(word) }
                         }
                     }
                     .padding(.leading, 34)
@@ -402,33 +407,29 @@ private struct StayedLine: View {
 
 /// `retry_label`'s control (R-1047-R6): ask the laptop again for the vaults
 /// that stayed. A link-weight text button, like `WordsControls`' secondary;
-/// the label and when it shows are the machine's.
+/// the label and when it shows are the machine's. `words_label`'s control
+/// (leave a held-seed restore for the grid) is the same link.
 private struct StayedRetry: View {
     let label: String
+    var identifier = "words-retry"
     let action: () -> Void
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        Button(action: action) {
-            Text(label)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color("link", scheme))
-                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("words-retry")
+        KitLink(label: label, identifier: identifier, action: action)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 // MARK: - words.show
 
-/// SHOW THE 24 WORDS AGAIN (`WordsShowState`, #1047 E5), from the More sheet.
+/// SHOW THE RECOVERY KEY AGAIN (`WordsShowState`, #1047 E5), from the Backup
+/// tab.
 ///
-/// ASK's primary is this view's one duty beyond drawing: it runs the phone's
-/// owner check (`LAContext` `.deviceOwnerAuthentication` — Face ID, Touch ID
-/// or the passcode) with the state's `verify_reason`, and answers `Verified`
-/// or `VerifyFailed`. It never sends `Primary` from ASK. The words reach the
+/// The owner check (`LAContext` `.deviceOwnerAuthentication` — Face ID,
+/// Touch ID or the passcode) is this flow's one duty beyond drawing. While
+/// `check_now` the shell runs it before this sheet is presented
+/// (`ShellModel.wordsShowChanged`); after a failed check, ASK is drawn and
+/// its primary runs it again. It never sends `Primary` from ASK. The words reach the
 /// state only in SHOW, behind the same shield words.make draws; a swipe and
 /// leaving the foreground both send `Dismissed` (the shell's).
 struct WordsShowView: View {
@@ -451,11 +452,14 @@ struct WordsShowView: View {
                     if !state.words.isEmpty {
                         ShownWords(cells: state.words)
                     }
+                    if !state.saveLabel.isEmpty, !state.words.isEmpty {
+                        WordsSaveCopyButton(label: state.saveLabel, words: state.words.map(\.word))
+                    }
 
                     WordsNotice(notice: state.notice)
 
                     if state.phase == .loading {
-                        ProgressView()
+                        KitSpinner()
                             .frame(maxWidth: .infinity)
                             .accessibilityIdentifier("words-show-loading")
                     }
@@ -486,13 +490,25 @@ struct WordsShowView: View {
         }
     }
 
-    /// THE OWNER CHECK. A phone with no passcode cannot evaluate the policy,
-    /// and that is a failed check, never a pass.
     private func verify(reason: String) {
-        LAContext().evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { ok, _ in
+        Self.ownerCheck(reason: reason, send: send)
+    }
+
+    /// THE OWNER CHECK. A phone with no passcode cannot evaluate the policy,
+    /// and that is a failed check, never a pass. The member dismissing the
+    /// prompt is `cancelled`, which closes the flow; any other failure keeps
+    /// ASK up with why.
+    static func ownerCheck(reason: String, send: @escaping (Data) -> Void) {
+        LAContext().evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { ok, error in
+            let code = (error as? LAError)?.code
+            let cancelled = code == .userCancel || code == .systemCancel || code == .appCancel
             DispatchQueue.main.async {
-                send(Self.event { event in
-                    if ok { event.verified = .init() } else { event.verifyFailed = .init() }
+                send(event { event in
+                    if ok {
+                        event.verified = .init()
+                    } else {
+                        event.verifyFailed = .with { $0.cancelled = cancelled }
+                    }
                 })
             }
         }
@@ -560,22 +576,82 @@ struct WordsControls: View {
             if !primary.isEmpty {
                 KitInkButton(label: primary, action: onPrimary)
                     .disabled(!primaryEnabled)
-                    .opacity(primaryEnabled ? 1 : 0.4)
                     .accessibilityIdentifier("\(prefix)-primary")
             }
             if !secondary.isEmpty {
-                Button(action: onSecondary) {
-                    Text(secondary)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("link", scheme))
-                        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("\(prefix)-secondary")
+                KitLink(label: secondary, identifier: "\(prefix)-secondary", action: onSecondary)
+                    .frame(maxWidth: .infinity)
             }
         }
         .padding(.top, 8)
+    }
+}
+
+/// A CHECKBOX on the words screens: the make flow's "Give this vault its own
+/// recovery key" (`VaultWordsState.own_label`).
+private struct WordsCheckbox: View {
+    let label: String
+    let on: Bool
+    var identifier = "words-check"
+    let toggle: (Bool) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            KitCheckBox(checked: on, label: label, identifier: identifier) { toggle(!on) }
+            // The words beside the box are a target too; the box speaks them.
+            Button { toggle(!on) } label: {
+                WordsCheckboxLabel(label: label)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+private struct WordsCheckboxLabel: View {
+    let label: String
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Text(label)
+            .centraidType("body")
+            .foregroundStyle(Theme.color("text", scheme))
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+            .contentShape(Rectangle())
+    }
+}
+
+/// SAVE A COPY (`VaultWordsState.save_label`). The words go out as one line of
+/// text through the system share sheet, so the member picks where they live — a
+/// password manager, Files, a note only they can open. The machine hears
+/// nothing back.
+///
+/// Duty 2 above (a word never reaches the clipboard) is relaxed here, on the
+/// member's own tap, and only as far as iOS lets this app go: the sheet is
+/// presented without Copy, Contact, Reading List and Camera Roll, and the
+/// words are not a URL, so no link preview is built from them. The sheet is
+/// presented by UIKit from the topmost controller rather than from SwiftUI,
+/// because this screen is hosted inside the capture-proof canvas.
+private struct WordsSaveCopyButton: View {
+    let label: String
+    let words: [String]
+
+    var body: some View {
+        KitLink(label: label, identifier: "words-save-copy", action: present)
+            .frame(maxWidth: .infinity)
+    }
+
+    private func present() {
+        let sheet = UIActivityViewController(activityItems: [words.joined(separator: " ")], applicationActivities: nil)
+        sheet.excludedActivityTypes = [.copyToPasteboard, .assignToContact, .addToReadingList, .saveToCameraRoll]
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        var top = scene?.windows.first(where: \.isKeyWindow)?.rootViewController
+        while let next = top?.presentedViewController { top = next }
+        sheet.popoverPresentationController?.sourceView = top?.view
+        top?.present(sheet, animated: true)
     }
 }
 

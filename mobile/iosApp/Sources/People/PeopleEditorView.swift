@@ -153,27 +153,13 @@ struct PeopleEditorView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(state.cadences, id: \.days) { cadence in
-                        Button {
+                        KitChip(
+                            label: cadence.label,
+                            selected: cadence.selected,
+                            identifier: "people-editor-cadence-\(cadence.days)"
+                        ) {
                             send(PeopleEvents.editor { $0.cadence = .with { $0.days = cadence.days } })
-                        } label: {
-                            Text(cadence.label)
-                                .centraidType(cadence.selected ? "smallStrong" : "small")
-                                .foregroundStyle(Theme.color(cadence.selected ? "text" : "textSoft", scheme))
-                                .padding(.horizontal, 12)
-                                .frame(minHeight: 32)
-                                .background(Capsule().fill(Theme.color(cadence.selected ? "bgSunken" : "bg", scheme)))
-                                .overlay(
-                                    Capsule().strokeBorder(
-                                        Theme.color(cadence.selected ? "lineStrong" : "line", scheme),
-                                        lineWidth: CentraidGeometry.hairline
-                                    )
-                                )
-                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(cadence.selected ? .isSelected : [])
-                        .accessibilityIdentifier("people-editor-cadence-\(cadence.days)")
                     }
                 }
             }

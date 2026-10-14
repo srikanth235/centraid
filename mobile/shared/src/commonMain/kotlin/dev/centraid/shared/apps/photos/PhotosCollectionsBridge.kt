@@ -277,7 +277,7 @@ public class PhotosCollectionsBridge {
             host.send(
                 PhotosCollectionsReads.settled(
                     CommandStatus.COMMAND_STATUS_DENIED,
-                    "No vault is open on this device.",
+                    "No vault is open on this phone.",
                     write.invokeKey,
                 ),
             )

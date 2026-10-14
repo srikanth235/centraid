@@ -108,33 +108,6 @@ public class HomeBridge {
     }
 
     /**
-     * WHETHER THIS DEVICE HOLDS THE SAMPLE VAULT, as it changes
-     * ([Shelf.hasSample]) — "Remove sample" when true, "Add sample" when
-     * false. Fires once with the current answer and again on every change, on
-     * the main dispatcher.
-     */
-    public fun observeHasSample(onChange: (Boolean) -> Unit) {
-        onSession { opened ->
-            scope.launch { opened.shelf.hasSample.collect { onChange(it) } }
-        }
-    }
-
-    /** "Add sample": [HomeSession.addSample]. [onDone] says whether one is held after. */
-    public fun addSample(onDone: (Boolean) -> Unit = {}) {
-        val session = this.session ?: return onDone(false)
-        scope.launch { onDone(session.addSample()) }
-    }
-
-    /** "Remove sample": [HomeSession.removeSample]. [onDone] fires once it is gone. */
-    public fun removeSample(onDone: () -> Unit = {}) {
-        val session = this.session ?: return onDone()
-        scope.launch {
-            session.removeSample()
-            onDone()
-        }
-    }
-
-    /**
      * OPEN THIS DEVICE'S VAULTS, AND START PUBLISHING.
      *
      * Not in the constructor: opening a core is I/O that asserts it is not on
@@ -340,6 +313,12 @@ public class HomeBridge {
         }
     }
 
+    /** Rename a vault; [onDone] says whether the name took. */
+    public fun renameVault(vaultId: String, name: String, onDone: (Boolean) -> Unit) {
+        val session = this.session ?: return onDone(false)
+        scope.launch { onDone(session.renameVault(vaultId, name)) }
+    }
+
     /**
      * THE MEMBER'S TRANSFER RULE, READ (#1025 S4, D-1025-S7-60).
      *
@@ -392,6 +371,33 @@ public class HomeBridge {
      */
     public fun transferRuleChoices(): List<TransferRuleChoice> =
         TransferRule.entries.map { TransferRuleChoice(it.stored, it.sentence) }
+
+    /**
+     * THE MEMBER'S APPEARANCE (R-CHROME-7), as the word the store holds — the
+     * same shape as [transferRule], for the same reason: a Swift `switch`
+     * cannot be exhaustive over an exported Kotlin enum.
+     */
+    public fun appearance(onAppearance: (String) -> Unit) {
+        scope.launch { onAppearance(Appearance.read(platformServices().secureStore).stored) }
+    }
+
+    /**
+     * THE HEADER KEY'S TAP: [Appearance.toggled] against what the phone
+     * itself shows, written, and answered as what the store then holds.
+     */
+    public fun toggleAppearance(current: String, phoneDark: Boolean, onAppearance: (String) -> Unit) {
+        scope.launch {
+            val store = platformServices().secureStore
+            Appearance.write(store, Appearance.of(current).toggled(phoneDark))
+            onAppearance(Appearance.read(store).stored)
+        }
+    }
+
+    /** The scheme [stored] holds the window to: dark, light, or null to follow the phone. */
+    public fun appearanceHeldDark(stored: String): Boolean? = Appearance.of(stored).held
+
+    /** The key as drawn on a screen that is [dark]: where a tap goes. */
+    public fun appearanceKey(dark: Boolean): AppearanceKey = Appearance.key(dark)
 
     /** The current state, for a view that needs one before it subscribes. */
     public fun current(): ByteArray =

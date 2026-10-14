@@ -528,6 +528,7 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-kit",
  "centraid-media",
+ "centraid-search",
  "rusqlite",
  "serde_json",
  "thiserror",
@@ -609,6 +610,7 @@ dependencies = [
  "centraid-apps-locker",
  "centraid-apps-notes",
  "centraid-apps-people",
+ "centraid-apps-photos",
  "centraid-apps-tally",
  "centraid-apps-tasks",
  "centraid-assist",

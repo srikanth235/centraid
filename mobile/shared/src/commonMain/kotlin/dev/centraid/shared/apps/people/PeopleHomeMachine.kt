@@ -8,9 +8,11 @@ import centraid.screen.v1.PeopleHomeChrome
 import centraid.screen.v1.PeopleHomeData
 import centraid.screen.v1.PeopleHomeEvent
 import centraid.screen.v1.PeopleHomeState
+import centraid.screen.v1.PeopleMoreRow
 import centraid.screen.v1.PeopleOrder
 import centraid.screen.v1.PeopleOrderChoice
 import centraid.screen.v1.PeopleRow
+import centraid.screen.v1.PeopleSortChip
 import centraid.screen.v1.PeopleStarPending
 import centraid.screen.v1.ReadFailure
 import centraid.screen.v1.SearchField
@@ -40,6 +42,10 @@ import dev.centraid.shared.screen.Step
  *   first, each card with "Log a touch"), Upcoming (nearest first), Recent.
  * - **Search** asks the core's name search; the surface under it is kept, so
  *   closing search re-reads nothing and clears the term.
+ * - **The room's grammar** (R-CHROME-1…4): Add person is the header's one
+ *   action, search the bar under it, the chips and the sort ONE row
+ *   ([PeopleHomeState.chips], then [PeopleHomeState.sort_chip], whose sheet
+ *   is SHEET_ORDER), and More holds Trash alone ([MORE_ROWS]).
  *
  * ONE READ IN FLIGHT ([PeopleHomeState.reading]): an answer does not say
  * which request it answers, so a read asked while one is out is queued and the
@@ -158,11 +164,13 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
             ),
         )
         event.sheet_closed != null -> Step(state.copy(sheet = PeopleHomeState.Sheet.SHEET_NONE))
+        // A MORE ROW CLOSES THE SHEET; where it leads (`trash`) is the shell's.
+        event.more_row != null -> Step(state.copy(sheet = PeopleHomeState.Sheet.SHEET_NONE))
         event.star != null -> star(state, event.star.party_id)
         event.data_ != null -> arrived(state, event.data_)
         event.refused != null -> refused(state, event.refused.failure ?: Reads.refused(""))
         event.denied != null -> Step(
-            state.copy(
+            SearchLaw.unasked(Search, state).copy(
                 loading = null,
                 failure = null,
                 data_ = null,
@@ -225,8 +233,13 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
         val term = activeTerm(state)
         if (event.search != null) {
             if (term == null) return Step(settled)
-            val answered = SearchLaw.answered(Search, settled, term)
-            return Step(answered.copy(search_data = event.search.copy(term = term)))
+            val answered = SearchLaw.answered(Search, settled, term, event.corrected, rows = event.search.rows.size)
+            // THE ONE ACTION OF THE NO-MATCH SENTENCE is Ask, when the law offered it (#1097).
+            val data = event.search.copy(
+                term = term,
+                empty = event.search.empty?.let { SearchLaw.asking(it, answered.search ?: SearchField()) },
+            )
+            return Step(answered.copy(search_data = data))
         }
         val data = event.data_ ?: return Step(settled)
         // The surface must be the one on screen; anything else is re-asked.
@@ -308,13 +321,28 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
 
     private fun decorate(state: PeopleHomeState): PeopleHomeState {
         val denied = state.denied != null
+        val orders = listOf(
+            PeopleOrderChoice(order = PeopleOrder.PEOPLE_ORDER_RECENT, label = PeopleCopy.SORT_RECENT),
+            PeopleOrderChoice(order = PeopleOrder.PEOPLE_ORDER_NAME, label = PeopleCopy.SORT_NAME),
+        ).map { it.copy(selected = it.order == state.order) }
+        // THE CHIP ROW: the roster's chips, held over a re-read so the row
+        // does not blink, the current one selected; none on Touch (no filter
+        // there), while denied, or over search, whose names no chip narrows.
+        val onRoster = !denied && state.destination == PeopleHomeState.Destination.DESTINATION_PEOPLE &&
+            state.search?.open_ != true
+        val chips = if (onRoster) {
+            (state.data_?.roster?.chips ?: state.chips).map { it.copy(selected = it.key == state.chip) }
+        } else {
+            emptyList()
+        }
+        val order = orders.firstOrNull { it.selected }?.label ?: PeopleCopy.SORT_RECENT
         return state.copy(
             band = if (denied) emptyList() else band(state.destination),
             chrome = CHROME,
-            order_choices = listOf(
-                PeopleOrderChoice(order = PeopleOrder.PEOPLE_ORDER_RECENT, label = PeopleCopy.SORT_RECENT),
-                PeopleOrderChoice(order = PeopleOrder.PEOPLE_ORDER_NAME, label = PeopleCopy.SORT_NAME),
-            ).map { it.copy(selected = it.order == state.order) },
+            order_choices = orders,
+            chips = chips,
+            sort_chip = if (chips.isEmpty()) null else PeopleSortChip(label = order, spoken = fill(PeopleCopy.SORT_CHIP_SPOKEN, "order" to order)),
+            more_rows = if (denied) emptyList() else MORE_ROWS,
             data_ = state.data_?.let { decorateData(it, state) },
             search_data = state.search_data?.let { it.copy(rows = it.rows.map { row -> overlay(row, state) }) },
         )
@@ -329,7 +357,7 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
                 PeopleFold.dayOne()
             state.chip == PeopleChipKey.PEOPLE_CHIP_KEY_STARRED -> EmptyState(headline = PeopleCopy.EMPTY_STARRED)
             state.chip == PeopleChipKey.PEOPLE_CHIP_KEY_DUE -> EmptyState(headline = PeopleCopy.EMPTY_DUE)
-            else -> PeopleFold.dayOne()
+            else -> PeopleFold.chipEmpty()
         }
         return data.copy(
             roster = roster.copy(
@@ -372,7 +400,7 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
             icon_key = "Activity",
             current = destination == PeopleHomeState.Destination.DESTINATION_TOUCH,
         ),
-        PeopleBandTab(key = "more", label = PeopleCopy.BAND_MORE, icon_key = "more", current = false),
+        PeopleBandTab(key = "more", label = PeopleCopy.BAND_MORE, icon_key = "MoreHoriz", current = false),
     )
 
     private val CHROME = PeopleHomeChrome(
@@ -385,12 +413,18 @@ public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent
         loading = PeopleCopy.LOADING,
         more_title = PeopleCopy.MORE_TITLE,
         sort_heading = PeopleCopy.SORT_HEADING,
-        trash_label = PeopleCopy.TRASH_LABEL,
         home = PeopleCopy.BAND_HOME,
+    )
+
+    /** More's rows: secondary places only (R-CHROME-4). `trash` is the shell's. */
+    public const val MORE_TRASH: String = "trash"
+    private val MORE_ROWS: List<PeopleMoreRow> = listOf(
+        PeopleMoreRow(key = MORE_TRASH, label = PeopleCopy.TRASH_LABEL, icon_key = "Trash"),
     )
 
     private object Search : SearchLens<PeopleHomeState> {
         override val screenId: String = SCREEN_ID
+        override val asks: Boolean = true
 
         override fun field(state: PeopleHomeState): SearchField = state.search ?: SearchField()
 

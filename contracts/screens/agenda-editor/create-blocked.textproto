@@ -68,7 +68,7 @@ chrome {
   done: "Done"
   keep_editing: "Keep editing"
   loading: "Opening your calendar"
-  retry: "Retry"
+  retry: "Try again"
   scope_title: "This event repeats"
   scope_question: "Which occurrences does this change?"
   pick_date: "Pick a date"

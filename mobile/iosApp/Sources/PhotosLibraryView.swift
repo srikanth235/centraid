@@ -70,7 +70,6 @@ enum LibraryMetrics {
     static let yearCoverRatio: CGFloat = 0.72
     static let cardGutter: CGFloat = 8
     static let cardBottom: CGFloat = 20
-    static let radiusMedium: CGFloat = 7
 }
 
 enum LibraryLayout {
@@ -175,14 +174,16 @@ enum LibraryLayout {
         return years
     }
 
-    /// `3 photographs · 1 video` — v0's `describeCounts`.
+    /// `3 photos · 1 video` — v0's `describeCounts`.
     static func describeCounts(_ cells: [Centraid_Screen_V1_PhotoCell]) -> String {
         let videos = cells.filter { $0.kind == .video }.count
         let photographs = cells.count - videos
         var parts: [String] = []
-        if photographs > 0 { parts.append("\(photographs) photograph" + (photographs == 1 ? "" : "s")) }
+        if photographs > 0 {
+            parts.append("\(photographs) " + (photographs == 1 ? PhotosWords.tileCountOne : PhotosWords.tileCountMany))
+        }
         if videos > 0 { parts.append("\(videos) video" + (videos == 1 ? "" : "s")) }
-        return parts.isEmpty ? "0 photographs" : parts.joined(separator: " · ")
+        return parts.isEmpty ? "0 \(PhotosWords.tileCountMany)" : parts.joined(separator: " · ")
     }
 
     /// THE DAY BEHIND A SCROLL TARGET'S ID — a row's own day, or a card's
@@ -363,12 +364,10 @@ struct LibraryTimelineRows: View {
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if selecting {
-                Button(all ? "Deselect" : "Select") { send(LibraryEvents.pick(ids, !all)) }
-                    .centraidType("control")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    // THE TARGET IS A THUMB'S EVEN WHERE THE ROW IS NOT: the
-                    // row's 34 is what the sweep's arithmetic reads.
-                    .contentShape(Rectangle().inset(by: -6))
+                // THE TARGET IS A THUMB'S EVEN WHERE THE ROW IS NOT: the kit's
+                // link is 44 and overflows the row's 34, which is what the
+                // sweep's arithmetic reads.
+                KitLink(label: all ? "Deselect" : "Select", dense: true) { send(LibraryEvents.pick(ids, !all)) }
                     .accessibilityLabel("\(all ? "Deselect" : "Select") \(title)")
             }
         }
@@ -438,7 +437,7 @@ struct LibraryGrainCards: View {
         if periods.isEmpty, complete {
             // A QUIET LINE, NOT A CARD: undated photographs live in All, and a
             // card for them would be a fake period.
-            Text("These photographs carry no capture date, so they are all in All.")
+            Text(PhotosWords.photosLibraryUndatedNote)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
                 .padding(CentraidGeometry.pageMargin)
@@ -506,7 +505,7 @@ struct LibraryGrainCards: View {
                             }
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: LibraryMetrics.radiusMedium))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     if !overlaid {
                         Text(period.title)
@@ -551,7 +550,7 @@ struct LibraryMoreSentinel: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: PhotoTileMetrics.rungHeights[0])
                 .task(id: count) { send(LibraryEvents.nextPage()) }
-                .accessibilityLabel("Loading more photographs")
+                .accessibilityLabel(PhotosWords.photosLibraryLoadingMore)
         }
     }
 }
@@ -678,49 +677,20 @@ struct LibraryScrubRail: View {
 
 /// THE GRAIN CONTROL (v0's `TimelineGrainControl.tsx`): Years · Months · All,
 /// PERMANENT while the library is the destination — never armed by a scroll,
-/// never on a timer. The band's grammar: one elevated plate on the pill rung
-/// with a hairline, the lit segment in ink with a mark-wide rule over it.
+/// never on a timer. The band's grammar, which is the kit's `KitSegmented`
+/// (it was drawn here first); this places it.
 struct LibraryGrainControl: View {
-    @Environment(\.colorScheme) private var scheme
     let grain: Centraid_Screen_V1_PhotosGridState.Grain
     let onGrain: (Centraid_Screen_V1_PhotosGridState.Grain) -> Void
 
     var body: some View {
-        HStack(spacing: 2) {
-            segment(.years, "Years")
-            segment(.months, "Months")
-            segment(.all, "All")
-        }
-        .padding(BandMetrics.platePad)
-        .background(Theme.color("bgElev", scheme), in: Capsule())
-        .overlay(Capsule().strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
+        KitSegmented(
+            options: [(key: .years, label: "Years"), (key: .months, label: "Months"), (key: .all, label: "All")],
+            selected: grain == .unspecified ? .all : grain,
+            onSelect: onGrain
+        )
         .frame(maxWidth: .infinity)
         .padding(.top, BandMetrics.topGap)
-        .accessibilityElement(children: .contain)
-    }
-
-    private func segment(_ key: Centraid_Screen_V1_PhotosGridState.Grain, _ label: String) -> some View {
-        let active = key == grain || (key == .all && grain == .unspecified)
-        return Button { onGrain(key) } label: {
-            Text(label)
-                .centraidType(active ? "control" : "band")
-                .foregroundStyle(Theme.color(active ? "text" : "textSoft", scheme))
-                .lineLimit(1)
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                .overlay(alignment: .top) {
-                    if active {
-                        Capsule()
-                            .fill(Theme.color("text", scheme))
-                            .frame(width: BandMetrics.markSize, height: BandMetrics.activeRule)
-                            .padding(.top, CentraidGeometry.hairline)
-                    }
-                }
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-        .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
     }
 }
 
@@ -752,9 +722,9 @@ struct LibrarySelectionBar: View {
         let armed = !grid.selected.isEmpty
         let favorites = grid.filter == .favorites
         HStack(spacing: BandMetrics.groupGutter) {
-            verb("FolderPlus", "Add to album", armed) { send(LibraryEvents.albumOpened()) }
-            verb("Heart", favorites ? "Unfavorite" : "Favorite", armed) { send(LibraryEvents.favorite(!favorites)) }
-            verb("Share", "Send a copy", armed) { onSendCopy() }
+            verb("FolderPlus", PhotosWords.photosAddToAlbum, armed) { send(LibraryEvents.albumOpened()) }
+            verb("Heart", favorites ? PhotosWords.photosUnfavorite : PhotosWords.photosFavorite, armed) { send(LibraryEvents.favorite(!favorites)) }
+            verb("Share", PhotosWords.photosSendCopy, armed) { onSendCopy() }
             verb("Trash", "Trash", armed) { send(LibraryEvents.confirmTrash()) }
         }
         .padding(BandMetrics.platePad)
@@ -796,8 +766,10 @@ struct LibrarySelectionBar: View {
 /// them back, and the camera roll is not touched.
 enum LibraryTrashCopy {
     static func question(_ count: Int) -> String {
-        count == 1 ? "Move 1 photograph to the trash?" : "Move \(count) photographs to the trash?"
+        count == 1
+            ? PhotosWords.photosTrashOne
+            : PhotosWords.fill(PhotosWords.photosTrashMany, "count", "\(count)")
     }
 
-    static let body = "You can restore them from the trash. Photographs in your camera roll are not touched."
+    static let body = PhotosWords.photosTrashBody
 }

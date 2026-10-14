@@ -165,11 +165,18 @@ struct ScreenFailureView: View {
 struct EmptyStateView: View {
     let empty: Centraid_Screen_V1_EmptyState
     var onAction: (() -> Void)? = nil
+    /// The action's accessibility id; a screen whose action is its own thing
+    /// (search's "Ask about") names it.
+    var actionIdentifier: String = "kit-empty-action"
 
     @Environment(\.colorScheme) private var scheme
+    /// The shell's doors for an app's day-one empty (docs/decisions.md,
+    /// "Onboarding without sample data"); nil where the shell offers neither.
+    @Environment(\.importFromPhone) private var importFromPhone
 
-    init(_ empty: Centraid_Screen_V1_EmptyState, onAction: (() -> Void)? = nil) {
+    init(_ empty: Centraid_Screen_V1_EmptyState, actionIdentifier: String = "kit-empty-action", onAction: (() -> Void)? = nil) {
         self.empty = empty
+        self.actionIdentifier = actionIdentifier
         self.onAction = onAction
     }
 
@@ -194,16 +201,68 @@ struct EmptyStateView: View {
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .multilineTextAlignment(.center)
             }
-            if !empty.actionLabel.isEmpty, let onAction {
+            // WHERE THE PHONE ALREADY HOLDS THE DATA, ITS IMPORT IS THE ACTION,
+            // asked here at the point of use; the app's own add stays in its
+            // header. A shell with no importer for the source draws the app's.
+            if !ShellWords.importLabel(empty.importSource).isEmpty, let importFromPhone {
+                KitOutlineButton(label: ShellWords.importLabel(empty.importSource)) { importFromPhone(empty.importSource) }
+                    .accessibilityIdentifier("kit-empty-import")
+                    .padding(.top, 4)
+            } else if !empty.actionLabel.isEmpty, let onAction {
                 KitOutlineButton(label: empty.actionLabel, action: onAction)
-                    .accessibilityIdentifier("kit-empty-action")
+                    .accessibilityIdentifier(actionIdentifier)
                     .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 32)
         .padding(.horizontal, CentraidGeometry.pageMargin)
+        // A CONTAINER, OR THE ID LEAKS: on a plain stack SwiftUI hands
+        // `kit-empty` down to the import and action buttons, over their own.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("kit-empty")
+    }
+}
+
+private struct AskChatKey: EnvironmentKey {
+    static let defaultValue: ((String) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    /// The shell's "ask the assistant" door, or nil where there is none
+    /// (previews). A search that found nothing reaches Chat through it, never
+    /// through a view's own routing (#1097, R-1097-30).
+    var askChat: ((String) -> Void)? {
+        get { self[AskChatKey.self] }
+        set { self[AskChatKey.self] = newValue }
+    }
+}
+
+/// THE NO-MATCH STATE OF AN APP'S SEARCH (#1097, R-1097-30): the kit empty
+/// state, with Ask as its one action when the machine named one. `ask` is the
+/// field's question and the words are the machine's (`SEARCH_ASK_ABOUT` is the
+/// action's label, finished in `empty`); this view only draws them and hands the
+/// question to the shell, which switches to the Chat tab and sends it. Empty `ask`
+/// is no action: a term typed since, a denial, or an app that offers none (Locker
+/// never does, R-1097-29, and does not draw this view).
+struct SearchEmptyView: View {
+    let empty: Centraid_Screen_V1_EmptyState
+    let ask: String
+
+    @Environment(\.askChat) private var askChat
+
+    init(_ empty: Centraid_Screen_V1_EmptyState, ask: String) {
+        self.empty = empty
+        self.ask = ask
+    }
+
+    var body: some View {
+        EmptyStateView(empty, actionIdentifier: "search-ask-about", onAction: action)
+    }
+
+    private var action: (() -> Void)? {
+        guard !ask.isEmpty, let askChat else { return nil }
+        return { askChat(ask) }
     }
 }
 
@@ -266,25 +325,36 @@ struct DeniedGate: View {
 struct KitOutlineButton: View {
     let label: String
     var tone: String = "text"
+    /// Stretches to the column's width, label centred.
+    var fullWidth: Bool = false
+    /// A 16 glyph before the label, in the tone's ink.
+    var iconKey: String = ""
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var enabled
 
     var body: some View {
+        let ink = enabled ? tone : "textDisabled"
         Button(action: action) {
-            Text(label)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color(tone, scheme))
-                .padding(.horizontal, 16)
-                .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                        .strokeBorder(
-                            Theme.color(tone == "text" ? "lineStrong" : tone, scheme),
-                            lineWidth: CentraidGeometry.hairline
-                        )
-                )
-                .contentShape(Rectangle())
+            HStack(spacing: 6) {
+                if !iconKey.isEmpty {
+                    CentraidIconView(iconKey: iconKey, tint: Theme.color(ink, scheme), size: 16)
+                }
+                Text(label)
+                    .centraidType("smallStrong")
+                    .foregroundStyle(Theme.color(ink, scheme))
+            }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                    .strokeBorder(
+                        Theme.color(enabled ? (tone == "text" ? "lineStrong" : tone) : "textDisabled", scheme),
+                        lineWidth: CentraidGeometry.hairline
+                    )
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

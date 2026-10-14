@@ -14,7 +14,6 @@ sheet: SHEET_NONE
 band { key: "day" label: "Day" icon_key: "Clock" current: true }
 band { key: "schedule" label: "Schedule" icon_key: "List" current: false }
 band { key: "waiting" label: "Waiting" icon_key: "Inbox" current: false }
-band { key: "search" label: "Search" icon_key: "Search" current: false }
-band { key: "more" label: "More" icon_key: "more" current: false }
+band { key: "more" label: "More" icon_key: "MoreHoriz" current: false }
 toolbar { shown: false }
-chrome { title: "Agenda" loading: "Opening your calendar" retry: "Retry" }
+chrome { title: "Agenda" loading: "Opening your calendar" retry: "Try again" }

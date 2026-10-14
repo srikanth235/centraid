@@ -6,14 +6,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.text.BasicTextField
+import dev.centraid.android.kit.RowSkeleton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,23 +23,40 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.AlbumChoiceCreated
 import centraid.screen.v1.AlbumChoiceDismissed
 import centraid.screen.v1.AlbumChoiceOpened
 import centraid.screen.v1.AlbumChosen
+import centraid.screen.v1.Confirm
 import centraid.screen.v1.PhotoShelfEvent
 import centraid.screen.v1.PhotoShelfState
 import centraid.screen.v1.PhotoStateView
 import dev.centraid.android.kit.AlbumChoiceSheet
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.ConfirmSheet
+import dev.centraid.android.kit.IconKey
+import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.SheetOption
+import dev.centraid.android.kit.SheetPrimary
+import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.PhotoCellsGrid
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PhotoShelfMachine
 
 /**
@@ -179,7 +197,7 @@ public fun PhotoShelfScreen(
         val failure = state.failure
         val data = state.data_
         when {
-            loading != null -> CircularProgressIndicator()
+            loading != null -> RowSkeleton()
 
             failure != null -> ScreenFailure(failure.sentence, failure.remedy)
 
@@ -241,35 +259,44 @@ public fun PhotoShelfScreen(
     }
 
     if (confirmingEmptyTrash) {
-        Confirm(
-            title = "Delete everything in the trash forever?",
-            body = "This cannot be undone. Every photograph in the trash leaves your library now — " +
-                "with its captions, faces and tags — and the space it holds is freed shortly afterwards.",
-            verb = "Empty trash",
-            keep = "Keep them",
+        ConfirmSheet(
+            confirm = Confirm(
+                title = PhotosCopy.PHOTOS_EMPTY_TRASH_TITLE,
+                body = PhotosCopy.PHOTOS_EMPTY_TRASH_BODY,
+                confirm_label = PhotosCopy.PHOTOS_EMPTY_TRASH,
+                destructive = true,
+            ),
+            onConfirm = {
+                confirmingEmptyTrash = false
+                onEvent(PhotoShelfEvent(empty_trash = PhotoShelfEvent.EmptyTrashRequested()))
+            },
             onDismiss = { confirmingEmptyTrash = false },
-        ) {
-            confirmingEmptyTrash = false
-            onEvent(PhotoShelfEvent(empty_trash = PhotoShelfEvent.EmptyTrashRequested()))
-        }
+            cancelLabel = PhotosCopy.PHOTOS_KEEP_THEM,
+        )
     }
 
     if (confirmingAlbumDelete) {
         // v0's `ALBUM_DELETE_BODY`: the one thing a member deciding needs.
-        Confirm(
-            title = "Delete this album?",
-            body = "Photos stay in the library.",
-            verb = "Delete album",
-            keep = "Keep it",
+        ConfirmSheet(
+            confirm = Confirm(
+                title = PhotosCopy.PHOTOS_DELETE_ALBUM_TITLE,
+                body = PhotosCopy.PHOTOS_DELETE_ALBUM_BODY,
+                confirm_label = PhotosCopy.PHOTOS_DELETE_ALBUM,
+                destructive = true,
+            ),
+            onConfirm = {
+                confirmingAlbumDelete = false
+                onEvent(PhotoShelfEvent(album_delete = PhotoShelfEvent.AlbumDeleteRequested()))
+            },
             onDismiss = { confirmingAlbumDelete = false },
-        ) {
-            confirmingAlbumDelete = false
-            onEvent(PhotoShelfEvent(album_delete = PhotoShelfEvent.AlbumDeleteRequested()))
-        }
+            cancelLabel = PhotosCopy.PHOTOS_KEEP_IT,
+        )
     }
 
     if (renaming) {
-        RenameDialog(
+        RenameSheet(
+            title = PhotosCopy.PHOTOS_RENAME_ALBUM,
+            fieldLabel = PhotosCopy.PHOTOS_ALBUM_NAME,
             current = PhotoShelfMachine.title(shelf),
             onDismiss = { renaming = false },
         ) { title ->
@@ -282,30 +309,21 @@ public fun PhotoShelfScreen(
     // a batch: a place NAME is one sentence per photograph, and a batch has as
     // many places as photographs.
     if (choosingPlace) {
-        AlertDialog(
-            onDismissRequest = { choosingPlace = false },
-            title = { Text(text = "Send a copy — how much of the place?") },
-            confirmButton = {
-                Column {
-                    TextButton(
-                        onClick = {
-                            choosingPlace = false
-                            onExport(state.selected_asset_ids, ShelfExport.Send(keepLocation = false))
-                        },
-                    ) { Text(text = "No location") }
-                    TextButton(
-                        onClick = {
-                            choosingPlace = false
-                            onExport(state.selected_asset_ids, ShelfExport.Send(keepLocation = true))
-                        },
-                    ) { Text(text = "Exact location") }
-                }
+        OptionSheet(
+            title = PhotosCopy.PHOTOS_SEND_PLACE_TITLE,
+            options = listOf(
+                SheetOption(key = "none", label = PhotosCopy.PHOTOS_SEND_NO_LOCATION),
+                SheetOption(key = "exact", label = PhotosCopy.PHOTOS_SEND_EXACT_LOCATION),
+            ),
+            onPick = { key ->
+                choosingPlace = false
+                onExport(state.selected_asset_ids, ShelfExport.Send(keepLocation = key == "exact"))
             },
-            dismissButton = { TextButton(onClick = { choosingPlace = false }) { Text(text = "Cancel") } },
+            onDismiss = { choosingPlace = false },
         )
     }
 
-    // A DIALOG IS NOT IN THE LAYOUT, so it sits outside the column: it is a
+    // A SHEET IS NOT IN THE LAYOUT, so it sits outside the column: it is a
     // window of its own and a `Column` child that sometimes becomes one would
     // move everything below it on the frame it appeared.
     if (confirmingPurge) {
@@ -349,7 +367,8 @@ private fun ShelfHeader(
             color = centraidColor("textSoft"),
         )
         when {
-            state.selecting -> TextButton(
+            state.selecting -> KitLink(
+                label = "Done",
                 onClick = {
                     onEvent(
                         PhotoShelfEvent(
@@ -358,18 +377,22 @@ private fun ShelfHeader(
                         ),
                     )
                 },
-            ) { Text(text = "Done") }
+            )
 
             data != null && data.cells.isNotEmpty() -> Row(verticalAlignment = Alignment.CenterVertically) {
                 // EMPTY TRASH, only on the trash, beside the way into
                 // selection. A text control and never a filled one: the safety
                 // is the confirm behind it.
                 if (PhotoShelfMachine.isTrash(state.shelf)) {
-                    TextButton(onClick = onAskToEmptyTrash) {
-                        Text(text = "Empty trash", color = centraidColor("danger"))
-                    }
+                    QuietButton(
+                        label = PhotosCopy.PHOTOS_EMPTY_TRASH,
+                        testTag = "shelf-empty-trash",
+                        ink = "net",
+                        onPress = onAskToEmptyTrash,
+                    )
                 }
-                TextButton(
+                KitLink(
+                    label = "Select",
                     onClick = {
                         onEvent(
                             PhotoShelfEvent(
@@ -377,7 +400,7 @@ private fun ShelfHeader(
                             ),
                         )
                     },
-                ) { Text(text = "Select") }
+                )
             }
         }
     }
@@ -391,24 +414,25 @@ private fun ShelfHeader(
 private fun AlbumActions(onAdd: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = onAdd) { Text(text = "Add photographs") }
+        KitLink(label = PhotosCopy.PHOTOS_ADD_PHOTOS, onClick = onAdd)
         Box {
-            IconButton(
-                onClick = { open = true },
-                modifier = Modifier.semantics { contentDescription = "Album options" },
-            ) {
-                CentraidIcon(iconKey = "MoreHoriz", tint = centraidColor("link"), size = 20.dp)
-            }
+            IconKey(
+                iconKey = "MoreHoriz",
+                label = PhotosCopy.PHOTOS_ALBUM_OPTIONS,
+                testTag = "album-options",
+                bordered = false,
+                onPress = { open = true },
+            )
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 DropdownMenuItem(
-                    text = { Text(text = "Rename album") },
+                    text = { Text(text = PhotosCopy.PHOTOS_RENAME_ALBUM) },
                     onClick = {
                         open = false
                         onRename()
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text(text = "Delete album", color = centraidColor("danger")) },
+                    text = { Text(text = PhotosCopy.PHOTOS_DELETE_ALBUM, color = centraidColor("net")) },
                     onClick = {
                         open = false
                         onDelete()
@@ -422,7 +446,7 @@ private fun AlbumActions(onAdd: () -> Unit, onRename: () -> Unit, onDelete: () -
 /** A FLOOR, AND IT SAYS SO WHEN IT IS ONE. See [ShelfHeader]. */
 private fun countSentence(state: PhotoShelfState): String {
     val data = state.data_ ?: return ""
-    val noun = if (data.cells.size == 1) "photograph" else "photographs"
+    val noun = if (data.cells.size == 1) PhotosCopy.TILE_COUNT_ONE else PhotosCopy.TILE_COUNT_MANY
     return if (data.next_cursor != null) {
         "At least ${data.cells.size} $noun"
     } else {
@@ -465,13 +489,13 @@ private fun SelectionBar(
             Verb(iconKey = "restore", label = "Restore", enabled = enabled) {
                 onEvent(PhotoShelfEvent(restore = PhotoShelfEvent.RestoreRequested()))
             }
-            Verb(iconKey = "trash", label = "Delete forever", enabled = enabled, run = onAskToPurge)
+            Verb(iconKey = "trash", label = PhotosCopy.PHOTOS_DELETE_FOREVER, enabled = enabled, run = onAskToPurge)
         } else {
-            Verb(iconKey = "share", label = "Send a copy", enabled = enabled, run = onAskPlace)
-            Verb(iconKey = "heart", label = if (favorites) "Unfavorite" else "Favorite", enabled = enabled) {
+            Verb(iconKey = "share", label = PhotosCopy.PHOTOS_SEND_COPY, enabled = enabled, run = onAskPlace)
+            Verb(iconKey = "heart", label = if (favorites) PhotosCopy.PHOTOS_UNFAVORITE else PhotosCopy.PHOTOS_FAVORITE, enabled = enabled) {
                 onEvent(PhotoShelfEvent(favorite = PhotoShelfEvent.FavoriteToggled(favorite = !favorites)))
             }
-            Verb(iconKey = "album", label = "Add to album", enabled = enabled) {
+            Verb(iconKey = "album", label = PhotosCopy.PHOTOS_ADD_TO_ALBUM, enabled = enabled) {
                 onEvent(PhotoShelfEvent(album_choice_opened = AlbumChoiceOpened()))
             }
             if (archive) {
@@ -491,7 +515,7 @@ private fun SelectionBar(
             MoreVerbs(state, favorites, enabled, onEvent, onSave)
         }
         Text(
-            text = "${state.selected_asset_ids.size} chosen",
+            text = PhotosCopy.PHOTOS_CHOSEN.replace("{count}", "${state.selected_asset_ids.size}"),
             style = centraidType("small"),
             color = centraidColor("textSoft"),
         )
@@ -517,7 +541,7 @@ private fun MoreVerbs(
         Verb(iconKey = "MoreHoriz", label = "More", enabled = enabled) { open = true }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
-                text = { Text(text = "Download original") },
+                text = { Text(text = PhotosCopy.PHOTOS_DOWNLOAD_ORIGINAL) },
                 onClick = {
                     open = false
                     onSave()
@@ -525,7 +549,7 @@ private fun MoreVerbs(
             )
             if (!favorites) {
                 DropdownMenuItem(
-                    text = { Text(text = "Unfavorite") },
+                    text = { Text(text = PhotosCopy.PHOTOS_UNFAVORITE) },
                     onClick = {
                         open = false
                         onEvent(PhotoShelfEvent(favorite = PhotoShelfEvent.FavoriteToggled(favorite = false)))
@@ -535,7 +559,7 @@ private fun MoreVerbs(
             if (album) {
                 val only = state.selected_asset_ids.singleOrNull()
                 DropdownMenuItem(
-                    text = { Text(text = "Make key photo") },
+                    text = { Text(text = PhotosCopy.PHOTOS_MAKE_KEY) },
                     enabled = only != null,
                     onClick = {
                         open = false
@@ -543,7 +567,7 @@ private fun MoreVerbs(
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text(text = "Remove from album") },
+                    text = { Text(text = PhotosCopy.PHOTOS_REMOVE_FROM_ALBUM) },
                     onClick = {
                         open = false
                         onEvent(PhotoShelfEvent(remove_from_album = PhotoShelfEvent.RemoveFromAlbumRequested()))
@@ -565,17 +589,9 @@ private fun MoreVerbs(
  */
 @Composable
 private fun Verb(iconKey: String, label: String, enabled: Boolean, run: () -> Unit) {
-    IconButton(
-        onClick = run,
-        enabled = enabled,
-        modifier = Modifier.semantics { contentDescription = label },
-    ) {
-        CentraidIcon(
-            iconKey = iconKey,
-            tint = centraidColor(if (enabled) "text" else "textDisabled"),
-            size = 22.dp,
-        )
-    }
+    // DISABLED IS THE INK, NEVER A FADED CONTAINER: the key stays in place (the
+    // bar must not move under a thumb), draws `textDisabled`, and does nothing.
+    IconKey(iconKey = iconKey, label = label, testTag = "shelf-verb", bordered = false, enabled = enabled, onPress = run)
 }
 
 /**
@@ -588,69 +604,116 @@ private fun Verb(iconKey: String, label: String, enabled: Boolean, run: () -> Un
  */
 @Composable
 private fun PurgeConfirm(count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    val noun = if (count == 1) "photograph" else "photographs"
-    val they = if (count == 1) "It leaves" else "They leave"
-    val their = if (count == 1) "its" else "their"
-    val holds = if (count == 1) "it holds is" else "they hold is"
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = "Delete $count $noun forever?") },
-        text = {
-            Text(
-                text = "This cannot be undone. $they your library now — with $their captions, " +
-                    "faces, tags and album membership — and the space $holds freed shortly " +
-                    "afterwards. Restore will not bring them back.",
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text(text = "Delete $count forever") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(text = "Keep them") } },
-    )
-}
-
-/** A destructive confirm: the cost in full sentences, the verb unfilled. */
-@Composable
-private fun Confirm(
-    title: String,
-    body: String,
-    verb: String,
-    keep: String,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = title) },
-        text = { Text(text = body) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text(text = verb, color = centraidColor("danger")) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(text = keep) } },
+    ConfirmSheet(
+        confirm = Confirm(
+            title = if (count == 1) {
+                PhotosCopy.PHOTOS_DELETE_FOREVER_ONE
+            } else {
+                PhotosCopy.PHOTOS_DELETE_FOREVER_MANY.replace("{count}", "$count")
+            },
+            body = PhotosCopy.PHOTOS_DELETE_FOREVER_BODY,
+            confirm_label = PhotosCopy.PHOTOS_DELETE_FOREVER_CONFIRM.replace("{count}", "$count"),
+            destructive = true,
+        ),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+        cancelLabel = PhotosCopy.PHOTOS_KEEP_THEM,
     )
 }
 
 /**
- * RENAME, as one field and a verb. An empty name is not offered: the vault's
- * `title` is `minLength: 1`, and the reducer drops it besides.
+ * RENAME, as one field and a verb in a [SheetRoom]. An empty name is not
+ * offered: the vault's `title` is `minLength: 1`, and the reducer drops it
+ * besides, so a blank name sends nothing.
  */
 @Composable
-private fun RenameDialog(current: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+internal fun RenameSheet(
+    title: String,
+    fieldLabel: String,
+    current: String,
+    onDismiss: () -> Unit,
+    primaryLabel: String = "Save",
+    onSave: (String) -> Unit,
+) {
     var name by remember { mutableStateOf(current) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = "Rename album") },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(text = "Album name") },
-                singleLine = true,
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(name) }, enabled = name.isNotBlank()) { Text(text = "Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(text = "Cancel") } },
+    NameSheet(
+        title = title,
+        fieldLabel = fieldLabel,
+        name = name,
+        onName = { name = it },
+        primaryLabel = primaryLabel,
+        onDismiss = onDismiss,
+        onSave = { onSave(name) },
     )
+}
+
+/**
+ * A SHEET WITH ONE NAME FIELD AND ONE VERB — rename, and name a new album. The
+ * verb is the sheet's ink button, drawn disabled while the name is blank: a
+ * blank name is not a write. [status]
+ * is the refusal's sentence, beside the field and never instead of it.
+ */
+@Composable
+internal fun NameSheet(
+    title: String,
+    fieldLabel: String,
+    name: String,
+    onName: (String) -> Unit,
+    primaryLabel: String,
+    onDismiss: () -> Unit,
+    status: String = "",
+    onSave: () -> Unit,
+) {
+    val ready = name.isNotBlank()
+    SheetRoom(
+        title = title,
+        onDismiss = onDismiss,
+        status = status,
+        primary = SheetPrimary(label = primaryLabel, testTag = "rename-save", enabled = ready, onPress = onSave),
+    ) {
+        NameField(
+            value = name,
+            onValueChange = onName,
+            label = fieldLabel,
+            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+        )
+    }
+}
+
+/** A NAME FIELD: one line on a `lineStrong` hairline, its label the placeholder. */
+@Composable
+internal fun NameField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = KitGeometry.ROW_MIN)
+            .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), RoundedCornerShape(KitGeometry.RADIUS))
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        if (value.isEmpty()) {
+            Text(
+                text = label,
+                style = centraidType("body"),
+                color = centraidColor("textFaint"),
+                modifier = Modifier.clearAndSetSemantics { },
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = centraidType("body").copy(color = centraidColor("text")),
+            cursorBrush = SolidColor(centraidColor("text")),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("rename-field")
+                .semantics { contentDescription = label },
+        )
+    }
 }

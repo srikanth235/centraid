@@ -409,6 +409,20 @@ class ScreenFixtureSpec : StringSpec({
         (resting == noHits).shouldBeFalse()
     }
 
+    "photos-search: a corrected answer is the field's words, and the hits answer what was typed" {
+        // #1097, R-1097-27. The correction rides the shared field, which the
+        // kit draws as "Showing results for"; the hits still answer the TYPED
+        // words, so a reducer can tell a late page from a current one.
+        val corrected = search("corrected")
+        corrected.query shouldBe "sunscren"
+        corrected.search.shouldNotBeNull().corrected shouldBe "sunscreen"
+        corrected.search.shouldNotBeNull().term shouldBe "sunscren"
+        corrected.hits.shouldNotBeNull().query shouldBe "sunscren"
+        corrected.hits.shouldNotBeNull().cells.size shouldBe 1
+        // An exact answer carries no correction.
+        search("hits-say-why").search shouldBe null
+    }
+
     "photos-search: a match is a KIND and a name, never prose" {
         // Field 4 was `repeated string matched_on` and is now reserved. A
         // prose line made each shell compose its own sentence, which is how
@@ -833,14 +847,6 @@ class ScreenFixtureSpec : StringSpec({
         // about how many secrets a member holds.
         locker.status shouldBe TileStatus.TILE_STATUS_CONTENT
         locker.count.shouldBeNull()
-        // The vault total OMITS it rather than adding zero: 1284 + 42 + 7.
-        content.data_.things!!.total shouldBe 1333
-    }
-
-    "home: a capped count says the total is only a floor" {
-        val things = home("status-urgent").data_!!.things!!
-        things.capped.shouldBeTrue()
-        things.total shouldBe 500
     }
 
     "home: an unaddressable photo is still a CELL" {
@@ -851,18 +857,17 @@ class ScreenFixtureSpec : StringSpec({
         cells.last().thumbnail_path.shouldBeNull()
     }
 
-    "home: Locker earns the grid while EMPTY" {
-        val locker = home("first-run").data_!!.tiles.first { it.app_id == "locker" }
-        locker.status shouldBe TileStatus.TILE_STATUS_EMPTY
-        locker.earns_grid.shouldBeTrue()
+    "home: every app is on the grid on day one, Locker included" {
+        val data = home("first-run").data_!!
+        data.tiles.first { it.app_id == "locker" }.status shouldBe TileStatus.TILE_STATUS_EMPTY
+        data.grid_rows.flatMap { it.app_ids }.toSet() shouldBe data.tiles.map { it.app_id }.toSet()
     }
 
-    "home: a loading springboard reports its total unsettled" {
+    "home: a loading springboard holds every slot" {
         val loading = home("loading-first").data_!!
         loading.springboard shouldBe Springboard.SPRINGBOARD_LOADING
-        loading.things!!.settled.shouldBeFalse()
         // A read in flight holds its slot at full geometry.
-        loading.tiles.all { it.earns_grid }.shouldBeTrue()
+        loading.grid_rows.flatMap { it.app_ids }.toSet() shouldBe loading.tiles.map { it.app_id }.toSet()
     }
 
     "home: a refused Home has no grid at all" {
@@ -872,12 +877,6 @@ class ScreenFixtureSpec : StringSpec({
         refused.data_.shouldBeNull()
         refused.failure.shouldNotBeNull().kind shouldBe
             ReadFailureKind.READ_FAILURE_KIND_NO_COPY_YET
-    }
-
-    "home: the all-apps sheet leaves the Home underneath intact" {
-        val sheet = home("all-apps-open")
-        sheet.all_apps_sheet_open.shouldBeTrue()
-        sheet.data_.shouldNotBeNull().tiles.size shouldBe 8
     }
 
     // --- Agenda (#1046) ---------------------------------------------------
@@ -901,7 +900,7 @@ class ScreenFixtureSpec : StringSpec({
         // A failed READ keeps the band and its retry: the next read may land.
         refused.failure.shouldNotBeNull().kind shouldBe ReadFailureKind.READ_FAILURE_KIND_UNAVAILABLE
         refused.denied.shouldBeNull()
-        refused.band.size shouldBe 5
+        refused.band.size shouldBe 4
     }
 
     "agenda: the first load anchors on no day, so the day bar is not shown" {
@@ -910,7 +909,7 @@ class ScreenFixtureSpec : StringSpec({
         // Empty until an answer says which day today is: never a device-clock guess.
         loading.anchor_day shouldBe ""
         loading.toolbar.shouldNotBeNull().shown.shouldBeFalse()
-        loading.band.map { it.key } shouldBe listOf("day", "schedule", "waiting", "search", "more")
+        loading.band.map { it.key } shouldBe listOf("day", "schedule", "waiting", "more")
     }
 
     "agenda: the now line is a row among the events, and a pending write is a row status" {
@@ -944,7 +943,9 @@ class ScreenFixtureSpec : StringSpec({
         state.search_open.shouldBeTrue()
         state.toolbar.shouldNotBeNull().shown.shouldBeFalse()
         state.data_.shouldNotBeNull().empty shouldBe AgendaEmpty.AGENDA_EMPTY_NO_MATCH
-        state.band.single { it.current }.key shouldBe "search"
+        // Search is the bar under the title, not a place (R-CHROME-5): the
+        // place the member searched from stays lit.
+        state.band.single { it.current }.key shouldBe "day"
     }
 
     "agenda-event: a one-off asks once; a series' confirm IS the scope sheet, none pre-chosen" {

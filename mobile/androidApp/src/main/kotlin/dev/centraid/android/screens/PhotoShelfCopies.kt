@@ -8,6 +8,7 @@ import android.os.Build
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.CopyExportScreen
 import dev.centraid.shared.apps.photos.LocatedOriginal
 import dev.centraid.shared.apps.photos.ShelfCopies
@@ -78,7 +79,7 @@ public suspend fun exportShelfCopies(
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.startActivity(
-                Intent.createChooser(send, "Send a copy").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent.createChooser(send, PhotosCopy.PHOTOS_SEND_COPY).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
             // THE CHOOSER SAYS WHAT IT DID; this says only what did not go.
             bridge.exportSettled(ShelfCopies.missingSentence(located.missing))

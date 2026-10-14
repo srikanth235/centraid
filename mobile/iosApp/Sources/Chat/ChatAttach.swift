@@ -145,7 +145,7 @@ struct ChatVaultPhotoSheet: View {
             ScrollView {
                 switch state.content {
                 case .loading:
-                    ProgressView().padding(.top, 48)
+                    RowSkeleton(rows: 6).padding(.top, 24)
                 case let .denied(denied):
                     DeniedGate(denied)
                 case let .failure(sentence, remedy):
@@ -201,7 +201,7 @@ struct ChatDocumentSheet: View {
         NavigationStack {
             ScrollView {
                 if !chat.documentsLoaded {
-                    ProgressView().padding(.top, 48)
+                    RowSkeleton(rows: 6).padding(.top, 24)
                 } else if chat.documents.isEmpty {
                     ScreenEmptyView(sentence: ChatWords.noDocuments)
                         .padding(.top, 24)
@@ -230,7 +230,7 @@ struct ChatDocumentSheet: View {
                                 .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(KitRowPress())
                             .accessibilityIdentifier("chat-document-\(index)")
                             Rectangle()
                                 .fill(Theme.color("line", scheme))

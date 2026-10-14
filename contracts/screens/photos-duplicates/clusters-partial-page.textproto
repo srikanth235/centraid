@@ -13,7 +13,7 @@
 # There is no `COUNT(*)` on the read door and no join clause, so every count in
 # this section is counted from rows in the reducer's `arrived`. That makes a
 # bare number over a full page a total nobody counted — which is why
-# `HomeState.ThingCount` has carried `capped` since Home shipped, and why these
+# `HomeTile.count` has carried `capped` since Home shipped, and why these
 # do now.
 #
 # The contrast is `photos-duplicates/clusters-by-reclaimable`: no `next_cursor`,

@@ -26,6 +26,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use centraid_apps_kit::Denial;
 use centraid_apps_kit::error::KitResult;
 use centraid_apps_kit::page::{MAX_PAGE_ROWS, PageRequest};
 use centraid_apps_kit::reads::{FanOutBound, PageDoor, Window, in_list, read_pages, read_window};
@@ -37,8 +38,18 @@ use crate::places::{PlaceRow, places_statement};
 /// The trash and memory shelves are what the screen shows (`library.ts:26`).
 pub const SHELF_ROWS: usize = 200;
 
-/// The search shelf shows this many matches (`search.ts:18`).
-pub const MATCH_ROWS: usize = 300;
+/// The most photographs the door's text leg names for one search (#1097,
+/// R-1097-25): the best of them by rank. The window is the kit's own page, and
+/// a search that matches more is a question the member narrows with another
+/// word.
+pub const SEARCH_ROWS: usize = MAX_PAGE_ROWS;
+
+/// The entity a photograph is in the full-text index (`centraid_search::DOMAINS`).
+pub const PHOTO_TARGET_TYPE: &str = "core.content_item";
+
+/// The assets a search can open: the best `SEARCH_ROWS` contents, each with a
+/// handful of assets at most (two assets can share a sha).
+const SEARCH_ASSET_BOUND: FanOutBound = FanOutBound::new(500, 8);
 
 /// The library window's own bounds, from the manifest's input schema:
 /// `limit` 20…2,000 with a default of 500 (`library.ts:63`).
@@ -460,18 +471,23 @@ pub fn asset_tags_statement(asset_ids: &[String]) -> KitResult<PageQuery> {
     .filter(&format!("target_type = ? AND {}", fragment.sql), bind))
 }
 
-/// `photos.search.assets` — only the matched content ids' LIVE assets.
+/// `photos.search.assets` — the matched content ids' LIVE assets: not trashed
+/// and not archived, the shelf the library and Photos' own search draw. Home
+/// keeps the archived ones (it opens a photo; this draws a grid) — see
+/// `R-1097-25`.
 pub fn search_assets_statement(content_ids: &[String]) -> KitResult<PageQuery> {
     let fragment = in_list("content_id", content_ids)?;
     Ok(PageQuery::new(
         "photos.search.assets",
-        "asset_id, content_id, kind, title, captured_at, place_id, width, height, duration_s, \
-         deleted_at",
+        "asset_id, content_id",
         "media_asset",
-        PageOrder::desc("captured_at", "asset_id"),
+        PageOrder::asc("asset_id", "asset_id"),
     )
     .filter(
-        &format!("{} AND deleted_at IS NULL", fragment.sql),
+        &format!(
+            "{} AND deleted_at IS NULL AND archived_at IS NULL",
+            fragment.sql
+        ),
         fragment.bind,
     ))
 }
@@ -924,52 +940,95 @@ fn assemble_joins(
 // `search`.
 // ---------------------------------------------------------------------------
 
-/// What `search` answers. The same grid rows, in **vault rank order**.
+/// What `search` answers: the photographs whose caption, recognised text or
+/// transcript the term names, as ASSET ids, in the index's **rank order** (best
+/// match first). A grid reads the photographs themselves by these ids; the
+/// order it draws them in is its own (capture time, as every shelf).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SearchData {
-    pub assets: Vec<GridAsset>,
+    pub asset_ids: Vec<String>,
 }
 
-/// Read and fold `search`, given the FTS hits the vault's own index answered.
+/// Ask the FTS door for `term` over the photograph domain (`core.content_item`:
+/// the caption, the recognised text and the transcript, #1097 R-1097-25) and
+/// open the hits that are LIVE photographs.
 ///
-/// The FTS read is `ctx.vault.search`, which is not a `PageQuery` and belongs
-/// to `crates/search`; the hits arrive here as content ids **in rank order**,
-/// and that order is the answer's order — a port that re-sorted by capture time
-/// would throw the ranking away.
-pub fn load_search(door: &dyn PageDoor, hits: &[String], now_ms: i64) -> KitResult<SearchData> {
-    if hits.is_empty() {
-        return Ok(SearchData::default());
+/// The door answers CONTENT ids in rank order; a photograph is a media asset,
+/// so each content id opens the live, unarchived assets that hold it, and a
+/// content item with none (trashed, archived, or no asset at all) is no hit.
+/// `limit` is clamped to [`SEARCH_ROWS`]. A blank term, a term with no
+/// searchable word and a zero `limit` answer the empty shape and no denial.
+///
+/// # Errors
+///
+/// A reached bound, as [`load_library`].
+pub fn load_search_term(
+    door: &dyn PageDoor,
+    search: &dyn centraid_search::Search,
+    principal: &centraid_search::Principal,
+    term: &str,
+    limit: usize,
+) -> KitResult<(SearchData, Option<Denial>)> {
+    let term = term.trim();
+    if term.is_empty() || limit == 0 {
+        return Ok((SearchData::default(), None));
     }
-    let mut content_ids: Vec<String> = hits.to_vec();
-    content_ids.sort();
-    content_ids.dedup();
-    let matched = read_one_page(door, &search_assets_statement(&content_ids)?, MATCH_ROWS)?;
-    let assets: Vec<AssetRow> = matched.rows.iter().filter_map(AssetRow::of).collect();
-    if assets.is_empty() {
-        return Ok(SearchData::default());
+    let request =
+        centraid_search::SearchRequest::new(PHOTO_TARGET_TYPE, term, limit.min(SEARCH_ROWS));
+    let page = match search.query(principal, &request) {
+        Ok(centraid_search::Answer::Data { page, .. }) => page,
+        Ok(centraid_search::Answer::Denied(denial)) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: denial.code,
+                    message: denial.message,
+                    revoked_at: denial.revoked_at,
+                }),
+            ));
+        }
+        Err(centraid_search::SearchError::NoSearchableWords { .. }) => {
+            return Ok((SearchData::default(), None));
+        }
+        Err(other) => {
+            return Ok((
+                SearchData::default(),
+                Some(Denial {
+                    code: None,
+                    message: Some(other.to_string()),
+                    revoked_at: None,
+                }),
+            ));
+        }
+    };
+    if page.rows.is_empty() {
+        return Ok((SearchData::default(), None));
     }
-    let albums = read_pages(
+    let content_ids: Vec<String> = page.rows.iter().map(|target| target.id.clone()).collect();
+    let assets = read_pages(
         door,
-        &albums_statement("photos.search.albums"),
-        ASSET_JOIN_BOUND,
+        &search_assets_statement(&content_ids)?,
+        SEARCH_ASSET_BOUND,
     )?;
-    let places = read_pages(door, &places_statement(), ASSET_JOIN_BOUND)?;
-    let mut reads = assemble_joins(door, &assets, &[], &albums, &places, Vec::new())?;
-    reads.live = assets;
-    let folded = fold_library(&reads, MATCH_ROWS, now_ms);
-    // Vault rank order (best match first), by the hit list's own order.
-    let rank: BTreeMap<&str, usize> = hits
-        .iter()
-        .enumerate()
-        .map(|(index, id)| (id.as_str(), index))
-        .collect();
-    let mut assets = folded.assets;
-    assets.sort_by_key(|asset| {
-        rank.get(asset.asset.content_id.as_str())
-            .copied()
-            .unwrap_or(usize::MAX)
-    });
-    Ok(SearchData { assets })
+    // The rows come back in id order; the hit list's order is the rank.
+    let mut by_content: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for row in &assets {
+        if let (Some(content_id), Some(asset_id)) =
+            (text_of(row, "content_id"), text_of(row, "asset_id"))
+        {
+            by_content.entry(content_id).or_default().push(asset_id);
+        }
+    }
+    let mut seen = BTreeSet::new();
+    let mut asset_ids = Vec::new();
+    for content_id in &content_ids {
+        for asset_id in by_content.remove(content_id).unwrap_or_default() {
+            if seen.insert(asset_id.clone()) {
+                asset_ids.push(asset_id);
+            }
+        }
+    }
+    Ok((SearchData { asset_ids }, None))
 }
 
 #[cfg(test)]

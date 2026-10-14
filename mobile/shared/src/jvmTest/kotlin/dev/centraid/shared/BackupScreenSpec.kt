@@ -16,6 +16,7 @@ import dev.centraid.shared.sync.BackupScreenMachine
 import dev.centraid.shared.sync.BackupStep
 import dev.centraid.shared.sync.DestinationReading
 import dev.centraid.shared.sync.ForgetAnswer
+import dev.centraid.shared.sync.KeyCustody
 import dev.centraid.shared.sync.TransferRule
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -174,6 +175,8 @@ class BackupScreenSpec : StringSpec({
     "back up now needs a gateway, a vault that has not moved, and no run already going" {
         val unpaired = ready(read(reading(destinations = emptyList())))
         unpaired.state.back_up_now_enabled shouldBe false
+        // NO DEAD PRIMARY: nothing to back up to draws no "Back up now" at all.
+        unpaired.state.back_up_now_label shouldBe ""
         unpaired.on(backUpNow).effects.shouldBeEmpty()
         val frozen = ready(read(frozen = true))
         frozen.state.back_up_now_enabled shouldBe false
@@ -278,14 +281,73 @@ class BackupScreenSpec : StringSpec({
             BackupInput.Forgot("gw-1", "Home laptop", forgotten = true, revoked = true),
         )
         revoked.model.state.notice shouldBe
-            "This phone no longer backs up to Home laptop. Your laptop will refuse this phone from now on."
+            "Forgot Home laptop. It now refuses this phone."
         revoked.effects shouldBe listOf(BackupEffect.Read)
         // NOT TOLD: the token stays live there, so the member is told how to end it.
         BackupScreenMachine.reduce(ready(), BackupInput.Forgot("gw-1", "Home laptop", forgotten = true, revoked = false))
             .model.state.notice shouldBe SharedCopy.BACKUP_FORGOTTEN_NOT_REVOKED.replace("{name}", "Home laptop")
         SharedCopy.BACKUP_FORGOTTEN_NOT_REVOKED shouldContain "centraid-gateway pairings revoke"
         BackupScreenMachine.reduce(ready(), BackupInput.Forgot("gw-1", "Home laptop", forgotten = false))
-            .model.state.notice shouldBe "Centraid could not forget Home laptop. Try again."
+            .model.state.notice shouldBe "Couldn't forget Home laptop. Try again."
+    }
+
+    // ----------------------------------------------------- recovery key --
+
+    val icloud = KeyCustody(
+        held = true,
+        synced = true,
+        saved = false,
+        wordsHere = true,
+        sentence = "Saved in your iCloud Keychain.",
+        place = "iCloud Keychain",
+    )
+
+    "a key in the keychain is one quiet sentence, the show control and the way off it (R-ONBOARD-10)" {
+        val state = ready(read().copy(key = icloud)).state
+        state.key_heading shouldBe SharedCopy.BACKUP_KEY_HEADING
+        state.key_line shouldBe "Saved in your iCloud Keychain."
+        state.key_warning shouldBe false
+        state.key_show_label shouldBe SharedCopy.BACKUP_KEY_SHOW
+        state.key_sync_label shouldBe "Keep my key off iCloud Keychain"
+        state.key_synced shouldBe true
+    }
+
+    "a key on this phone alone is a WARNING until the member says they saved a copy" {
+        val alone = icloud.copy(synced = false)
+        val warned = ready(read().copy(key = alone)).state
+        warned.key_warning shouldBe true
+        warned.key_line shouldBe SharedCopy.BACKUP_KEY_PHONE_ONLY
+        warned.key_sync_label shouldBe "Save my key in iCloud Keychain"
+
+        val saved = ready(read().copy(key = alone.copy(saved = true))).state
+        saved.key_warning shouldBe false
+        saved.key_line shouldBe SharedCopy.BACKUP_KEY_PHONE_ONLY_SAVED
+
+        // NO KEYCHAIN AT ALL: nothing to move it to, so no link.
+        ready(read().copy(key = alone.copy(place = ""))).state.key_sync_label shouldBe ""
+        // A KEY THAT CAME THROUGH THE KEYCHAIN has no words here to show.
+        ready(read().copy(key = icloud.copy(wordsHere = false))).state.key_show_label shouldBe ""
+    }
+
+    "a phone holding no key draws no section at all" {
+        val state = ready(read().copy(key = icloud.copy(held = false))).state
+        state.key_heading shouldBe ""
+        state.key_line shouldBe ""
+        ready(read()).state.key_heading shouldBe ""
+    }
+
+    "moving the key asks the door only for a real move, and says when the keychain refused" {
+        val model = ready(read().copy(key = icloud))
+        val off = model.on(BackupScreenEvent(set_key_sync = BackupScreenEvent.SetKeySync(on = false)))
+        off.effects shouldBe listOf(BackupEffect.SetKeySync(on = false, place = "iCloud Keychain"))
+        // ALREADY THERE: nothing to do.
+        model.on(BackupScreenEvent(set_key_sync = BackupScreenEvent.SetKeySync(on = true))).effects.shouldBeEmpty()
+
+        val refused = BackupScreenMachine.reduce(model, BackupInput.KeyMoved(on = true, synced = false, place = "iCloud Keychain"))
+        refused.model.state.notice shouldBe SharedCopy.BACKUP_KEY_SYNC_FAILED.replace("{place}", "iCloud Keychain")
+        refused.effects shouldBe listOf(BackupEffect.Read)
+        BackupScreenMachine.reduce(model, BackupInput.KeyMoved(on = false, synced = false, place = "iCloud Keychain"))
+            .model.state.notice shouldBe ""
     }
 
     "a dismissed screen hears nothing until it is opened again" {

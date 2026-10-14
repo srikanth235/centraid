@@ -545,7 +545,7 @@ class PhotoShelfSpec : StringSpec({
         PhotoShelfMachine.title(
             PhotoShelf(album = PhotoShelf.Album(collection_id = "c1", name = "Portugal")),
         ) shouldBe "Portugal"
-        PhotoShelfMachine.title(null) shouldBe "Photographs"
+        PhotoShelfMachine.title(null) shouldBe "Photos"
     }
 
     // --- The statements ---------------------------------------------------

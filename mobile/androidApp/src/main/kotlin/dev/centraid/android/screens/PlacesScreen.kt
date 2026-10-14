@@ -21,11 +21,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
+import dev.centraid.android.kit.RowSkeleton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,11 +44,15 @@ import centraid.screen.v1.PlacesEvent
 import centraid.screen.v1.PlacesState
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ContentImage
+import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.KitSegmented
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
+import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PlacesMachine
 import kotlin.math.sqrt
 
@@ -90,7 +91,6 @@ public fun PlacesScreen(
     // typed text lives here because this is the only place it exists before it
     // is written; the reducer holds the name the vault last said.
     var renaming: PlaceRow? by remember { mutableStateOf(null) }
-    var typedName by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.padding(16.dp)) {
         PresentationControl(state.presentation, onEvent)
@@ -112,7 +112,7 @@ public fun PlacesScreen(
         val failure = state.failure
         val data = state.data_
         when {
-            loading != null -> CircularProgressIndicator()
+            loading != null -> RowSkeleton()
 
             failure != null -> ScreenFailure(failure.sentence, failure.remedy)
 
@@ -120,8 +120,8 @@ public fun PlacesScreen(
                 val places = data.places
                 if (places.isEmpty()) {
                     ScreenEmpty(
-                        sentence = "No places yet.",
-                        remedy = "A place is something a photograph carries, or does not.",
+                        sentence = PhotosCopy.PHOTOS_PLACES_EMPTY,
+                        remedy = PhotosCopy.PHOTOS_PLACES_EMPTY_CAPTION,
                     )
                 } else if (state.presentation == PlacesState.Presentation.PRESENTATION_MAP) {
                     PlacesPlot(places, onOpenPlace)
@@ -130,10 +130,7 @@ public fun PlacesScreen(
                         places = places,
                         modifier = Modifier.weight(1f),
                         onOpen = onOpenPlace,
-                        onRename = { row ->
-                            renaming = row
-                            typedName = row.name
-                        },
+                        onRename = { row -> renaming = row },
                     )
                 }
                 Footer(
@@ -149,22 +146,25 @@ public fun PlacesScreen(
 
     val target = renaming
     if (target != null) {
-        RenameDialog(
-            typedName = typedName,
-            onTyped = { typedName = it },
+        // `media.name_place` REFUSES A BLANK NAME, so the sheet does not offer
+        // the verb while the name is blank. A round trip whose only possible
+        // outcome is a denial teaches a member nothing.
+        RenameSheet(
+            title = PhotosCopy.PHOTOS_PLACES_NAME_THIS,
+            fieldLabel = "Place name",
+            current = target.name,
             onDismiss = { renaming = null },
-            onSave = {
-                onEvent(
-                    PlacesEvent(
-                        renamed = PlacesEvent.PlaceRenamed(
-                            place_id = target.place_id,
-                            name = typedName,
-                        ),
+        ) { name ->
+            onEvent(
+                PlacesEvent(
+                    renamed = PlacesEvent.PlaceRenamed(
+                        place_id = target.place_id,
+                        name = name,
                     ),
-                )
-                renaming = null
-            },
-        )
+                ),
+            )
+            renaming = null
+        }
     }
 }
 
@@ -180,56 +180,27 @@ private fun PresentationControl(
     presentation: PlacesState.Presentation,
     onEvent: (PlacesEvent) -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        PresentationButton(
-            selected = presentation != PlacesState.Presentation.PRESENTATION_MAP,
-            iconKey = "Grid",
-            label = "Cards",
-            onClick = {
-                onEvent(
-                    PlacesEvent(
-                        presentation = PlacesEvent.PresentationChanged(
-                            PlacesState.Presentation.PRESENTATION_CARDS,
-                        ),
+    KitSegmented(
+        options = listOf(PRESENT_CARDS to "Cards", PRESENT_MAP to "Map"),
+        selected = if (presentation == PlacesState.Presentation.PRESENTATION_MAP) PRESENT_MAP else PRESENT_CARDS,
+        onSelect = { key ->
+            onEvent(
+                PlacesEvent(
+                    presentation = PlacesEvent.PresentationChanged(
+                        if (key == PRESENT_MAP) {
+                            PlacesState.Presentation.PRESENTATION_MAP
+                        } else {
+                            PlacesState.Presentation.PRESENTATION_CARDS
+                        },
                     ),
-                )
-            },
-        )
-        PresentationButton(
-            selected = presentation == PlacesState.Presentation.PRESENTATION_MAP,
-            iconKey = "MapPin",
-            label = "Map",
-            onClick = {
-                onEvent(
-                    PlacesEvent(
-                        presentation = PlacesEvent.PresentationChanged(
-                            PlacesState.Presentation.PRESENTATION_MAP,
-                        ),
-                    ),
-                )
-            },
-        )
-    }
+                ),
+            )
+        },
+    )
 }
 
-@Composable
-private fun PresentationButton(
-    selected: Boolean,
-    iconKey: String,
-    label: String,
-    onClick: () -> Unit,
-) {
-    val ink = centraidColor(if (selected) "text" else "textSoft")
-    TextButton(onClick = onClick) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CentraidIcon(iconKey = iconKey, tint = ink, size = 16.dp)
-            Text(text = label, style = centraidType("control"), color = ink)
-        }
-    }
-}
+private const val PRESENT_CARDS = "cards"
+private const val PRESENT_MAP = "map"
 
 @Composable
 private fun PlaceCards(
@@ -263,7 +234,7 @@ private fun PlaceCard(
     onRename: (PlaceRow) -> Unit,
 ) {
     val label = if (row.asset_count > 0) {
-        "${row.name}, ${countPhrase(row)} photographs"
+        PhotosCopy.PHOTOS_PLACES_SPOKEN.replace("{name}", row.name).replace("{count}", countPhrase(row))
     } else {
         row.name
     }
@@ -276,7 +247,7 @@ private fun PlaceCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(4f / 3f)
-                .clip(RoundedCornerShape(7.dp))
+                .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["md"] ?: 0).dp))
                 // THE GROUND, when there are no bytes. Not a placeholder image:
                 // a surface the eye reads as empty.
                 .background(centraidColor("bgSunken")),
@@ -297,23 +268,7 @@ private fun PlaceCard(
                 color = centraidColor("textFaint"),
             )
         }
-        TextButton(onClick = { onRename(row) }) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CentraidIcon(
-                    iconKey = "Pencil",
-                    tint = centraidColor("textSoft"),
-                    size = 14.dp,
-                )
-                Text(
-                    text = "Name this place",
-                    style = centraidType("control"),
-                    color = centraidColor("textSoft"),
-                )
-            }
-        }
+        KitLink(label = PhotosCopy.PHOTOS_PLACES_NAME_THIS, dense = true, onClick = { onRename(row) })
     }
 }
 
@@ -336,8 +291,8 @@ private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
     val plotted = PlacesMachine.plot(places)
     if (plotted.isEmpty()) {
         ScreenEmpty(
-            sentence = "No place here carries a coordinate.",
-            remedy = "A photograph lands on the plot once it carries where it was taken.",
+            sentence = PhotosCopy.PHOTOS_PLACES_MAP_EMPTY,
+            remedy = PhotosCopy.PHOTOS_PLACES_MAP_EMPTY_CAPTION,
         )
         return
     }
@@ -348,7 +303,7 @@ private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(260.dp)
-            .clip(RoundedCornerShape(7.dp))
+            .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["md"] ?: 0).dp))
             .background(centraidColor("bgSunken")),
     ) {
         // RHYTHM, NOT REFERENCE. A graticule says "this is a chart of your own
@@ -386,7 +341,7 @@ private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
             val row = byId[pin.placeId] ?: return@forEach
             val diameter = pinSize(pin.count, largest)
             val label = if (row.asset_count > 0) {
-                "${row.name}, ${countPhrase(row)} photographs"
+                PhotosCopy.PHOTOS_PLACES_SPOKEN.replace("{name}", row.name).replace("{count}", countPhrase(row))
             } else {
                 row.name
             }
@@ -396,7 +351,7 @@ private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
             // sits on a plate with no coastline. With no cover it is the count
             // alone, on the stage ink.
             val cover = row.cover_thumbnail_path?.takeIf { it.isNotEmpty() }
-            val shape = RoundedCornerShape(7.dp)
+            val shape = RoundedCornerShape((LocalCentraidTokens.current.radii["md"] ?: 0).dp)
             Box(
                 modifier = Modifier
                     .offset(
@@ -425,7 +380,7 @@ private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
                                 .align(Alignment.BottomEnd)
                                 .background(
                                     centraidColor("stage"),
-                                    RoundedCornerShape(topStart = 7.dp),
+                                    RoundedCornerShape(topStart = (LocalCentraidTokens.current.radii["md"] ?: 0).dp),
                                 )
                                 .padding(horizontal = 4.dp),
                         )
@@ -508,16 +463,16 @@ private fun Footer(
         if (unpinned > 0) {
             Text(
                 text = if (unpinned == 1) {
-                    "1 place has no coordinate, so it is not on the plot."
+                    PhotosCopy.PHOTOS_PLACES_UNPINNED_ONE
                 } else {
-                    "$unpinned places have no coordinate, so they are not on the plot."
+                    PhotosCopy.PHOTOS_PLACES_UNPINNED_MANY.replace("{count}", "$unpinned")
                 },
                 style = centraidType("small"),
                 color = centraidColor("textSoft"),
             )
         }
         Text(
-            text = "Nothing is fetched — this is drawn here from your own coordinates.",
+            text = PhotosCopy.PHOTOS_PLACES_MAP_NOTE,
             style = centraidType("small"),
             color = centraidColor("textFaint"),
         )
@@ -525,12 +480,17 @@ private fun Footer(
 }
 
 /**
- * One sentence, four shapes, because "1 photograph carries" and "at least 1
- * photograph carries" are both things a member may read.
+ * One sentence, four shapes, because "1 photo has" and "at least 1 photo has"
+ * are both things a member may read.
  */
 private fun unplacedSentence(unplaced: Int, capped: Boolean): String {
-    val noun = if (unplaced == 1) "photograph carries" else "photographs carry"
-    return if (capped) "At least $unplaced $noun no place." else "$unplaced $noun no place."
+    val template = when {
+        unplaced == 1 && !capped -> PhotosCopy.PHOTOS_PLACES_UNPLACED_ONE
+        !capped -> PhotosCopy.PHOTOS_PLACES_UNPLACED_MANY
+        unplaced == 1 -> PhotosCopy.PHOTOS_PLACES_UNPLACED_ONE_CAPPED
+        else -> PhotosCopy.PHOTOS_PLACES_UNPLACED_MANY_CAPPED
+    }
+    return template.replace("{count}", "$unplaced")
 }
 
 /**
@@ -543,35 +503,3 @@ private fun unplacedSentence(unplaced: Int, capped: Boolean): String {
  */
 private fun countPhrase(row: PlaceRow): String =
     if (row.asset_count_capped) "at least ${row.asset_count}" else "${row.asset_count}"
-
-@Composable
-private fun RenameDialog(
-    typedName: String,
-    onTyped: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onSave: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = "Name this place") },
-        text = {
-            OutlinedTextField(
-                value = typedName,
-                onValueChange = onTyped,
-                singleLine = true,
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onSave,
-                // `media.name_place` REFUSES A BLANK NAME, so the control that
-                // would send one is not offered. A round trip whose only
-                // possible outcome is a denial teaches a member nothing.
-                enabled = typedName.isNotBlank(),
-            ) { Text(text = "Save") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(text = "Cancel") }
-        },
-    )
-}

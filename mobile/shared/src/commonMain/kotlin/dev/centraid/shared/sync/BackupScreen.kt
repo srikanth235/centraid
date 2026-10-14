@@ -26,7 +26,10 @@ import kotlinx.coroutines.sync.withLock
  * line at the top is [BackupLines]' and is the value Home draws. The three
  * controls are the member's transfer rule (the shells draw its choices from
  * `HomeBridge.transferRuleChoices`, one setting with one store), "Include
- * videos", and "Back up now". The destinations are the gateways this vault
+ * videos", and "Back up now". Under them, the RECOVERY KEY (R-ONBOARD-10):
+ * where it is, read from the stores each time, a warning when it is on this
+ * phone alone and the member has not said they saved a copy, and the controls
+ * to show it and to move it into or out of the keychain. The destinations are the gateways this vault
  * backs up to; adding one is `pair.laptop`'s, and forgetting one drops only
  * this phone's pairing, so it asks nothing first.
  */
@@ -50,6 +53,7 @@ public object BackupScreenMachine {
                     includeVideos = input.includeVideos,
                     backgroundNotice = input.registration?.takeIf { !it.registered }?.sentence.orEmpty(),
                     nowMs = input.nowMs,
+                    key = input.key,
                 ),
             )
             // A RUN THAT ENDED IS RE-READ: what it moved is the line's to say.
@@ -84,6 +88,12 @@ public object BackupScreenMachine {
                 ),
                 listOf(BackupEffect.Read),
             )
+            is BackupInput.KeyMoved -> step(
+                model.copy(
+                    notice = if (input.synced == input.on) "" else SharedCopy.BACKUP_KEY_SYNC_FAILED.replace("{place}", input.place),
+                ),
+                listOf(BackupEffect.Read),
+            )
         }
     }
 
@@ -108,6 +118,11 @@ public object BackupScreenMachine {
             val gatewayId = event.forget_destination.gateway_id
             step(model.copy(notice = ""), listOf(BackupEffect.Forget(gatewayId, labelOf(model, gatewayId))))
         }
+        // ONLY A MOVE THE SCREEN OFFERS: a key held, and a keychain to move it to.
+        event.set_key_sync != null && model.key?.held == true && model.key.place.isNotEmpty() &&
+            event.set_key_sync.on != model.key.synced ->
+            step(model.copy(notice = ""), listOf(BackupEffect.SetKeySync(event.set_key_sync.on, model.key.place)))
+        // `show_key` IS AN INTENT: the shell opens words.show.
         else -> BackupStep(model)
     }
 
@@ -143,7 +158,10 @@ public object BackupScreenMachine {
                 include_videos = model.includeVideos,
                 include_videos_label = SharedCopy.BACKUP_INCLUDE_VIDEOS,
                 backing_up_now = model.backingUpNow,
-                back_up_now_label = SharedCopy.BACKUP_NOW,
+                // NO "BACK UP NOW" WITH NOTHING TO BACK UP TO: a dead primary
+                // control above "Add a backup device" put the one useful act
+                // second. It appears once a backup device is paired.
+                back_up_now_label = if (model.destinations().isEmpty()) "" else SharedCopy.BACKUP_NOW,
                 back_up_now_enabled = canBackUpNow(model),
                 progress = if (model.backingUpNow) progress(reading) else "",
                 battery_sentence = if (stood) SharedCopy.BACKUP_BATTERY else "",
@@ -154,7 +172,34 @@ public object BackupScreenMachine {
                 notice = model.notice,
                 background_notice = model.backgroundNotice,
                 phase = model.phase,
-            ),
+            ).withKey(model.key),
+        )
+    }
+
+    /**
+     * THE RECOVERY KEY'S SECTION (R-ONBOARD-10). Synchronised: the platform's
+     * own sentence of where it is and how it comes back. On this phone alone:
+     * a plain sentence once the member said they saved a copy, a warning
+     * until then. Nothing at all on a phone holding no key.
+     */
+    internal fun BackupScreenState.withKey(key: KeyCustody?): BackupScreenState {
+        if (key == null || !key.held) return this
+        val warning = !key.synced && !key.saved
+        return copy(
+            key_heading = SharedCopy.BACKUP_KEY_HEADING,
+            key_line = when {
+                key.synced -> key.sentence
+                key.saved -> SharedCopy.BACKUP_KEY_PHONE_ONLY_SAVED
+                else -> SharedCopy.BACKUP_KEY_PHONE_ONLY
+            },
+            key_warning = warning,
+            key_show_label = if (key.wordsHere) SharedCopy.BACKUP_KEY_SHOW else "",
+            key_sync_label = when {
+                key.place.isEmpty() -> ""
+                key.synced -> SharedCopy.BACKUP_KEY_SYNC_OFF.replace("{place}", key.place)
+                else -> SharedCopy.BACKUP_KEY_SYNC_ON.replace("{place}", key.place)
+            },
+            key_synced = key.synced,
         )
     }
 
@@ -216,10 +261,31 @@ public data class BackupModel(
     public val backgroundNotice: String = "",
     /** This phone's clock when the reading arrived, for "reached 2 minutes ago". */
     public val nowMs: Long = 0,
+    /** Where the recovery key is, as last read; null before the first read. */
+    public val key: KeyCustody? = null,
     public val state: BackupScreenState = BackupScreenState(),
 ) {
     internal fun destinations(): List<DestinationReading> = reading?.destinations.orEmpty()
 }
+
+/**
+ * WHERE THE RECOVERY KEY IS (R-ONBOARD-10), read from the stores — never
+ * remembered by the screen, so a keychain turned off elsewhere is said as off.
+ */
+public data class KeyCustody(
+    /** This phone holds a key at all. */
+    public val held: Boolean,
+    /** The synchronised store holds this phone's key. */
+    public val synced: Boolean,
+    /** The member said they saved a copy ([dev.centraid.shared.custody.VaultSecrets.wordsSaved]). */
+    public val saved: Boolean,
+    /** This phone keeps the words, so it can show them. */
+    public val wordsHere: Boolean,
+    /** The platform's sentence for a synchronised key. */
+    public val sentence: String,
+    /** Where the platform synchronises to ("iCloud Keychain", "Google"); empty for nowhere. */
+    public val place: String,
+)
 
 public sealed interface BackupInput {
     public data class View(public val event: BackupScreenEvent) : BackupInput
@@ -232,7 +298,11 @@ public sealed interface BackupInput {
         public val includeVideos: Boolean,
         public val registration: BackgroundTasks.Registration?,
         public val nowMs: Long,
+        public val key: KeyCustody? = null,
     ) : BackupInput
+
+    /** The key was asked to move [on] or off the keychain; [synced] is where it ended up. */
+    public data class KeyMoved(public val on: Boolean, public val synced: Boolean, public val place: String) : BackupInput
 
     /** A "Back up now" run started or ended, wherever it was asked for. */
     public data class Running(public val backingUp: Boolean) : BackupInput
@@ -261,6 +331,9 @@ public sealed interface BackupEffect {
     public data class WriteIncludeVideos(public val include: Boolean) : BackupEffect
 
     public data class Forget(public val gatewayId: String, public val label: String) : BackupEffect
+
+    /** Move the recovery key into the keychain at [place], or out of it. */
+    public data class SetKeySync(public val on: Boolean, public val place: String) : BackupEffect
 }
 
 public data class BackupStep(public val model: BackupModel, public val effects: List<BackupEffect> = emptyList())
@@ -289,6 +362,12 @@ public interface BackupScreenDoors {
     public suspend fun forget(gatewayId: String): ForgetAnswer?
 
     public fun nowMs(): Long
+
+    /** Where the recovery key is; null when the stores would not say. */
+    public suspend fun key(): KeyCustody? = null
+
+    /** Move the key into the keychain or out of it; answers whether it is synchronised afterwards. */
+    public suspend fun setKeySync(on: Boolean): Boolean = false
 }
 
 /** THE MACHINE, RUNNING: effects become door calls, and their answers come back as inputs. */
@@ -356,6 +435,7 @@ public class BackupScreenFlow(
             includeVideos = doors.includeVideos(),
             registration = doors.registration(),
             nowMs = doors.nowMs(),
+            key = runCatching { doors.key() }.getOrNull(),
         )
         BackupEffect.BackUpNow -> {
             doors.backUpNow()
@@ -374,5 +454,10 @@ public class BackupScreenFlow(
                 revoked = answer?.revoked == true,
             )
         }
+        is BackupEffect.SetKeySync -> BackupInput.KeyMoved(
+            on = effect.on,
+            synced = runCatching { doors.setKeySync(effect.on) }.getOrDefault(false),
+            place = effect.place,
+        )
     }
 }

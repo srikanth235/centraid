@@ -26,13 +26,13 @@ struct Opened {
 unsafe impl Sync for Opened {}
 
 impl Opened {
-    /// A sample vault with a model slot of its own, for the tests that install
+    /// A vault holding the scenario, with a model slot of its own, for the tests that install
     /// fakes.
     fn sample() -> Self {
         Self::open(true)
     }
 
-    /// A sample vault exactly as `centraid_open` leaves it: the process-wide
+    /// A vault holding the scenario exactly as `centraid_open` leaves it: the process-wide
     /// model slot, with the real engine's loader in it under `llama` and with
     /// no loader at all without it.
     fn as_opened() -> Self {
@@ -59,12 +59,32 @@ impl Opened {
                 .assist()
                 .use_host(Arc::new(centraid_assist::ModelHost::new()));
         }
+        // A MEMBER'S VAULT WITH THE SCENARIO IN IT, founded through the ABI
+        // and seeded through the command plane, so it stays writable: these
+        // tests write through the chat.
         let found = opened.call(wire::request::Kind::Found(wire::FoundRequest {
             display_name: "Sample".to_owned(),
             owner_name: "Me".to_owned(),
-            content: wire::FoundContent::Sample as i32,
+            content: wire::FoundContent::Unspecified as i32,
+            tz: String::new(),
         }));
-        assert!(matches!(found.kind, Some(wire::response::Kind::Found(_))));
+        let Some(wire::response::Kind::Found(founded)) = found.kind else {
+            panic!("a found answered {:?}", found.kind);
+        };
+        let core = opened.core();
+        let report = core
+            .with_vault(|vault| {
+                centraid_core::example::seed(
+                    vault,
+                    core.registry(),
+                    &core.owner(),
+                    &founded.owner_party_id,
+                    &|_| true,
+                    centraid_core::example::now_ms(),
+                )
+            })
+            .expect("the scenario seeds");
+        assert!(report.is_whole(), "the scenario seeds whole: {report:?}");
         opened
     }
 
@@ -535,14 +555,14 @@ fn a_core_as_opened_without_the_engine_reads_a_model_file_as_no_engine_and_will_
 ///   cargo test --release -p centraid-core-ffi --test assist -- --ignored --nocapture
 /// ```
 ///
-/// It loads the file, asks the sample vault a few questions and prints what
+/// It loads the file, asks the scenario a few questions and prints what
 /// the model said. What it asserts is the plane's contract and not the model's
 /// accuracy: every turn ends in an answer or a typed refusal, and a cancel
 /// stops a turn.
 #[cfg(feature = "llama")]
 #[test]
 #[ignore = "needs a model file: set CENTRAID_ASSIST_MODEL"]
-fn the_real_model_answers_questions_over_the_sample_vault() {
+fn the_real_model_answers_questions_over_the_scenario() {
     let Some(model) = std::env::var_os("CENTRAID_ASSIST_MODEL") else {
         eprintln!("CENTRAID_ASSIST_MODEL is not set; nothing to run");
         return;
@@ -1142,7 +1162,7 @@ fn a_status_and_a_load_say_where_the_projector_stands() {
 }
 
 #[test]
-fn the_picker_lists_the_sample_vaults_text_documents_newest_edit_first() {
+fn the_picker_lists_the_scenarios_text_documents_newest_edit_first() {
     let opened = Opened::sample();
     let answer = assist(
         &opened,
@@ -1178,7 +1198,7 @@ fn the_picker_lists_the_sample_vaults_text_documents_newest_edit_first() {
 ///   cargo test --release -p centraid-core-ffi --test assist -- --ignored --nocapture attachments
 /// ```
 ///
-/// It describes sample-vault photographs and asks about a sample document, and
+/// It describes the scenario's photographs and asks about a sample document, and
 /// prints what the model said. Asserted: every turn answers, a photo turn
 /// streams, and nothing is refused.
 #[cfg(feature = "llama")]

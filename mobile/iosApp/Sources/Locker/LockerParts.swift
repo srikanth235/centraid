@@ -60,21 +60,21 @@ struct LockerWall: View {
                 }
                 // THE KEY IS NOT ON THIS PHONE: "Enter your 24 words", the
                 // intent the shell routes to words.enter (#1047 E2).
+                // ONE INK PER VIEW: Unlock is the thing to do; the words verb
+                // is the ink only when it stands alone.
                 if !lock.wordsLabel.isEmpty {
-                    KitInkButton(label: lock.wordsLabel) {
-                        sendLock(LockerLockSeam.event { $0.words = .init() })
-                    }
-                    .accessibilityIdentifier("locker-words")
-                    .padding(.top, 4)
-                }
-                if !lock.facts.isEmpty {
-                    VStack(spacing: 0) {
-                        ForEach(Array(lock.facts.enumerated()), id: \.offset) { _, fact in
-                            FieldRow(key: fact.label, value: fact.detail)
-                                .padding(.horizontal, -CentraidGeometry.pageMargin)
+                    if lock.unlockLabel.isEmpty {
+                        KitInkButton(label: lock.wordsLabel) {
+                            sendLock(LockerLockSeam.event { $0.words = .init() })
                         }
+                        .accessibilityIdentifier("locker-words")
+                        .padding(.top, 4)
+                    } else {
+                        KitOutlineButton(label: lock.wordsLabel, fullWidth: true) {
+                            sendLock(LockerLockSeam.event { $0.words = .init() })
+                        }
+                        .accessibilityIdentifier("locker-words")
                     }
-                    .padding(.top, 12)
                 }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -219,36 +219,21 @@ struct LockerChoicePills: View {
     var identifier: String = "locker-choice"
     let onPick: (String) -> Void
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(choices, id: \.key) { choice in
-                    Button { onPick(choice.key) } label: {
-                        HStack(spacing: 4) {
-                            Text(choice.label)
-                                .centraidType("smallStrong")
-                            if !choice.detail.isEmpty {
-                                Text(choice.detail)
-                                    .centraidType("annotLabel")
-                                    .monospacedDigit()
-                            }
-                        }
-                        .foregroundStyle(Theme.color(choice.selected ? "textInv" : "text", scheme))
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: CentraidGeometry.targetMinFine)
-                        .background(Capsule().fill(choice.selected ? Theme.color("text", scheme) : Color.clear))
-                        .overlay(Capsule().strokeBorder(Theme.color(choice.selected ? "text" : "lineStrong", scheme), lineWidth: CentraidGeometry.hairline))
-                        .contentShape(Capsule())
+                    KitChip(
+                        label: choice.label,
+                        count: choice.detail,
+                        selected: choice.selected,
+                        identifier: "\(identifier)-\(choice.key)"
+                    ) {
+                        onPick(choice.key)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(choice.selected ? .isSelected : [])
-                    .accessibilityIdentifier("\(identifier)-\(choice.key)")
                 }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 8)
         }
     }
 }

@@ -18,6 +18,7 @@ import centraid.core.v1.TasksTask
 import centraid.core.v1.TasksView
 import centraid.screen.v1.Denied
 import centraid.screen.v1.EmptyState
+import centraid.screen.v1.ImportSource
 import centraid.screen.v1.ListRow
 import centraid.screen.v1.Loading
 import centraid.screen.v1.ReadFailure
@@ -36,6 +37,7 @@ import dev.centraid.shared.kit.BandLaw
 import dev.centraid.shared.kit.BandLens
 import dev.centraid.shared.kit.ContentLens
 import dev.centraid.shared.kit.ReadContent
+import dev.centraid.shared.kit.SearchContainers
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.kit.WriteLaw
@@ -124,13 +126,15 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
     public const val BAND_PROJECTS: String = "projects"
     public const val BAND_MORE: String = "more"
 
-    /** More rows: all but `search` and `reads` are intents the shell routes. */
+    /**
+     * More rows: all but `reads` are intents the shell routes. Search is not
+     * one — the search bar under the title is its one way in (R-CHROME-2).
+     */
     public const val MORE_ANYTIME: String = "anytime"
     public const val MORE_ALL: String = "all"
     public const val MORE_LOGBOOK: String = "logbook"
     public const val MORE_REMINDERS: String = "reminders"
     public const val MORE_CATCH_UP: String = "catch_up"
-    public const val MORE_SEARCH: String = "search"
     public const val MORE_TRASH: String = "trash"
     public const val MORE_READS: String = "reads"
 
@@ -245,7 +249,6 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
                 Step(state.copy(screen = screen.copy(sheet = NONE, filing_task_id = "", new_project_name = "")))
 
             event.more_row != null -> when (event.more_row.key) {
-                MORE_SEARCH -> opened(state.copy(screen = screen.copy(sheet = NONE)))
                 MORE_READS -> Step(state.copy(screen = screen.copy(sheet = TasksHomeState.Sheet.SHEET_READS)))
                 // INTENTS: the sheet closes, and the shell routes the key.
                 else -> Step(state.copy(screen = screen.copy(sheet = NONE)))
@@ -454,7 +457,14 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
             // A SEARCH CLOSED WHILE ITS HITS WERE READING IS NOT REOPENED.
             search = if (term == null) null else answer.search ?: state.search,
             screen = if (term != null && answer.search != null) {
-                SearchLaw.answered(Search, state, state.screen.search?.term ?: "").screen
+                SearchLaw.answered(
+                    Search,
+                    state,
+                    state.screen.search?.term ?: "",
+                    answer.search?.corrected ?: "",
+                    SearchContainers.fold(answer.search?.containers ?: emptyList()),
+                    rows = answer.search.tasks.size,
+                ).screen
             } else {
                 state.screen
             },
@@ -543,7 +553,13 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
             return TasksHomeData(
                 today = hits.today,
                 groups = if (rows.isEmpty()) emptyList() else listOf(TasksRowGroup(key = "results", title = TasksCopy.GROUP_RESULTS, meta = rows.size.toString(), rows = rows)),
-                empty = if (rows.isEmpty()) EmptyState(headline = TasksCopy.SEARCH_EMPTY) else EmptyState(),
+                // A PROJECT THAT MATCHED THE NAME IS AN ANSWER: no "nothing found" over it.
+                empty = if (rows.isEmpty() && screen.search?.containers.isNullOrEmpty()) {
+                    // THE ONE ACTION is Ask, when the law offered it (#1097).
+                    SearchLaw.asking(EmptyState(headline = TasksCopy.SEARCH_EMPTY), screen.search ?: SearchField())
+                } else {
+                    EmptyState()
+                },
                 count_label = TasksRows.count(rows.size, TasksCopy.HIT_ONE, TasksCopy.HIT_MANY),
                 searching = true,
             )
@@ -572,13 +588,29 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
         val groups = withAdds(TasksRows.groups(source, ctx), ops, screen.destination, board.today)
         val dayOne = (board.counts?.let { it.open_ == 0 && it.closed == 0 } ?: false) &&
             board.projects.isEmpty() && ops.adds.isEmpty()
+        // NOTHING OPEN — day one, or the starters finished — is when the
+        // phone's reminders are offered: a first vault's starter tasks mean
+        // day one is never seen, and "all done" is the point of use.
+        val reminders = if ((board.counts?.open_ ?: -1) == 0 && ops.adds.isEmpty()) {
+            ImportSource.IMPORT_SOURCE_REMINDERS
+        } else {
+            ImportSource.IMPORT_SOURCE_UNSPECIFIED
+        }
         val empty = when {
             groups.isNotEmpty() -> EmptyState()
-            dayOne -> EmptyState(headline = TasksCopy.DAY_ONE)
+            // DAY ONE, and only day one, offers the phone's reminders, where
+            // the shell can read them.
+            dayOne -> EmptyState(
+                headline = TasksCopy.DAY_ONE,
+                import_source = ImportSource.IMPORT_SOURCE_REMINDERS,
+            )
             screen.destination == TODAY ->
-                EmptyState(headline = if (ops.completed > 0) TasksCopy.TODAY_DONE else TasksCopy.TODAY_EMPTY)
-            screen.destination == UPCOMING -> EmptyState(headline = TasksCopy.UPCOMING_EMPTY)
-            else -> EmptyState(headline = TasksCopy.INBOX_EMPTY)
+                EmptyState(
+                    headline = if (ops.completed > 0) TasksCopy.TODAY_DONE else TasksCopy.TODAY_EMPTY,
+                    import_source = reminders,
+                )
+            screen.destination == UPCOMING -> EmptyState(headline = TasksCopy.UPCOMING_EMPTY, import_source = reminders)
+            else -> EmptyState(headline = TasksCopy.INBOX_EMPTY, import_source = reminders)
         }
         val shown = TasksRows.rootCount(groups)
         val catchUp = state.catchUp
@@ -672,8 +704,11 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
                     title = title,
                     can_submit = title.isNotBlank(),
                     lands_label = "${TasksCopy.LANDS_IN} $lands",
-                    shown = !denied && screen.data_ != null && screen.destination != PROJECTS && activeTerm(screen) == null,
+                    // Hidden while search is open, term or not: the bar and its Plus
+                    // would be a second verb over a field that is looking.
+                    shown = !denied && screen.data_ != null && screen.destination != PROJECTS && screen.search?.open_ != true,
                     focused = screen.quick_add?.focused == true && title.isNotEmpty(),
+                    add_label = TasksCopy.ADD_TASK,
                 ),
                 file_choices = if (screen.sheet == TasksHomeState.Sheet.SHEET_FILE) fileChoices(state) else emptyList(),
                 more_rows = MORE_ROWS,
@@ -691,7 +726,7 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
             TasksRows.tab(BAND_UPCOMING, TasksCopy.BAND_UPCOMING, "Calendar", on(UPCOMING)),
             TasksRows.tab(BAND_INBOX, TasksCopy.BAND_INBOX, "Inbox", on(INBOX)),
             TasksRows.tab(BAND_PROJECTS, TasksCopy.BAND_PROJECTS, "Folder", on(PROJECTS)),
-            TasksRows.tab(BAND_MORE, TasksCopy.BAND_MORE, "more", sheetUp),
+            TasksRows.tab(BAND_MORE, TasksCopy.BAND_MORE, "MoreHoriz", sheetUp),
         )
     }
 
@@ -701,7 +736,6 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
         TasksChoice(key = MORE_LOGBOOK, label = TasksCopy.VIEW_LOGBOOK, meta = TasksCopy.MORE_LOGBOOK_META, enabled = true, icon_key = "Book"),
         TasksChoice(key = MORE_REMINDERS, label = TasksCopy.VIEW_REMINDERS, meta = TasksCopy.MORE_REMINDERS_META, enabled = true, icon_key = "Bell"),
         TasksChoice(key = MORE_CATCH_UP, label = TasksCopy.CATCH_UP, meta = TasksCopy.MORE_CATCH_UP_META, enabled = true, icon_key = "History"),
-        TasksChoice(key = MORE_SEARCH, label = TasksCopy.SEARCH, enabled = true, icon_key = "Search"),
         TasksChoice(key = MORE_TRASH, label = TasksCopy.TRASH, meta = TasksCopy.MORE_TRASH_META, enabled = true, icon_key = "Trash"),
         TasksChoice(key = MORE_READS, label = TasksCopy.READS_TITLE, enabled = true, icon_key = "Info"),
     )
@@ -778,6 +812,7 @@ public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
 
     private object Search : SearchLens<TasksHome> {
         override val screenId: String = SCREEN_ID
+        override val asks: Boolean = true
 
         override fun field(state: TasksHome): SearchField = state.screen.search ?: SearchField()
 

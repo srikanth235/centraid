@@ -5,9 +5,9 @@ import centraid.screen.v1.VaultLockup
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreConfiguration
 import dev.centraid.core.CoreOutcome
-import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.custody.DevSeed
 import dev.centraid.shared.custody.VaultSecrets
+import dev.centraid.shared.kit.PhoneImport
 import dev.centraid.shared.platform.PlatformServices
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -119,41 +119,6 @@ import okio.Path.Companion.toPath
  * through [openCore]. A vault with no seed on this phone, or no index
  * recorded for it, opens UNKEYED — reads and writes as before — and Locker
  * draws its no-words wall rather than a failure.
- *
- * ## THE SAMPLE VAULT
- *
- * A phone that makes its first vault also founds a SECOND, separate vault
- * named [SAMPLE_VAULT_NAME] and filled with the Tahoe scenario
- * ([foundSample]), so a new member has something to look around in while
- * their own vault stays clean. Removing it is [forget], which deletes its
- * directory whole; nothing of the member's goes with it.
- *
- * **Whether a vault is the sample is read out of the vault**, like its name:
- * `core_vault.settings_json`'s `sample` mark, through [VaultRoster.name]. There
- * is no list of sample vaults beside the directory, for the reason there is no
- * manifest. The mark is `seeding` from the found's own commit and `ready` only
- * once the scenario landed whole, so a process killed mid-seed leaves a vault
- * that says `seeding` — and [load] deletes it rather than holding half a
- * scenario ([adopt]), giving back the index it had spent.
- *
- * **It opens KEYED under the member's own seed, at an index of its own**
- * (the owner's ruling of 2026-10-02, amending R-SAMPLE-5). Its Locker holds a
- * few fake items, and an item is sealed under its vault's `K` — the seed's leaf
- * at the vault's index — so the sample is a vault like any other the phone
- * holds as far as keys go: [foundSample] reserves the next index BEFORE the
- * open, releases it on a refusal, records it against the vault's id on
- * success, and [forget] forgets it with the vault. The high-water mark never
- * lowers, so a removed sample's index is never given to a vault again. It never
- * touches the public demo words: the core seals under whatever seed the open
- * carries, which is the member's. A phone holding no seed — or a seed that
- * arrived by sync and has not been settled (R-1047-E2), whose next index would
- * be a guess — founds it UNKEYED, with no index spent and no Locker items, as
- * before. It still never drains or pairs (the core refuses both); the key buys
- * it Locker and nothing a laptop could see.
- *
- * **It never takes the front from the member's vault**: [foundSample] moves
- * the foreground only on a shelf that has none, and [load] and [forget] prefer
- * a member's vault to it whenever they choose one.
  */
 public class Shelf(
     /** Where every vault this device holds lives. */
@@ -218,19 +183,6 @@ public class Shelf(
          * open Locker or seal a drain. A fact about the open, never the key.
          */
         public val keyed: Boolean = false,
-        /**
-         * THIS IS THE SAMPLE VAULT, finished (see the class header). Read out
-         * of the vault's own mark, never kept beside it. A sample never pairs
-         * and never drains, so a shell hides pairing for it and offers
-         * "Remove sample" instead.
-         */
-        public val sample: Boolean = false,
-        /**
-         * WHEN THE VAULT WAS FOUNDED (`core_vault.created_at`, RFC 3339 UTC),
-         * read out of the vault with its name; empty when unknown. Home's
-         * notice slot asks whether it was today ([FoundingDay]).
-         */
-        public val foundedAt: String = "",
     ) {
         /** Closed to give the OS its memory back, and reopened on next touch. */
         public val resting: Boolean get() = core == null
@@ -309,8 +261,6 @@ public class Shelf(
             // state. It was a door on `HomeBridge` because there was no slot;
             // there is one, so there is one source.
             frozen_line = frozenLine.orEmpty(),
-            sample = sample,
-            founded_at = foundedAt,
             // `originals_withheld` IS LEFT AT ITS PROTO ZERO (#1029 §1). It
             // carried the last pass's `withheld` — originals a TRANSFER RULE
             // held back on a metered link — and a vault whose originals are on
@@ -408,21 +358,6 @@ public class Shelf(
      */
     public val holdsNoVault: StateFlow<Boolean?> get() = holdsNoVaultFlow.asStateFlow()
 
-    private val hasSampleFlow = MutableStateFlow(false)
-
-    /**
-     * WHETHER THIS DEVICE HOLDS THE SAMPLE VAULT, as it changes — what decides
-     * between "Remove sample" and "Add sample".
-     *
-     * A sample alone is not a vault of the member's own: [holdsNoVault] is
-     * true over a shelf that holds only the sample, so the first-launch gate
-     * still offers to make or restore one.
-     */
-    public val hasSample: StateFlow<Boolean> get() = hasSampleFlow.asStateFlow()
-
-    /** The sample vault's holding, when this device holds it. */
-    public fun sampleHolding(): Holding? = holdings.value.firstOrNull { it.sample }
-
     private var foregroundId: String? = null
 
     /**
@@ -453,7 +388,8 @@ public class Shelf(
     }
 
     /**
-     * The core the foreground holding is open on, or null.
+     * The core every screen reads through: the one the foreground holding is
+     * open on, or null.
      *
      * It does **not** wake a resting holding — waking is a suspending act and
      * this is read from a property on the session's hot path; [bringToFront] and
@@ -461,6 +397,14 @@ public class Shelf(
      * state of the device and shows the empty shelf rather than an error.
      */
     public fun core(): CentraidCore? = foregroundHolding()?.core
+
+    /**
+     * WHY A WRITE IS REFUSED ON WHAT [core] ANSWERS, or null: the moved
+     * sentence on a frozen vault. Read at the moment of each write, so a
+     * screen opened before the freeze still refuses the save pressed after.
+     */
+    public fun readOnlySentence(): String? =
+        if (foregroundHolding()?.readOnly == true) MOVED_SENTENCE else null
 
     // -----------------------------------------------------------------------
     // Launch
@@ -506,7 +450,7 @@ public class Shelf(
             // index nothing was sealed under, both given back.
             if (!fs.exists(pending.path.toPath())) {
                 deleteVault(pending.path)
-                secrets.releaseVaultIndex(pending.index)
+                release(pending)
             }
             secrets.clearPendingFound()
         }
@@ -555,12 +499,18 @@ public class Shelf(
         name: String = DEFAULT_VAULT_NAME,
         ownerName: String = DEFAULT_OWNER_NAME,
         /**
-         * Two STARTER rows — a note and a task — written by the core through
-         * the command plane after the found's own commit, so a member's first
-         * vault is not a blank wall. Best-effort: a refused starter leaves the
-         * vault founded and empty.
+         * The TEACHING STARTER ROWS — a few notes and tasks that each teach
+         * one real gesture — written by the core through the command plane
+         * after the found's own commit. Ordinary rows of the member's, with no
+         * mark. Best-effort: a refused starter leaves the vault founded.
          */
         starters: Boolean = false,
+        /**
+         * THE ENTRY A VAULT ON ITS OWN WORDS IS KEPT ON (R-1047-E18): its seed,
+         * at index 0, keys the vault instead of the member's at the next
+         * index, and the member's high-water mark is not touched.
+         */
+        own: String? = null,
     ): FoundOutcome = gate.withLock {
         val path = freshVaultFile()
         // THE INDEX IS SPENT BEFORE THE OPEN (#1047 E4, the crash window), and
@@ -572,19 +522,31 @@ public class Shelf(
         // by the next [load] rather than leaving a keyed vault nothing opens
         // keyed. No seed, no index: an index names a node under a seed, and
         // with no seed there is no node.
-        val index = if (secrets.seed() != null) secrets.reserveVaultIndex(path) else null
+        val key = when {
+            own != null -> VaultSecrets.VaultKey(0, own).also { secrets.reserveOwnFound(path, own) }
+            secrets.seed() != null -> VaultSecrets.VaultKey(secrets.reserveVaultIndex(path))
+            else -> null
+        }
         // A REFUSAL DELETES THE DIRECTORY AND GIVES THE INDEX BACK: nothing was
         // sealed under it and nothing left this phone.
         suspend fun refuse(core: CentraidCore?, because: FoundRefusal): FoundOutcome {
             core?.close()
             deleteVault(path)
-            if (index != null) secrets.releaseVaultIndex(index)
+            // A REFUSED FOUND ON ITS OWN WORDS KEEPS THE ENTRY: the member has
+            // just written those words down, and "Try again" founds with them.
+            // The flow that kept it forgets it if the member walks away.
+            when {
+                key == null -> Unit
+                key.own != null -> secrets.clearPendingFound()
+                else -> secrets.releaseVaultIndex(key.index)
+            }
             return FoundOutcome.Refused(because)
         }
-        val (core, keyed) = openCore(path, create = true, index = index)
+        val (core, keyed) = openCore(path, create = true, key = key)
             ?: return@withLock refuse(null, FoundRefusal.NO_CORE)
         val content = if (starters) FoundContent.FOUND_CONTENT_STARTERS else FoundContent.FOUND_CONTENT_UNSPECIFIED
-        if (!VaultRoster.found(core, displayName = name, ownerName = ownerName, content = content)) {
+        val tz = services.clock.read().zone
+        if (!VaultRoster.found(core, displayName = name, ownerName = ownerName, content = content, tz = tz)) {
             return@withLock refuse(core, FoundRefusal.NOT_FOUNDED)
         }
         val named = VaultRoster.identify(core)
@@ -594,7 +556,11 @@ public class Shelf(
         if (holdings.value.any { it.vaultId == named.vault_id }) {
             return@withLock refuse(core, FoundRefusal.ALREADY_HELD)
         }
-        if (keyed && index != null) secrets.rememberVaultIndex(named.vault_id, index)
+        when {
+            !keyed || key == null -> Unit
+            key.own != null -> secrets.bindOwnVault(named.vault_id, key.own, key.index)
+            else -> secrets.rememberVaultIndex(named.vault_id, key.index)
+        }
         secrets.clearPendingFound()
         val holding = Holding(
             vaultId = named.vault_id,
@@ -603,91 +569,10 @@ public class Shelf(
             color = named.color,
             core = core,
             keyed = keyed,
-            foundedAt = named.founded_at,
         )
         holdings.value = holdings.value + holding
         foregroundId = holding.vaultId
         services.secureStore.write(FOREGROUND_KEY, holding.vaultId)
-        publish()
-        FoundOutcome.Founded(holding)
-    }
-
-    /**
-     * FOUND THE SAMPLE VAULT ON THIS PHONE, AND SEED IT (see the class header).
-     *
-     * [found]'s shape with three differences, each deliberate:
-     *
-     * 1. **The core seeds it** — `FOUND_CONTENT_SAMPLE`: the mark at `seeding`
-     *    in the found's own commit, the Tahoe scenario across seven apps
-     *    through the command plane, Locker's fake items sealed under THIS
-     *    vault's keys when the open is keyed (item 2), the mark at `ready`
-     *    last.
-     *    Any refusal fails the found, and the directory is deleted here — a
-     *    half-seeded sample is never a holding. The identify afterwards must
-     *    read a FINISHED sample, or the directory goes too.
-     * 2. **Keyed, at an index of its own, when the phone can**: [found]'s
-     *    index lifecycle exactly — the next index is spent and recorded as
-     *    pending against THIS path before the open (so a process killed
-     *    mid-seed is finished or undone by [load]), given back when the found
-     *    is refused, and recorded against the vault's id once it is held. The
-     *    seed must be here AND settled ([VaultSecrets.seedSettled]): an
-     *    unsettled seed's next index would be one an existing vault already
-     *    holds, so that phone's sample is unkeyed, spends nothing and has no
-     *    Locker items.
-     * 3. **The foreground does not move** when the shelf already has one. The
-     *    member's own vault stays in front; the sample is a row in the
-     *    switcher until they go to it. On a shelf holding nothing it is the
-     *    only holding, and a shelf with holdings always has a foreground.
-     *
-     * One sample per device: a second is refused [FoundRefusal.ALREADY_HELD]
-     * before any file is made.
-     */
-    public suspend fun foundSample(): FoundOutcome = gate.withLock {
-        if (holdings.value.any { it.sample }) return@withLock FoundOutcome.Refused(FoundRefusal.ALREADY_HELD)
-        val path = freshVaultFile()
-        // ASKED BEFORE THE INDEX IS SPENT: reserving raises the high-water mark,
-        // which would itself make an unsettled seed look settled.
-        val keyable = secrets.seed() != null && secrets.seedSettled()
-        val index = if (keyable) secrets.reserveVaultIndex(path) else null
-        suspend fun refuse(core: CentraidCore?, because: FoundRefusal): FoundOutcome {
-            core?.close()
-            deleteVault(path)
-            if (index != null) secrets.releaseVaultIndex(index)
-            return FoundOutcome.Refused(because)
-        }
-        val (core, keyed) = openCore(path, create = true, index = index)
-            ?: return@withLock refuse(null, FoundRefusal.NO_CORE)
-        val seeded = VaultRoster.found(
-            core,
-            displayName = SAMPLE_VAULT_NAME,
-            ownerName = DEFAULT_OWNER_NAME,
-            content = FoundContent.FOUND_CONTENT_SAMPLE,
-        )
-        if (!seeded) return@withLock refuse(core, FoundRefusal.NOT_FOUNDED)
-        val named = VaultRoster.name(core)
-        if (named == null || named.lockup.vault_id.isEmpty() || !named.lockup.sample) {
-            return@withLock refuse(core, FoundRefusal.NOT_FOUNDED)
-        }
-        if (holdings.value.any { it.vaultId == named.lockup.vault_id }) {
-            return@withLock refuse(core, FoundRefusal.ALREADY_HELD)
-        }
-        if (keyed && index != null) secrets.rememberVaultIndex(named.lockup.vault_id, index)
-        if (index != null) secrets.clearPendingFound()
-        val holding = Holding(
-            vaultId = named.lockup.vault_id,
-            path = path,
-            name = named.lockup.vault_name,
-            color = named.lockup.color,
-            core = core,
-            keyed = keyed,
-            sample = true,
-            foundedAt = named.lockup.founded_at,
-        )
-        holdings.value = holdings.value + holding
-        if (foregroundId == null) {
-            foregroundId = holding.vaultId
-            services.secureStore.write(FOREGROUND_KEY, holding.vaultId)
-        }
         publish()
         FoundOutcome.Founded(holding)
     }
@@ -721,6 +606,9 @@ public class Shelf(
         // THE INDEX GOES WITH THE VAULT; the high-water mark does not, so a
         // later found never reuses it.
         secrets.forgetVaultIndex(vaultId)
+        // A VAULT ON ITS OWN WORDS takes its keychain entry with it, so a
+        // restore never lists a vault this member deleted.
+        secrets.forgetOwnVault(vaultId)
         if (foregroundId == vaultId) {
             foregroundId = firstChoice(holdings.value)
             services.secureStore.write(FOREGROUND_KEY, foregroundId.orEmpty())
@@ -796,13 +684,18 @@ public class Shelf(
         custody?.let { return@withLock it }
         val path = vaultDir.toPath().resolve(CUSTODY_FILE).toString()
         runCatching { fs.createDirectories(vaultDir.toPath()) }
-        val opened = openCore(path, create = false, index = null)?.first
+        val opened = openCore(path, create = false, key = null)?.first
         custody = opened
         opened
     }
 
     /** One vault a restore laid down: where, and the index it was found at. */
-    public data class Restored(public val path: String, public val index: Int)
+    public data class Restored(
+        public val path: String,
+        public val index: Int,
+        /** The entry this vault was restored from when it is on its own words (R-1047-E18). */
+        public val own: String? = null,
+    )
 
     /**
      * HOLD WHAT A RESTORE BROUGHT BACK, KEYED (#1047 E1, R-1047-E3).
@@ -817,14 +710,21 @@ public class Shelf(
     public suspend fun adoptRestored(restored: List<Restored>): Int = gate.withLock {
         var added = 0
         for (vault in restored) {
-            val (probe, _) = openCore(vault.path, create = false, index = null) ?: continue
+            val (probe, _) = openCore(vault.path, create = false, key = null) ?: continue
             val named = VaultRoster.identify(probe)
             probe.close()
             if (named == null || named.vault_id.isEmpty()) continue
             if (holdings.value.any { it.vaultId == named.vault_id }) continue
-            secrets.rememberVaultIndex(named.vault_id, vault.index)
-            val (core, keyed) = openCore(vault.path, create = false, index = vault.index)
-                ?: openCore(vault.path, create = false, index = null)
+            // A VAULT RESTORED FROM ITS OWN WORDS opens with them (R-1047-E18),
+            // and its entry takes the vault's name for a later restore's list.
+            if (vault.own != null) {
+                secrets.bindOwnVault(named.vault_id, vault.own, vault.index)
+                secrets.labelOwnSeed(vault.own, named.vault_name)
+            } else {
+                secrets.rememberVaultIndex(named.vault_id, vault.index)
+            }
+            val (core, keyed) = openCore(vault.path, create = false, key = VaultSecrets.VaultKey(vault.index, vault.own))
+                ?: openCore(vault.path, create = false, key = null)
                 ?: continue
             holdings.value = holdings.value + Holding(
                 vaultId = named.vault_id,
@@ -833,8 +733,6 @@ public class Shelf(
                 color = named.color,
                 core = core,
                 keyed = keyed,
-                sample = named.sample,
-                foundedAt = named.founded_at,
             )
             if (foregroundId == null) {
                 foregroundId = named.vault_id
@@ -857,11 +755,11 @@ public class Shelf(
     public suspend fun rekey(): Int = gate.withLock {
         var changed = false
         holdings.value = holdings.value.map { holding ->
-            val index = keyedIndex(holding.vaultId)
-            if (holding.keyed || index == null) return@map holding
+            val key = keyOf(holding.vaultId)
+            if (holding.keyed || key == null) return@map holding
             holding.core?.close()
-            val (core, keyed) = openCore(holding.path, create = false, index = index)
-                ?: openCore(holding.path, create = false, index = null)
+            val (core, keyed) = openCore(holding.path, create = false, key = key)
+                ?: openCore(holding.path, create = false, key = null)
                 ?: return@map holding.copy(core = null, keyed = false)
             changed = true
             holding.copy(core = core, keyed = keyed)
@@ -933,6 +831,25 @@ public class Shelf(
         update(vaultId) { it.copy(moved = Moved(atIso = atIso, unacked = unacked)) }
     }
 
+    /**
+     * RENAME A VAULT, IN ITS OWN FILE: `core.rename_vault` writes
+     * `core_vault.display_name`, the one place a vault's name lives
+     * ([VaultRoster]), and the holding takes the name the core answered. A
+     * resting holding is woken to be written; a vault that moved is read-only
+     * and is not renamed. False when the name is blank or the core refused it.
+     */
+    public suspend fun renameVault(vaultId: String, name: String): Boolean {
+        val wanted = name.trim()
+        if (wanted.isEmpty()) return false
+        val holding = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return false
+        if (holding.readOnly) return false
+        val core = awaken(vaultId) ?: return false
+        val input = "{\"display_name\":${PhoneImport.quote(wanted)}}"
+        if (!PhoneImport.write(core, "core.rename_vault", input)) return false
+        rename(vaultId, wanted, holding.color)
+        return true
+    }
+
     /** Re-read a holding's identity from its own file. */
     public fun rename(vaultId: String, name: String, color: String) {
         if (name.isEmpty()) return
@@ -965,23 +882,12 @@ public class Shelf(
         } else {
             listOf(front) + held.filter { it.vaultId != front.vaultId }
         }
-        // THE SAMPLE IS LISTED LAST, whichever vault is in front (R-SAMPLE-1):
-        // it is a place to look around, not a vault of the member's own, and a
-        // switcher that put it first the moment they stepped into it would
-        // move their own vault down. A stable partition, so the order within
-        // each half is the one above.
-        val listed = ordered.filter { !it.sample } + ordered.filter { it.sample }
-        rosterFlow.value = listed.map { it.lockup() }
-        holdsNoVaultFlow.value = held.none { !it.sample }
-        hasSampleFlow.value = held.any { it.sample }
+        rosterFlow.value = ordered.map { it.lockup() }
+        holdsNoVaultFlow.value = held.isEmpty()
     }
 
-    /**
-     * THE HOLDING TO PUT IN FRONT when nothing names one: the first of the
-     * member's own, and the sample only when it is all there is.
-     */
-    private fun firstChoice(held: List<Holding>): String? =
-        (held.firstOrNull { !it.sample } ?: held.firstOrNull())?.vaultId
+    /** THE HOLDING TO PUT IN FRONT when nothing names one: the first. */
+    private fun firstChoice(held: List<Holding>): String? = held.firstOrNull()?.vaultId
 
     /**
      * Reopen a RESTING holding, or answer the core it already has.
@@ -992,7 +898,7 @@ public class Shelf(
         val holding = holdings.value.firstOrNull { it.vaultId == vaultId } ?: return null
         holding.core?.let { return it }
         val (opened, keyed) =
-            openCore(holding.path, create = false, index = keyedIndex(holding.vaultId))
+            openCore(holding.path, create = false, key = keyOf(holding.vaultId))
                 ?: return null
         holdings.value = holdings.value.map {
             if (it.vaultId == holding.vaultId) it.copy(core = opened, keyed = keyed) else it
@@ -1016,55 +922,37 @@ public class Shelf(
         /** The found in flight at this path when the process died, if any. */
         pending: VaultSecrets.PendingFound? = null,
     ): Holding? {
-        val opened = openCore(path, create = false, index = null)
-        val identity = opened?.first?.let { VaultRoster.name(it) }
-        // A SAMPLE THE PROCESS DID NOT LIVE TO FINISH: its mark still says
-        // `seeding`, so its scenario is partial. Deleted whole rather than held
-        // as if it were a sample — the member can add a fresh one.
-        //
-        // ITS INDEX GOES BACK WITH IT: the sample was founded keyed, so a
-        // half-seeded one may have sealed Locker items under an index spent for
-        // it. The directory — and every sealed item — is deleted here and
-        // nothing was ever copied off the phone, so the index named by a
-        // pending found is released (only while it is still the highest; the
-        // mark never lowers past a vault that is held) and any record against
-        // the file's own id is forgotten.
-        if (opened != null && identity?.unfinishedSample == true) {
-            opened.first.close()
-            deleteVault(path)
-            if (pending != null) secrets.releaseVaultIndex(pending.index)
-            identity.lockup.vault_id.takeIf { it.isNotEmpty() }?.let { secrets.forgetVaultIndex(it) }
-            return null
-        }
-        val named = identity?.lockup
+        val opened = openCore(path, create = false, key = null)
+        val named = opened?.first?.let { VaultRoster.identify(it) }
         if (opened == null || named == null || named.vault_id.isEmpty()) {
             opened?.first?.close()
             // A FOUND THAT NEVER FINISHED — the file is there and names no
             // vault — is the refusal the process did not live to clean up.
             if (pending != null) {
                 deleteVault(path)
-                secrets.releaseVaultIndex(pending.index)
+                release(pending)
             }
             return null
         }
         val probe = opened.first
         if (pending != null && secrets.vaultIndex(named.vault_id) == null) {
-            secrets.rememberVaultIndex(named.vault_id, pending.index)
+            // A VAULT ON ITS OWN WORDS is bound to its entry, not the mark.
+            if (pending.own != null) {
+                secrets.bindOwnVault(named.vault_id, pending.own, pending.index)
+            } else {
+                secrets.rememberVaultIndex(named.vault_id, pending.index)
+            }
         }
-        // NEVER A DEV SEED'S INDEX FOR THE SAMPLE: the sample has an index of
-        // its own, spent at its found (the class header), and the dev seed's
-        // index 0 is the demo vault's — recorded against the sample it would
-        // put two vaults on one identity and one Locker `K`.
-        if (dev != null && !named.sample && secrets.vaultIndex(named.vault_id) == null) {
+        if (dev != null && secrets.vaultIndex(named.vault_id) == null) {
             secrets.rememberVaultIndex(named.vault_id, dev.index)
         }
-        val index = keyedIndex(named.vault_id)
-        val (core, keyed) = if (index == null) {
+        val key = keyOf(named.vault_id)
+        val (core, keyed) = if (key == null) {
             probe to false
         } else {
             probe.close()
-            openCore(path, create = false, index = index)
-                ?: openCore(path, create = false, index = null)
+            openCore(path, create = false, key = key)
+                ?: openCore(path, create = false, key = null)
                 ?: return null
         }
         return Holding(
@@ -1074,16 +962,24 @@ public class Shelf(
             color = named.color,
             core = core,
             keyed = keyed,
-            sample = named.sample,
-            foundedAt = named.founded_at,
         )
     }
 
-    /** [vaultId]'s index when this phone also holds the seed, else null. */
-    private suspend fun keyedIndex(vaultId: String): Int? {
-        val index = secrets.vaultIndex(vaultId) ?: return null
-        return if (secrets.seed() != null) index else null
+    /**
+     * GIVE BACK WHAT A FOUND THAT NEVER FINISHED SPENT: the member's index, or —
+     * for a vault on its own words — its entry, whose seed keys nothing now.
+     */
+    private suspend fun release(pending: VaultSecrets.PendingFound) {
+        if (pending.own != null) {
+            secrets.clearPendingFound()
+            secrets.forgetOwnSeed(pending.own)
+        } else {
+            secrets.releaseVaultIndex(pending.index)
+        }
     }
+
+    /** What opens [vaultId] keyed — its index and its seed's entry — when this phone holds that seed, else null. */
+    private suspend fun keyOf(vaultId: String): VaultSecrets.VaultKey? = secrets.vaultKey(vaultId)
 
     /**
      * THE ONE OPEN (#1029 §1).
@@ -1107,19 +1003,21 @@ public class Shelf(
     private suspend fun openCore(
         path: String,
         create: Boolean,
-        index: Int?,
+        key: VaultSecrets.VaultKey?,
     ): Pair<CentraidCore, Boolean>? {
         // THE SEED LIVES FOR THIS CALL AND NO LONGER (#1047 W2, `CONTRACT.md`
         // §4b). Read out of the store here, carried by one configuration into
         // `centraid_open`, and dropped with it; nothing on this class keeps it.
         // A `String` cannot be zeroed, so the defence is scope, not scrubbing.
-        val seed = index?.let { secrets.seed() }
+        // WHICH SEED is the key's (R-1047-E18): the member's, or the entry a
+        // vault on its own words is kept on.
+        val seed = key?.let { secrets.seedFor(it) }
         val core = opener(
             CoreConfiguration(
                 databasePath = path,
                 create = create,
                 vaultSeedHex = seed,
-                vaultIndex = if (seed == null) 0 else index,
+                vaultIndex = if (seed == null || key == null) 0 else key.index,
             ),
         ) ?: return null
         return core to (seed != null)
@@ -1238,7 +1136,7 @@ public class Shelf(
          * describing one that is not there.
          */
         public const val MOVED_SENTENCE: String =
-            "This vault moved to your other phone. Everything here is still readable."
+            "Moved to your other phone. Still readable here."
 
         /**
          * WHAT A VAULT IS CALLED WHEN NOBODY NAMED IT (#1029 W5).
@@ -1264,14 +1162,5 @@ public class Shelf(
          * vault by its id and a phone by a token (`docs/gateway.md`).
          */
         public const val DEFAULT_OWNER_NAME: String = "Me"
-
-        /**
-         * WHAT THE SAMPLE VAULT IS CALLED. Written to its
-         * `core_vault.display_name` like any vault's name — so it is read back
-         * off the file — and app copy, because a member reads it on the header
-         * and the switcher.
-         */
-        public const val SAMPLE_VAULT_NAME: String = SharedCopy.SAMPLE_VAULT_NAME
-
     }
 }

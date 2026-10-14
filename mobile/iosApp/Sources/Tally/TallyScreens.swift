@@ -169,7 +169,7 @@ enum TallyScreens: AppScreens {
             (expense, { (shell: ShellModel) in AnyView(TallyExpenseView(data: shell.state(expense), send: sender(shell, expense), push: push(shell), onBack: pop(shell))) }),
             (recurring, { (shell: ShellModel) in AnyView(TallyRecurringView(data: shell.state(recurring), send: sender(shell, recurring), onBack: pop(shell))) }),
             (spending, { (shell: ShellModel) in AnyView(TallySpendingView(data: shell.state(spending), send: sender(shell, spending), onBack: pop(shell))) }),
-            (search, { (shell: ShellModel) in AnyView(TallySearchView(data: shell.state(search), send: sender(shell, search), push: push(shell), onBack: pop(shell))) }),
+            (search, { (shell: ShellModel) in AnyView(TallySearchView(data: shell.state(search), send: sender(shell, search), push: push(shell), onBack: pop(shell), openContainer: { [weak shell] in shell?.openRow($0, parent: $1) })) }),
         ]
         for (id, view) in pages {
             shell.route(

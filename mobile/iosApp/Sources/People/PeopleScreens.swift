@@ -13,7 +13,7 @@ import CentraidShared
 /// open.
 ///
 /// **THE INTENTS ARE THE SHELL'S.** `PersonPicked`, `AddPersonRequested`,
-/// `TrashRequested`, `LogTouchRequested`, `EditRequested` and `ChannelTapped`
+/// `MoreRowPicked`, `LogTouchRequested`, `EditRequested` and `ChannelTapped`
 /// change nothing in the machines; each is forwarded (so a spec that watches
 /// the event log still sees it) and then routed here — a push, or the OS for a
 /// channel (tel:, mailto:, Maps, the pasteboard).
@@ -139,7 +139,7 @@ enum PeopleScreens: AppScreens {
             shell.path.append(personRoute(picked.partyID, name: picked.name, logTouch: true))
         case .addPerson:
             shell.path.append(newPersonRoute)
-        case .trash:
+        case let .moreRow(row) where row.key == "trash":
             shell.path.append(.screen(trash, Data()))
         default:
             break

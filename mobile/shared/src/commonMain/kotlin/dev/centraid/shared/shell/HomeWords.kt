@@ -10,49 +10,28 @@ import dev.centraid.design.copy.SharedCopy
  * that fill a slot are composed here, once for both shells.
  */
 public object HomeWords {
-    public const val ALL_APPS: String = SharedCopy.HOME_ALL_APPS
     public const val LOADING: String = SharedCopy.HOME_LOADING
     public const val PHOTOS_ABSENT: String = SharedCopy.HOME_PHOTOS_ABSENT
     public const val DAY_ONE_TITLE: String = SharedCopy.HOME_DAY_ONE_TITLE
     public const val DAY_ONE_BODY: String = SharedCopy.HOME_DAY_ONE_BODY
-    public const val FIRST_MOVES: String = SharedCopy.HOME_FIRST_MOVES
 
     /** THE FIRST-LAUNCH GATE (a device that holds no vault): one sentence, two actions. */
     public const val FIRST_LAUNCH_BODY: String = SharedCopy.FIRST_LAUNCH_BODY
     public const val FIRST_LAUNCH_HOUSE_TITLE: String = SharedCopy.FIRST_LAUNCH_HOUSE_TITLE
     public const val FIRST_LAUNCH_HOUSE_BODY: String = SharedCopy.FIRST_LAUNCH_HOUSE_BODY
-    public const val FIRST_LAUNCH_KEY_TITLE: String = SharedCopy.FIRST_LAUNCH_KEY_TITLE
-    public const val FIRST_LAUNCH_KEY_BODY: String = SharedCopy.FIRST_LAUNCH_KEY_BODY
-    public const val FIRST_LAUNCH_COPY_TITLE: String = SharedCopy.FIRST_LAUNCH_COPY_TITLE
-    public const val FIRST_LAUNCH_COPY_BODY: String = SharedCopy.FIRST_LAUNCH_COPY_BODY
+    public const val FIRST_LAUNCH_ASSISTANT_TITLE: String = SharedCopy.FIRST_LAUNCH_ASSISTANT_TITLE
+    public const val FIRST_LAUNCH_ASSISTANT_BODY: String = SharedCopy.FIRST_LAUNCH_ASSISTANT_BODY
+    public const val FIRST_LAUNCH_BACKUP_TITLE: String = SharedCopy.FIRST_LAUNCH_BACKUP_TITLE
+    public const val FIRST_LAUNCH_BACKUP_BODY: String = SharedCopy.FIRST_LAUNCH_BACKUP_BODY
     public const val FIRST_LAUNCH_NEXT: String = SharedCopy.FIRST_LAUNCH_NEXT
     public const val FIRST_LAUNCH_SKIP: String = SharedCopy.FIRST_LAUNCH_SKIP
     public const val FIRST_LAUNCH_MAKE: String = SharedCopy.FIRST_LAUNCH_MAKE
     public const val FIRST_LAUNCH_RESTORE: String = SharedCopy.FIRST_LAUNCH_RESTORE
 
-    /**
-     * THE SAMPLE VAULT'S WORDS: the one sentence Day One and the deck say about
-     * it, and its two verbs. The vault's own name is `Shelf.SAMPLE_VAULT_NAME`,
-     * because it is written into the vault rather than drawn beside it.
-     */
-    public const val SAMPLE_LINE: String = SharedCopy.SAMPLE_LINE
-    public const val SAMPLE_REMOVE: String = SharedCopy.SAMPLE_REMOVE
-    public const val SAMPLE_ADD: String = SharedCopy.SAMPLE_ADD
-
-    /** "Add sample" while the scenario is still being seeded: the row's quiet, disabled label. */
-    public const val SAMPLE_ADDING: String = SharedCopy.SAMPLE_ADDING
-
-    /**
-     * "Remove sample"'s confirmation: the destructive verb and the one
-     * sentence under it. Removal deletes a vault, so it is confirmed even
-     * though nothing of the member's goes with it.
-     */
-    public const val SAMPLE_REMOVE_CONFIRM: String = SharedCopy.SAMPLE_REMOVE_CONFIRM
-    public const val SAMPLE_REMOVE_BODY: String = SharedCopy.SAMPLE_REMOVE_BODY
-
     public const val BAND_HOME: String = SharedCopy.BAND_HOME
     public const val BAND_MORE: String = SharedCopy.BAND_MORE
-    public const val BAND_MORE_SPOKEN: String = SharedCopy.BAND_MORE_SPOKEN
+    public const val BAND_BACKUP: String = SharedCopy.BAND_BACKUP
+    public const val BAND_BACKUP_SPOKEN: String = SharedCopy.BAND_BACKUP_SPOKEN
 
     public const val VAULTS_TITLE: String = SharedCopy.VAULTS_TITLE
     public const val VAULTS_ONE: String = SharedCopy.VAULTS_ONE
@@ -62,6 +41,11 @@ public object HomeWords {
     public const val VAULTS_CURRENT: String = SharedCopy.VAULTS_CURRENT
     public const val VAULTS_FORGET: String = SharedCopy.VAULTS_FORGET
     public const val VAULTS_FORGET_BODY: String = SharedCopy.VAULTS_FORGET_BODY
+    public const val VAULTS_RENAME: String = SharedCopy.VAULTS_RENAME
+    public const val VAULTS_RENAME_FAILED: String = SharedCopy.VAULTS_RENAME_FAILED
+    public const val VAULTS_RENAME_FIELD: String = SharedCopy.VAULTS_RENAME_FIELD
+    public const val VAULTS_RENAME_SAVE: String = SharedCopy.VAULTS_RENAME_SAVE
+    public const val VAULTS_RENAME_TITLE: String = SharedCopy.VAULTS_RENAME_TITLE
 
     /** A switcher row's name: the vault's own, or "Unnamed vault". */
     public fun vaultName(name: String): String = name.ifBlank { SharedCopy.VAULTS_UNNAMED }

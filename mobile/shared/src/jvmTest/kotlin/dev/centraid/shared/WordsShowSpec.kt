@@ -40,22 +40,46 @@ class WordsShowSpec : StringSpec({
 
     fun asking(): Shown = reduce(WordsShowMachine.initial(), opened).model
 
-    "opening asks first, reads nothing, and shows nothing secret" {
+    "opening runs the owner check at once: nothing is drawn, nothing is read, nothing is secret" {
+        // NO SCREEN BEFORE THE CHECK: the Backup tab's "Show recovery key" is
+        // already the ask, so the shell runs Face ID or the passcode the
+        // moment it sees `check_now`, and presents the sheet only after.
         val step = reduce(WordsShowMachine.initial(), opened)
         step.effects.shouldBeEmpty()
-        step.model.state.phase shouldBe WordsShowState.Phase.PHASE_ASK
-        step.model.state.secure shouldBe false
-        step.model.state.verify_reason shouldBe WordsCopy.SHOW_AGAIN_REASON
+        val state = step.model.state
+        state.phase shouldBe WordsShowState.Phase.PHASE_ASK
+        state.check_now shouldBe true
+        state.secure shouldBe false
+        state.verify_reason shouldBe WordsCopy.SHOW_AGAIN_REASON
+        state.title shouldBe ""
+        state.body shouldBe ""
+        state.primary_label shouldBe ""
+        state.secondary_label shouldBe ""
         // ASK's primary is the view's owner check, never a read.
         reduce(step.model, primary).effects.shouldBeEmpty()
         reduce(step.model, primary).model.state.phase shouldBe WordsShowState.Phase.PHASE_ASK
     }
 
-    "a failed owner check keeps the words hidden and says so" {
+    "a cancelled owner check closes: the member said no, and there is no screen to stay on" {
+        val cancelled = WordsShowEvent.VerifyFailed(cancelled = true)
+        val step = reduce(asking(), event(WordsShowEvent(verify_failed = cancelled)))
+        step.model.state.phase shouldBe WordsShowState.Phase.PHASE_CLOSED
+        step.model.holdsWords shouldBe false
+        step.effects.shouldBeEmpty()
+    }
+
+    "a failed owner check keeps the words hidden and says so, with a way to try again" {
         val failed = reduce(asking(), event(WordsShowEvent(verify_failed = WordsShowEvent.VerifyFailed()))).model
         failed.state.phase shouldBe WordsShowState.Phase.PHASE_ASK
+        failed.state.check_now shouldBe false
+        failed.state.title shouldBe WordsCopy.SHOW_AGAIN_TITLE
         failed.state.notice shouldBe WordsCopy.SHOW_AGAIN_VERIFY_FAILED
+        failed.state.primary_label shouldBe WordsCopy.SHOW_AGAIN_PRIMARY
+        failed.state.secondary_label shouldBe WordsCopy.CANCEL
+        failed.state.verify_reason shouldBe WordsCopy.SHOW_AGAIN_REASON
         failed.holdsWords shouldBe false
+        // Trying again from the drawn screen and passing reads the store.
+        reduce(failed, verified).effects shouldBe listOf(ShowEffect.Load)
     }
 
     "verified reads the store; the words are shown on a secure screen, and Done drops them" {
@@ -68,7 +92,15 @@ class WordsShowSpec : StringSpec({
         shown.state.words.last().word shouldBe "art"
         shown.toString() shouldNotContain "abandon"
 
-        val done = reduce(shown, primary).model
+        // "I'VE SAVED IT": the words are dropped at once, the claim is
+        // recorded (R-ONBOARD-10), and only then does the screen close.
+        shown.state.primary_label shouldBe WordsCopy.SHOW_AGAIN_SAVED
+        shown.state.save_label shouldBe WordsCopy.SAVE_LABEL
+        val saving = reduce(shown, primary)
+        saving.effects shouldBe listOf(ShowEffect.Saved)
+        saving.model.holdsWords shouldBe false
+        saving.model.state.words.shouldBeEmpty()
+        val done = reduce(saving.model, ShowInput.Recorded).model
         done.state.phase shouldBe WordsShowState.Phase.PHASE_CLOSED
         done.holdsWords shouldBe false
         reduce(shown, event(WordsShowEvent(dismissed = WordsShowEvent.Dismissed()))).model.holdsWords shouldBe false
@@ -93,6 +125,37 @@ class WordsShowSpec : StringSpec({
             flow.reduce(verified)
             flow.state.value.phase shouldBe WordsShowState.Phase.PHASE_SHOW
             flow.state.value.words.map { it.word } shouldBe words
+            secrets.wordsSaved() shouldBe false
+            flow.reduce(primary)
+            flow.state.value.phase shouldBe WordsShowState.Phase.PHASE_CLOSED
+            secrets.wordsSaved() shouldBe true
+        }
+    }
+
+    "the vault in front on its own words shows ITS words, by its name (R-1047-E18)" {
+        runTest {
+            val services = FakePlatformServices()
+            val secrets = VaultSecrets(services.secureStore, services.syncedSecrets)
+            secrets.rememberWords(words)
+            val own = secrets.keepOwnSeed("cd".repeat(64), "Family")
+            val ownWords = words.reversed()
+            secrets.rememberOwnWords(own, ownWords)
+            secrets.bindOwnVault("v-family", own)
+            val flow = WordsShowFlow({ secrets }, CoroutineScope(Dispatchers.Unconfined)) { "v-family" to "Family" }
+            flow.reduce(opened)
+            flow.reduce(verified)
+            flow.state.value.title shouldBe WordsCopy.SHOW_OWN_TITLE.replace("{name}", "Family")
+            flow.state.value.words.map { it.word } shouldBe ownWords
+            // A VAULT'S OWN KEY claims nothing about the member's.
+            flow.state.value.primary_label shouldBe WordsCopy.DONE
+            flow.reduce(primary)
+            secrets.wordsSaved() shouldBe false
+
+            // A VAULT ON THE MEMBER'S WORDS in front shows the member's.
+            val member = WordsShowFlow({ secrets }, CoroutineScope(Dispatchers.Unconfined)) { "v-main" to "My vault" }
+            member.reduce(opened)
+            member.reduce(verified)
+            member.state.value.words.map { it.word } shouldBe words
         }
     }
 })

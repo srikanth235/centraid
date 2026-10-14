@@ -7,6 +7,10 @@ import SwiftUI
 import UIKit
 #endif
 
+#if canImport(CentraidShared)
+import CentraidShared
+#endif
+
 /// THE PHOTO EDITOR — crop, rotate, straighten, flip (#1029, photos port).
 ///
 /// The Compose twin is `screens/PhotoEditorScreen.kt`; the two are kept in step
@@ -25,7 +29,7 @@ import UIKit
 ///
 /// ## The one promise
 ///
-/// **Nothing is written until "Save as a new photograph".** Every control here
+/// **Nothing is written until "Save new photo".** Every control here
 /// sends a plan change; only the commit sends `save`, and only the machine
 /// turns that into a render.
 struct PhotoEditorView: View {
@@ -60,15 +64,26 @@ struct PhotoEditorView: View {
             Theme.color("stage", scheme).ignoresSafeArea()
             switch state.content {
             case .loading:
-                ProgressView()
+                // A STAGE'S OWN WORD, not a spinner: the kit's skeleton is rows
+                // on a page ground, and this ground is the stage.
+                Text(KitWords.shared.OPENING)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("onStageSoft", scheme))
             case let .denied(denied):
                 DeniedGate(denied)
             case let .failure(sentence, remedy):
                 VStack(spacing: 12) {
                     ScreenFailureView(sentence: sentence, remedy: remedy)
-                    Button(PhotoEditorStateView.cancelWord) { send(state.cancelEvent) }
-                        .centraidType("control")
-                        .foregroundStyle(Theme.color("onStage", scheme))
+                    Button {
+                        send(state.cancelEvent)
+                    } label: {
+                        Text(PhotoEditorStateView.cancelWord)
+                            .centraidType("control")
+                            .foregroundStyle(Theme.color("onStage", scheme))
+                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(CentraidGeometry.pageMargin)
             case let .data(source):
@@ -80,20 +95,22 @@ struct PhotoEditorView: View {
         // to lose. Hiding the bar takes the swipe-back with it.
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
-        .confirmationDialog(
-            PhotoEditorStateView.discardQuestion,
+        .sheet(
             isPresented: Binding(
                 get: { state.discardOpen },
                 set: { open in if !open, state.discardOpen { send(state.discardEvent(false)) } }
-            ),
-            titleVisibility: .visible
+            )
         ) {
-            Button(PhotoEditorStateView.discardWord, role: .destructive) {
-                send(state.discardEvent(true))
-            }
-            Button(PhotoEditorStateView.keepEditingWord, role: .cancel) {
-                send(state.discardEvent(false))
-            }
+            ConfirmSheet(
+                Centraid_Screen_V1_Confirm.with {
+                    $0.title = PhotoEditorStateView.discardQuestion
+                    $0.confirmLabel = PhotoEditorStateView.discardWord
+                    $0.destructive = true
+                },
+                cancelLabel: PhotoEditorStateView.keepEditingWord,
+                onConfirm: { send(state.discardEvent(true)) },
+                onDismiss: { send(state.discardEvent(false)) }
+            )
         }
         // THE MACHINE SAYS WHEN TO LEAVE; the shell does the leaving.
         .onChange(of: state.phase) { _, phase in
@@ -160,21 +177,21 @@ struct PhotoEditorView: View {
                 .contentShape(Rectangle())
                 .gesture(cropGesture(frame: geometry.frame), including: state.isEditing ? .all : .none)
                 .accessibilityElement()
-                .accessibilityLabel("Crop area")
-                .accessibilityHint("Drag to move the crop, pinch to resize it")
+                .accessibilityLabel(PhotosWords.photosCropArea)
+                .accessibilityHint(PhotosWords.photosCropHint)
                 // NOTHING IS REACHABLE BY GESTURE ALONE (§15). The drag and the
                 // pinch have spoken equivalents, one step at a time.
-                .accessibilityAction(named: "Move crop left") { send(state.movedEvent(-step, 0)) }
-                .accessibilityAction(named: "Move crop right") { send(state.movedEvent(step, 0)) }
-                .accessibilityAction(named: "Move crop up") { send(state.movedEvent(0, -step)) }
-                .accessibilityAction(named: "Move crop down") { send(state.movedEvent(0, step)) }
-                .accessibilityAction(named: "Make crop larger") { send(state.scaledEvent(grow)) }
-                .accessibilityAction(named: "Make crop smaller") { send(state.scaledEvent(1 / grow)) }
+                .accessibilityAction(named: PhotosWords.photosCropLeft) { send(state.movedEvent(-step, 0)) }
+                .accessibilityAction(named: PhotosWords.photosCropRight) { send(state.movedEvent(step, 0)) }
+                .accessibilityAction(named: PhotosWords.photosCropUp) { send(state.movedEvent(0, -step)) }
+                .accessibilityAction(named: PhotosWords.photosCropDown) { send(state.movedEvent(0, step)) }
+                .accessibilityAction(named: PhotosWords.photosCropLarger) { send(state.scaledEvent(grow)) }
+                .accessibilityAction(named: PhotosWords.photosCropSmaller) { send(state.scaledEvent(1 / grow)) }
                 .accessibilityIdentifier("photos.editor.stage")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             Text(state.stagePath == nil
-                ? "This photograph is not on this device yet."
+                ? PhotosWords.photosNotOnPhone
                 : PhotoEditorStateView.title)
                 .centraidType("small")
                 .multilineTextAlignment(.center)
@@ -548,14 +565,14 @@ struct PhotoEditorStateView {
     // and not the shared module's, so the constants are restated rather than
     // called — the lightbox's share rows are the same arrangement.
 
-    static let title = "Crop and rotate"
+    static let title = PhotosWords.photosEditorTitle
     static let cancelWord = "Cancel"
-    static let saveWord = "Save as a new photograph"
+    static let saveWord = PhotosWords.photosSaveAsNew
     static let explanation =
-        "Saving writes a new photograph with the original's date and place; the original is not touched."
-    static let discardQuestion = "Discard this edit?"
+        PhotosWords.photosSaveAsNewExplanation
+    static let discardQuestion = PhotosWords.photosEditDiscardQuestion
     static let discardWord = "Discard"
-    static let keepEditingWord = "Keep editing"
+    static let keepEditingWord = PhotosWords.photosEditKeepEditing
     static let ratios: [Centraid_Screen_V1_PhotoEditPlan.Ratio] = [.original, .square, .threeTwo]
 
     /// SPACING IS LOAD-BEARING: `3 : 2` renders in the numeric register.
@@ -572,10 +589,10 @@ struct PhotoEditorStateView {
     /// fired on, in the capture's own zone, so it names the day the Library and
     /// the viewer file the photograph under; no offset is UTC, as there.
     static func meta(_ capturedAt: String, offsetMinutes: Int) -> String {
-        guard let when = instant(capturedAt) else { return "from a photograph" }
+        guard let when = instant(capturedAt) else { return PhotosWords.photosEditFromUndated }
         var style = Date.FormatStyle.dateTime.day().month(.wide).year()
         style.timeZone = TimeZone(secondsFromGMT: offsetMinutes * 60) ?? .gmt
-        return "from a photograph taken \(when.formatted(style))"
+        return "from a photo taken \(when.formatted(style))"
     }
 
     /// The vault writes `%Y-%m-%dT%H:%M:%fZ`; fractional seconds first, for the
@@ -634,7 +651,10 @@ struct PhotoEditButton: View {
                 tint: Theme.color(enabled ? "onStage" : "onStageSoft", scheme),
                 size: 24
             )
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .disabled(!enabled)
         .accessibilityLabel("Edit")
         .accessibilityHint(refusal ?? "")
@@ -643,9 +663,9 @@ struct PhotoEditButton: View {
 
     /// `PhotoEditorMachine.editRefusal`, mirrored.
     static func refusal(_ detail: Centraid_Screen_V1_PhotoDetail) -> String? {
-        if detail.assetID.isEmpty { return "This photograph is not in a vault yet." }
+        if detail.assetID.isEmpty { return PhotosWords.photosNotInVault }
         guard detail.kind == .photo || detail.kind == .scan else {
-            return "Crop and rotate work on photographs, not on this kind of media"
+            return PhotosWords.photosEditNotAPhoto
         }
         switch detail.held {
         case .original: return nil

@@ -29,6 +29,7 @@ import centraid.screen.v1.TallyTemplateRow
 import dev.centraid.design.copy.TallyCopy
 import dev.centraid.shared.kit.ContentLens
 import dev.centraid.shared.kit.ReadContent
+import dev.centraid.shared.kit.SearchContainers
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.kit.time.CivilWords
@@ -346,7 +347,17 @@ public object TallySearchMachine :
         }
 
     override fun absorb(held: TallyHeld<TallySearchState>): TallyHeld<TallySearchState> =
-        SearchLaw.answered(Field, held, held.screen.field_?.term ?: "")
+        SearchLaw.answered(
+            Field,
+            held,
+            held.screen.field_?.term ?: "",
+            held.answers.search?.corrected ?: "",
+            SearchContainers.fold(held.answers.search?.containers ?: emptyList()),
+            rows = held.answers.search?.results?.size,
+        )
+
+    override fun unanswered(held: TallyHeld<TallySearchState>): TallyHeld<TallySearchState> =
+        SearchLaw.unasked(Field, held)
 
     override fun fold(held: TallyHeld<TallySearchState>): TallySearchData? {
         val answer = held.answers.search ?: return null
@@ -360,8 +371,16 @@ public object TallySearchMachine :
                 total > rows.size -> "${rows.size} ${TallyCopy.OF_WORD} ${TallyFold.count(total, TallyCopy.MATCH_ONE, TallyCopy.MATCH_MANY)}"
                 else -> TallyFold.count(total, TallyCopy.MATCH_ONE, TallyCopy.MATCH_MANY)
             },
-            empty = if (rows.isEmpty()) {
-                EmptyState(headline = "${TallyCopy.NOTHING_MATCHES} “$shownTerm”.", body = TallyCopy.SEARCH_NOT_SEARCHED)
+            // A GROUP THAT MATCHED THE NAME IS AN ANSWER: no "nothing found" over it.
+            empty = if (rows.isEmpty() && answer.containers.isEmpty()) {
+                // THE ONE ACTION is Ask, when the law offered it (#1097).
+                SearchLaw.asking(
+                    EmptyState(
+                        headline = TallyCopy.NOTHING_MATCHES.replace("{term}", shownTerm),
+                        body = TallyCopy.SEARCH_NOT_SEARCHED,
+                    ),
+                    held.screen.field_ ?: SearchField(),
+                )
             } else {
                 null
             },
@@ -382,6 +401,7 @@ public object TallySearchMachine :
 
     private object Field : SearchLens<TallyHeld<TallySearchState>> {
         override val screenId: String = SCREEN_ID
+        override val asks: Boolean = true
 
         override fun field(state: TallyHeld<TallySearchState>): SearchField = state.screen.field_ ?: SearchField()
 

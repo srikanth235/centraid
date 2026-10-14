@@ -11,7 +11,7 @@ import dev.centraid.shared.kit.ScreenBridge
  * A shell pushes `Destination.PeopleHome` and forwards `Opened` with its band
  * destination. The intents on `PeopleHomeEvent` — `PersonPicked`,
  * `AddPersonRequested` (push the editor with a minted id, see
- * [PeopleEditorBridge.openNew]), `TrashRequested`, `LogTouchRequested` (push
+ * [PeopleEditorBridge.openNew]), `MoreRowPicked` for `trash`, `LogTouchRequested` (push
  * the person with `Opened.log_touch`) — change nothing here; the shell routes
  * them off the event it forwards.
  */

@@ -414,6 +414,15 @@ const ICON_DATA = {
   Maximize: [{ d: "M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" }],
   List: [{ d: "M4 6h16M4 12h16M4 18h16" }],
   Archive: [{ d: "M4 5h16v4H4z" }, { d: "M6 9v10h12V9M9 13h6" }],
+  // THE BAND'S BACKUP TAB: a loop that comes back around a lock — a sealed
+  // copy the member gets back. Not `Archive` (work put away), `History` (a
+  // timeline) or `Cloud` (the backup is on the member's own machine).
+  Backup: [
+    { d: "M21 12a9 9 0 1 1-2.64-6.36L21 8" },
+    { d: "M21 3v5h-5" },
+    { d: "M9 11.5h6V16H9z" },
+    { d: "M10.5 11.5V10a1.5 1.5 0 0 1 3 0v1.5" },
+  ],
   Upload: [{ d: "M12 15V3m0 0 4 4m-4-4-4 4M5 21h14" }],
   Download: [{ d: "M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" }],
   FolderPlus: [

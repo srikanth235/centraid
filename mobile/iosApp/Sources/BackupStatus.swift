@@ -34,7 +34,14 @@ import SwiftUI
 ///   This is the honest half of calling `LIMITED` a first-class state: saying
 ///   "Centraid imports the photos you selected" while offering no way to
 ///   select more would be a statement with no remedy attached.
-/// * **"Import now"** — a pass, when one is not already running.
+/// * **"Import now"** — a pass, offered only over an EMPTY library the grant
+///   can fill and with none already running. Over photographs, More's camera
+///   roll sheet is the deliberate place to run one again.
+///
+/// **It speaks only when there is something to say or do** — a remedy, an
+/// import moving, a wait — and which of those it is, and every word, is
+/// `PhotosGridMachine`'s `import_banner`. Done or idle over a full library
+/// draws nothing.
 ///
 /// **Nothing here blames the member.** Not "you denied access", not "you only
 /// picked a few": every sentence says what Centraid does and what would change
@@ -46,53 +53,56 @@ struct BackupStatus: View {
     @Environment(\.colorScheme) private var scheme
     let state: PhotosGridStateView
 
-    /// The grant, read off the same bytes `state` decodes. Only "is it
-    /// denied" is asked of it here, and `PhotosGridStateView` — shared by every
-    /// lane — does not answer that one.
-    private var permission: Centraid_Screen_V1_MediaPermission {
-        ((try? Centraid_Screen_V1_PhotosGridState(serializedBytes: shell.photosState))
-            ?? .init()).permission
+    /// THE BANNER, AS THE MACHINE DECIDED IT (`PhotosGridMachine.importBanner`):
+    /// unset when there is nothing to say or do, so a library with photographs
+    /// and an import that is done draws no line at all, and "Import now" is
+    /// offered only over an empty library. This view decides none of it.
+    private var banner: Centraid_Screen_V1_PhotosImportBanner? {
+        let grid = (try? Centraid_Screen_V1_PhotosGridState(serializedBytes: shell.photosState)) ?? .init()
+        return grid.hasImportBanner ? grid.importBanner : nil
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(state.backupSentence)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("text", scheme))
-            if !state.pausedReason.isEmpty {
-                Text(state.pausedReason)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-            }
+        if let banner {
+            VStack(alignment: .leading, spacing: 4) {
+                if !banner.sentence.isEmpty {
+                    Text(banner.sentence)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("text", scheme))
+                }
+                if !banner.reason.isEmpty {
+                    Text(banner.reason)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textSoft", scheme))
+                }
 
-            // THE VERBS ARE HOME'S LINK, not the system tint: `link` in the
-            // `control` role, the way "All apps" is drawn, so the one app does
-            // not speak in a blue the rulebook never emitted.
-            HStack(spacing: 16) {
-                if state.canAskForPhotos {
-                    Button("Allow photo access") {
-                        shell.send(screen: "photos.grid", event: state.permissionRequestEvent)
+                // THE VERBS ARE THE KIT'S LINK: `link` ink, 44 target, so the one
+                // app does not speak in a blue the rulebook never emitted.
+                HStack(spacing: 16) {
+                    switch banner.remedy {
+                    case .ask:
+                        KitLink(label: banner.allowLabel) {
+                            shell.send(screen: "photos.grid", event: state.permissionRequestEvent)
+                        }
+                    case .settings:
+                        KitLink(label: banner.settingsLabel, identifier: "photos.backup.open-settings") { openSettings() }
+                    case .manageSelection:
+                        KitLink(label: banner.manageLabel) { presentLimitedPicker() }
+                    case .unspecified, .UNRECOGNIZED:
+                        EmptyView()
+                    }
+                    if banner.importNow {
+                        KitLink(label: banner.importNowLabel, identifier: "photos.backup.import-now") {
+                            shell.backUpCameraRoll()
+                        }
                     }
                 }
-                if permission == .denied {
-                    Button("Open Settings") { openSettings() }
-                        .accessibilityIdentifier("photos.backup.open-settings")
-                }
-                if state.isLimitedSelection {
-                    Button("Manage selection") { presentLimitedPicker() }
-                }
-                if !state.backupIsRunning {
-                    Button("Import now") { shell.backUpCameraRoll() }
-                }
             }
-            .centraidType("control")
-            .tint(Theme.color("link", scheme))
-            .buttonStyle(.borderless)
+            // Inset is owned by `PhotosGridView` (R-PHOTOS-2) — this banner does
+            // not pad for the status bar or the navigation bar.
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(PhotosWords.photosCameraRoll)
         }
-        // Inset is owned by `PhotosGridView` (R-PHOTOS-2) — this banner does
-        // not pad for the status bar or the navigation bar.
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Camera roll import")
     }
 
     /// This app's own page in Settings, where a denied grant is changed.

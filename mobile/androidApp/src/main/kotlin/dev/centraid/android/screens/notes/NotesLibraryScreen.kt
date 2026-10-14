@@ -1,19 +1,17 @@
 package dev.centraid.android.screens.notes
 
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import centraid.screen.v1.ChatCard
 import centraid.screen.v1.NotesBandTab
 import centraid.screen.v1.NotesLibraryEvent
 import centraid.screen.v1.NotesLibrarySort
@@ -33,43 +31,47 @@ import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
+import dev.centraid.android.kit.RoomChip
 import dev.centraid.android.kit.RoomSearch
+import dev.centraid.android.kit.SearchContainerRow
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.screenContentOf
-import dev.centraid.android.screens.people.FilterChip
-import dev.centraid.android.screens.people.SearchOpener
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
-/** Notes' band, drawn from the machine's tabs; More is the plate's own key. */
+/**
+ * Notes' band, drawn from the machine's tabs as they come: More is an
+ * ordinary tab, last, whose tap is the place's `BandPicked("more")`
+ * (R-CHROME-4).
+ */
 @Composable
 internal fun NotesBandView(band: List<NotesBandTab>, onPick: (String) -> Unit, onHome: () -> Unit) {
     AppBand(
         app = "notes",
-        tabs = band.filter { it.key != "more" }.map {
-            AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current)
-        },
+        tabs = band.map { AppBandTab(key = it.key, label = it.label, iconKey = it.icon_key, selected = it.current) },
         onSelect = onPick,
         onHome = onHome,
-        onMore = if (band.any { it.key == "more" }) ({ onPick("more") }) else null,
     )
 }
 
 /**
- * THE NOTES LIBRARY (#1029 app port) in an `AppPlace`: pinned-first sections,
- * tag chips, a window that widens at the foot, search over it, More, the row
- * menu, file-into and sort as sheets, the trash confirm. A band tap on
- * another place and the three intents are the route's.
+ * THE NOTES LIBRARY (#1029 app port) in an `AppPlace`: New note top right,
+ * the search bar, ONE chip row (the notebook, Pinned, the tags, the sort
+ * last — the machine's `chips`), pinned-first sections, a window that widens
+ * at the foot, More (the machine's `more_rows`), the row menu, file-into and
+ * sort as sheets, the trash confirm. A band tap on another place and the
+ * intents are the route's.
  */
 @Composable
 public fun NotesLibraryScreen(
     state: NotesLibraryState,
     onEvent: (NotesLibraryEvent) -> Unit,
     onHome: () -> Unit,
+    onOpenContainer: (ChatCard) -> Unit = {},
 ) {
     val chrome = state.chrome
     val search = state.search
@@ -91,7 +93,17 @@ public fun NotesLibraryScreen(
                 closeLabel = chrome?.search_close.orEmpty(),
                 onTerm = { term -> onEvent(NotesLibraryEvent(search_term = NotesLibraryEvent.SearchTermChanged(term))) },
                 onClose = { onEvent(NotesLibraryEvent(search_closed = NotesLibraryEvent.SearchClosed())) },
+                onOpen = { onEvent(NotesLibraryEvent(search_opened = NotesLibraryEvent.SearchOpened())) },
             )
+        },
+        chips = state.chips.map { chip ->
+            RoomChip(
+                testTag = "notes-chip-${chip.key}",
+                label = chip.label,
+                selected = chip.selected,
+                chevron = chip.chevron,
+                spoken = chip.spoken,
+            ) { onEvent(NotesLibraryEvent(chip = NotesLibraryEvent.ChipPicked(chip.key))) }
         },
         status = if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "",
         band = { NotesBandView(state.band, { key -> onEvent(NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key))) }, onHome) },
@@ -105,6 +117,10 @@ public fun NotesLibraryScreen(
                         if (empty.headline.isEmpty()) Quiet(empty.body) else EmptyStateView(empty, onAction = null)
                     }
                 }
+                // THE NOTEBOOKS WHOSE NAME MATCHED come first (#1097), through the router.
+                items(search.containers, key = { "c-${it.entity}-${it.id}" }) { container ->
+                    SearchContainerRow(container, onOpen = onOpenContainer)
+                }
                 items(results.rows, key = { "s-" + it.note_id }) { row -> NoteRow(row, chrome?.row_menu_label.orEmpty(), onEvent) }
             }
         } else {
@@ -115,43 +131,6 @@ public fun NotesLibraryScreen(
                 skeleton = { RowSkeleton(label = chrome?.loading.orEmpty()) },
             ) { data ->
                 LazyColumn(Modifier.testTag("notes-library")) {
-                    item(key = "search-open") {
-                        SearchOpener(chrome?.search_placeholder.orEmpty()) {
-                            onEvent(NotesLibraryEvent(search_opened = NotesLibraryEvent.SearchOpened()))
-                        }
-                    }
-                    if (state.filter_label.isNotEmpty()) {
-                        item(key = "filter") {
-                            Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
-                                Text(
-                                    state.filter_label,
-                                    style = centraidType("annotLabel"),
-                                    color = centraidColor("textSoft"),
-                                    modifier = Modifier.weight(1f).padding(top = 9.dp),
-                                )
-                                QuietButton(chrome?.filter_clear_label.orEmpty(), testTag = "notes-clear-filter") {
-                                    onEvent(NotesLibraryEvent(filter_cleared = NotesLibraryEvent.FilterCleared()))
-                                }
-                            }
-                        }
-                    }
-                    if (data.tags.isNotEmpty()) {
-                        item(key = "tags") {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
-                                    .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                data.tags.forEach { tag ->
-                                    FilterChip(tag.label, tag.label, tag.selected, "notes-tag-${tag.concept_id}") {
-                                        onEvent(NotesLibraryEvent(tag = NotesLibraryEvent.TagToggled(tag.concept_id)))
-                                    }
-                                }
-                            }
-                        }
-                    }
                     val empty = data.empty
                     if (data.sections.all { it.rows.isEmpty() } && empty != null) {
                         item(key = "empty") {
@@ -183,17 +162,14 @@ public fun NotesLibraryScreen(
 
     val close = { onEvent(NotesLibraryEvent(sheet_closed = NotesLibraryEvent.SheetClosed())) }
     when (state.sheet) {
+        // MORE IS THE MACHINE'S ROWS (Trash): never search, sort or a filter.
         NotesLibraryState.Sheet.SHEET_MORE -> if (chrome != null) {
             SheetRoom(title = chrome.more_title, onDismiss = close) {
-                SheetRow(chrome.sort_label, iconKey = "SwitchVert", testTag = "notes-more-sort", onTap = {
-                    onEvent(NotesLibraryEvent(sheet_opened = NotesLibraryEvent.SheetOpened(NotesLibraryState.Sheet.SHEET_SORT)))
-                })
-                SheetRow(chrome.pinned_only_label, iconKey = "Pin", selected = state.pinned_only, testTag = "notes-more-pinned", onTap = {
-                    onEvent(NotesLibraryEvent(pinned_only = NotesLibraryEvent.PinnedOnlyToggled()))
-                })
-                SheetRow(chrome.trash_label, iconKey = "Trash", testTag = "notes-more-trash", onTap = {
-                    onEvent(NotesLibraryEvent(trash_opened = NotesLibraryEvent.TrashOpened()))
-                })
+                state.more_rows.forEach { row ->
+                    SheetRow(row.label, iconKey = row.icon_key, testTag = "notes-more-${row.key}", onTap = {
+                        onEvent(NotesLibraryEvent(more_row = NotesLibraryEvent.MoreRowPicked(row.key)))
+                    })
+                }
             }
         }
         NotesLibraryState.Sheet.SHEET_SORT -> OptionSheet(

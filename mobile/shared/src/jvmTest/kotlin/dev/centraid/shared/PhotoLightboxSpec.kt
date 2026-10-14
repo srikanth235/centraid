@@ -661,7 +661,7 @@ class PhotoLightboxSpec : StringSpec({
         val video = loaded(assetRow(kind = "video")).state
         PhotoLightboxMachine.toolbar(video)[PhotoLightboxMachine.Verb.EDIT]
             .shouldNotBeNull().why shouldBe
-            "Crop and rotate work on photographs, not on this kind of media"
+            "Crop and rotate work on photos only."
     }
 
     // --- The writes --------------------------------------------------------

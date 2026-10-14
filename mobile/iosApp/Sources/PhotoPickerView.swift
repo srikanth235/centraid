@@ -75,7 +75,7 @@ struct PhotoPickerView: View {
 
                 switch state.content {
                 case .loading:
-                    ProgressView()
+                    RowSkeleton()
                 case let .denied(denied):
                     DeniedGate(denied)
                 case let .failure(sentence, remedy):
@@ -114,22 +114,29 @@ struct PhotoPickerView: View {
                 // nothing picked, so it is disabled rather than absent: a
                 // control that appears when a member picks is a control that
                 // moves under their thumb.
-                Button(state.picked.isEmpty ? "Add" : "Add \(state.picked.count)") {
+                ToolbarVerb(
+                    label: state.picked.isEmpty ? "Add" : "Add \(state.picked.count)",
+                    identifier: "photos.picker.add"
+                ) {
                     send(state.confirmEvent)
                     onFinished()
                 }
                 .disabled(state.picked.isEmpty)
-                .accessibilityIdentifier("photos.picker.add")
             }
         }
         .safeAreaInset(edge: .bottom) {
-            Text(state.chosenSentence)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.vertical, 8)
-                .background(.thinMaterial)
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(Theme.color("line", scheme))
+                    .frame(height: CentraidGeometry.hairline)
+                Text(state.chosenSentence)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.vertical, 8)
+            }
+            .background(Theme.color("bgElev", scheme).ignoresSafeArea(edges: .bottom))
         }
         .onAppear {
             send(
@@ -153,8 +160,8 @@ struct PhotoPickerStateView {
     /// v0's two sentences, verbatim. Static because they are constants of the
     /// screen and not of a state — a member reads the first one before any read
     /// has landed.
-    static let refersNotCopies = "An album refers to a photograph where it lives."
-    static let nothingLeft = "Everything in your library is already in this album."
+    static let refersNotCopies = PhotosWords.photosAlbumRefers
+    static let nothingLeft = PhotosWords.photosPickerNothingLeft
 
     private var state: Centraid_Screen_V1_PhotoPickerState {
         (try? Centraid_Screen_V1_PhotoPickerState(serializedBytes: data)) ?? .init()
@@ -183,13 +190,12 @@ struct PhotoPickerStateView {
         state.hasWriteFailure ? state.writeFailure : nil
     }
 
-    /// NOTHING HAS BEEN ADDED YET, and the line says so while a member picks.
-    /// v0's wording, because the reassurance is the point: a picked set is not
-    /// a write and a member should not have to guess when the album changed.
+    /// THE COUNT OF WHAT IS PICKED. A picked set is not a write; the Add button
+    /// is where the album changes.
     var chosenSentence: String {
         picked.isEmpty
-            ? "Nothing chosen yet"
-            : "\(picked.count) chosen \u{00B7} nothing has been added yet"
+            ? PhotosWords.photosPickerNothingChosen
+            : PhotosWords.fill(PhotosWords.photosChosen, "count", "\(picked.count)")
     }
 
     func openedEvent(

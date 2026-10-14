@@ -1,5 +1,8 @@
 package dev.centraid.android.screens.words
 
+import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.camera.core.CameraSelector
@@ -34,6 +37,7 @@ import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.ReaderException
 import com.google.zxing.common.HybridBinarizer
 import dev.centraid.android.kit.QuietButton
@@ -54,10 +58,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * The CAMERA grant is `WordsSheets`' to ask for, at the moment the member
  * tapped Scan and never before; this dialog is drawn only once it is held.
- * [onCancel] closes it; the paste field is still there.
+ * [onPhoto] closes it for the photo picker; [onCancel] closes it; the paste
+ * field is still there.
  */
 @Composable
-internal fun PairScanner(onRead: (String) -> Unit, onCancel: () -> Unit) {
+internal fun PairScanner(
+    photoLabel: String,
+    onRead: (String) -> Unit,
+    onPhoto: () -> Unit,
+    onCancel: () -> Unit,
+) {
     Dialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
@@ -74,6 +84,19 @@ internal fun PairScanner(onRead: (String) -> Unit, onCancel: () -> Unit) {
                     .padding(16.dp),
                 onPress = onCancel,
             )
+            // A SCREENSHOT OF THE SQUARE, from the camera screen.
+            if (photoLabel.isNotEmpty()) {
+                QuietButton(
+                    label = photoLabel,
+                    testTag = "pair-scan-photo",
+                    ink = "onAccent",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .safeDrawingPadding()
+                        .padding(24.dp),
+                    onPress = onPhoto,
+                )
+            }
         }
     }
 }
@@ -148,5 +171,42 @@ private fun decode(reader: MultiFormatReader, image: ImageProxy): String? {
         null
     } finally {
         reader.reset()
+    }
+}
+
+/**
+ * THE SQUARE, READ OUT OF A PHOTO — the camera-less scan (`PhotoTapped`). The
+ * system photo picker hands back one image the member chose (no storage grant:
+ * the picker is the grant), and the same ZXing reader decodes it. Null when the
+ * image holds no QR code, or will not decode. Large photos are sampled down to
+ * about 2048 px on the long side first: a QR read needs the module grid, not
+ * every pixel, and a full-size bitmap is tens of megabytes. Call off the main
+ * thread.
+ */
+internal fun readSquare(context: Context, uri: Uri): String? {
+    val resolver = context.contentResolver
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 2048) sample *= 2
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
+    val pixels = IntArray(bitmap.width * bitmap.height)
+    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+    val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
+    bitmap.recycle()
+    val reader = MultiFormatReader().apply {
+        setHints(
+            mapOf(
+                DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                DecodeHintType.TRY_HARDER to true,
+                DecodeHintType.ALSO_INVERTED to true,
+            ),
+        )
+    }
+    return try {
+        reader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text
+    } catch (_: ReaderException) {
+        null
     }
 }

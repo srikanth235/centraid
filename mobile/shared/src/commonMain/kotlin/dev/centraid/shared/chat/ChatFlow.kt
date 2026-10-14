@@ -49,10 +49,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * THE CORE'S ASSISTANT PLANE, AS THE CHAT'S DOOR (`assist.proto`).
@@ -123,6 +125,12 @@ public interface ChatDoor {
 
     /** The drawer's list, newest first; null when the core would not say. */
     public suspend fun threads(): List<ThreadRow>?
+
+    /**
+     * The chats [term] finds, best match first, and the words the core searched instead when it
+     * corrected a typo; null when the core would not say (#1097).
+     */
+    public suspend fun searchThreads(term: String): ThreadSearch?
 
     /** One stored thread and its messages; null when the core would not say. */
     public suspend fun thread(threadId: String): ChatThread?
@@ -269,6 +277,16 @@ public class CoreChatDoor(
             ThreadRow(id = row.thread_id, title = row.title, updatedMs = row.updated_ms)
         }
 
+    override suspend fun searchThreads(term: String): ThreadSearch? =
+        query(AppQueryRequest(chat_threads = ChatThreadsRequest(term = term)))?.chat_threads?.let { found ->
+            ThreadSearch(
+                rows = found.threads.map { row ->
+                    ThreadRow(id = row.thread_id, title = row.title, updatedMs = row.updated_ms)
+                },
+                corrected = found.corrected,
+            )
+        }
+
     override suspend fun thread(threadId: String): ChatThread? =
         query(AppQueryRequest(chat_thread = ChatThreadRequest(thread_id = threadId)))?.chat_thread
 
@@ -374,6 +392,35 @@ public class ChatFlow(
     }
 
     /**
+     * ASK A QUESTION ON THE MEMBER'S BEHALF (search's "Ask about" action).
+     *
+     * The Chat tab has just been opened, so the core has not started a session
+     * yet and a [ChatEvent.Sent] now would be dropped. This waits (at most
+     * [ASK_PATIENCE_MS]) until [ChatMachine.canAsk], starts a new chat when the
+     * open one already holds a thread (the question is about something else),
+     * and sends (the call returns once the question is on its way, not when it
+     * is answered). `false` when the chat did not become ready in time — no model
+     * yet, or the assistant is unavailable: the Chat tab says why, and the
+     * question is not queued behind a download.
+     */
+    public suspend fun askWhenReady(text: String, patienceMs: Long = ASK_PATIENCE_MS): Boolean {
+        val ready = withTimeoutOrNull(patienceMs) { model.first { ChatMachine.canAsk(it) } } ?: return false
+        // Launched, not awaited: `reduce` runs the turn's effects, and a send
+        // lasts as long as the answer. The two steps share one coroutine so the
+        // new chat is made before the question is put to it.
+        scope.launch {
+            if (ready.messages.isNotEmpty()) reduce(ChatInput.View(ChatEvent(new_chat = ChatEvent.NewChat())))
+            reduce(ChatInput.View(ChatEvent(sent = ChatEvent.Sent(text = text))))
+        }
+        return true
+    }
+
+    public companion object {
+        /** How long [askWhenReady] waits for the chat to take a question. */
+        public const val ASK_PATIENCE_MS: Long = 8_000
+    }
+
+    /**
      * STOP LISTENING, AND STOP FOR GOOD. Cancels the scope [attach]'s collector
      * and every in-flight effect run on, so a flow the shell has replaced (a
      * vault switch makes a new one) no longer reduces the old core's events.
@@ -432,6 +479,10 @@ public class ChatFlow(
             is ChatEffect.Clear -> door.clear(effect.session)
             is ChatEffect.Copy -> copyToClipboard(effect.text)
             ChatEffect.ReadThreads -> reduce(ChatInput.Threads(door.threads(), door.nowMillis()))
+            is ChatEffect.SearchThreads -> {
+                val found = door.searchThreads(effect.term)
+                reduce(ChatInput.Found(effect.term, found?.rows, found?.corrected.orEmpty(), door.nowMillis()))
+            }
             is ChatEffect.OpenThread -> {
                 val thread = door.thread(effect.threadId)
                 // The session is asked for only for a thread that is there: the
@@ -463,8 +514,8 @@ public class ChatFlow(
  * The shell:
  *
  * 1. builds one bridge for the app's session and calls [attach] with the
- *    foreground core's supplier (`{ session.shelf.core() }`), where the model
- *    file lives, the device's zone, and the two platform acts;
+ *    member's own core's supplier (`{ session.shelf.core() }`), where the
+ *    model file lives, the device's zone, and the two platform acts;
  * 2. calls [open] each time the Chat tab appears (with the app it was opened
  *    from, or empty) — repeating the same scope keeps the thread;
  * 3. in `PHASE_NEEDS_MODEL`, runs its download when [attach]'s `startDownload`
@@ -542,8 +593,41 @@ public class ChatBridge {
         forward(ChatEvent(drawer = ChatEvent.DrawerToggled(opened = open)))
     }
 
-    public fun openThread(threadId: String) {
-        forward(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = threadId)))
+    public fun openThread(threadId: String, title: String = "") {
+        forward(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = threadId, title = title)))
+    }
+
+    /**
+     * [open], and then a past chat opened on the member's behalf (search's chat row, #1097,
+     * R-1097-24). The two run in that order on one coroutine, as [openAsking]'s do: [open] returns
+     * when its effects have, so the thread is opened against the chat [open] made. [title] is the
+     * hit's, so a chat older than the drawer's list still has its name in the header at once.
+     */
+    public fun openThreadFrom(app: String, modelBytes: Long, vaultName: String = "", threadId: String, title: String) {
+        val flow = running ?: return
+        scope.launch {
+            flow.reduce(
+                ChatInput.View(
+                    ChatEvent(opened = ChatEvent.Opened(app = app, model_bytes = modelBytes, vault_name = vaultName)),
+                ),
+            )
+            flow.reduce(ChatInput.View(ChatEvent(thread_opened = ChatEvent.ThreadOpened(thread_id = threadId, title = title))))
+        }
+    }
+
+    /** The drawer's search opener. */
+    public fun openDrawerSearch() {
+        forward(ChatEvent(drawer_search_opened = ChatEvent.DrawerSearchOpened()))
+    }
+
+    /** The drawer's field changed. */
+    public fun drawerSearch(term: String) {
+        forward(ChatEvent(drawer_search_term = ChatEvent.DrawerSearchTerm(term = term)))
+    }
+
+    /** The drawer's field was closed. */
+    public fun closeDrawerSearch() {
+        forward(ChatEvent(drawer_search_closed = ChatEvent.DrawerSearchClosed()))
     }
 
     public fun renameThread(threadId: String, title: String) {
@@ -570,6 +654,25 @@ public class ChatBridge {
 
     public fun send(text: String) {
         forward(ChatEvent(sent = ChatEvent.Sent(text = text)))
+    }
+
+    /**
+     * [open], and then a question asked on the member's behalf (search's "Ask
+     * about"). The two run in that order on one coroutine: [open] returns when
+     * its effects have (the status read, the session start), so the question is
+     * sent against the chat that [open] made and not against the one it
+     * replaced. Dropped, like any send, when the chat never becomes ready.
+     */
+    public fun openAsking(app: String, modelBytes: Long, vaultName: String = "", text: String) {
+        val flow = running ?: return
+        scope.launch {
+            flow.reduce(
+                ChatInput.View(
+                    ChatEvent(opened = ChatEvent.Opened(app = app, model_bytes = modelBytes, vault_name = vaultName)),
+                ),
+            )
+            flow.askWhenReady(text)
+        }
     }
 
     public fun stop() {

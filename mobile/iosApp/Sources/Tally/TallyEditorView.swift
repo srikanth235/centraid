@@ -88,15 +88,10 @@ struct TallyEditorView: View {
             onBack: { send(Self.event { $0.close = .init() }) }
         ) {
             if case let .data(editor) = content {
-                Button {
+                ToolbarVerb(label: chrome.save, identifier: "tally-editor-save") {
                     send(Self.event { $0.save = .init() })
-                } label: {
-                    Text(chrome.save)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color(editor.canSave ? "text" : "textFaint", scheme))
                 }
                 .disabled(!editor.canSave)
-                .accessibilityIdentifier("tally-editor-save")
             }
         } content: {
             ReadStateView(
@@ -136,7 +131,6 @@ struct TallyEditorView: View {
                             onTap: { pick.pick(choice) }
                         )
                         .disabled(!choice.enabled)
-                        .opacity(choice.enabled ? 1 : 0.5)
                     }
                 }
             }
@@ -250,21 +244,13 @@ struct TallyEditorView: View {
         let label = name(entry, editor)
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 12) {
-                Button {
+                KitCheckBox(
+                    checked: entry.included,
+                    label: label,
+                    identifier: "tally-entry-toggle-\(party)"
+                ) {
                     send(Self.event { $0.entryToggled = .with { $0.partyID = party } })
-                } label: {
-                    CentraidIconView(
-                        iconKey: entry.included ? "CheckCircle" : "Circle",
-                        tint: Theme.color(entry.included ? "text" : "textFaint", scheme),
-                        size: 20
-                    )
-                    .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(label)
-                .accessibilityAddTraits(entry.included ? .isSelected : [])
-                .accessibilityIdentifier("tally-entry-toggle-\(party)")
                 Text(label)
                     .centraidType("body")
                     .foregroundStyle(Theme.color(entry.included ? "text" : "textFaint", scheme))
@@ -331,32 +317,17 @@ struct TallyEditorView: View {
                         })
                     }
                     .frame(width: 96)
-                    Button {
+                    KitIconKey(iconKey: "X", label: chrome.removeLine) {
                         send(Self.event { $0.lineRemoved = .with { $0.lineKey = line.lineKey } })
-                    } label: {
-                        CentraidIconView(iconKey: "X", tint: Theme.color("textSoft", scheme), size: 16)
-                            .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(chrome.removeLine)
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(editor.payers, id: \.key) { person in
                             let on = line.partyIds.contains(person.key)
-                            Button {
+                            KitChip(label: person.label, selected: on) {
                                 send(Self.event { $0.lineParty = .with { $0.lineKey = line.lineKey; $0.partyID = person.key } })
-                            } label: {
-                                Text(person.label)
-                                    .centraidType("annotLabelOn")
-                                    .foregroundStyle(Theme.color(on ? "onAccent" : "textSoft", scheme))
-                                    .padding(.horizontal, 10)
-                                    .frame(minHeight: CentraidGeometry.targetMinFine)
-                                    .background(Capsule().fill(Theme.color(on ? "accent" : "bgSunken", scheme)))
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(on ? .isSelected : [])
                         }
                     }
                 }
@@ -487,16 +458,9 @@ struct TallySettleUpView: View {
                         .centraidType("annotLabel")
                         .foregroundStyle(Theme.color("net", scheme))
                 }
-                Button {
+                KitOutlineButton(label: draft.cancelLabel, fullWidth: true) {
                     send(Self.event { $0.dismissed = .init() })
-                } label: {
-                    Text(draft.cancelLabel)
-                        .centraidType("labelOn")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
             }
             .disabled(state.write.phase == .inFlight)
             .accessibilityIdentifier("tally-settle-draft")

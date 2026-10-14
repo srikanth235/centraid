@@ -56,6 +56,10 @@ pub mod config;
 pub mod convert;
 pub mod error;
 pub mod events;
+/// THE DEMO SCENARIO: one weekend at Tahoe across seven apps, seeded through
+/// the command plane into a dev fixture vault (`seed-demo-vault`) or a test's
+/// vault — never by a found, never into a member's vault. No Locker.
+pub mod example;
 pub mod handle;
 pub mod identity;
 pub mod locker;
@@ -66,11 +70,10 @@ pub mod originals;
 /// the status the shell draws, and the doors beside the pass. See
 /// `phone.proto`.
 pub mod phone;
-/// THE SAMPLE SCENARIO (the sample vault): one weekend at Tahoe across seven
-/// apps, seeded through the command plane, and five fake Locker items sealed
-/// under the member's own keys when the core holds them (never the demo words).
-pub mod sample;
 pub mod stage;
+/// THE STARTER ROWS a member's first vault is founded with: ordinary rows of
+/// theirs, best-effort, declared as data. See `vault.proto`'s `FoundContent`.
+pub mod starters;
 
 /// Lane C's generated types, re-exported so a consumer needs one dependency.
 pub use centraid_api_proto::core_v1 as api_proto;

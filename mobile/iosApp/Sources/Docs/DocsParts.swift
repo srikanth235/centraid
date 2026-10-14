@@ -41,7 +41,6 @@ struct DocsSheetView: View {
                             onTap: { actions.onAction(action) }
                         )
                         .disabled(!action.enabled)
-                        .opacity(action.enabled ? 1 : 0.5)
                         if !action.detail.isEmpty {
                             Text(action.detail)
                                 .centraidType("annotLabel")
@@ -162,29 +161,13 @@ struct FlowChips: View {
     let onTap: (String) -> Void
     let spoken: (String) -> String
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(items, id: \.id) { item in
-                    Button {
+                    KitChip(label: item.label, selected: true, spoken: spoken(item.label)) {
                         onTap(item.id)
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(item.label)
-                                .centraidType("annotLabelOn")
-                                .foregroundStyle(Theme.color("text", scheme))
-                            CentraidIconView(iconKey: "X", tint: Theme.color("textSoft", scheme), size: 10)
-                                .accessibilityHidden(true)
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(minHeight: CentraidGeometry.targetMinFine)
-                        .overlay(Capsule().strokeBorder(Theme.color("line", scheme), lineWidth: CentraidGeometry.hairline))
-                        .contentShape(Capsule())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(spoken(item.label))
                 }
             }
         }
@@ -247,14 +230,13 @@ struct DocsRowItem: View {
             .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.title : row.accessibilityLabel)
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("docs-row-\(row.documentID)")
-            Button(action: onMenu) {
-                CentraidIconView(iconKey: "MoreHoriz", tint: Theme.color("textSoft", scheme), size: 18)
-                    .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(menuLabel), \(row.title)")
-            .accessibilityIdentifier("docs-row-menu-\(row.documentID)")
+            KitIconKey(
+                iconKey: "MoreHoriz",
+                label: "\(menuLabel), \(row.title)",
+                tint: "textSoft",
+                identifier: "docs-row-menu-\(row.documentID)",
+                action: onMenu
+            )
             .padding(.trailing, 8)
         }
         .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -302,15 +284,7 @@ struct DocsRenameField: View {
                     .onSubmit(onClose)
                     .accessibilityLabel(placeholder)
                     .accessibilityIdentifier("docs-rename-field")
-                Button(action: onClose) {
-                    Text(doneLabel)
-                        .centraidType("smallStrong")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("docs-rename-done")
+                KitLink(label: doneLabel, identifier: "docs-rename-done", action: onClose)
             }
             if !rename.statusLabel.isEmpty {
                 Text(rename.statusLabel)

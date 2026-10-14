@@ -237,6 +237,7 @@ internal fun TasksQuickAddBar(
     verb: String,
     onChange: (String) -> Unit,
     onSubmit: () -> Unit,
+    focus: FocusRequester = remember { FocusRequester() },
 ) {
     if (quickAdd == null || !quickAdd.shown) return
     // A LATE ECHO NEVER OVERWRITES WHAT IS TYPED NOW: the machine's title is
@@ -246,8 +247,8 @@ internal fun TasksQuickAddBar(
     val editor = rememberFollowedText(quickAdd.title)
     val typed = editor.text.value
     val submit = { onSubmit() }
-    // OPENED WITH WORDS IN IT (Notes' "Send to Tasks"): the field takes the keyboard.
-    val focus = remember { FocusRequester() }
+    // OPENED WITH WORDS IN IT (Notes' "Send to Tasks"): the field takes the
+    // keyboard. [focus] is also the header's Plus, which asks for it.
     LaunchedEffect(quickAdd.focused) { if (quickAdd.focused) focus.requestFocus() }
     val shape = RoundedCornerShape(KitGeometry.RADIUS)
     Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)) {

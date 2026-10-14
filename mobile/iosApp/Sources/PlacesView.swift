@@ -60,7 +60,7 @@ struct PlacesStateView {
     static var unplacedShelf: Data {
         var shelf = Centraid_Screen_V1_PhotoShelf()
         shelf.place = .with {
-            $0.placeName = "No location yet"
+            $0.placeName = PhotosWords.placeNoLocation
             $0.unplaced = true
         }
         return (try? shelf.serializedData()) ?? Data()
@@ -135,12 +135,12 @@ struct PlacesView: View {
                 if let (sentence, remedy) = state.writeFailure {
                     ScreenFailureView(sentence: sentence, remedy: remedy)
                         .padding(10)
-                        .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: 7))
+                        .background(Theme.color("bgElev", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
                 }
 
                 switch state.content {
                 case .loading:
-                    ProgressView()
+                    RowSkeleton()
                 case let .denied(denied):
                     DeniedGate(denied)
                 case let .failure(sentence, remedy):
@@ -148,8 +148,8 @@ struct PlacesView: View {
                 case let .data(places, unplaced, capped):
                     if places.isEmpty {
                         ScreenEmptyView(
-                            sentence: "No places yet.",
-                            remedy: "A place is something a photograph carries, or does not."
+                            sentence: PhotosWords.photosPlacesEmpty,
+                            remedy: PhotosWords.photosPlacesEmptyCaption
                         )
                     } else if state.presentation == .map {
                         PlacesPlot(places: places) { row in
@@ -171,46 +171,21 @@ struct PlacesView: View {
         }
     }
 
-    /// CARDS OR A PLOT, as two buttons over one read.
-    ///
-    /// Not a `Picker`: the two options carry marks from this product's own set
-    /// (`CentraidCatalog.icons`) and the shell draws no platform icon —
-    /// a second icon set is a second product.
+    /// CARDS OR A PLOT, as two views of one read.
     private var presentationControl: some View {
-        HStack(spacing: 8) {
-            presentationButton(.cards, icon: "Grid", label: "Cards")
-            presentationButton(.map, icon: "MapPin", label: "Map")
+        HStack {
+            KitSegmented(
+                options: [
+                    (key: Centraid_Screen_V1_PlacesState.Presentation.cards, label: "Cards"),
+                    (key: Centraid_Screen_V1_PlacesState.Presentation.map, label: "Map"),
+                ],
+                selected: state.presentation,
+                identifier: "places-presentation"
+            ) { presentation in
+                send(state.presentationEvent(presentation))
+            }
             Spacer()
         }
-    }
-
-    private func presentationButton(
-        _ presentation: Centraid_Screen_V1_PlacesState.Presentation,
-        icon: String,
-        label: String
-    ) -> some View {
-        let selected = state.presentation == presentation
-        return Button {
-            send(state.presentationEvent(presentation))
-        } label: {
-            HStack(spacing: 4) {
-                CentraidIconView(
-                    iconKey: icon,
-                    tint: Theme.color(selected ? "text" : "textSoft", scheme)
-                )
-                Text(label)
-                    .centraidType("control")
-                    .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Theme.color(selected ? "bgSel" : "bg", scheme),
-                in: Capsule()
-            )
-        }
-        .accessibilityLabel(label)
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     private func cards(_ places: [Centraid_Screen_V1_PlaceRow]) -> some View {
@@ -277,13 +252,13 @@ struct PlacesView: View {
                 if unpinned > 0 {
                     Text(
                         unpinned == 1
-                            ? "1 place has no coordinate, so it is not on the plot."
-                            : "\(unpinned) places have no coordinate, so they are not on the plot."
+                            ? PhotosWords.photosPlacesUnpinnedOne
+                            : PhotosWords.fill(PhotosWords.photosPlacesUnpinnedMany, "count", "\(unpinned)")
                     )
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
                 }
-                Text("Nothing is fetched — this is drawn here from your own coordinates.")
+                Text(PhotosWords.photosPlacesMapNote)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
@@ -291,44 +266,49 @@ struct PlacesView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// One sentence, four shapes, because "1 photograph carries" and "at least
-    /// 1 photograph carries" are both things a member may read.
+    /// One sentence, four shapes, because "1 photo has" and "at least 1 photo
+    /// has" are both things a member may read.
     private func unplacedSentence(_ unplaced: UInt32, capped: Bool) -> String {
-        let noun = unplaced == 1 ? "photograph carries" : "photographs carry"
-        return capped
-            ? "At least \(unplaced) \(noun) no place."
-            : "\(unplaced) \(noun) no place."
+        let template: String
+        switch (unplaced == 1, capped) {
+        case (true, false): template = PhotosWords.photosPlacesUnplacedOne
+        case (false, false): template = PhotosWords.photosPlacesUnplacedMany
+        case (true, true): template = PhotosWords.photosPlacesUnplacedOneCapped
+        case (false, true): template = PhotosWords.photosPlacesUnplacedManyCapped
+        }
+        return PhotosWords.fill(template, "count", "\(unplaced)")
     }
 
     private func renameSheet(_ target: RenameTarget) -> some View {
-        NavigationStack {
-            Form {
-                TextField("Name", text: $typedName)
-                    .accessibilityIdentifier("place-name-field")
+        SheetRoom(
+            title: PhotosWords.photosPlacesNameThis,
+            // `media.name_place` REFUSES A BLANK NAME, so the control that would
+            // send one is greyed. A round trip whose only possible outcome is
+            // a denial teaches a member nothing.
+            primary: SheetPrimary(
+                label: "Save",
+                enabled: !typedName.trimmingCharacters(in: .whitespaces).isEmpty
+            ) {
+                send(
+                    state.renameEvent(
+                        placeIdentifier: target.id,
+                        name: typedName
+                    )
+                )
+                renaming = nil
             }
-            .navigationTitle("Name this place")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { renaming = nil }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        send(
-                            state.renameEvent(
-                                placeIdentifier: target.id,
-                                name: typedName
-                            )
-                        )
-                        renaming = nil
-                    }
-                    // `media.name_place` REFUSES A BLANK NAME, so the control
-                    // that would send one is not offered. A round trip whose
-                    // only possible outcome is a denial teaches a member
-                    // nothing.
-                    .disabled(typedName.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
+        ) {
+            TextField("Name", text: $typedName)
+                .centraidType("body")
+                .padding(.horizontal, 12)
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
+                        .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
+                )
+                .accessibilityIdentifier("place-name-field")
         }
+        .presentationDetents([.height(260)])
     }
 }
 
@@ -362,6 +342,34 @@ private struct PlaceCard: View {
     }
 
     var body: some View {
+        Button(action: onOpen) {
+            card
+        }
+        .buttonStyle(KitRowPress())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            row.assetCount > 0
+                ? PhotosWords.fill(
+                    PhotosWords.fill(PhotosWords.photosPlacesSpoken, "name", row.name),
+                    "count", PlaceCard.countPhrase(row))
+                : row.name
+        )
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Rename", onRename)
+        .contextMenu {
+            Button {
+                onRename()
+            } label: {
+                Label {
+                    Text(PhotosWords.photosPlacesNameThis)
+                } icon: {
+                    CentraidIconView(iconKey: "Pencil", tint: Theme.color("text", scheme))
+                }
+            }
+        }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 6) {
             Color.clear
                 .aspectRatio(4 / 3, contentMode: .fit)
@@ -374,7 +382,7 @@ private struct PlaceCard: View {
                         Theme.color("bgSunken", scheme)
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
             Text(row.name)
                 .centraidType("small")
                 .lineLimit(2)
@@ -385,27 +393,8 @@ private struct PlaceCard: View {
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .onTapGesture(perform: onOpen)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            row.assetCount > 0
-                ? "\(row.name), \(PlaceCard.countPhrase(row)) photographs"
-                : row.name
-        )
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: "Rename", onRename)
-        .contextMenu {
-            Button {
-                onRename()
-            } label: {
-                Label {
-                    Text("Name this place")
-                } icon: {
-                    CentraidIconView(iconKey: "Pencil", tint: Theme.color("text", scheme))
-                }
-            }
-        }
     }
 }
 
@@ -472,16 +461,19 @@ private struct PlacesPlot: View {
                     } label: {
                         PlacePin(row: pin.row, size: pin.size)
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel(
                         pin.row.assetCount > 0
-                            ? "\(pin.row.name), \(PlaceCard.countPhrase(pin.row)) photographs"
+                            ? PhotosWords.fill(
+                                PhotosWords.fill(PhotosWords.photosPlacesSpoken, "name", pin.row.name),
+                                "count", PlaceCard.countPhrase(pin.row))
                             : pin.row.name
                     )
                     .position(x: pin.point.x, y: pin.point.y)
                 }
             }
             .background(Theme.color("bgSunken", scheme))
-            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
         }
         .frame(height: 260)
     }
@@ -548,7 +540,7 @@ private struct PlacePin: View {
     let size: CGFloat
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 7)
+        let shape = RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
         if row.hasCoverThumbnailPath, !row.coverThumbnailPath.isEmpty {
             Color.clear
                 .frame(width: size, height: size)
@@ -561,7 +553,7 @@ private struct PlacePin: View {
                             .padding(.horizontal, 4)
                             .background(
                                 Theme.color("stage", scheme),
-                                in: UnevenRoundedRectangle(topLeadingRadius: 7)
+                                in: UnevenRoundedRectangle(topLeadingRadius: Theme.radius("md", scheme))
                             )
                     }
                 }

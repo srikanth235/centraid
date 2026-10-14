@@ -2,23 +2,21 @@ package dev.centraid.android.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import dev.centraid.android.kit.RowSkeleton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.PhotoPickerEvent
 import centraid.screen.v1.PhotoPickerState
+import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.PhotoCellsGrid
 import dev.centraid.android.kit.ScreenEmpty
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PhotoPickerMachine
 
 /**
@@ -55,49 +53,36 @@ public fun PhotoPickerScreen(
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                // THE NAME IS ON THE STATE BEFORE ANY READ HAS LANDED, because
-                // it rode in with `Opened` off the route. A head that waited a
-                // round trip would paint under the previous screen's title.
-                Text(
-                    text = "Add to “${state.collection_name}”",
-                    style = centraidType("bodyStrong"),
-                    color = centraidColor("text"),
-                )
-                // NOTHING HAS BEEN ADDED YET, and the line says so while a
-                // member picks. A picked set is not a write, and a member
-                // should not have to guess when the album changed.
-                Text(
-                    text = chosenSentence(state),
-                    style = centraidType("small"),
-                    color = centraidColor("textSoft"),
-                )
-            }
-            // THE ONE FILLED ELEMENT (§18) — and it cannot fire with nothing
-            // picked, so it is disabled rather than absent: a control that
-            // appears when a member picks is a control that moves under their
-            // thumb.
-            Button(
-                onClick = {
-                    onEvent(PhotoPickerEvent(confirm = PhotoPickerEvent.ConfirmRequested()))
-                    onFinished()
-                },
-                enabled = state.picked_asset_ids.isNotEmpty(),
-            ) {
-                Text(
-                    text = if (state.picked_asset_ids.isEmpty()) {
-                        "Add"
-                    } else {
-                        "Add ${state.picked_asset_ids.size}"
-                    },
-                )
-            }
+        Column {
+            // THE NAME IS ON THE STATE BEFORE ANY READ HAS LANDED, because
+            // it rode in with `Opened` off the route. A head that waited a
+            // round trip would paint under the previous screen's title.
+            Text(
+                text = "Add to “${state.collection_name}”",
+                style = centraidType("bodyStrong"),
+                color = centraidColor("text"),
+            )
+            // NOTHING HAS BEEN ADDED YET, and the line says so while a
+            // member picks. A picked set is not a write, and a member
+            // should not have to guess when the album changed.
+            Text(
+                text = chosenSentence(state),
+                style = centraidType("small"),
+                color = centraidColor("textSoft"),
+            )
         }
+        // THE ONE INK BUTTON (§18) — and it cannot fire with nothing picked,
+        // so it is drawn disabled rather than absent: a control that appears
+        // when a member picks is a control that moves under their thumb.
+        InkButton(
+            label = if (state.picked_asset_ids.isEmpty()) "Add" else "Add ${state.picked_asset_ids.size}",
+            testTag = "picker-add",
+            enabled = state.picked_asset_ids.isNotEmpty(),
+            onPress = {
+                onEvent(PhotoPickerEvent(confirm = PhotoPickerEvent.ConfirmRequested()))
+                onFinished()
+            },
+        )
 
         // ADDING REFERS, IT DOES NOT COPY — v0's sentence, verbatim, and the
         // fact that makes this screen safe to use. Nothing is duplicated and
@@ -124,7 +109,7 @@ public fun PhotoPickerScreen(
         val failure = state.failure
         val data = state.data_
         when {
-            loading != null -> CircularProgressIndicator()
+            loading != null -> RowSkeleton()
 
             // A FAILED READ IS NOT AN EMPTY LIBRARY, and on this screen the
             // difference decides what a member does next: one means there is
@@ -156,7 +141,7 @@ public fun PhotoPickerScreen(
 
 private fun chosenSentence(state: PhotoPickerState): String =
     if (state.picked_asset_ids.isEmpty()) {
-        "Nothing chosen yet"
+        PhotosCopy.PHOTOS_PICKER_NOTHING_CHOSEN
     } else {
-        "${state.picked_asset_ids.size} chosen · nothing has been added yet"
+        PhotosCopy.PHOTOS_CHOSEN.replace("{count}", "${state.picked_asset_ids.size}")
     }

@@ -4,7 +4,7 @@ package dev.centraid.shared.shell
  * THE BAND — invariant 1 of the Binding Layer (#1020, wave A).
  *
  * One band, never app-themed, never scrolled away. It lists FRAME PLACES and
- * never installed apps: Home, the pinned places, and More. Apps are covers
+ * never installed apps: Home, the pinned places, and Backup. Apps are covers
  * pushed over Home, which is why this is native-stack chrome drawn at the foot
  * of Home rather than a bottom-tab navigator — a tab bar would make every app a
  * peer of Home and there would be nowhere for a cover to come from.
@@ -39,7 +39,7 @@ public object BandPolicy {
             name = "Home",
             short = "Home",
             iconKey = "Home",
-            what = "The springboard — every app with something in it",
+            what = "Every app, at a glance",
             // Pinned BY LAW: its row shows "by law", not a switch.
             law = true,
             pinnedByDefault = true,
@@ -62,7 +62,7 @@ public object BandPolicy {
             name = "System",
             short = "System",
             iconKey = "Cellular",
-            what = "The machine this vault lives on",
+            what = "Your backup device",
             law = false,
             pinnedByDefault = false,
         ),
@@ -87,11 +87,11 @@ public object BandPolicy {
     )
 
     /**
-     * Home plus four, and then More.
+     * Home plus four, and then Backup.
      *
      * A sixth destination puts every target under 44pt on a 390px screen, so
-     * this is a constraint and not a preference. A sixth pinned place overflows
-     * into More however many are pinned.
+     * this is a constraint and not a preference. Places past the cap are not
+     * drawn; every app is a tile on Home.
      */
     public const val BAND_PLACE_SLOTS: Int = 4
 
@@ -118,9 +118,9 @@ public object BandPolicy {
     /**
      * The band's tabs: Home first, then pinned places in TABLE order, capped.
      *
-     * `More` is not in this list — each shell draws it beside the tabs, because
-     * it is not a place and a "···" in a bordered square is not a destination
-     * mark.
+     * `Backup` is not in this list — each shell draws it beside the tabs,
+     * because it opens the Backup screen over Home rather than being a place
+     * (R-ONBOARD-9).
      */
     public fun bandTabs(pins: List<String> = DEFAULT_PINS): List<Place> {
         val pinned = PLACES.filter { it.id != NOT_IN_BAND && isPinned(pins, it.id) }

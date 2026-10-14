@@ -7,6 +7,7 @@ import centraid.screen.v1.PhotoShelfState
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.SeatState
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -407,30 +408,30 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
             album != null -> "Nothing in this album yet."
             // THE PHOTOGRAPHS WITH NO PLACE (`PlacesMachine.unplacedShelf`):
             // empty means every photograph has one, which is the good news.
-            place != null && place.unplaced -> "Every photograph has a place."
-            place != null -> "No photographs at ${place.place_name} yet."
-            memory != null -> "No photographs from this memory are on this device."
+            place != null && place.unplaced -> "Every photo has a place."
+            place != null -> "No photos at ${place.place_name} yet."
+            memory != null -> "No photos from this memory are on this phone."
             view != null -> emptyStateViewSentence(view)
             // A SHELF WITH NO PREDICATE IS NOT AN EMPTY LIBRARY. It is a screen
             // opened without its parameter, which is a defect and not a state a
             // member is in — so the sentence says what is missing rather than
             // claiming the vault holds nothing.
-            else -> "This shelf was opened without saying which photographs it is."
+            else -> PhotosCopy.PHOTOS_SHELF_NOTHING
         }
     }
 
     /** The second line, where a shelf has one a member can act on. */
     public fun emptyRemedy(shelf: PhotoShelf?): String = when {
-        shelf?.album != null -> "An album refers to a photograph where it lives."
+        shelf?.album != null -> PhotosCopy.PHOTOS_ALBUM_REFERS
         else -> ""
     }
 
     private fun emptyStateViewSentence(view: PhotoStateView): String {
         val person = view.person
-        if (person != null) return "No photographs of ${person.person_name} yet."
+        if (person != null) return "No photos of ${person.person_name} yet."
         return when (view.mode?.kind) {
             PhotoStateView.Mode.Kind.KIND_FAVORITES ->
-                "No favorites yet — tap the heart on any photograph."
+                PhotosCopy.PHOTOS_EMPTY_FAVORITES
 
             PhotoStateView.Mode.Kind.KIND_ARCHIVE -> "Archive is empty."
             PhotoStateView.Mode.Kind.KIND_TRASH -> "Trash is empty."
@@ -438,7 +439,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
                 "Videos you capture or import collect here."
 
             PhotoStateView.Mode.Kind.KIND_UNSPECIFIED, null ->
-                "This shelf was opened without saying which photographs it is."
+                PhotosCopy.PHOTOS_SHELF_NOTHING
         }
     }
 
@@ -459,7 +460,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
             place != null -> place.place_name
             memory != null -> memory.title
             view != null -> stateViewTitle(view)
-            else -> "Photographs"
+            else -> PhotosCopy.PHOTOS_SHELF_TITLE
         }
     }
 
@@ -471,7 +472,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
             PhotoStateView.Mode.Kind.KIND_ARCHIVE -> "Archive"
             PhotoStateView.Mode.Kind.KIND_TRASH -> "Trash"
             PhotoStateView.Mode.Kind.KIND_VIDEOS -> "Videos"
-            PhotoStateView.Mode.Kind.KIND_UNSPECIFIED, null -> "Photographs"
+            PhotoStateView.Mode.Kind.KIND_UNSPECIFIED, null -> PhotosCopy.PHOTOS_SHELF_TITLE
         }
     }
 
@@ -515,7 +516,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
     public fun purgeWindowSentence(days: Int): String = if (days == 0) {
         ""
     } else {
-        "Photographs here are deleted forever $days days after you trash them."
+        "Photos here are deleted forever $days days after you trash them."
     }
 
     /**

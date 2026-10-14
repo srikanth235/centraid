@@ -348,6 +348,6 @@ class DuplicatesSpec : StringSpec({
         val event = DuplicatesReads.refused(Reads.noCopyYet())
         event.data_.shouldBeNull()
         event.refused.shouldNotBeNull().failure.shouldNotBeNull().sentence shouldBe
-            "This device has not copied these yet."
+            "Not on this phone yet."
     }
 })

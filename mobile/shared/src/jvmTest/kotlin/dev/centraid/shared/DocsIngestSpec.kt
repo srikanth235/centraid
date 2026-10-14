@@ -204,7 +204,7 @@ class DocsIngestSpec : StringSpec({
     }
 
     "the bridge: a refused stage is the core's sentence, and Try again restages the held file" {
-        val port = FakePort(refuseFirstStage = "Centraid could not take those bytes.")
+        val port = FakePort(refuseFirstStage = "Couldn't add that file. Try again.")
         val bridge = DocsIngestBridge.over(port, Dispatchers.Default)
         val file = File.createTempFile("photo", ".png").apply { writeBytes(ByteArray(8)) }
         bridge.onPick = { bridge.picked(file.absolutePath, "photo.png", "image/png", owned = false) }
@@ -212,7 +212,7 @@ class DocsIngestSpec : StringSpec({
             bridge.request(DocsDriveEvent.AddRequested.Kind.KIND_UPLOAD, "", "")
             withTimeout(5_000) {
                 bridge.host.state.first { it.phase == DocsIngestState.Phase.PHASE_FAILED }
-            }.status_label shouldBe "Centraid could not take those bytes."
+            }.status_label shouldBe "Couldn't add that file. Try again."
             port.writes.shouldBeEmpty()
             bridge.retry()
             withTimeout(5_000) { bridge.host.state.first { it.phase == DocsIngestState.Phase.PHASE_FILED } }
