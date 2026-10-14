@@ -749,10 +749,9 @@ fn a_project_is_found_by_name_beside_the_tasks() {
         (
             hit.entity.as_str(),
             hit.id.as_str(),
-            hit.app_id.as_str(),
-            hit.open_id.as_str()
+            hit.app_id.as_str()
         ),
-        ("schedule.project", project.as_str(), "tasks", "")
+        ("schedule.project", project.as_str(), "tasks")
     );
     assert_eq!(hit.title, "Kitchen refit");
 

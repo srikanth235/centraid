@@ -14,8 +14,7 @@
 //! trashed), a note that teaches `[[` links, a task completed by its circle and
 //! one that teaches what opening a task gives. Only gestures both shells draw:
 //! there is no swipe or long press in Notes or Tasks, so no row mentions one.
-//! **Tally gets none** — its smallest row is a group, which would hide Tally's
-//! day-one state and which neither shell can delete — and People, Agenda and
+//! People, Agenda and
 //! Docs get none because their day one offers an import.
 //!
 //! **THE TASKS ARE DUE TODAY, the member's today**: Tasks opens on Today, and a

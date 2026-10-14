@@ -781,10 +781,9 @@ fn a_folder_is_found_by_name_and_the_root_is_not() {
         (
             hit.entity.as_str(),
             hit.id.as_str(),
-            hit.app_id.as_str(),
-            hit.open_id.as_str()
+            hit.app_id.as_str()
         ),
-        ("core.concept", folder.as_str(), "docs", "")
+        ("core.concept", folder.as_str(), "docs")
     );
     assert_eq!(hit.title, "Leases");
     // The drive's top level is a concept of the same scheme, labelled

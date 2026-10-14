@@ -1070,7 +1070,7 @@ mod tests {
         );
         let note = scratch.create("Quokka sighting", "saw one");
         let found = search("quokka");
-        let containers: Vec<(&str, &str, &str, &str)> = found
+        let containers: Vec<(&str, &str, &str)> = found
             .containers
             .iter()
             .map(|hit| {
@@ -1078,13 +1078,12 @@ mod tests {
                     hit.entity.as_str(),
                     hit.id.as_str(),
                     hit.app_id.as_str(),
-                    hit.open_id.as_str(),
                 )
             })
             .collect();
         assert_eq!(
             containers,
-            [("core.collection", notebook.as_str(), "notes", "")],
+            [("core.collection", notebook.as_str(), "notes")],
             "the notebook, and not the album, which opens in Photos"
         );
         assert_eq!(found.containers[0].title, "Quokka recipes");

@@ -8,7 +8,7 @@
 //!
 //! | The runtime asks | The door answers through |
 //! |---|---|
-//! | `table`, `tally` | [`VaultDoor`], the page door every app query reads through (`Vault::keyset_page`) |
+//! | `table` | [`VaultDoor`], the page door every app query reads through (`Vault::keyset_page`) |
 //! | `search` | the FTS door over the vault's read connection, as a screen's search does |
 //! | `run` | [`api::invoke_raw`](crate::api), the gate order and change feed a screen's write goes through, with an `invoke_key` |
 //! | `mint_id`, `now_ms` | the vault's own id source and clock |
@@ -43,7 +43,6 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_apps_kit::reads::{FanOutBound, read_pages};
 use centraid_apps_kit::row::Row;
 use centraid_apps_kit::statement::{PageOrder, PageQuery};
-use centraid_apps_tally::queries::{TallyData, load_tally};
 use centraid_assist::native::door::Occurrence;
 use centraid_assist::native::{Door, Ran};
 use centraid_search::Target;
@@ -122,17 +121,6 @@ impl Door for CoreDoor {
                 return Err(format!("reading {table}: {failure}"));
             }
             rows.map_err(|error| format!("reading {table}: {error}"))
-        })
-    }
-
-    fn tally(&self) -> Result<TallyData, String> {
-        self.with(|vault| {
-            let door = VaultDoor::new(vault);
-            let data = load_tally(&door);
-            if let Some(failure) = door.take_failure() {
-                return Err(format!("reading the ledger: {failure}"));
-            }
-            data.map_err(|error| format!("reading the ledger: {error}"))
         })
     }
 

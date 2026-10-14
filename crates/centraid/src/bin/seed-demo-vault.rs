@@ -5,7 +5,7 @@
 //!
 //!   --file <name>   the file to write inside <dir>  (default demo-vault.sqlite3)
 //!   --name <text>   the vault's display name        (default "Demo vault")
-//!   --only <a,b,c>  seed only these apps            (default: all eight)
+//!   --only <a,b,c>  seed only these apps            (default: all seven)
 //!   --force         overwrite a file that is ALREADY a vault
 //! ```
 //!
@@ -13,17 +13,17 @@
 //! against two, and two vaults holding the same rows under the same name would
 //! prove nothing: a switch that quietly did not happen would look exactly like
 //! one that did. `--only` is what makes the difference VISIBLE on the
-//! springboard — a vault seeded `--only docs,tasks,agenda` draws People, Notes,
-//! Photos and Tally as genuinely empty, which is a state the grid already knows
+//! springboard — a vault seeded `--only docs,tasks,agenda` draws People, Notes
+//! and Photos as genuinely empty, which is a state the grid already knows
 //! how to say and does not have to invent.
 //!
-//! **One scenario across eight apps** — agenda, docs, locker, notes, people,
-//! photos, tally and tasks: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
-//! Chris, with notes, a packing list and an uneven expense ledger. A demo
+//! **One scenario across seven apps** — agenda, docs, locker, notes, people,
+//! photos and tasks: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
+//! Chris, with notes and a packing list. A demo
 //! corpus is for reading like somebody's life rather than like
 //! `Item 1, Item 2`.
 //!
-//! **SEVEN OF THE EIGHT ARE THE LIBRARY'S.** The scenario lives in
+//! **SIX OF THE SEVEN ARE THE LIBRARY'S.** The scenario lives in
 //! `centraid_core::example`, which the chat's tests seed too, so a fixture and
 //! the rows those tests read are one set. This binary is the thin caller: the command line, the guard below, the byte store, the
 //! count it prints — and Locker, which is the one app that stays here because
@@ -257,7 +257,6 @@ fn main() {
                 vault,
                 &registry,
                 &principal,
-                &founded.owner_party_id,
                 &|app| wanted.has(app),
                 now,
             )
@@ -325,14 +324,13 @@ fn main() {
 /// with a live `people_profile` (#1047), so its mirror counts the profiles —
 /// this seeder trashes none, so every profile is live. Locker counts live,
 /// unarchived items, as its tile does; the trashed demo item is not one.
-const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
+const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 7] = [
     ("photos", "media_asset", "asset_id", None),
     ("docs", "core_document", "document_id", None),
     ("notes", "knowledge_note", "note_id", None),
     ("agenda", "core_event", "event_id", None),
     ("tasks", "schedule_task", "task_id", None),
     ("people", "people_profile", "profile_id", None),
-    ("tally", "tally_group", "group_id", None),
     (
         "locker",
         "locker_item",

@@ -50,7 +50,7 @@ fn pair() -> Pair {
             })),
         })
         .expect("the vault founds");
-    let Some(wire::response::Kind::Found(founded)) = answer.kind else {
+    let Some(wire::response::Kind::Found(_)) = answer.kind else {
         panic!("a found answered {:?}", answer.kind);
     };
     let report = core
@@ -59,7 +59,6 @@ fn pair() -> Pair {
                 vault,
                 core.registry(),
                 &core.owner(),
-                &founded.owner_party_id,
                 &|_| true,
                 centraid_core::example::now_ms(),
             )
@@ -101,7 +100,7 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
     );
     assert_eq!(from_core, from_harness);
 
-    // A table straight, in the kit's paged shape, and the ledger.
+    // A table straight, in the kit's paged shape.
     for (table, columns, sort, pk) in [
         (
             "core_party",
@@ -123,10 +122,6 @@ fn a_read_through_the_core_door_returns_the_rows_the_harness_door_returns() {
         assert!(!a.is_empty(), "{table} holds rows in the scenario");
         assert_eq!(a, b, "{table}");
     }
-    assert_eq!(
-        format!("{:?}", core.tally().expect("core ledger")),
-        format!("{:?}", harness.tally().expect("harness ledger"))
-    );
 
     // A search: a person's own name, over the entities the runtime searches.
     let world = World::load_with(&core, false).unwrap();

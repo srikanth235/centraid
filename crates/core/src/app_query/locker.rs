@@ -20,7 +20,7 @@ use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
 
-/// A loader's answer as the wire's (Tally's `answered`, for Locker).
+/// A loader's answer as the wire's (the kit's `answered`, for Locker).
 fn answered<T>(
     door: &VaultDoor<'_>,
     loaded: KitResult<T>,

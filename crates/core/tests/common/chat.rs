@@ -93,7 +93,7 @@ pub fn seed_scenario(handle: &Handle) {
             })),
         })
         .expect("the vault founds");
-    let Some(wire::response::Kind::Found(founded)) = answer.kind else {
+    let Some(wire::response::Kind::Found(_)) = answer.kind else {
         panic!("a found answered {:?}", answer.kind);
     };
     let report = handle
@@ -102,7 +102,6 @@ pub fn seed_scenario(handle: &Handle) {
                 vault,
                 handle.registry(),
                 &handle.owner(),
-                &founded.owner_party_id,
                 &|_| true,
                 centraid_core::example::now_ms(),
             )
