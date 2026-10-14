@@ -83,6 +83,10 @@ fn the_registry_carries_every_command_this_build_has() {
         // `rename_thread`, `delete_thread` and `clear`, and `settle_proposal`,
         // which records how a parked write's card ended (#1088, rung twelve).
         ("chat.", 5),
+        // The 20 `money.*` (#1099): accounts, the statement import, a line's
+        // category, name, void and transfer, plans, rules and their history pass,
+        // the stated balance and layout, and the member's own categories.
+        ("money.", 20),
     ];
     let total: usize = by_schema.iter().map(|(_, expected)| *expected).sum();
     assert_eq!(

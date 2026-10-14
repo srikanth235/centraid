@@ -586,7 +586,11 @@ fn folder_scheme_id(ctx: &CommandCtx<'_, '_>) -> Result<String> {
 }
 
 /// A concept scheme's id, created on first use.
-fn find_or_create_scheme(ctx: &CommandCtx<'_, '_>, uri: &str, title: &str) -> Result<String> {
+pub(crate) fn find_or_create_scheme(
+    ctx: &CommandCtx<'_, '_>,
+    uri: &str,
+    title: &str,
+) -> Result<String> {
     let existing: Option<String> = ctx
         .connection()
         .query_row(

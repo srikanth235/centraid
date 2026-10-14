@@ -57,6 +57,7 @@ mod event_time;
 pub mod knowledge;
 pub mod locker;
 pub mod media;
+pub mod money;
 pub mod people;
 pub mod schedule;
 pub mod social;
@@ -299,6 +300,9 @@ impl Registry {
             registry.register(definition)?;
         }
         for definition in media::definitions() {
+            registry.register(definition)?;
+        }
+        for definition in money::definitions() {
             registry.register(definition)?;
         }
         for definition in people::definitions() {
