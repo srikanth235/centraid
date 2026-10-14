@@ -6,7 +6,7 @@
 // that drifts on any of them turns every rule downstream into noise.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -515,4 +515,59 @@ test("a receipt row carries its issue, whether a ruling is in it, and any cost",
     assert.equal(typeof row.touched, "boolean");
     assert.ok(row.issue === null || Number.isInteger(row.issue));
   }
+});
+
+test("at the hook door a branch cut from the trunk's tip has no committed range (#1103)", async (t) => {
+  // lib/git.mjs pins ROOT to the checkout the law sits in, so the probe is a
+  // throwaway repository holding a copy of the law, and the answer is read in a
+  // child process rather than imported.
+  const repo = path.join(tmpdir(), `law-trunk-tip-${process.pid}`);
+  rmSync(repo, { recursive: true, force: true });
+  mkdirSync(repo, { recursive: true });
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const sh = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+  sh("init", "-q", "-b", "main");
+  sh("config", "user.email", "t@example.test");
+  sh("config", "user.name", "t");
+  sh("config", "commit.gpgsign", "false");
+  cpSync(HERE, path.join(repo, ".governance", "law"), {
+    recursive: true,
+    filter: (from) => !from.includes(`${path.sep}node_modules`) && !from.includes(`${path.sep}out`),
+  });
+  symlinkSync(path.join(HERE, "node_modules"), path.join(repo, ".governance/law/node_modules"), "dir");
+  writeFileSync(path.join(repo, "a.txt"), "1\n");
+  sh("add", "a.txt");
+  sh("commit", "-q", "-m", "first");
+  writeFileSync(path.join(repo, "a.txt"), "2\n");
+  sh("commit", "-q", "-am", "the trunk tip, whatever its subject");
+  const tip = sh("rev-parse", "HEAD");
+  const resolve = (staged) =>
+    JSON.parse(
+      execFileSync(
+        "node",
+        [
+          "--input-type=module",
+          "-e",
+          `import { resolveRange } from "./.governance/law/arrival.mjs";
+           process.stdout.write(JSON.stringify(resolveRange(undefined, { staged: ${staged} })));`,
+        ],
+        { cwd: repo, encoding: "utf8" }
+      )
+    );
+
+  sh("switch", "-q", "-c", "feature");
+  const hook = resolve(true);
+  assert.equal(hook.base, tip, "the hook door judges no committed commit");
+  assert.equal(hook.head, tip);
+  assert.equal(hook.hasBase, false);
+
+  const window = resolve(false);
+  assert.notEqual(window.base, tip, "the window door keeps the tip-commit fallback");
+  assert.equal(window.base, sh("rev-parse", "HEAD~1"));
+
+  // No trunk at all (a detached CI checkout) keeps the fallback at either door.
+  sh("branch", "-q", "-m", "main", "other");
+  sh("switch", "-q", "--detach", "HEAD");
+  sh("branch", "-q", "-D", "other");
+  assert.equal(resolve(true).base, sh("rev-parse", "HEAD~1"), "no trunk: the tip commit");
 });

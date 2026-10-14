@@ -72,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **The commit hook judges the commit you are writing on a fresh branch** ([#1103](https://github.com/srikanth235/centraid/issues/1103)). When HEAD is the trunk's tip, the hook door's range is empty and only the pending commit is judged, instead of the trunk's tip commit; a push to main and a checkout with no trunk still judge the tip.
 - **A second Save no longer files the row twice** ([#1089](https://github.com/srikanth235/centraid/issues/1089)). The vault runs a write sent twice twice, and five create flows let Save fire again after the first write committed: the Tally and Agenda editors, People's add, the Collections new-album sheet and FaceReview's new person. A committed create now ends its sitting.
 - **A daily task stays on Today in the evening, and the trash countdown is right across a clock change** ([#1090](https://github.com/srikanth235/centraid/issues/1090)). A repeating task due on a date recurs on the member's civil days, not on UTC midnights, so it no longer left Today from 20:00 in New York; the Docs trash counts the time left to the purge, so it reads 30 for a fresh trash across a daylight-saving change and keeps Restore on until the vault would refuse it.
 - The OSV lockfile gate passes again: `tinypool` is pinned to 2.1.2 past two critical advisories (GHSA-5gmw-xhrv-c9v3, GHSA-85c8-ppgw-ccpr) against the 2.1.0 that `oxfmt` pulls in ([#671](https://github.com/srikanth235/centraid/issues/671)).
