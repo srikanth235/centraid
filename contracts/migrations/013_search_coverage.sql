@@ -1,4 +1,4 @@
--- SEARCH FINDS WHAT A MEMBER TYPED — RUNG THIRTEEN (#1097, R1, R1a, R1b, R1c, R1d, R2a, R3).
+-- SEARCH FINDS WHAT A MEMBER TYPED — RUNG THIRTEEN (#1097, R1, R1a, R1b, R1c, R1d, R2a, R3, R5).
 --
 -- **ON THE LADDER.** `LADDER` in `crates/vault/src/migrations.rs` ends here.
 -- The file is both the migration and its fixture (D-1020-D1-13).
@@ -15,8 +15,9 @@
 -- project; an expense's category, group, line item or memo, searched for it and
 -- found nothing, in the app and on Home, because the text lived in a table whose
 -- index nothing read. This rung moves that text into the index the door DOES
--- read, so one probe per domain still answers (Home stays at seven), and it
--- retires nine indexes nothing reads (R2a).
+-- read, so one probe per domain still answers (the domains stay at seven), it
+-- retires seven indexes nothing reads (R2a), and it keeps four for the door's
+-- other registry, the containers a member files things in (R5).
 --
 -- ## R1 — an entity's index folds in its attribute text
 --
@@ -96,23 +97,23 @@
 -- ## R2a — what is retired
 --
 -- Nine indexes had writers and no reader (`rg -l "fts_<name>\b" --glob '!*.sql'`
--- finds nothing for any of them but one test each for two), and the text of the
--- first five is folded above: `fts_people_profile`, `fts_core_place`,
--- `fts_schedule_project`, `fts_social_circle` and `fts_knowledge_annotation`,
--- with their fifteen triggers. The owner chose (Q-1097-1 (c), widened) to retire
--- four more: `fts_core_transaction` and `fts_locker_item` (no feature is
--- proposed to read either, and Locker has its own walker) and
--- `fts_social_thread` and `fts_social_message`, which index the People
--- messaging model (`social_thread`, `social_message`) that has no screen; the
--- Chat tab is `chat_thread` and `chat_message`, which a later lane indexes. The
--- door test that proved `locker.item` is no domain now plants its own table.
--- `fts_core_collection` stays as it was: containers are the follow-up
--- (Q-1097-2) that would read it.
+-- finds nothing for any of them but one test each for two). The text of three is
+-- folded above — `fts_people_profile`, `fts_core_place` and
+-- `fts_knowledge_annotation`, with their nine triggers — and the owner chose
+-- (Q-1097-1 (c), widened) to retire four more: `fts_core_transaction` and
+-- `fts_locker_item` (no feature is proposed to read either, and Locker has its
+-- own walker) and `fts_social_thread` and `fts_social_message`, which index the
+-- People messaging model (`social_thread`, `social_message`) that has no screen;
+-- the Chat tab is `chat_thread` and `chat_message`, which a later lane indexes.
+-- The door test that proved `locker.item` is no domain now plants its own table.
+-- That is seven. The other two of the nine, `fts_schedule_project` and
+-- `fts_social_circle`, are KEPT: the owner folded containers into #1097
+-- (Q-1097-2 (b)), and a project and a Tally group are two of them (R5).
 --
 -- ## R3 — a vocabulary for each domain
 --
 -- `fts_<index>_vocab`, an `fts5vocab(<index>, 'row')` table, for the seven
--- domain indexes and never for Locker. It lists every term with the number of
+-- domain indexes and for the four container indexes (R5), and never for Locker. It lists every term with the number of
 -- rows it is in (`term`, `doc`, `cnt`), which is what a correction pass reads
 -- to find the word a member meant. It is a persistent table because the read
 -- connection is `query_only` and a temp table needs a write. The name is not an
@@ -121,6 +122,47 @@
 -- key on; a vocab table is a virtual table, so the snapshot's table census
 -- leaves it out. A RUNG THAT REBUILDS A DOMAIN INDEX MUST DROP ITS `_vocab`
 -- FIRST and create it again after.
+--
+-- ## R5 — containers are search results of their own
+--
+-- A notebook, an album, a Tasks project, a Tally group and a Docs folder are
+-- things a member names and goes looking for by that name. They are NOT domains:
+-- the Notes `[[` powerbox loops the domains, and a container is no link target.
+-- `crates/search` keeps them in a second registry, `CONTAINERS`, and holds it to
+-- the same open-time checks. Four indexes serve them; each has a persistent
+-- `_vocab` of its own, so a typo in a container's name is corrected like a
+-- typo in a note's.
+--
+--   fts_core_collection   (collection_id, name)   notebooks AND albums. UNCHANGED:
+--                                                 `core_collection.kind` is immutable
+--                                                 (006) and the door already joins
+--                                                 the base row, so the app a hit
+--                                                 opens in is read off `kind` at
+--                                                 query time and the index carries
+--                                                 no column the base lacks.
+--   fts_schedule_project  (project_id, name)      a project, while `archived_at` is
+--                                                 NULL. Kept as the baseline made it,
+--                                                 with the archive guard added to its
+--                                                 triggers: an archived project
+--                                                 leaves the index, restoring it puts
+--                                                 it back.
+--   fts_social_circle     (circle_id, name)       a circle that a LIVE `tally_group`
+--                                                 stands on (`archived_at IS NULL`).
+--                                                 People has no circles screen, so a
+--                                                 circle with no group is no result;
+--                                                 `fts_social_circle_from_tally_group_*`
+--                                                 re-index the circle when a group is
+--                                                 made, archived, restored or deleted.
+--   fts_core_concept      (concept_id, pref_label) a FOLDER: a concept of the folders
+--                                                 scheme that is not the `root`. Named
+--                                                 for its table, as every index is; it
+--                                                 holds a subset of it, as every index
+--                                                 of a table with a guard does. Tags
+--                                                 and flags are concepts of other
+--                                                 schemes and are never in it.
+--
+-- A notebook, a circle, a folder are removed by DELETE, not by a flag, so the
+-- `_ad` triggers stay; a hit is live because the index holds live rows only.
 --
 -- ## Idempotent on purpose
 --
@@ -139,16 +181,6 @@ DROP TRIGGER IF EXISTS fts_core_place_ai;
 DROP TRIGGER IF EXISTS fts_core_place_au;
 DROP TRIGGER IF EXISTS fts_core_place_ad;
 DROP TABLE IF EXISTS fts_core_place;
-
-DROP TRIGGER IF EXISTS fts_schedule_project_ai;
-DROP TRIGGER IF EXISTS fts_schedule_project_au;
-DROP TRIGGER IF EXISTS fts_schedule_project_ad;
-DROP TABLE IF EXISTS fts_schedule_project;
-
-DROP TRIGGER IF EXISTS fts_social_circle_ai;
-DROP TRIGGER IF EXISTS fts_social_circle_au;
-DROP TRIGGER IF EXISTS fts_social_circle_ad;
-DROP TABLE IF EXISTS fts_social_circle;
 
 DROP TRIGGER IF EXISTS fts_knowledge_annotation_ai;
 DROP TRIGGER IF EXISTS fts_knowledge_annotation_au;
@@ -1411,7 +1443,213 @@ BEGIN
        AND p.deleted_at IS NULL;
 END;
 
--- 6. The vocabulary of each domain (R3).
+-- 6. Containers (R5): the four indexes the door's second registry reads.
+--
+-- `fts_core_collection` is untouched (see R5); its vocabulary is created below.
+-- The other three are dropped and created again with the same columns they had,
+-- so the baseline's unconditional triggers can give way to guarded ones, and are
+-- filled from the live rows with the SELECT their triggers run.
+
+-- 6a. A project, while it is not archived.
+
+DROP TABLE IF EXISTS fts_schedule_project_vocab;
+DROP TRIGGER IF EXISTS fts_schedule_project_ai;
+DROP TRIGGER IF EXISTS fts_schedule_project_au;
+DROP TRIGGER IF EXISTS fts_schedule_project_ad;
+DROP TABLE IF EXISTS fts_schedule_project;
+
+CREATE VIRTUAL TABLE fts_schedule_project USING fts5(
+  project_id UNINDEXED, name,
+  tokenize = "unicode61 remove_diacritics 2"
+);
+
+INSERT INTO fts_schedule_project(rowid, project_id, name)
+  SELECT p.rowid, p.project_id, p.name
+    FROM schedule_project p
+   WHERE p.archived_at IS NULL;
+
+CREATE TRIGGER fts_schedule_project_ad
+  AFTER DELETE ON schedule_project
+BEGIN
+  DELETE FROM fts_schedule_project WHERE rowid = old.rowid;
+END;
+
+CREATE TRIGGER fts_schedule_project_ai
+  AFTER INSERT ON schedule_project
+BEGIN
+  INSERT INTO fts_schedule_project(rowid, project_id, name)
+    SELECT new.rowid, new.project_id, new.name
+     WHERE new.archived_at IS NULL;
+END;
+
+CREATE TRIGGER fts_schedule_project_au
+  AFTER UPDATE ON schedule_project
+BEGIN
+  DELETE FROM fts_schedule_project WHERE rowid = old.rowid;
+  INSERT INTO fts_schedule_project(rowid, project_id, name)
+    SELECT new.rowid, new.project_id, new.name
+     WHERE new.archived_at IS NULL;
+END;
+
+-- 6b. A circle that a live Tally group stands on.
+
+DROP TABLE IF EXISTS fts_social_circle_vocab;
+DROP TRIGGER IF EXISTS fts_social_circle_ai;
+DROP TRIGGER IF EXISTS fts_social_circle_au;
+DROP TRIGGER IF EXISTS fts_social_circle_ad;
+DROP TRIGGER IF EXISTS fts_social_circle_from_tally_group_ai;
+DROP TRIGGER IF EXISTS fts_social_circle_from_tally_group_au;
+DROP TRIGGER IF EXISTS fts_social_circle_from_tally_group_ad;
+DROP TABLE IF EXISTS fts_social_circle;
+
+CREATE VIRTUAL TABLE fts_social_circle USING fts5(
+  circle_id UNINDEXED, name,
+  tokenize = "unicode61 remove_diacritics 2"
+);
+
+INSERT INTO fts_social_circle(rowid, circle_id, name)
+  SELECT c.rowid, c.circle_id, c.name
+    FROM social_circle c
+   WHERE EXISTS (SELECT 1 FROM tally_group g
+                  WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL);
+
+CREATE TRIGGER fts_social_circle_ad
+  AFTER DELETE ON social_circle
+BEGIN
+  DELETE FROM fts_social_circle WHERE rowid = old.rowid;
+END;
+
+CREATE TRIGGER fts_social_circle_ai
+  AFTER INSERT ON social_circle
+BEGIN
+  INSERT INTO fts_social_circle(rowid, circle_id, name)
+    SELECT new.rowid, new.circle_id, new.name
+     WHERE EXISTS (SELECT 1 FROM tally_group g
+                    WHERE g.circle_id = new.circle_id AND g.archived_at IS NULL);
+END;
+
+CREATE TRIGGER fts_social_circle_au
+  AFTER UPDATE ON social_circle
+BEGIN
+  DELETE FROM fts_social_circle WHERE rowid = old.rowid;
+  INSERT INTO fts_social_circle(rowid, circle_id, name)
+    SELECT new.rowid, new.circle_id, new.name
+     WHERE EXISTS (SELECT 1 FROM tally_group g
+                    WHERE g.circle_id = new.circle_id AND g.archived_at IS NULL);
+END;
+
+-- A group is made AFTER its circle, archived and restored by `archived_at`, and
+-- deleted before its circle; each re-indexes the circle it stands on. An update
+-- of `circle_id` re-indexes both the circle it left and the one it reached.
+
+CREATE TRIGGER fts_social_circle_from_tally_group_ai
+  AFTER INSERT ON tally_group
+BEGIN
+  DELETE FROM fts_social_circle WHERE rowid IN (
+    SELECT c.rowid FROM social_circle c WHERE c.circle_id = new.circle_id);
+  INSERT INTO fts_social_circle(rowid, circle_id, name)
+    SELECT c.rowid, c.circle_id, c.name
+      FROM social_circle c
+     WHERE c.circle_id = new.circle_id
+       AND EXISTS (SELECT 1 FROM tally_group g
+                    WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL);
+END;
+
+CREATE TRIGGER fts_social_circle_from_tally_group_au
+  AFTER UPDATE OF circle_id, archived_at ON tally_group
+BEGIN
+  DELETE FROM fts_social_circle WHERE rowid IN (
+    SELECT c.rowid FROM social_circle c
+     WHERE c.circle_id IN (old.circle_id, new.circle_id));
+  INSERT INTO fts_social_circle(rowid, circle_id, name)
+    SELECT c.rowid, c.circle_id, c.name
+      FROM social_circle c
+     WHERE c.circle_id IN (old.circle_id, new.circle_id)
+       AND EXISTS (SELECT 1 FROM tally_group g
+                    WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL);
+END;
+
+CREATE TRIGGER fts_social_circle_from_tally_group_ad
+  AFTER DELETE ON tally_group
+BEGIN
+  DELETE FROM fts_social_circle WHERE rowid IN (
+    SELECT c.rowid FROM social_circle c WHERE c.circle_id = old.circle_id);
+  INSERT INTO fts_social_circle(rowid, circle_id, name)
+    SELECT c.rowid, c.circle_id, c.name
+      FROM social_circle c
+     WHERE c.circle_id = old.circle_id
+       AND EXISTS (SELECT 1 FROM tally_group g
+                    WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL);
+END;
+
+-- 6c. A Docs folder: a concept of the folders scheme that is not the root.
+-- `https://centraid.dev/schemes/folders` is `FOLDER_SCHEME_URI` in
+-- `crates/vault/src/commands/core.rs`, and `root` its `ROOT_FOLDER_NOTATION`.
+
+DROP TABLE IF EXISTS fts_core_concept_vocab;
+DROP TRIGGER IF EXISTS fts_core_concept_ai;
+DROP TRIGGER IF EXISTS fts_core_concept_au;
+DROP TRIGGER IF EXISTS fts_core_concept_ad;
+DROP TRIGGER IF EXISTS fts_core_concept_from_core_concept_scheme_au;
+DROP TABLE IF EXISTS fts_core_concept;
+
+CREATE VIRTUAL TABLE fts_core_concept USING fts5(
+  concept_id UNINDEXED, pref_label,
+  tokenize = "unicode61 remove_diacritics 2"
+);
+
+INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+  SELECT c.rowid, c.concept_id, c.pref_label
+    FROM core_concept c
+    JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+   WHERE s.uri = 'https://centraid.dev/schemes/folders'
+     AND c.notation <> 'root';
+
+CREATE TRIGGER fts_core_concept_ad
+  AFTER DELETE ON core_concept
+BEGIN
+  DELETE FROM fts_core_concept WHERE rowid = old.rowid;
+END;
+
+CREATE TRIGGER fts_core_concept_ai
+  AFTER INSERT ON core_concept
+BEGIN
+  INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+    SELECT new.rowid, new.concept_id, new.pref_label
+     WHERE new.notation <> 'root'
+       AND EXISTS (SELECT 1 FROM core_concept_scheme s
+                    WHERE s.scheme_id = new.scheme_id
+                      AND s.uri = 'https://centraid.dev/schemes/folders');
+END;
+
+CREATE TRIGGER fts_core_concept_au
+  AFTER UPDATE ON core_concept
+BEGIN
+  DELETE FROM fts_core_concept WHERE rowid = old.rowid;
+  INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+    SELECT new.rowid, new.concept_id, new.pref_label
+     WHERE new.notation <> 'root'
+       AND EXISTS (SELECT 1 FROM core_concept_scheme s
+                    WHERE s.scheme_id = new.scheme_id
+                      AND s.uri = 'https://centraid.dev/schemes/folders');
+END;
+
+-- A scheme whose URI changes moves every concept of it in or out of the folders.
+
+CREATE TRIGGER fts_core_concept_from_core_concept_scheme_au
+  AFTER UPDATE OF uri ON core_concept_scheme
+BEGIN
+  DELETE FROM fts_core_concept WHERE rowid IN (
+    SELECT c.rowid FROM core_concept c WHERE c.scheme_id = new.scheme_id);
+  INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+    SELECT c.rowid, c.concept_id, c.pref_label
+      FROM core_concept c
+     WHERE c.scheme_id = new.scheme_id
+       AND c.notation <> 'root'
+       AND new.uri = 'https://centraid.dev/schemes/folders';
+END;
+
+-- 7. The vocabulary of each domain and each container (R3, R5).
 
 DROP TABLE IF EXISTS fts_knowledge_note_vocab;
 CREATE VIRTUAL TABLE fts_knowledge_note_vocab USING fts5vocab(fts_knowledge_note, 'row');
@@ -1433,3 +1671,15 @@ CREATE VIRTUAL TABLE fts_core_content_item_vocab USING fts5vocab(fts_core_conten
 
 DROP TABLE IF EXISTS fts_core_document_vocab;
 CREATE VIRTUAL TABLE fts_core_document_vocab USING fts5vocab(fts_core_document, 'row');
+
+DROP TABLE IF EXISTS fts_core_collection_vocab;
+CREATE VIRTUAL TABLE fts_core_collection_vocab USING fts5vocab(fts_core_collection, 'row');
+
+DROP TABLE IF EXISTS fts_schedule_project_vocab;
+CREATE VIRTUAL TABLE fts_schedule_project_vocab USING fts5vocab(fts_schedule_project, 'row');
+
+DROP TABLE IF EXISTS fts_social_circle_vocab;
+CREATE VIRTUAL TABLE fts_social_circle_vocab USING fts5vocab(fts_social_circle, 'row');
+
+DROP TABLE IF EXISTS fts_core_concept_vocab;
+CREATE VIRTUAL TABLE fts_core_concept_vocab USING fts5vocab(fts_core_concept, 'row');

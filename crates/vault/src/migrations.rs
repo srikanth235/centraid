@@ -160,8 +160,11 @@ pub const CHAT_PROPOSALS_SQL: &str =
 /// project; an expense's category, group, items and memo), with child-table
 /// triggers that re-index the parent. The rank weights are the search door's and
 /// not a row in the index (R1d). A note logged on an
-/// interaction folds into the memo of the person it is about (Q-1097-5). Nine
-/// indexes no one reads leave, and each of the seven domain indexes gains a persistent
+/// interaction folds into the memo of the person it is about (Q-1097-5). Seven
+/// indexes no one reads leave; four are kept for the containers a member files
+/// things in (notebook, album, project, Tally group, folder; R-1097-19), the
+/// circle's and the new folder index guarded to the live rows; and each of the
+/// seven domain indexes and four container indexes gains a persistent
 /// `fts5vocab` table for the correction pass. Every statement is guarded with
 /// IF EXISTS, because the suites wind a founded file back by pragma and climb
 /// again over this rung's own objects.

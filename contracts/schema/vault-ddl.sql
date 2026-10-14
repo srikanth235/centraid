@@ -1800,6 +1800,33 @@ CREATE TABLE 'fts_core_collection_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
 -- table fts_core_collection_idx on fts_core_collection_idx
 CREATE TABLE 'fts_core_collection_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
 
+-- table fts_core_collection_vocab on fts_core_collection_vocab
+CREATE VIRTUAL TABLE fts_core_collection_vocab USING fts5vocab(fts_core_collection, 'row');
+
+-- table fts_core_concept on fts_core_concept
+CREATE VIRTUAL TABLE fts_core_concept USING fts5(
+  concept_id UNINDEXED, pref_label,
+  tokenize = "unicode61 remove_diacritics 2"
+);
+
+-- table fts_core_concept_config on fts_core_concept_config
+CREATE TABLE 'fts_core_concept_config'(k PRIMARY KEY, v) WITHOUT ROWID;
+
+-- table fts_core_concept_content on fts_core_concept_content
+CREATE TABLE 'fts_core_concept_content'(id INTEGER PRIMARY KEY, c0, c1);
+
+-- table fts_core_concept_data on fts_core_concept_data
+CREATE TABLE 'fts_core_concept_data'(id INTEGER PRIMARY KEY, block BLOB);
+
+-- table fts_core_concept_docsize on fts_core_concept_docsize
+CREATE TABLE 'fts_core_concept_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
+
+-- table fts_core_concept_idx on fts_core_concept_idx
+CREATE TABLE 'fts_core_concept_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
+
+-- table fts_core_concept_vocab on fts_core_concept_vocab
+CREATE VIRTUAL TABLE fts_core_concept_vocab USING fts5vocab(fts_core_concept, 'row');
+
 -- table fts_core_content_item on fts_core_content_item
 CREATE VIRTUAL TABLE fts_core_content_item USING fts5(
   content_id UNINDEXED, title,
@@ -1920,6 +1947,30 @@ CREATE TABLE 'fts_knowledge_note_idx'(segid, term, pgno, PRIMARY KEY(segid, term
 -- table fts_knowledge_note_vocab on fts_knowledge_note_vocab
 CREATE VIRTUAL TABLE fts_knowledge_note_vocab USING fts5vocab(fts_knowledge_note, 'row');
 
+-- table fts_schedule_project on fts_schedule_project
+CREATE VIRTUAL TABLE fts_schedule_project USING fts5(
+  project_id UNINDEXED, name,
+  tokenize = "unicode61 remove_diacritics 2"
+);
+
+-- table fts_schedule_project_config on fts_schedule_project_config
+CREATE TABLE 'fts_schedule_project_config'(k PRIMARY KEY, v) WITHOUT ROWID;
+
+-- table fts_schedule_project_content on fts_schedule_project_content
+CREATE TABLE 'fts_schedule_project_content'(id INTEGER PRIMARY KEY, c0, c1);
+
+-- table fts_schedule_project_data on fts_schedule_project_data
+CREATE TABLE 'fts_schedule_project_data'(id INTEGER PRIMARY KEY, block BLOB);
+
+-- table fts_schedule_project_docsize on fts_schedule_project_docsize
+CREATE TABLE 'fts_schedule_project_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
+
+-- table fts_schedule_project_idx on fts_schedule_project_idx
+CREATE TABLE 'fts_schedule_project_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
+
+-- table fts_schedule_project_vocab on fts_schedule_project_vocab
+CREATE VIRTUAL TABLE fts_schedule_project_vocab USING fts5vocab(fts_schedule_project, 'row');
+
 -- table fts_schedule_task on fts_schedule_task
 CREATE VIRTUAL TABLE fts_schedule_task USING fts5(
   task_id UNINDEXED, title, description, project,
@@ -1943,6 +1994,30 @@ CREATE TABLE 'fts_schedule_task_idx'(segid, term, pgno, PRIMARY KEY(segid, term)
 
 -- table fts_schedule_task_vocab on fts_schedule_task_vocab
 CREATE VIRTUAL TABLE fts_schedule_task_vocab USING fts5vocab(fts_schedule_task, 'row');
+
+-- table fts_social_circle on fts_social_circle
+CREATE VIRTUAL TABLE fts_social_circle USING fts5(
+  circle_id UNINDEXED, name,
+  tokenize = "unicode61 remove_diacritics 2"
+);
+
+-- table fts_social_circle_config on fts_social_circle_config
+CREATE TABLE 'fts_social_circle_config'(k PRIMARY KEY, v) WITHOUT ROWID;
+
+-- table fts_social_circle_content on fts_social_circle_content
+CREATE TABLE 'fts_social_circle_content'(id INTEGER PRIMARY KEY, c0, c1);
+
+-- table fts_social_circle_data on fts_social_circle_data
+CREATE TABLE 'fts_social_circle_data'(id INTEGER PRIMARY KEY, block BLOB);
+
+-- table fts_social_circle_docsize on fts_social_circle_docsize
+CREATE TABLE 'fts_social_circle_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
+
+-- table fts_social_circle_idx on fts_social_circle_idx
+CREATE TABLE 'fts_social_circle_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
+
+-- table fts_social_circle_vocab on fts_social_circle_vocab
+CREATE VIRTUAL TABLE fts_social_circle_vocab USING fts5vocab(fts_social_circle, 'row');
 
 -- table fts_tally_expense on fts_tally_expense
 CREATE VIRTUAL TABLE fts_tally_expense USING fts5(
@@ -3757,6 +3832,52 @@ CREATE TRIGGER fts_core_collection_au AFTER UPDATE ON core_collection BEGIN
   INSERT INTO fts_core_collection(rowid, collection_id, name) SELECT new.rowid, new."collection_id", new."name";
 END;
 
+-- trigger fts_core_concept_ad on core_concept
+CREATE TRIGGER fts_core_concept_ad
+  AFTER DELETE ON core_concept
+BEGIN
+  DELETE FROM fts_core_concept WHERE rowid = old.rowid;
+END;
+
+-- trigger fts_core_concept_ai on core_concept
+CREATE TRIGGER fts_core_concept_ai
+  AFTER INSERT ON core_concept
+BEGIN
+  INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+    SELECT new.rowid, new.concept_id, new.pref_label
+     WHERE new.notation <> 'root'
+       AND EXISTS (SELECT 1 FROM core_concept_scheme s
+                    WHERE s.scheme_id = new.scheme_id
+                      AND s.uri = 'https://centraid.dev/schemes/folders');
+END;
+
+-- trigger fts_core_concept_au on core_concept
+CREATE TRIGGER fts_core_concept_au
+  AFTER UPDATE ON core_concept
+BEGIN
+  DELETE FROM fts_core_concept WHERE rowid = old.rowid;
+  INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+    SELECT new.rowid, new.concept_id, new.pref_label
+     WHERE new.notation <> 'root'
+       AND EXISTS (SELECT 1 FROM core_concept_scheme s
+                    WHERE s.scheme_id = new.scheme_id
+                      AND s.uri = 'https://centraid.dev/schemes/folders');
+END;
+
+-- trigger fts_core_concept_from_core_concept_scheme_au on core_concept_scheme
+CREATE TRIGGER fts_core_concept_from_core_concept_scheme_au
+  AFTER UPDATE OF uri ON core_concept_scheme
+BEGIN
+  DELETE FROM fts_core_concept WHERE rowid IN (
+    SELECT c.rowid FROM core_concept c WHERE c.scheme_id = new.scheme_id);
+  INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+    SELECT c.rowid, c.concept_id, c.pref_label
+      FROM core_concept c
+     WHERE c.scheme_id = new.scheme_id
+       AND c.notation <> 'root'
+       AND new.uri = 'https://centraid.dev/schemes/folders';
+END;
+
 -- trigger fts_core_content_item_ad on core_content_item
 CREATE TRIGGER fts_core_content_item_ad AFTER DELETE ON core_content_item BEGIN
   DELETE FROM fts_core_content_item WHERE rowid = old.rowid;
@@ -4499,6 +4620,32 @@ CREATE TRIGGER fts_knowledge_note_au AFTER UPDATE ON knowledge_note BEGIN
             WHERE content_id = new."body_content_id") END) WHERE new."deleted_at" IS NULL;
 END;
 
+-- trigger fts_schedule_project_ad on schedule_project
+CREATE TRIGGER fts_schedule_project_ad
+  AFTER DELETE ON schedule_project
+BEGIN
+  DELETE FROM fts_schedule_project WHERE rowid = old.rowid;
+END;
+
+-- trigger fts_schedule_project_ai on schedule_project
+CREATE TRIGGER fts_schedule_project_ai
+  AFTER INSERT ON schedule_project
+BEGIN
+  INSERT INTO fts_schedule_project(rowid, project_id, name)
+    SELECT new.rowid, new.project_id, new.name
+     WHERE new.archived_at IS NULL;
+END;
+
+-- trigger fts_schedule_project_au on schedule_project
+CREATE TRIGGER fts_schedule_project_au
+  AFTER UPDATE ON schedule_project
+BEGIN
+  DELETE FROM fts_schedule_project WHERE rowid = old.rowid;
+  INSERT INTO fts_schedule_project(rowid, project_id, name)
+    SELECT new.rowid, new.project_id, new.name
+     WHERE new.archived_at IS NULL;
+END;
+
 -- trigger fts_schedule_task_ad on schedule_task
 CREATE TRIGGER fts_schedule_task_ad
   AFTER DELETE ON schedule_task
@@ -4555,6 +4702,77 @@ BEGIN
       LEFT JOIN schedule_project pr ON pr.project_id = p.project_id
      WHERE p.project_id = new.project_id
        AND p.deleted_at IS NULL;
+END;
+
+-- trigger fts_social_circle_ad on social_circle
+CREATE TRIGGER fts_social_circle_ad
+  AFTER DELETE ON social_circle
+BEGIN
+  DELETE FROM fts_social_circle WHERE rowid = old.rowid;
+END;
+
+-- trigger fts_social_circle_ai on social_circle
+CREATE TRIGGER fts_social_circle_ai
+  AFTER INSERT ON social_circle
+BEGIN
+  INSERT INTO fts_social_circle(rowid, circle_id, name)
+    SELECT new.rowid, new.circle_id, new.name
+     WHERE EXISTS (SELECT 1 FROM tally_group g
+                    WHERE g.circle_id = new.circle_id AND g.archived_at IS NULL);
+END;
+
+-- trigger fts_social_circle_au on social_circle
+CREATE TRIGGER fts_social_circle_au
+  AFTER UPDATE ON social_circle
+BEGIN
+  DELETE FROM fts_social_circle WHERE rowid = old.rowid;
+  INSERT INTO fts_social_circle(rowid, circle_id, name)
+    SELECT new.rowid, new.circle_id, new.name
+     WHERE EXISTS (SELECT 1 FROM tally_group g
+                    WHERE g.circle_id = new.circle_id AND g.archived_at IS NULL);
+END;
+
+-- trigger fts_social_circle_from_tally_group_ad on tally_group
+CREATE TRIGGER fts_social_circle_from_tally_group_ad
+  AFTER DELETE ON tally_group
+BEGIN
+  DELETE FROM fts_social_circle WHERE rowid IN (
+    SELECT c.rowid FROM social_circle c WHERE c.circle_id = old.circle_id);
+  INSERT INTO fts_social_circle(rowid, circle_id, name)
+    SELECT c.rowid, c.circle_id, c.name
+      FROM social_circle c
+     WHERE c.circle_id = old.circle_id
+       AND EXISTS (SELECT 1 FROM tally_group g
+                    WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL);
+END;
+
+-- trigger fts_social_circle_from_tally_group_ai on tally_group
+CREATE TRIGGER fts_social_circle_from_tally_group_ai
+  AFTER INSERT ON tally_group
+BEGIN
+  DELETE FROM fts_social_circle WHERE rowid IN (
+    SELECT c.rowid FROM social_circle c WHERE c.circle_id = new.circle_id);
+  INSERT INTO fts_social_circle(rowid, circle_id, name)
+    SELECT c.rowid, c.circle_id, c.name
+      FROM social_circle c
+     WHERE c.circle_id = new.circle_id
+       AND EXISTS (SELECT 1 FROM tally_group g
+                    WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL);
+END;
+
+-- trigger fts_social_circle_from_tally_group_au on tally_group
+CREATE TRIGGER fts_social_circle_from_tally_group_au
+  AFTER UPDATE OF circle_id, archived_at ON tally_group
+BEGIN
+  DELETE FROM fts_social_circle WHERE rowid IN (
+    SELECT c.rowid FROM social_circle c
+     WHERE c.circle_id IN (old.circle_id, new.circle_id));
+  INSERT INTO fts_social_circle(rowid, circle_id, name)
+    SELECT c.rowid, c.circle_id, c.name
+      FROM social_circle c
+     WHERE c.circle_id IN (old.circle_id, new.circle_id)
+       AND EXISTS (SELECT 1 FROM tally_group g
+                    WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL);
 END;
 
 -- trigger fts_tally_expense_ad on tally_expense

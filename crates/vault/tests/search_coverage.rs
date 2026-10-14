@@ -5,7 +5,9 @@
 //! in a table whose index nothing read. Rung thirteen folds that text into the
 //! index each domain's probe reads (R1), leaves out what the member can no longer
 //! see (R1b), keeps a Locker memo out of every index (R1c), stores no rank weights
-//! (R1d: the door owns them) and adds a vocabulary table per domain (R3).
+//! (R1d: the door owns them) and adds a vocabulary table per domain (R3). It also
+//! keeps four indexes for the containers a member files things in (R5): a
+//! notebook and an album, a project, a Tally group, a Docs folder.
 //!
 //! ## How the claims are made
 //!
@@ -251,6 +253,37 @@ impl World {
             );
         }
         task
+    }
+
+    // --- containers (R5) ---
+
+    fn notebook(&self, name: &str) -> String {
+        self.id("knowledge.create_notebook", json!({ "name": name }), "notebook_id")
+    }
+
+    fn album(&self, title: &str) -> String {
+        self.id("media.create_album", json!({ "title": title }), "album_id")
+    }
+
+    fn project(&self, name: &str) -> String {
+        self.id("schedule.save_project", json!({ "name": name }), "project_id")
+    }
+
+    fn folder(&self, name: &str) -> String {
+        self.id("core.create_folder", json!({ "name": name }), "folder_id")
+    }
+
+    /// The circle a Tally group stands on: the id the circle index holds.
+    fn circle_of(&self, group: &str) -> String {
+        self.vault()
+            .read(|connection| {
+                Ok(connection.query_row(
+                    "SELECT circle_id FROM tally_group WHERE group_id = ?1",
+                    [group],
+                    |row| row.get::<_, String>(0),
+                )?)
+            })
+            .expect("a group stands on a circle")
     }
 
     // --- tally ---
@@ -577,6 +610,66 @@ fn assert_indexes_match(vault: &Vault) {
                 assert_eq!(
                     actual, expected,
                     "{fts} does not hold what its base tables say (columns {columns:?})"
+                );
+            }
+            Ok(())
+        })
+        .expect("the indexes read");
+}
+
+/// The four container indexes hold exactly the live containers (R5), judged by
+/// plain joins that are not the triggers: a notebook or an album as it stands, a
+/// project while it is not archived, a circle a live group stands on, and a
+/// concept of the folders scheme that is not the root.
+fn assert_containers_match(vault: &Vault) {
+    vault
+        .read(|connection| {
+            let one = |sql: &str| -> Indexed {
+                let mut statement = connection.prepare(sql).expect("the rows read");
+                statement
+                    .query_map([], |row| {
+                        Ok((row.get::<_, String>(0)?, bags([Some(row.get::<_, String>(1)?)])))
+                    })
+                    .expect("the rows read")
+                    .collect::<rusqlite::Result<Indexed>>()
+                    .expect("the rows read")
+            };
+            let checks: [(&str, &[&str], Indexed); 4] = [
+                (
+                    "fts_core_collection",
+                    &["collection_id", "name"],
+                    one("SELECT collection_id, name FROM core_collection"),
+                ),
+                (
+                    "fts_schedule_project",
+                    &["project_id", "name"],
+                    one("SELECT project_id, name FROM schedule_project WHERE archived_at IS NULL"),
+                ),
+                (
+                    "fts_social_circle",
+                    &["circle_id", "name"],
+                    one(
+                        "SELECT c.circle_id, c.name FROM social_circle c
+                          WHERE EXISTS (SELECT 1 FROM tally_group g
+                                         WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL)",
+                    ),
+                ),
+                (
+                    "fts_core_concept",
+                    &["concept_id", "pref_label"],
+                    one(
+                        "SELECT c.concept_id, c.pref_label FROM core_concept c
+                           JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+                          WHERE s.uri = 'https://centraid.dev/schemes/folders'
+                            AND c.notation <> 'root'",
+                    ),
+                ),
+            ];
+            for (fts, columns, expected) in checks {
+                let actual = held(connection, fts, columns);
+                assert_eq!(
+                    actual, expected,
+                    "{fts} does not hold the live containers its base tables say"
                 );
             }
             Ok(())
@@ -1595,11 +1688,25 @@ fn wind_back_to_rung_twelve(path: &Path) {
             .collect::<rusqlite::Result<_>>()
             .expect("the schema reads")
     };
-    assert_eq!(rung_thirteen.len(), 7 + 22, "rung thirteen's own objects");
+    // Eleven vocabularies (seven domains, four containers), twenty-two
+    // re-indexing triggers of the domains, the circle's three from the Tally
+    // group and the folder index's one from its scheme.
+    assert_eq!(
+        rung_thirteen.len(),
+        11 + 22 + 3 + 1,
+        "rung thirteen's own objects"
+    );
     let mut statements = String::from("BEGIN;\n");
     for (kind, name) in &rung_thirteen {
         statements.push_str(&format!("DROP {} {name};\n", kind.to_uppercase()));
     }
+    // The folder index is born in rung thirteen: it leaves and nothing replaces it.
+    for suffix in ["ai", "au", "ad"] {
+        statements.push_str(&format!(
+            "DROP TRIGGER IF EXISTS fts_core_concept_{suffix};\n"
+        ));
+    }
+    statements.push_str("DROP TABLE IF EXISTS fts_core_concept;\n");
     let rebuilt = [
         "fts_core_party",
         "fts_core_event",
@@ -1638,12 +1745,11 @@ fn wind_back_to_rung_twelve(path: &Path) {
         .expect("the file is wound back to rung twelve");
 }
 
-/// The nine indexes rung thirteen retires (R2a).
-const RETIRED: [&str; 9] = [
+/// The seven indexes rung thirteen retires (R2a). `fts_schedule_project` and
+/// `fts_social_circle` are not among them: they serve containers (R5).
+const RETIRED: [&str; 7] = [
     "fts_people_profile",
     "fts_core_place",
-    "fts_schedule_project",
-    "fts_social_circle",
     "fts_knowledge_annotation",
     "fts_core_transaction",
     "fts_locker_item",
@@ -1651,10 +1757,16 @@ const RETIRED: [&str; 9] = [
     "fts_social_message",
 ];
 
-/// The one index kept, unread, for containers as results of their own
-/// (Q-1097-2). Chat history is `chat_thread` and `chat_message`, not the
-/// People messaging model `fts_social_*` indexed, so those two are retired.
-const KEPT_FOR_FOLLOW_UPS: [&str; 1] = ["fts_core_collection"];
+/// The four indexes kept for containers as results of their own (Q-1097-2,
+/// R5), each with a vocabulary of its own. Chat history is `chat_thread` and
+/// `chat_message`, not the People messaging model `fts_social_*` indexed, so
+/// the messaging pair is retired.
+const CONTAINER_INDEXES: [&str; 4] = [
+    "fts_core_collection",
+    "fts_schedule_project",
+    "fts_social_circle",
+    "fts_core_concept",
+];
 
 /// The triggers of OTHER indexes that also wrote `fts_social_message`: a body's
 /// text or a representation arriving re-indexes every note, document and
@@ -1727,6 +1839,19 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
         json!({ "expense_id": expense, "note": "the red folder" }),
     );
     let generic = world.expense("Dinner", "general", None, &ana, None);
+    // Containers (R5): one of each, and an archived project and group that the
+    // baseline indexed and the rebuilt index must not.
+    let notebook = world.notebook("Reading list");
+    let album = world.album("Goa trip");
+    let folder = world.folder("Leases");
+    let archived_project = world.project("Archived chores");
+    world.execute_sql(
+        "UPDATE schedule_project SET archived_at = '2099-01-01T00:00:00.000Z' WHERE project_id = ?1",
+        &[&archived_project],
+    );
+    let mothballed = world.group("Mothballed flat", &[&ana]);
+    world.run("tally.archive_group", json!({ "group_id": mothballed }));
+    let circle = world.circle_of(&group);
 
     let path = world.vault().path().to_path_buf();
     wind_back_to_rung_twelve(&path);
@@ -1826,16 +1951,48 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
             "{writer} is gone"
         );
     }
-    // The kept one is whole: the table, its five shadow tables and its three
-    // triggers.
-    for kept in KEPT_FOR_FOLLOW_UPS {
+    // Each container index is whole: the table, its five shadow tables, its
+    // three triggers and its vocabulary (R5), and the circle's index and the
+    // folder index have the triggers of the table they hang on besides.
+    for kept in CONTAINER_INDEXES {
         let objects = remaining_objects(&migrated, kept);
+        let from_children = match kept {
+            "fts_social_circle" => 3,
+            "fts_core_concept" => 1,
+            _ => 0,
+        };
         assert_eq!(
             objects.len(),
-            1 + 5 + 3,
+            1 + 5 + 3 + 1 + from_children,
             "{kept} lost objects at the climb: {objects:?}"
         );
     }
+    // What the containers held before the rung is in them after it.
+    for (fts, word, found) in [
+        ("fts_core_collection", "reading", &notebook),
+        ("fts_core_collection", "goa", &album),
+        ("fts_schedule_project", "kitchen", &project),
+        ("fts_social_circle", "sitwell", &circle),
+        ("fts_core_concept", "leases", &folder),
+    ] {
+        assert_eq!(
+            hits(&migrated, fts, &format!("\"{word}\"")),
+            set([found]),
+            "{fts} after the climb"
+        );
+    }
+    // A project and a group archived before the rung are not backfilled.
+    for (fts, word) in [
+        ("fts_schedule_project", "archived"),
+        ("fts_social_circle", "mothballed"),
+    ] {
+        assert_eq!(
+            hits(&migrated, fts, &format!("\"{word}\"")),
+            none(),
+            "{fts}: `{word}` is archived"
+        );
+    }
+    assert_containers_match(&migrated);
     // The triggers work on the migrated file as they do on a founded one.
     let registry = Registry::with_system_commands().expect("the registry builds");
     registry.install(&migrated).expect("the record installs");
@@ -1894,4 +2051,350 @@ fn the_rung_climbs_over_a_file_that_already_has_its_objects() {
         set([&ravi])
     );
     assert_indexes_match(&migrated);
+}
+
+// ---------------------------------------------------------------------------
+// 6. Containers (R5): a notebook, an album, a project, a group, a folder.
+// ---------------------------------------------------------------------------
+
+/// A phrase, so a word is looked up whole.
+fn word(word: &str) -> String {
+    format!("\"{word}\"")
+}
+
+#[test]
+fn a_notebook_and_an_album_are_indexed_renamed_and_removed() {
+    let world = World::new("cov-collections");
+    let notebook = world.notebook("Reading list");
+    let album = world.album("Goa trip");
+    // A notebook inside a notebook is a notebook.
+    let nested = world.id(
+        "knowledge.create_notebook",
+        json!({ "name": "Cookery", "parent_notebook_id": notebook }),
+        "notebook_id",
+    );
+    for (query, found) in [
+        ("reading", set([&notebook])),
+        ("goa", set([&album])),
+        ("cookery", set([&nested])),
+    ] {
+        assert_eq!(world.hits("fts_core_collection", &word(query)), found);
+    }
+    assert_containers_match(world.vault());
+
+    // A RENAME MOVES THE HIT, for each kind.
+    world.run(
+        "knowledge.rename_notebook",
+        json!({ "notebook_id": notebook, "name": "Novels" }),
+    );
+    world.run(
+        "media.rename_album",
+        json!({ "album_id": album, "title": "Lisbon trip" }),
+    );
+    assert_eq!(world.hits("fts_core_collection", &word("reading")), none());
+    assert_eq!(world.hits("fts_core_collection", &word("goa")), none());
+    assert_eq!(
+        world.hits("fts_core_collection", &word("novels")),
+        set([&notebook])
+    );
+    assert_eq!(
+        world.hits("fts_core_collection", &word("lisbon")),
+        set([&album])
+    );
+    assert_containers_match(world.vault());
+
+    // A DELETE IS A HARD DELETE and the hit goes with the row.
+    world.run("knowledge.delete_notebook", json!({ "notebook_id": nested }));
+    world.run("knowledge.delete_notebook", json!({ "notebook_id": notebook }));
+    world.run("media.delete_album", json!({ "album_id": album }));
+    for query in ["novels", "lisbon", "cookery"] {
+        assert_eq!(world.hits("fts_core_collection", &word(query)), none());
+    }
+    assert_containers_match(world.vault());
+}
+
+#[test]
+fn a_project_is_indexed_while_it_is_not_archived_and_a_rename_moves_the_hit() {
+    let world = World::new("cov-projects");
+    let project = world.project("Kitchen refit");
+    assert_eq!(
+        world.hits("fts_schedule_project", &word("kitchen")),
+        set([&project])
+    );
+
+    // A RENAME is an upsert on the same id.
+    world.run(
+        "schedule.save_project",
+        json!({ "project_id": project, "name": "Bathroom refit" }),
+    );
+    assert_eq!(world.hits("fts_schedule_project", &word("kitchen")), none());
+    assert_eq!(
+        world.hits("fts_schedule_project", &word("bathroom")),
+        set([&project])
+    );
+    assert_containers_match(world.vault());
+
+    // ARCHIVED IS NOT FOUND, and restoring it is found again. No command writes
+    // `archived_at` yet, so the fixture does (the column and the read filter
+    // exist; the door must already honour it).
+    world.execute_sql(
+        "UPDATE schedule_project SET archived_at = '2099-01-01T00:00:00.000Z' WHERE project_id = ?1",
+        &[&project],
+    );
+    assert_eq!(world.hits("fts_schedule_project", &word("bathroom")), none());
+    assert_containers_match(world.vault());
+    world.execute_sql(
+        "UPDATE schedule_project SET archived_at = NULL WHERE project_id = ?1",
+        &[&project],
+    );
+    assert_eq!(
+        world.hits("fts_schedule_project", &word("bathroom")),
+        set([&project])
+    );
+
+    // A project made already archived is never in; a delete takes it out.
+    let born_archived = world.id(
+        "schedule.save_project",
+        json!({ "name": "Shelved chores" }),
+        "project_id",
+    );
+    world.execute_sql(
+        "UPDATE schedule_project SET archived_at = '2099-01-01T00:00:00.000Z' WHERE project_id = ?1",
+        &[&born_archived],
+    );
+    assert_eq!(world.hits("fts_schedule_project", &word("shelved")), none());
+    world.execute_sql(
+        "DELETE FROM schedule_project WHERE project_id = ?1",
+        &[&project],
+    );
+    assert_eq!(world.hits("fts_schedule_project", &word("bathroom")), none());
+    assert_containers_match(world.vault());
+}
+
+#[test]
+fn a_circle_is_indexed_only_while_a_live_tally_group_stands_on_it() {
+    let world = World::new("cov-circles");
+    let ana = world.friend("Ana");
+    let group = world.group("Sitwell Road", &[&ana]);
+    let circle = world.circle_of(&group);
+    assert_eq!(
+        world.hits("fts_social_circle", &word("sitwell")),
+        set([&circle])
+    );
+
+    // A RENAME is on the circle.
+    world.run(
+        "tally.rename_group",
+        json!({ "group_id": group, "name": "Elm Street" }),
+    );
+    assert_eq!(world.hits("fts_social_circle", &word("sitwell")), none());
+    assert_eq!(
+        world.hits("fts_social_circle", &word("elm")),
+        set([&circle])
+    );
+    assert_containers_match(world.vault());
+
+    // ARCHIVED IS NOT FOUND, and un-archiving finds it again.
+    world.run("tally.archive_group", json!({ "group_id": group }));
+    assert_eq!(world.hits("fts_social_circle", &word("elm")), none());
+    assert_containers_match(world.vault());
+    world.run(
+        "tally.archive_group",
+        json!({ "group_id": group, "archived": false }),
+    );
+    assert_eq!(
+        world.hits("fts_social_circle", &word("elm")),
+        set([&circle])
+    );
+
+    // A CIRCLE NO GROUP STANDS ON is no result, whoever made it: People has no
+    // circles screen. Giving it a group later makes it one, and a group moved
+    // onto another circle takes the hit with it.
+    let owner = world.owner.clone();
+    world.execute_sql(
+        "INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
+         VALUES ('circle-bare', ?1, 'Bare circle', 'friends'),
+                ('circle-spare', ?1, 'Spare circle', 'custom')",
+        &[&owner],
+    );
+    assert_eq!(world.hits("fts_social_circle", &word("bare")), none());
+    world.execute_sql(
+        "INSERT INTO tally_group (group_id, circle_id, icon, color, currency, created_at)
+         VALUES ('group-bare', 'circle-bare', 'x', 'blue', 'GBP', '2099-01-01T00:00:00.000Z')",
+        &[],
+    );
+    assert_eq!(
+        world.hits("fts_social_circle", &word("bare")),
+        set([&"circle-bare".to_owned()])
+    );
+    world.execute_sql(
+        "UPDATE tally_group SET circle_id = 'circle-spare' WHERE group_id = 'group-bare'",
+        &[],
+    );
+    assert_eq!(world.hits("fts_social_circle", &word("bare")), none());
+    assert_eq!(
+        world.hits("fts_social_circle", &word("spare")),
+        set([&"circle-spare".to_owned()])
+    );
+    assert_containers_match(world.vault());
+
+    // A DELETE takes the group and then the circle; the hit is gone.
+    world.run("tally.delete_group", json!({ "group_id": group }));
+    assert_eq!(world.hits("fts_social_circle", &word("elm")), none());
+    assert_containers_match(world.vault());
+}
+
+#[test]
+fn a_folder_is_indexed_and_the_root_a_tag_and_another_scheme_never_are() {
+    let world = World::new("cov-folders");
+    let leases = world.folder("Leases");
+    assert_eq!(
+        world.hits("fts_core_concept", &word("leases")),
+        set([&leases])
+    );
+    // THE ROOT is a concept of the folders scheme and is not a result: its label
+    // is `Documents`, and it exists now that a folder was made.
+    assert_eq!(
+        world.count(
+            "SELECT COUNT(*) FROM core_concept WHERE notation = 'root' AND pref_label = 'Documents'"
+        ),
+        1
+    );
+    assert_eq!(world.hits("fts_core_concept", &word("documents")), none());
+
+    // A TAG is a concept too, of another scheme, with a label of its own.
+    world.execute_sql(
+        "INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
+         VALUES ('scheme-tags', 'https://centraid.dev/schemes/tags', 'Tags', '1')",
+        &[],
+    );
+    world.execute_sql(
+        "INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label)
+         VALUES ('tag-urgent', 'scheme-tags', 'urgent', 'Urgent leases')",
+        &[],
+    );
+    assert_eq!(
+        world.hits("fts_core_concept", &word("urgent")),
+        none(),
+        "a tag is no folder"
+    );
+    assert_eq!(
+        world.hits("fts_core_concept", &word("leases")),
+        set([&leases]),
+        "only the folder holds the word"
+    );
+
+    // A RENAME moves the hit; a nested folder is a folder.
+    world.run(
+        "core.rename_folder",
+        json!({ "folder_id": leases, "name": "Contracts" }),
+    );
+    assert_eq!(world.hits("fts_core_concept", &word("leases")), none());
+    assert_eq!(
+        world.hits("fts_core_concept", &word("contracts")),
+        set([&leases])
+    );
+    let nested = world.id(
+        "core.create_folder",
+        json!({ "name": "Signed", "parent_folder_id": leases }),
+        "folder_id",
+    );
+    assert_eq!(
+        world.hits("fts_core_concept", &word("signed")),
+        set([&nested])
+    );
+    assert_containers_match(world.vault());
+
+    // MOVING A CONCEPT OUT OF THE SCHEME, or the scheme off its URI, takes the
+    // folder out of the index, and back in puts it back.
+    world.execute_sql(
+        "UPDATE core_concept SET scheme_id = 'scheme-tags', notation = 'moved'
+          WHERE concept_id = ?1",
+        &[&nested],
+    );
+    assert_eq!(world.hits("fts_core_concept", &word("signed")), none());
+    assert_containers_match(world.vault());
+    world.execute_sql(
+        "UPDATE core_concept_scheme SET uri = 'https://centraid.dev/schemes/folders-moved'
+          WHERE uri = 'https://centraid.dev/schemes/folders'",
+        &[],
+    );
+    assert_eq!(world.hits("fts_core_concept", &word("contracts")), none());
+    assert_containers_match(world.vault());
+    world.execute_sql(
+        "UPDATE core_concept_scheme SET uri = 'https://centraid.dev/schemes/folders'
+          WHERE uri = 'https://centraid.dev/schemes/folders-moved'",
+        &[],
+    );
+    assert_eq!(
+        world.hits("fts_core_concept", &word("contracts")),
+        set([&leases])
+    );
+    assert_eq!(world.hits("fts_core_concept", &word("documents")), none());
+
+    // A DELETE takes the hit (the subfolder that was moved out leaves first, or
+    // the folder is not empty).
+    world.execute_sql("DELETE FROM core_concept WHERE concept_id = ?1", &[&nested]);
+    world.run("core.delete_folder", json!({ "folder_id": leases }));
+    assert_eq!(world.hits("fts_core_concept", &word("contracts")), none());
+    assert_containers_match(world.vault());
+}
+
+#[test]
+fn every_container_vocabulary_answers_term_and_doc_for_a_planted_word() {
+    let world = World::new("cov-container-vocab");
+    let ana = world.friend("Ana");
+    world.notebook("Quokka notebook");
+    world.project("Quokka project");
+    world.group("Quokka group", &[&ana]);
+    world.folder("Quokka folder");
+    for container in CONTAINER_INDEXES {
+        let vocab = format!("{container}_vocab");
+        let (docs, total): (i64, i64) = world
+            .vault()
+            .read(|connection| {
+                Ok(connection.query_row(
+                    &format!("SELECT doc, cnt FROM {vocab} WHERE term = 'quokka'"),
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )?)
+            })
+            .unwrap_or_else(|error| panic!("{vocab} does not answer `quokka`: {error}"));
+        assert_eq!((docs, total), (1, 1), "{vocab}: one container holds it once");
+        assert_eq!(
+            world.count(&format!(
+                "SELECT COUNT(*) FROM {vocab} WHERE term = 'nosuchword'"
+            )),
+            0
+        );
+    }
+    // A DELETED container leaves its words: a vocabulary offers nothing the
+    // member can no longer find.
+    world.run("core.delete_folder", json!({ "folder_id": world.id(
+        "core.create_folder",
+        json!({ "name": "Wombat" }),
+        "folder_id",
+    ) }));
+    assert_eq!(
+        world.count("SELECT COUNT(*) FROM fts_core_concept_vocab WHERE term = 'wombat'"),
+        0
+    );
+    assert_containers_match(world.vault());
+}
+
+/// THE WEIGHTS ARE NOT IN A CONTAINER INDEX EITHER (R1d, R5), and the sealed-column
+/// scan above (`no_sealed_column_appears_in_any_fts_object_at_the_ladder_head`)
+/// reads every `fts_*` object, the four containers' included.
+#[test]
+fn no_container_index_stores_a_rank_override() {
+    let world = World::new("cov-container-rank");
+    for fts in CONTAINER_INDEXES {
+        assert_eq!(
+            world.count(&format!(
+                "SELECT COUNT(*) FROM {fts}_config WHERE k = 'rank'"
+            )),
+            0,
+            "{fts} stores a rank, so a replayed vault would order differently"
+        );
+    }
 }
