@@ -10,15 +10,56 @@
 
 ## Verification
 
-- `cargo deny --all-features --config deny.toml check` on the base (before the bump): advisories FAILED (RUSTSEC-2026-0346, 0347, 0348, 0349), bans ok, licenses ok, sources ok.
-- `cargo update -p rustls --precise 0.23.46`: updated rustls only; `git diff Cargo.lock` shows 2 lines changed after the getrandom revert.
-- `cargo deny --all-features --config deny.toml check` after the bump (cargo-deny 0.20.2): advisories ok, bans ok, licenses ok, sources ok.
-- `cargo build --locked -p centraid-gateway -p centraid-core`: finished.
-- `cargo test --locked -p centraid-gateway`: all test results ok, 0 failed.
-- `bun run check:push:static`: 4 of 4 gates passed (format:check, lint, turbo:lint, typecheck:affected).
+```sh
+cargo deny --all-features --config deny.toml check
+```
+
+On the base before the bump: fail, advisories FAILED on RUSTSEC-2026-0346, 0347, 0348 and 0349; bans, licenses and sources ok.
+
+```sh
+cargo update -p rustls --precise 0.23.46
+```
+
+Outcome: pass. It also flipped tempfile's getrandom from 0.4.3 to 0.3.4; that line was put back by hand, leaving 2 removed and 2 added lines (rustls version and checksum).
+
+```sh
+cargo metadata --locked --format-version 1
+```
+
+Outcome: pass, exit 0 with the hand-reverted lock.
+
+```sh
+cargo deny --all-features --config deny.toml check
+```
+
+After the bump (cargo-deny 0.20.2): pass, advisories ok, bans ok, licenses ok, sources ok.
+
+```sh
+cargo build --locked -p centraid-gateway -p centraid-core
+```
+
+Outcome: pass, exit 0.
+
+```sh
+cargo test --locked -p centraid-gateway
+```
+
+Outcome: pass, every suite ok, 0 failed.
+
+```sh
+bun run check:push:static
+```
+
+Outcome: pass, 4 of 4 gates (format:check, lint, turbo:lint, typecheck:affected); run before the final receipt commit.
 
 ## Decisions
 
 ## Audit
 
-There was no independent reviewer.
+**PASS.** An independent read-only Sonnet verifier, a separate agent from the author, checked the result:
+
+- The lock diff is rustls's version and checksum only.
+- `cargo metadata --locked` exits 0. `cargo update --workspace --dry-run` reports "Locking 0 packages", and a real `cargo update --workspace` leaves the lock byte-identical, so the hand-reverted getrandom line is stable.
+- `cargo deny ... check advisories` passes on this branch and fails on main e08ef1b5 with RUSTSEC-2026-0346 to 0349.
+
+Limits: the verifier did not rerun the build, the gateway tests or `check:push:static`; those outcomes above are the author's own.
