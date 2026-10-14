@@ -1,0 +1,33 @@
+# THE DATE-ORDER QUESTION: the file could not say whether 03/04/2026 is March or April, so
+# the choice starts empty, there are no rows, and there is nothing to import until it is
+# answered.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+phase: PHASE_PLANNED
+data {
+  lede: "Choose a statement you downloaded from your bank."
+  file_label: "File"
+  file_value: "Chase_Checking_Oct2026.CSV"
+  choose_label: "Choose another file"
+  account_label: "Into"
+  account_value: "Chase Total Checking ····2291"
+  needs_account: true
+  statements {
+    key: "statement:0"
+    title: "Chase Total Checking"
+    question {
+      prompt: "Which order does this file write dates in?"
+      samples: "03/04/2026"
+      samples: "11/05/2026"
+      options { key: "mdy" label: "MM/DD/YYYY" selected: false }
+      options { key: "dmy" label: "DD/MM/YYYY" selected: false }
+    }
+  }
+  discard_label: "Start over"
+}
+chrome { title: "Import statement" back_label: "Money" retry: "Try again" }
+account_id: "a-chase"
+sheet: SHEET_NONE

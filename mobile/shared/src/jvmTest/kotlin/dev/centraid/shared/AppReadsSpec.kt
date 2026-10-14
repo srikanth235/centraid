@@ -36,6 +36,24 @@ import dev.centraid.shared.apps.locker.LockerImportReads
 import dev.centraid.shared.apps.locker.LockerItemMachine
 import dev.centraid.shared.apps.locker.LockerItemReads
 import dev.centraid.shared.apps.locker.LockerTrashMachine
+import dev.centraid.shared.apps.money.MoneyAccountsMachine
+import dev.centraid.shared.apps.money.MoneyAccountsReads
+import dev.centraid.shared.apps.money.MoneyCategoriesMachine
+import dev.centraid.shared.apps.money.MoneyCategoriesReads
+import dev.centraid.shared.apps.money.MoneyHomeMachine
+import dev.centraid.shared.apps.money.MoneyHomeReads
+import dev.centraid.shared.apps.money.MoneyImportMachine
+import dev.centraid.shared.apps.money.MoneyImportReads
+import dev.centraid.shared.apps.money.MoneyRecurringMachine
+import dev.centraid.shared.apps.money.MoneyRecurringReads
+import dev.centraid.shared.apps.money.MoneyRulesMachine
+import dev.centraid.shared.apps.money.MoneyRulesReads
+import dev.centraid.shared.apps.money.MoneySearchMachine
+import dev.centraid.shared.apps.money.MoneySearchReads
+import dev.centraid.shared.apps.money.MoneyTargetMachine
+import dev.centraid.shared.apps.money.MoneyTargetReads
+import dev.centraid.shared.apps.money.MoneyTransactionMachine
+import dev.centraid.shared.apps.money.MoneyTransactionReads
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.notes.NotesReads
 import dev.centraid.shared.apps.notes.NotesHistoryMachine
@@ -318,6 +336,17 @@ class AppReadsSpec : StringSpec({
         // export and import read the shelf's counts.
         Triple("locker.export", LockerExportReads, LockerExportMachine),
         Triple("locker.import", LockerImportReads, LockerImportMachine),
+        // MONEY (#1099). Every screen reads the same table set: one app query folds
+        // accounts, lines, targets, rules, checkpoints, categories and transfer links.
+        Triple("money.home", MoneyHomeReads, MoneyHomeMachine),
+        Triple("money.transaction", MoneyTransactionReads, MoneyTransactionMachine),
+        Triple("money.target", MoneyTargetReads, MoneyTargetMachine),
+        Triple("money.recurring", MoneyRecurringReads, MoneyRecurringMachine),
+        Triple("money.import", MoneyImportReads, MoneyImportMachine),
+        Triple("money.accounts", MoneyAccountsReads, MoneyAccountsMachine),
+        Triple("money.rules", MoneyRulesReads, MoneyRulesMachine),
+        Triple("money.categories", MoneyCategoriesReads, MoneyCategoriesMachine),
+        Triple("money.search", MoneySearchReads, MoneySearchMachine),
         // HOME'S SEARCH (R-CHROME-6). Like the powerbox it declares no table:
         // a transient screen over search results re-reads on a new term only.
         Triple("home.search", HomeSearchReads, HomeSearchMachine),

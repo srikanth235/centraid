@@ -24,6 +24,7 @@ import centraid.screen.v1.PhotoShelf
  * | notes | `notebook` | the library under that notebook (a container found by name, #1097) |
  * | photos | `album` | the album's shelf |
  * | docs | `folder` | the folder's page; `parent` is the pushing page's title |
+ * | money | `transaction` | the transaction page; `parent` is the pushing page's title |
  * | chat | `thread` | none: Chat is a tab and not a screen. The iOS shell opens it (`ShellModel.openChatThread`), and Android has no Chat tab, so Home's search never offers the row there (R-1097-24) |
  *
  * A notebook, album or folder arrives with its id and its name (the
@@ -57,6 +58,7 @@ public object RowRoutes {
             day = "",
         )
         "photos" to "photo" -> Destination.PhotoLightbox(card.id, neighbours.ifEmpty { listOf(card.id) })
+        "money" to "transaction" -> Destination.MoneyTransaction(card.id, parent = parent)
         else -> appHome(card.app)
     }
 
@@ -68,6 +70,7 @@ public object RowRoutes {
         "people" -> Destination.PeopleHome()
         "agenda" -> Destination.AgendaHome()
         "photos" -> Destination.PhotosHome()
+        "money" -> Destination.MoneyHome()
         else -> null
     }
 }

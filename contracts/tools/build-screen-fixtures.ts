@@ -43,6 +43,11 @@ const TYPES: Record<string, string> = {
   "agenda-editor": "centraid.screen.v1.AgendaEditorState",
   "agenda-event": "centraid.screen.v1.AgendaEventState",
   home: "centraid.screen.v1.HomeState",
+  // Money's three states worth a fixture (#1099): the home over its tabs, the
+  // import's review and its question, and a transaction with its two offers.
+  money: "centraid.screen.v1.MoneyHomeState",
+  "money-import": "centraid.screen.v1.MoneyImportState",
+  "money-transaction": "centraid.screen.v1.MoneyTransactionState",
   notes: "centraid.screen.v1.NotesEditorState",
   photos: "centraid.screen.v1.PhotosGridState",
   // The rest of the photos miniapp: eleven state messages for v0's fourteen

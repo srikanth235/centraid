@@ -1,0 +1,50 @@
+# A TRANSACTION WITH TWO OFFERS: the app proposes a transfer and a rule, and writes neither.
+# What the bank said never changes; the name and the category are the member decisions.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+txn_id: "t1"
+data {
+  title: "Trader Joe’s"
+  amount { minor: -6418 currency: "USD" exponent: 2 }
+  amount_tone: TONE_NET
+  direction_label: "Money out"
+  facts { label: "Account" detail: "Chase Total Checking" }
+  facts { label: "Posted" detail: "Tue 13 October" }
+  facts { label: "Bank wrote" detail: "TRADER JOE S #552" }
+  facts { label: "Category" detail: "Groceries" }
+  facts { label: "Name" detail: "Trader Joe’s · from a rule" }
+  transfer_offer {
+    key: "transfer"
+    title: "Possible transfer"
+    body: "Matches a row in Chase Savings on Oct 13."
+    detail: "FROM CHECKING"
+    accept_label: "Link as transfer"
+    dismiss_label: "Not now"
+  }
+  rule_offer {
+    key: "rule"
+    title: "Rule suggestion"
+    body: "4 of the last 5 Trader Joe’s rows are Groceries."
+    detail: "contains TRADER JOE S"
+    accept_label: "Create rule"
+    dismiss_label: "Not now"
+  }
+  notes: "Seen 5 times"
+  actions { key: "category" label: "Set category" icon_key: "Tag" enabled: true }
+  actions { key: "name" label: "Set name" icon_key: "Pencil" enabled: true }
+  actions { key: "void" label: "Void transaction" icon_key: "Trash" enabled: true destructive: true }
+  category_options { key: "" label: "No category" selected: false }
+  category_options { key: "c-groc" label: "Groceries" selected: true detail: "Food" }
+  category_sheet_title: "Category"
+  name_sheet_title: "Name"
+  name_placeholder: "Name"
+  save_label: "Save"
+  clear_label: "Clear"
+}
+write { phase: PHASE_IDLE }
+sheet: SHEET_NONE
+chrome { title: "Transaction" back_label: "Activity" retry: "Try again" }
+draft_token: "tok"

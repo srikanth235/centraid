@@ -270,17 +270,18 @@ public object HomeReads {
      * redrawing on sync, nothing fails, and the symptom is a count that is right
      * only after a relaunch. Deriving it means there is one place a table is
      * named and it is the query that reads it — and for Agenda's app query,
-     * which names no table the runtime can see, it is [HomeAgendaTile.TABLES].
+     * which names no table the runtime can see, it is [HomeAgendaTile.TABLES], and
+     * for Money's, which rides the core's own arm, [HomeMoneyTile.TABLES].
      */
     public val TABLES: Set<String> =
-        READS.flatMap { listOf(it.query.from) + it.alsoReads }.toSet() + HomeAgendaTile.TABLES
+        READS.flatMap { listOf(it.query.from) + it.alsoReads }.toSet() + HomeAgendaTile.TABLES + HomeMoneyTile.TABLES
 
     /**
      * Every app whose tile is READ — the page reads and the app queries —
      * which is every tile, Locker's included since #1047 (a count, never a row).
      */
     public val READ_APP_IDS: Set<String> =
-        READS.map { it.appId }.toSet() + HomeAgendaTile.APP_ID
+        READS.map { it.appId }.toSet() + HomeAgendaTile.APP_ID + HomeMoneyTile.APP_ID
 
     /**
      * The text of a row's column, or empty. Positional, as the door states.

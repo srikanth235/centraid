@@ -234,7 +234,7 @@ dev/centraid/shared/
 ├── screen/     THE CONTRACT, and nothing else: ScreenMachine + ScreenHost
 ├── kit/        the laws every app screen is built from — no app type in it
 │   └── time/   civil-day arithmetic and words over the core's answers
-├── apps/       agenda/ docs/ notes/ people/ photos/ tasks/ — each
+├── apps/       agenda/ docs/ locker/ money/ notes/ people/ photos/ tasks/ — each
 │               app's machines, reads, writes and bridges
 ├── custody/    the 24 words, pairing and restore
 ├── nav/        the navigation model

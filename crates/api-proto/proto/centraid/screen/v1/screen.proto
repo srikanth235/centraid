@@ -1065,6 +1065,8 @@ message TileBody {
     Tasks tasks = 5;
     Locker locker = 7;
     Notes notes = 8;
+    // Money's body: what this month's spending came to, per currency (#1099).
+    Spent money = 9;
   }
 
   message Photos {
@@ -1159,6 +1161,15 @@ message TileBody {
     string note_id = 1;
     string title = 2;
     string excerpt = 3;
+  }
+
+  // THIS MONTH'S SPENDING, one figure per currency and nothing summed across
+  // them (#1099, R-1099-13). The amounts are the core's, unchanged; the caption
+  // is the machine's ("spent in October"). Named for what it holds because a
+  // nested `Money` would shadow the kit's `Money` inside this message.
+  message Spent {
+    repeated centraid.screen.v1.Money amounts = 1;
+    string caption = 2;
   }
 }
 
@@ -11321,4 +11332,1321 @@ message ChatEvent {
 
   // INTENT: the drawer's field was closed; the term and its answer go with it.
   message DrawerSearchClosed {}
+}
+
+// --- Money ---
+// ---------------------------------------------------------------------------
+//
+// Money on the phone (#1099, R-1099-13): the home place (Spending, Activity,
+// Cash flow, and More as a sheet), one transaction, a category's target, the
+// recurring charges, the statement import, accounts, rules, categories, and
+// search. Every screen reads through the core's `money.*` app queries
+// (`core/v1/money.proto`, arms 100-109); the import's plan is the core's
+// `Request.money`, and publishing it is the ordinary `money.import_transactions`
+// command.
+//
+// VIEWS DECIDE NOTHING. Every label, sentence, chip, hue key, accessibility
+// label, empty state and enabled flag below is computed in `apps/money`. The
+// core's typed answers never cross: they stay on the Kotlin side beside these
+// messages, for `AgendaHomeState`'s reason (this file cannot import
+// `centraid.core.v1`).
+//
+// EVERY FIGURE IS DERIVED AT READ TIME. A `Money` here is the core's amount
+// unchanged (minor units, currency, exponent; the shell renders it with the
+// vault's locale). Nothing here adds two amounts, and nothing is summed across
+// currencies: a figure that spans currencies is one `Money` per currency.
+
+// ---------------------------------------------------------------------------
+// The shared parts.
+// ---------------------------------------------------------------------------
+
+message MoneyBandTab {
+  // `spending`, `activity`, `cashflow`, `more` - what `BandPicked` sends.
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  bool current = 4;
+}
+
+message MoneyMoreRow {
+  // `accounts`, `rules`, `categories`, `import` - what `MorePicked` sends.
+  string key = 1;
+  string label = 2;
+  string meta = 3;
+  string icon_key = 4;
+}
+
+// One choice in a sheet: a month, an account, a category, a kind.
+message MoneyChoice {
+  string key = 1;
+  string label = 2;
+  bool selected = 3;
+  // A note beside the label ("Groceries" under a group's name); empty for none.
+  string detail = 4;
+}
+
+// A filter chip in the chip row (R-CHROME-3). `active` is a value other than
+// the default ("Chase Total Checking", not "All accounts").
+message MoneyChip {
+  // `month`, `account`, `category`.
+  string key = 1;
+  string label = 2;
+  bool active = 3;
+}
+
+// A label beside a figure: Planned, Left, In, Out, Net.
+message MoneyFigure {
+  string label = 1;
+  Money amount = 2;
+  // NET is money out or over plan; NEUTRAL is ink; SEAM is "not counted".
+  StatusChip.Tone tone = 3;
+}
+
+message MoneyFact {
+  string label = 1;
+  string detail = 2;
+}
+
+message MoneyPageChrome {
+  string title = 1;
+  // The page it was pushed from, by its title: the back control says it.
+  string back_label = 2;
+  string retry = 3;
+}
+
+// One transaction as a list draws it.
+message MoneyRow {
+  string txn_id = 1;
+  // The member's name for it, else the bank's words.
+  string title = 2;
+  // "Amex Blue Cash" / "AMAZON MKTPL*2K4L19 · Oct 13" / "Not counted as spending".
+  string meta = 3;
+  // Signed: negative is money out.
+  Money amount = 4;
+  // NET for money out, NEUTRAL for money in, SEAM for a transfer or a void.
+  StatusChip.Tone amount_tone = 5;
+  // Empty for none; "No category" is a chip, not this.
+  string category_label = 6;
+  repeated StatusChip chips = 7;
+  string accessibility_label = 8;
+  // A void or a transfer is struck through or greyed.
+  bool dimmed = 9;
+}
+
+message MoneyDaySection {
+  // `YYYY-MM-DD`.
+  string day = 1;
+  // "Today", "Yesterday", "Mon 12 October".
+  string heading = 2;
+  repeated MoneyRow rows = 3;
+}
+
+// ---------------------------------------------------------------------------
+// --- money.home: Spending - Activity - Cash flow, More as a sheet ----------
+// ---------------------------------------------------------------------------
+
+message MoneyHomeState {
+  SeatState seat = 1;
+  // WHICH TAB, as a parameter (law 2).
+  Destination destination = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    Denied denied = 5;
+    MoneyHomeData data = 6;
+  }
+  Sheet sheet = 7;
+  // Four tabs in order; EMPTY while denied.
+  repeated MoneyBandTab band = 8;
+  MoneyHomeChrome chrome = 9;
+  // `YYYY-MM`; EMPTY is the month today falls in.
+  string month = 10;
+  // Activity's filters. EMPTY account is every account; `category_filter` is
+  // EMPTY (any), `uncategorised`, or a category id.
+  string account_id = 11;
+  string category_filter = 12;
+  // Activity rows asked for: the window end. Show more asks for another page.
+  uint32 activity_shown = 13;
+  // The chip row under the search bar (Activity only); EMPTY elsewhere.
+  repeated MoneyChip chips = 14;
+
+  enum Destination {
+    DESTINATION_UNSPECIFIED = 0;
+    DESTINATION_SPENDING = 1;
+    DESTINATION_ACTIVITY = 2;
+    DESTINATION_CASHFLOW = 3;
+  }
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_MORE = 2;
+    SHEET_MONTH = 3;
+    SHEET_ACCOUNT = 4;
+    SHEET_CATEGORY = 5;
+  }
+}
+
+message MoneyHomeChrome {
+  string title = 1;
+  // The header's one trailing action, the Plus glyph's spoken words (R-CHROME-1).
+  string add_label = 2;
+  string retry = 3;
+  string more_title = 4;
+  repeated MoneyMoreRow more_rows = 5;
+  // The search bar under the title (R-CHROME-2). It never opens in place: a tap
+  // sends `SearchOpened` and the shell pushes `money.search`.
+  string search_placeholder = 6;
+  string previous_month_label = 7;
+  string next_month_label = 8;
+  string month_sheet_title = 9;
+  string account_sheet_title = 10;
+  string category_sheet_title = 11;
+  string close_label = 12;
+}
+
+message MoneyHomeData {
+  // `YYYY-MM-DD` in the device's zone, the core's.
+  string today = 1;
+  // "October 2026".
+  string month_label = 2;
+  // False when the month shown is the one today falls in.
+  bool can_step_next = 3;
+  // The month stepper is drawn on Spending and Activity.
+  bool shows_month = 4;
+  MoneySpendingData spending = 5;
+  MoneyActivityData activity = 6;
+  MoneyCashflowData cashflow = 7;
+  // The month sheet's choices: this month and the eleven before it.
+  repeated MoneyChoice month_options = 8;
+}
+
+// --- Spending ---------------------------------------------------------------
+
+message MoneySpendingData {
+  // Day one: no account or no transaction yet. One sentence and Import.
+  optional EmptyState empty = 1;
+  // One per currency, in the core's order.
+  repeated MoneyHero heroes = 2;
+  // "17 days left".
+  string days_left_label = 3;
+  repeated MoneyInOutNet in_out_net = 4;
+  repeated MoneyCategoryTable tables = 5;
+  // "3 rows need a category", "3 transfers are not counted", "Imported from
+  // CSV into Chase". Sentences, no amounts.
+  repeated string notes = 6;
+  // The definitions printed under the figures.
+  repeated MoneyFact definitions = 7;
+  // A row to the recurring charges: label and a note.
+  string recurring_label = 8;
+  string recurring_meta = 9;
+  // The figures are over a window.
+  string window_note = 10;
+}
+
+message MoneyHero {
+  // Spent so far this month, a positive magnitude.
+  Money spent = 1;
+  string spent_label = 2;
+  // Planned, Left, Refunds.
+  repeated MoneyFigure figures = 3;
+  bool has_bar = 4;
+  // Basis points of the plan spent, clamped to 10000 for the bar; the tick is
+  // how far through the month today falls.
+  uint32 fill_bp = 5;
+  uint32 tick_bp = 6;
+  bool over = 7;
+  string accessibility_label = 8;
+}
+
+message MoneyInOutNet {
+  // In, Out, Net in one currency.
+  repeated MoneyFigure figures = 1;
+}
+
+message MoneyCategoryTable {
+  // The currency code when more than one currency is drawn; EMPTY otherwise.
+  string heading = 1;
+  string currency = 2;
+  repeated MoneyCategoryLine rows = 3;
+}
+
+message MoneyCategoryLine {
+  string category_id = 1;
+  string label = 2;
+  bool has_plan = 3;
+  Money planned = 4;
+  Money spent = 5;
+  Money left = 6;
+  bool over = 7;
+  string accessibility_label = 8;
+}
+
+// --- Activity ---------------------------------------------------------------
+
+message MoneyActivityData {
+  // The sheets' choices (R-CHROME-3: month, account, category).
+  repeated MoneyChoice account_options = 1;
+  repeated MoneyChoice category_options = 2;
+  // "Needs a category" and what it comes to, per currency.
+  string needs_label = 3;
+  repeated MoneyFigure needs_category = 4;
+  repeated MoneyDaySection sections = 5;
+  // "60 of 212"; empty when every row is drawn.
+  string window = 6;
+  bool more = 7;
+  optional EmptyState empty = 8;
+}
+
+// --- Cash flow --------------------------------------------------------------
+
+message MoneyCashflowData {
+  optional EmptyState empty = 1;
+  repeated MoneyCashflowSeries series = 2;
+  repeated MoneyFact definitions = 3;
+  string window_note = 4;
+}
+
+message MoneyCashflowSeries {
+  string currency = 1;
+  // The currency code when more than one currency is drawn.
+  string heading = 2;
+  repeated MoneyCashflowMonth months = 3;
+}
+
+message MoneyCashflowMonth {
+  string month = 1;
+  // "Oct".
+  string label = 2;
+  Money incoming = 3;
+  Money outgoing = 4;
+  Money net = 5;
+  StatusChip.Tone net_tone = 6;
+  // The bars: this month's side as basis points of the series' largest side.
+  uint32 in_bp = 7;
+  uint32 out_bp = 8;
+  // "12% kept"; empty when nothing came in.
+  string rate_label = 9;
+  // The month is not over: outlined, never compared as if whole.
+  bool partial = 10;
+  string accessibility_label = 11;
+}
+
+message MoneyHomeEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    BandPicked band = 3;
+    MonthStepped month_stepped = 4;
+    MonthPicked month_picked = 5;
+    ChipTapped chip = 6;
+    AccountPicked account_picked = 7;
+    CategoryPicked category_picked = 8;
+    SheetClosed sheet_closed = 9;
+    ShowMore show_more = 10;
+    // INTENTS: the machine changes nothing (but the sheet closing behind a More
+    // row); the shell routes them.
+    AddStatement add = 11;
+    SearchOpened search_opened = 12;
+    TransactionPicked transaction = 13;
+    CategoryLinePicked category_line = 14;
+    RecurringOpened recurring = 15;
+    MorePicked more = 16;
+  }
+
+  // Lands on `destination` (Spending when unspecified).
+  message Opened {
+    MoneyHomeState.Destination destination = 1;
+  }
+
+  message Refreshed {}
+
+  message BandPicked {
+    string key = 1;
+  }
+
+  // -1 is the previous month, 1 the next.
+  message MonthStepped {
+    int32 months = 1;
+  }
+
+  message MonthPicked {
+    string month = 1;
+  }
+
+  // `month`, `account` or `category`: opens that chip's sheet.
+  message ChipTapped {
+    string key = 1;
+  }
+
+  // EMPTY is every account.
+  message AccountPicked {
+    string account_id = 1;
+  }
+
+  // EMPTY is any category; `uncategorised`; or a category id.
+  message CategoryPicked {
+    string key = 1;
+  }
+
+  message SheetClosed {}
+
+  message ShowMore {}
+
+  // The header's Plus and the day-one action: both push `money.import`.
+  message AddStatement {}
+
+  // The search bar: the shell pushes `money.search`.
+  message SearchOpened {}
+
+  message TransactionPicked {
+    string txn_id = 1;
+  }
+
+  // A category row: the shell pushes the target sheet for it.
+  message CategoryLinePicked {
+    string category_id = 1;
+    string currency = 2;
+  }
+
+  message RecurringOpened {}
+
+  // `accounts`, `rules`, `categories`, `import`.
+  message MorePicked {
+    string key = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// --- money.transaction ------------------------------------------------------
+// ---------------------------------------------------------------------------
+
+message MoneyTransactionState {
+  SeatState seat = 1;
+  string txn_id = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    Denied denied = 5;
+    MoneyTransactionData data = 6;
+  }
+  WriteState write = 7;
+  optional Confirm confirm = 8;
+  Sheet sheet = 9;
+  // The name being typed in the name sheet.
+  string name_draft = 10;
+  MoneyPageChrome chrome = 11;
+  // What the last act did: "Filed under Groceries", or the core's refusal.
+  optional StatusLine status = 12;
+  // A sitting's token: keys the minted rule id and the writes.
+  string draft_token = 13;
+  // Offers the member waved off this sitting: `transfer`, `rule`.
+  repeated string dismissed = 14;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_CATEGORY = 2;
+    SHEET_NAME = 3;
+  }
+}
+
+message MoneyTransactionData {
+  // The member's name for it, else the bank's words.
+  string title = 1;
+  // Signed.
+  Money amount = 2;
+  StatusChip.Tone amount_tone = 3;
+  // "Money out" / "Money in".
+  string direction_label = 4;
+  // Account, Posted, Bank wrote, Category, Name, Imported, Memo.
+  repeated MoneyFact facts = 5;
+  repeated StatusChip chips = 6;
+  optional MoneyOffer transfer_offer = 7;
+  optional MoneyOffer rule_offer = 8;
+  // "Seen 6 times", "Repeats every month".
+  repeated string notes = 9;
+  repeated MoneyAction actions = 10;
+  // The category sheet's choices; group names in `detail`.
+  repeated MoneyChoice category_options = 11;
+  string category_sheet_title = 12;
+  string name_sheet_title = 13;
+  string name_placeholder = 14;
+  string save_label = 15;
+  string clear_label = 16;
+  string accessibility_label = 17;
+  // The other half of an accepted transfer, drawn as a row.
+  string transferred_with = 18;
+}
+
+// An offer the app PROPOSES and never applies on its own.
+message MoneyOffer {
+  // `transfer` or `rule`.
+  string key = 1;
+  string title = 2;
+  string body = 3;
+  // The condition, in the bank's own words.
+  string detail = 4;
+  string accept_label = 5;
+  string dismiss_label = 6;
+}
+
+message MoneyAction {
+  // `category`, `name`, `transfer`, `unlink`, `void`.
+  string key = 1;
+  string label = 2;
+  string icon_key = 3;
+  bool enabled = 4;
+  bool destructive = 5;
+}
+
+message MoneyTransactionEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    ActionPicked action = 3;
+    CategoryPicked category = 4;
+    NameEdited name_edited = 5;
+    NameSaved name_saved = 6;
+    SheetClosed sheet_closed = 7;
+    OfferAccepted offer_accepted = 8;
+    OfferDismissed offer_dismissed = 9;
+    ConfirmAccepted confirm_accepted = 10;
+    ConfirmDismissed confirm_dismissed = 11;
+  }
+
+  message Opened {
+    string txn_id = 1;
+    string parent = 2;
+    string draft_token = 3;
+  }
+
+  message Refreshed {}
+
+  message ActionPicked {
+    string key = 1;
+  }
+
+  // EMPTY clears the category.
+  message CategoryPicked {
+    string category_id = 1;
+  }
+
+  message NameEdited {
+    string text = 1;
+  }
+
+  message NameSaved {}
+
+  message SheetClosed {}
+
+  message OfferAccepted {
+    string key = 1;
+  }
+
+  message OfferDismissed {
+    string key = 1;
+  }
+
+  message ConfirmAccepted {}
+
+  message ConfirmDismissed {}
+}
+
+// ---------------------------------------------------------------------------
+// --- money.target: a category's plan for one month (a sheet) ---------------
+// ---------------------------------------------------------------------------
+
+message MoneyTargetState {
+  SeatState seat = 1;
+  // `YYYY-MM`.
+  string month = 2;
+  string category_id = 3;
+  string currency = 4;
+  oneof content {
+    Loading loading = 5;
+    ReadFailure failure = 6;
+    Denied denied = 7;
+    MoneyTargetData data = 8;
+  }
+  WriteState write = 9;
+  // What the member is typing, and whether unused money carries.
+  string amount_text = 10;
+  bool carry = 11;
+  // The sheet was seeded from the stored target.
+  bool seeded = 12;
+  MoneyPageChrome chrome = 13;
+  string draft_token = 14;
+}
+
+message MoneyTargetData {
+  string title = 1;
+  string month_label = 2;
+  string amount_label = 3;
+  // "USD".
+  string currency_label = 4;
+  // Last six months averaged / carried in / spent: figures beside words.
+  repeated MoneyFigure figures = 5;
+  string use_average_label = 6;
+  string carry_label = 7;
+  string carry_note = 8;
+  // The next month's effect, said before the member commits.
+  string preview_label = 9;
+  Money preview = 10;
+  string preview_note = 11;
+  string save_label = 12;
+  // Empty when no target is stored (nothing to remove).
+  string remove_label = 13;
+  bool can_save = 14;
+  string issue = 15;
+  string exponent_hint = 16;
+  uint32 exponent = 17;
+}
+
+message MoneyTargetEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    AmountEdited amount = 3;
+    CarryToggled carry = 4;
+    UseAverage use_average = 5;
+    Save save = 6;
+    Remove remove = 7;
+  }
+
+  message Opened {
+    string month = 1;
+    string category_id = 2;
+    string currency = 3;
+    string draft_token = 4;
+  }
+
+  message Refreshed {}
+
+  message AmountEdited {
+    string text = 1;
+  }
+
+  message CarryToggled {}
+
+  message UseAverage {}
+
+  message Save {}
+
+  message Remove {}
+}
+
+// ---------------------------------------------------------------------------
+// --- money.recurring --------------------------------------------------------
+// ---------------------------------------------------------------------------
+
+message MoneyRecurringState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    Denied denied = 4;
+    MoneyRecurringData data = 5;
+  }
+  MoneyPageChrome chrome = 6;
+}
+
+message MoneyRecurringData {
+  repeated MoneyRecurringRow rows = 1;
+  optional EmptyState empty = 2;
+  repeated MoneyFact definitions = 3;
+  string window_note = 4;
+}
+
+message MoneyRecurringRow {
+  string key = 1;
+  string merchant = 2;
+  // "every month · Chase Total Checking".
+  string meta = 3;
+  // Positive: what it costs each time.
+  Money amount = 4;
+  // "next Oct 28", "seen 6 times".
+  string detail = 5;
+  repeated StatusChip chips = 6;
+  string accessibility_label = 7;
+}
+
+message MoneyRecurringEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+  }
+
+  message Opened {
+    string parent = 1;
+  }
+
+  message Refreshed {}
+}
+
+// ---------------------------------------------------------------------------
+// --- money.import: pick a statement, read the plan, publish ---------------
+// ---------------------------------------------------------------------------
+//
+// THE FILE IS HELD KOTLIN-SIDE and dropped when the page is left: the plan is
+// the core's, and neither rides a drawn state. Nothing is written until
+// Publish; statement bytes are never stored.
+
+message MoneyImportState {
+  SeatState seat = 1;
+  Phase phase = 2;
+  oneof content {
+    Loading loading = 3;
+    ReadFailure failure = 4;
+    Denied denied = 5;
+    MoneyImportData data = 6;
+  }
+  MoneyPageChrome chrome = 7;
+  optional StatusLine status = 8;
+  // The account a CSV imports into.
+  string account_id = 9;
+  Sheet sheet = 10;
+  // The member's answers to the plan's questions.
+  DateOrder date_order = 11;
+  SignChoice sign = 12;
+  // Keep the rows proposed as duplicates.
+  bool keep_proposed = 13;
+  string draft_token = 14;
+
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    PHASE_IDLE = 1;
+    PHASE_READING = 2;
+    PHASE_PLANNED = 3;
+    PHASE_PUBLISHING = 4;
+    PHASE_PUBLISHED = 5;
+  }
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_ACCOUNT = 2;
+  }
+
+  enum DateOrder {
+    DATE_ORDER_UNSPECIFIED = 0;
+    DATE_ORDER_MDY = 1;
+    DATE_ORDER_DMY = 2;
+  }
+
+  enum SignChoice {
+    SIGN_CHOICE_UNSPECIFIED = 0;
+    SIGN_CHOICE_DEBITS_NEGATIVE = 1;
+    SIGN_CHOICE_DEBITS_POSITIVE = 2;
+  }
+}
+
+message MoneyImportData {
+  string lede = 1;
+  string file_label = 2;
+  // The file's name, or "No file chosen".
+  string file_value = 3;
+  string file_note = 4;
+  // EMPTY while a read or a publish is out.
+  string choose_label = 5;
+  string account_label = 6;
+  string account_value = 7;
+  // A CSV needs an account; an OFX file finds its own.
+  bool needs_account = 8;
+  repeated MoneyChoice account_options = 9;
+  string account_sheet_title = 10;
+  // The whole file was refused: the sentence, and no statements.
+  string refusal = 11;
+  repeated MoneyImportStatement statements = 12;
+  string publish_label = 13;
+  string publish_note = 14;
+  string discard_label = 15;
+  string done_label = 16;
+  // Day one of Import: no account exists to import into.
+  optional EmptyState empty = 17;
+  string add_account_label = 18;
+}
+
+message MoneyImportStatement {
+  string key = 1;
+  // The account's label, or "Statement 2".
+  string title = 2;
+  // A statement that matched no account, or has another currency.
+  string refusal = 3;
+  // "Sep 15 to Oct 14".
+  string span = 4;
+  // In and out of the file, and of the new rows.
+  repeated MoneyFigure totals = 5;
+  // New, Already in, Check these, Can't read: the counts add up to the file.
+  repeated MoneyFact counts = 6;
+  repeated MoneyImportLine rows = 7;
+  // "and 12 more".
+  repeated string more = 8;
+  optional MoneyImportQuestion question = 9;
+  repeated string warnings = 10;
+  repeated MoneyChoice sign_options = 11;
+  string sign_label = 12;
+  // The statement's own closing balance, kept as a checkpoint.
+  optional MoneyFigure checkpoint = 13;
+  string checkpoint_label = 14;
+  // Offer to keep the rows proposed as duplicates.
+  string keep_proposed_label = 15;
+  bool has_proposed = 16;
+}
+
+message MoneyImportLine {
+  string key = 1;
+  // "Row 88".
+  string line_label = 2;
+  string title = 3;
+  string meta = 4;
+  bool has_amount = 5;
+  Money amount = 6;
+  StatusChip chip = 7;
+  // A sentence for a row that cannot be read.
+  string reason = 8;
+  string accessibility_label = 9;
+}
+
+message MoneyImportQuestion {
+  string prompt = 1;
+  repeated string samples = 2;
+  // `mdy`, `dmy`.
+  repeated MoneyChoice options = 3;
+}
+
+message MoneyImportEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    // INTENT: the shell opens the OS picker, then hands the bytes to the bridge.
+    ChooseTapped choose = 3;
+    AccountSheetOpened account_sheet_opened = 4;
+    AccountPicked account_picked = 5;
+    SheetClosed sheet_closed = 6;
+    DateOrderAnswered date_order = 7;
+    SignChosen sign = 8;
+    KeepProposedToggled keep_proposed = 9;
+    Publish publish = 10;
+    Discard discard = 11;
+    Left left = 12;
+    // INTENT: the shell pushes the Accounts page.
+    AddAccount add_account = 13;
+    // INTENT: the shell pops back.
+    Done done = 14;
+  }
+
+  message Opened {
+    string parent = 1;
+    string draft_token = 2;
+  }
+
+  message Refreshed {}
+
+  message ChooseTapped {}
+
+  message AccountSheetOpened {}
+
+  message AccountPicked {
+    string account_id = 1;
+  }
+
+  message SheetClosed {}
+
+  // `mdy` or `dmy`.
+  message DateOrderAnswered {
+    string order = 1;
+  }
+
+  // `debits_negative` or `debits_positive`.
+  message SignChosen {
+    string choice = 1;
+  }
+
+  message KeepProposedToggled {}
+
+  message Publish {}
+
+  message Discard {}
+
+  message Left {}
+
+  message AddAccount {}
+
+  message Done {}
+}
+
+// ---------------------------------------------------------------------------
+// --- money.accounts ---------------------------------------------------------
+// ---------------------------------------------------------------------------
+
+message MoneyAccountsState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    Denied denied = 4;
+    MoneyAccountsData data = 5;
+  }
+  WriteState write = 6;
+  MoneyPageChrome chrome = 7;
+  Sheet sheet = 8;
+  optional MoneyAccountEditor editor = 9;
+  optional StatusLine status = 10;
+  string draft_token = 11;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_EDITOR = 2;
+  }
+}
+
+message MoneyAccountsData {
+  repeated MoneyAccountSection sections = 1;
+  // One per currency; never summed across them.
+  string net_worth_label = 2;
+  repeated MoneyFigure net_worth = 3;
+  string net_worth_note = 4;
+  optional EmptyState empty = 5;
+  string add_label = 6;
+  repeated MoneyFact definitions = 7;
+}
+
+message MoneyAccountSection {
+  // "On budget", "Off budget".
+  string title = 1;
+  repeated MoneyAccountRow rows = 2;
+}
+
+message MoneyAccountRow {
+  string account_id = 1;
+  string name = 2;
+  // "····2291 · Checking · USD".
+  string meta = 3;
+  bool has_balance = 4;
+  Money balance = 5;
+  // "Not worked out" when there is no balance.
+  string balance_note = 6;
+  // "Matches Sep 30 statement" / "off the Sep 28 statement" / "No statement balance yet".
+  string checkpoint_line = 7;
+  // The difference, drawn before the line when the statement disagrees.
+  bool has_delta = 8;
+  Money delta = 9;
+  StatusChip.Tone checkpoint_tone = 10;
+  string accessibility_label = 11;
+}
+
+message MoneyAccountEditor {
+  Mode mode = 1;
+  string account_id = 2;
+  string name = 3;
+  // `checking`, `savings`, `credit_card`, `cash`.
+  string kind = 4;
+  repeated MoneyChoice kind_options = 5;
+  // Add only: the account's one currency (a code).
+  string currency = 6;
+  bool on_budget = 7;
+  // The bank's account number, as the member types it.
+  string external_ref = 8;
+  // Edit only.
+  bool closed = 9;
+  bool can_save = 10;
+  string issue = 11;
+  string title = 12;
+  string save_label = 13;
+  string name_label = 14;
+  string kind_label = 15;
+  string currency_label = 16;
+  string on_budget_label = 17;
+  string external_ref_label = 18;
+  string external_ref_note = 19;
+  string closed_label = 20;
+  string cancel_label = 21;
+
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_ADD = 1;
+    MODE_EDIT = 2;
+  }
+}
+
+message MoneyAccountsEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    AddTapped add = 3;
+    AccountPicked account = 4;
+    NameEdited name = 5;
+    KindPicked kind_picked = 6;
+    CurrencyEdited currency = 7;
+    OnBudgetToggled on_budget = 8;
+    ExternalRefEdited external_ref = 9;
+    ClosedToggled closed = 10;
+    Save save = 11;
+    SheetClosed sheet_closed = 12;
+  }
+
+  message Opened {
+    string parent = 1;
+    string draft_token = 2;
+  }
+
+  message Refreshed {}
+
+  message AddTapped {}
+
+  message AccountPicked {
+    string account_id = 1;
+  }
+
+  message NameEdited {
+    string text = 1;
+  }
+
+  message KindPicked {
+    string kind = 1;
+  }
+
+  message CurrencyEdited {
+    string text = 1;
+  }
+
+  message OnBudgetToggled {}
+
+  message ExternalRefEdited {
+    string text = 1;
+  }
+
+  message ClosedToggled {}
+
+  message Save {}
+
+  message SheetClosed {}
+}
+
+// ---------------------------------------------------------------------------
+// --- money.rules ------------------------------------------------------------
+// ---------------------------------------------------------------------------
+
+message MoneyRulesState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    Denied denied = 4;
+    MoneyRulesData data = 5;
+  }
+  WriteState write = 6;
+  MoneyPageChrome chrome = 7;
+  Sheet sheet = 8;
+  optional MoneyRuleEditor editor = 9;
+  optional Confirm confirm = 10;
+  optional StatusLine status = 11;
+  string draft_token = 12;
+  // What the open Confirm is about: `delete` or `apply`.
+  string pending = 13;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_EDITOR = 2;
+    SHEET_CATEGORY = 3;
+  }
+}
+
+message MoneyRulesData {
+  repeated MoneyRuleRow rows = 1;
+  // "12 of 500".
+  string limit_line = 2;
+  optional EmptyState empty = 3;
+  string add_label = 4;
+  string apply_label = 5;
+  // The category sheet's choices.
+  repeated MoneyChoice category_options = 6;
+  string category_sheet_title = 7;
+}
+
+message MoneyRuleRow {
+  string rule_id = 1;
+  // The pattern, as the bank writes it.
+  string title = 2;
+  // "contains · files under Groceries · names it Trader Joe's".
+  string meta = 3;
+  string accessibility_label = 4;
+}
+
+message MoneyRuleEditor {
+  Mode mode = 1;
+  string rule_id = 2;
+  // `is`, `contains`, `matches`.
+  string kind = 3;
+  string pattern = 4;
+  string category_id = 5;
+  string category_label = 6;
+  string display_name = 7;
+  bool can_save = 8;
+  string issue = 9;
+  string title = 10;
+  string save_label = 11;
+  string kind_label = 12;
+  repeated MoneyChoice kind_options = 13;
+  string pattern_label = 14;
+  string pattern_note = 15;
+  string category_row_label = 16;
+  string name_label = 17;
+  string delete_label = 18;
+  string apply_label = 19;
+  string cancel_label = 20;
+  string clear_category_label = 21;
+
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_ADD = 1;
+    MODE_EDIT = 2;
+  }
+}
+
+message MoneyRulesEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    AddTapped add = 3;
+    RulePicked rule = 4;
+    KindPicked kind_picked = 5;
+    PatternEdited pattern = 6;
+    NameEdited name = 7;
+    CategorySheetOpened category_sheet = 8;
+    CategoryPicked category = 9;
+    Save save = 10;
+    DeleteTapped delete = 11;
+    ApplyTapped apply = 12;
+    SheetClosed sheet_closed = 13;
+    ConfirmAccepted confirm_accepted = 14;
+    ConfirmDismissed confirm_dismissed = 15;
+  }
+
+  message Opened {
+    string parent = 1;
+    string draft_token = 2;
+  }
+
+  message Refreshed {}
+
+  message AddTapped {}
+
+  message RulePicked {
+    string rule_id = 1;
+  }
+
+  message KindPicked {
+    string kind = 1;
+  }
+
+  message PatternEdited {
+    string text = 1;
+  }
+
+  message NameEdited {
+    string text = 1;
+  }
+
+  message CategorySheetOpened {}
+
+  // EMPTY clears the category.
+  message CategoryPicked {
+    string category_id = 1;
+  }
+
+  message Save {}
+
+  message DeleteTapped {}
+
+  // On an open rule: apply that rule to history. On the list: apply them all.
+  message ApplyTapped {}
+
+  message SheetClosed {}
+
+  message ConfirmAccepted {}
+
+  message ConfirmDismissed {}
+}
+
+// ---------------------------------------------------------------------------
+// --- money.categories -------------------------------------------------------
+// ---------------------------------------------------------------------------
+
+message MoneyCategoriesState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    Denied denied = 4;
+    MoneyCategoriesData data = 5;
+  }
+  WriteState write = 6;
+  MoneyPageChrome chrome = 7;
+  Sheet sheet = 8;
+  // The add form's words.
+  string name_draft = 9;
+  string group_id = 10;
+  // The category the row sheet is about.
+  string category_id = 11;
+  optional Confirm confirm = 12;
+  optional StatusLine status = 13;
+  string draft_token = 14;
+  // The category a pending merge folds into.
+  string merge_into = 15;
+
+  enum Sheet {
+    SHEET_UNSPECIFIED = 0;
+    SHEET_NONE = 1;
+    SHEET_ADD = 2;
+    SHEET_ROW = 3;
+    SHEET_MERGE = 4;
+  }
+}
+
+message MoneyCategoriesData {
+  repeated MoneyCategoryGroup groups = 1;
+  string add_label = 2;
+  optional EmptyState empty = 3;
+  // The add form.
+  string add_title = 4;
+  string name_label = 5;
+  string group_label = 6;
+  repeated MoneyChoice group_options = 7;
+  string save_label = 8;
+  bool can_save = 9;
+  string issue = 10;
+  // The row sheet for `category_id`.
+  string row_title = 11;
+  repeated MoneyAction row_actions = 12;
+  // The merge sheet's destinations.
+  string merge_title = 13;
+  repeated MoneyChoice merge_options = 14;
+  string cancel_label = 15;
+}
+
+message MoneyCategoryGroup {
+  string group_id = 1;
+  string label = 2;
+  repeated MoneyCategoryEntry rows = 3;
+}
+
+message MoneyCategoryEntry {
+  string category_id = 1;
+  string label = 2;
+  bool archived = 3;
+  // "archived".
+  string meta = 4;
+  string accessibility_label = 5;
+}
+
+message MoneyCategoriesEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+    AddTapped add = 3;
+    NameEdited name = 4;
+    GroupPicked group = 5;
+    Save save = 6;
+    CategoryPicked category = 7;
+    RowActionPicked row_action = 8;
+    MergeIntoPicked merge_into = 9;
+    SheetClosed sheet_closed = 10;
+    ConfirmAccepted confirm_accepted = 11;
+    ConfirmDismissed confirm_dismissed = 12;
+  }
+
+  message Opened {
+    string parent = 1;
+    string draft_token = 2;
+  }
+
+  message Refreshed {}
+
+  message AddTapped {}
+
+  message NameEdited {
+    string text = 1;
+  }
+
+  // EMPTY is no group.
+  message GroupPicked {
+    string group_id = 1;
+  }
+
+  message Save {}
+
+  message CategoryPicked {
+    string category_id = 1;
+  }
+
+  // `merge`, `archive`, `restore`.
+  message RowActionPicked {
+    string key = 1;
+  }
+
+  message MergeIntoPicked {
+    string category_id = 1;
+  }
+
+  message SheetClosed {}
+
+  message ConfirmAccepted {}
+
+  message ConfirmDismissed {}
+}
+
+// ---------------------------------------------------------------------------
+// --- money.search -----------------------------------------------------------
+// ---------------------------------------------------------------------------
+
+message MoneySearchState {
+  SeatState seat = 1;
+  SearchField field = 2;
+  oneof content {
+    // Nothing typed: the resting sentence, no read.
+    EmptyState resting = 3;
+    Loading loading = 4;
+    ReadFailure failure = 5;
+    Denied denied = 6;
+    MoneySearchData data = 7;
+  }
+  MoneyPageChrome chrome = 8;
+  string placeholder = 9;
+  string clear_label = 10;
+}
+
+message MoneySearchData {
+  repeated MoneyRow rows = 1;
+  // "3 matches" / "50 of 212 matches".
+  string count_label = 2;
+  optional EmptyState empty = 3;
+}
+
+message MoneySearchEvent {
+  oneof kind {
+    Opened opened = 1;
+    TermChanged term = 2;
+    Cleared cleared = 3;
+    Refreshed refreshed = 4;
+    // INTENT: the shell pushes the transaction.
+    TransactionPicked transaction = 5;
+  }
+
+  message Opened {}
+
+  message TermChanged {
+    string term = 1;
+  }
+
+  message Cleared {}
+
+  message Refreshed {}
+
+  message TransactionPicked {
+    string txn_id = 1;
+  }
 }

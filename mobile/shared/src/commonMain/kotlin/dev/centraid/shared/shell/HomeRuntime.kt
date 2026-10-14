@@ -103,6 +103,7 @@ public class HomeRuntime(
     public fun readAllTiles() {
         HomeReads.READS.forEach { read -> scope.launch { readTile(read) } }
         scope.launch { readAgenda() }
+        scope.launch { readMoney() }
     }
 
     private suspend fun readTile(read: HomeReads.TileRead) {
@@ -137,6 +138,33 @@ public class HomeRuntime(
             is AppQueryOutcome.Denied ->
                 refused(HomeAgendaTile.APP_ID, deniedFailure(outcome.denial))
             is AppQueryOutcome.Refused -> refused(HomeAgendaTile.APP_ID, outcome.failure)
+        }
+        host.send(event)
+    }
+
+    /**
+     * MONEY'S TILE, THROUGH THE CORE'S MONEY ARM (#1099). Same law as every other
+     * tile: its own event the moment it lands, and a read that did not land is
+     * `TileRefused`, never an empty tile.
+     */
+    private suspend fun readMoney() {
+        val handle = core()
+        val event = if (handle == null) {
+            refused(HomeMoneyTile.APP_ID, Reads.noVault())
+        } else {
+            val request = Envelope(request_id = 0, request = Request(money = HomeMoneyTile.request(clock.read())))
+            when (val outcome = handle.call(request)) {
+                is CoreOutcome.Failed -> refused(HomeMoneyTile.APP_ID, fromCore(outcome.failure))
+                is CoreOutcome.Answered -> {
+                    val tile = outcome.value.response?.money?.home_tile
+                    val error = outcome.value.error
+                    when {
+                        tile != null -> HomeMoneyTile.arrived(tile)
+                        error != null -> refused(HomeMoneyTile.APP_ID, sentenceFor(error.code))
+                        else -> refused(HomeMoneyTile.APP_ID, Reads.refused(WRONG_ANSWER))
+                    }
+                }
+            }
         }
         host.send(event)
     }

@@ -13,6 +13,9 @@ import centraid.screen.v1.DuplicateReviewState
 import centraid.screen.v1.DuplicatesState
 import centraid.screen.v1.FaceReviewState
 import centraid.screen.v1.HomeState
+import centraid.screen.v1.MoneyHomeState
+import centraid.screen.v1.MoneyImportState
+import centraid.screen.v1.MoneyTransactionState
 import centraid.screen.v1.Springboard
 import centraid.screen.v1.TileStatus
 import centraid.screen.v1.MediaPermission
@@ -36,6 +39,7 @@ import centraid.screen.v1.SeatState
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -754,7 +758,7 @@ class ScreenFixtureSpec : StringSpec({
 
     "home: an unreadable springboard is NOT a first run" {
         // THE FOURTH READ STATE, and the reason Home has one. Both fixtures
-        // show seven tiles with no content; only one of them may say the vault
+        // show eight tiles with no content; only one of them may say the vault
         // is empty, and it is the one whose reads LANDED.
         val unreadable = home("every-tile-unreadable")
         val firstRun = home("first-run")
@@ -950,6 +954,86 @@ class ScreenFixtureSpec : StringSpec({
         screens.resolve("agenda-editor").binFiles().forEach { file ->
             val state = AgendaEditorState.ADAPTER.decode(file.readBytes())
             contentCount(state.loading, state.failure, state.denied, state.data_, state.gone) shouldBe 1
+        }
+    }
+
+    // --- Money (#1099) ----------------------------------------------------
+
+    fun money(case: String): MoneyHomeState =
+        MoneyHomeState.ADAPTER.decode(screens.bytes("money/$case"))
+
+    "money: day one is one sentence and one action, with the same verb in the header" {
+        val state = money("day-one")
+        val empty = state.data_.shouldNotBeNull().spending.shouldNotBeNull().empty.shouldNotBeNull()
+        empty.headline shouldBe "Import a bank statement to see this month."
+        empty.action_label shouldBe state.chrome.shouldNotBeNull().add_label
+        state.band.map { it.key } shouldBe listOf("spending", "activity", "cashflow", "more")
+        state.data_.spending.shouldNotBeNull().heroes.shouldBeEmpty()
+    }
+
+    "money: two currencies are two heroes, and a figure never spans them" {
+        val spending = money("spending").data_.shouldNotBeNull().spending.shouldNotBeNull()
+        spending.heroes.map { it.spent?.currency } shouldBe listOf("USD", "CAD")
+        spending.tables.single().currency shouldBe "USD"
+        // Over plan is a minus sign and a tone, never a colour alone.
+        val over = spending.tables.single().rows.single()
+        over.over.shouldBeTrue()
+        over.left?.minor shouldBe -2_827L
+        spending.in_out_net.single().figures.map { it.label } shouldBe listOf("In", "Out", "Net")
+    }
+
+    "money: a transfer keeps its row, greyed, and the chip row has no sort chip" {
+        val state = money("activity")
+        state.chips.map { it.key } shouldBe listOf("month", "account", "category")
+        val transfer = state.data_.shouldNotBeNull().activity.shouldNotBeNull().sections[1].rows.single()
+        transfer.dimmed.shouldBeTrue()
+        transfer.chips.single().label shouldBe "Transfer"
+    }
+
+    "money: a denied Money is the gate and a failed read keeps its band" {
+        val denied = money("denied")
+        val refused = money("read-refused")
+        denied.denied.shouldNotBeNull().title shouldBe "Money is off"
+        denied.band.shouldContainExactly()
+        denied.failure.shouldBeNull()
+        refused.failure.shouldNotBeNull().kind shouldBe ReadFailureKind.READ_FAILURE_KIND_UNAVAILABLE
+        refused.band.size shouldBe 4
+    }
+
+    "money: the import review counts every verdict, and the date-order question has no rows and no default" {
+        val review = MoneyImportState.ADAPTER.decode(screens.bytes("money-import/planned"))
+        val statement = review.data_.shouldNotBeNull().statements.single()
+        statement.counts.map { it.label } shouldBe listOf("New", "Already in", "Check these", "Can’t read")
+        statement.rows.first { it.line_label == "Row 88" }.reason shouldBe "Amount has a letter O."
+        review.data_.publish_label shouldBe "Import 186 rows"
+        val question = MoneyImportState.ADAPTER.decode(screens.bytes("money-import/question"))
+        val asked = question.data_.shouldNotBeNull().statements.single()
+        asked.question.shouldNotBeNull().options.none { it.selected }.shouldBeTrue()
+        asked.rows.shouldBeEmpty()
+        question.data_.publish_label shouldBe ""
+    }
+
+    "money: a transaction offers a transfer and a rule and carries no write" {
+        val state = MoneyTransactionState.ADAPTER.decode(screens.bytes("money-transaction/offers"))
+        val data = state.data_.shouldNotBeNull()
+        data.transfer_offer.shouldNotBeNull().key shouldBe "transfer"
+        data.rule_offer.shouldNotBeNull().key shouldBe "rule"
+        state.write.shouldNotBeNull().phase shouldBe WriteState.Phase.PHASE_IDLE
+        data.actions.single { it.destructive }.key shouldBe "void"
+    }
+
+    "money: every fixture sets exactly one content state" {
+        screens.resolve("money").binFiles().forEach { file ->
+            val state = MoneyHomeState.ADAPTER.decode(file.readBytes())
+            contentCount(state.loading, state.failure, state.denied, state.data_) shouldBe 1
+        }
+        screens.resolve("money-import").binFiles().forEach { file ->
+            val state = MoneyImportState.ADAPTER.decode(file.readBytes())
+            contentCount(state.loading, state.failure, state.denied, state.data_) shouldBe 1
+        }
+        screens.resolve("money-transaction").binFiles().forEach { file ->
+            val state = MoneyTransactionState.ADAPTER.decode(file.readBytes())
+            contentCount(state.loading, state.failure, state.denied, state.data_) shouldBe 1
         }
     }
 
