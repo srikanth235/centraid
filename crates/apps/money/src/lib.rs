@@ -21,5 +21,6 @@ pub mod civil;
 pub mod engine;
 pub mod import;
 pub mod queries;
+pub mod recurring;
 pub mod rules;
 pub mod year3;

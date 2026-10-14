@@ -748,3 +748,108 @@ fn search_walks_months_newest_first_and_forgives_a_slip() {
     let limited = search(&door, "2024-03", "netflix", 1).unwrap();
     assert_eq!((limited.rows.len(), limited.total_matches), (1, 3));
 }
+
+#[test]
+fn recurring_series_over_the_ledger_match_the_fixture() {
+    use centraid_apps_money::recurring::{
+        Cadence, RECURRING_MONTHS, Status, detect, forecast, seen_times,
+    };
+    let connection = vault();
+    let door = TestDoor::new(&connection);
+    let world = world(&door);
+    let case = fixture("recurring.json");
+    let today = case["today"].as_str().unwrap();
+    let month = case["month"].as_str().unwrap();
+    let lookback = queries::load_lookback(&door, month, RECURRING_MONTHS).unwrap();
+    assert!(!lookback.truncated);
+    let found = detect(&lookback.value, &world.linked, today);
+    let wanted = case["series"].as_array().unwrap();
+    assert_eq!(found.len(), wanted.len());
+    for (got, want) in found.iter().zip(wanted) {
+        assert_eq!(got.merchant_key, want["merchant_key"].as_str().unwrap());
+        assert_eq!(got.account_id, want["account"].as_str().unwrap());
+        assert_eq!(got.cadence, Cadence::Monthly);
+        assert_eq!(want["cadence"], "monthly");
+        assert_eq!(got.rrule, want["rrule"].as_str().unwrap());
+        assert_eq!(got.anchor, want["anchor"].as_str().unwrap());
+        assert_eq!(got.median_amount_minor, i(&want["median"]));
+        assert_eq!(
+            got.category_concept_id.as_deref(),
+            want["category"].as_str()
+        );
+        assert_eq!(
+            got.occurrences,
+            want["occurrences"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|d| d.as_str().unwrap().to_owned())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(got.rank_milli, i(&want["rank_milli"]));
+        assert_eq!(got.next_due(today).as_deref(), want["next_due"].as_str());
+        for window in want["projection"].as_array().unwrap() {
+            let projected = got.project(
+                window["from"].as_str().unwrap(),
+                window["to"].as_str().unwrap(),
+                today,
+            );
+            let words = |s: Status| match s {
+                Status::Paid => "paid",
+                Status::Due => "due",
+                Status::Late => "late",
+            };
+            let got_pairs: Vec<(String, &str)> = projected
+                .iter()
+                .map(|p| (p.expected_on.clone(), words(p.status)))
+                .collect();
+            let want_pairs: Vec<(String, &str)> = window["expected"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|e| (e[0].as_str().unwrap().to_owned(), e[1].as_str().unwrap()))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|(d, s)| {
+                    (
+                        d,
+                        if s == "paid" {
+                            "paid"
+                        } else if s == "due" {
+                            "due"
+                        } else {
+                            "late"
+                        },
+                    )
+                })
+                .collect();
+            assert_eq!(got_pairs, want_pairs);
+        }
+    }
+    for (description, times) in case["seen_times"].as_object().unwrap() {
+        assert_eq!(
+            seen_times(&lookback.value, description),
+            usize::try_from(i(times)).unwrap(),
+            "{description}"
+        );
+    }
+    // The forecast: March's spending so far plus nothing still to come.
+    let ctx = context(&world, today);
+    let rows = load_month(&door, month, &ActivityFilter::default())
+        .unwrap()
+        .value;
+    let spent: BTreeMap<String, i64> = spending(&rows, month, &ctx)
+        .into_iter()
+        .map(|s| (s.currency, s.spent_minor))
+        .collect();
+    let is_income = |c: &str| ctx.is_income(c);
+    for line in forecast(&spent, &found, month, today, &is_income) {
+        let want = &case["forecast"][&line.currency];
+        if want.is_null() {
+            continue;
+        }
+        assert_eq!(line.spent_so_far_minor, i(&want["spent_so_far"]));
+        assert_eq!(line.expected_minor, i(&want["expected"]));
+        assert_eq!(line.month_end_minor, i(&want["month_end"]));
+    }
+}

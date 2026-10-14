@@ -514,6 +514,35 @@ pub fn load_month(
     })
 }
 
+/// The rows of the `months` windows ending at `through_month`, oldest window
+/// first and undecorated (a merchant is read off the bank's own words);
+/// `truncated` when any window held more than [`MONTH_ROWS`].
+pub fn load_lookback(
+    door: &dyn PageDoor,
+    through_month: &str,
+    months: usize,
+) -> KitResult<Bounded<Vec<TxnRow>>> {
+    let mut rows = Vec::new();
+    let mut truncated = false;
+    for back in (0..months).rev() {
+        let Some(month) = civil::add_months(through_month, -i32::try_from(back).unwrap_or(0))
+        else {
+            continue;
+        };
+        let window = read_window(
+            door,
+            &month_statement(&month, &ActivityFilter::default())?,
+            MONTH_ROWS,
+        )?;
+        truncated |= window.filled;
+        rows.extend(window.rows.iter().map(txn_of));
+    }
+    Ok(Bounded {
+        value: rows,
+        truncated,
+    })
+}
+
 /// One page of Activity: a month, filtered, newest first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActivityPage {
