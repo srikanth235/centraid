@@ -1,0 +1,1260 @@
+{
+  "manifestVersion": 1,
+  "id": "money",
+  "name": "Money",
+  "description": "Where your money went \u2014 a personal ledger as a projection of the vault. Import a bank or card statement (CSV, OFX or QFX) and see spending by category against a monthly plan, cash flow, and balances checked against the balances your statements state. Accounts and transactions are the vault's own core.account and core.transaction; the app adds your names, rules, plans and checkpoints. An imported line is never edited, only filed under a category or voided; importing the same file twice writes nothing; a possible duplicate or transfer is proposed and never decided for you. Every balance, total and forecast is derived at read time \u2014 nothing is stored \u2014 and nothing is ever added across currencies. The statement itself is read once and never kept. No data of its own \u2014 revoke the grant and the app goes dark.",
+  "version": "0.1.0",
+  "iconKey": "Coin",
+  "colorKey": "indigo",
+  "vault": {
+    "why": "Reads your accounts and transactions to show where the money went, and files the statements you import.",
+    "scopes": [
+      {
+        "schema": "core",
+        "table": "transaction",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "core",
+        "table": "account",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "core",
+        "table": "concept",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "core",
+        "table": "tag",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "core",
+        "table": "link",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "money",
+        "table": "account",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "money",
+        "table": "transaction",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "money",
+        "table": "target",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "money",
+        "table": "rule",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "money",
+        "table": "import_profile",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "money",
+        "table": "balance_checkpoint",
+        "verbs": "read+act"
+      }
+    ]
+  },
+  "actionSideEffect": "vault-write",
+  "actions": [
+    {
+      "name": "add-account",
+      "description": "Add an account the member imports statements into, with its currency, kind and (optionally) an opening balance.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["account_id", "name", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "kind": {
+            "enum": ["checking", "savings", "credit_card", "cash"]
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3
+          },
+          "on_budget": {
+            "type": "boolean"
+          },
+          "opening_minor": {
+            "type": "integer"
+          },
+          "opening_on": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.account", "money.account"]
+    },
+    {
+      "name": "edit-account",
+      "description": "Rename an account, change its kind, move it on or off budget, or close it.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["account_id"],
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "kind": {
+            "enum": ["checking", "savings", "credit_card", "cash"]
+          },
+          "on_budget": {
+            "type": "boolean"
+          },
+          "closed_on": {
+            "type": ["string", "null"],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["money.account"]
+    },
+    {
+      "name": "set-opening-balance",
+      "description": "State where an account stood on a day; every balance after it is derived from that.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "required": ["account_id", "opening_minor", "opening_on"],
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "opening_minor": {
+            "type": "integer"
+          },
+          "opening_on": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "confirm": {
+            "type": "boolean"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["money.account"]
+    },
+    {
+      "name": "import-transactions",
+      "description": "Write the new rows of a statement the member reviewed: lines already in the account are reported, not written.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["account_id", "source", "rows"],
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "enum": ["csv", "ofx"]
+          },
+          "rows": {
+            "type": "array",
+            "maxItems": 20000,
+            "items": {
+              "type": "object",
+              "required": [
+                "txn_id",
+                "external_id",
+                "posted_on",
+                "amount_minor",
+                "direction",
+                "description"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "txn_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "external_id": {
+                  "type": "string",
+                  "minLength": 5,
+                  "maxLength": 300
+                },
+                "posted_on": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                },
+                "amount_minor": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "direction": {
+                  "enum": ["debit", "credit"]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "memo": {
+                  "type": ["string", "null"]
+                },
+                "check_number": {
+                  "type": ["string", "null"]
+                },
+                "bank_type": {
+                  "type": ["string", "null"]
+                },
+                "category_concept_id": {
+                  "type": ["string", "null"]
+                },
+                "display_name": {
+                  "type": ["string", "null"]
+                }
+              }
+            }
+          },
+          "checkpoint": {
+            "type": "object",
+            "required": ["as_of", "balance_minor", "currency"],
+            "additionalProperties": false,
+            "properties": {
+              "as_of": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              },
+              "balance_minor": {
+                "type": "integer"
+              },
+              "currency": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 3
+              }
+            }
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "core.transaction",
+        "money.transaction",
+        "money.balance_checkpoint"
+      ]
+    },
+    {
+      "name": "record-checkpoint",
+      "description": "State a balance for a day, as evidence a derived balance is compared with.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["account_id", "as_of", "balance_minor"],
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "as_of": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "balance_minor": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3
+          },
+          "source": {
+            "enum": ["ofx", "csv", "member"]
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["money.balance_checkpoint"]
+    },
+    {
+      "name": "save-import-profile",
+      "description": "Remember how this bank's CSV is laid out, keyed by its header fingerprint.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "header_fingerprint",
+          "delimiter",
+          "date_order",
+          "sign_mode",
+          "date_col",
+          "desc_col"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "header_fingerprint": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "delimiter": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1
+          },
+          "skip_lines": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "date_order": {
+            "enum": ["mdy", "dmy", "ymd"]
+          },
+          "sign_mode": {
+            "enum": ["signed", "debit_credit", "indicator", "flip"]
+          },
+          "date_col": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "amount_col": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "debit_col": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "credit_col": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "desc_col": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "memo_col": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "indicator_col": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "indicator_out_value": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["money.import_profile"]
+    },
+    {
+      "name": "categorize",
+      "description": "File one or more transactions under a category, or clear it.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["txn_ids", "category_concept_id"],
+        "additionalProperties": false,
+        "properties": {
+          "txn_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2000,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "category_concept_id": {
+            "type": ["string", "null"],
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.transaction"]
+    },
+    {
+      "name": "void-transaction",
+      "description": "Remove a transaction from every total. Nothing is deleted and a void row never comes back.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "required": ["txn_id"],
+        "additionalProperties": false,
+        "properties": {
+          "txn_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.transaction"]
+    },
+    {
+      "name": "set-display-name",
+      "description": "Name a transaction in the member's words; the bank's words stay as written.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["txn_id", "display_name"],
+        "additionalProperties": false,
+        "properties": {
+          "txn_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "display_name": {
+            "type": ["string", "null"],
+            "maxLength": 120
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["money.transaction"]
+    },
+    {
+      "name": "link-transfer",
+      "description": "Say two transactions are the two halves of one movement of the member's own money.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["txn_id", "other_txn_id"],
+        "additionalProperties": false,
+        "properties": {
+          "txn_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "other_txn_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.link"]
+    },
+    {
+      "name": "unlink-transfer",
+      "description": "Take a transfer link off a transaction.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["txn_id"],
+        "additionalProperties": false,
+        "properties": {
+          "txn_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.link"]
+    },
+    {
+      "name": "set-target",
+      "description": "Plan an amount for a category in a month, or clear the plan.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["month", "category_concept_id", "amount_minor"],
+        "additionalProperties": false,
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$"
+          },
+          "category_concept_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "amount_minor": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3
+          },
+          "carry": {
+            "type": "boolean"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["money.target"]
+    },
+    {
+      "name": "set-carry",
+      "description": "Say whether a month's unused amount for a category rolls into the next.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["month", "category_concept_id", "carry"],
+        "additionalProperties": false,
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$"
+          },
+          "category_concept_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "carry": {
+            "type": "boolean"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["money.target"]
+    },
+    {
+      "name": "add-rule",
+      "description": "Add a rule that files and names matching descriptions.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["rule_id", "match_kind", "pattern"],
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "match_kind": {
+            "enum": ["is", "contains", "matches"]
+          },
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "amount_min_minor": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "amount_max_minor": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "account_id": {
+            "type": ["string", "null"],
+            "minLength": 1
+          },
+          "set_category_concept_id": {
+            "type": ["string", "null"],
+            "minLength": 1
+          },
+          "set_display_name": {
+            "type": ["string", "null"],
+            "maxLength": 120
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["money.rule"]
+    },
+    {
+      "name": "edit-rule",
+      "description": "Change a rule.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["rule_id"],
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "match_kind": {
+            "enum": ["is", "contains", "matches"]
+          },
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "amount_min_minor": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "amount_max_minor": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "account_id": {
+            "type": ["string", "null"],
+            "minLength": 1
+          },
+          "set_category_concept_id": {
+            "type": ["string", "null"],
+            "minLength": 1
+          },
+          "set_display_name": {
+            "type": ["string", "null"],
+            "maxLength": 120
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["money.rule"]
+    },
+    {
+      "name": "delete-rule",
+      "description": "Delete a rule; rows it already filed keep their category.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "required": ["rule_id"],
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["money.rule"]
+    },
+    {
+      "name": "apply-rule-to-history",
+      "description": "Apply a rule to the rows already imported; the member's own choices are kept unless told otherwise.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overwrite": {
+            "type": "boolean"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.transaction", "money.transaction"]
+    },
+    {
+      "name": "add-category",
+      "description": "Add a category, optionally beneath a group.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["category_id", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "category_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "parent_concept_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.concept"]
+    },
+    {
+      "name": "merge-category",
+      "description": "Fold one category into another: its rows, rules and plans move.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "required": ["from_concept_id", "into_concept_id"],
+        "additionalProperties": false,
+        "properties": {
+          "from_concept_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "into_concept_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [
+        "core.concept",
+        "core.transaction",
+        "money.rule",
+        "money.target"
+      ]
+    },
+    {
+      "name": "archive-category",
+      "description": "Archive a category, or bring it back.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "required": ["concept_id", "archived"],
+        "additionalProperties": false,
+        "properties": {
+          "concept_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": ["core.tag"]
+    }
+  ],
+  "queries": [
+    {
+      "name": "spending",
+      "description": "The Spending screen for a month: spent per currency against the plan, each category's planned, carried-in, spent and left, uncategorised rows, in/out/net, what was left out (transfers, rows dated after today) and the month-end forecast. Every figure is derived at read time and per currency.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$"
+          }
+        },
+        "additionalProperties": false,
+        "required": ["month"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "activity",
+      "description": "A page of a month's transactions, newest first, filtered by account and category, with the count that still need a category.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "uncategorised": {
+            "type": "boolean"
+          },
+          "cursor": {
+            "type": "object"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "additionalProperties": false,
+        "required": ["month"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "transaction",
+      "description": "One transaction with its flags, a transfer it may be half of, the rule the app would propose, how often its merchant is seen and the recurring series it belongs to.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "txn_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": ["txn_id"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "cashflow",
+      "description": "Twelve months of money in, out and net per currency, with the savings rate. The current month is marked partial.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "through": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$"
+          }
+        },
+        "additionalProperties": false,
+        "required": ["through"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "accounts",
+      "description": "Accounts on and off budget with derived balances, the newest checkpoint against each, and net worth per currency.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "rules",
+      "description": "The rules in the order they apply, with their specificity.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "categories",
+      "description": "The categories: groups, then categories, archived ones marked.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "target-sheet",
+      "description": "The target sheet for a category in a month: the plan, what carried in, the six-month average and next month's preview.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$"
+          },
+          "category_id": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "carry": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": ["month", "category_id", "currency"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "recurring",
+      "description": "Recurring charges detected over thirteen months: cadence, amount, next due and status. Nothing is stored.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "home-tile",
+      "description": "This month's spending per currency, for Home.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$"
+          }
+        },
+        "additionalProperties": false,
+        "required": ["month"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "search",
+      "description": "Searches the newest twelve months of transactions by description, the member's name, category and memo, forgiving a slipped letter.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$"
+          },
+          "term": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "additionalProperties": false,
+        "required": ["month", "term"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "states": {
+    "designed": [
+      "dayone",
+      "pending",
+      "offline",
+      "stale",
+      "conflict",
+      "parked",
+      "denied"
+    ],
+    "excluded": []
+  }
+}

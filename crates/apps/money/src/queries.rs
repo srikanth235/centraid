@@ -28,9 +28,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_kit::page::{Page, PageRequest};
-use centraid_apps_kit::reads::{
-    FanOutBound, PageDoor, in_list, read_page, read_pages, read_window,
-};
+use centraid_apps_kit::reads::{FanOutBound, PageDoor, Window, in_list, read_page, read_pages};
 use centraid_apps_kit::row::{Row, integer_or_zero, text_of};
 use centraid_apps_kit::spelling::WalkedWords;
 use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
@@ -380,22 +378,31 @@ pub fn categories_statement() -> PageQuery {
     )
 }
 
-/// `money.categories.archived` — the concepts carrying the flags scheme's
-/// `archived` tag.
-pub fn archived_statement() -> PageQuery {
+/// `money.categories.archived.concept` — the flags scheme's `archived` concept
+/// (found by its notation: a single table, because the vault's paged door takes
+/// no join).
+pub fn archived_concept_statement() -> PageQuery {
     query(
+        "money.categories.archived.concept",
+        "concept_id",
+        "core_concept",
+        PageOrder::asc("concept_id", "concept_id"),
+    )
+    .filter("notation = ?", vec![PageBindValue::from("archived")])
+}
+
+/// `money.categories.archived` — the tags that mark a concept archived.
+pub fn archived_statement(flag_concept_ids: &[String]) -> KitResult<PageQuery> {
+    let fragment = in_list("concept_id", flag_concept_ids)?;
+    let mut bind = vec![PageBindValue::from("core.concept")];
+    bind.extend(fragment.bind);
+    Ok(query(
         "money.categories.archived",
         "tag_id, target_id",
-        "core_tag t JOIN core_concept c ON c.concept_id = t.concept_id",
+        "core_tag",
         PageOrder::asc("tag_id", "tag_id"),
     )
-    .filter(
-        "target_type = ? AND c.notation = ?",
-        vec![
-            PageBindValue::from("core.concept"),
-            PageBindValue::from("archived"),
-        ],
-    )
+    .filter(&format!("target_type = ? AND {}", fragment.sql), bind))
 }
 
 /// `money.links.transfer` — live transfer links between two transactions.
@@ -455,8 +462,49 @@ pub fn profiles_statement(account_id: &str) -> PageQuery {
 // Loaders.
 // ---------------------------------------------------------------------------
 
-const SMALL: FanOutBound = FanOutBound::new(500, 4);
-const LARGE: FanOutBound = FanOutBound::new(500, 80);
+/// Rows asked for in one page: ONE UNDER the door's ceiling of 500.
+///
+/// The vault's `keyset_page` probes for a next page by asking its own runner for
+/// `limit + 1` rows, and that runner clamps to the same 500, so a page asked for
+/// at exactly 500 reports no next page and a walk silently stops there (found
+/// in the year-3 suite, reported to the root; a vault fix makes this 500 again).
+/// At 499 the probe fits under the clamp, and a window over a month of 512 rows
+/// is whole.
+pub const PAGE_ROWS: usize = 499;
+
+const SMALL: FanOutBound = FanOutBound::new(PAGE_ROWS, 4);
+const LARGE: FanOutBound = FanOutBound::new(PAGE_ROWS, 82);
+
+/// A stated window of `rows`, walked page by page (the kit's `read_window`, at
+/// [`PAGE_ROWS`]).
+fn read_window(door: &dyn PageDoor, query: &PageQuery, rows: usize) -> KitResult<Window> {
+    let mut collected: Vec<Row> = Vec::new();
+    let mut after = None;
+    while collected.len() < rows {
+        let want = (rows - collected.len()).min(PAGE_ROWS);
+        let page = door.page(
+            query,
+            &PageRequest {
+                limit: want,
+                after: after.clone(),
+            },
+        )?;
+        collected.extend(page.rows);
+        match page.next {
+            None => {
+                return Ok(Window {
+                    rows: collected,
+                    filled: false,
+                });
+            }
+            Some(next) => after = Some(next),
+        }
+    }
+    Ok(Window {
+        rows: collected,
+        filled: true,
+    })
+}
 
 fn day_of(row: &Row) -> String {
     text_of(row, "posted_at")
@@ -524,13 +572,22 @@ pub fn load_month(
     month: &str,
     filter: &ActivityFilter,
 ) -> KitResult<Bounded<Vec<TxnRow>>> {
-    let window = read_window(door, &month_statement(month, filter)?, MONTH_ROWS)?;
-    let mut rows: Vec<TxnRow> = window.rows.iter().map(txn_of).collect();
-    if !rows.is_empty() {
-        decorate(door, &mut rows)?;
+    let mut window = load_month_plain(door, month, filter)?;
+    if !window.value.is_empty() {
+        decorate(door, &mut window.value)?;
     }
+    Ok(window)
+}
+
+/// A month's rows without Money's columns: all a fold needs.
+pub fn load_month_plain(
+    door: &dyn PageDoor,
+    month: &str,
+    filter: &ActivityFilter,
+) -> KitResult<Bounded<Vec<TxnRow>>> {
+    let window = read_window(door, &month_statement(month, filter)?, MONTH_ROWS)?;
     Ok(Bounded {
-        value: rows,
+        value: window.rows.iter().map(txn_of).collect(),
         truncated: window.filled,
     })
 }
@@ -579,7 +636,11 @@ pub fn load_activity_page(
     filter: &ActivityFilter,
     request: &PageRequest,
 ) -> KitResult<ActivityPage> {
-    let page: Page<Row> = read_page(door, &month_statement(month, filter)?, request)?;
+    let request = PageRequest {
+        limit: request.limit.min(PAGE_ROWS),
+        after: request.after.clone(),
+    };
+    let page: Page<Row> = read_page(door, &month_statement(month, filter)?, &request)?;
     let mut rows: Vec<TxnRow> = page.rows.iter().map(txn_of).collect();
     if !rows.is_empty() {
         decorate(door, &mut rows)?;
@@ -767,10 +828,18 @@ pub fn load_checkpoints(door: &dyn PageDoor) -> KitResult<Bounded<Vec<Checkpoint
 
 /// The categories scheme, archived ones marked.
 pub fn load_categories(door: &dyn PageDoor) -> KitResult<Vec<CategoryRow>> {
-    let archived: BTreeSet<String> = read_pages(door, &archived_statement(), SMALL)?
+    let flags: Vec<String> = read_pages(door, &archived_concept_statement(), SMALL)?
         .iter()
-        .filter_map(|row| text_of(row, "target_id"))
+        .filter_map(|row| text_of(row, "concept_id"))
         .collect();
+    let archived: BTreeSet<String> = if flags.is_empty() {
+        BTreeSet::new()
+    } else {
+        read_pages(door, &archived_statement(&flags)?, SMALL)?
+            .iter()
+            .filter_map(|row| text_of(row, "target_id"))
+            .collect()
+    };
     let rows = read_window(door, &categories_statement(), CATEGORY_ROWS)?.rows;
     Ok(rows
         .iter()

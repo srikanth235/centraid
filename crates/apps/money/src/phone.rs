@@ -167,6 +167,23 @@ fn flags_of(row: &TxnRow, data: &MoneyData, today: &str) -> Vec<Flag> {
 // Spending.
 // ---------------------------------------------------------------------------
 
+/// The lookback's rows split into its `count` month windows, oldest first, the
+/// last being `through`.
+fn windows_of(rows: &[TxnRow], through: &str, count: usize) -> Vec<(String, Vec<TxnRow>)> {
+    (0..count)
+        .rev()
+        .filter_map(|back| civil::add_months(through, -i32::try_from(back).unwrap_or(0)))
+        .map(|month| {
+            let in_month = rows
+                .iter()
+                .filter(|r| civil::month_of(&r.posted_on) == month)
+                .cloned()
+                .collect();
+            (month, in_month)
+        })
+        .collect()
+}
+
 /// One currency's hero on the Spending screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpendingCurrency {
@@ -253,21 +270,23 @@ pub struct MoneySpending {
 /// The Spending screen for `month` (today decides how much of it is "so far").
 pub fn spending(door: &dyn PageDoor, month: &str, today: &str) -> KitResult<MoneySpending> {
     let data = MoneyData::load(door)?;
-    let window = queries::load_month(door, month, &ActivityFilter::default())?;
+    // One read of the thirteen windows serves the month, the carry chain and
+    // the recurring detector; none of them needs a member's name or memo.
+    let lookback = queries::load_lookback(door, month, RECURRING_MONTHS)?;
+    let windows = windows_of(&lookback.value, month, RECURRING_MONTHS);
+    let window = queries::Bounded {
+        value: windows
+            .last()
+            .map(|(_, rows)| rows.clone())
+            .unwrap_or_default(),
+        truncated: lookback.truncated,
+    };
     let ctx = data.context(today);
     let folded = engine::spending(&window.value, month, &ctx);
     // The plan: this month's targets and what the previous months left.
     let from = civil::add_months(month, -i32::try_from(engine::CARRY_MONTHS).unwrap_or(12))
         .unwrap_or_else(|| month.to_owned());
     let targets = queries::load_targets(door, &from, month)?;
-    let mut windows = Vec::new();
-    for back in (1..=engine::CARRY_MONTHS).rev() {
-        if let Some(earlier) = civil::add_months(month, -i32::try_from(back).unwrap_or(0)) {
-            let rows = queries::load_month(door, &earlier, &ActivityFilter::default())?;
-            windows.push((earlier, rows.value));
-        }
-    }
-    windows.push((month.to_owned(), window.value.clone()));
     let spent_index = SpentIndex::from_windows(&windows, &ctx);
     let mut statuses: BTreeMap<String, TargetStatus> = BTreeMap::new();
     for target in targets.value.iter().filter(|t| t.month == month) {
@@ -387,7 +406,6 @@ pub fn spending(door: &dyn PageDoor, month: &str, today: &str) -> KitResult<Mone
         .iter()
         .map(|e| (e.currency.clone(), e.spent_minor))
         .collect();
-    let lookback = queries::load_lookback(door, month, RECURRING_MONTHS)?;
     let series = recurring::detect(&lookback.value, &data.linked, today);
     let is_income = |c: &str| ctx.is_income(c);
     let forecast = if civil::month_of(today) == month {
@@ -527,7 +545,7 @@ pub fn activity(
 ) -> KitResult<MoneyActivity> {
     let data = MoneyData::load(door)?;
     let page = queries::load_activity_page(door, month, filter, request)?;
-    let needing = queries::load_month(
+    let needing = queries::load_month_plain(
         door,
         month,
         &ActivityFilter {
@@ -815,7 +833,7 @@ pub fn cashflow(door: &dyn PageDoor, through: &str, today: &str) -> KitResult<Mo
     let mut truncated = data.truncated;
     for back in (0..CASHFLOW_MONTHS).rev() {
         if let Some(month) = civil::add_months(through, -i32::try_from(back).unwrap_or(0)) {
-            let rows = queries::load_month(door, &month, &ActivityFilter::default())?;
+            let rows = queries::load_month_plain(door, &month, &ActivityFilter::default())?;
             truncated |= rows.truncated;
             windows.push((month, rows.value));
         }
@@ -1066,13 +1084,8 @@ pub fn target_sheet(
 ) -> KitResult<MoneyTargetSheet> {
     let data = MoneyData::load(door)?;
     let ctx = data.context(today);
-    let mut windows = Vec::new();
-    for back in (0..=engine::CARRY_MONTHS).rev() {
-        if let Some(earlier) = civil::add_months(month, -i32::try_from(back).unwrap_or(0)) {
-            let rows = queries::load_month(door, &earlier, &ActivityFilter::default())?;
-            windows.push((earlier, rows.value));
-        }
-    }
+    let lookback = queries::load_lookback(door, month, engine::CARRY_MONTHS + 1)?;
+    let windows = windows_of(&lookback.value, month, engine::CARRY_MONTHS + 1);
     let spent = SpentIndex::from_windows(&windows, &ctx);
     let from = civil::add_months(month, -i32::try_from(engine::CARRY_MONTHS).unwrap_or(12))
         .unwrap_or_else(|| month.to_owned());
@@ -1208,7 +1221,7 @@ pub struct MoneyHomeTile {
 /// The tile Home shows: this month's spending per currency, or nothing yet.
 pub fn home_tile(door: &dyn PageDoor, month: &str, today: &str) -> KitResult<MoneyHomeTile> {
     let data = MoneyData::load(door)?;
-    let window = queries::load_month(door, month, &ActivityFilter::default())?;
+    let window = queries::load_month_plain(door, month, &ActivityFilter::default())?;
     let folded = engine::spending(&window.value, month, &data.context(today));
     Ok(MoneyHomeTile {
         month: month.to_owned(),

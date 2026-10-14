@@ -113,3 +113,23 @@ Branch `money/p`. Doctrine: [docs/decisions.md#money-1099](../docs/decisions.md#
 - `crates/apps/money/tests/corpus/windows1252.csv`
 
 **Falsification.** (1) *The date order is decided over the whole column, not the first row.* Throwaway: `date::decide` mutated to read only the first cell. `a_day_first_file_whose_first_row_is_ambiguous_is_decided_by_the_whole_column` went red (`FAILED`); restored, green. (2) *A weekly same-amount charge is never proposed against last week's.* Throwaway: `FUZZY_DAYS` 3 → 7. The first version of the case stayed green (one-to-one claiming hid it: the Jan 1 row claimed the existing row first); I added the next-week-alone assertion, and with `FUZZY_DAYS = 7` the case went red; restored, green.
+
+## Lane P, part 2 — Money's reads, folds, recurring charges, phone answers, manifest and door (waves 3 and 7)
+
+Doctrine: [docs/decisions.md#money-1099](../docs/decisions.md#money-1099). Rulings R-1099-45..49 are recorded there; the schema half is [#ontology-v0-close-916](../docs/decisions.md#ontology-v0-close-916) and lane V's.
+
+**What changed.** `queries.rs` (every read a `PageQuery` with a stated ceiling), `engine.rs` (spending, in/out/net, cash flow, balances, net worth, the target reducer with carry, transfer proposals moved from Tally), `recurring.rs` (detection, RRULE through the vault's one engine, statuses, forecast), `phone.rs` (the typed answers), `manifest.json` + `manifest.rs`, `commands.rs` (20 actions), `door.rs` (behind `vault-door`), `import::csv::SavedProfile`, and the hand-computed fixtures under `contracts/apps/money/`.
+
+**Verification.** `cargo test -p centraid-apps-money --all-features`: 47 unit, 4 door, 14 folds, 41 corpus, 7 phone and the year-3 suite green; `cargo clippy -p centraid-apps-money --all-targets --all-features -- -D warnings` green; `cargo xtask rules` green. The year-3 suite imports 18,000 rows through the real `money.import_transactions`, re-imports one account (all `already_in`), reads six screens through the kit's `TestDoor` and through the vault's own `keyset_page` (equal answers), and reconciles the screens with arithmetic from the parsed rows.
+
+**Findings.** (1) `Vault::keyset_page` probes `limit + 1` through `page_raw`, which clamps to 500 again: a page asked for at exactly 500 returns no `next`, so every 500-row walk stops silently (R-1099-48). `PAGE_ROWS = 499` is the crate's defence; the fix belongs in `crates/vault/src/page.rs`. (2) The paged door takes one table in `from`; no join. (3) `money.add_account` / `edit_account` cannot set `core_account.external_ref`, so an OFX statement can be matched to an account only by a value the member has no command to enter (`import::resolve_account` needs `external_ref` or a mask). (4) The vault's RRULE subset has no positional `BYDAY` (R-1099-47).
+
+### Every file this section touches
+
+- `receipts/issue-1099-money.md`, `CHANGELOG.md`, `docs/decisions.md`, `Cargo.lock`
+- `crates/apps/money/Cargo.toml`, `crates/apps/money/README.md`, `crates/apps/money/manifest.json`
+- `crates/apps/money/src/lib.rs`, `civil.rs`, `queries.rs`, `engine.rs`, `recurring.rs`, `phone.rs`, `manifest.rs`, `commands.rs`, `door.rs`, `import/mod.rs`, `import/csv.rs`, `import/plan.rs`
+- `crates/apps/money/tests/common/mod.rs`, `door.rs`, `folds.rs`, `phone.rs`, `year3.rs`, `import_corpus.rs`
+- `contracts/apps/money/rows.json`, `spending.json`, `cashflow.json`, `balances.json`, `targets.json`, `transfers.json`, `recurring.json`, `rules.json`
+
+**Falsification.** (1) *Overspending never carries in Tracking mode.* Throwaway: the tracking branch changed to carry the unfloored leftover; `overspending_does_not_carry_in_tracking_and_does_in_the_dormant_envelope_branch` went red; restored, green. (2) *A walk over a month longer than 500 rows is whole through the vault's own assembler.* Throwaway: `PAGE_ROWS` set to 500; the year-3 suite went red at "cash flow month 2024-01" (the keyset door returned 500 of 512 rows); restored, green. That check is also what found finding (1).

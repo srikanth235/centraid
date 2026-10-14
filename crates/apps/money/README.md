@@ -9,7 +9,7 @@ Money is a personal-finance app: accounts, transactions that enter by **importin
 - the statement's bytes are read once and never stored;
 - every figure is derived at read time: **no stored balance or rollup**.
 
-This README describes the import half (wave 2): `import` and `rules`. The queries, the action table and the manifest are wave 3.
+The crate has two halves: the import (`import`, `rules`) and the reads and folds (`queries`, `engine`, `recurring`, `phone`), with the manifest, the action table and the door beside them.
 
 ## Modules
 
@@ -22,6 +22,11 @@ This README describes the import half (wave 2): `import` and `rules`. The querie
 | `import::keys` | The dedupe key (R-1099-3): `ofx:<FITID>`, `ofx-nofitid:<hash>`, `csv:<64 hex>` over day, signed amount, raw description and ordinal within that triple |
 | `import::plan` | `plan`: rules, then exact de-duplication (one-to-one), in-file repeats, then the fuzzy **proposal**; a verdict per row and the file's totals |
 | `rules` | The rule semantics the vault's `apply_rule_to_history` agrees with (seam S2), the merchant key and the counting learner |
+| `queries` | Every read as a `PageQuery` with a stated ceiling: a month window by `posted_at` range, the Activity keyset page, accounts, targets, rules, checkpoints, categories, transfer links, the existing-rows window for a plan, and the search walk (R-1099-44). Single tables only; Money's decoration is read by id. A read that stops at a ceiling says so (`Bounded::truncated`) |
+| `engine` | The folds, pure and per currency: spending (refund credit, uncategorised, transfers and future rows left out and counted), in/out/net, cash flow and savings rate, balances against checkpoints, net worth, the target reducer with carry (envelope mode dormant) and transfer proposals (moved from Tally, R-1099-38) |
+| `recurring` | Detection of weekly, biweekly, monthly, quarterly and yearly charges, projected through `centraid_vault::time` (no second expander, no stored series), the due/late/paid statuses, "seen N times" and the month-end forecast |
+| `phone` | The typed answer to each screen: Spending, Activity, Cash flow, a transaction, Accounts, Rules, Categories, the target sheet, Recurring, Home's tile, search and the import plan. No clock and no zone: `today` and the month come in as text |
+| `manifest`, `commands`, `door` | `manifest.json` (id `money`, `Coin`, `indigo`) parsed by the kit; the 20-row action table, one vault command each, `invoke_key` required, a denial a value; the real door over the vault's `execute` behind `vault-door` |
 | `year3` | A deterministic generator: 4 accounts, 18,000 rows, as Chase-shaped CSV text |
 
 ## What this crate may not contain, and what stops it
@@ -44,6 +49,13 @@ This README describes the import half (wave 2): `import` and `rules`. The querie
 | `FUZZY_DAYS` | 3 | the gap between a row and the existing row it may be proposed a duplicate of |
 | `SIMILARITY_THRESHOLD` | 0.5 | bigram Dice of the two descriptions; see the constant's comment |
 | `RULES` | 500 | rules a vault holds |
+| `MONTH_ROWS` | 2,000 | one month window |
+| `CASHFLOW_MONTHS` / `SEARCH_MONTHS` / `RECURRING_MONTHS` | 12 / 12 / 13 | the windows the cash-flow fold, a search walk and the recurring detector read |
+| `ACCOUNT_ROWS` | 40,000 | one account's history, for its balance; past it the balance is unavailable, never short |
+| `MATCH_SCAN_ROWS` | 500 | newest rows per account a transfer is looked for among |
+| `EXISTING_ROWS` | 40,000 | rows an import plan compares against |
+| `PAGE_ROWS` | 499 | rows asked per page: one under the door's 500, so the vault's `limit + 1` probe fits its own clamp |
+| `CARRY_MONTHS` | 12 | how far a target's carry chain is followed |
 | `LEARNER_WINDOW` / `LEARNER_SUPPORT` | 5 / 3 | the counting learner proposes after 3 of a merchant's last 5 categorised rows agree |
 
 ## Dedupe and the fuzzy pass
@@ -56,6 +68,14 @@ The fuzzy pass is a proposal, never a write, and it is narrow on purpose: same d
 
 A column of slash dates that never has a day over 12 in either slot cannot be read: the statement carries a `DateOrderQuestion` (a few sample cells and the two orders) and **no rows**; the caller reads the file again with `CsvOptions::date_order` set to the member's answer. An answer cannot overrule a day the file proves. TD Canada's export is modelled as `MM/DD/YYYY`, as TD prints it.
 
+## Derived, never stored
+
+Every figure is derived at read time and keyed by currency; the definitions the screens print are in `engine`'s module doc (spending, in/out/net, savings rate, balance, planned) and `recurring`'s (qualification, status precedence). A balance is the account's opening balance plus the signed `posted` rows after its opening date; a checkpoint is evidence it is compared with. Recurring charges are RRULE strings checked by `assert_supported` and expanded by the vault's one engine; the vault's subset has no positional `BYDAY`, so an "nth weekday of the month" series is not offered.
+
 ## Tests
+
+`tests/folds.rs`, `tests/phone.rs` and `tests/door.rs` run the reads, the folds and the door over the fixtures in `contracts/apps/money/` (`rows.json`, `spending.json`, `cashflow.json`, `balances.json`, `targets.json`, `transfers.json`, `recurring.json`, `rules.json`, each hand-computed and explained in its `_` field). `rules.json` is seam S2: the crate's `rules::apply` and the vault's `money.apply_rule_to_history` read the same cases. `tests/year3.rs` imports 18,000 rows through the real command path and reconciles the screens over both keyset assemblers.
+
+The import corpus:
 
 `tests/import_corpus.rs` reads the files under `tests/corpus/`: Chase, Amex, Capital One, Bank of America, Wells Fargo, TD, RBC and Tangerine layouts; QFX 1.x and OFX 2.x; windows-1252, a byte-order mark, CRLF and a quoted newline, parenthesised negatives, a `;` file with decimal commas; day-first files whose first row is ambiguous and that are wholly ambiguous; a weekly charge; the same file twice; two files overlapping by a week; a multi-account OFX; a currency mismatch; a bad `TRNAMT`; and the 20,001-row and 8 MiB + 1 refusals. Each case pins the exact `(day, signed amount, description)` of every row.
