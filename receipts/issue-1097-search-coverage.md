@@ -152,6 +152,58 @@ The fix pass for the first `## Audit` (REFUTED), by a worker who did not write t
 - **Denial (optional finding).** New `a_correction_never_goes_around_a_denial` in `crates/core/src/app_query.rs` (its `tests` module, with a door that always corrects): 90 passed and 1 failed with the guard removed; 91 passed restored.
 - **Verification.** `cargo test -p centraid-apps-locker`: 44 unit and 11 parity, green. `cargo test -p centraid-core --lib app_query`: 91 passed. `cargo test -p centraid-vault --test search_coverage`: 17 passed.
 
+### Lane E — owner rulings
+
+The owner answered the seven open questions on 2026-10-14 and took every recommendation; the root then widened Q-1097-1 the same day (the two social indexes). Lane E applies the answers that change code and records the rest. Rung 013 was never merged to a shared branch and never pushed, so it is **amended in place**: no rung 014, `LADDER` stays at thirteen rungs. Doctrine digest the lane worked under: law `b4ce8d9df2f4` (`node .governance/law/brief.mjs`).
+
+**What it did.**
+
+- **E1 (Q-1097-1 (c), widened).** Nine indexes are retired in all (the lane A five plus `fts_core_transaction`, `fts_locker_item`, `fts_social_thread`, `fts_social_message`); `fts_core_collection` is the one that stays. The social pair index the People messaging model (`social_thread`, `social_message`), which has no screen and no reader; the Chat tab is `chat_thread`/`chat_message`. Four triggers that belong to other indexes also wrote `fts_social_message` (`trg_fts_content_text_ai`, `trg_fts_content_text_au`, `trg_fts_representation_ai`, `trg_fts_representation_au`: a body's text or a representation arriving re-indexes every note, document and message that owns it); the rung creates them again with the baseline's own text minus the message block, because a trigger that inserts into a dropped table fails the statement that fired it (found by the red run in Falsification 3).
+- **E2 (Q-1097-5 (b)).** Census, then the fold.
+  - *About-link.* `people.log_interaction` inserts a `core_activity`, then one `core_link` (`from_type = 'core.activity'`, `from_id = <activity>`, `to_type = 'core.party'`, `to_id = <party>`, relation `about` in `urn:duaility:relations`, `valid_to = NULL`), then, when there is text, a `knowledge_annotation` (`target_type = 'core.activity'`, `target_id = <activity>`). The People sheet (`crates/apps/people/src/queries.rs::links_statement`, `valid_to IS NULL`), `people.purge_person` and the command's own postcondition all follow that edge with no relation filter, so the fold does the same.
+  - *Writers of an annotation on a `core.activity`.* Only `people.log_interaction` (`crates/vault/src/commands/people.rs`, through `annotate`); the others are fixtures (`crates/apps/kit/src/fixtures.rs` year-3 build, `crates/search/tests/door.rs`). No command updates or deletes one except `people.purge_person` and Locker's own `replace_memo`/Tally's memo for their own targets.
+  - *What cannot happen.* `core_activity` has no `deleted_at`, so an interaction cannot be trashed; `knowledge_annotation` has no `deleted_at` either. Their removal is a delete: `people.purge_person` and the `core_entity` cascade, which delete the edge and the note, each firing its trigger. An edge ends with `core.unlink_entities` (`valid_to` set) and `core.link_entities` cannot link an activity (it is not in `LINKABLE`). A merge re-points `core_link.to_id`.
+  - *The fold.* The `memo` of `fts_core_party` is now the party's own annotations plus the annotations of every activity with a live edge onto it. The expression is in all 15 party SELECTs of the rung (backfill, base triggers, profile/channel child triggers). The three `fts_core_party_from_knowledge_annotation_*` triggers now cover `target_type IN ('core.party','core.activity')` and re-index the parties the annotation is on directly or through the activity's live edges; new `fts_core_party_from_core_link_ai/au/ad` re-index a party when an edge is made, ended, re-pointed or deleted. No new column, and `memo` keeps its 0.5 weight. The rung's backfill folds the notes already there.
+
+**Files.**
+
+- `contracts/migrations/013_search_coverage.sql`: the four retirements, the four rebuilt content triggers, the memo fold and the link triggers; header text (R2a, the memo row, "What this is for") brought to the current state.
+- `contracts/schema/vault-ddl.sql`: regenerated with `cargo run -q -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl.sql` (140 `CREATE TABLE` and 8 FTS5 tables, from 160 and 12 at lane D). `contracts/golden/issue-1020/vault-ddl.sql` is untouched: no check required it.
+- `crates/vault/tests/search_coverage.rs`: the oracle's memo now includes interaction notes; the retirement test asserts the nine are gone (table, five shadow tables, triggers, and no remaining object's SQL names one) and that `fts_core_collection` is whole; the wind-back restores the nine and the four triggers; four new tests (below).
+- `crates/vault/tests/baseline.rs`: `LADDER_OBJECTS` 45 to 48, `DROPPED_OBJECTS` 168 to 204, `ALTERED_OBJECTS` 24 to 28, the FTS shadow count 60 to 40 and the sync-trigger count `51 - 27 + 12 + 1 + 1 + 8`. These pin the ladder head's delta from the v0 corpus, so they do measure this rung.
+- `crates/search/tests/door.rs`: the four Locker tests plant their own `fts_locker_item` (`with_a_locker_index`); new `an_interaction_note_finds_the_person_and_a_typo_in_it_is_corrected`.
+- `crates/core/src/app_query/vault.rs` and `crates/core/src/app_query/people.rs`: one test each, Home and People's own search.
+- `crates/vault/src/migrations.rs` (comment), `docs/decisions.md` (Q-1097-1 to 7 answered and struck, R-1097-12 to 18, supersession pointers on R-1097-1, 2, 3), `docs/vault-ontology.md` (the table counts and ONT-39), `crates/search/README.md`, `crates/vault/README.md`, `contracts/README.md`, `CHANGELOG.md`.
+- Front page and earlier lanes' text: untouched (the front page holds no index count). The `## Owner questions` section below gets a pointer, because "none is ruled" is no longer true.
+
+**Verification.**
+
+| # | Command | Outcome |
+| --- | --- | --- |
+| E1 | `cargo test -p centraid-vault --test search_coverage` | **21 passed** (17 before; four new) |
+| E2 | `cargo test -p centraid-search` | **23 unit + 34 door passed, 1 ignored** (the latency measurement) |
+| E3 | `cargo test -p centraid-vault --no-fail-fast` | **521 passed, 0 failed** |
+| E4 | `cargo test -p centraid-core --no-fail-fast` | **352 passed, 0 failed** (two new: `an_interaction_note_finds_its_person_on_home`, `an_interaction_note_finds_the_person_it_was_logged_for`) |
+| E5 | `cargo test -p centraid-vault --test ladder_ddl`, and `cargo run -q -p centraid-vault --bin export-ladder-ddl \| cmp - contracts/schema/vault-ddl.sql` | 3 passed; byte-identical |
+| E6 | `bun run check:push:static` | 4/4 passed |
+| E7 | `node .governance/law/run.mjs --range 874fcd521..HEAD` | 10 rules, no findings |
+| E8 | `cargo xtask gate --profile local`, alone | every step green (fmt 2.6 s, clippy 79.9 s, test 1,881.0 s, restore-drill 38.1 s, rules 0.5 s, ledgers 0.2 s); last line `gate local: FAIL — over budget`, 2,002.4 s against 120 s, which is Inherited red row 1 (the budget was not touched) |
+
+**Decisions.**
+
+- *Amended in place, not rung 014.* The rung has run nowhere; a rung 014 would leave every vault one rung ahead of a schema nobody has. The header's "never edited from here on" begins at the first merge.
+- *No relation filter on the edge.* The People sheet, the purge and the postcondition read it without one; filtering on `about` would make the fold disagree with the sheet.
+- *One trigger set per child table.* The annotation triggers were extended rather than a second set added, so a table keeps one `fts_core_party_from_<table>_<ai|au|ad>` set (the `_from_` convention the snapshot and the wind-back key on).
+- *The Locker door test plants its table in the test, not the shared fixture*, so the other door tests, the sealed scans among them, never see it.
+- *Two core tests, not one.* Home's and People's search run in separate test modules with their own harness; one test cannot hold both.
+
+**Falsification.**
+
+1. *The link triggers.* The three removed together: 5 tests fail, among them `a_logged_interaction_note_finds_its_person_and_every_participant` (the second participant is not found: left one party, right two) and `a_merged_persons_interactions_move_to_the_survivor_and_a_purge_clears_them` (left empty). Removed one at a time: without `_ad`, `removing_the_link_or_the_note_or_the_activity_drops_the_hit` fails (the trigger count test with it); without `_au`, that test and the merge test fail. Restored: 21 passed.
+2. *The two earlier retirements.* The `fts_locker_item` drops removed from the rung: `a_locker_memo_is_in_no_index_and_no_vocabulary` and the climb test fail ("fts_locker_item is still in the file", nine objects listed). Restored.
+3. *The social pair.* The four rebuilt content triggers removed from the rung while the social tables are dropped: `knowledge.create_note` errors with `no such table: main.fts_social_message`, and the climb test fails on "an object still names fts_social_message". Restored.
+4. *The door still refuses `locker.item`.* A `locker.item` domain added to `DOMAINS` in a throwaway: `an_entity_with_sealed_columns_is_not_a_domain_and_asking_is_a_refusal` fails ("locker.item answered Ok(Data { … Cabin booking site … }) rather than refusing"), and so do the other three Locker tests. Restored (`git diff` of `crates/search/src` empty).
+
 ## Verification
 
 All commands run in the lane worktree on the working tree, with `CARGO_TARGET_DIR` set to the worktree's own `target/`.
@@ -404,7 +456,7 @@ Where the plan, the issue or a lane's first reading turned out wrong, and what s
 
 ## Owner questions
 
-Each is a question with options and a recommendation; none is ruled. They are recorded where decisions live, as Q-1097-1 to 7 in [docs/decisions.md](../docs/decisions.md#open-questions-for-the-owner-1097), and the owner's answers go there, not here.
+Each is a question with options and a recommendation; none is ruled. They are recorded where decisions live, as Q-1097-1 to 7 in [docs/decisions.md](../docs/decisions.md#open-questions-for-the-owner-1097), and the owner's answers go there, not here. **Answered 2026-10-14**, every recommendation taken (Q-1097-1 widened to the two social indexes): the rulings are R-1097-12 to 18 in [docs/decisions.md](../docs/decisions.md#the-owners-rulings-on-the-open-questions-1097), and Lane E above applies the two that change code.
 
 | Id | Question | Options and recommendation |
 | --- | --- | --- |
