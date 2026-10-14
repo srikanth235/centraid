@@ -1,0 +1,22 @@
+[package]
+name = "centraid-apps-money"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_apps_money"
+path = "src/lib.rs"
+
+[dependencies]
+# ONE HASH (#1025 S4): the import's dedupe key is BLAKE3, like every other
+# hash this repo defines itself. See `import::keys`.
+blake3.workspace = true
+centraid-apps-kit = { path = "../kit" }
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

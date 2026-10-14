@@ -36,3 +36,80 @@ See the lane report; the table is filled from the runs below.
 
 1. **A vault holding duplicate `external_id`s still climbs and loses nothing.** Throwaway check: deleted the rewriting `UPDATE` from `014_money.sql` and ran `money_schema.rs::a_vault_holding_duplicate_external_ids_climbs_and_loses_nothing`. Result: red (`UNIQUE constraint failed: core_transaction.account_id, core_transaction.external_id` when the file opened); green with the `UPDATE` restored.
 2. **Importing the same file twice writes nothing.** Throwaway check: made the `already_in` lookup in `import_transactions` never match and ran `money_commands.rs::importing_twice_writes_nothing_and_an_overlap_writes_only_the_new_lines`. Result: red; green with the lookup restored.
+
+## Lane P — the Money app crate: import parsers, plan pipeline, rules, adversarial corpus (wave 2)
+
+Branch `money/p`. Doctrine: [docs/decisions.md#money-1099](../docs/decisions.md#money-1099); the schema half is [#ontology-v0-close-916](../docs/decisions.md#ontology-v0-close-916) and is lane V's.
+
+**What this slice is.** `crates/apps/money` (package `centraid-apps-money`) with its import half: `import::{text, csv, ofx, amount, date, keys, plan}` and `rules`, plus the kit's shared CSV reader (`centraid_apps_kit::csv`, lifted out of Locker, which now calls it) and a deterministic year-3 generator. Nothing here touches a vault, a database or a clock: the plan is a function of parsed rows, the account's existing rows, the rules and `today`.
+
+**Red first.** The implementation was written before the corpus files (this section does not pretend otherwise); the corpus was then run against a stub reader (`read_csv` and `read_ofx` returning a refusal at their first line) and recorded red, then the stub was removed:
+
+- stubbed: `cargo test -p centraid-apps-money --test import_corpus` → `41 FAILED` of 41 (e.g. `chase_checking.csv: This does not look like a bank statement.`, `td_canada.csv: This does not look like a bank statement.`; even `a_file_that_is_not_ofx_is_refused` fails, `NotAStatement` where `UnreadableOfx` is pinned);
+- real: `test result: ok. 41 passed` (and 19 unit tests).
+- The plan and the rules have unit tests written with them; their corpus cases were red only through the stubbed readers.
+- Two defects the corpus found in the first implementation and that are fixed with their cases kept: `ROW 0`/`ATM 100` parsed as an amount through a "currency code" prefix (a description column read as numeric; now only a symbol or an ISO code is a currency mark), and a quoted newline kept its `\r` (CRLF and LF exports of one statement hashed differently; now normalised before tokenising).
+
+**Corpus cases (each pins the exact `(day, signed minor, description)` of every row and the line and reason of every rejected one):** Chase checking · Amex (positive charges flipped, `SignGuessed` declared, member override) · Capital One (debit/credit columns, posted date over transaction date) · Bank of America (preamble, header at record 6, the "Beginning balance" line is one rejected row at line 8) · Wells Fargo (no header, read by content) · TD Canada (no header, debit/credit/balance, modelled `MM/DD/YYYY` as TD prints it) · RBC (`CAD$`/`USD$`, `Description 1/2`, cheque number) · Tangerine · windows-1252 · UTF-8 BOM · CRLF + quoted newline + doubled quotes (and CRLF/LF hash alike) · parentheses, `$-`, `CR` · `;` with decimal commas and dotted dates · day-first with an ambiguous first row (decided by a `21/04` three rows down) · wholly ambiguous (the question, then both answers) · an answer cannot overrule a proven day · bad rows (lines 3, 4, 5 rejected, the blank line skipped, the file not blocked) · QFX 1.x SGML (zone suffixes ignored, `CHECKNUM`, `LEDGERBAL` not `AVAILBAL`, line numbers) · OFX 2.x XML with `&amp;` and `&#201;` · multi-account (bank, bank, card; matched by last four and by stored id; NoAccount; Ambiguous refused) · `CURDEF` mismatch · one bad `TRNAMT` (one rejected, two new) · no `FITID` (`ofx-nofitid:`, an identical pair stays two) · not OFX · same file twice (CSV and QFX: every row `AlreadyIn`) · overlap by a week (only the new rows `New`) · weekly same-amount charge (never proposed against last week, including the seven-day case) · identical same-day pair (two rows; one held, the other is new) · fuzzy proposal across a CSV-era copy, never across two different FITIDs · one-to-one claiming · in-file repeat collapse and the counts add up · future-dated flagged · rules applied on plan rows (raw description untouched) · profile re-applied on a matching fingerprint, re-detected with `ProfileChanged` on a changed one, JSON round trip · 20,000 rows read and 20,001 refused with the limit · 8 MiB + 1 byte refused by both readers · not a statement · year-3 (4 accounts, 18,000 rows read, planned, and re-planned to all `AlreadyIn`).
+
+### Seam notes
+
+- `ImportRow` is seam S1 field for field; `RowVerdict::Rejected` carries the reason and the 1-based line is on `PlanRow.line` (and `ParsedRow.line`). There is no "dropped by rule" verdict (R-1099-43); there is a fifth verdict `RepeatInFile`, so that the verdict counts add up to the file's data rows.
+- The dedupe hash is **BLAKE3**, not SHA-256 (R-1099-40): the workspace manifest confines `sha2` to two other crates. The shape `csv:<64 hex>` is unchanged.
+- Rules agree with the plan's seam S2 text verbatim; wave 3's test against the real vault is the proof.
+
+### Every file this section touches
+
+- `receipts/issue-1099-money.md`
+- `CHANGELOG.md`
+- `ARCHITECTURE.md`
+- `docs/decisions.md`
+- `Cargo.toml`
+- `Cargo.lock`
+- `crates/apps/kit/README.md`
+- `crates/apps/kit/src/lib.rs`
+- `crates/apps/kit/src/csv.rs`
+- `crates/apps/locker/src/transfer.rs`
+- `crates/apps/money/Cargo.toml`
+- `crates/apps/money/README.md`
+- `crates/apps/money/src/lib.rs`
+- `crates/apps/money/src/civil.rs`
+- `crates/apps/money/src/rules.rs`
+- `crates/apps/money/src/year3.rs`
+- `crates/apps/money/src/import/mod.rs`
+- `crates/apps/money/src/import/amount.rs`
+- `crates/apps/money/src/import/csv.rs`
+- `crates/apps/money/src/import/date.rs`
+- `crates/apps/money/src/import/keys.rs`
+- `crates/apps/money/src/import/ofx.rs`
+- `crates/apps/money/src/import/plan.rs`
+- `crates/apps/money/src/import/text.rs`
+- `crates/apps/money/tests/import_corpus.rs`
+- `crates/apps/money/tests/corpus/amex.csv`
+- `crates/apps/money/tests/corpus/bad_rows.csv`
+- `crates/apps/money/tests/corpus/bank_of_america.csv`
+- `crates/apps/money/tests/corpus/capital_one.csv`
+- `crates/apps/money/tests/corpus/chase_checking.csv`
+- `crates/apps/money/tests/corpus/crlf_quoted_newline.csv`
+- `crates/apps/money/tests/corpus/curdef_mismatch.ofx`
+- `crates/apps/money/tests/corpus/dmy_first_ambiguous.csv`
+- `crates/apps/money/tests/corpus/dmy_wholly_ambiguous.csv`
+- `crates/apps/money/tests/corpus/identical_pair.csv`
+- `crates/apps/money/tests/corpus/multi_account.ofx`
+- `crates/apps/money/tests/corpus/ofx2.ofx`
+- `crates/apps/money/tests/corpus/ofx_bad_trnamt.ofx`
+- `crates/apps/money/tests/corpus/ofx_no_fitid.ofx`
+- `crates/apps/money/tests/corpus/overlap_a.csv`
+- `crates/apps/money/tests/corpus/overlap_b.csv`
+- `crates/apps/money/tests/corpus/parentheses.csv`
+- `crates/apps/money/tests/corpus/qfx_sgml.qfx`
+- `crates/apps/money/tests/corpus/rbc.csv`
+- `crates/apps/money/tests/corpus/semicolon_decimal_comma.csv`
+- `crates/apps/money/tests/corpus/tangerine.csv`
+- `crates/apps/money/tests/corpus/td_canada.csv`
+- `crates/apps/money/tests/corpus/utf8_bom.csv`
+- `crates/apps/money/tests/corpus/weekly_charge.csv`
+- `crates/apps/money/tests/corpus/wells_fargo.csv`
+- `crates/apps/money/tests/corpus/windows1252.csv`
+
+**Falsification.** (1) *The date order is decided over the whole column, not the first row.* Throwaway: `date::decide` mutated to read only the first cell. `a_day_first_file_whose_first_row_is_ambiguous_is_decided_by_the_whole_column` went red (`FAILED`); restored, green. (2) *A weekly same-amount charge is never proposed against last week's.* Throwaway: `FUZZY_DAYS` 3 → 7. The first version of the case stayed green (one-to-one claiming hid it: the Jan 1 row claimed the existing row first); I added the next-week-alone assertion, and with `FUZZY_DAYS = 7` the case went red; restored, green.

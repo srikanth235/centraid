@@ -496,6 +496,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "centraid-apps-money"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "blake3",
+ "centraid-apps-kit",
+ "hex",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "centraid-apps-notes"
 version = "1.0.0-alpha.0"
 dependencies = [

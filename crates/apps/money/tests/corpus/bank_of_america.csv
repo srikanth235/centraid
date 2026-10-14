@@ -1,0 +1,11 @@
+Description,,Summary Amt.
+Beginning balance as of 01/01/2024,,"1,000.00"
+Total credits,,"2,000.00"
+Total debits,,"-850.45"
+Ending balance as of 01/31/2024,,"2,149.55"
+
+Date,Description,Amount,Running Bal.
+01/01/2024,Beginning balance as of 01/01/2024,,"1,000.00"
+01/03/2024,"WHOLE FOODS #123 AUSTIN TX","-85.45","914.55"
+01/15/2024,"PAYROLL DEPOSIT","2,000.00","2,914.55"
+01/22/2024,"RENT PAYMENT","-765.00","2,149.55"
