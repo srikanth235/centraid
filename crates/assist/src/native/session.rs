@@ -387,9 +387,6 @@ pub struct Session {
     /// `ask`. What the next turn's words are about (`Session::focus`), and,
     /// for the written ones, the `focus:` line's `acted` part.
     pub(crate) marks: Vec<Mark>,
-    /// `(person, group id, currency)` of the settlements the running `act`
-    /// planned, so its diff can carry the balance they moved.
-    pub(crate) settling: Vec<(Key, String, String)>,
     /// The current user message, for grounding dates (`crate::native::ground`).
     pub(crate) message: String,
     /// The user message before it: a row the person named there and only
@@ -642,7 +639,6 @@ impl Session {
             noops: BTreeSet::new(),
             acted: BTreeSet::new(),
             marks: Vec::new(),
-            settling: Vec::new(),
             message: String::new(),
             prev_message: String::new(),
             pending_notes: Vec::new(),
@@ -833,7 +829,7 @@ impl Session {
         Ok(out)
     }
 
-    /// A rows list that names a VALUE (`@n` of a count, a sum, a balance) is an error, never
+    /// A rows list that names a VALUE (`@n` of a count, a sum) is an error, never
     /// the rows the value was computed over and never another result's rows: a value keeps
     /// its rows for `within` and `exclude` (SPEC §3.3), and `rows` takes rows. Read at every
     /// place a call hands over rows to work on (`rows`, an ask's `options`).
@@ -1054,7 +1050,7 @@ impl Session {
         Ok(expr)
     }
 
-    /// The currencies the vault holds: its base currency, its groups' and its debts' (what a
+    /// The currencies the vault holds: its base currency and the currency of every row that holds an amount (what a
     /// currency symbol in an amount is settled against, `whr::settle_currencies`).
     pub(crate) fn vault_currencies(&self) -> Vec<String> {
         let mut codes = vec![self.world.currency.clone()];
@@ -2300,20 +2296,6 @@ impl Session {
             .collect()
     }
 
-    /// Whether the message names a person other than the user or says a pronoun for them
-    /// (a person only in focus does not count: nt14).
-    pub(crate) fn names_a_person_or_pronoun(&self) -> bool {
-        crate::native::search::message_names_a_person(self, &self.message)
-            || crate::native::block::says_a_pronoun_for_them(&self.message)
-    }
-
-    /// Whether the turn is about a person other than the user: the message says one's name, or
-    /// a pronoun for them, or one is in focus (`block::other_person_in_play`).
-    pub(crate) fn names_someone_else(&self) -> bool {
-        crate::native::search::message_names_a_person(self, &self.message)
-            || crate::native::block::other_person_in_play(self, &self.message)
-    }
-
     /// Rows this turn offered as options of an `ask`: in focus next turn
     /// (the `asked:` part of the line).
     pub(crate) fn mark_offered(&mut self, keys: &[Key]) {
@@ -3076,34 +3058,7 @@ impl Session {
             .iter()
             .filter_map(|key| self.world.row(key).cloned())
             .collect();
-        let (text_value, machine) = if op == "balance" {
-            if group.is_some() {
-                return Err("error: balance takes no group.".to_owned());
-            }
-            let linked = selector
-                .as_ref()
-                .map(|s| s.linked_to.clone())
-                .unwrap_or_default();
-            // A BALANCE IS OF ONE ROW, chosen as every name read chooses (nt13 B2): `House` is
-            // the group called House, not also `Beach House 2026`; several rows on the winning
-            // tier are still the error
-            let chosen = match selector.as_ref().and_then(|s| s.name.as_ref()) {
-                Some(name) if keys.len() > 1 => {
-                    let best = crate::native::resolve::resolve_rows(
-                        name,
-                        keys.iter().filter_map(|key| self.world.row(key)),
-                        self.flags.normalize,
-                    );
-                    if best.matches.is_empty() {
-                        keys.clone()
-                    } else {
-                        best.matches
-                    }
-                }
-                _ => keys.clone(),
-            };
-            crate::native::values::balance(self, kind, &chosen, &linked)?
-        } else {
+        let (text_value, machine) = {
             if op == "count" && field.is_some() {
                 return Err("error: count takes no field.".to_owned());
             }
@@ -3135,24 +3090,10 @@ impl Session {
             crate::native::values::fold(&op, field.as_deref(), group.as_deref(), &rows, &self.world)
         };
         // A VALUE KEEPS ITS ROWS: the rows it was computed over, so
-        // `within: @n` and `exclude: @n` reach them next turn. A balance also
-        // keeps the person it was about, which a group's balance has only as
-        // `linked_to`.
-        let mut kept_kinds = kinds.clone();
-        let mut kept_keys = keys.clone();
-        if op == "balance" {
-            for key in selector.iter().flat_map(|s| s.linked_to.iter()) {
-                if key.0 == Kind::Person && !kept_keys.contains(key) {
-                    kept_keys.push(key.clone());
-                    if !kept_kinds.contains(&Kind::Person) {
-                        kept_kinds.push(Kind::Person);
-                    }
-                }
-            }
-        }
+        // `within: @n` and `exclude: @n` reach them next turn.
         self.results.push(ResultSet {
-            kinds: kept_kinds,
-            keys: kept_keys,
+            kinds: kinds.clone(),
+            keys: keys.clone(),
             value: Some(machine.clone()),
         });
         let handle = self.results.len();
@@ -3171,7 +3112,6 @@ impl Session {
                     .as_ref()
                     .map(|s| crate::native::block::named_containers(&self.world, &s.linked_to))
                     .unwrap_or_default(),
-                list_rows: op == "balance",
             },
         );
         let over = match &selector {
@@ -3185,7 +3125,6 @@ impl Session {
                 format!("count of {over}, {} rows", rows.len())
             }
             (_, "count") => format!("count of {over}"),
-            (_, "balance") => text_value.1.clone(),
             (Some(field), _) if over.starts_with('@') => {
                 format!("{op} of {field} over {over}, {} rows", rows.len())
             }

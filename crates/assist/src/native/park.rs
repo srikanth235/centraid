@@ -28,7 +28,7 @@
 //!   authored sessions of the train worlds.
 //! * Ids: a row the runtime names before its command (`Door::mint_id`) keeps that id, a person
 //!   included (the vault honours a seat-minted party id); an id the vault makes inside a command
-//!   (a debt, an album's revision) is minted here for the card and replaced by the real one when
+//!   (an album's revision) is minted here for the card and replaced by the real one when
 //!   its step runs, in the later steps and in the undo memory.
 //!
 //! # What a patch cannot know
@@ -40,7 +40,6 @@
 
 use std::collections::BTreeMap;
 
-use centraid_apps_tally::queries::{GroupRow, SettlementRow};
 use serde_json::{Value, json};
 
 use crate::native::dates::Stamp;
@@ -162,12 +161,12 @@ pub struct RowChange {
     pub links: Vec<LinkChange>,
 }
 
-/// Whether a verb deletes, removes, cancels or settles money: the writes a card asks twice for.
+/// Whether a verb deletes, removes or cancels: the writes a card asks twice for.
 #[must_use]
 pub fn destructive_verb(verb: &str) -> bool {
     matches!(
         verb,
-        "delete" | "remove_from" | "cancel" | "settle_up" | "settle_debt"
+        "delete" | "remove_from" | "cancel"
     )
 }
 
@@ -482,18 +481,6 @@ fn patch(
                 _ => Ok(refused("person_live", "That person is not here.")),
             }
         }
-        "people.add_debt" => debt_add(world, cx, input),
-        "people.settle_debt" => {
-            let id = text(input, "debt_id").unwrap_or_default();
-            match world.rows.get_mut(&(Kind::Debt, id.to_owned())) {
-                Some(row) if row.field("status") == Some(&Val::Enum("open")) => {
-                    row.fields.insert("status", Val::Enum("settled"));
-                    row.updated = cx.now.clone();
-                    Ok(ok(json!({"debt_id": id})))
-                }
-                _ => Ok(refused("debt_open", "that debt is not open")),
-            }
-        }
         "schedule.save_project" => project_save(world, cx, input),
         "schedule.add_task" => task_add(world, cx, input),
         "schedule.edit_task" => task_edit(world, cx, input),
@@ -771,26 +758,6 @@ fn patch(
             });
             Ok(ok(json!({"album_id": album.1, "asset_id": photo.1})))
         }
-        "tally.create_group" => group_create(world, cx, input),
-        "tally.rename_group" => {
-            let id = text(input, "group_id").unwrap_or_default();
-            let name = text(input, "name").unwrap_or_default().to_owned();
-            match world.rows.get_mut(&(Kind::Group, id.to_owned())) {
-                Some(row) => {
-                    row.name.clone_from(&name);
-                    row.updated = cx.now.clone();
-                    if let Some(group) = world.tally.groups.iter_mut().find(|g| g.group_id == id) {
-                        group.name = name;
-                    }
-                    Ok(ok(json!({"group_id": id})))
-                }
-                None => Ok(refused("group_exists", "there is no group with that id")),
-            }
-        }
-        "tally.delete_group" => group_delete(world, input),
-        "tally.add_group_member" => group_member(world, input, true),
-        "tally.remove_group_member" => group_member(world, input, false),
-        "tally.settle_up" => settle_up(world, cx, input),
         "locker.add_item" => locker_add(world, cx, input),
         "locker.edit_item" => locker_edit(world, cx, input),
         "locker.trash_item" => trash_row(
@@ -957,49 +924,6 @@ fn people_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
     Ok(ok(
         json!({"party_id": id, "revision_id": cx.id("revision_id")}),
     ))
-}
-
-fn debt_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let person = text(input, "party_id").unwrap_or_default().to_owned();
-    if !world.rows.contains_key(&(Kind::Person, person.clone())) {
-        return Ok(refused("person_exists", "That person is not here."));
-    }
-    if person == world.me {
-        return Ok(refused(
-            "not_the_owner_themselves",
-            "a debt needs two people; this is you",
-        ));
-    }
-    let id = text(input, "debt_id").map_or_else(|| cx.id("debt_id"), str::to_owned);
-    let owes = text(input, "direction") == Some("owe");
-    let mut row = new_row(Kind::Debt, &id, text(input, "reason").unwrap_or("debt"), cx);
-    row.date = cx.stamp().map(|stamp| Stamp {
-        date: stamp.date,
-        time: None,
-    });
-    row.fields.insert(
-        "amount",
-        Val::Money(
-            int(input, "amount_minor").unwrap_or_default(),
-            world.currency.clone(),
-        ),
-    );
-    row.fields.insert(
-        "direction",
-        Val::Enum(if owes { "i_owe" } else { "owes_me" }),
-    );
-    row.fields.insert("status", Val::Enum("open"));
-    world.rows.insert(row.key(), row);
-    edge(
-        world,
-        (Kind::Debt, id.clone()),
-        (Kind::Person, person.clone()),
-        Via::Counterparty,
-    );
-    if !world.tally.friends.contains(&person) {
-        world.tally.friends.push(person);
-    }
-    Ok(ok(json!({"debt_id": id})))
 }
 
 // ---------------------------------------------------------------------
@@ -1701,146 +1625,6 @@ fn photo_update(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String
 }
 
 // ---------------------------------------------------------------------
-// tally
-// ---------------------------------------------------------------------
-
-fn group_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "group_id").map_or_else(|| cx.id("group_id"), str::to_owned);
-    let name = text(input, "name").unwrap_or_default();
-    if world.of_kind(Kind::Group).any(|row| row.name == name) {
-        return Err(format!(
-            "tally.create_group: invalid input: name: a circle named \"{name}\" already exists"
-        ));
-    }
-    let currency =
-        text(input, "currency").map_or_else(|| world.currency.clone(), str::to_uppercase);
-    let mut row = new_row(Kind::Group, &id, name, cx);
-    row.fields.insert("currency", Val::Text(currency.clone()));
-    row.extra.insert("currency", currency.clone());
-    world.rows.insert(row.key(), row);
-    let mut members = vec![world.me.clone()];
-    for member in input
-        .get("member_ids")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-    {
-        if !members.iter().any(|have| have == member) {
-            members.push(member.to_owned());
-        }
-    }
-    for member in &members {
-        edge(
-            world,
-            (Kind::Group, id.clone()),
-            (Kind::Person, member.clone()),
-            Via::Membership,
-        );
-    }
-    members.sort();
-    world.tally.members_by_group.insert(id.clone(), members);
-    world.tally.groups.push(GroupRow {
-        group_id: id.clone(),
-        circle_id: (cx.mint)(),
-        name: name.to_owned(),
-        icon: text(input, "icon").unwrap_or_default().to_owned(),
-        color: text(input, "color").unwrap_or("#0FA678").to_owned(),
-        currency,
-        simplify_opt_in: false,
-        archived_at: None,
-    });
-    Ok(ok(json!({"group_id": id})))
-}
-
-fn group_delete(world: &mut World, input: &Value) -> Result<Ran, String> {
-    let id = text(input, "group_id").unwrap_or_default().to_owned();
-    let key = (Kind::Group, id.clone());
-    if !world.rows.contains_key(&key) {
-        return Ok(refused("group_exists", "there is no group with that id"));
-    }
-    if world
-        .tally
-        .expenses
-        .iter()
-        .any(|expense| expense.group_id.as_deref() == Some(id.as_str()))
-    {
-        return Ok(refused(
-            "group_empty",
-            "this group still has expenses; a group with money in it is not deleted",
-        ));
-    }
-    world.rows.remove(&key);
-    unlink(world, |edge| !(edge.from == key || edge.to == key));
-    world.tally.groups.retain(|group| group.group_id != id);
-    world.tally.members_by_group.remove(&id);
-    world
-        .tally
-        .settlements
-        .retain(|settlement| settlement.group_id.as_deref() != Some(id.as_str()));
-    Ok(ok(json!({"group_id": id})))
-}
-
-fn group_member(world: &mut World, input: &Value, add: bool) -> Result<Ran, String> {
-    let group = text(input, "group_id").unwrap_or_default().to_owned();
-    let party = text(input, "party_id").unwrap_or_default().to_owned();
-    let key = (Kind::Group, group.clone());
-    if !world.rows.contains_key(&key) {
-        return Ok(refused("group_exists", "there is no group with that id"));
-    }
-    if add {
-        let members = world
-            .tally
-            .members_by_group
-            .entry(group.clone())
-            .or_default();
-        if !members.contains(&party) {
-            members.push(party.clone());
-            members.sort();
-        }
-        edge(world, key, (Kind::Person, party), Via::Membership);
-        return Ok(ok(json!({"group_id": group})));
-    }
-    let net = centraid_apps_tally::balance::group_net(&world.tally.balance_data(), &group);
-    if net.get(&party).copied().unwrap_or(0) != 0 {
-        return Ok(refused(
-            "member_off_ledger",
-            "this member still has an unsettled balance in this group; settle up first, or the group keeps their history",
-        ));
-    }
-    if party == world.me {
-        return Err(
-            "tally.remove_group_member: invalid input: party_id: you cannot remove yourself from a group; leave it instead"
-                .to_owned(),
-        );
-    }
-    if let Some(members) = world.tally.members_by_group.get_mut(&group) {
-        members.retain(|member| *member != party);
-    }
-    unlink(world, |edge| {
-        !(edge.via == Via::Membership
-            && edge.from == key
-            && edge.to == (Kind::Person, party.clone()))
-    });
-    Ok(ok(json!({"group_id": group})))
-}
-
-fn settle_up(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
-    let group = text(input, "group_id").map(str::to_owned);
-    let id = cx.id("settlement_id");
-    world.tally.settlements.push(SettlementRow {
-        settlement_id: id.clone(),
-        group_id: group,
-        from_party: text(input, "from_party").unwrap_or_default().to_owned(),
-        to_party: text(input, "to_party").unwrap_or_default().to_owned(),
-        amount_minor: int(input, "amount_minor").unwrap_or_default(),
-        currency: text(input, "currency").map(str::to_owned),
-        paid_on: text(input, "paid_on").map(str::to_owned),
-    });
-    Ok(ok(json!({"settlement_id": id, "txn_id": Value::Null})))
-}
-
-// ---------------------------------------------------------------------
 // the session's side
 // ---------------------------------------------------------------------
 
@@ -2019,76 +1803,6 @@ pub(crate) fn drift(patched: &World, real: &World) -> Vec<String> {
     }
     for edge in b.difference(&a) {
         out.push(format!("edge {:?} only in the vault", edge));
-    }
-    let groups = |world: &World| -> Vec<(String, String, String)> {
-        let mut groups: Vec<_> = world
-            .tally
-            .groups
-            .iter()
-            .map(|g| (g.group_id.clone(), g.name.clone(), g.currency.clone()))
-            .collect();
-        groups.sort();
-        groups
-    };
-    if groups(patched) != groups(real) {
-        out.push(format!(
-            "tally groups {:?} / {:?}",
-            groups(patched),
-            groups(real)
-        ));
-    }
-    let members = |world: &World| -> BTreeMap<String, Vec<String>> {
-        world
-            .tally
-            .members_by_group
-            .iter()
-            .map(|(group, members)| {
-                let mut members = members.clone();
-                members.sort();
-                (group.clone(), members)
-            })
-            .collect()
-    };
-    if members(patched) != members(real) {
-        out.push(format!(
-            "tally members {:?} / {:?}",
-            members(patched),
-            members(real)
-        ));
-    }
-    let settlements = |world: &World| -> Vec<String> {
-        let mut rows: Vec<String> = world
-            .tally
-            .settlements
-            .iter()
-            .map(|s| {
-                format!(
-                    "{} {:?} {} {} {} {:?} {:?}",
-                    s.settlement_id,
-                    s.group_id,
-                    s.from_party,
-                    s.to_party,
-                    s.amount_minor,
-                    s.currency,
-                    s.paid_on
-                )
-            })
-            .collect();
-        rows.sort();
-        rows
-    };
-    if settlements(patched) != settlements(real) {
-        out.push(format!(
-            "tally settlements {:?} / {:?}",
-            settlements(patched),
-            settlements(real)
-        ));
-    }
-    let friends = |world: &World| -> std::collections::BTreeSet<String> {
-        world.tally.friends.iter().cloned().collect()
-    };
-    if friends(patched) != friends(real) {
-        out.push("tally friends differ".to_owned());
     }
     if patched.entity_count != real.entity_count {
         out.push(format!(
@@ -2437,7 +2151,6 @@ impl Session {
             self.created = memory.created;
             self.marks = memory.marks;
         }
-        self.settling.clear();
         self.park.steps.clear();
         self.park.calls.clear();
         self.park.call = None;
@@ -2483,8 +2196,7 @@ impl Session {
         self.park.before = None;
         self.park.pending = None;
         if !matches!(outcome, Confirmed::Done { .. }) {
-            self.settling.clear();
-            if let Some(memory) = self.park.memory.take() {
+                if let Some(memory) = self.park.memory.take() {
                 self.writes.truncate(memory.writes);
                 self.undone = memory.undone;
                 self.noops = memory.noops;

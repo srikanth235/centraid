@@ -359,53 +359,56 @@ fn undo_parks_too_and_takes_back_a_confirmed_batch() {
 }
 
 #[test]
-fn a_parked_debt_keeps_the_id_the_card_showed_and_a_later_step_names_it() {
-    // `people.add_debt` honours a caller-minted `debt_id`, and a parked create pre-mints it (#1088),
-    // so the id on the card is the id the vault writes and a later step of the same turn names the
-    // row the member will have. Before the vault took an id, the patch made one up and the confirm
-    // replaced it in the later steps; that replacement is still the safety net for an id only the
-    // vault can name (`Session::run_pending`), and nothing a create writes needs it.
+fn a_parked_person_keeps_the_id_the_card_showed_and_a_later_step_names_it() {
+    // `people.add_person` honours a caller-minted `party_id`, and a parked create pre-mints it
+    // (#1088), so the id on the card is the id the vault writes and a later step of the same turn
+    // names the row the member will have. Before the vault took an id, the patch made one up and
+    // the confirm replaced it in the later steps; that replacement is still the safety net for an
+    // id only the vault can name (`Session::run_pending`), and nothing a create writes needs it.
     let world = seeded();
     let mut session = park(&world);
-    let neha = number(&mut session, "person", "Neha Rao");
     let made = call(
         &mut session,
         "act",
-        json!({"verb": "create", "kind": "debt", "args": {"name": "taxi", "person": neha, "amount": 18.5, "direction": "owes_me"}, "more": true}),
+        json!({"verb": "create", "kind": "person", "args": {"name": "Ada Lovelace", "role": "friend"}, "more": true}),
     );
-    let debt = format!("#{}", made["effect"]["created"][0]["n"]);
+    let person = format!("#{}", made["effect"]["created"][0]["n"]);
     let parked_id = made["effect"]["created"][0]["id"]
         .as_str()
         .expect("an id")
         .to_owned();
-    let settled = call(
+    let starred = call(
         &mut session,
         "act",
-        json!({"verb": "settle_debt", "rows": debt}),
+        json!({"verb": "star", "rows": person}),
     );
-    let id = pending_id(&settled);
-    let steps = &settled["effect"]["pending"]["steps"];
-    assert_eq!(steps[0]["command"], json!("people.add_debt"));
+    let id = pending_id(&starred);
+    let steps = &starred["effect"]["pending"]["steps"];
+    assert_eq!(steps[0]["command"], json!("people.add_person"));
     assert_eq!(
-        steps[0]["input"]["debt_id"],
+        steps[0]["input"]["party_id"],
         json!(parked_id),
         "the create step carries the id the card showed"
     );
     assert_eq!(
-        steps[1]["input"]["debt_id"],
+        steps[1]["input"]["party_id"],
         json!(parked_id),
-        "and the settle step names the same one"
+        "and the star step names the same one"
     );
     let Confirmed::Done { text: real, .. } = session.confirm(&id) else {
         panic!("the chain did not confirm");
     };
-    assert_eq!(real, format!("{}\n{}", text(&made), text(&settled)));
-    // the vault holds one debt called taxi, settled, under the id the card showed
+    assert_eq!(real, format!("{}\n{}", text(&made), text(&starred)));
+    // the vault holds one person called Ada, starred, under the id the card showed
     let mut fresh = world.session();
     fresh.user("");
-    let found = call(&mut fresh, "find", json!({"kind": "debt", "name": "taxi"}));
+    let found = call(
+        &mut fresh,
+        "find",
+        json!({"kind": "person", "name": "Ada Lovelace"}),
+    );
     let rows = found["effect"]["rows"].as_array().expect("rows");
     assert_eq!(rows.len(), 1, "{}", found["text"]);
     assert_eq!(rows[0]["id"].as_str(), Some(parked_id.as_str()));
-    assert!(text(&found).contains("status settled"), "{}", text(&found));
+    assert!(text(&found).contains("starred"), "{}", text(&found));
 }

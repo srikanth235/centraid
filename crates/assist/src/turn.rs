@@ -74,7 +74,7 @@ pub enum Reading {
 /// What a running turn tells its watcher, in order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
-    /// A step is looking in an app: "Looking in Tally".
+    /// A step is looking in an app: "Looking in Notes".
     Activity { app: App, tool: &'static str },
     /// The rows the turn found, to draw while the line is written.
     Cards(Vec<Card>),
@@ -442,7 +442,7 @@ mod tests {
     #[test]
     fn a_photo_turn_streams_one_answer_over_the_image() {
         let model = ScriptedModel::new(["A river bends past a stand of pines."]).seeing();
-        let mut session = Session::new(Some(App::Tally));
+        let mut session = Session::new(Some(App::Notes));
         let (result, events) =
             run_attached(&model, &mut session, "What is in this photo?", &photo());
 
@@ -695,7 +695,7 @@ mod tests {
     #[test]
     fn clear_starts_a_new_chat_and_keeps_the_scope() {
         let mut session = Session::restore(
-            Some(App::Tally),
+            Some(App::Notes),
             vec![Turn {
                 user: "hi".to_owned(),
                 record: Recorded::Answer("Hi.".to_owned()),
@@ -704,7 +704,7 @@ mod tests {
         );
         session.clear();
         assert!(session.history().is_empty());
-        assert_eq!(session.scope(), Some(App::Tally));
+        assert_eq!(session.scope(), Some(App::Notes));
         assert_eq!(session.prepare_regenerate(), None);
     }
 

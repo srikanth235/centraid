@@ -20,11 +20,6 @@ fn fixture() -> common::World {
     );
     let documents = world["documents"].as_array_mut().unwrap();
     documents.push(json!({"key": "w2_old", "name": "W2 2024", "text": "wages"}));
-    let debts = world["debts"].as_array_mut().unwrap();
-    debts.push(
-        json!({"key": "lunch2", "person": "ray", "direction": "i_owe", "amount": 9,
-        "name": "lunch", "date": "2026-09-01"}),
-    );
     let people = world["people"].as_array_mut().unwrap();
     for (key, name) in [("pedro_a", "Pedro Almeida"), ("pedro_c", "Pedro Costa")] {
         people.push(json!({"key": key, "name": name, "role": "friend"}));
@@ -206,17 +201,8 @@ fn a_row_in_focus_does_not_beat_applicability() {
 }
 
 #[test]
-fn settle_and_delete_by_name_take_the_open_and_the_live_row() {
+fn delete_by_name_takes_the_live_row() {
     let world = fixture();
-    // Two debts called "lunch": one settled, one open.
-    let mut session = world.session();
-    session.user("settle the lunch");
-    let settled = text(
-        &mut session,
-        "act",
-        json!({"verb": "settle_debt", "kind": "debt", "name": "lunch"}),
-    );
-    assert!(settled.starts_with("settled: #"), "{settled}");
     // A trashed row is not a candidate for delete.
     let mut session = world.session();
     session.user("delete the library books");

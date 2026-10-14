@@ -109,7 +109,7 @@ fn every_mapped_write_makes_a_line_that_names_its_row_and_asks_twice_only_when_i
                 step.destructive,
                 matches!(
                     *verb,
-                    "delete" | "remove_from" | "cancel" | "settle_up" | "settle_debt"
+                    "delete" | "remove_from" | "cancel"
                 ),
                 "{pair}"
             );

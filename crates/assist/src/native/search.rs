@@ -578,7 +578,7 @@ pub(crate) fn name_in_part(
     trashed_only: bool,
     majority: bool,
 ) -> Vec<Key> {
-    // (a kind noun, `debt` or `IOU`, is no word of a name either: `settle the ticket IOU` has
+    // (a kind noun, `note` or `doc`, is no word of a name either: `rename the ticket note` has
     // one content word)
     let content: Vec<Spoken> = spoken_tokens(text)
         .into_iter()
@@ -996,37 +996,6 @@ struct Hit {
     near: Vec<usize>,
 }
 
-/// Whether the message says a word of the name (or nickname) of a live person other than the
-/// user: the vault line would show them.
-#[must_use]
-pub(crate) fn message_names_a_person(session: &Session, message: &str) -> bool {
-    !persons_named(session, message).is_empty()
-}
-
-/// The live people other than the user whose name, nickname or role the message says.
-#[must_use]
-pub(crate) fn persons_named(session: &Session, message: &str) -> Vec<Key> {
-    let words = spoken_words(message);
-    let me = session.world.me_key();
-    session
-        .world
-        .rows
-        .values()
-        .filter(|row| {
-            row.kind == Kind::Person && !row.trashed && row.key() != me && {
-                let spelled: Vec<String> = aliases(row)
-                    .iter()
-                    .flat_map(|name| spellings_of(name))
-                    .collect();
-                words.iter().any(|token| {
-                    can_name(token) && spelled.iter().any(|word| word_score(token, word) >= 2)
-                })
-            }
-        })
-        .map(Row::key)
-        .collect()
-}
-
 /// Words of five letters or more that name nothing on their own (`after`, `every`, a month, a
 /// weekday, a unit of time: the `dates:` line reads those): they never make a row worth a slot of
 /// its own in the vault line (`preground`, nt15 R3d).
@@ -1217,28 +1186,15 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
         });
     }
     // WHAT THE MESSAGE POINTS AT WITHOUT NAMING IT: the container of the focus
-    // rows when the message says "that album" leads the line; the person's own
-    // row, for "my balance", closes it and only when no other person is in play
+    // rows when the message says "that album" leads the line
     // (`crate::native::block`).
     let mut leading: Vec<Key> = Vec::new();
     leading.extend(crate::native::block::container_hit(session, message));
     let me = session.world.me_key();
-    let other = found
-        .iter()
-        .any(|hit| hit.key.0 == Kind::Person && hit.key != me);
-    // A GROUP IS NAMED when the message says a whole word of its name (`tahoe`, not `bill` for
-    // `Flat Bills`) or all of it
-    let group_named = found.iter().any(|hit| {
-        hit.key.0 == Kind::Group
-            && (hit.exact
-                || (hit.hits > 0
-                    && usize::try_from(hit.score).is_ok_and(|score| score >= 3 * hit.hits)))
-    });
-    let closing = crate::native::block::me_hit(session, message, other, group_named);
     let reach: Vec<usize> = (0..tokens.len())
         .map(|at| found.iter().filter(|hit| hit.reached.contains(&at)).count())
         .collect();
-    found.retain(|hit| !leading.contains(&hit.key) && closing.as_ref() != Some(&hit.key));
+    found.retain(|hit| !leading.contains(&hit.key));
     // NEAR SPELLINGS (nt15 R3c, R3e): a word of the message that no row reaches by a word or its
     // start may reach a row by one edit (`brazil` for `Brasil`) or as the joined words of a name
     // (`weijie` for `Wei Jie`): the row joins the line at a lower tier (it follows every row a
@@ -1248,7 +1204,7 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
         .collect();
     if !unreached.is_empty() {
         for row in session.world.rows.values() {
-            if row.trashed || leading.contains(&row.key()) || closing.as_ref() == Some(&row.key()) {
+            if row.trashed || leading.contains(&row.key()) {
                 continue;
             }
             let names: Vec<&str> = aliases(row);
@@ -1277,7 +1233,7 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
             }
         }
     }
-    if found.is_empty() && leading.is_empty() && closing.is_none() {
+    if found.is_empty() && leading.is_empty() {
         return None;
     }
     // A NAME MANY ROWS SHARE is cut (`Dentist` ×19): the rows the conversation
@@ -1309,7 +1265,7 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
     });
     // DIVERSITY: no kind past half the slots while another kind has a hit. A row over its kind's
     // share waits; it fills a slot only when no other kind's hit is left to.
-    let room = PREGROUND_CAP.saturating_sub(leading.len() + usize::from(closing.is_some()));
+    let room = PREGROUND_CAP.saturating_sub(leading.len());
     let share = PREGROUND_CAP / 2;
     let mut per_kind: BTreeMap<Kind, usize> = BTreeMap::new();
     let mut chosen: Vec<usize> = Vec::new();
@@ -1399,7 +1355,6 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
     let keys: Vec<Key> = leading
         .into_iter()
         .chain(chosen.iter().map(|index| found[*index].key.clone()))
-        .chain(closing)
         .collect();
     for key in keys {
         let number = session.number(&key);

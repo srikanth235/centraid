@@ -8,9 +8,6 @@
 //!   "people":    [{"key":"neha","name":"Neha Rao","role":"…","nickname":"…","met":"…",
 //!                  "cadence":30,"starred":true,"last_contacted":"2026-09-01T10:00",
 //!                  "last_contacted_kind":"call"}],
-//!   "groups":    [{"key":"tahoe","name":"Tahoe Trip","currency":"USD","members":["neha"]}],
-//!   "expenses":  [{"group":"tahoe","name":"Cabin","amount":300,"paid_by":"me",
-//!                  "split":["me","neha"],"date":"2026-08-01"}],
 //!   "lists":     [{"key":"home","name":"Home","area":"…"}],
 //!   "events":    [{"key":"dentist","name":"Dentist","start":"2026-10-02T09:00",
 //!                  "end":"2026-10-02T10:00","description":"…","attendees":["neha"],
@@ -25,8 +22,6 @@
 //!   "albums":    [{"key":"summer","name":"Summer"}],
 //!   "photos":    [{"key":"beach","name":"Beach","taken":"2026-07-01T10:00",
 //!                  "albums":["summer"],"people":["neha"],"starred":true}],
-//!   "debts":     [{"key":"tickets","person":"neha","direction":"owes_me","amount":25.5,
-//!                  "name":"concert tickets","date":"2026-05-01","settled":"2026-06-01"}],
 //!   "locker":    [{"key":"bank","name":"Bank","type":"login","username":"…",
 //!                  "url":"…","notes":"…","password":"…","starred":true}],
 //!   "links":     [{"from":"cabin","to":"neha"}]
@@ -48,13 +43,11 @@ use serde_json::{Map, Value, json};
 use crate::dates::Stamp;
 use crate::meta::Kind;
 use crate::vaultio::{Handle, SetClock, millis_of};
-use crate::world::minor_of;
 
 struct Seeder {
     handle: Handle,
     keys: BTreeMap<String, (Kind, String)>,
     cursor: i64,
-    currency: String,
     locker: Option<(String, Vec<u8>)>,
     /// `key.field` of every world value the vault cannot hold.
     dropped: Vec<String>,
@@ -173,7 +166,6 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         handle,
         keys: BTreeMap::new(),
         cursor: epoch,
-        currency: founded.currency.clone(),
         locker: None,
         dropped: Vec::new(),
     };
@@ -237,30 +229,6 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             json!({"album_id": id, "title": str_of(row, "name").ok_or("an album needs a name")?}),
         )?;
         seeder.key(row, Kind::Album, id)?;
-    }
-    for row in rows(world, "groups") {
-        seeder.clock_for(row, "created")?;
-        let id = seeder.mint();
-        let mut members = Vec::new();
-        for member in row
-            .get("members")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            members.push(seeder.id(member.as_str().unwrap_or_default(), Kind::Person)?);
-        }
-        let mut input = json!({
-            "group_id": id,
-            "name": str_of(row, "name").ok_or("a group needs a name")?,
-            "icon": "group",
-            "member_ids": members,
-        });
-        if let Some(currency) = str_of(row, "currency") {
-            input["currency"] = json!(currency);
-        }
-        seeder.run("tally.create_group", input)?;
-        seeder.key(row, Kind::Group, id)?;
     }
     for row in rows(world, "events") {
         seeder.clock_for(row, "created")?;
@@ -416,36 +384,6 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             )?;
         }
     }
-    for row in rows(world, "debts") {
-        seeder.clock_for(row, "date")?;
-        let person = seeder.id(
-            str_of(row, "person").ok_or("a debt needs a person")?,
-            Kind::Person,
-        )?;
-        let direction = match str_of(row, "direction").unwrap_or("owes_me") {
-            "owes_me" => "owed",
-            "i_owe" => "owe",
-            other => return Err(format!("debt direction is owes_me or i_owe, not {other}")),
-        };
-        let amount = row
-            .get("amount")
-            .and_then(Value::as_f64)
-            .ok_or("a debt needs an amount")?;
-        let mut input = json!({
-            "party_id": person,
-            "direction": direction,
-            "amount_minor": minor_of(amount, &seeder.currency),
-        });
-        if let Some(reason) = str_of(row, "name") {
-            input["reason"] = json!(reason);
-        }
-        let out = seeder.run("people.add_debt", input)?;
-        seeder.key(
-            row,
-            Kind::Debt,
-            out["debt_id"].as_str().unwrap_or_default().to_owned(),
-        )?;
-    }
     for row in rows(world, "locker") {
         seeder.clock_for(row, "created")?;
         let id = seeder.mint();
@@ -494,70 +432,6 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         }
         seeder.run("locker.add_item", input)?;
         seeder.key(row, Kind::LockerItem, id)?;
-    }
-    for row in rows(world, "expenses") {
-        seeder.clock_for(row, "created")?;
-        let group = seeder.id(
-            str_of(row, "group").ok_or("an expense needs a group")?,
-            Kind::Group,
-        )?;
-        let currency = str_of(row, "currency").map_or_else(
-            || {
-                rows(world, "groups")
-                    .iter()
-                    .find(|g| str_of(g, "key") == str_of(row, "group"))
-                    .and_then(|g| str_of(g, "currency"))
-                    .unwrap_or(&seeder.currency)
-                    .to_owned()
-            },
-            str::to_owned,
-        );
-        let amount = minor_of(
-            row.get("amount")
-                .and_then(Value::as_f64)
-                .ok_or("an expense needs an amount")?,
-            &currency,
-        );
-        let payer = seeder.id(str_of(row, "paid_by").unwrap_or("me"), Kind::Person)?;
-        let mut split = Vec::new();
-        for person in row
-            .get("split")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            split.push(seeder.id(person.as_str().unwrap_or_default(), Kind::Person)?);
-        }
-        if split.is_empty() {
-            return Err("an expense needs split: [keys]".to_owned());
-        }
-        let count = i64::try_from(split.len()).unwrap_or(1);
-        let share = amount / count;
-        let splits: Vec<Value> = split
-            .iter()
-            .enumerate()
-            .map(|(index, party)| {
-                let extra = if index == 0 {
-                    amount - share * count
-                } else {
-                    0
-                };
-                json!({"party_id": party, "share_minor": share + extra})
-            })
-            .collect();
-        let mut input = json!({
-            "group_id": group,
-            "description": str_of(row, "name").ok_or("an expense needs a name")?,
-            "amount_minor": amount,
-            "paid_by": payer,
-            "category": str_of(row, "category").unwrap_or("general"),
-            "split_method": "exact",
-            "splits": splits,
-        });
-        if let Some(date) = str_of(row, "date") {
-            input["spent_on"] = json!(&vault_time(date)?[..10]);
-        }
-        seeder.run("tally.add_expense", input)?;
     }
     for link in rows(world, "links") {
         let (Some(from), Some(to)) = (str_of(link, "from"), str_of(link, "to")) else {
@@ -620,12 +494,11 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
     Ok((Value::Object(keys), dropped))
 }
 
-/// Stars, completions, cancellations, settlements, contacts, edits, trash —
+/// Stars, completions, cancellations, contacts, edits, trash —
 /// the states a row reaches after it is created, each at its own time.
 fn states(seeder: &mut Seeder, world: &Value) -> Result<(), String> {
-    let sections: [(&str, Kind); 12] = [
+    let sections: [(&str, Kind); 11] = [
         ("people", Kind::Person),
-        ("groups", Kind::Group),
         ("lists", Kind::List),
         ("notebooks", Kind::Notebook),
         ("folders", Kind::Folder),
@@ -721,13 +594,6 @@ fn states(seeder: &mut Seeder, world: &Value) -> Result<(), String> {
                     return Err(format!("a {} has no trash", kind.name()));
                 }
             }
-        }
-    }
-    for row in rows(world, "debts") {
-        if let Some(settled) = str_of(row, "settled") {
-            let id = seeder.id(str_of(row, "key").unwrap_or_default(), Kind::Debt)?;
-            seeder.handle.clock.set(at(settled)?);
-            seeder.run("people.settle_debt", json!({"debt_id": id}))?;
         }
     }
     Ok(())

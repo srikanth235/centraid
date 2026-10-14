@@ -660,13 +660,13 @@ mod tests {
                     &registry,
                     &owner,
                     &Command::new(
-                        "tally.create_group",
+                        "money.add_account",
                         serde_json::json!({
-                            "name": name, "icon": "travel", "currency": currency, "member_ids": [],
+                            "account_id": name, "name": name, "kind": "cash", "currency": currency,
                         }),
                     ),
                 )
-                .expect("a group");
+                .expect("an account");
             assert_eq!(
                 outcome.status,
                 CommandStatus::Executed,
@@ -675,8 +675,8 @@ mod tests {
             );
         }
 
-        let mut asked = query(&["group_id", "currency"], "group_id", "group_id");
-        asked.from = "tally_group".to_owned();
+        let mut asked = query(&["account_id", "currency"], "account_id", "account_id");
+        asked.from = "core_account".to_owned();
         asked.with_minor_units = true;
         let answer = page(
             &vault,
@@ -706,7 +706,7 @@ mod tests {
             ]
         );
 
-        asked.select = vec!["group_id".to_owned()];
+        asked.select = vec!["account_id".to_owned()];
         let refused = page(
             &vault,
             &wire::PageRequest {

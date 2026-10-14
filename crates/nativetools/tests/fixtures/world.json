@@ -17,43 +17,27 @@
       "nickname": "NK",
       "cadence": 14
     },
-    { "key": "benedikt", "name": "Benedikt Weiss", "met": "Berlin 2019" },
-    { "key": "ray", "name": "Ray Ochoa" },
-    { "key": "old", "name": "Old Contact", "trashed": "2026-03-01T09:00" }
-  ],
-  "groups": [
     {
-      "key": "tahoe",
-      "name": "Tahoe Trip",
-      "members": ["neha_r", "ray"],
-      "created": "2026-02-01T09:00"
+      "key": "benedikt",
+      "name": "Benedikt Weiss",
+      "met": "Berlin 2019"
     },
     {
-      "key": "flat",
-      "name": "Flat 4B",
-      "members": ["benedikt"],
-      "created": "2026-02-02T09:00"
-    }
-  ],
-  "expenses": [
-    {
-      "group": "tahoe",
-      "name": "Cabin",
-      "amount": 300,
-      "paid_by": "me",
-      "split": ["me", "neha_r", "ray"],
-      "date": "2026-08-01"
+      "key": "ray",
+      "name": "Ray Ochoa"
     },
     {
-      "group": "tahoe",
-      "name": "Groceries",
-      "amount": 60,
-      "paid_by": "ray",
-      "split": ["me", "ray"],
-      "date": "2026-08-02"
+      "key": "old",
+      "name": "Old Contact",
+      "trashed": "2026-03-01T09:00"
     }
   ],
-  "lists": [{ "key": "home", "name": "Home" }],
+  "lists": [
+    {
+      "key": "home",
+      "name": "Home"
+    }
+  ],
   "events": [
     {
       "key": "tabla",
@@ -100,13 +84,32 @@
       "status": "completed",
       "completed": "2026-09-19T17:00"
     },
-    { "key": "outline", "name": "Report outline", "parent": "report" },
-    { "key": "library", "name": "Library books", "trashed": true },
-    { "key": "pay", "name": "Pay rent", "due": "2026-10-01", "priority": 2 }
+    {
+      "key": "outline",
+      "name": "Report outline",
+      "parent": "report"
+    },
+    {
+      "key": "library",
+      "name": "Library books",
+      "trashed": true
+    },
+    {
+      "key": "pay",
+      "name": "Pay rent",
+      "due": "2026-10-01",
+      "priority": 2
+    }
   ],
   "notebooks": [
-    { "key": "recipes", "name": "Recipes" },
-    { "key": "empty_nb", "name": "Ideas" }
+    {
+      "key": "recipes",
+      "name": "Recipes"
+    },
+    {
+      "key": "empty_nb",
+      "name": "Ideas"
+    }
   ],
   "notes": [
     {
@@ -124,7 +127,12 @@
       "created": "2026-09-25T21:00"
     }
   ],
-  "folders": [{ "key": "taxes", "name": "Taxes" }],
+  "folders": [
+    {
+      "key": "taxes",
+      "name": "Taxes"
+    }
+  ],
   "documents": [
     {
       "key": "w2",
@@ -134,11 +142,21 @@
       "starred": true,
       "created": "2026-02-10T10:00"
     },
-    { "key": "lease", "name": "Lease agreement", "created": "2026-03-01T10:00" }
+    {
+      "key": "lease",
+      "name": "Lease agreement",
+      "created": "2026-03-01T10:00"
+    }
   ],
   "albums": [
-    { "key": "summer", "name": "Summer" },
-    { "key": "empty_album", "name": "Wedding" }
+    {
+      "key": "summer",
+      "name": "Summer"
+    },
+    {
+      "key": "empty_album",
+      "name": "Wedding"
+    }
   ],
   "photos": [
     {
@@ -154,25 +172,6 @@
       "name": "Hike",
       "taken": "2026-07-03T08:30",
       "albums": ["summer"]
-    }
-  ],
-  "debts": [
-    {
-      "key": "tickets",
-      "person": "neha_r",
-      "direction": "owes_me",
-      "amount": 25.5,
-      "name": "concert tickets",
-      "date": "2026-05-01"
-    },
-    {
-      "key": "lunch",
-      "person": "ray",
-      "direction": "i_owe",
-      "amount": 12,
-      "name": "lunch",
-      "date": "2026-06-01",
-      "settled": "2026-06-10T12:00"
     }
   ],
   "locker": [
@@ -192,5 +191,10 @@
       "password": "s3cret"
     }
   ],
-  "links": [{ "from": "reed", "to": "benedikt" }]
+  "links": [
+    {
+      "from": "reed",
+      "to": "benedikt"
+    }
+  ]
 }

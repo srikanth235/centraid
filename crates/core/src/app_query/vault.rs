@@ -53,7 +53,7 @@ const OPENABLE: FanOutBound = FanOutBound::new(64, 1);
 
 /// What a Home answer is made of: the hits that open something, the media
 /// asset each photo opens by, and the containers that matched.
-type Opened = (Vec<Target>, BTreeMap<String, String>, Vec<named::Opened>);
+type Opened = (Vec<Target>, BTreeMap<String, String>, Vec<Target>);
 
 pub(super) fn search(
     vault: &Vault,
@@ -105,7 +105,7 @@ pub(super) fn search(
                         })
                         .collect();
                     // ISOLATED PER NAMED INDEX, like the domains above.
-                    let found = named::of_all(door, &index, term)?;
+                    let found = named::of_all(&index, term);
                     Ok(((targets, assets, found), None))
                 },
             )
@@ -135,14 +135,14 @@ pub(super) fn search(
                     }
                 })
                 .chain(found.into_iter().map(|container| wire::VaultSearchHit {
-                    subtitle_local_day: subtitle_day(zone.as_ref(), &container.target.subtitle),
-                    entity: container.target.entity,
-                    id: container.target.id,
-                    title: container.target.title,
-                    subtitle: container.target.subtitle,
-                    app_id: container.target.app_id,
-                    snippet: container.target.snippet,
-                    open_id: container.open_id,
+                    subtitle_local_day: subtitle_day(zone.as_ref(), &container.subtitle),
+                    entity: container.entity,
+                    id: container.id,
+                    title: container.title,
+                    subtitle: container.subtitle,
+                    app_id: container.app_id,
+                    snippet: container.snippet,
+                    open_id: String::new(),
                 }))
                 .collect(),
         })

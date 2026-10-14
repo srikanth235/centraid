@@ -115,7 +115,7 @@ fn every_envelope_body_round_trips() {
         }),
         envelope::Body::Event(core::Event {
             kind: Some(core::event::Kind::Change(core::ChangeEvent {
-                table: "tally_expense".to_owned(),
+                table: "core_transaction".to_owned(),
                 pk_set: vec![RecordKey {
                     values: vec![text("exp_1")],
                 }],
@@ -249,7 +249,7 @@ fn an_app_query_and_its_typed_answer_round_trip_with_absence_intact() {
 fn opaque_payloads_survive_byte_for_byte() {
     let payload: Vec<u8> = (0u8..=255).collect();
     let command = core::Command {
-        name: "tally.add_expense".to_owned(),
+        name: "notes.create_note".to_owned(),
         input: payload.clone(),
         invoke_key: "k1".to_owned(),
         ..core::Command::default()
@@ -258,7 +258,7 @@ fn opaque_payloads_survive_byte_for_byte() {
     assert_eq!(decoded.input, payload);
 
     let screen = ScreenState {
-        screen_id: "tally.list".to_owned(),
+        screen_id: "photos.grid".to_owned(),
         state: payload.clone(),
         revision: 9,
     };

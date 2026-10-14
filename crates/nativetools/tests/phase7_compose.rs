@@ -768,35 +768,6 @@ fn a_row_for_a_container_of_another_kind_declines_out_of_scope() {
 }
 
 #[test]
-fn a_member_with_an_unsettled_balance_asks_over_the_person_and_the_group() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("take ray off the tahoe trip");
-    let tahoe = find_in_turn(&mut session, "group", "Tahoe Trip");
-    let reply = call(
-        &mut session,
-        "act",
-        json!({"verb": "remove_from", "kind": "person", "name": "Ray Ochoa", "args": format!("from: {tahoe}")}),
-    );
-    assert_eq!(tool_of(&reply), "ask", "{reply}");
-    assert_eq!(reply["ends_turn"], true, "{reply}");
-    assert_eq!(reply["effect"]["composed"], true, "{reply}");
-    assert_eq!(
-        reply["effect"]["ask"]["question"],
-        "Ray Ochoa still has an unsettled balance in the Tahoe Trip group; settle up first?"
-    );
-    assert_eq!(options(&reply), vec![world.id("ray"), world.id("tahoe")]);
-    assert_eq!(reply["effect"]["refusal"]["predicate"], "member_off_ledger");
-    assert_eq!(reply["effect"]["refusal"]["outcome"], "ask");
-    assert_eq!(family(&reply), fix("refused_write", "ask_options"));
-    assert!(reply["effect"].get("diff").is_none(), "{reply}");
-    assert!(
-        text(&reply).starts_with("refused: remove_from #"),
-        "{reply}"
-    );
-}
-
-#[test]
 fn an_event_that_clashes_in_time_asks_over_the_events_in_the_way() {
     let world = seeded();
     let mut session = world.session();
@@ -872,10 +843,8 @@ fn without_the_flag_the_refusals_are_the_old_errors() {
     let world = seeded();
     let mut session = world.session_with(common::TODAY, uncomposed());
     session.user("do these");
-    let tahoe = find_in_turn(&mut session, "group", "Tahoe Trip");
     let dentist = find_in_turn(&mut session, "event", "Dentist");
     let calls = [
-        json!({"verb": "remove_from", "kind": "person", "name": "Ray Ochoa", "args": format!("from: {tahoe}")}),
         json!({"verb": "create", "kind": "event", "args": "name: Call\ndate: {\"date\":\"2026-10-02\",\"time\":\"09:15\"}"}),
         json!({"verb": "reschedule", "kind": "event", "name": "Launch party", "args": "to: {\"unit\":\"week\",\"rel\":1,\"weekday\":5}"}),
         json!({"verb": "star", "kind": "event", "name": "Dentist"}),
@@ -1556,16 +1525,16 @@ fn a_restore_by_a_misspelled_name_goes_to_the_trashed_row() {
 fn delete_and_remove_from_keep_the_ask_for_the_one_near_spelling() {
     let world = seeded();
     let mut session = world.session();
-    session.user("take ray ochoo off the tahoe trip");
-    let tahoe = find_in_turn(&mut session, "group", "Tahoe Trip");
+    session.user("take hikee out of the summer album");
+    let summer = find_in_turn(&mut session, "album", "Summer");
     let removed = call(
         &mut session,
         "act",
-        json!({"verb": "remove_from", "kind": "person", "name": "Ray Ochoo",
-               "args": format!("from: {tahoe}")}),
+        json!({"verb": "remove_from", "kind": "photo", "name": "Hikee",
+               "args": format!("from: {summer}")}),
     );
-    let ray = session_number(&mut session, "ray");
-    assert_asked(&world, &removed, &format!("Did you mean {ray}?"), &["ray"]);
+    assert_eq!(tool_of(&removed), "ask", "{removed}");
+    assert_eq!(options(&removed), vec![world.id("hike")], "{removed}");
     assert_eq!(family(&removed), fix("unmatched_write", "ask_nearest"));
     assert!(
         removed["effect"].get("near_spelling").is_none(),
@@ -1583,8 +1552,8 @@ fn delete_and_remove_from_keep_the_ask_for_the_one_near_spelling() {
 }
 
 #[test]
-fn a_reveal_and_a_settlement_keep_the_ask_for_the_one_near_spelling() {
-    // a secret or real money on a row the person did not name exactly: ask, as delete does
+fn a_reveal_keeps_the_ask_for_the_one_near_spelling() {
+    // a secret on a row the person did not name exactly: ask, as delete does
     let world = seeded();
     let mut session = world.session();
     session.user("show me the home wiffi password");

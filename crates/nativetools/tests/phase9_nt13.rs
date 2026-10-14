@@ -38,15 +38,15 @@ fn replay(world: &World) -> centraid_nativetools::Session {
 // B1: a stated kind restricts a write's name resolution
 
 #[test]
-fn nt13_b1_a_person_that_is_not_one_is_not_a_task_for_a_group() {
+fn nt13_b1_a_photo_that_is_not_one_is_not_a_task_for_an_album() {
     let world = seeded();
     let mut session = world.session();
-    session.user("add pay rent to the tahoe trip");
-    let tahoe = find_in_turn(&mut session, "group", "Tahoe Trip");
+    session.user("add pay rent to the summer album");
+    let summer = find_in_turn(&mut session, "album", "Summer");
     let reply = call(
         &mut session,
         "act",
-        json!({"verb": "add_to", "kind": "person", "name": "Pay rent", "args": format!("to: {tahoe}")}),
+        json!({"verb": "add_to", "kind": "photo", "name": "Pay rent", "args": format!("to: {summer}")}),
     );
     assert!(!text(&reply).contains("goes into a"), "{reply}");
     assert!(diff_rows(&reply).is_empty(), "{reply}");
@@ -61,12 +61,12 @@ fn nt13_b1_a_person_that_is_not_one_is_not_a_task_for_a_group() {
 fn nt13_b1_also_under_no_normalize() {
     let world = seeded();
     let mut session = replay(&world);
-    session.user("add pay rent to the tahoe trip");
-    let tahoe = find_in_turn(&mut session, "group", "Tahoe Trip");
+    session.user("add pay rent to the summer album");
+    let summer = find_in_turn(&mut session, "album", "Summer");
     let reply = call(
         &mut session,
         "act",
-        json!({"verb": "add_to", "kind": "person", "name": "Pay rent", "args": format!("to: {tahoe}")}),
+        json!({"verb": "add_to", "kind": "photo", "name": "Pay rent", "args": format!("to: {summer}")}),
     );
     assert!(!text(&reply).contains("goes into a"), "{reply}");
     assert!(diff_rows(&reply).is_empty(), "{reply}");
@@ -90,65 +90,6 @@ fn nt13_b1_a_name_of_a_row_the_container_holds_still_goes_to_it() {
         "{reply}"
     );
     assert!(text(&reply).contains("applied to"), "{reply}");
-}
-
-// ---------------------------------------------------------------------------------------------
-// B2: a group is selected by the resolver's precedence for a balance
-
-fn two_houses() -> World {
-    world_with(|world| {
-        push(
-            world,
-            "groups",
-            json!({"key": "house_g", "name": "House", "members": ["ray"]}),
-        );
-        push(
-            world,
-            "groups",
-            json!({"key": "beach_g", "name": "Beach House 2026", "members": ["ray"]}),
-        );
-    })
-}
-
-#[test]
-fn nt13_b2_an_exact_group_name_beats_a_longer_one_in_a_balance() {
-    let world = two_houses();
-    let mut session = world.session();
-    session.user("what is the balance in house");
-    let reply = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "group", "name": "House"}),
-    );
-    assert!(!text(&reply).starts_with("error:"), "{reply}");
-    assert!(text(&reply).contains("House"), "{reply}");
-    assert!(!text(&reply).contains("Beach"), "{reply}");
-}
-
-#[test]
-fn nt13_b2_also_under_no_normalize() {
-    let world = two_houses();
-    let mut session = replay(&world);
-    session.user("what is the balance in house");
-    let reply = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "group", "name": "House"}),
-    );
-    assert!(!text(&reply).starts_with("error:"), "{reply}");
-}
-
-#[test]
-fn nt13_b2_several_rows_on_the_winning_tier_are_still_the_error() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("what does neha owe");
-    let reply = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "person", "name": "Neha"}),
-    );
-    assert!(text(&reply).contains("the selection holds 2"), "{reply}");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -349,108 +290,6 @@ fn nt13_r1_an_edit_arg_is_read_the_same_way() {
         text(&edited).contains("note: read in progres as in_progress"),
         "{edited}"
     );
-}
-
-fn peso_world() -> World {
-    world_with(|world| {
-        push(
-            world,
-            "groups",
-            json!({"key": "cancun", "name": "Cancun", "currency": "MXN", "members": ["ray"]}),
-        );
-    })
-}
-
-#[test]
-fn nt13_r1_a_currency_name_is_the_one_code_the_vault_holds() {
-    let world = peso_world();
-    let mut session = world.session();
-    session.user("the group in pesos");
-    let found = call(
-        &mut session,
-        "find",
-        json!({"kind": "group", "where": "currency = \"pesos\""}),
-    );
-    assert_eq!(
-        ids(&found["effect"]["rows"]),
-        vec![world.id("cancun")],
-        "{found}"
-    );
-    assert!(text(&found).contains("note: read pesos as MXN"), "{found}");
-}
-
-#[test]
-fn nt13_r1_a_near_code_is_the_one_code_that_fits() {
-    let world = peso_world();
-    for said in ["MX", "MXP"] {
-        let mut session = world.session();
-        session.user("the group in pesos");
-        let found = call(
-            &mut session,
-            "find",
-            json!({"kind": "group", "where": format!("currency = {said}")}),
-        );
-        assert_eq!(
-            ids(&found["effect"]["rows"]),
-            vec![world.id("cancun")],
-            "{said}: {found}"
-        );
-        assert!(
-            text(&found).contains(&format!("note: read {said} as MXN")),
-            "{said}: {found}"
-        );
-    }
-}
-
-#[test]
-fn nt13_r1_a_money_where_takes_a_currency_name() {
-    let world = peso_world();
-    let mut session = world.session();
-    session.user("debts over 5 pesos");
-    let found = call(
-        &mut session,
-        "find",
-        json!({"kind": "debt", "where": "amount >= 5 pesos"}),
-    );
-    assert!(!text(&found).starts_with("error:"), "{found}");
-    assert!(text(&found).contains("note: read pesos as MXN"), "{found}");
-}
-
-#[test]
-fn nt13_r1_a_currency_name_with_no_code_in_the_vault_is_still_the_error() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("debts over 5 pesos");
-    let found = call(
-        &mut session,
-        "find",
-        json!({"kind": "debt", "where": "amount >= 5 pesos"}),
-    );
-    assert!(text(&found).starts_with("error:"), "{found}");
-}
-
-#[test]
-fn nt13_r1_a_currency_name_two_held_codes_share_is_still_the_error() {
-    let world = world_with(|world| {
-        push(
-            world,
-            "groups",
-            json!({"key": "a", "name": "Cancun", "currency": "MXN", "members": []}),
-        );
-        push(
-            world,
-            "groups",
-            json!({"key": "b", "name": "Bogota", "currency": "COP", "members": []}),
-        );
-    });
-    let mut session = world.session();
-    session.user("debts over 5 pesos");
-    let found = call(
-        &mut session,
-        "find",
-        json!({"kind": "debt", "where": "amount >= 5 pesos"}),
-    );
-    assert!(text(&found).starts_with("error:"), "{found}");
 }
 
 #[test]

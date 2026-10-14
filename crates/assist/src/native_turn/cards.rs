@@ -1,26 +1,25 @@
 //! A RESULT IS THE CHAT'S EXISTING CARD (R-1088-7): the kind to app and entity table.
 //!
-//! The runtime's rows are thirteen kinds; the chat's card names one of seven apps and an entity the
+//! The runtime's rows are eleven kinds; the chat's card names one of seven apps (Money's is the
+//! seventh, since rung fifteen) and an entity the
 //! shell routes by. This is the one place that says which. A card is a reference (`app`,
 //! `entity`, `id`) and a few words; the app's own tile draws the row.
 //!
 //! | kind | app | entity | a tap opens |
 //! |---|---|---|---|
 //! | person | people | `person` | the person |
-//! | group | tally | `group` | the group's ledger |
 //! | event | agenda | `event` | the event |
 //! | task | tasks | `task` | the task |
 //! | note | notes | `note` | the note |
 //! | document | docs | `document` | the document |
 //! | photo | photos | `photo` | the lightbox |
 //! | album | photos | `album` | the album's shelf |
-//! | debt | tally | `debt` | Tally's home |
 //! | notebook | notes | `notebook` | the library under that notebook |
 //! | folder | docs | `folder` | the folder's page |
 //! | list | tasks | `project` | the project |
 //! | locker item | none | none | never drawn: the Locker is off on the phone (R-1088-3) |
 //!
-//! The group, album, notebook and folder routes are the shell's since the containers became search results
+//! The album, notebook and folder routes are the shell's since the containers became search results
 //! (#1097, `ChatRouting.swift`): the card's `id` is the container's id and its `title` the name the route needs.
 //! The kinds with no row route open their app's home, which is what the shell does with any entity
 //! it has no route for (`ChatRouting.appHome`): a tap that reached nothing would read as a broken
@@ -39,8 +38,6 @@ use crate::result::Card;
 pub enum Opens {
     /// The row itself: the shell has a route for this `(app, entity)`.
     Row,
-    /// The app's home: the shell has no route for the entity.
-    AppHome,
 }
 
 /// How one kind is drawn as a card.
@@ -61,26 +58,15 @@ const fn row(kind: Kind, app: App, entity: &'static str) -> CardKind {
     }
 }
 
-const fn home(kind: Kind, app: App, entity: &'static str) -> CardKind {
-    CardKind {
-        kind,
-        app,
-        entity,
-        opens: Opens::AppHome,
-    }
-}
-
 /// THE TABLE. Every kind but the Locker item.
-pub const TABLE: [CardKind; 12] = [
+pub const TABLE: [CardKind; 10] = [
     row(Kind::Person, App::People, "person"),
-    row(Kind::Group, App::Tally, "group"),
     row(Kind::Event, App::Agenda, "event"),
     row(Kind::Task, App::Tasks, "task"),
     row(Kind::Note, App::Notes, "note"),
     row(Kind::Document, App::Docs, "document"),
     row(Kind::Photo, App::Photos, "photo"),
     row(Kind::Album, App::Photos, "album"),
-    home(Kind::Debt, App::Tally, "debt"),
     row(Kind::Notebook, App::Notes, "notebook"),
     row(Kind::Folder, App::Docs, "folder"),
     row(Kind::List, App::Tasks, "project"),
@@ -108,10 +94,7 @@ pub fn card_of(row: &Row, _today: Date) -> Option<Card> {
     }
     let state = match row.field("status") {
         Some(Val::Enum(status)) => (*status).to_owned(),
-        _ => match (row.kind, row.field("amount")) {
-            (Kind::Debt, Some(amount)) => amount.show(None),
-            _ => String::new(),
-        },
+        _ => String::new(),
     };
     Some(card.meta(state))
 }

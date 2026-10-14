@@ -68,7 +68,7 @@ use crate::error::{CoreError, Result};
 // The chat's arm (R-CHAT-1): the thread list, a thread, and a card's row.
 mod chat;
 // The named as search results (#1097, R-1097-19..24): notebooks, albums,
-// projects, Tally groups, Docs folders and chat threads, for Home and the
+// projects, Docs folders and chat threads, for Home and the
 // owning apps.
 mod named;
 // People's arm (#1046): its conversions and tests, beside this one.
@@ -81,8 +81,6 @@ mod people;
 // Photos' own search (#1097, R-1097-25..27): the text and album legs, the live rule
 // and the correction.
 mod photos;
-// Tally's arm (#1046): its conversions and tests, beside this one.
-mod tally;
 // Tasks' arm (#1046): its conversions and tests, beside this one.
 mod tasks;
 // Home's arm (R-CHROME-6): every app's search domain but Locker's.
@@ -193,16 +191,6 @@ pub fn answer(vault: &Vault, request: &wire::AppQueryRequest) -> Result<wire::Ap
         Q::PeoplePerson(asked) => people::person(vault, &door, &now, asked)?,
         Q::PeopleSearch(asked) => people::search(vault, &door, &now, asked)?,
         Q::PeopleTrash(asked) => people::trash(vault, &door, asked)?,
-        Q::TallyDashboard(asked) => tally::dashboard(vault, &door, &now, asked)?,
-        Q::TallyGroup(asked) => tally::group(&door, asked)?,
-        Q::TallyFriend(asked) => tally::friend(&door, asked)?,
-        Q::TallyExpense(asked) => tally::expense(vault, &door, &now, asked)?,
-        Q::TallySettleUp(asked) => tally::settle_up(&door, asked)?,
-        Q::TallyRecurring(_) => tally::recurring(&door)?,
-        Q::TallySpending(asked) => tally::spending(vault, &door, &now, asked)?,
-        Q::TallySearch(asked) => tally::search(vault, &door, asked)?,
-        Q::TallyTrash(asked) => tally::trash(vault, &door, asked)?,
-        Q::TallyExport(asked) => tally::export(vault, &door, &now, asked)?,
         Q::NotesLibrary(asked) => notes::library(vault, &door, asked)?,
         Q::NotesNotebooks(_) => notes::notebooks(&door)?,
         Q::NotesJournal(asked) => notes::journal(vault, &door, &now, asked)?,

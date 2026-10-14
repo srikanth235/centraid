@@ -461,122 +461,6 @@ fn ends_with_send(reply: &Value, call_text: &str) {
 }
 
 #[test]
-fn a_groups_balance_sent_with_linked_to_the_group_runs_the_call_for_the_user() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("what's my balance in the tahoe trip group");
-    let group = common::find_in_turn(&mut session, "group", "Tahoe Trip");
-    let wrong = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "person", "linked_to": group}),
-    );
-    // the call is fixed and run (nt12 R1), and the note says which call
-    assert!(!text(&wrong).starts_with("error"), "{wrong}");
-    assert!(
-        text(&wrong).contains(
-            "note: used compute op: balance, kind: group, name: \"Tahoe Trip\", linked_to: #"
-        ),
-        "{wrong}"
-    );
-    let me = common::number(&mut session, "person", "Sam Park");
-    let right = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "group", "name": "Tahoe Trip", "linked_to": me}),
-    );
-    assert!(!text(&right).starts_with("error"), "{right}");
-}
-
-#[test]
-fn the_same_when_the_result_is_the_group_and_when_someone_else_is_in_play() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("what's my balance in the tahoe trip group");
-    call(
-        &mut session,
-        "find",
-        json!({"kind": "group", "name": "Tahoe Trip"}),
-    );
-    let within = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "person", "within": "@1"}),
-    );
-    assert!(
-        text(&within).contains("note: used compute op: balance, kind: group"),
-        "{within}"
-    );
-    assert!(!text(&within).starts_with("error"), "{within}");
-    // the message is about ray: whose balance it is, is not the user's to assume
-    let mut session = world.session();
-    session.user("what's ray's balance in the tahoe trip group");
-    let group = common::find_in_turn(&mut session, "group", "Tahoe Trip");
-    let wrong = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "person", "linked_to": group}),
-    );
-    let ray = common::number(&mut session, "person", "Ray Ochoa");
-    assert!(
-        text(&wrong).contains(&format!(
-            "note: used compute op: balance, kind: group, name: \"Tahoe Trip\", linked_to: {ray}"
-        )),
-        "{wrong}"
-    );
-}
-
-#[test]
-fn that_is_you_names_the_person_row_the_words_fit() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("what's my balance with ray");
-    let wrong = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "person", "name": "Sam Park"}),
-    );
-    let ray = common::number(&mut session, "person", "Ray Ochoa");
-    assert!(!text(&wrong).starts_with("error"), "{wrong}");
-    assert!(
-        text(&wrong).contains(&format!("note: used compute op: balance, rows: {ray}")),
-        "{wrong}"
-    );
-    // two persons fit the words ("neha"): that is a guess, the error is what it was
-    let mut session = world.session();
-    session.user("what's my balance with neha");
-    let wrong = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "person", "name": "Sam Park"}),
-    );
-    assert_eq!(
-        text(&wrong),
-        "error: that is you; balance is you versus someone else."
-    );
-}
-
-#[test]
-fn a_group_balance_of_someone_the_message_names_runs_the_call_with_that_person() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("what's ray's share in the tahoe trip");
-    let wrong = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "group", "name": "Tahoe Trip"}),
-    );
-    let ray = common::number(&mut session, "person", "Ray Ochoa");
-    assert!(!text(&wrong).starts_with("error"), "{wrong}");
-    assert!(
-        text(&wrong).contains(&format!(
-            "note: used compute op: balance, kind: group, name: \"Tahoe Trip\", linked_to: {ray}"
-        )),
-        "{wrong}"
-    );
-}
-
-#[test]
 fn a_narrowing_that_lost_its_within_names_it() {
     let world = busy_world();
     let mut session = world.session();
@@ -707,20 +591,7 @@ fn a_wrong_kind_row_with_one_row_the_words_fit_ends_in_the_call_on_that_row() {
 fn a_link_the_kinds_lack_ends_in_the_call_with_real_handles() {
     let world = seeded();
     let mut session = world.session();
-    session.user("what do i owe in the tahoe trip");
-    let group = common::find_in_turn(&mut session, "group", "Tahoe Trip");
-    let money = call(
-        &mut session,
-        "find",
-        json!({"kind": "debt", "linked_to": group}),
-    );
-    let me = common::number(&mut session, "person", "Sam Park");
-    assert!(
-        text(&money).contains(&format!(
-            "Send compute op: balance, kind: group, name: \"Tahoe Trip\", linked_to: {me}."
-        )),
-        "{money}"
-    );
+    session.user("who is in the summer album");
     let album = common::find_in_turn(&mut session, "album", "Summer");
     let people = call(
         &mut session,

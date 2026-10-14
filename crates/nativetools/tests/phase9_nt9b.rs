@@ -177,118 +177,11 @@ fn the_end_of_the_day_and_the_rest_of_today_are_today_only() {
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// F5: the `(you)` row for money words when a group is named; a group balance defaults to you
-
 fn vault_of(session: &mut centraid_nativetools::Session, message: &str) -> String {
     session.user(message)["preground"]
         .as_str()
         .unwrap_or_default()
         .to_owned()
-}
-
-#[test]
-fn money_words_with_a_group_named_put_the_users_row_in_the_vault_line() {
-    let world = seeded();
-    for message in [
-        "money-wise where do we stand in the tahoe trip",
-        "am i up or down on the tahoe trip",
-        "who fronted the most in the tahoe trip",
-        "how much have i put in for the tahoe trip",
-        "what did i spend in the tahoe trip",
-        "i am out of pocket on the tahoe trip",
-    ] {
-        let mut session = world.session();
-        let vault = vault_of(&mut session, message);
-        assert!(
-            vault.ends_with("person \"Sam Park\" (you)"),
-            "{message}: {vault}"
-        );
-    }
-}
-
-#[test]
-fn the_users_row_stays_out_without_a_group_or_with_someone_else_in_play() {
-    let world = seeded();
-    for message in [
-        // no group is named
-        "what did i spend on the cabin",
-        "who paid for dinner",
-        // someone else is in play
-        "ray paid for the cabin in the tahoe trip",
-        "did he front the tahoe trip",
-    ] {
-        let mut session = world.session();
-        let vault = vault_of(&mut session, message);
-        assert!(!vault.contains("(you)"), "{message}: {vault}");
-    }
-}
-
-#[test]
-fn a_group_a_word_only_starts_is_not_named() {
-    // `bill` starts `Bills` and says nothing of the group: "paid" is the state of a task here
-    let world = world_with(|world| {
-        push(
-            world,
-            "groups",
-            json!({"key": "bills", "name": "Flat Bills", "members": ["ray"]}),
-        );
-        push(
-            world,
-            "tasks",
-            json!({"key": "gas", "name": "Pay the gas bill"}),
-        );
-    });
-    let mut session = world.session();
-    let vault = vault_of(&mut session, "the gas bill's paid, tick it off");
-    assert!(!vault.contains("(you)"), "{vault}");
-    // the whole word names it
-    let mut session = world.session();
-    let vault = vault_of(&mut session, "am i up or down on the flat bills");
-    assert!(vault.contains("(you)"), "{vault}");
-}
-
-#[test]
-fn a_group_balance_with_no_person_is_the_users() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("how are we money-wise in the tahoe trip");
-    let net = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "group", "name": "Tahoe Trip"}),
-    );
-    let reply = text(&net);
-    assert!(!reply.starts_with("error"), "{net}");
-    assert!(
-        reply.contains("net of #") && reply.contains("Sam Park"),
-        "{net}"
-    );
-    // a person the call names is still the person
-    // a message about someone else: the person the model left out is still the error's to add
-    session.user("what's ray's share in the tahoe trip");
-    let left_out = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "group", "name": "Tahoe Trip"}),
-    );
-    // nt12 R1: the person the message names is added by the runtime, with a note
-    assert!(!text(&left_out).starts_with("error"), "{left_out}");
-    assert!(
-        text(&left_out).contains("note: used compute op: balance, kind: group"),
-        "{left_out}"
-    );
-    session.user("and the tahoe trip balance");
-    let neha = common::find_in_turn(&mut session, "person", "Neha Rao");
-    let theirs = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "group", "name": "Tahoe Trip", "linked_to": neha}),
-    );
-    assert!(
-        text(&theirs).contains("Neha Rao") && !text(&theirs).contains("Sam Park"),
-        "{theirs}"
-    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -708,12 +601,12 @@ fn the_hint_says_a_name_matches_only_names_when_the_name_was_the_whole_condition
         json!({"kind": "task", "name": "Zzyzx", "where": "status = open"}),
     );
     assert_eq!(hint_of(&conditioned), "", "{conditioned}");
-    let group = call(
+    let notebook = call(
         &mut session,
         "find",
-        json!({"kind": "group", "name": "Zzyzx"}),
+        json!({"kind": "notebook", "name": "Zzyzx"}),
     );
-    assert_eq!(hint_of(&group), "", "{group}");
+    assert_eq!(hint_of(&notebook), "", "{notebook}");
     // rows and the sentence share the one line, rows first
     let both = call(
         &mut session,
@@ -857,20 +750,7 @@ fn an_unknown_field_another_kind_has_names_those_kinds() {
 fn a_link_the_kinds_lack_names_the_parameter_that_fits() {
     let world = seeded();
     let mut session = world.session();
-    session.user("what do we owe in the tahoe trip");
-    let group = common::find_in_turn(&mut session, "group", "Tahoe Trip");
-    let money = call(
-        &mut session,
-        "find",
-        json!({"kind": "debt", "linked_to": group}),
-    );
-    assert!(
-        text(&money).contains("debts are not linked to groups.")
-            && text(&money).contains(
-                "Send compute op: balance, kind: group, name: \"Tahoe Trip\", linked_to: #"
-            ),
-        "{money}"
-    );
+    session.user("who is in the summer album");
     let album = common::find_in_turn(&mut session, "album", "Summer");
     let people = call(
         &mut session,
@@ -881,23 +761,13 @@ fn a_link_the_kinds_lack_names_the_parameter_that_fits() {
         text(&people).contains("Send find kind: photo, linked_to: #"),
         "{people}"
     );
-    // another kind of a group's is no money: no sentence about it
+    // another kind of an album's is no photo: no sentence about it
     let events = call(
         &mut session,
         "find",
-        json!({"kind": "event", "linked_to": group}),
+        json!({"kind": "event", "linked_to": album}),
     );
-    assert!(!text(&events).contains("compute op balance"), "{events}");
-    // the same link in a where
-    let count = call(
-        &mut session,
-        "find",
-        json!({"kind": "debt", "where": "group count > 1"}),
-    );
-    assert!(
-        says(&count).contains("not a kind") || says(&count).starts_with("error"),
-        "{count}"
-    );
+    assert!(!text(&events).contains("Send find kind: photo"), "{events}");
 }
 
 #[test]
@@ -939,8 +809,8 @@ fn a_wrong_kind_row_in_a_write_is_a_repair_naming_the_rows_the_words_fit() {
         );
         push(
             world,
-            "groups",
-            json!({"key": "scan_group", "name": "Scan club", "members": ["ray"]}),
+            "albums",
+            json!({"key": "scan_album", "name": "Scan club"}),
         );
     });
     let fresh = |message: &str| {
@@ -979,19 +849,19 @@ fn a_wrong_kind_row_in_a_write_is_a_repair_naming_the_rows_the_words_fit() {
         says(&put).contains("list \"Home\"? Send act verb: add_to, rows: #"),
         "{put}"
     );
-    // a group that is not one: the groups the words fit
-    let mut session = fresh("settle up with ray");
+    // an album that is not one: the albums the words fit
+    let mut session = fresh("put hike in the lease scan");
     let scan = common::find_in_turn(&mut session, "document", "Lease scan");
-    let ray = common::find_in_turn(&mut session, "person", "Ray Ochoa");
-    let settled = call(
+    let hike = common::find_in_turn(&mut session, "photo", "Hike");
+    let filed = call(
         &mut session,
         "act",
-        json!({"verb": "settle_up", "rows": ray, "args": format!("group: {scan}")}),
+        json!({"verb": "add_to", "rows": hike, "args": format!("to: {scan}")}),
     );
     assert!(
-        says(&settled).contains("group \"Scan club\"? Send act verb: settle_up, rows: #")
-            && says(&settled).ends_with(", args: group: #3."),
-        "{settled}"
+        says(&filed).contains("album \"Scan club\"? Send act verb: add_to, rows: #")
+            && says(&filed).contains(", args: to: #"),
+        "{filed}"
     );
     // nothing of the right kind fits the words: the refusal is the decline it was
     let mut session = fresh("tick off the taxes");

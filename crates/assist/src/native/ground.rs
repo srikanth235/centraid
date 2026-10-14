@@ -2067,9 +2067,6 @@ impl Session {
         }
         let op = object.get("op").and_then(Value::as_str);
         let aggregates = tool == "compute" || (tool == "answer" && op.is_some());
-        if op == Some("balance") {
-            return unchanged();
-        }
         let kind = selector.kinds[0];
         let words = tokens(&self.message);
         let defaults = self.flags.defaults;

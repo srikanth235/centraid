@@ -580,7 +580,6 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "centraid-apps-agenda",
  "centraid-apps-kit",
- "centraid-apps-tally",
  "centraid-search",
  "centraid-vault",
  "flate2",
@@ -626,7 +625,6 @@ dependencies = [
  "centraid-apps-notes",
  "centraid-apps-people",
  "centraid-apps-photos",
- "centraid-apps-tally",
  "centraid-apps-tasks",
  "centraid-assist",
  "centraid-blobs",
@@ -758,7 +756,6 @@ dependencies = [
  "base64 0.22.1",
  "centraid-apps-agenda",
  "centraid-apps-kit",
- "centraid-apps-tally",
  "centraid-assist",
  "centraid-ontology",
  "centraid-search",

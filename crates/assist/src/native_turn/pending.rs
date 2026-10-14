@@ -44,8 +44,6 @@ fn opening(verb: &str) -> (Say, bool) {
         "add_to" => (Say::StepAddTo, false),
         "remove_from" => (Say::StepRemoveFrom, false),
         "log" => (Say::StepLog, false),
-        "settle_up" => (Say::StepSettleUp, false),
-        "settle_debt" => (Say::StepSettleDebt, false),
         "undo" => (Say::StepUndo, false),
         // `edit`, and `reveal` (which the phone never parks: the Locker is off)
         _ => (Say::StepEdit, true),
@@ -215,8 +213,6 @@ mod tests {
             ("delete", true),
             ("remove_from", true),
             ("cancel", true),
-            ("settle_up", true),
-            ("settle_debt", true),
             ("complete", false),
             ("edit", false),
             ("create", false),

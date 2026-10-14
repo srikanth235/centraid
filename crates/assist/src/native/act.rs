@@ -11,7 +11,7 @@
 //! - A REFUSAL OF THE VAULT to restore or to delete. A restore the vault will
 //!   not make because the row's window has run out ends in `decline not_found`;
 //!   a delete it refuses because the row still holds others (a folder with
-//!   documents, a group with expenses, a notebook with notebooks) ends in an ask
+//!   documents, a notebook with notebooks) ends in an ask
 //!   that names what the person can do. Every other refusal (a call the
 //!   command's schema rejects, a check this file does not name, any other
 //!   verb) stays an `error:` for the model to repair.
@@ -19,8 +19,8 @@
 //! With `Flags::compose` the same hands-off rule reaches the selector and the refusals the
 //! person can lift (`compose.rs`, SPEC §4.8): a selector that fits several rows or none ends in
 //! the ask or the decline the runtime writes, a verb that does not apply to the kind and a row
-//! in the trash end in a decline, and a member with a balance, a cancelled event to move and a
-//! clash of time end in an ask over the rows involved. Two things the person's words settle
+//! in the trash end in a decline, and a cancelled event to move and a clash of time end in an ask
+//! over the rows involved. Two things the person's words settle
 //! before that: a selector that fits several rows takes every one of them when the message (or
 //! the trace) says all, and a name that reached nothing goes to the one near spelling of its
 //! kind (`Targets::decided`, said in the reply and the effect by `Session::say_decided`).
@@ -38,7 +38,7 @@ use crate::native::session::{
     Inverse, Outcome, ResultSet, Selector, Session, arg_bool, arg_str, canonical_json,
 };
 use crate::native::whr;
-use crate::native::world::{Key, Row, SEALED, Val, World, minor_of};
+use crate::native::world::{Key, Row, SEALED, Val, World};
 
 /// A write over `ROW_CAP` rows that the runtime asked about (`Session::bulk_ask`).
 /// The person's yes in the turn right after the ask lets that same write through
@@ -69,7 +69,6 @@ pub(crate) fn create_allowed(kind: Kind) -> Vec<&'static str> {
         Kind::Event => allowed.push("date"),
         Kind::Note => allowed.push("notebook"),
         Kind::Document => allowed.extend(["folder", "text"]),
-        Kind::Debt => allowed.push("person"),
         Kind::LockerItem => allowed.extend(["password", "code", "card_number", "cvv"]),
         _ => {}
     }
@@ -92,14 +91,12 @@ pub(crate) fn create_arg_alias(kind: Kind, key: &str) -> Option<&'static str> {
 pub fn id_param(kind: Kind) -> &'static str {
     match kind {
         Kind::Person => "party_id",
-        Kind::Group => "group_id",
         Kind::Event => "event_id",
         Kind::Task => "task_id",
         Kind::Note => "note_id",
         Kind::Document => "document_id",
         Kind::Photo => "asset_id",
         Kind::Album => "album_id",
-        Kind::Debt => "debt_id",
         Kind::LockerItem => "item_id",
         Kind::Notebook => "notebook_id",
         Kind::Folder => "folder_id",
@@ -111,13 +108,21 @@ pub fn id_param(kind: Kind) -> &'static str {
 #[must_use]
 pub fn container_of(kind: Kind) -> Option<Kind> {
     Some(match kind {
-        Kind::Person => Kind::Group,
         Kind::Photo => Kind::Album,
         Kind::Note => Kind::Notebook,
         Kind::Document => Kind::Folder,
         Kind::Task => Kind::List,
         _ => return None,
     })
+}
+
+/// The refusal for a membership verb on a kind that is in no container.
+fn not_container_verb(verb: Verb, row: &Row) -> String {
+    format!(
+        "error: {} does not apply to {}.",
+        verb.spec().name,
+        row.kind.name()
+    )
 }
 
 /// `args` as the model writes it: an object, or `field: value` lines whose
@@ -689,7 +694,7 @@ impl Session {
             // money, a secret (egress), and a write the message says takes every row
             let guess_ok = !matches!(
                 verb,
-                Verb::Delete | Verb::RemoveFrom | Verb::SettleUp | Verb::SettleDebt | Verb::Reveal
+                Verb::Delete | Verb::RemoveFrom | Verb::Reveal
             ) && self.said_every_row().is_none();
             match named.keys.as_slice() {
                 [_] if self.flags.compose && guess_ok => {
@@ -1335,11 +1340,10 @@ impl Session {
     /// WHETHER THE VERB CAN CHANGE EACH ROW as it stands (SPEC §14.1): the
     /// verb would leave the row different. `complete` an open task, `restore`
     /// a trashed row, `delete` a live one, `star` an unstarred row, `unstar`
-    /// a starred one, `settle_debt` an open debt, and for every other verb the
+    /// a starred one, and for every other verb the
     /// write's own already-so test: `cancel` an event not cancelled, `add_to`
     /// a row that is not a member, `reopen` a task not open, an `edit` that
-    /// changes a field (the pin of a pinned note is no change), `settle_up` a
-    /// person with a balance, `reveal` an item that has the field asked for.
+    /// changes a field (the pin of a pinned note is no change), `reveal` an item that has the field asked for.
     /// The one exception is `reschedule`: a row already at the time asked is
     /// still a candidate, since the person may be re-confirming it. A call
     /// that cannot be planned at all (a malformed argument) is `Unknown`: the
@@ -1359,7 +1363,6 @@ impl Session {
                 Verb::Delete => yes(!row.trashed),
                 Verb::Star => yes(!row.starred()),
                 Verb::Unstar => yes(row.starred()),
-                Verb::SettleDebt => yes(row.field("status") != Some(&Val::Enum("settled"))),
                 _ => {
                     // Planning names rows (`named`), which would put them in
                     // the conversation's focus: the filter leaves no trace.
@@ -1608,7 +1611,6 @@ impl Session {
                                     &before,
                                 )
                             {
-                                self.settling.clear();
                                 return Ok(ended);
                             }
                             let name = self.named(&key);
@@ -1680,7 +1682,6 @@ impl Session {
             && let Some((key, command, input, ran, _)) = set_aside.first()
             && let Some(ended) = self.refusal(verb, key, (command, input), ran, &before)
         {
-            self.settling.clear();
             return Ok(ended);
         }
         if !set_aside.is_empty() {
@@ -1692,33 +1693,7 @@ impl Session {
             touched.push(created.clone());
         }
         self.settle()?;
-        let mut diff = diff(&before, &self.world);
-        // A SETTLEMENT MOVES A BALANCE, not a row field: the diff carries the
-        // person's balance in the settled group (positive = they owe me),
-        // before and after, as a `balance` field on the person.
-        for (person, group, currency) in std::mem::take(&mut self.settling) {
-            let owes = |world: &World| {
-                let data = world.tally.balance_data();
-                centraid_apps_tally::balance::group_pair_nets(&data, &group)
-                    .get(&person.1)
-                    .and_then(|row| row.get(&world.me))
-                    .copied()
-                    .unwrap_or(0)
-            };
-            let (old, new) = (owes(&before), owes(&self.world));
-            if old != new {
-                diff.rows.push((
-                    person,
-                    "updated",
-                    json!({
-                        "balance": [
-                            {"amount": crate::native::world::units(old, &currency), "unit": currency},
-                            {"amount": crate::native::world::units(new, &currency), "unit": currency},
-                        ],
-                    }),
-                ));
-            }
-        }
+        let diff = diff(&before, &self.world);
         let mut lines = Vec::new();
         let mut shown_lines: Vec<(Key, usize, String)> = Vec::new();
         let mut shown_changes: Vec<RowChange> = Vec::new();
@@ -2142,22 +2117,6 @@ impl Session {
                     note: None,
                 }
             }
-            Verb::SettleDebt => {
-                check_args(&[])?;
-                if row.field("status") == Some(&Val::Enum("settled")) {
-                    return Ok(Plan::Already("is settled".to_owned()));
-                }
-                Plan::Run {
-                    steps: vec![Step {
-                        command,
-                        input: json!({"debt_id": id}),
-                    }],
-                    inverse: Vec::new(),
-                    not_undoable: Some("the vault has no command that unsettles a debt".to_owned()),
-                    note: None,
-                }
-            }
-            Verb::SettleUp => self.plan_settle_up(row, args)?,
             Verb::Reveal => self.plan_reveal(row, args)?,
             Verb::Reschedule => self.plan_reschedule(row, args)?,
             Verb::Edit => self.plan_edit(row, args)?,
@@ -2185,7 +2144,7 @@ impl Session {
         let containers = match args.get(slot) {
             Some(value) => self.resolve_rows(value)?,
             None if verb == Verb::RemoveFrom && self.flags.normalize => {
-                let expected = container_of(row.kind).unwrap_or(Kind::Group);
+                let expected = container_of(row.kind).ok_or_else(|| not_container_verb(verb, row))?;
                 let inside = self
                     .world
                     .neighbours(&row.key())
@@ -2202,7 +2161,7 @@ impl Session {
         let [container] = containers.as_slice() else {
             return Err(format!("error: {slot} is exactly one #n."));
         };
-        let expected = container_of(row.kind).unwrap_or(Kind::Group);
+        let expected = container_of(row.kind).ok_or_else(|| not_container_verb(verb, row))?;
         // A DESTINATION OF A KIND THAT CANNOT HOLD THE ROW whose name is the name of exactly one
         // container that can (nt13 R4) is that container: the Send of "Did you mean" would change
         // only the destination to the same-named container, which is no guess
@@ -2280,19 +2239,14 @@ impl Session {
             }
         };
         let pair = |command: &'static str| -> Step {
-            let input = match row.kind {
-                Kind::Person => json!({"group_id": cid, "party_id": id}),
-                _ => json!({"album_id": cid, "asset_id": id}),
-            };
-            Step { command, input }
+            Step {
+                command,
+                input: json!({"album_id": cid, "asset_id": id}),
+            }
         };
         let mut planned = match row.kind {
-            Kind::Person | Kind::Photo => {
-                let (add, remove) = if row.kind == Kind::Person {
-                    ("tally.add_group_member", "tally.remove_group_member")
-                } else {
-                    ("media.add_to_album", "media.remove_from_album")
-                };
+            Kind::Photo => {
+                let (add, remove) = ("media.add_to_album", "media.remove_from_album");
                 if verb == Verb::AddTo {
                     Plan::Run {
                         steps: vec![pair(add)],
@@ -2361,127 +2315,6 @@ impl Session {
             })
             .collect();
         format!(" Did you mean {}?", named.join(" or "))
-    }
-
-    fn plan_settle_up(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
-        for key in args.keys() {
-            if key != "group" && key != "amount" {
-                return Err(format!(
-                    "error: settle_up takes group: #n and amount: N, not \"{key}\"."
-                ));
-            }
-        }
-        if row.id == self.world.me {
-            return Err("error: settle_up is with someone else, not you.".to_owned());
-        }
-        // NO GROUP: the one group in which this person and you have a balance (nt12 R4)
-        let mut by_default: Option<Key> = None;
-        let groups = match args.get("group") {
-            Some(group) => self.resolve_rows(group)?,
-            None if self.flags.normalize => {
-                let held = self.groups_holding_balance(row);
-                let [only] = held.as_slice() else {
-                    return Err("error: settle_up needs group: #n.".to_owned());
-                };
-                by_default = Some(only.clone());
-                held
-            }
-            None => return Err("error: settle_up needs group: #n.".to_owned()),
-        };
-        let [group] = groups.as_slice() else {
-            return Err("error: group is exactly one #n.".to_owned());
-        };
-        if group.0 != Kind::Group {
-            let name = self.named(group);
-            let fits = self.did_you_mean(&[Kind::Group], group);
-            return Err(format!(
-                "error: group: names a group, and {name} is not one.{fits}"
-            ));
-        }
-        let currency = self
-            .world
-            .row(group)
-            .and_then(|row| row.extra.get("currency").cloned())
-            .unwrap_or_else(|| self.world.currency.clone());
-        let data = self.world.tally.balance_data();
-        let pair = centraid_apps_tally::balance::group_pair_nets(&data, &group.1);
-        let me = self.world.me.clone();
-        let owes = pair
-            .get(&row.id)
-            .and_then(|row| row.get(&me))
-            .copied()
-            .unwrap_or(0);
-        let amount = match args.get("amount") {
-            Some(value) => {
-                let given = text_of(value);
-                whr::symbol_conflict(&given, &currency)?;
-                let number = whr::parse_amount(&given)
-                    .ok_or_else(|| "error: amount is a number in currency units.".to_owned())?;
-                Some(minor_of(number, &currency))
-            }
-            None => None,
-        };
-        if owes == 0 && amount.is_none() {
-            let name = self.named(group);
-            return Ok(Plan::Already(format!(
-                "is settled up in {name} (balance {})",
-                crate::native::world::money(0, &currency)
-            )));
-        }
-        let (from, to) = if owes >= 0 {
-            (row.id.clone(), me)
-        } else {
-            (me, row.id.clone())
-        };
-        let amount = amount.unwrap_or(owes.abs());
-        if amount <= 0 {
-            return Err("error: amount is more than zero.".to_owned());
-        }
-        self.settling
-            .push((row.key(), group.1.clone(), currency.clone()));
-        Ok(Plan::Run {
-            steps: vec![Step {
-                command: "tally.settle_up",
-                input: json!({
-                    "from_party": from,
-                    "to_party": to,
-                    "amount_minor": amount,
-                    "currency": currency,
-                    "group_id": group.1,
-                    "paid_on": self.today().to_string(),
-                }),
-            }],
-            inverse: Vec::new(),
-            not_undoable: Some("a settlement is real cash and stays recorded".to_owned()),
-            note: Some(format!(
-                "settlement: {} paid {}{}",
-                crate::native::world::money(amount, &currency),
-                if owes >= 0 { "to you" } else { "by you" },
-                by_default.map_or_else(String::new, |key| format!(
-                    "\nnote: used group {} (the only group with a balance between you and {})",
-                    self.named(&key),
-                    row.name
-                ))
-            )),
-        })
-    }
-
-    /// The groups in which `person` and you have a balance.
-    fn groups_holding_balance(&self, person: &Row) -> Vec<Key> {
-        let data = self.world.tally.balance_data();
-        let me = self.world.me.clone();
-        self.world
-            .rows
-            .values()
-            .filter(|group| group.kind == Kind::Group && !group.trashed)
-            .filter(|group| {
-                centraid_apps_tally::balance::group_pair_nets(&data, &group.id)
-                    .get(&person.id)
-                    .and_then(|owed| owed.get(&me))
-                    .is_some_and(|net| *net != 0)
-            })
-            .map(Row::key)
-            .collect()
     }
 
     /// Whether the person's message names the secret `field` (`password`, `code`, `notes`): by
@@ -3253,7 +3086,6 @@ impl Session {
                     creatable.join(", ")
                 )
             })?;
-        let spec = kind.spec();
         let allowed = create_allowed(kind);
         // an arg under another spelling of a field is that field (`create_arg_alias`)
         let mut spelled = args.clone();
@@ -3346,14 +3178,6 @@ impl Session {
                     input["party_id"] = json!(mint());
                 }
                 ("people.add_person", input, "party_id")
-            }
-            Kind::Group => {
-                let mut input =
-                    json!({"group_id": mint(), "name": name, "icon": "group", "member_ids": []});
-                if let Some(currency) = text("currency") {
-                    input["currency"] = json!(currency.to_uppercase());
-                }
-                ("tally.create_group", input, "group_id")
             }
             Kind::Event => {
                 let resolved = date.ok_or("error: create event needs date: <date expression>.")?;
@@ -3465,38 +3289,6 @@ impl Session {
                     input["area"] = json!(area);
                 }
                 ("schedule.save_project", input, "project_id")
-            }
-            Kind::Debt => {
-                let person = one_row(self, "person", Kind::Person)?
-                    .ok_or("error: create debt needs person: #n.")?;
-                let given = args.get("amount").map(text_of).unwrap_or_default();
-                whr::symbol_conflict(&given, &self.world.currency)?;
-                let amount = whr::parse_amount(&given)
-                    .ok_or("error: create debt needs amount: N (currency units).")?;
-                let direction = whr::enum_value(
-                    Kind::Debt,
-                    "direction",
-                    &text("direction")
-                        .ok_or("error: create debt needs direction: owes_me or i_owe.")?,
-                )?;
-                let vault_direction = spec
-                    .field("direction")
-                    .and_then(|field| field.vault_value(direction))
-                    .unwrap_or("owed");
-                let mut input = json!({
-                    "party_id": person.1,
-                    "direction": vault_direction,
-                    "amount_minor": minor_of(amount, &self.world.currency).max(1),
-                    "reason": name,
-                });
-                // A PARKED DEBT KEEPS THE ID IT WAS SHOWN WITH: `people.add_debt` honours a
-                // caller-minted `debt_id` (#922 G2), so the confirm writes the row the card named and
-                // a later step of the chain that names it needs no replacement. A run lets the vault
-                // mint it, as every harness run always has.
-                if self.flags.writes != crate::native::park::Writes::Run {
-                    input["debt_id"] = json!(mint());
-                }
-                ("people.add_debt", input, "debt_id")
             }
             Kind::LockerItem => {
                 let kind_value = match text("type") {
@@ -3655,33 +3447,7 @@ impl Session {
             }
         }
         self.settle()?;
-        let mut diff = diff(&before, &self.world);
-        // A SETTLEMENT MOVES A BALANCE, not a row field: the diff carries the
-        // person's balance in the settled group (positive = they owe me),
-        // before and after, as a `balance` field on the person.
-        for (person, group, currency) in std::mem::take(&mut self.settling) {
-            let owes = |world: &World| {
-                let data = world.tally.balance_data();
-                centraid_apps_tally::balance::group_pair_nets(&data, &group)
-                    .get(&person.1)
-                    .and_then(|row| row.get(&world.me))
-                    .copied()
-                    .unwrap_or(0)
-            };
-            let (old, new) = (owes(&before), owes(&self.world));
-            if old != new {
-                diff.rows.push((
-                    person,
-                    "updated",
-                    json!({
-                        "balance": [
-                            {"amount": crate::native::world::units(old, &currency), "unit": currency},
-                            {"amount": crate::native::world::units(new, &currency), "unit": currency},
-                        ],
-                    }),
-                ));
-            }
-        }
+        let diff = diff(&before, &self.world);
         self.mark_acted(&touched);
         let mut out = Vec::new();
         let mut shown_lines: Vec<(Key, usize, String)> = Vec::new();
@@ -3729,7 +3495,6 @@ fn verb_phrase(verb: Verb) -> &'static str {
         Verb::AddTo => "add",
         Verb::RemoveFrom => "remove",
         Verb::Log => "log a contact with",
-        Verb::SettleUp | Verb::SettleDebt => "settle",
         other => other.spec().name,
     }
 }
@@ -3929,13 +3694,11 @@ impl Session {
     ///   back has run past its window: nothing can lift that, so the turn
     ///   ends in `decline not_found`.
     /// - A `delete` the vault refuses because the row still holds others (a
-    ///   folder with documents, a group with expenses, a notebook with
-    ///   notebooks) ends in an ask that names what the person can do
+    ///   folder with documents, a notebook with notebooks) ends in an ask that names what the person can do
     ///   (`refusal_question`).
     ///
     /// With `Flags::compose` the refusals a confirmation or a choice can lift end in an ask
-    /// over the rows involved (`refusal_question`): a member removed from a group with an
-    /// unsettled balance (`member_off_ledger`), a cancelled event to reschedule
+    /// over the rows involved (`refusal_question`): a cancelled event to reschedule
     /// (`event_exists_not_cancelled`). A new event that clashes in time is `create`'s
     /// (`Session::compose_busy_conflict`).
     ///
@@ -3946,7 +3709,7 @@ impl Session {
         &mut self,
         verb: Verb,
         key: &Key,
-        (command, input): (&str, &Value),
+        (command, _): (&str, &Value),
         ran: &Ran,
         before: &World,
     ) -> Option<Outcome> {
@@ -3967,7 +3730,7 @@ impl Session {
         let question = if restore_lapsed {
             None
         } else {
-            Some(self.refusal_question(key, command, input, predicate)?)
+            Some(self.refusal_question(key, command, predicate)?)
         };
         let reason = ran.reason.clone().unwrap_or_default();
         let said = reason.trim_end_matches('.').to_owned();
@@ -4022,7 +3785,6 @@ impl Session {
         &mut self,
         key: &Key,
         command: &str,
-        input: &Value,
         predicate: &str,
     ) -> Option<(String, Vec<Key>)> {
         let row_name = self
@@ -4071,23 +3833,6 @@ impl Session {
                 ),
                 Vec::new(),
             ),
-            ("tally.delete_group", "group_empty") => (
-                format!(
-                    "the {row_name} group still has expenses, so it cannot be deleted; keep it, or rename it instead?"
-                ),
-                Vec::new(),
-            ),
-            // THE PERSON AND THE GROUP they are in the way of: settling up lifts the refusal.
-            ("tally.remove_group_member", "member_off_ledger") => {
-                let group: Key = (Kind::Group, input.get("group_id")?.as_str()?.to_owned());
-                let group_name = self.world.row(&group)?.name.clone();
-                (
-                    format!(
-                        "{row_name} still has an unsettled balance in the {group_name} group; settle up first?"
-                    ),
-                    vec![key.clone(), group],
-                )
-            }
             ("schedule.reschedule_event", "event_exists_not_cancelled") => (
                 format!(
                     "the {row_name} event was cancelled, so it cannot be moved; plan a new one instead?"
@@ -4141,7 +3886,6 @@ pub(crate) fn event_span(row: &Row) -> (jiff::civil::DateTime, jiff::civil::Date
 fn rename(kind: Kind) -> (&'static str, &'static str) {
     match kind {
         Kind::Person => ("people.edit_person", "display_name"),
-        Kind::Group => ("tally.rename_group", "name"),
         Kind::Event => ("schedule.edit_event", "summary"),
         Kind::Task => ("schedule.edit_task", "title"),
         Kind::Note => ("knowledge.edit_note", "title"),
@@ -4152,7 +3896,6 @@ fn rename(kind: Kind) -> (&'static str, &'static str) {
         Kind::Notebook => ("knowledge.rename_notebook", "name"),
         Kind::Folder => ("core.rename_folder", "name"),
         Kind::List => ("schedule.save_project", "name"),
-        Kind::Debt => ("", ""),
     }
 }
 
@@ -4193,10 +3936,7 @@ pub fn appended(have: &str, added: &str) -> String {
 }
 
 fn editable(kind: Kind) -> String {
-    let mut names = Vec::new();
-    if kind != Kind::Debt {
-        names.push("name");
-    }
+    let mut names = vec!["name"];
     names.extend(
         kind.spec()
             .fields

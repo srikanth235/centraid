@@ -18,14 +18,6 @@ const CHAT_COPY: &str = include_str!("../../../../copy/chat.json");
 /// One sentence of what the runtime says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Say {
-    /// `Balance {value}.`: a balance with no one to name.
-    Balance,
-    /// `You and {name} are settled up.`
-    BalanceEven,
-    /// `{name} owes you {value}.`
-    BalanceOwed,
-    /// `You owe {name} {value}.`
-    BalanceOwing,
     /// The turn ran out of steps with nothing to ask.
     Cap,
     /// `Counted {what}.`
@@ -87,10 +79,6 @@ pub enum Say {
     StepReschedule,
     /// `Restore {kind} "{title}"`
     StepRestore,
-    /// `Settle {kind} "{title}"`
-    StepSettleDebt,
-    /// `Settle up with "{title}"`
-    StepSettleUp,
     /// `Star {kind} "{title}"`
     StepStar,
     /// `Undo {kind} "{title}"`
@@ -101,11 +89,7 @@ pub enum Say {
 
 impl Say {
     /// Every sentence, for the test that holds them against the copy file.
-    pub const ALL: [Self; 42] = [
-        Self::Balance,
-        Self::BalanceEven,
-        Self::BalanceOwed,
-        Self::BalanceOwing,
+    pub const ALL: [Self; 36] = [
         Self::Cap,
         Self::Count,
         Self::DeclineFabricatedSecret,
@@ -139,8 +123,6 @@ impl Say {
         Self::StepReopen,
         Self::StepReschedule,
         Self::StepRestore,
-        Self::StepSettleDebt,
-        Self::StepSettleUp,
         Self::StepStar,
         Self::StepUndo,
         Self::StepUnstar,
@@ -150,10 +132,6 @@ impl Say {
     #[must_use]
     pub const fn key(self) -> &'static str {
         match self {
-            Self::Balance => "SAID_BALANCE",
-            Self::BalanceEven => "SAID_BALANCE_EVEN",
-            Self::BalanceOwed => "SAID_BALANCE_OWED",
-            Self::BalanceOwing => "SAID_BALANCE_OWING",
             Self::Cap => "SAID_CAP",
             Self::Count => "SAID_COUNT",
             Self::DeclineFabricatedSecret => "SAID_DECLINE_FABRICATED_SECRET",
@@ -187,8 +165,6 @@ impl Say {
             Self::StepReopen => "SAID_STEP_REOPEN",
             Self::StepReschedule => "SAID_STEP_RESCHEDULE",
             Self::StepRestore => "SAID_STEP_RESTORE",
-            Self::StepSettleDebt => "SAID_STEP_SETTLE_DEBT",
-            Self::StepSettleUp => "SAID_STEP_SETTLE_UP",
             Self::StepStar => "SAID_STEP_STAR",
             Self::StepUndo => "SAID_STEP_UNDO",
             Self::StepUnstar => "SAID_STEP_UNSTAR",
@@ -272,10 +248,6 @@ mod tests {
     #[test]
     fn placeholders_are_the_names_the_fill_points_use() {
         let fills = [
-            (Say::Balance, vec!["value"]),
-            (Say::BalanceEven, vec!["name"]),
-            (Say::BalanceOwed, vec!["name", "value"]),
-            (Say::BalanceOwing, vec!["name", "value"]),
             (Say::Count, vec!["what"]),
             (Say::Found, vec!["what"]),
             (Say::FoundSome, vec!["what", "shown"]),
@@ -299,8 +271,6 @@ mod tests {
             (Say::StepReopen, vec!["kind", "title"]),
             (Say::StepReschedule, vec!["kind", "title"]),
             (Say::StepRestore, vec!["kind", "title"]),
-            (Say::StepSettleDebt, vec!["kind", "title"]),
-            (Say::StepSettleUp, vec!["title"]),
             (Say::StepStar, vec!["kind", "title"]),
             (Say::StepUndo, vec!["kind", "title"]),
             (Say::StepUnstar, vec!["kind", "title"]),

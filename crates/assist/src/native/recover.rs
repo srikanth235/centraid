@@ -294,7 +294,6 @@ impl Session {
 use serde_json::{Map, Value, json};
 
 use crate::native::meta::Kind;
-use crate::native::search;
 use crate::native::session::{arg_str, tool_params};
 
 /// A call in the model's own terms: `act verb: edit, rows: #3, args: description: x`. Parameters
@@ -414,7 +413,7 @@ impl Session {
     }
 
     /// THE CALL THE RUNTIME CAN FIX WITHOUT A GUESS (nt12 R1, R2): a field the kind names
-    /// otherwise, a balance whose person the message names, a selector whose list is the one on
+    /// otherwise, a selector whose list is the one on
     /// screen. The corrected args, the note that says what was used, and the error with the
     /// call to send (what the model reads when the fixed call fails too). A reveal is egress and
     /// a `Did you mean` changes the rows: those stay a `Send` on the error, never a run.
@@ -428,7 +427,6 @@ impl Session {
             return None;
         }
         self.field_swap(tool, args, error)
-            .or_else(|| self.balance_call(tool, args, error))
             .or_else(|| self.within_call(tool, args, error))
     }
 
@@ -581,114 +579,15 @@ impl Session {
         changed.then(|| format!("{} Send {}.", error.trim_end(), render_call(tool, &call)))
     }
 
-    /// The groups a balance call reaches: its rows, its `linked_to`, its `within` result, and the
-    /// groups a selector of kind group selects.
-    fn groups_in_reach(&mut self, args: &Map<String, Value>) -> Vec<Key> {
-        let mut keys: Vec<Key> = Vec::new();
-        for key in ["rows", "linked_to"] {
-            if let Some(value) = args.get(key).filter(|value| !value.is_null())
-                && let Ok(found) = self.resolve_rows(value)
-            {
-                keys.extend(found);
-            }
-        }
-        if let Some(within) = arg_str(args, "within")
-            && let Ok(handle) = self.resolve_result(&within)
-        {
-            keys.extend(self.results[handle - 1].keys.clone());
-        }
-        if args.get("rows").is_none()
-            && arg_str(args, "kind")
-                .is_some_and(|kind| Kind::parse(kind.trim()) == Some(Kind::Group))
-            && let Ok(selector) = self.selector(args)
-        {
-            keys.extend(self.select(&selector));
-        }
-        let mut groups: Vec<Key> = Vec::new();
-        for key in keys {
-            if key.0 == Kind::Group && !groups.contains(&key) {
-                groups.push(key);
-            }
-        }
-        groups
-    }
-
-    /// Whose balance the message means: the one other person it names, or the user when it
-    /// names no one and nobody else is in play; `None` when that is a guess.
-    pub(crate) fn balance_person(&mut self) -> Option<Key> {
-        let others = search::persons_named(self, &self.message.clone());
-        match others.as_slice() {
-            [only] => Some(only.clone()),
-            [] if !self.names_someone_else() && self.world.row(&self.world.me_key()).is_some() => {
-                Some(self.world.me_key())
-            }
-            _ => None,
-        }
-    }
-
-    /// A balance the call got wrong: the group's balance of the person, or the person's.
-    fn balance_call(&mut self, tool: &str, args: &Map<String, Value>, error: &str) -> Option<Fix> {
-        if !matches!(tool, "compute" | "answer")
-            || arg_str(args, "op").as_deref() != Some("balance")
-        {
-            return None;
-        }
-        let one_person = error.starts_with("error: balance is for one person;")
-            || error.starts_with("error: balance needs one person;");
-        let you = error.starts_with("error: that is you;");
-        let no_person = error.starts_with("error: a group's balance is one person's");
-        if !(one_person || you || no_person) {
-            return None;
-        }
-        let groups = self.groups_in_reach(args);
-        let fixed = match groups.as_slice() {
-            [group] => {
-                let person = self.balance_person()?;
-                let n = self.number(&person);
-                let name = self.world.row(group)?.name.clone();
-                let mut call = Map::new();
-                call.insert("op".to_owned(), json!("balance"));
-                call.insert("kind".to_owned(), json!("group"));
-                call.insert("name".to_owned(), json!(name));
-                call.insert("linked_to".to_owned(), json!(format!("#{n}")));
-                call
-            }
-            [] if you => {
-                let named = search::persons_named(self, &self.message.clone());
-                let [other] = named.as_slice() else {
-                    return None;
-                };
-                let n = self.number(other);
-                let mut call = Map::new();
-                call.insert("op".to_owned(), json!("balance"));
-                call.insert("rows".to_owned(), json!(format!("#{n}")));
-                call
-            }
-            _ => return None,
-        };
-        Some(fix_of(tool, error, fixed))
-    }
-
-    /// THE CALL FOR A LINK THE KINDS LACK, with real handles (` Send …`, a leading space): a
-    /// group's money is the group's balance of the person the message means; the photos of a
-    /// person or an album are the photos `linked_to` that row. `None` when it is a guess (the
-    /// selector links to two rows, or whose balance it is is not decided).
+    /// THE CALL FOR A LINK THE KINDS LACK, with real handles (` Send …`, a leading space): the
+    /// photos of a person or an album are the photos `linked_to` that row. `None` when it is a
+    /// guess (the selector links to two rows).
     pub(crate) fn link_call(&mut self, kind: Kind, selector: &Selector) -> Option<String> {
         let [target] = selector.linked_to.as_slice() else {
             return None;
         };
         let mut call = Map::new();
         let (tool, shown) = match (kind, target.0) {
-            (Kind::Debt, Kind::Group) => {
-                let person = self.balance_person()?;
-                let n = self.number(&person);
-                let name = self.world.row(target)?.name.clone();
-                call.insert("op".to_owned(), json!("balance"));
-                call.insert("kind".to_owned(), json!("group"));
-                call.insert("name".to_owned(), json!(name));
-                call.insert("linked_to".to_owned(), json!(format!("#{n}")));
-                ("compute", &call)
-            }
             (Kind::Person, Kind::Album) | (Kind::Album, Kind::Person) => {
                 let n = self.number(target);
                 call.insert("kind".to_owned(), json!("photo"));

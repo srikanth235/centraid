@@ -63,12 +63,12 @@ fn the_observations_read_exactly_as_specified() {
         ),
         "ambiguous: \"Neha\" fits #13 person \"Neha Rao\", #14 person \"Neha Kulkarni\"; nothing was done."
     );
-    session.user("how much is owed on debts?");
+    session.user("how much effort is on my tasks?");
     assert_eq!(
         text(
             &mut session,
             "compute",
-            json!({"op": "sum", "field": "amount", "kind": "debt"})
+            json!({"op": "sum", "field": "effort", "kind": "task"})
         ),
         "@2 = 37.50 USD (sum of amount over 2 debts)"
     );

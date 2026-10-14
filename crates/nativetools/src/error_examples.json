@@ -214,6 +214,11 @@
   "act.x_does_not_apply_to_x": {
     "tool": "act",
     "argument": "verb",
+    "why_none": "defensive: add_to and remove_from apply only to kinds that have a container, and the verb table already refuses the other kinds with the family below"
+  },
+  "act.x_does_not_apply_to_x_2": {
+    "tool": "act",
+    "argument": "verb",
     "calls": [
       {
         "tool": "act",
@@ -349,115 +354,6 @@
           "kind": "task",
           "name": "Book the cabin",
           "args": "to: #6"
-        }
-      }
-    ]
-  },
-  "act.settle_up_takes_group_n_and_amount": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "foo: bar"
-        }
-      }
-    ]
-  },
-  "act.settle_up_is_with_someone_else_not": {
-    "tool": "act",
-    "argument": "name",
-    "calls": [
-      {
-        "tool": "find",
-        "args": {
-          "kind": "person"
-        }
-      },
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "rows": "#13",
-          "args": "group: #2"
-        }
-      }
-    ]
-  },
-  "act.settle_up_needs_group_n": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Benedikt"
-        }
-      }
-    ]
-  },
-  "act.group_is_exactly_one_n": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "group: #1, #2"
-        }
-      }
-    ]
-  },
-  "act.group_names_a_group_and_name": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "group: #8"
-        }
-      }
-    ]
-  },
-  "act.amount_is_a_number_in_currency": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "group: #2\namount: lots"
-        }
-      }
-    ]
-  },
-  "act.amount_is_more_than_zero": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "group: #2\namount: 0"
         }
       }
     ]
@@ -830,60 +726,6 @@
           "verb": "create",
           "kind": "event",
           "args": "name: x"
-        }
-      }
-    ]
-  },
-  "act.create_debt_needs_person_n": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "create",
-          "kind": "debt",
-          "args": "name: x"
-        }
-      }
-    ]
-  },
-  "act.create_debt_needs_amount_n_currency": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "find",
-        "args": {
-          "kind": "person"
-        }
-      },
-      {
-        "tool": "act",
-        "args": {
-          "verb": "create",
-          "kind": "debt",
-          "args": "name: x\nperson: #12"
-        }
-      }
-    ]
-  },
-  "act.create_debt_needs_direction_owes_me_or": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "find",
-        "args": {
-          "kind": "person"
-        }
-      },
-      {
-        "tool": "act",
-        "args": {
-          "verb": "create",
-          "kind": "debt",
-          "args": "name: x\nperson: #12\namount: 5"
         }
       }
     ]
@@ -1542,21 +1384,6 @@
       }
     ]
   },
-  "session.balance_takes_no_group": {
-    "tool": "compute",
-    "argument": "group",
-    "calls": [
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "person",
-          "name": "Ray",
-          "group": "effort"
-        }
-      }
-    ]
-  },
   "session.count_takes_no_field": {
     "tool": "compute",
     "argument": "field",
@@ -1846,89 +1673,6 @@
         "args": {
           "kind": "task",
           "where": "status = bogus"
-        }
-      }
-    ]
-  },
-  "values.balance_needs_one_x_the_selection": {
-    "tool": "compute",
-    "argument": "name",
-    "calls": [
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "person",
-          "name": "Zed"
-        }
-      }
-    ]
-  },
-  "values.balance_is_for_one_x_the": {
-    "tool": "compute",
-    "argument": "kind",
-    "calls": [
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "person"
-        }
-      }
-    ]
-  },
-  "values.that_is_you_balance_is_you": {
-    "tool": "compute",
-    "argument": "name",
-    "calls": [
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "person",
-          "name": "Sam Park"
-        }
-      }
-    ]
-  },
-  "values.a_group_s_balance_is_one": {
-    "tool": "compute",
-    "argument": "linked_to",
-    "calls": [
-      {
-        "tool": "find",
-        "args": {
-          "kind": "person",
-          "name": "Neha Rao"
-        }
-      },
-      {
-        "tool": "find",
-        "args": {
-          "kind": "person",
-          "name": "Ray Ochoa"
-        }
-      },
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "group",
-          "name": "Tahoe Trip",
-          "linked_to": "#9, #10"
-        }
-      }
-    ]
-  },
-  "values.balance_is_defined_for_person_and": {
-    "tool": "compute",
-    "argument": "kind",
-    "calls": [
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "task"
         }
       }
     ]

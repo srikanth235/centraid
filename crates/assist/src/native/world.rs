@@ -6,7 +6,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::row::Row as VaultRow;
-use centraid_apps_tally::queries::TallyData;
 
 use crate::native::dates::Stamp;
 use crate::native::door::{Door, int, text};
@@ -200,7 +199,6 @@ pub struct World {
     pub calendar: String,
     pub root_folder: Option<String>,
     pub locker_key: Option<String>,
-    pub tally: TallyData,
     /// Invocations in the journal, for the seed that numbers a session.
     pub entity_count: usize,
 }
@@ -326,19 +324,16 @@ impl World {
         let concepts = Concepts::load(door)?;
         world.root_folder = concepts.root_folder.clone();
         world.load_people(door, &concepts)?;
-        world.load_groups(door)?;
         world.load_events(door, at)?;
         world.load_tasks(door)?;
         // Photos before collections: an album's entries are edges to them.
         world.load_photos(door, &concepts)?;
         world.load_notes_and_collections(door)?;
         world.load_documents(door, &concepts)?;
-        world.load_debts(door)?;
         if locker {
             world.load_locker(door, &concepts)?;
         }
         world.load_links(door)?;
-        world.tally = door.tally()?;
         world.edges.sort();
         world.edges.dedup();
         Ok(world)
@@ -421,68 +416,6 @@ impl World {
                 updated,
                 extra,
             });
-        }
-        Ok(())
-    }
-
-    fn load_groups(&mut self, door: &dyn Door) -> Result<(), String> {
-        let groups = door.table(
-            "tally_group",
-            "group_id, circle_id, currency, archived_at, created_at, updated_at",
-            "created_at",
-            "group_id",
-        )?;
-        let circles = door.table(
-            "social_circle",
-            "circle_id, name, created_at",
-            "created_at",
-            "circle_id",
-        )?;
-        let members = door.table(
-            "social_circle_member",
-            "member_id, circle_id, party_id, added_at",
-            "added_at",
-            "member_id",
-        )?;
-        let names: BTreeMap<String, String> = circles
-            .iter()
-            .filter_map(|row| Some((text(row, "circle_id")?, text(row, "name")?)))
-            .collect();
-        let mut circle_group = BTreeMap::new();
-        for group in &groups {
-            let id = text(group, "group_id").unwrap_or_default();
-            let circle = text(group, "circle_id").unwrap_or_default();
-            circle_group.insert(circle.clone(), id.clone());
-            let mut fields = BTreeMap::new();
-            let currency = text(group, "currency").unwrap_or_default();
-            fields.insert("currency", Val::Text(currency.clone()));
-            let mut extra = BTreeMap::new();
-            extra.insert("currency", currency);
-            self.insert(Row {
-                kind: Kind::Group,
-                name: names.get(&circle).cloned().unwrap_or_default(),
-                id,
-                date: None,
-                fields,
-                trashed: false,
-                created: text(group, "created_at").unwrap_or_default(),
-                updated: text(group, "updated_at").unwrap_or_default(),
-                extra,
-            });
-        }
-        for member in &members {
-            let (Some(circle), Some(party)) = (text(member, "circle_id"), text(member, "party_id"))
-            else {
-                continue;
-            };
-            if let Some(group) = circle_group.get(&circle) {
-                self.edge(
-                    (Kind::Group, group.clone()),
-                    (Kind::Person, party),
-                    Via::Membership,
-                    None,
-                );
-            }
         }
         Ok(())
     }
@@ -1010,56 +943,6 @@ impl World {
                 updated: text(asset, "updated_at").unwrap_or_default(),
                 extra,
             });
-        }
-        Ok(())
-    }
-
-    fn load_debts(&mut self, door: &dyn Door) -> Result<(), String> {
-        let debts = door.table(
-            "tally_obligation",
-            "obligation_id, from_party, to_party, amount_minor, currency, reason, incurred_on, \
-             settled_at, created_at, updated_at, deleted_at",
-            "created_at",
-            "obligation_id",
-        )?;
-        for debt in &debts {
-            let id = text(debt, "obligation_id").unwrap_or_default();
-            let from = text(debt, "from_party").unwrap_or_default();
-            let to = text(debt, "to_party").unwrap_or_default();
-            let (direction, other) = if from == self.me {
-                ("i_owe", to)
-            } else {
-                ("owes_me", from)
-            };
-            let mut fields = BTreeMap::new();
-            let currency = text(debt, "currency").unwrap_or_else(|| self.currency.clone());
-            fields.insert(
-                "amount",
-                Val::Money(int(debt, "amount_minor").unwrap_or_default(), currency),
-            );
-            fields.insert("direction", Val::Enum(direction));
-            let settled = text(debt, "settled_at").is_some();
-            fields.insert(
-                "status",
-                Val::Enum(if settled { "settled" } else { "open" }),
-            );
-            self.insert(Row {
-                kind: Kind::Debt,
-                id: id.clone(),
-                name: text(debt, "reason").unwrap_or_else(|| "debt".to_owned()),
-                date: stamp(text(debt, "incurred_on")),
-                fields,
-                trashed: text(debt, "deleted_at").is_some(),
-                created: text(debt, "created_at").unwrap_or_default(),
-                updated: text(debt, "updated_at").unwrap_or_default(),
-                extra: BTreeMap::new(),
-            });
-            self.edge(
-                (Kind::Debt, id),
-                (Kind::Person, other),
-                Via::Counterparty,
-                None,
-            );
         }
         Ok(())
     }

@@ -11,7 +11,7 @@
 //! `in_progress`; `status != open` leaves out both, and `status in (…)` reads
 //! each member the same way. `in_progress`, `completed` and `cancelled` select
 //! only themselves, and so does `open` on a status without `in_progress` (a
-//! debt's). The rule is `selects`; `edit` and `create` write the value they
+//! debt's, until Tally left, #1099). The rule is `selects`; `edit` and `create` write the value they
 //! are given and never go through it.
 
 use crate::native::meta::{self, FieldType, Kind};
@@ -223,15 +223,12 @@ pub fn field_fix(kind: Kind, field: &str, using: FieldUse) -> String {
     }
 }
 
-/// THE CALL TO SEND INSTEAD OF A LINK THE KINDS LACK, when it is decidable: a group's money is
-/// `op balance` on the group (debts are the person's, a group's money is its balance; only a
-/// debt is asked of a group that way, so no other kind gets the sentence), and the photos of a person or of an album are the photos `linked_to` that row. A
-/// sentence with a leading space, or nothing.
+/// THE CALL TO SEND INSTEAD OF A LINK THE KINDS LACK, when it is decidable: the photos of a
+/// person or of an album are the photos `linked_to` that row. A sentence with a leading space,
+/// or nothing.
 #[must_use]
 pub fn link_fix(kind: Kind, target: Kind) -> String {
     match (kind, target) {
-        (Kind::Debt, Kind::Group) => " A group's money is compute op balance, kind group, linked_to the person (none means you)."
-            .to_owned(),
         (Kind::Person, Kind::Album) | (Kind::Album, Kind::Person) => {
             " The photos of a person or an album: find kind photo, linked_to that row.".to_owned()
         }

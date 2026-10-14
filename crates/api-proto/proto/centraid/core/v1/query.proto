@@ -114,7 +114,7 @@ message PageQuery {
   // other computed column — the minor-unit exponent of the row's `currency`
   // (JPY 0, USD 2, KWD 3). `screen.v1.Money.exponent` has always said it comes
   // "from the kit's table through the core, never guessed and never assumed
-  // to be 2", and no door served it, so the Tally list left it at 0 and a
+  // to be 2", and no door served it, so a list left it at 0 and a
   // renderer that trusted it drew $42.50 as $4,250.
   //
   // `select` must name a `currency` column; one that does not is REFUSED as an

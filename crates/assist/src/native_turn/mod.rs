@@ -60,7 +60,7 @@ pub mod log;
 pub mod pending;
 pub mod words;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::app::App;
 use crate::attach::Notice;
@@ -621,53 +621,7 @@ fn value_line(session: &Session, value: &Value, result: Option<usize>) -> String
         "sum" => say_with(Say::Total, &[("field", field), ("value", &body)]),
         "min" => say_with(Say::Lowest, &[("field", field), ("value", &body)]),
         "max" => say_with(Say::Highest, &[("field", field), ("value", &body)]),
-        "balance" => balance_line(session, value, &body),
         _ => body,
-    }
-}
-
-fn balance_line(session: &Session, value: &Value, body: &str) -> String {
-    let signs: Vec<f64> = value["values"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|v| v["amount"].as_f64())
-        .collect();
-    let person = (value["of"]["kind"] == "person")
-        .then(|| {
-            session
-                .world
-                .row(&(Kind::Person, value["of"]["id"].as_str()?.to_owned()))
-                .map(|row| row.name.clone())
-        })
-        .flatten();
-    let Some(name) = person else {
-        return say_with(Say::Balance, &[("value", body)]);
-    };
-    if signs.iter().all(|amount| *amount == 0.0) {
-        say_with(Say::BalanceEven, &[("name", &name)])
-    } else if signs.iter().all(|amount| *amount >= 0.0) {
-        say_with(Say::BalanceOwed, &[("name", &name), ("value", body)])
-    } else if signs.iter().all(|amount| *amount <= 0.0) {
-        let owed: Vec<Value> = value["values"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|v| {
-                let mut v = v.clone();
-                v["amount"] = json!(v["amount"].as_f64().unwrap_or_default().abs());
-                v
-            })
-            .collect();
-        say_with(
-            Say::BalanceOwing,
-            &[
-                ("name", &name),
-                ("value", &amounts_text(&Value::Array(owed))),
-            ],
-        )
-    } else {
-        say_with(Say::Balance, &[("value", body)])
     }
 }
 

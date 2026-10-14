@@ -148,37 +148,6 @@ fn candidates(app: App, world: &World, today: Date) -> Vec<Suggestion> {
             out.push(say(app, "Who did I talk to lately?"));
             out.push(say(app, "Who have I starred?"));
         }
-        App::Tally => {
-            let open = |direction: &'static str| {
-                live(world, Kind::Debt)
-                    .filter(move |row| is(row, "status", "open") && is(row, "direction", direction))
-            };
-            if open("owes_me").next().is_some() {
-                out.push(say(app, "Who owes me money?"));
-            }
-            if open("i_owe").next().is_some() {
-                out.push(say(app, "What do I owe?"));
-            }
-            // Someone a debt is still open with: the balance with them is a number
-            // the runtime computes.
-            let person = first_by(
-                live(world, Kind::Person).filter(|person| {
-                    live(world, Kind::Debt).any(|debt| {
-                        is(debt, "status", "open") && world.linked(&debt.key(), &person.key())
-                    })
-                }),
-                by_name,
-            );
-            if let Some(person) = person {
-                out.push(say(
-                    app,
-                    format!("What is my balance with {}?", lead_words(&person.name, 2)),
-                ));
-            }
-            out.push(say(app, "Who owes me money?"));
-            out.push(say(app, "What do I owe?"));
-            out.push(say(app, "Which groups am I in?"));
-        }
         App::Photos => {
             if let Some(photo) = first_by(live(world, Kind::Photo), newest) {
                 out.push(say(
@@ -214,10 +183,9 @@ fn candidates(app: App, world: &World, today: Date) -> Vec<Suggestion> {
 }
 
 /// The apps an unscoped chat draws from, in the order it tries them.
-const OPENING_ORDER: [App; 7] = [
+const OPENING_ORDER: [App; 6] = [
     App::Tasks,
     App::Agenda,
-    App::Tally,
     App::People,
     App::Photos,
     App::Notes,
@@ -284,8 +252,6 @@ pub fn suggest(door: &dyn Door, tz: &str, scope: Option<App>) -> Vec<Suggestion>
 mod tests {
     use super::*;
     use crate::native::dates::Stamp;
-    use crate::native::meta::Via;
-    use crate::native::world::Edge;
     use std::collections::BTreeMap;
 
     const TODAY: Date = jiff::civil::date(2026, 10, 8);
@@ -331,14 +297,6 @@ mod tests {
 
     fn open_task(id: &str, name: &str, day: &str) -> Row {
         with(on(row(Kind::Task, id, name), day), "status", "open")
-    }
-
-    fn open_debt(id: &str, direction: &'static str) -> Row {
-        with(
-            with(row(Kind::Debt, id, "Dinner"), "status", "open"),
-            "direction",
-            direction,
-        )
     }
 
     #[test]
@@ -389,36 +347,6 @@ mod tests {
             assert_eq!(got.len(), SUGGESTIONS, "{app:?}");
             assert!(got.iter().all(|s| s.app == app), "{app:?}");
         }
-        assert_eq!(
-            texts(&suggest_in(&w, TODAY, Some(App::Tally))),
-            [
-                "Who owes me money?",
-                "What do I owe?",
-                "Which groups am I in?"
-            ]
-        );
-    }
-
-    #[test]
-    fn a_debt_backs_the_questions_about_it_and_the_balance_with_its_person() {
-        let mut w = world([
-            row(Kind::Person, "p1", "Sam Rivera"),
-            open_debt("d1", "owes_me"),
-        ]);
-        w.edges.push(Edge {
-            from: (Kind::Debt, "d1".to_owned()),
-            to: (Kind::Person, "p1".to_owned()),
-            via: Via::Counterparty,
-            link_id: None,
-        });
-        assert_eq!(
-            texts(&suggest_in(&w, TODAY, Some(App::Tally))),
-            [
-                "Who owes me money?",
-                "What is my balance with Sam Rivera?",
-                "What do I owe?"
-            ]
-        );
     }
 
     #[test]
@@ -429,7 +357,7 @@ mod tests {
                 row(Kind::Event, "e1", "Dinner with Maya"),
                 "2026-10-10T19:00:00",
             ),
-            open_debt("d1", "owes_me"),
+            row(Kind::Person, "p1", "Sam Rivera"),
         ]);
         let got = suggest_in(&w, TODAY, None);
         assert_eq!(
@@ -437,11 +365,11 @@ mod tests {
             [
                 "What is due today?",
                 "What is on my calendar this week?",
-                "Who owes me money?"
+                "What do I know about Sam Rivera?"
             ]
         );
         let apps: Vec<App> = got.iter().map(|s| s.app).collect();
-        assert_eq!(apps, [App::Tasks, App::Agenda, App::Tally]);
+        assert_eq!(apps, [App::Tasks, App::Agenda, App::People]);
     }
 
     #[test]

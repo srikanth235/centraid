@@ -218,7 +218,6 @@ fn add_to_and_remove_from_every_container() {
     let world = seeded();
     let mut session = world.session_uncomposed();
     for (kind, name, container_kind, container) in [
-        ("person", "Benedikt", "group", "Tahoe"),
         ("photo", "Hike", "album", "Wedding"),
         ("note", "Diary", "notebook", "Ideas"),
         ("document", "Lease", "folder", "Taxes"),
@@ -344,9 +343,7 @@ fn reschedule_reads_the_row_anchor_and_keeps_the_time() {
 fn create_writes_every_creatable_kind_and_echoes_its_number() {
     let world = seeded();
     let mut session = world.session();
-    let neha = number(&mut session, "person", "Neha Rao");
     for args in [
-        json!({"kind": "debt", "name": "taxi", "person": neha, "amount": 18.5, "direction": "owes_me"}),
         json!({"kind": "task", "name": "Call plumber", "date": {"unit": "day", "rel": 1}, "effort": 15}),
         json!({"kind": "event", "name": "Coffee", "date": {"unit": "week", "rel": 1, "weekday": 1, "time": "14:00"}}),
         json!({"kind": "person", "name": "Ada Lovelace", "role": "friend"}),
@@ -356,7 +353,6 @@ fn create_writes_every_creatable_kind_and_echoes_its_number() {
         json!({"kind": "notebook", "name": "Travel"}),
         json!({"kind": "folder", "name": "Medical"}),
         json!({"kind": "list", "name": "Errands"}),
-        json!({"kind": "group", "name": "Book club"}),
         json!({"kind": "locker item", "name": "Gym", "type": "membership"}),
     ] {
         let mut args = args;
@@ -394,16 +390,6 @@ fn create_writes_every_creatable_kind_and_echoes_its_number() {
             .as_str()
             .unwrap()
             .contains("Mon 2026-09-28 14:00 (tomorrow)")
-    );
-    let balance = call(
-        &mut session,
-        "answer",
-        json!({"op": "balance", "kind": "person", "name": "Neha Rao"}),
-    );
-    assert!(
-        balance["text"].as_str().unwrap().contains("= 144.00 USD"),
-        "{}",
-        balance["text"]
     );
 }
 
@@ -469,7 +455,7 @@ fn edit_changes_fields_through_their_commands() {
 }
 
 #[test]
-fn cancel_log_settle_debt_settle_up_and_reveal() {
+fn cancel_log_and_reveal() {
     let world = seeded();
     let mut session = world.session();
     let found = numbers(
@@ -508,60 +494,6 @@ fn cancel_log_settle_debt_settle_up_and_reveal() {
         json!({"verb": "log", "rows": ray, "args": "kind: coffee"}),
     );
     assert_eq!(field_change(&logged, "date")[1], "2026-09-27T09:00:00");
-
-    let found = numbers(
-        &mut session,
-        &[("debt", "lunch"), ("debt", "concert tickets")],
-    );
-    let again = text(
-        &mut session,
-        "act",
-        json!({"verb": "settle_debt", "rows": found[0]}),
-    );
-    assert!(
-        again.starts_with("already: ") && again.contains("is settled"),
-        "{again}"
-    );
-    let settled = call(
-        &mut session,
-        "act",
-        json!({"verb": "settle_debt", "rows": found[1]}),
-    );
-    assert_eq!(field_change(&settled, "status"), json!(["open", "settled"]));
-
-    // I paid the 300 cabin split three ways (Ray owes 100); Ray paid 60 of
-    // groceries split with me (I owe 30): Ray owes me 70 in Tahoe.
-    session.user("");
-    let before = text(
-        &mut session,
-        "answer",
-        json!({"op": "balance", "kind": "person", "name": "Ray"}),
-    );
-    assert!(before.contains("= 70.00 USD"), "{before}");
-    let found = numbers(&mut session, &[("person", "Ray"), ("group", "Tahoe")]);
-    let up = call(
-        &mut session,
-        "act",
-        json!({"verb": "settle_up", "rows": found[0], "args": format!("group: {}", found[1])}),
-    );
-    assert!(
-        up["text"]
-            .as_str()
-            .unwrap()
-            .contains("settlement: 70.00 USD paid to you"),
-        "{}",
-        up["text"]
-    );
-    session.user("");
-    let even = text(
-        &mut session,
-        "act",
-        json!({"verb": "settle_up", "rows": found[0], "args": format!("group: {}", found[1])}),
-    );
-    assert!(
-        even.starts_with("already: ") && even.contains("settled up"),
-        "{even}"
-    );
 
     let wifi = number(&mut session, "locker item", "wifi");
     let nothing = text(
@@ -669,21 +601,4 @@ fn more_keeps_the_turn_open_and_act_then_answer_works() {
     let answered = ids(&left["effect"]["answer"]["rows"]);
     assert!(!answered.is_empty());
     assert!(!answered.contains(&world.id("cabin")));
-}
-
-#[test]
-fn a_suffixed_amount_creates_a_debt() {
-    let world = seeded();
-    let mut session = world.session();
-    let neha = number(&mut session, "person", "Neha Rao");
-    session.user("neha owes me 2.5k for the course");
-    let response = call(
-        &mut session,
-        "act",
-        json!({"verb": "create", "kind": "debt", "args": {
-            "name": "course", "person": neha, "amount": "2.5k", "direction": "owes_me"}}),
-    );
-    let made = response["text"].as_str().unwrap();
-    assert!(made.starts_with("created: #"), "{made}");
-    assert!(made.contains("2500"), "{made}");
 }

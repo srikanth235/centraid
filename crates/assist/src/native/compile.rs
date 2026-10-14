@@ -137,14 +137,7 @@ pub const PICK_REASONS: [&str; 7] = ["name", "kind", "date", "focus", "created",
 /// The reasons that say the row is not named by the message but comes from an earlier turn.
 const REFER_REASONS: [&str; 3] = ["focus", "asked", "created"];
 /// The verbs that act on one row at a time: a selector under one of them stands for one row.
-pub const SINGLE_ROW_VERBS: [&str; 6] = [
-    "edit",
-    "reschedule",
-    "log",
-    "reveal",
-    "settle_up",
-    "settle_debt",
-];
+pub const SINGLE_ROW_VERBS: [&str; 4] = ["edit", "reschedule", "log", "reveal"];
 
 /// A slot that does not compile.
 struct Refusal {

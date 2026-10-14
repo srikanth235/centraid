@@ -265,13 +265,6 @@ fn the_closed_words_and_the_kind_of_a_verb_are_the_runtimes() {
     // the verbs a selector stands for one row under
     assert_eq!(
         SINGLE_ROW_VERBS,
-        [
-            "edit",
-            "reschedule",
-            "log",
-            "reveal",
-            "settle_up",
-            "settle_debt"
-        ]
+        ["edit", "reschedule", "log", "reveal"]
     );
 }

@@ -155,7 +155,7 @@ fn the_focus_line_holds_the_rows_created_this_session() {
     let made = call(
         &mut session,
         "act",
-        json!({"verb": "create", "kind": "group", "args": "name: Lisboa"}),
+        json!({"verb": "create", "kind": "notebook", "args": "name: Lisboa"}),
     );
     let n = made["effect"]["created"][0]["n"]
         .as_u64()
@@ -303,7 +303,7 @@ fn the_three_parts_come_in_order_and_the_block_adds_the_vault_and_dates_lines() 
     call(
         &mut session,
         "act",
-        json!({"verb": "create", "kind": "group", "args": "name: Lisboa", "more": true}),
+        json!({"verb": "create", "kind": "notebook", "args": "name: Lisboa", "more": true}),
     );
     call(
         &mut session,
@@ -376,7 +376,7 @@ fn without_pre_grounding_the_turn_has_no_block() {
     call(
         &mut session,
         "act",
-        json!({"verb": "create", "kind": "group", "args": "name: Lisboa"}),
+        json!({"verb": "create", "kind": "notebook", "args": "name: Lisboa"}),
     );
     let turn = session.user("neha next tuesday");
     for key in ["preground", "focus", "dates", "block"] {
@@ -664,7 +664,7 @@ fn a_created_row_that_was_undone_leaves_the_focus_line() {
     call(
         &mut session,
         "act",
-        json!({"verb": "create", "kind": "group", "args": "name: Lisboa"}),
+        json!({"verb": "create", "kind": "notebook", "args": "name: Lisboa"}),
     );
     assert!(focus(&mut session, "undo that").is_some_and(|line| line.contains("\"Lisboa\"")));
     let undone = call(&mut session, "act", json!({"verb": "undo"}));

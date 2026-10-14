@@ -298,55 +298,6 @@ fn nt12_b4_a_morning_row_moved_to_eight_stays_in_the_morning() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// B5: a currency symbol names a currency
-
-#[test]
-fn nt12_b5_a_euro_amount_is_not_read_as_dollars() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("debts over 20");
-    let dollars = call(
-        &mut session,
-        "find",
-        json!({"kind": "debt", "where": "amount >= $20"}),
-    );
-    assert_eq!(
-        ids(&dollars["effect"]["rows"]),
-        vec![world.id("tickets")],
-        "{dollars}"
-    );
-    let euros = call(
-        &mut session,
-        "find",
-        json!({"kind": "debt", "where": "amount >= €20"}),
-    );
-    assert!(ids(&euros["effect"]["rows"]).is_empty(), "{euros}");
-}
-
-#[test]
-fn nt12_b5_a_symbol_two_codes_share_is_an_error() {
-    let world = world_with(|world| {
-        push(
-            world,
-            "groups",
-            json!({"key": "maple", "name": "Maple", "currency": "CAD", "members": []}),
-        );
-    });
-    let mut session = world.session();
-    session.user("debts over 20");
-    let both = call(
-        &mut session,
-        "find",
-        json!({"kind": "debt", "where": "amount >= $20"}),
-    );
-    assert!(text(&both).starts_with("error:"), "{both}");
-    assert!(
-        text(&both).contains("USD") && text(&both).contains("CAD"),
-        "{both}"
-    );
-}
-
-// ---------------------------------------------------------------------------------------------
 // B6: a past weekday is labelled past
 
 #[test]
@@ -411,21 +362,6 @@ fn nt12_r1_a_follow_up_selector_without_a_kind_runs_within_the_one_list() {
         vec![world.id("pay")],
         "{narrowed}"
     );
-}
-
-#[test]
-fn nt12_r1_a_balance_for_the_person_the_message_names_runs() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("what does ray owe in tahoe trip");
-    let balance = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "group", "name": "Tahoe Trip"}),
-    );
-    assert!(!text(&balance).contains("error:"), "{balance}");
-    assert!(text(&balance).contains("note: used compute"), "{balance}");
-    assert!(text(&balance).contains("Ray Ochoa"), "{balance}");
 }
 
 #[test]
@@ -757,44 +693,6 @@ fn nt12_r4_args_on_a_verb_that_takes_none_are_dropped_with_a_note() {
     );
     assert_eq!(diff_ids(&done), vec![world.id("cabin")], "{done}");
     assert!(text(&done).contains("note: ignored"), "{done}");
-}
-
-#[test]
-fn nt12_r4_settle_up_without_a_group_takes_the_one_group_that_holds_a_balance() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("neha rao paid me back");
-    let handle = find_in_turn(&mut session, "person", "neha rao");
-    let settled = call(
-        &mut session,
-        "act",
-        json!({"verb": "settle_up", "rows": [handle]}),
-    );
-    assert!(!text(&settled).starts_with("error:"), "{settled}");
-    assert!(text(&settled).contains("Tahoe Trip"), "{settled}");
-    assert!(text(&settled).contains("note: used group"), "{settled}");
-}
-
-#[test]
-fn nt12_r4_settle_up_without_a_group_stays_an_error_when_several_hold_a_balance() {
-    let world = world_with(|world| {
-        push(
-            world,
-            "expenses",
-            json!({"group": "flat", "name": "Rent", "amount": 100, "paid_by": "me",
-                   "split": ["me", "neha_r"], "date": "2026-08-03"}),
-        );
-        world["groups"][1]["members"] = json!(["benedikt", "neha_r"]);
-    });
-    let mut session = world.session();
-    session.user("neha rao paid me back");
-    let handle = find_in_turn(&mut session, "person", "neha rao");
-    let settled = call(
-        &mut session,
-        "act",
-        json!({"verb": "settle_up", "rows": [handle]}),
-    );
-    assert!(text(&settled).starts_with("error:"), "{settled}");
 }
 
 #[test]

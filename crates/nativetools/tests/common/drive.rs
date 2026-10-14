@@ -18,14 +18,12 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
     // The row each kind's single-row verbs act on, by a find that selects one.
     let subject = match kind {
         Kind::Person => "Ray",
-        Kind::Group => "Flat",
         Kind::Event => "Dentist",
         Kind::Task => "cabin",
         Kind::Note => "Dal",
         Kind::Document => "Lease",
         Kind::Photo => "Hike",
         Kind::Album => "Summer",
-        Kind::Debt => "concert tickets",
         Kind::LockerItem => "Bank",
         Kind::Notebook => "Recipes",
         Kind::Folder => "Taxes",
@@ -36,7 +34,6 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             session.user("");
             let args = match kind {
                 Kind::Person => json!({"name": "Ada Lovelace", "role": "friend"}),
-                Kind::Group => json!({"name": "Book club"}),
                 Kind::Event => {
                     json!({"name": "Coffee", "date": {"unit": "week", "rel": 1, "weekday": 1, "time": "14:00"}})
                 }
@@ -46,10 +43,6 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 Kind::Note => json!({"name": "Packing list", "body": "socks"}),
                 Kind::Document => json!({"name": "Receipt", "text": "paid"}),
                 Kind::Album => json!({"name": "Autumn"}),
-                Kind::Debt => {
-                    let neha = number(session, "person", "Neha Rao");
-                    json!({"name": "taxi", "person": neha, "amount": 18.5, "direction": "owes_me"})
-                }
                 Kind::LockerItem => json!({"name": "Gym", "type": "membership"}),
                 Kind::Notebook => json!({"name": "Travel"}),
                 Kind::Folder => json!({"name": "Medical"}),
@@ -92,10 +85,9 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             measure(session, json!({"verb": "cancel", "rows": row}))
         }
         "delete" => {
-            // A group with expenses, a folder with documents and a notebook
-            // with notes ask first; the empty ones go.
+            // A folder with documents and a notebook with notes ask first; the
+            // empty ones go.
             let target = match kind {
-                Kind::Group => "Flat",
                 Kind::Folder => {
                     session.user("");
                     let made = settled(
@@ -164,8 +156,6 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
         }
         "add_to" | "remove_from" => {
             let (row_name, container_kind, container) = match (kind, verb) {
-                (Kind::Person, "add_to") => ("Benedikt", "group", "Tahoe"),
-                (Kind::Person, _) => ("Benedikt", "group", "Flat"),
                 (Kind::Photo, "add_to") => ("Hike", "album", "Wedding"),
                 (Kind::Photo, _) => ("Hike", "album", "Summer"),
                 (Kind::Note, "add_to") => ("Diary", "notebook", "Ideas"),
@@ -192,18 +182,6 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 session,
                 json!({"verb": "log", "rows": row, "args": "kind: coffee"}),
             )
-        }
-        "settle_up" => {
-            let found = numbers(session, &[("person", "Ray"), ("group", "Tahoe")]);
-            let args = format!("group: {}", found[1]);
-            measure(
-                session,
-                json!({"verb": "settle_up", "rows": found[0], "args": args}),
-            )
-        }
-        "settle_debt" => {
-            let row = number(session, name, subject);
-            measure(session, json!({"verb": "settle_debt", "rows": row}))
         }
         "reveal" => {
             let row = number(session, name, "wifi");

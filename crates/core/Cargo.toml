@@ -47,9 +47,6 @@ centraid-apps-docs = { path = "../apps/docs" }
 centraid-apps-people = { path = "../apps/people" }
 # Notes' folds, for the `notes_*` app-query arms (#1046).
 centraid-apps-notes = { path = "../apps/notes" }
-# Tally's ten phone queries (#1046) — the ledger folded once through its one
-# balance engine, every figure with its currency's exponent — the same way.
-centraid-apps-tally = { path = "../apps/tally" }
 # Photos' own search (#1097, R-1097-25..27): the photographs the full-text door
 # names, opened as live assets.
 centraid-apps-photos = { path = "../apps/photos" }

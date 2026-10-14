@@ -152,7 +152,7 @@ fn tools_with(full: bool) -> Vec<Value> {
     act.insert("rows".into(), rows.clone());
     act.insert(
         "args".into(),
-        json!({"type": "string", "description": "field: value lines, dates as date expressions (create: name and fields, kind as the kind param · edit: field: value, or body+: / description+: text to add · reschedule, add_to: to · remove_from: from · log: kind · settle_up: group · reveal: field)"}),
+        json!({"type": "string", "description": "field: value lines, dates as date expressions (create: name and fields, kind as the kind param · edit: field: value, or body+: / description+: text to add · reschedule, add_to: to · remove_from: from · log: kind · reveal: field)"}),
     );
     act.insert(
         "more".into(),

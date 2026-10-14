@@ -166,9 +166,6 @@ pub fn card_line(kind: Kind, currency: &str) -> String {
     if !verbs.is_empty() {
         line.push_str(&format!(" · verbs: {}", verbs.join(" ")));
     }
-    if let Some(balance) = spec.balance {
-        line.push_str(&format!(" · balance: {balance}"));
-    }
     line
 }
 

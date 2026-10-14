@@ -343,7 +343,7 @@ fn the_last_one_is_the_latest_past_one() {
 fn biggest_with_a_number_field_is_a_value() {
     // off by default (the train references read "biggest" as rows); on when the switch is set
     let world = seeded();
-    let args = json!({"kind": "debt", "order": "amount desc", "limit": 1});
+    let args = json!({"kind": "task", "order": "effort desc", "limit": 1});
     let off = answer_in_turn(&world, "which is the biggest", args.clone());
     assert!(off["effect"]["value"].is_null(), "{off}");
     let on = || Flags {
@@ -357,7 +357,7 @@ fn biggest_with_a_number_field_is_a_value() {
     session.user("which is the biggest");
     let reply = call(&mut session, "answer", args.clone());
     assert_eq!(reply["effect"]["value"]["op"], "max", "{reply}");
-    assert!(said(&reply).contains("25.50"), "{reply}");
+    assert!(said(&reply).contains("30"), "{reply}");
     // "most" is not named even with the switch on
     let mut session = world.session_with(common::TODAY, on());
     session.user("which is the most");
@@ -484,8 +484,6 @@ fn the_families_the_data_is_built_from_are_all_there() {
         "session.no_kind_part_kinds_x",
         "act.no_verb_verb_text_verbs_x",
         // cardinality
-        "values.balance_needs_one_x_the_selection",
-        "values.balance_is_for_one_x_the",
         "act.act_needs_rows_n_or_a",
         // applicability
         "act.x_does_not_apply_to_x",
@@ -677,19 +675,12 @@ fn ten_slot_sets_compile_to_the_calls_the_reference_run_makes() {
             json!({"tool": "ask", "args": {"question": "which Neha?", "options": people}}),
         )
     });
-    // 10. a lookup, a link by pick, and a balance
+    // 10. a lookup and a link by pick
     compiles_to(|_| {
         (
             "find the dal note".into(),
             json!({"intent": "read", "via": "find", "kind": "note", "name": "Dal"}),
             json!({"tool": "find", "args": {"kind": "note", "name": "Dal"}}),
-        )
-    });
-    compiles_to(|_| {
-        (
-            "what does ray owe".into(),
-            json!({"intent": "count", "op": "balance", "kind": "person", "name": "Ray"}),
-            json!({"tool": "answer", "args": {"op": "balance", "kind": "person", "name": "Ray"}}),
         )
     });
     compiles_to(|_| {

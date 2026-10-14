@@ -44,10 +44,6 @@ impl Door for Recording {
         Door::table(&self.inner, table, columns, sort, pk)
     }
 
-    fn tally(&self) -> Result<centraid_apps_tally::queries::TallyData, String> {
-        Door::tally(&self.inner)
-    }
-
     fn search(
         &self,
         entity: &str,

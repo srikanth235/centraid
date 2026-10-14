@@ -15,7 +15,6 @@ path = "src/lib.rs"
 [dependencies]
 centraid-apps-agenda = { path = "../apps/agenda" }
 centraid-apps-kit = { path = "../apps/kit" }
-centraid-apps-tally = { path = "../apps/tally" }
 centraid-search = { path = "../search" }
 centraid-vault = { path = "../vault" }
 jiff.workspace = true

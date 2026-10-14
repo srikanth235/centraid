@@ -45,14 +45,12 @@ pub const OPEN_LINK_CAP: usize = 8;
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
     Person,
-    Group,
     Event,
     Task,
     Note,
     Document,
     Photo,
     Album,
-    Debt,
     LockerItem,
     Notebook,
     Folder,
@@ -60,16 +58,14 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 11] = [
         Self::Person,
-        Self::Group,
         Self::Event,
         Self::Task,
         Self::Note,
         Self::Document,
         Self::Photo,
         Self::Album,
-        Self::Debt,
         Self::LockerItem,
         Self::Notebook,
         Self::Folder,
@@ -115,8 +111,8 @@ impl Kind {
     }
 
     /// The link a row of this kind holds its contents by: a list its tasks, a
-    /// notebook its notes, an album its photos, a folder its documents, a group
-    /// its members, a task its subtasks. `None` for a kind that holds nothing.
+    /// notebook its notes, an album its photos, a folder its documents, a task
+    /// its subtasks. `None` for a kind that holds nothing.
     #[must_use]
     pub fn holds(self) -> Option<&'static Link> {
         let spec = self.spec();
@@ -256,8 +252,6 @@ pub struct Link {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Via {
-    /// `social_circle_member` under a Tally group's circle.
-    Membership,
     /// `schedule_attendee`.
     Attendee,
     /// `core_link` with the `about` relation (`core.link_entities`).
@@ -270,8 +264,6 @@ pub enum Via {
     Entry,
     /// A folder concept tag on a document (`core.move_document`).
     FolderTag,
-    /// `tally_obligation` — the counterpart party.
-    Counterparty,
 }
 
 /// What an `act` can do.
@@ -291,8 +283,6 @@ pub enum Verb {
     AddTo,
     RemoveFrom,
     Log,
-    SettleUp,
-    SettleDebt,
     Reveal,
     Undo,
 }
@@ -329,8 +319,6 @@ pub struct KindSpec {
     pub trash: bool,
     /// A container the vault directory lists (SPEC §6.0.4).
     pub container: bool,
-    /// Which `balance` this kind answers, when it answers one (SPEC §4.3).
-    pub balance: Option<&'static str>,
 }
 
 impl KindSpec {
@@ -371,8 +359,6 @@ const EVENT_STATUS: &[(&str, &str)] = &[
     ("tentative", "tentative"),
     ("cancelled", "cancelled"),
 ];
-const DEBT_DIRECTION: &[(&str, &str)] = &[("owes_me", "owed"), ("i_owe", "owe")];
-const DEBT_STATUS: &[(&str, &str)] = &[("open", "open"), ("settled", "settled")];
 /// Locker item types: the vault's own list, derived from
 /// `centraid_vault::commands::locker::ITEM_TYPES` and spelled identically.
 static LOCKER_TYPES: [(&str, &str); ITEM_TYPES.len()] = {
@@ -407,7 +393,7 @@ pub const LOG_KINDS: &[&str] = &["call", "message", "visit", "coffee"];
 /// The starred flag lives in `core_tag` under the flags scheme for every kind.
 const STAR: Source = at("core_tag", "concept_id");
 
-use FieldType::{Bool, Date, Enum, Money, Number, Text};
+use FieldType::{Bool, Date, Enum, Number, Text};
 
 pub static KINDS: &[KindSpec] = &[
     KindSpec {
@@ -438,11 +424,6 @@ pub static KINDS: &[KindSpec] = &[
         ],
         links: &[
             Link {
-                kind: Kind::Group,
-                label: "groups",
-                via: Via::Membership,
-            },
-            Link {
                 kind: Kind::Event,
                 label: "events",
                 via: Via::Attendee,
@@ -462,36 +443,9 @@ pub static KINDS: &[KindSpec] = &[
                 label: "photos",
                 via: Via::About,
             },
-            Link {
-                kind: Kind::Debt,
-                label: "debts",
-                via: Via::Counterparty,
-            },
         ],
         trash: true,
         container: false,
-        balance: Some("me versus that person; positive = they owe me"),
-    },
-    KindSpec {
-        kind: Kind::Group,
-        name: "group",
-        plural: "groups",
-        entity: "tally.group",
-        table: "tally_group",
-        pk: "group_id",
-        name_source: at("social_circle", "name"),
-        date: None,
-        fields: &[field("currency", Text, at("tally_group", "currency")).create()],
-        links: &[Link {
-            kind: Kind::Person,
-            label: "members",
-            via: Via::Membership,
-        }],
-        trash: false,
-        container: true,
-        balance: Some(
-            "with linked_to a person: that person's net position in the group; positive = the group owes them",
-        ),
     },
     KindSpec {
         kind: Kind::Event,
@@ -522,7 +476,6 @@ pub static KINDS: &[KindSpec] = &[
         }],
         trash: true,
         container: false,
-        balance: None,
     },
     KindSpec {
         kind: Kind::Task,
@@ -572,7 +525,6 @@ pub static KINDS: &[KindSpec] = &[
         ],
         trash: true,
         container: false,
-        balance: None,
     },
     KindSpec {
         kind: Kind::Note,
@@ -606,7 +558,6 @@ pub static KINDS: &[KindSpec] = &[
         ],
         trash: true,
         container: false,
-        balance: None,
     },
     KindSpec {
         kind: Kind::Document,
@@ -628,7 +579,6 @@ pub static KINDS: &[KindSpec] = &[
         }],
         trash: true,
         container: false,
-        balance: None,
     },
     KindSpec {
         kind: Kind::Photo,
@@ -657,7 +607,6 @@ pub static KINDS: &[KindSpec] = &[
         ],
         trash: true,
         container: false,
-        balance: None,
     },
     KindSpec {
         kind: Kind::Album,
@@ -676,35 +625,6 @@ pub static KINDS: &[KindSpec] = &[
         }],
         trash: false,
         container: true,
-        balance: None,
-    },
-    KindSpec {
-        kind: Kind::Debt,
-        name: "debt",
-        plural: "debts",
-        entity: "tally.obligation",
-        table: "tally_obligation",
-        pk: "obligation_id",
-        name_source: at("tally_obligation", "reason"),
-        date: Some(DateSpec {
-            label: "incurred",
-            source: at("tally_obligation", "incurred_on"),
-        }),
-        fields: &[
-            field("amount", Money, at("tally_obligation", "amount_minor")).create(),
-            field("direction", Enum, at("tally_obligation", "from_party"))
-                .values(DEBT_DIRECTION)
-                .create(),
-            field("status", Enum, at("tally_obligation", "settled_at")).values(DEBT_STATUS),
-        ],
-        links: &[Link {
-            kind: Kind::Person,
-            label: "person",
-            via: Via::Counterparty,
-        }],
-        trash: false,
-        container: false,
-        balance: None,
     },
     KindSpec {
         kind: Kind::LockerItem,
@@ -733,7 +653,6 @@ pub static KINDS: &[KindSpec] = &[
         links: &[],
         trash: true,
         container: false,
-        balance: None,
     },
     KindSpec {
         kind: Kind::Notebook,
@@ -752,7 +671,6 @@ pub static KINDS: &[KindSpec] = &[
         }],
         trash: false,
         container: true,
-        balance: None,
     },
     KindSpec {
         kind: Kind::Folder,
@@ -771,7 +689,6 @@ pub static KINDS: &[KindSpec] = &[
         }],
         trash: false,
         container: true,
-        balance: None,
     },
     KindSpec {
         kind: Kind::List,
@@ -792,7 +709,6 @@ pub static KINDS: &[KindSpec] = &[
         }],
         trash: false,
         container: true,
-        balance: None,
     },
 ];
 
@@ -805,13 +721,11 @@ pub static VERBS: &[VerbSpec] = &[
         done: "created",
         commands: &[
             (Kind::Person, "people.add_person"),
-            (Kind::Group, "tally.create_group"),
             (Kind::Event, "schedule.propose_event"),
             (Kind::Task, "schedule.add_task"),
             (Kind::Note, "knowledge.create_note"),
             (Kind::Document, "core.add_document"),
             (Kind::Album, "media.create_album"),
-            (Kind::Debt, "people.add_debt"),
             (Kind::LockerItem, "locker.add_item"),
             (Kind::Notebook, "knowledge.create_notebook"),
             (Kind::Folder, "core.create_folder"),
@@ -825,7 +739,6 @@ pub static VERBS: &[VerbSpec] = &[
         done: "edited",
         commands: &[
             (Kind::Person, "people.edit_person"),
-            (Kind::Group, "tally.rename_group"),
             (Kind::Event, "schedule.edit_event"),
             (Kind::Task, "schedule.edit_task"),
             (Kind::Note, "knowledge.edit_note"),
@@ -876,7 +789,6 @@ pub static VERBS: &[VerbSpec] = &[
         done: "deleted",
         commands: &[
             (Kind::Person, "people.trash_person"),
-            (Kind::Group, "tally.delete_group"),
             (Kind::Event, "schedule.delete_event"),
             (Kind::Task, "schedule.delete_task"),
             (Kind::Note, "knowledge.delete_note"),
@@ -930,10 +842,9 @@ pub static VERBS: &[VerbSpec] = &[
     VerbSpec {
         verb: Verb::AddTo,
         name: "add_to",
-        args: "to: #n (the group, album, notebook, folder or list)",
+        args: "to: #n (the album, notebook, folder or list)",
         done: "added",
         commands: &[
-            (Kind::Person, "tally.add_group_member"),
             (Kind::Photo, "media.add_to_album"),
             (Kind::Note, "knowledge.move_note"),
             (Kind::Document, "core.move_document"),
@@ -946,7 +857,6 @@ pub static VERBS: &[VerbSpec] = &[
         args: "from: #n",
         done: "removed",
         commands: &[
-            (Kind::Person, "tally.remove_group_member"),
             (Kind::Photo, "media.remove_from_album"),
             (Kind::Note, "knowledge.move_note"),
             (Kind::Document, "core.move_document"),
@@ -959,20 +869,6 @@ pub static VERBS: &[VerbSpec] = &[
         args: "kind: call|message|visit|coffee",
         done: "logged",
         commands: &[(Kind::Person, "people.log_interaction")],
-    },
-    VerbSpec {
-        verb: Verb::SettleUp,
-        name: "settle_up",
-        args: "group: #n (amount = their balance unless given as amount: N)",
-        done: "settled up",
-        commands: &[(Kind::Person, "tally.settle_up")],
-    },
-    VerbSpec {
-        verb: Verb::SettleDebt,
-        name: "settle_debt",
-        args: "",
-        done: "settled",
-        commands: &[(Kind::Debt, "people.settle_debt")],
     },
     VerbSpec {
         verb: Verb::Reveal,
@@ -1103,14 +999,12 @@ const REVEAL_SYNONYMS: &[(&str, &str)] = &[
     ("pw", "password"),
 ];
 
-/// Whether a word is a kind of the vault or another word for one (`debt`, `IOU`, `doc`, `pic`,
+/// Whether a word is a kind of the vault or another word for one (`doc`, `pic`,
 /// `login`, `contact`, `bill`): a noun that says what a row is, not a word of its name. A closed
 /// table over `Kind::parse` (nt15 R4: it is no content word of a name).
 #[must_use]
 pub fn kind_word(word: &str) -> bool {
     const OTHER: &[&str] = &[
-        "iou",
-        "ious",
         "bill",
         "bills",
         "doc",
@@ -1134,8 +1028,6 @@ pub fn kind_word(word: &str) -> bool {
         "appointments",
         "item",
         "items",
-        "group",
-        "groups",
     ];
     let folded = word.trim().to_lowercase();
     Kind::parse(&folded).is_some() || OTHER.contains(&folded.as_str())
@@ -1182,7 +1074,7 @@ pub fn reveal_synonym(word: &str) -> Option<&'static str> {
 pub const PRIORITY_SCALE: &str = "1 highest..9 lowest, 0 none";
 
 /// Value operations (SPEC §4.3).
-pub const OPS: &[&str] = &["count", "sum", "min", "max", "balance"];
+pub const OPS: &[&str] = &["count", "sum", "min", "max"];
 
 /// Decline reasons (SPEC §4).
 pub const DECLINE_REASONS: &[&str] = &[
@@ -1262,7 +1154,6 @@ pub fn mapped_commands() -> Vec<&'static str> {
         "core.link_entities",
         "core.unlink_entities",
         "media.add_asset",
-        "tally.add_expense",
         "schedule.edit_event",
     ]);
     out.sort_unstable();

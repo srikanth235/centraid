@@ -230,7 +230,7 @@ pub(super) fn search(
             &search,
             &entities,
             &asked.term,
-            |(data, found): &(tasks::SearchData, Vec<named::Opened>)| {
+            |(data, found): &(tasks::SearchData, Vec<centraid_search::Target>)| {
                 data.tasks.is_empty() && found.is_empty()
             },
             |term| {
@@ -246,13 +246,8 @@ pub(super) fn search(
                 if denial.is_some() {
                     return Ok(((data, Vec::new()), denial));
                 }
-                let (found, denial) = named::of_app(
-                    door,
-                    &search,
-                    "tasks",
-                    term,
-                    limit.min(named::CONTAINER_ROWS),
-                )?;
+                let (found, denial) =
+                    named::of_app(&search, "tasks", term, limit.min(named::CONTAINER_ROWS));
                 Ok(((data, found), denial))
             },
         )))

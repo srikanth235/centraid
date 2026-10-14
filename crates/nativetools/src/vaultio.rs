@@ -235,17 +235,6 @@ impl Handle {
             .map_err(|error| format!("reading {table}: {error}"))
     }
 
-    /// The Tally ledger, folded by the Tally app's own read.
-    pub fn tally(&self) -> Result<centraid_apps_tally::queries::TallyData, String> {
-        self.vault
-            .read(|connection| {
-                let door = TestDoor::new(connection);
-                Ok(centraid_apps_tally::queries::load_tally(&door))
-            })
-            .map_err(|error| error.to_string())?
-            .map_err(|error| format!("reading the ledger: {error}"))
-    }
-
     /// The occurrences of the days `from_day..=to_day` in the zone `tz`: Agenda's own read
     /// (`centraid_apps_agenda::occurrences`) over the owner's view, as the core's door asks it.
     pub fn events(
@@ -344,10 +333,6 @@ fn with_store(vault: Vault, path: &Path) -> Result<Vault, String> {
 impl Door for Handle {
     fn table(&self, table: &str, columns: &str, sort: &str, pk: &str) -> Result<Vec<Row>, String> {
         Self::table(self, table, columns, sort, pk)
-    }
-
-    fn tally(&self) -> Result<centraid_apps_tally::queries::TallyData, String> {
-        Self::tally(self)
     }
 
     fn events(
