@@ -1700,13 +1700,11 @@ fn a_vault_at_rung_twelve_climbs_to_thirteen_with_its_rows_backfilled() {
         );
     }
     // A project archived before the rung is not backfilled.
-    for (fts, word) in [("fts_schedule_project", "archived")] {
-        assert_eq!(
-            hits(&migrated, fts, &format!("\"{word}\"")),
-            none(),
-            "{fts}: `{word}` is archived"
-        );
-    }
+    assert_eq!(
+        hits(&migrated, "fts_schedule_project", "\"archived\""),
+        none(),
+        "fts_schedule_project: `archived` is archived"
+    );
     assert_containers_match(&migrated);
     // The triggers work on the migrated file as they do on a founded one.
     let registry = Registry::with_system_commands().expect("the registry builds");
