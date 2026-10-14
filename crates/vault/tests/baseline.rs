@@ -58,7 +58,10 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 /// carries an interaction's note to the person (#1097), and its chat index
 /// `fts_chat_thread` with its five shadow tables, its vocabulary and the six
 /// triggers that keep it to a thread's title and what the member said
-/// (R-1097-22). Rungs three and four
+/// (R-1097-22), and rung fourteen's Money: six `money_*` tables with their
+/// touch and membership triggers and indexes, the unique index that lands a
+/// statement line once per account, and the three triggers that hold a Money
+/// account to one currency and an imported row to never being edited (#1099). Rungs three and four
 /// added the old backup plane's index and blob custody (#1029 §2, §4); rung
 /// ten drops all eight objects again (#1080), so they are founded and gone.
 ///
@@ -67,7 +70,7 @@ use centraid_vault::{APPLICATION_ID, Vault, head_version};
 /// Named here rather than filtered by prefix: a guard that stopped being
 /// created, or an object arriving from somewhere, both have to show up as a
 /// failure.
-const LADDER_OBJECTS: [&str; 78] = [
+const LADDER_OBJECTS: [&str; 102] = [
     "chat_message",
     "chat_message_attachment",
     "chat_message_card",
@@ -83,6 +86,10 @@ const LADDER_OBJECTS: [&str; 78] = [
     "core_entity_revision_parent_is_immutable",
     "core_entity_revision_parent_is_same_object",
     "core_link_no_revises_edge",
+    "core_transaction_account_external_idx",
+    "core_transaction_currency_matches_money_account_ai",
+    "core_transaction_currency_matches_money_account_au",
+    "core_transaction_money_rows_are_fixed",
     "fts_chat_thread",
     "fts_chat_thread_ad",
     "fts_chat_thread_ai",
@@ -145,7 +152,27 @@ const LADDER_OBJECTS: [&str; 78] = [
     "idx_chat_attachment_asset",
     "idx_chat_attachment_document",
     "idx_chat_attachment_thumb",
+    "idx_money_rule_account",
+    "idx_money_rule_category",
+    "idx_money_target_category",
     "locker_key_one_generation",
+    "money_account",
+    "money_account_touch_updated_at",
+    "money_balance_checkpoint",
+    "money_balance_checkpoint_currency_matches_account_ai",
+    "money_balance_checkpoint_currency_matches_account_au",
+    "money_balance_checkpoint_touch_updated_at",
+    "money_import_profile",
+    "money_import_profile_touch_updated_at",
+    "money_rule",
+    "money_rule_entity_delete",
+    "money_rule_entity_insert",
+    "money_rule_order_idx",
+    "money_rule_touch_updated_at",
+    "money_target",
+    "money_target_touch_updated_at",
+    "money_transaction",
+    "money_transaction_touch_updated_at",
 ];
 
 /// WHAT RUNG FIVE DROPS (#1029): the storage of every plane this umbrella
@@ -623,10 +650,11 @@ fn the_entity_kind_registry_is_derived_and_equals_what_v0s_ladder_seeded() {
         .iter()
         .filter(|kind| !derived.contains(kind))
         .collect();
-    // THE KINDS A RUNG ABOVE THE CORPUS ADDS, NAMED: rung eleven's chat thread.
+    // THE KINDS A RUNG ABOVE THE CORPUS ADDS, NAMED: rung eleven's chat thread and
+    // rung fourteen's Money rule.
     // The derivation must find it (a thread's first insert would fail its
     // foreign key otherwise), and the corpus, being v0, cannot hold it.
-    const ADDED_BY_THE_LADDER: [&str; 1] = ["chat.thread"];
+    const ADDED_BY_THE_LADDER: [&str; 2] = ["chat.thread", "money.rule"];
     for kind in ADDED_BY_THE_LADDER {
         assert!(
             derived.iter().any(|found| found == kind),
@@ -675,10 +703,10 @@ fn the_two_pragmas_and_the_replica_seed_are_written() {
     // rung ten drops rungs three and four's backup index (#1080); rung eleven
     // founds the chat (R-CHAT-1); rung twelve gives a proposal its life
     // (#1088); rung thirteen folds attribute text into the search indexes
-    // (#1097).
+    // (#1097); rung fourteen founds Money (#1099).
     // Spelled out rather than left as `head_version()` alone: a rung silently
     // vanishing would still satisfy the line above.
-    assert_eq!(user_version, 13);
+    assert_eq!(user_version, 14);
     assert_eq!(journal, "wal");
 }
 

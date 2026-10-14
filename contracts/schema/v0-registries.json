@@ -10,6 +10,7 @@
     "knowledge",
     "locker",
     "media",
+    "money",
     "people",
     "schedule",
     "social",
@@ -966,6 +967,54 @@
       "label": "Memory photos",
       "lifecycle": "append-only",
       "projectionOf": "media.memory",
+      "deletionRoles": []
+    },
+    {
+      "logical": "money.account",
+      "table": "money_account",
+      "label": "Money accounts",
+      "lifecycle": "mutable",
+      "projectionOf": "core.account",
+      "deletionRoles": []
+    },
+    {
+      "logical": "money.balance_checkpoint",
+      "table": "money_balance_checkpoint",
+      "label": "Stated balances",
+      "lifecycle": "mutable",
+      "projectionOf": "core.account",
+      "deletionRoles": []
+    },
+    {
+      "logical": "money.import_profile",
+      "table": "money_import_profile",
+      "label": "Statement layouts",
+      "lifecycle": "mutable",
+      "projectionOf": "core.account",
+      "deletionRoles": []
+    },
+    {
+      "logical": "money.rule",
+      "table": "money_rule",
+      "label": "Money rules",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "money.target",
+      "table": "money_target",
+      "label": "Category plans",
+      "lifecycle": "mutable",
+      "projectionOf": "core.concept",
+      "deletionRoles": []
+    },
+    {
+      "logical": "money.transaction",
+      "table": "money_transaction",
+      "label": "Money transactions",
+      "lifecycle": "mutable",
+      "projectionOf": "core.transaction",
       "deletionRoles": []
     },
     {

@@ -171,6 +171,16 @@ pub const CHAT_PROPOSALS_SQL: &str =
 pub const SEARCH_COVERAGE_SQL: &str =
     include_str!("../../../contracts/migrations/013_search_coverage.sql");
 
+/// Rung fourteen: Money keeps the member's decisions in the vault (#1099, R-1099-10).
+///
+/// Six `money_*` tables decorate the spine's account and transaction (the member's name for
+/// an account and for a line, a plan per category and month, rules, a remembered statement
+/// layout, a stated balance), a unique index makes a statement line land once per account, two
+/// triggers hold a Money account to one currency and an imported row to never being edited,
+/// and the rung seeds the `transfer` relation and the categories scheme. The file states each
+/// choice and the rule for a vault that already holds duplicate `external_id`s.
+pub const MONEY_SQL: &str = include_str!("../../../contracts/migrations/014_money.sql");
+
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
@@ -241,6 +251,11 @@ pub const LADDER: &[Migration] = &[
         version: 13,
         name: "search-coverage",
         sql: SEARCH_COVERAGE_SQL,
+    },
+    Migration {
+        version: 14,
+        name: "money",
+        sql: MONEY_SQL,
     },
 ];
 

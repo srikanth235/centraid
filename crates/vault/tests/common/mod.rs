@@ -261,3 +261,27 @@ pub fn undo_rung_twelve(raw: &rusqlite::Connection) {
     raw.execute_batch(centraid_vault::migrations::CHAT_SQL)
         .expect("rung eleven's chat comes back");
 }
+
+/// UNDO RUNG FOURTEEN on a raw connection: Money's six tables (their touch and
+/// membership triggers and indexes go with them), the three triggers and the
+/// unique index it put on `core_transaction`, the entity kind, and the vocabulary
+/// it seeded (the categories scheme, its concepts and the `transfer` relation).
+/// A test that winds a founded file back below rung fourteen runs this first, then
+/// sets `user_version = 13`, writes whatever the old rung let through, and lets
+/// `Vault::open` climb (#1099).
+pub const UNDO_RUNG_FOURTEEN: &str =
+    "DROP TRIGGER core_transaction_currency_matches_money_account_ai;
+     DROP TRIGGER core_transaction_currency_matches_money_account_au;
+     DROP TRIGGER core_transaction_money_rows_are_fixed;
+     DROP INDEX core_transaction_account_external_idx;
+     DROP TABLE money_transaction;
+     DROP TABLE money_target;
+     DROP TABLE money_rule;
+     DROP TABLE money_import_profile;
+     DROP TABLE money_balance_checkpoint;
+     DROP TABLE money_account;
+     DELETE FROM core_entity_kind WHERE kind = 'money.rule';
+     DELETE FROM core_concept WHERE concept_id LIKE 'money:cat:%.%';
+     DELETE FROM core_concept WHERE concept_id LIKE 'money:cat:%';
+     DELETE FROM core_concept WHERE concept_id = 'money:relation:transfer';
+     DELETE FROM core_concept_scheme WHERE scheme_id = 'money:categories';";

@@ -121,6 +121,10 @@ CREATE UNIQUE INDEX core_tag_owner_assertion_idx
   ON core_tag(target_type, target_id, concept_id)
   WHERE tagged_by_party_id IS NOT NULL;
 
+-- index core_transaction_account_external_idx on core_transaction
+CREATE UNIQUE INDEX core_transaction_account_external_idx
+  ON core_transaction(account_id, external_id) WHERE external_id IS NOT NULL;
+
 -- index core_transaction_external_idx on core_transaction
 CREATE INDEX core_transaction_external_idx
   ON core_transaction(external_id) WHERE external_id IS NOT NULL;
@@ -383,6 +387,18 @@ CREATE INDEX idx_message_thread ON social_message(thread_id);
 -- index idx_message_thread_sent on social_message
 CREATE INDEX idx_message_thread_sent ON social_message(thread_id, sent_at);
 
+-- index idx_money_rule_account on money_rule
+CREATE INDEX idx_money_rule_account
+  ON money_rule(account_id) WHERE account_id IS NOT NULL;
+
+-- index idx_money_rule_category on money_rule
+CREATE INDEX idx_money_rule_category
+  ON money_rule(set_category_concept_id) WHERE set_category_concept_id IS NOT NULL;
+
+-- index idx_money_target_category on money_target
+CREATE INDEX idx_money_target_category
+  ON money_target(category_concept_id);
+
 -- index idx_note_author_party on knowledge_note
 CREATE INDEX idx_note_author_party ON knowledge_note(author_party_id);
 
@@ -525,6 +541,10 @@ CREATE INDEX media_asset_purge_idx
 -- index media_face_region_asset_page_idx on media_face_region
 CREATE INDEX media_face_region_asset_page_idx
   ON media_face_region(asset_id, region_id);
+
+-- index money_rule_order_idx on money_rule
+CREATE INDEX money_rule_order_idx
+  ON money_rule(position, rule_id);
 
 -- index people_important_date_purge_idx on people_important_date
 CREATE INDEX people_important_date_purge_idx
@@ -2380,6 +2400,131 @@ CREATE TABLE media_memory_member (
   PRIMARY KEY (memory_id, asset_id)
 ) STRICT;
 
+-- table money_account on money_account
+CREATE TABLE money_account (
+  account_id    TEXT PRIMARY KEY REFERENCES core_account(account_id) ON DELETE CASCADE,
+  name          TEXT NOT NULL CHECK (length(trim(name)) > 0),
+  kind          TEXT NOT NULL CHECK (kind IN ('checking','savings','credit_card','cash')),
+  -- On budget: its spending counts toward the month's plan. Off budget (a loan
+  -- paid elsewhere, a shared account) it is still listed and still has a balance.
+  on_budget     INTEGER NOT NULL DEFAULT 1 CHECK (on_budget IN (0,1)),
+  -- Where the account stood on `opening_on`, SIGNED (a card owes: negative).
+  -- The balance on any day is this plus the posted rows after `opening_on`,
+  -- derived at read time; an account with no opening date counts every row.
+  opening_minor INTEGER NOT NULL DEFAULT 0,
+  opening_on    TEXT CHECK (opening_on IS NULL
+                            OR opening_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  -- A closed account keeps every row and stays readable; it leaves the lists a
+  -- member picks from. A day, not an instant: the member says which day.
+  closed_on     TEXT CHECK (closed_on IS NULL
+                            OR closed_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version   INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
+) STRICT;
+
+-- table money_balance_checkpoint on money_balance_checkpoint
+CREATE TABLE money_balance_checkpoint (
+  account_id      TEXT NOT NULL REFERENCES core_account(account_id) ON DELETE CASCADE,
+  as_of           TEXT NOT NULL CHECK (as_of GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  source          TEXT NOT NULL CHECK (source IN ('ofx','csv','member')),
+  -- SIGNED, in the account's currency.
+  balance_minor   INTEGER NOT NULL,
+  currency        TEXT NOT NULL CHECK (length(currency) = 3),
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version     INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  PRIMARY KEY (account_id, as_of, source)
+) STRICT;
+
+-- table money_import_profile on money_import_profile
+CREATE TABLE money_import_profile (
+  account_id         TEXT NOT NULL REFERENCES core_account(account_id) ON DELETE CASCADE,
+  -- A digest of the file's header row: the same bank's export finds its mapping.
+  header_fingerprint TEXT NOT NULL CHECK (length(header_fingerprint) > 0),
+  delimiter          TEXT NOT NULL CHECK (length(delimiter) = 1),
+  skip_lines         INTEGER NOT NULL DEFAULT 0 CHECK (skip_lines >= 0),
+  date_order         TEXT NOT NULL CHECK (date_order IN ('mdy','dmy','ymd')),
+  -- How the amount's sign is read: one signed column; a debit and a credit
+  -- column; an amount plus an indicator column naming which rows go out; or one
+  -- signed column whose sign is reversed (a card statement that lists charges as
+  -- positive).
+  sign_mode          TEXT NOT NULL CHECK (sign_mode IN ('signed','debit_credit','indicator','flip')),
+  date_col           INTEGER NOT NULL CHECK (date_col >= 0),
+  amount_col         INTEGER CHECK (amount_col IS NULL OR amount_col >= 0),
+  debit_col          INTEGER CHECK (debit_col IS NULL OR debit_col >= 0),
+  credit_col         INTEGER CHECK (credit_col IS NULL OR credit_col >= 0),
+  desc_col           INTEGER NOT NULL CHECK (desc_col >= 0),
+  memo_col           INTEGER CHECK (memo_col IS NULL OR memo_col >= 0),
+  indicator_col      INTEGER CHECK (indicator_col IS NULL OR indicator_col >= 0),
+  -- The indicator word that means money going OUT ("DR", "Debit", "D").
+  indicator_out_value TEXT,
+  created_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version        INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  PRIMARY KEY (account_id, header_fingerprint),
+  CHECK (sign_mode <> 'debit_credit' OR (debit_col IS NOT NULL AND credit_col IS NOT NULL)),
+  CHECK (sign_mode = 'debit_credit' OR amount_col IS NOT NULL),
+  CHECK (sign_mode <> 'indicator'
+         OR (indicator_col IS NOT NULL AND indicator_out_value IS NOT NULL))
+) STRICT;
+
+-- table money_rule on money_rule
+CREATE TABLE money_rule (
+  rule_id                 TEXT PRIMARY KEY,
+  match_kind              TEXT NOT NULL CHECK (match_kind IN ('is','contains','matches')),
+  pattern                 TEXT NOT NULL CHECK (length(trim(pattern)) > 0),
+  -- Inclusive bounds on the MAGNITUDE (`core_transaction.amount_minor`, > 0);
+  -- either may be absent.
+  amount_min_minor        INTEGER CHECK (amount_min_minor IS NULL OR amount_min_minor >= 0),
+  amount_max_minor        INTEGER CHECK (amount_max_minor IS NULL OR amount_max_minor >= 0),
+  account_id              TEXT REFERENCES core_account(account_id) ON DELETE CASCADE,
+  set_category_concept_id TEXT REFERENCES core_concept(concept_id),
+  set_display_name        TEXT CHECK (set_display_name IS NULL OR length(trim(set_display_name)) > 0),
+  position                INTEGER NOT NULL DEFAULT 0 CHECK (position >= 0),
+  created_at              TEXT NOT NULL,
+  updated_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version             INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  CHECK (amount_min_minor IS NULL OR amount_max_minor IS NULL
+         OR amount_min_minor <= amount_max_minor),
+  -- A rule that does nothing is not a rule.
+  CHECK (set_category_concept_id IS NOT NULL OR set_display_name IS NOT NULL),
+  FOREIGN KEY (rule_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
+) STRICT;
+
+-- table money_target on money_target
+CREATE TABLE money_target (
+  -- `YYYY-MM`: the civil month the plan is for (R-1099-2).
+  month               TEXT NOT NULL CHECK (month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),
+  category_concept_id TEXT NOT NULL REFERENCES core_concept(concept_id) ON DELETE CASCADE,
+  amount_minor        INTEGER NOT NULL CHECK (amount_minor >= 0),
+  currency            TEXT NOT NULL CHECK (length(currency) = 3),
+  -- Roll the month's unspent (or overspent) amount into the next month's.
+  carry               INTEGER NOT NULL DEFAULT 0 CHECK (carry IN (0,1)),
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version         INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  PRIMARY KEY (month, category_concept_id)
+) STRICT;
+
+-- table money_transaction on money_transaction
+CREATE TABLE money_transaction (
+  txn_id              TEXT PRIMARY KEY REFERENCES core_transaction(txn_id) ON DELETE CASCADE,
+  -- What the member (or a rule, for them) calls this line. The bank's words stay
+  -- in `core_transaction.description`, exactly as written. Both or neither.
+  display_name        TEXT CHECK (display_name IS NULL OR length(trim(display_name)) > 0),
+  display_name_source TEXT CHECK (display_name_source IN ('rule','member')),
+  memo                TEXT,
+  check_number        TEXT,
+  -- OFX `TRNTYPE` or the CSV's own Type column, as the bank wrote it.
+  bank_type           TEXT,
+  imported_from       TEXT NOT NULL CHECK (imported_from IN ('csv','ofx')),
+  imported_at         TEXT NOT NULL,
+  updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version         INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  CHECK ((display_name IS NULL) = (display_name_source IS NULL))
+) STRICT;
+
 -- table people_important_date on people_important_date
 CREATE TABLE people_important_date (
   date_id     TEXT PRIMARY KEY,
@@ -3750,6 +3895,24 @@ BEGIN
    WHERE tag_id = NEW.tag_id;
 END;
 
+-- trigger core_transaction_currency_matches_money_account_ai on core_transaction
+CREATE TRIGGER core_transaction_currency_matches_money_account_ai
+BEFORE INSERT ON core_transaction
+WHEN EXISTS (SELECT 1 FROM money_account WHERE account_id = NEW.account_id)
+BEGIN
+  SELECT RAISE(ABORT, 'transaction currency must match its Money account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
+-- trigger core_transaction_currency_matches_money_account_au on core_transaction
+CREATE TRIGGER core_transaction_currency_matches_money_account_au
+BEFORE UPDATE OF account_id, currency ON core_transaction
+WHEN EXISTS (SELECT 1 FROM money_account WHERE account_id = NEW.account_id)
+BEGIN
+  SELECT RAISE(ABORT, 'transaction currency must match its Money account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
 -- trigger core_transaction_entity_delete on core_transaction
 CREATE TRIGGER core_transaction_entity_delete
 AFTER DELETE ON core_transaction
@@ -3767,6 +3930,27 @@ BEGIN
       WHERE entity_id = NEW.txn_id AND entity_type <> 'core.transaction');
   INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
   VALUES (NEW.txn_id, 'core.transaction', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger core_transaction_money_rows_are_fixed on core_transaction
+CREATE TRIGGER core_transaction_money_rows_are_fixed
+BEFORE UPDATE ON core_transaction
+WHEN EXISTS (SELECT 1 FROM money_account WHERE account_id = OLD.account_id)
+BEGIN
+  SELECT RAISE(ABORT, 'a Money transaction is never edited after import: only its category and its void status move (#1099)')
+   WHERE NEW.txn_id IS NOT OLD.txn_id
+      OR NEW.account_id IS NOT OLD.account_id
+      OR NEW.posted_at IS NOT OLD.posted_at
+      OR NEW.amount_minor IS NOT OLD.amount_minor
+      OR NEW.currency IS NOT OLD.currency
+      OR NEW.direction IS NOT OLD.direction
+      OR NEW.transfer_group_id IS NOT OLD.transfer_group_id
+      OR NEW.counterparty_party_id IS NOT OLD.counterparty_party_id
+      OR NEW.description IS NOT OLD.description
+      OR NEW.external_id IS NOT OLD.external_id
+      OR NEW.created_at IS NOT OLD.created_at
+      OR (NEW.status IS NOT OLD.status AND NEW.status <> 'void')
+      OR (OLD.status = 'void' AND NEW.status <> 'void');
 END;
 
 -- trigger core_transaction_touch_updated_at on core_transaction
@@ -5473,6 +5657,119 @@ BEGIN
       WHERE entity_id = NEW.memory_id AND entity_type <> 'media.memory');
   INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
   VALUES (NEW.memory_id, 'media.memory', COALESCE(NEW.computed_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger money_account_touch_updated_at on money_account
+CREATE TRIGGER money_account_touch_updated_at
+AFTER UPDATE ON money_account
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_account
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE account_id = NEW.account_id;
+END;
+
+-- trigger money_balance_checkpoint_currency_matches_account_ai on money_balance_checkpoint
+CREATE TRIGGER money_balance_checkpoint_currency_matches_account_ai
+BEFORE INSERT ON money_balance_checkpoint
+BEGIN
+  SELECT RAISE(ABORT, 'checkpoint currency must match its account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
+-- trigger money_balance_checkpoint_currency_matches_account_au on money_balance_checkpoint
+CREATE TRIGGER money_balance_checkpoint_currency_matches_account_au
+BEFORE UPDATE OF account_id, currency ON money_balance_checkpoint
+BEGIN
+  SELECT RAISE(ABORT, 'checkpoint currency must match its account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
+-- trigger money_balance_checkpoint_touch_updated_at on money_balance_checkpoint
+CREATE TRIGGER money_balance_checkpoint_touch_updated_at
+AFTER UPDATE ON money_balance_checkpoint
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_balance_checkpoint
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE account_id = NEW.account_id AND as_of = NEW.as_of AND source = NEW.source;
+END;
+
+-- trigger money_import_profile_touch_updated_at on money_import_profile
+CREATE TRIGGER money_import_profile_touch_updated_at
+AFTER UPDATE ON money_import_profile
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_import_profile
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE account_id = NEW.account_id AND header_fingerprint = NEW.header_fingerprint;
+END;
+
+-- trigger money_rule_entity_delete on money_rule
+CREATE TRIGGER money_rule_entity_delete
+AFTER DELETE ON money_rule
+BEGIN
+  DELETE FROM core_entity WHERE entity_id = OLD.rule_id;
+END;
+
+-- trigger money_rule_entity_insert on money_rule
+CREATE TRIGGER money_rule_entity_insert
+BEFORE INSERT ON money_rule
+BEGIN
+  SELECT RAISE(ABORT, 'entity id is already held by another kind: money_rule (#916)')
+   WHERE EXISTS (
+     SELECT 1 FROM core_entity
+      WHERE entity_id = NEW.rule_id AND entity_type <> 'money.rule');
+  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
+  VALUES (NEW.rule_id, 'money.rule', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger money_rule_touch_updated_at on money_rule
+CREATE TRIGGER money_rule_touch_updated_at
+AFTER UPDATE ON money_rule
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_rule
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE rule_id = NEW.rule_id;
+END;
+
+-- trigger money_target_touch_updated_at on money_target
+CREATE TRIGGER money_target_touch_updated_at
+AFTER UPDATE ON money_target
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_target
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE month = NEW.month AND category_concept_id = NEW.category_concept_id;
+END;
+
+-- trigger money_transaction_touch_updated_at on money_transaction
+CREATE TRIGGER money_transaction_touch_updated_at
+AFTER UPDATE ON money_transaction
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_transaction
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE txn_id = NEW.txn_id;
 END;
 
 -- trigger people_important_date_entity_delete on people_important_date

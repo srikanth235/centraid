@@ -31,8 +31,9 @@ const RETIRED_IN_CORPUS: &[&str] = &["replica_change"];
 /// Entity tables a rung ABOVE the corpus founds. The subject of this file is the
 /// frozen v0 corpus, so a table the v1 ladder added is in the registry and not
 /// in the file by construction; it is held at the ladder head instead, against a
-/// founded vault (`crates/vault/tests/chat_schema.rs`, rung eleven's chat).
-const ADDED_AFTER_THE_CORPUS: &[&str] = &["chat_thread"];
+/// founded vault (`crates/vault/tests/chat_schema.rs`, rung eleven's chat;
+/// `crates/vault/tests/money_schema.rs`, rung fourteen's `money_rule`).
+const ADDED_AFTER_THE_CORPUS: &[&str] = &["chat_thread", "money_rule"];
 
 fn golden_vault() -> (centraid_ontology::golden::InflatedGolden, Vault) {
     let golden = open_golden().expect("the corpus inflates");

@@ -47,6 +47,14 @@ const SEED_RELATIONS: &[(&str, &str)] = &[
     ("distinct-from", "Distinct from"),
 ];
 
+/// THE `transfer` RELATION (#1099, R-1099-15): two `core.transaction`s that are the two halves
+/// of one movement of the member's own money. Seeded beside the others, but under a FIXED id and
+/// outside the loop above, for two reasons: rung fourteen gives a vault that already has the
+/// relations scheme the same row under the same id, so a vault founded at the head and one
+/// climbed from rung thirteen hold identical rows; and a fixed id draws nothing from the id
+/// source, so adding it moves no id a seeded vault mints afterwards.
+const TRANSFER_RELATION: (&str, &str, &str) = ("money:relation:transfer", "transfer", "Transfer");
+
 /// Seed the relations scheme and its notations. Idempotent over an existing
 /// scheme, so re-founding a restored file adds nothing.
 /// THE DEFAULT CALENDAR, WITHOUT WHICH AGENDA CANNOT BE USED AT ALL.
@@ -125,6 +133,14 @@ fn seed_relation_vocabulary(
             rusqlite::params![ids.next(), scheme_id, notation, label, now],
         )?;
     }
+    let (concept_id, notation, label) = TRANSFER_RELATION;
+    connection.execute(
+        "INSERT INTO core_concept
+           (concept_id, scheme_id, notation, pref_label, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+         ON CONFLICT (scheme_id, notation) DO NOTHING",
+        rusqlite::params![concept_id, scheme_id, notation, label, now],
+    )?;
     Ok(())
 }
 
