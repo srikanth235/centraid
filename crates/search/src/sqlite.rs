@@ -54,6 +54,9 @@ use centraid_ontology::jsvalue::js_number_to_string;
 use centraid_ontology::registries::sealed_physical_columns;
 use rusqlite::Connection;
 
+use crate::containers::{
+    CONTAINERS, Container, Guard, Opens, assert_no_sealed_container_column, container_of,
+};
 use crate::domains::{
     Domain, INDEX_LABELLED, PREVIEW_CHARS, PREVIEW_FROM_TEXT, assert_no_sealed_column, domain_of,
     folded_columns,
@@ -71,7 +74,9 @@ pub struct SqliteDoor<'connection> {
 impl<'connection> SqliteDoor<'connection> {
     /// Open the door over a connection, checking the model it is about to read.
     ///
-    /// Four checks, all at open and none at query time — a door that checks
+    /// Four checks over the domains, and the first three again over the
+    /// containers ([`crate::containers::CONTAINERS`], which fold nothing), all at
+    /// open and none at query time — a door that checks
     /// per call is a door someone can be talked into skipping a check on:
     ///
     /// 1. no domain PROJECTS a sealed column, and no fold is read from one
@@ -97,9 +102,13 @@ impl<'connection> SqliteDoor<'connection> {
     /// table's nor listed, or its column count is not its weights' length.
     pub fn open(connection: &'connection Connection) -> Result<Self, SearchError> {
         assert_no_sealed_column()?;
+        assert_no_sealed_container_column()?;
         let sealed = sealed_physical_columns();
+        for container in CONTAINERS {
+            check_container(connection, container, &sealed)?;
+        }
         for domain in DOMAINS {
-            let columns = index_columns(connection, domain)?;
+            let columns = index_columns(connection, domain.entity, domain.fts)?;
             for column in &columns {
                 if sealed
                     .iter()
@@ -112,7 +121,7 @@ impl<'connection> SqliteDoor<'connection> {
                     });
                 }
             }
-            let base = base_columns(connection, domain)?;
+            let base = base_columns(connection, domain.table)?;
             if let Some(unlisted) = columns.iter().find(|column| {
                 !base.contains(column)
                     && !folded_columns(domain.entity).any(|folded| folded.column == column.as_str())
@@ -153,33 +162,85 @@ impl<'connection> SqliteDoor<'connection> {
     }
 }
 
-/// The columns the domain's base table has.
-fn base_columns(connection: &Connection, domain: &Domain) -> Result<Vec<String>, SearchError> {
+/// The open-time checks for one container: its index is in the file, carries no
+/// sealed column, carries only the base table's own columns (a container folds
+/// nothing in), and is weighed column for column.
+fn check_container(
+    connection: &Connection,
+    container: &Container,
+    sealed: &[(String, String)],
+) -> Result<(), SearchError> {
+    let columns = index_columns(connection, container.entity, container.fts)?;
+    for column in &columns {
+        if sealed
+            .iter()
+            .any(|(table, name)| table == container.table && name == column)
+        {
+            return Err(SearchError::SealedColumnReachable {
+                entity: container.entity.to_owned(),
+                table: container.table.to_owned(),
+                column: column.clone(),
+            });
+        }
+    }
+    let base = base_columns(connection, container.table)?;
+    if let Some(unlisted) = columns.iter().find(|column| !base.contains(column)) {
+        return Err(SearchError::IndexUnusable {
+            entity: container.entity.to_owned(),
+            detail: format!(
+                "`{fts}` carries `{unlisted}`, which is not a column of `{table}`; a container \
+                 folds nothing in (#1097)",
+                fts = container.fts,
+                table = container.table,
+            ),
+        });
+    }
+    if container.weights.len() != columns.len() {
+        return Err(SearchError::IndexUnusable {
+            entity: container.entity.to_owned(),
+            detail: format!(
+                "`{fts}` has {live} columns and `containers::CONTAINERS` weighs {listed}; \
+                 one weight per index column, in the index's order (#1097)",
+                fts = container.fts,
+                live = columns.len(),
+                listed = container.weights.len(),
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// The columns a base table has.
+fn base_columns(connection: &Connection, table: &str) -> Result<Vec<String>, SearchError> {
     let mut statement = connection
         .prepare("SELECT name FROM pragma_table_info(?1)")
         .map_err(|error| SearchError::Sqlite(error.to_string()))?;
     let names = statement
-        .query_map([domain.table], |row| row.get::<_, String>(0))
+        .query_map([table], |row| row.get::<_, String>(0))
         .map_err(|error| SearchError::Sqlite(error.to_string()))?
         .collect::<Result<Vec<String>, rusqlite::Error>>()
         .map_err(|error| SearchError::Sqlite(error.to_string()))?;
     Ok(names)
 }
 
-/// The live column names of a domain's shadow table.
-fn index_columns(connection: &Connection, domain: &Domain) -> Result<Vec<String>, SearchError> {
+/// The live column names of an index (a domain's or a container's).
+fn index_columns(
+    connection: &Connection,
+    entity: &str,
+    fts: &str,
+) -> Result<Vec<String>, SearchError> {
     let mut statement = connection
         .prepare("SELECT name FROM pragma_table_info(?1) ORDER BY cid")
         .map_err(|error| SearchError::Sqlite(error.to_string()))?;
     let names: Vec<String> = statement
-        .query_map([domain.fts], |row| row.get::<_, String>(0))
+        .query_map([fts], |row| row.get::<_, String>(0))
         .map_err(|error| SearchError::Sqlite(error.to_string()))?
         .collect::<Result<Vec<String>, rusqlite::Error>>()
         .map_err(|error| SearchError::Sqlite(error.to_string()))?;
     if names.is_empty() {
         return Err(SearchError::IndexUnusable {
-            entity: domain.entity.to_owned(),
-            detail: format!("`{}` is not a table in this vault", domain.fts),
+            entity: entity.to_owned(),
+            detail: format!("`{fts}` is not a table in this vault"),
         });
     }
     Ok(names)
@@ -242,9 +303,31 @@ fn coalesce_columns(columns: &[&str]) -> String {
 /// in one domain and a prefix of the alphabet's busiest letters in a bigger one.
 pub const MAX_VOCAB_SCAN: usize = 8_192;
 
-/// The vocabulary table of a domain's index (`fts_<index>_vocab`, rung thirteen).
-fn vocabulary_of(domain: &Domain) -> String {
-    format!("{}_vocab", domain.fts)
+/// An index a correction reads the vocabulary of: a domain's or a container's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Indexed {
+    entity: &'static str,
+    fts: &'static str,
+}
+
+/// The index a logical entity names, among the domains and then the containers.
+fn index_of(entity: &str) -> Option<Indexed> {
+    domain_of(entity)
+        .map(|domain| Indexed {
+            entity: domain.entity,
+            fts: domain.fts,
+        })
+        .or_else(|| {
+            container_of(entity).map(|container| Indexed {
+                entity: container.entity,
+                fts: container.fts,
+            })
+        })
+}
+
+/// The vocabulary table of an index (`fts_<index>_vocab`, rung thirteen).
+fn vocabulary_of(index: &Indexed) -> String {
+    format!("{}_vocab", index.fts)
 }
 
 /// The smallest string greater than every string that starts with `prefix`: the
@@ -272,31 +355,31 @@ fn prefix_end(prefix: &str) -> Option<String> {
 }
 
 impl SqliteDoor<'_> {
-    /// Whether any term of the domain starts with `word` — a prefix probe that
+    /// Whether any term of the index starts with `word` — a prefix probe that
     /// stops at the first.
-    fn holds(&self, domain: &Domain, word: &str) -> Result<bool, SearchError> {
+    fn holds(&self, index: &Indexed, word: &str) -> Result<bool, SearchError> {
         let Some(end) = prefix_end(word) else {
             return Ok(false);
         };
-        let vocabulary = vocabulary_of(domain);
+        let vocabulary = vocabulary_of(index);
         let mut statement = self
             .connection
             .prepare_cached(&format!(
                 "SELECT 1 FROM {vocabulary} WHERE term >= ?1 AND term < ?2 LIMIT 1"
             ))
-            .map_err(|error| unusable_vocabulary(domain, &vocabulary, &error))?;
+            .map_err(|error| unusable_vocabulary(index, &vocabulary, &error))?;
         statement
             .exists(rusqlite::params![word, end])
             .map_err(|error| SearchError::Sqlite(error.to_string()))
     }
 
-    /// Up to `limit` terms of the domain that start with `prefix`, in term order,
+    /// Up to `limit` terms of the index that start with `prefix`, in term order,
     /// each with the number of documents it is in. A term more than one letter
     /// shorter than the word cannot have a prefix one edit from it, so it is not
     /// kept.
     fn terms_under(
         &self,
-        domain: &Domain,
+        index: &Indexed,
         prefix: &str,
         shortest: usize,
         limit: usize,
@@ -305,7 +388,7 @@ impl SqliteDoor<'_> {
         let Some(end) = prefix_end(prefix) else {
             return Ok(0);
         };
-        let vocabulary = vocabulary_of(domain);
+        let vocabulary = vocabulary_of(index);
         let mut statement = self
             .connection
             .prepare_cached(&format!(
@@ -313,7 +396,7 @@ impl SqliteDoor<'_> {
                   WHERE term >= ?1 AND term < ?2
                   ORDER BY term LIMIT ?3"
             ))
-            .map_err(|error| unusable_vocabulary(domain, &vocabulary, &error))?;
+            .map_err(|error| unusable_vocabulary(index, &vocabulary, &error))?;
         let rows = statement
             .query_map(
                 rusqlite::params![prefix, end, i64::try_from(limit).unwrap_or(i64::MAX)],
@@ -331,12 +414,12 @@ impl SqliteDoor<'_> {
         Ok(read)
     }
 
-    /// The terms a correction of `word` may land on, from one domain: the terms
+    /// The terms a correction of `word` may land on, from one index: the terms
     /// that start with the word's first letter, and those that start with its
     /// first two letters swapped — **at most [`MAX_VOCAB_SCAN`] rows in all**.
     fn neighbours(
         &self,
-        domain: &Domain,
+        index: &Indexed,
         word: &str,
         into: &mut Vec<(String, u64)>,
     ) -> Result<(), SearchError> {
@@ -349,10 +432,10 @@ impl SqliteDoor<'_> {
         let mut allowance = MAX_VOCAB_SCAN;
         if second != first {
             let swapped: String = [second, first].iter().collect();
-            allowance -= self.terms_under(domain, &swapped, shortest, allowance, into)?;
+            allowance -= self.terms_under(index, &swapped, shortest, allowance, into)?;
         }
         if allowance > 0 {
-            self.terms_under(domain, &first.to_string(), shortest, allowance, into)?;
+            self.terms_under(index, &first.to_string(), shortest, allowance, into)?;
         }
         Ok(())
     }
@@ -360,18 +443,64 @@ impl SqliteDoor<'_> {
 
 /// A vocabulary table the file does not have, or cannot read: a vault older than
 /// rung thirteen, said as the unusable index it is.
-fn unusable_vocabulary(domain: &Domain, vocabulary: &str, error: &rusqlite::Error) -> SearchError {
+fn unusable_vocabulary(index: &Indexed, vocabulary: &str, error: &rusqlite::Error) -> SearchError {
     SearchError::IndexUnusable {
-        entity: domain.entity.to_owned(),
+        entity: index.entity.to_owned(),
         detail: format!(
-            "`{vocabulary}` is not usable: {error} (rung thirteen creates the vocabulary of each domain)"
+            "`{vocabulary}` is not usable: {error} (rung thirteen creates the vocabulary of each domain and each container)"
         ),
     }
 }
 
+/// What one MATCH statement is built from: a domain's or a container's index,
+/// with the expressions that read its row. ONE statement shape serves both
+/// registries, so the two cannot drift apart.
+struct Probe {
+    entity: &'static str,
+    fts: &'static str,
+    table: &'static str,
+    id_column: &'static str,
+    title: String,
+    subtitle: String,
+    rank_function: String,
+    deleted_column: Option<&'static str>,
+    guards: &'static [Guard],
+    opens: Opens,
+}
+
+/// The probe a logical entity names: a domain first, then a container.
+fn probe_of(entity: &str) -> Option<Probe> {
+    if let Some(domain) = domain_of(entity) {
+        return Some(Probe {
+            entity: domain.entity,
+            fts: domain.fts,
+            table: domain.table,
+            id_column: domain.id_column,
+            title: title_expression(domain),
+            subtitle: subtitle_expression(domain),
+            rank_function: domain.rank_function(),
+            deleted_column: domain.deleted_column,
+            guards: &[],
+            opens: Opens::App(domain.app_id),
+        });
+    }
+    container_of(entity).map(|container| Probe {
+        entity: container.entity,
+        fts: container.fts,
+        table: container.table,
+        id_column: container.id_column,
+        title: coalesce_columns(container.labels),
+        subtitle: "''".to_owned(),
+        rank_function: container.rank_function(),
+        deleted_column: container.deleted_column,
+        guards: container.guards,
+        opens: container.opens,
+    })
+}
+
 impl Search for SqliteDoor<'_> {
     fn query(&self, principal: &Principal, request: &SearchRequest) -> Result<Answer, SearchError> {
-        let domain = domain_of(&request.entity).ok_or_else(|| SearchError::NotADomain {
+        let probe = probe_of(&request.entity).ok_or_else(|| SearchError::NotADomain {
             entity: request.entity.clone(),
             count: DOMAINS.len(),
         })?;
@@ -385,20 +514,57 @@ impl Search for SqliteDoor<'_> {
             limit: window,
             after: request.page.after.clone(),
         };
-        let probe = probe_limit(&clamped)?;
+        let probe_rows = probe_limit(&clamped)?;
 
-        let title = title_expression(domain);
+        // NARROWED TO ONE APP: the kinds of the base row that open there. An
+        // entity that opens in no such app answers an empty page, not a refusal.
+        let kinds: Option<Vec<&'static str>> = match (&request.app, probe.opens) {
+            (None, _) => None,
+            (Some(app), Opens::App(only)) => (only != app.as_str()).then(Vec::new),
+            (Some(app), Opens::ByKind { apps, .. }) => Some(
+                apps.iter()
+                    .filter(|(_, opens_in)| *opens_in == app.as_str())
+                    .map(|(value, _)| *value)
+                    .collect(),
+            ),
+        };
+        if kinds.as_ref().is_some_and(Vec::is_empty) {
+            return Ok(Answer::Data {
+                page: Page {
+                    rows: Vec::new(),
+                    next: None,
+                },
+                window,
+            });
+        }
+
         // THE WEIGHTS RIDE WITH THE QUERY (#1097, R1d). FTS5's rank override is a
         // second MATCH on the hidden `rank` column, so `ORDER BY {fts}.rank` and
         // the keyset below read the weighted score, and a vault built by
         // replaying the DDL ranks as a founded one does: the weights are not
         // data in the index.
         let mut predicates: Vec<String> = vec![
-            format!("{fts} MATCH ?1", fts = domain.fts),
-            format!("{fts}.rank MATCH ?", fts = domain.fts),
+            format!("{fts} MATCH ?1", fts = probe.fts),
+            format!("{fts}.rank MATCH ?", fts = probe.fts),
         ];
-        if let Some(deleted) = domain.deleted_column {
+        if let Some(deleted) = probe.deleted_column {
             predicates.push(format!("b.\"{deleted}\" IS NULL"));
+        }
+        // A CONTAINER IS LIVE BY MORE THAN A FLAG: a Tally group is a circle a
+        // live group stands on, a folder a concept of the folders scheme that is
+        // not the root. The triggers keep the index to such rows; this is the
+        // door's belt to them.
+        for guard in probe.guards {
+            predicates.push(format!("({})", guard.sql));
+        }
+        // A KIND OF ROW NOBODY LISTED OPENS NOWHERE, and a narrowed query keeps
+        // the kinds that open in its app.
+        if let Opens::ByKind { column, apps } = probe.opens {
+            let listed: Vec<&str> = kinds
+                .clone()
+                .unwrap_or_else(|| apps.iter().map(|(value, _)| *value).collect());
+            let placeholders = vec!["?"; listed.len()].join(", ");
+            predicates.push(format!("b.\"{column}\" IN ({placeholders})"));
         }
         // A ROW WITH NO LABEL IS NOT A TARGET (`link-targets-table.ts:86`-`:88`),
         // and an excluded id is the caller's own contract — Notes' journal set
@@ -407,16 +573,26 @@ impl Search for SqliteDoor<'_> {
         // and dropping rows after that row was counted makes `next` claim a
         // continuation the caller cannot use, or withhold one it is owed. A
         // fixture with one unlabelled note is what found that.
-        predicates.push(format!("{title} <> ''"));
+        predicates.push(format!("{title} <> ''", title = probe.title));
         let mut binds: Vec<rusqlite::types::Value> = vec![
             rusqlite::types::Value::Text(expression.clone()),
-            rusqlite::types::Value::Text(domain.rank_function()),
+            rusqlite::types::Value::Text(probe.rank_function.clone()),
         ];
+        if let Opens::ByKind { apps, .. } = probe.opens {
+            let listed: Vec<&str> = kinds
+                .clone()
+                .unwrap_or_else(|| apps.iter().map(|(value, _)| *value).collect());
+            binds.extend(
+                listed
+                    .into_iter()
+                    .map(|value| rusqlite::types::Value::Text(value.to_owned())),
+            );
+        }
         if !request.excluded_ids.is_empty() {
             let placeholders = vec!["?"; request.excluded_ids.len()].join(", ");
             predicates.push(format!(
                 "b.\"{pk}\" NOT IN ({placeholders})",
-                pk = domain.id_column
+                pk = probe.id_column
             ));
             binds.extend(
                 request
@@ -434,30 +610,36 @@ impl Search for SqliteDoor<'_> {
             })?;
             predicates.push(format!(
                 "({fts}.rank, b.\"{pk}\") > (?, ?)",
-                fts = domain.fts,
-                pk = domain.id_column
+                fts = probe.fts,
+                pk = probe.id_column
             ));
             binds.push(rusqlite::types::Value::Real(rank));
             binds.push(rusqlite::types::Value::Text(after.pk.clone()));
         }
         binds.push(rusqlite::types::Value::Integer(
-            i64::try_from(probe).unwrap_or(i64::MAX),
+            i64::try_from(probe_rows).unwrap_or(i64::MAX),
         ));
 
+        let kind_select = match probe.opens {
+            Opens::ByKind { column, .. } => format!("b.\"{column}\""),
+            Opens::App(_) => "''".to_owned(),
+        };
         let sql = format!(
             "SELECT b.\"{pk}\" AS id,
                     {title} AS title,
                     {subtitle} AS subtitle,
                     COALESCE(snippet({fts}, -1, '⟦', '⟧', '…', 12), '') AS snippet,
-                    {fts}.rank AS rank
+                    {fts}.rank AS rank,
+                    {kind_select} AS kind
                FROM {fts} JOIN \"{base}\" b ON b.\"{pk}\" = {fts}.\"{pk}\"
               WHERE {predicate}
               ORDER BY {fts}.rank, b.\"{pk}\"
               LIMIT ?",
-            pk = domain.id_column,
-            base = domain.table,
-            fts = domain.fts,
-            subtitle = subtitle_expression(domain),
+            pk = probe.id_column,
+            title = probe.title,
+            base = probe.table,
+            fts = probe.fts,
+            subtitle = probe.subtitle,
             predicate = predicates.join(" AND "),
         );
 
@@ -465,7 +647,7 @@ impl Search for SqliteDoor<'_> {
             self.connection
                 .prepare(&sql)
                 .map_err(|error| SearchError::IndexUnusable {
-                    entity: domain.entity.to_owned(),
+                    entity: probe.entity.to_owned(),
                     detail: error.to_string(),
                 })?;
         let fetched: Vec<(Target, f64)> = statement
@@ -475,27 +657,36 @@ impl Search for SqliteDoor<'_> {
                 let subtitle: String = row.get("subtitle")?;
                 let snippet: String = row.get("snippet")?;
                 let rank: f64 = row.get("rank")?;
-                Ok((
+                let kind: String = row.get("kind")?;
+                Ok((id, title, subtitle, snippet, rank, kind))
+            })
+            .map_err(|error| SearchError::Sqlite(error.to_string()))?
+            .collect::<Result<Vec<_>, rusqlite::Error>>()
+            .map_err(|error| SearchError::Sqlite(error.to_string()))?
+            .into_iter()
+            .filter_map(|(id, title, subtitle, snippet, rank, kind)| {
+                // The app comes from the entity, or from the row's kind where
+                // one index serves two apps. A kind nobody listed is no target.
+                let app_id = probe.opens.app_of(&kind)?;
+                Some((
                     Target {
-                        entity: domain.entity.to_owned(),
+                        entity: probe.entity.to_owned(),
                         id,
                         title,
                         // v0's `first(row, subtitles) || app`: never empty, so a
                         // surface has nothing to guess.
                         subtitle: if subtitle.trim().is_empty() {
-                            domain.app_id.to_owned()
+                            app_id.to_owned()
                         } else {
                             subtitle
                         },
-                        app_id: domain.app_id.to_owned(),
+                        app_id: app_id.to_owned(),
                         snippet,
                     },
                     rank,
                 ))
             })
-            .map_err(|error| SearchError::Sqlite(error.to_string()))?
-            .collect::<Result<Vec<(Target, f64)>, rusqlite::Error>>()
-            .map_err(|error| SearchError::Sqlite(error.to_string()))?;
+            .collect();
 
         let page = page_of(fetched, &clamped, |(target, rank)| {
             Ok(PageCursor {
@@ -517,23 +708,23 @@ impl Search for SqliteDoor<'_> {
     /// `entities` do not hold, replaced by the words they do. `None` when no word
     /// changed.
     ///
-    /// Every entity must be one of the seven domains, exactly as in `query`: the
-    /// vocabulary of a domain is its index's, and Locker has an index and no
-    /// vocabulary, so a secret has no term a correction could offer.
+    /// Every entity must be one of the seven domains or one of the containers,
+    /// exactly as in `query`: the vocabulary of either is its index's, and Locker
+    /// has neither, so a secret has no term a correction could offer.
     fn correct(
         &self,
         principal: &Principal,
         entities: &[&str],
         query: &str,
     ) -> Result<Option<String>, SearchError> {
-        let mut domains: Vec<&Domain> = Vec::new();
+        let mut domains: Vec<Indexed> = Vec::new();
         for entity in entities {
-            let domain = domain_of(entity).ok_or_else(|| SearchError::NotADomain {
+            let index = index_of(entity).ok_or_else(|| SearchError::NotADomain {
                 entity: (*entity).to_owned(),
                 count: DOMAINS.len(),
             })?;
-            if !domains.contains(&domain) {
-                domains.push(domain);
+            if !domains.contains(&index) {
+                domains.push(index);
             }
         }
         let _ = principal;
@@ -687,6 +878,36 @@ mod tests {
                 ))
                 .expect("an index is created");
         }
+        // The containers: a base table with the id, the label and the columns
+        // the door tests, and an index of the id and the label.
+        for container in CONTAINERS {
+            let mut base: Vec<&str> = container.projected_columns();
+            base.sort_unstable();
+            base.dedup();
+            connection
+                .execute_batch(&format!(
+                    "CREATE TABLE {}({});",
+                    container.table,
+                    base.join(", ")
+                ))
+                .expect("a container table is created");
+            let mut index = vec![
+                format!("{} UNINDEXED", container.id_column),
+                container.labels[0].to_owned(),
+            ];
+            if let Some((entity, column)) = extra
+                && entity == container.entity
+            {
+                index.push(column.to_owned());
+            }
+            connection
+                .execute_batch(&format!(
+                    "CREATE VIRTUAL TABLE {} USING fts5({});",
+                    container.fts,
+                    index.join(", ")
+                ))
+                .expect("a container index is created");
+        }
         connection
     }
 
@@ -743,6 +964,43 @@ mod tests {
             }
             other => panic!(
                 "the door opened over an index the weights do not cover: {:?}",
+                other.map(|_| ())
+            ),
+        }
+    }
+
+    /// A DEMONSTRATED RED for the containers' open-time checks: an index column
+    /// the base table lacks (a container folds nothing in), and a weight list of
+    /// the wrong length, are refusals.
+    #[test]
+    fn a_container_index_with_a_column_the_table_lacks_fails_to_open() {
+        let connection = model(Some(("core.collection", "stray_notes")), None);
+        match SqliteDoor::open(&connection) {
+            Err(SearchError::IndexUnusable { entity, detail }) => {
+                assert_eq!(entity, "core.collection");
+                assert!(detail.contains("stray_notes"), "{detail}");
+                assert!(detail.contains("folds nothing"), "{detail}");
+            }
+            other => panic!(
+                "the door opened over a container with a stray column: {:?}",
+                other.map(|_| ())
+            ),
+        }
+    }
+
+    #[test]
+    fn a_model_without_a_container_index_fails_to_open_naming_it() {
+        let connection = model(None, None);
+        connection
+            .execute_batch("DROP TABLE fts_schedule_project;")
+            .expect("the index is dropped");
+        match SqliteDoor::open(&connection) {
+            Err(SearchError::IndexUnusable { entity, detail }) => {
+                assert_eq!(entity, "schedule.project");
+                assert!(detail.contains("fts_schedule_project"), "{detail}");
+            }
+            other => panic!(
+                "the door opened without a container index: {:?}",
                 other.map(|_| ())
             ),
         }

@@ -23,8 +23,8 @@
 use centraid_apps_kit::contract_vault::open_contract_vault;
 use centraid_apps_kit::page::PageRequest;
 use centraid_search::{
-    Answer, DOMAINS, MAX_VOCAB_SCAN, Principal, Search, SearchError, SearchRequest, SqliteDoor,
-    Target,
+    Answer, CONTAINERS, DOMAINS, MAX_VOCAB_SCAN, Principal, Search, SearchError, SearchRequest,
+    SqliteDoor, Target,
 };
 use centraid_vault::custody::locker_key::{
     LOCKER_CIPHERTEXT_PREFIX, encrypt_under_locker_key, is_locker_ciphertext, locker_aad,
@@ -416,14 +416,18 @@ fn secrets_planted_in_every_sealed_column_never_reach_a_target() {
             |row| row.get(0),
         )
         .expect("the cell reads");
+    // THE CONTAINERS TOO (R-1097-20): a second registry is held to the same
+    // property, and its entities are asked for the marker by name as well.
+    let entities: Vec<&str> = DOMAINS
+        .iter()
+        .map(|domain| domain.entity)
+        .chain(CONTAINERS.iter().map(|container| container.entity))
+        .collect();
     for marker in [PLAINTEXT, ciphertext.as_str()] {
-        for domain in DOMAINS {
+        for entity in &entities {
             let answer = door
-                .query(
-                    &Principal::Owner,
-                    &SearchRequest::new(domain.entity, marker, 50),
-                )
-                .unwrap_or_else(|error| panic!("{} answered {error}", domain.entity));
+                .query(&Principal::Owner, &SearchRequest::new(*entity, marker, 50))
+                .unwrap_or_else(|error| panic!("{entity} answered {error}"));
             for target in targets(&answer) {
                 for field in [
                     &target.entity,
@@ -435,8 +439,7 @@ fn secrets_planted_in_every_sealed_column_never_reach_a_target() {
                 ] {
                     assert!(
                         !field.contains(marker),
-                        "{} answered a target carrying {marker}: {target:?}",
-                        domain.entity
+                        "{entity} answered a target carrying {marker}: {target:?}"
                     );
                 }
             }
@@ -616,6 +619,7 @@ fn a_window_continues_by_keyset_and_ends_without_a_cursor() {
                 query: "cabin".to_owned(),
                 page: PageRequest::after(1, cursor),
                 excluded_ids: Vec::new(),
+                app: None,
             },
         )
         .expect("notes answer");
@@ -1922,5 +1926,353 @@ fn correction_latency_on_fifty_thousand_terms() {
         "the bound ({MAX_VOCAB_SCAN} rows), tasks only: p50 {:.2} ms, max {:.2} ms",
         micros[50] as f64 / 1000.0,
         micros[99] as f64 / 1000.0,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The containers (#1097, R-1097-19..21): a second registry beside the domains
+// ---------------------------------------------------------------------------
+
+const FOLDERS_URI: &str = "https://centraid.dev/schemes/folders";
+
+/// One of each container, as the product writes them, plus the rows that must
+/// NOT be found: an archived project, a circle with an archived group, a circle
+/// no group stands on, the folders scheme's root and a tag.
+fn seed_containers(connection: &Connection, owner: &str) -> rusqlite::Result<()> {
+    for (id, kind, name) in [
+        ("nb-1", "notebook", "Reading list"),
+        ("al-1", "album", "Reading trip"),
+    ] {
+        connection.execute(
+            "INSERT INTO core_collection
+               (collection_id, owner_party_id, kind, name, sort_order, created_at)
+             VALUES (?1, ?2, ?3, ?4, 0, ?5)",
+            rusqlite::params![id, owner, kind, name, NOW],
+        )?;
+    }
+    for (id, name, archived) in [
+        ("pr-1", "Kitchen refit", None),
+        ("pr-2", "Kitchen archive", Some(NOW)),
+    ] {
+        connection.execute(
+            "INSERT INTO schedule_project (project_id, owner_party_id, name, archived_at, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![id, owner, name, archived, NOW],
+        )?;
+    }
+    for (circle, group, name, archived) in [
+        ("ci-1", Some("gr-1"), "Kitchen flat", None),
+        ("ci-2", Some("gr-2"), "Kitchen old flat", Some(NOW)),
+        ("ci-3", None, "Kitchen cousins", None),
+    ] {
+        connection.execute(
+            "INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
+             VALUES (?1, ?2, ?3, 'custom')",
+            rusqlite::params![circle, owner, name],
+        )?;
+        if let Some(group) = group {
+            connection.execute(
+                "INSERT INTO tally_group
+                   (group_id, circle_id, icon, color, currency, archived_at, created_at)
+                 VALUES (?1, ?2, 'x', 'blue', 'GBP', ?3, ?4)",
+                rusqlite::params![group, circle, archived, NOW],
+            )?;
+        }
+    }
+    connection.execute(
+        "INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
+         VALUES ('sch-f', ?1, 'Folders', '1'), ('sch-t', 'https://centraid.dev/schemes/tags', 'Tags', '1')",
+        [FOLDERS_URI],
+    )?;
+    for (id, scheme, notation, label) in [
+        ("cn-root", "sch-f", "root", "Kitchen root"),
+        ("cn-1", "sch-f", "kitchen-docs", "Kitchen documents"),
+        ("cn-tag", "sch-t", "kitchen", "Kitchen tag"),
+    ] {
+        connection.execute(
+            "INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![id, scheme, notation, label],
+        )?;
+    }
+    Ok(())
+}
+
+fn app_of_each(door: &SqliteDoor<'_>, entity: &str, query: &str) -> Vec<(String, String)> {
+    let answer = door
+        .query(&Principal::Owner, &SearchRequest::new(entity, query, 50))
+        .unwrap_or_else(|error| panic!("{entity} answered {error}"));
+    targets(&answer)
+        .into_iter()
+        .map(|target| (target.id, target.app_id))
+        .collect()
+}
+
+fn pairs<const N: usize>(rows: [(&str, &str); N]) -> Vec<(String, String)> {
+    rows.into_iter()
+        .map(|(id, app)| (id.to_owned(), app.to_owned()))
+        .collect()
+}
+
+/// EACH CONTAINER IS FOUND BY ITS NAME, on the replayed DDL and on a founded
+/// vault, with the app it opens in, and only while it is live.
+#[test]
+fn each_container_is_found_by_name_with_the_app_it_opens_in_and_only_while_live() {
+    on_both_vaults(seed_containers, |connection| {
+        let door = door(connection);
+        // One index, two apps: the kind decides, in id order within one rank.
+        let mut both = app_of_each(&door, "core.collection", "reading");
+        both.sort();
+        assert_eq!(both, pairs([("al-1", "photos"), ("nb-1", "notes")]));
+        assert_eq!(
+            app_of_each(&door, "schedule.project", "kitchen"),
+            pairs([("pr-1", "tasks")]),
+            "an archived project is not found"
+        );
+        assert_eq!(
+            app_of_each(&door, "social.circle", "kitchen"),
+            pairs([("ci-1", "tally")]),
+            "a circle with an archived group, and a circle no group stands on, are not found"
+        );
+        assert_eq!(
+            app_of_each(&door, "core.concept", "kitchen"),
+            pairs([("cn-1", "docs")]),
+            "the root and a tag are not folders"
+        );
+        // A title is the name; the subtitle is never empty (the app).
+        let answer = door
+            .query(
+                &Principal::Owner,
+                &SearchRequest::new("schedule.project", "kitchen", 50),
+            )
+            .expect("projects answer");
+        let project = &targets(&answer)[0];
+        assert_eq!(
+            (
+                project.entity.as_str(),
+                project.title.as_str(),
+                project.subtitle.as_str()
+            ),
+            ("schedule.project", "Kitchen refit", "tasks")
+        );
+        assert!(project.snippet.contains('⟦'), "{}", project.snippet);
+    });
+}
+
+/// A QUERY MAY BE NARROWED TO ONE APP: the kinds of the shared index that open
+/// there, and nothing for an entity that opens elsewhere.
+#[test]
+fn a_query_narrowed_to_an_app_answers_that_apps_containers_only() {
+    on_both_vaults(seed_containers, |connection| {
+        let door = door(connection);
+        let narrowed = |entity: &str, query: &str, app: &str| -> Vec<(String, String)> {
+            let answer = door
+                .query(
+                    &Principal::Owner,
+                    &SearchRequest::new(entity, query, 50).in_app(app),
+                )
+                .unwrap_or_else(|error| panic!("{entity} in {app} answered {error}"));
+            targets(&answer)
+                .into_iter()
+                .map(|target| (target.id, target.app_id))
+                .collect()
+        };
+        assert_eq!(
+            narrowed("core.collection", "reading", "notes"),
+            pairs([("nb-1", "notes")])
+        );
+        assert_eq!(
+            narrowed("core.collection", "reading", "photos"),
+            pairs([("al-1", "photos")])
+        );
+        assert_eq!(narrowed("core.collection", "reading", "tally"), Vec::new());
+        assert_eq!(
+            narrowed("schedule.project", "kitchen", "tasks"),
+            pairs([("pr-1", "tasks")])
+        );
+        assert_eq!(narrowed("schedule.project", "kitchen", "notes"), Vec::new());
+        // A domain narrowed to another app answers nothing either.
+        assert_eq!(narrowed("schedule.task", "budget", "notes"), Vec::new());
+    });
+}
+
+/// A TYPO IN A CONTAINER'S NAME IS CORRECTED from the container's own
+/// vocabulary, and a container's words are not offered to a search that named
+/// only domains.
+#[test]
+fn a_typo_in_a_container_name_is_corrected_from_its_vocabulary() {
+    on_both_vaults(seed_containers, |connection| {
+        let door = door(connection);
+        for (entity, typo, word) in [
+            ("core.collection", "raeding", "reading"),
+            ("schedule.project", "kithcen", "kitchen"),
+            ("social.circle", "kithcen", "kitchen"),
+            ("core.concept", "documnets", "documents"),
+        ] {
+            assert_eq!(
+                corrected(&door, &[entity], typo).as_deref(),
+                Some(word),
+                "{entity}"
+            );
+        }
+        // Not named, not offered.
+        assert_eq!(corrected(&door, &TASKS, "raeding"), None);
+        assert_eq!(corrected(&door, &["schedule.task"], "kithcen"), None);
+        // Mixed with a domain, either's words are known.
+        assert_eq!(
+            corrected(&door, &["schedule.task", "core.collection"], "raeding").as_deref(),
+            Some("reading")
+        );
+        // The archived project's words are not in the vocabulary.
+        assert_eq!(corrected(&door, &["schedule.project"], "archvie"), None);
+    });
+}
+
+/// LOCKER IS NEVER A CONTAINER, for a query or a correction, alone or beside a
+/// container; and the domains stay seven.
+#[test]
+fn locker_is_refused_beside_the_containers_and_the_domains_stay_seven() {
+    let connection = vault();
+    with_a_locker_index(&connection);
+    let door = door(&connection);
+    assert_eq!(DOMAINS.len(), 7);
+    assert_eq!(CONTAINERS.len(), 4);
+    for entity in [
+        "locker.item",
+        "locker.item_field",
+        "locker.item_passkey",
+        "sync.connection_credential",
+    ] {
+        let refused = door.query(&Principal::Owner, &SearchRequest::new(entity, "cabin", 8));
+        assert!(
+            matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+            "{entity} answered {refused:?}"
+        );
+        for entities in [vec![entity], vec!["core.collection", entity]] {
+            let refused = door.correct(&Principal::Owner, &entities, "raeding");
+            assert!(
+                matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+                "{entities:?} answered {refused:?}"
+            );
+        }
+    }
+}
+
+/// THE REGISTRIES ARE DISJOINT, and a domain's entity does not become a
+/// container's by being asked for narrowed.
+#[test]
+fn the_two_registries_share_no_entity_index_or_table() {
+    for container in CONTAINERS {
+        assert!(
+            centraid_search::domain_of(container.entity).is_none(),
+            "{} is a domain",
+            container.entity
+        );
+        assert!(DOMAINS.iter().all(|domain| domain.fts != container.fts));
+    }
+    for domain in DOMAINS {
+        assert!(
+            centraid_search::container_of(domain.entity).is_none(),
+            "{} is a container",
+            domain.entity
+        );
+    }
+}
+
+/// THE FOLDER SCHEME THE DOOR TESTS IS THE ONE THE COMMANDS WRITE.
+#[test]
+fn the_folders_scheme_is_the_one_the_vault_writes() {
+    assert_eq!(
+        centraid_search::containers::FOLDERS_SCHEME_URI,
+        centraid_vault::commands::core::FOLDER_SCHEME_URI
+    );
+}
+
+/// A DEMONSTRATED RED for the open checks over the committed model: a container
+/// index with a column the table lacks does not open, and neither does a file
+/// without a container's vocabulary correct.
+#[test]
+fn a_container_index_that_grew_a_column_fails_to_open_and_a_missing_vocabulary_is_unusable() {
+    let connection = vault();
+    assert!(SqliteDoor::open(&connection).is_ok());
+    connection
+        .execute_batch(
+            "DROP TABLE fts_core_collection_vocab;
+             DROP TABLE fts_core_collection;
+             CREATE VIRTUAL TABLE fts_core_collection USING fts5(
+               collection_id UNINDEXED, name, scratchpad,
+               tokenize = \"unicode61 remove_diacritics 2\");",
+        )
+        .expect("the index is rebuilt with one more column");
+    match SqliteDoor::open(&connection) {
+        Err(SearchError::IndexUnusable { entity, detail }) => {
+            assert_eq!(entity, "core.collection");
+            assert!(detail.contains("scratchpad"), "{detail}");
+        }
+        other => panic!(
+            "the door opened over a stray column: {:?}",
+            other.map(|_| ())
+        ),
+    }
+
+    let connection = vault();
+    connection
+        .execute_batch("DROP TABLE fts_schedule_project_vocab;")
+        .expect("the vocabulary is dropped");
+    let door = door(&connection);
+    match door.correct(&Principal::Owner, &["schedule.project"], "kithcen") {
+        Err(SearchError::IndexUnusable { entity, detail }) => {
+            assert_eq!(entity, "schedule.project");
+            assert!(detail.contains("fts_schedule_project_vocab"), "{detail}");
+        }
+        other => panic!("a missing vocabulary answered {other:?}"),
+    }
+}
+
+/// THE DOOR'S OWN BELT, apart from the triggers' braces: the three rows the rung
+/// keeps out of the indexes are written into them by hand, and the door still
+/// does not find them. A guard that lived only in a trigger would answer them.
+#[test]
+fn the_door_does_not_find_a_dead_container_that_got_into_an_index() {
+    let connection = vault();
+    seed_containers(&connection, "party-1").expect("containers are seeded");
+    connection
+        .execute_batch(
+            "INSERT INTO fts_schedule_project(rowid, project_id, name)
+               SELECT rowid, project_id, name FROM schedule_project WHERE project_id = 'pr-2';
+             INSERT INTO fts_social_circle(rowid, circle_id, name)
+               SELECT rowid, circle_id, name FROM social_circle WHERE circle_id IN ('ci-2', 'ci-3');
+             INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+               SELECT rowid, concept_id, pref_label FROM core_concept
+                WHERE concept_id IN ('cn-root', 'cn-tag');",
+        )
+        .expect("the dead rows are written into the indexes");
+    // The control: the index really does hold them now.
+    for (fts, expected) in [
+        ("fts_schedule_project", 2_i64),
+        ("fts_social_circle", 3),
+        ("fts_core_concept", 3),
+    ] {
+        let held: i64 = connection
+            .query_row(
+                &format!("SELECT COUNT(*) FROM {fts} WHERE {fts} MATCH 'kitchen'"),
+                [],
+                |row| row.get(0),
+            )
+            .expect("the index answers");
+        assert_eq!(held, expected, "{fts} holds the poison");
+    }
+    let door = door(&connection);
+    assert_eq!(
+        app_of_each(&door, "schedule.project", "kitchen"),
+        pairs([("pr-1", "tasks")])
+    );
+    assert_eq!(
+        app_of_each(&door, "social.circle", "kitchen"),
+        pairs([("ci-1", "tally")])
+    );
+    assert_eq!(
+        app_of_each(&door, "core.concept", "kitchen"),
+        pairs([("cn-1", "docs")])
     );
 }

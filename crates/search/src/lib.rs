@@ -20,7 +20,7 @@
 //! | A denial is a VALUE | [`Answer`] is `Denied` or `Data`, never an `Err` (census §A seam 6) |
 //! | A bound reports the size it reaches | [`SearchRequest::limit`] is clamped by [`MAX_MATCH_ROWS`] and [`Answer::window`] says what it actually was (D-1020-D3-12) |
 //! | **A result can carry no secret** | [`Target`], and [`domains::assert_no_sealed_column`] — see below |
-//! | A correction is a bounded lookup (#1097) | [`Search::correct`] replaces a word by a whole term the named domains' vocabularies hold, reads at most [`MAX_VOCAB_SCAN`] rows per word per domain, and refuses an entity that is not a domain exactly as `query` does |
+//! | A correction is a bounded lookup (#1097) | [`Search::correct`] replaces a word by a whole term the named domains' and containers' vocabularies hold, reads at most [`MAX_VOCAB_SCAN`] rows per word per index, and refuses an entity that is neither exactly as `query` does |
 //!
 //! ## Secret-free BY CONSTRUCTION, not by filtering
 //!
@@ -41,10 +41,11 @@
 //!    column folded in from another table ([`domains::FOLDED`], #1097) is held
 //!    to it through its listed sources, and an index column nobody listed does
 //!    not open.
-//! 3. **`locker.item` is not a domain.** The absence is structural: the powerbox
-//!    reaches seven domains and Locker is not one of them, so a secret
-//!    cannot become a link target by *adding a probe*. Asking for it is a
-//!    typed [`SearchError::NotADomain`].
+//! 3. **`locker.item` is not a domain, and not a container.** The absence is
+//!    structural: the powerbox reaches seven domains, the containers are a second
+//!    list ([`containers::CONTAINERS`], held to the same two checks above) and
+//!    Locker is in neither, so a secret cannot become a link target or a result
+//!    by *adding a probe*. Asking for it is a typed [`SearchError::NotADomain`].
 //!
 //! `crates/search/tests/door.rs` plants a secret in every sealed column the
 //! registry names — **sealed by `crates/vault::custody` itself**, as the member
@@ -62,10 +63,12 @@
 //! and states, in [`SqliteDoor`]'s own words, which of those walls it does and
 //! does not stand behind yet.
 
+pub mod containers;
 pub mod domains;
 pub mod matching;
 pub mod sqlite;
 
+pub use containers::{CONTAINERS, Container, container_of};
 pub use domains::{DOMAINS, Domain, domain_of};
 pub use matching::{MAX_MATCH_TOKENS, match_expression};
 pub use sqlite::{MAX_VOCAB_SCAN, SqliteDoor};
@@ -108,7 +111,8 @@ impl Principal {
 /// One search: which domain, what words, how many rows, and where to continue.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchRequest {
-    /// A logical entity from [`DOMAINS`], e.g. `knowledge.note`.
+    /// A logical entity from [`DOMAINS`], e.g. `knowledge.note`, or from
+    /// [`CONTAINERS`], e.g. `core.collection`.
     pub entity: String,
     /// Owner-typed words. Compiled by [`match_expression`]; FTS5 operators in
     /// it stay literals.
@@ -120,6 +124,11 @@ pub struct SearchRequest {
     /// R-journal). Applied **in the door**, over the ranked hits, so an
     /// all-journal search answers an empty list rather than a filtered one.
     pub excluded_ids: Vec<String>,
+    /// Only the rows that open in this app, when set. A container index that
+    /// serves two apps (`core.collection`: notebooks open in Notes, albums in
+    /// Photos) answers one app's rows; an entity that opens in another app answers
+    /// none. `None` answers every row.
+    pub app: Option<String>,
 }
 
 impl SearchRequest {
@@ -131,7 +140,15 @@ impl SearchRequest {
             query: query.into(),
             page: PageRequest::first(limit),
             excluded_ids: Vec::new(),
+            app: None,
         }
+    }
+
+    /// The same request narrowed to the rows that open in `app`.
+    #[must_use]
+    pub fn in_app(mut self, app: impl Into<String>) -> Self {
+        self.app = Some(app.into());
+        self
     }
 
     /// The same request with ids the caller wants excluded.
@@ -248,9 +265,9 @@ pub trait Search {
     /// [`centraid_apps_kit::spelling`]'s, which the assistant's name resolver
     /// reads too.
     ///
-    /// `entities` are the domains the caller is about to search again, and the
-    /// same refusal applies as in `query`: an entity that is not one of the seven
-    /// is [`SearchError::NotADomain`], so Locker has no vocabulary to ask.
+    /// `entities` are the domains and containers the caller is about to search
+    /// again, and the same refusal applies as in `query`: an entity that is
+    /// neither is [`SearchError::NotADomain`], so Locker has no vocabulary to ask.
     ///
     /// The default is `None`, so a door with no vocabulary (a test double, a
     /// recorder around another door) is a door that corrects nothing and not one
@@ -275,11 +292,12 @@ pub trait Search {
 /// empty page.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SearchError {
-    /// The entity is not one of the seven. **`locker.item` lands here on
-    /// purpose**: the absence is the security property, so asking has to fail
-    /// loudly rather than answer nothing and look like "no matches".
+    /// The entity is not one of the seven domains or the containers. **`locker.item`
+    /// lands here on purpose**: the absence is the security property, so asking has
+    /// to fail loudly rather than answer nothing and look like "no matches".
+    /// `count` is the number of domains.
     #[error(
-        "`{entity}` is not a search domain — the powerbox reaches {count} domains and a secret cannot become one by adding a probe (#1020, D-1020-N1)"
+        "`{entity}` is not a search domain or a container — the powerbox reaches {count} domains and a secret cannot become one by adding a probe (#1020, D-1020-N1)"
     )]
     NotADomain { entity: String, count: usize },
 
