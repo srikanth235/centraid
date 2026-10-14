@@ -23,7 +23,8 @@ use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
 use super::{
-    RecordingSearch, VaultDoor, corrected_search, non_empty, settle, zone_if_any, zone_of,
+    RecordingSearch, VaultDoor, containers, corrected_search, non_empty, settle, zone_if_any,
+    zone_of,
 };
 use crate::error::{CoreError, Result};
 
@@ -192,16 +193,30 @@ pub(super) fn search(
     asked: &wire::NotesSearchRequest,
 ) -> Result<Answer> {
     let zone = zone_if_any(vault, &asked.tz)?;
+    // THE NOTEBOOKS THE TERM NAMES RIDE BESIDE THE NOTES (#1097, R-1097-19..21),
+    // and the correction treats the two as one answer: it runs only when both
+    // are empty, over the notes' vocabulary and the notebooks'.
+    let entities = containers::entities_of(queries::NOTE_TARGET_TYPE, "notes");
     let loaded = with_search(vault, door, |search| {
         corrected_search(
             search,
-            &[queries::NOTE_TARGET_TYPE],
+            &entities,
             &asked.term,
-            |data: &queries::SearchData| data.notes.is_empty(),
-            |term| queries::load_search(door, search, &Principal::Owner, term),
+            |(data, found): &(queries::SearchData, Vec<containers::Opened>)| {
+                data.notes.is_empty() && found.is_empty()
+            },
+            |term| {
+                let (data, denial) = queries::load_search(door, search, &Principal::Owner, term)?;
+                if denial.is_some() {
+                    return Ok(((data, Vec::new()), denial));
+                }
+                let (found, denial) =
+                    containers::of_app(door, search, "notes", term, containers::CONTAINER_ROWS)?;
+                Ok(((data, found), denial))
+            },
         )
     })?;
-    settle(door, loaded, |(data, corrected)| {
+    settle(door, loaded, |((data, found), corrected)| {
         Answer::NotesSearch(wire::NotesSearch {
             corrected,
             hits: data
@@ -209,6 +224,7 @@ pub(super) fn search(
                 .into_iter()
                 .map(|hit| hit_to_wire(hit, zone.as_ref()))
                 .collect(),
+            containers: found.into_iter().map(containers::to_wire).collect(),
         })
     })
 }
@@ -1022,5 +1038,81 @@ mod tests {
                 Ok(())
             })
             .expect("the vault is open");
+    }
+
+    /// A NOTEBOOK IS A SEARCH RESULT OF ITS OWN (#1097, R-1097-19..21): its name
+    /// finds it beside the notes, an album of the same name is Photos' and not
+    /// Notes', a deleted notebook is gone, and a slip in a word only a notebook
+    /// holds is corrected to it.
+    #[test]
+    fn a_notebook_is_found_by_name_and_an_album_is_not_notes() {
+        let scratch = Scratch::founded();
+        let search = |term: &str| {
+            let Ok(Answer::NotesSearch(found)) =
+                scratch.ask(Q::NotesSearch(wire::NotesSearchRequest {
+                    term: term.to_owned(),
+                    tz: TZ.to_owned(),
+                }))
+            else {
+                panic!("search answers");
+            };
+            found
+        };
+        let notebook = scratch.run(
+            "knowledge.create_notebook",
+            serde_json::json!({ "name": "Quokka recipes" }),
+        )["notebook_id"]
+            .as_str()
+            .expect("a notebook id")
+            .to_owned();
+        scratch.run(
+            "media.create_album",
+            serde_json::json!({ "title": "Quokka holiday" }),
+        );
+        let note = scratch.create("Quokka sighting", "saw one");
+        let found = search("quokka");
+        let containers: Vec<(&str, &str, &str, &str)> = found
+            .containers
+            .iter()
+            .map(|hit| {
+                (
+                    hit.entity.as_str(),
+                    hit.id.as_str(),
+                    hit.app_id.as_str(),
+                    hit.open_id.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            containers,
+            [("core.collection", notebook.as_str(), "notes", "")],
+            "the notebook, and not the album, which opens in Photos"
+        );
+        assert_eq!(found.containers[0].title, "Quokka recipes");
+        assert!(found.containers[0].snippet.contains('⟦'));
+        let ids: Vec<&str> = found.hits.iter().map(|hit| hit.note_id.as_str()).collect();
+        assert_eq!(ids, [note.as_str()]);
+
+        // A TYPO IN A WORD ONLY THE NOTEBOOK HOLDS is corrected to it.
+        scratch.run(
+            "knowledge.create_notebook",
+            serde_json::json!({ "name": "Wombat shelf" }),
+        );
+        let slipped = search("womabt");
+        assert_eq!(slipped.corrected, "wombat");
+        assert_eq!(slipped.containers.len(), 1);
+        assert!(slipped.hits.is_empty());
+        // An exact container hit is not corrected, and its rows' emptiness is
+        // not read as an empty answer.
+        let exact = search("wombat");
+        assert!(exact.corrected.is_empty() && exact.containers.len() == 1);
+
+        // A DELETED NOTEBOOK IS NOT FOUND.
+        scratch.run(
+            "knowledge.delete_notebook",
+            serde_json::json!({ "notebook_id": notebook }),
+        );
+        assert!(search("recipes").containers.is_empty());
+        assert!(search("quokka").containers.is_empty());
     }
 }

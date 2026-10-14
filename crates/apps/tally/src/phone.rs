@@ -1192,6 +1192,22 @@ pub fn spending_of(data: &TallyData, month: &str) -> Spending {
 /// again with the corrected words; `corrected` says so only if that run found
 /// something.
 pub fn load_search(door: &dyn PageDoor, term: &str, limit: usize) -> KitResult<SearchResults> {
+    load_search_with(door, term, limit, true)
+}
+
+/// [`load_search`], with the correction switched by the caller.
+///
+/// **A caller whose answer holds more than these expenses decides.** Tally's
+/// search also answers the groups whose name matched (#1097, R-1097-19..21), and
+/// the term is corrected only when the expenses AND the groups are both empty:
+/// when the groups matched exactly, the expense walk must not correct the term
+/// behind them, so the caller passes `correct = false`.
+pub fn load_search_with(
+    door: &dyn PageDoor,
+    term: &str,
+    limit: usize,
+    correct: bool,
+) -> KitResult<SearchResults> {
     let needle = term.trim().to_lowercase();
     if needle.is_empty() {
         return Ok(SearchResults {
@@ -1226,7 +1242,7 @@ pub fn load_search(door: &dyn PageDoor, term: &str, limit: usize) -> KitResult<S
     };
     let mut matched = find(&needle);
     let mut corrected = None;
-    if matched.is_empty() {
+    if correct && matched.is_empty() {
         let mut words = WalkedWords::new();
         for texts in &haystacks {
             words.add_row(texts.iter().map(String::as_str));

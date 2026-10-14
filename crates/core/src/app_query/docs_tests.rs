@@ -745,3 +745,57 @@ fn a_purged_document_is_gone_from_the_drive_and_its_bytes_released() {
     assert_eq!(all.trash_count, 0);
     assert_eq!(titles(&all), ["Lease"], "the live document is untouched");
 }
+
+/// A FOLDER IS A SEARCH RESULT OF ITS OWN (#1097, R-1097-19..21): its name finds
+/// it, the drive's root never is one, it opens by its concept id, a deleted
+/// folder is gone, and a slip in a word only a folder holds is corrected.
+#[test]
+fn a_folder_is_found_by_name_and_the_root_is_not() {
+    let scratch = Scratch::founded();
+    let folder = scratch.run(
+        "core.create_folder",
+        serde_json::json!({ "name": "Leases" }),
+    )["folder_id"]
+        .as_str()
+        .expect("a folder id")
+        .to_owned();
+    let search = |term: &str| {
+        let wire::app_query_response::Answer::DocsSearch(found) = scratch
+            .ask(wire::app_query_request::Query::DocsSearch(
+                wire::DocsSearchRequest {
+                    term: term.to_owned(),
+                    limit: 10,
+                    tz: TZ.to_owned(),
+                },
+            ))
+            .expect("search answers")
+        else {
+            panic!("search answered as something else");
+        };
+        found
+    };
+    let found = search("leases");
+    assert_eq!(found.containers.len(), 1);
+    let hit = &found.containers[0];
+    assert_eq!(
+        (
+            hit.entity.as_str(),
+            hit.id.as_str(),
+            hit.app_id.as_str(),
+            hit.open_id.as_str()
+        ),
+        ("core.concept", folder.as_str(), "docs", "")
+    );
+    assert_eq!(hit.title, "Leases");
+    // The drive's top level is a concept of the same scheme, labelled
+    // `Documents`, and is not a folder anyone named.
+    assert!(search("documents").containers.is_empty());
+    let slipped = search("laeses");
+    assert_eq!(slipped.corrected, "leases");
+    assert_eq!(slipped.containers.len(), 1);
+    scratch.run(
+        "core.delete_folder",
+        serde_json::json!({ "folder_id": folder }),
+    );
+    assert!(search("leases").containers.is_empty());
+}

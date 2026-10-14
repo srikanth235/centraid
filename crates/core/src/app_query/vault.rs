@@ -12,8 +12,17 @@
 //! in the index and a live `people_profile` in People, so a party with no live
 //! profile (a Tally friend, a trashed person) is dropped too.
 //!
-//! **A TYPO IS CORRECTED ACROSS THE SEVEN DOMAINS** (#1097, R4, R8), only when
-//! the whole answer is empty, and the answer says so in `corrected`.
+//! **CONTAINERS ARE HITS TOO** (#1097, R-1097-19..21): one more probe per
+//! container index ([`centraid_search::CONTAINERS`]) — a notebook or an album,
+//! a project, a Tally group, a Docs folder — appended after the domains' rows,
+//! each with the app it opens in and, where the app opens it by another key (a
+//! Tally group is a circle in the index and a `tally_group` in Tally), that key
+//! as `open_id`. They are not domains: the Notes powerbox above does not see
+//! them.
+//!
+//! **A TYPO IS CORRECTED ACROSS THE SEVEN DOMAINS AND THE CONTAINERS** (#1097,
+//! R4, R8), only when the whole answer, rows and containers, is empty, and the
+//! answer says so in `corrected`.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -27,7 +36,7 @@ use centraid_search::{Principal, Target};
 use centraid_vault::Vault;
 
 use super::notes::subtitle_day;
-use super::{VaultDoor, corrected_search, settle, zone_if_any};
+use super::{VaultDoor, containers, corrected_search, settle, zone_if_any};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -41,9 +50,13 @@ const PARTY_ENTITY: &str = "core.party";
 /// The rows one answer can open: the loader's eight per domain, with room.
 const OPENABLE: FanOutBound = FanOutBound::new(64, 1);
 
-/// What a Home answer is made of: the hits that open something, and the media
-/// asset each photo opens by.
-type Opened = (Vec<Target>, BTreeMap<String, String>);
+/// What a Home answer is made of: the hits that open something, the media
+/// asset each photo opens by, and the containers that matched.
+type Opened = (
+    Vec<Target>,
+    BTreeMap<String, String>,
+    Vec<containers::Opened>,
+);
 
 pub(super) fn search(
     vault: &Vault,
@@ -53,9 +66,10 @@ pub(super) fn search(
     // ISOLATED PER DOMAIN, as the powerbox is (`notes::link_targets`): the
     // plain FTS door, so one domain's refusal drops its rows and not the answer.
     //
-    // THE CORRECTION SPANS THE SEVEN DOMAINS (#1097, R4, R8) and runs only when
-    // the whole answer, after the rows that cannot be opened are dropped, is
-    // empty; the vocabulary it reads is every domain's.
+    // THE CORRECTION SPANS THE SEVEN DOMAINS AND THE CONTAINERS (#1097, R4, R8,
+    // R-1097-19..21) and runs only when the whole answer, after the rows that
+    // cannot be opened are dropped, is empty; the vocabulary it reads is every
+    // domain's and every container index's.
     let loaded = vault.read(|connection| {
         let index =
             centraid_search::SqliteDoor::open(connection).map_err(|error| CoreError::Invariant {
@@ -64,18 +78,23 @@ pub(super) fn search(
         let entities: Vec<&str> = centraid_search::DOMAINS
             .iter()
             .map(|domain| domain.entity)
+            .chain(
+                centraid_search::CONTAINERS
+                    .iter()
+                    .map(|container| container.entity),
+            )
             .collect();
         Ok(index.map(|index| {
             corrected_search(
                 &index,
                 &entities,
                 &asked.term,
-                |(targets, _): &Opened| targets.is_empty(),
+                |(targets, _, found): &Opened| targets.is_empty() && found.is_empty(),
                 |term| {
                     let (data, denial) =
                         queries::load_link_targets(door, &index, &Principal::Owner, term)?;
                     if denial.is_some() {
-                        return Ok(((Vec::new(), BTreeMap::new()), denial));
+                        return Ok(((Vec::new(), BTreeMap::new(), Vec::new()), denial));
                     }
                     let assets = photo_assets(door, &data.targets)?;
                     let people = live_people(door, &data.targets)?;
@@ -88,13 +107,15 @@ pub(super) fn search(
                             _ => true,
                         })
                         .collect();
-                    Ok(((targets, assets), None))
+                    // ISOLATED PER CONTAINER INDEX, like the domains above.
+                    let found = containers::of_all(door, &index, term)?;
+                    Ok(((targets, assets, found), None))
                 },
             )
         }))
     })??;
     let zone = zone_if_any(vault, &asked.tz)?;
-    settle(door, loaded, |((targets, assets), corrected)| {
+    settle(door, loaded, |((targets, assets, found), corrected)| {
         Answer::VaultSearch(wire::VaultSearch {
             corrected,
             hits: targets
@@ -116,6 +137,16 @@ pub(super) fn search(
                         open_id,
                     }
                 })
+                .chain(found.into_iter().map(|container| wire::VaultSearchHit {
+                    subtitle_local_day: subtitle_day(zone.as_ref(), &container.target.subtitle),
+                    entity: container.target.entity,
+                    id: container.target.id,
+                    title: container.target.title,
+                    subtitle: container.target.subtitle,
+                    app_id: container.target.app_id,
+                    snippet: container.target.snippet,
+                    open_id: container.open_id,
+                }))
                 .collect(),
         })
     })
@@ -332,7 +363,7 @@ mod tests {
         );
     }
 
-    /// THE CORRECTION SPANS THE SEVEN DOMAINS (#1097, R4, R8): a slip in a word
+    /// THE CORRECTION SPANS THE SEVEN DOMAINS AND THE CONTAINERS (#1097, R4, R8): a slip in a word
     /// two apps hold finds both, once, and says what it searched; an exact term
     /// is untouched.
     #[test]
@@ -508,5 +539,188 @@ mod tests {
                 .all(|hit| hit.app_id != "photos"),
             "a trashed photo is no hit"
         );
+    }
+
+    /// EVERY CONTAINER IS A HOME HIT (#1097, R-1097-19..21), each with the app it
+    /// opens in: a notebook (Notes), an album (Photos), a project (Tasks), a
+    /// Tally group (opened by its GROUP id, not the circle's) and a Docs folder.
+    #[test]
+    fn every_container_is_a_home_hit_with_its_app_and_open_id() {
+        let scratch = Scratch::founded();
+        let id = |output: serde_json::Value, key: &str| -> String {
+            output[key].as_str().expect("an id").to_owned()
+        };
+        let notebook = id(
+            scratch.run(
+                "knowledge.create_notebook",
+                serde_json::json!({ "name": "Heron notes" }),
+            ),
+            "notebook_id",
+        );
+        let album = id(
+            scratch.run(
+                "media.create_album",
+                serde_json::json!({ "title": "Heron trip" }),
+            ),
+            "album_id",
+        );
+        let project = id(
+            scratch.run(
+                "schedule.save_project",
+                serde_json::json!({ "name": "Heron hide" }),
+            ),
+            "project_id",
+        );
+        let ana = id(
+            scratch.run("tally.add_friend", serde_json::json!({ "name": "Ana" })),
+            "party_id",
+        );
+        let group = id(
+            scratch.run(
+                "tally.create_group",
+                serde_json::json!({
+                    "name": "Heron house", "icon": "x", "currency": "GBP", "member_ids": [ana]
+                }),
+            ),
+            "group_id",
+        );
+        let folder = id(
+            scratch.run(
+                "core.create_folder",
+                serde_json::json!({ "name": "Heron papers" }),
+            ),
+            "folder_id",
+        );
+        let found = scratch.search("heron");
+        let hits: BTreeMap<(&str, &str), (&str, &str)> = found
+            .hits
+            .iter()
+            .map(|hit| {
+                (
+                    (hit.app_id.as_str(), hit.entity.as_str()),
+                    (hit.id.as_str(), hit.open_id.as_str()),
+                )
+            })
+            .collect();
+        assert_eq!(hits.len(), 5, "{hits:?}");
+        assert_eq!(hits[&("notes", "core.collection")], (notebook.as_str(), ""));
+        assert_eq!(hits[&("photos", "core.collection")], (album.as_str(), ""));
+        assert_eq!(hits[&("tasks", "schedule.project")], (project.as_str(), ""));
+        assert_eq!(hits[&("docs", "core.concept")], (folder.as_str(), ""));
+        let (circle, opens_by) = hits[&("tally", "social.circle")];
+        assert_ne!(circle, group, "the index row is the circle");
+        assert_eq!(opens_by, group, "Tally opens a group by its group id");
+        // Titles are the names; a container's subtitle is its app.
+        let titled: BTreeSet<&str> = found.hits.iter().map(|hit| hit.title.as_str()).collect();
+        assert!(titled.contains("Heron notes") && titled.contains("Heron house"));
+        assert!(found.hits.iter().all(|hit| hit.subtitle == hit.app_id));
+        assert!(found.corrected.is_empty());
+    }
+
+    /// A CONTAINER THAT IS GONE IS NOT FOUND: a deleted notebook, a deleted album,
+    /// an archived group (and found again when un-archived), a deleted group, a
+    /// deleted folder.
+    #[test]
+    fn a_deleted_or_archived_container_is_no_home_hit() {
+        let scratch = Scratch::founded();
+        let id = |output: serde_json::Value, key: &str| -> String {
+            output[key].as_str().expect("an id").to_owned()
+        };
+        let notebook = id(
+            scratch.run(
+                "knowledge.create_notebook",
+                serde_json::json!({ "name": "Ibis notes" }),
+            ),
+            "notebook_id",
+        );
+        let album = id(
+            scratch.run(
+                "media.create_album",
+                serde_json::json!({ "title": "Ibis trip" }),
+            ),
+            "album_id",
+        );
+        let ana = id(
+            scratch.run("tally.add_friend", serde_json::json!({ "name": "Ana" })),
+            "party_id",
+        );
+        let group = id(
+            scratch.run(
+                "tally.create_group",
+                serde_json::json!({
+                    "name": "Ibis house", "icon": "x", "currency": "GBP", "member_ids": [ana]
+                }),
+            ),
+            "group_id",
+        );
+        let folder = id(
+            scratch.run(
+                "core.create_folder",
+                serde_json::json!({ "name": "Ibis papers" }),
+            ),
+            "folder_id",
+        );
+        assert_eq!(scratch.search("ibis").hits.len(), 4);
+        scratch.run(
+            "tally.archive_group",
+            serde_json::json!({ "group_id": group }),
+        );
+        let after_archive: Vec<String> = scratch
+            .search("ibis")
+            .hits
+            .into_iter()
+            .map(|hit| hit.entity)
+            .collect();
+        assert!(
+            !after_archive.contains(&"social.circle".to_owned()),
+            "{after_archive:?}"
+        );
+        assert_eq!(after_archive.len(), 3);
+        scratch.run(
+            "tally.archive_group",
+            serde_json::json!({ "group_id": group, "archived": false }),
+        );
+        assert_eq!(scratch.search("ibis").hits.len(), 4);
+        scratch.run(
+            "tally.delete_group",
+            serde_json::json!({ "group_id": group }),
+        );
+        scratch.run(
+            "knowledge.delete_notebook",
+            serde_json::json!({ "notebook_id": notebook }),
+        );
+        scratch.run(
+            "media.delete_album",
+            serde_json::json!({ "album_id": album }),
+        );
+        scratch.run(
+            "core.delete_folder",
+            serde_json::json!({ "folder_id": folder }),
+        );
+        assert!(scratch.search("ibis").hits.is_empty());
+        assert!(
+            scratch.search("ibsi").corrected.is_empty(),
+            "nothing is left to correct to"
+        );
+    }
+
+    /// A TYPO IN A CONTAINER'S NAME IS CORRECTED, and Home says what it
+    /// searched: the correction reads the container indexes' vocabularies too,
+    /// and runs only because notes, tasks and the rest held nothing.
+    #[test]
+    fn a_typo_in_a_container_name_is_corrected_on_home() {
+        let scratch = Scratch::founded();
+        scratch.run(
+            "knowledge.create_notebook",
+            serde_json::json!({ "name": "Marmoset recipes" }),
+        );
+        let slipped = scratch.search("marmsoet");
+        assert_eq!(slipped.corrected, "marmoset");
+        assert_eq!(slipped.hits.len(), 1);
+        assert_eq!(slipped.hits[0].app_id, "notes");
+        // An exact term is untouched; and once a NOTE holds the exact word the
+        // containers do not make the answer "empty" either.
+        let exact = scratch.search("marmoset");
+        assert!(exact.corrected.is_empty() && exact.hits.len() == 1);
     }
 }

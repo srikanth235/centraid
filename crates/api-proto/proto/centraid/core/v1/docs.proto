@@ -46,6 +46,8 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
+import "centraid/core/v1/container.proto";
+
 // ---------------------------------------------------------------------------
 // The requests.
 // ---------------------------------------------------------------------------
@@ -320,6 +322,11 @@ message DocsSearch {
   // when no correction found anything. A shell says "Showing results for
   // <corrected>".
   string corrected = 3;
+  // THE CONTAINERS THE TERM NAMES (#1097, R-1097-19..21): the folders whose own name
+  // matched, in the index's rank order, at most eight. Empty when none did. A
+  // correction counts them: the term is corrected only when the rows and these
+  // are both empty.
+  repeated ContainerHit containers = 4;
 }
 
 message DocsDocument {

@@ -18,7 +18,7 @@ use centraid_apps_tasks::views::{self, GroupKind, Placed, View};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{RecordingSearch, VaultDoor, corrected_search, settle, zone_of};
+use super::{RecordingSearch, VaultDoor, containers, corrected_search, settle, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -223,13 +223,19 @@ pub(super) fn search(
             door,
         };
         let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
+        // THE PROJECTS THE TERM NAMES RIDE BESIDE THE TASKS (#1097, R-1097-19..21),
+        // and the correction treats the two as one answer.
+        let entities =
+            containers::entities_of(centraid_apps_tasks::queries::TASK_TARGET_TYPE, "tasks");
         Ok(Ok(corrected_search(
             &search,
-            &[centraid_apps_tasks::queries::TASK_TARGET_TYPE],
+            &entities,
             &asked.term,
-            |data: &tasks::SearchData| data.tasks.is_empty(),
+            |(data, found): &(tasks::SearchData, Vec<containers::Opened>)| {
+                data.tasks.is_empty() && found.is_empty()
+            },
             |term| {
-                tasks::load_search_term(
+                let (data, denial) = tasks::load_search_term(
                     door,
                     &search,
                     &centraid_search::Principal::Owner,
@@ -237,11 +243,22 @@ pub(super) fn search(
                     limit,
                     now,
                     &zone,
-                )
+                )?;
+                if denial.is_some() {
+                    return Ok(((data, Vec::new()), denial));
+                }
+                let (found, denial) = containers::of_app(
+                    door,
+                    &search,
+                    "tasks",
+                    term,
+                    limit.min(containers::CONTAINER_ROWS),
+                )?;
+                Ok(((data, found), denial))
             },
         )))
     })??;
-    settle(door, loaded, |(data, corrected)| {
+    settle(door, loaded, |((data, found), corrected)| {
         Answer::TasksSearch(wire::TasksSearch {
             corrected,
             today: today.day_text(),
@@ -251,6 +268,7 @@ pub(super) fn search(
                 .iter()
                 .map(|task| task_to_wire(&views::place(task, &zone, &today)))
                 .collect(),
+            containers: found.into_iter().map(containers::to_wire).collect(),
         })
     })
 }

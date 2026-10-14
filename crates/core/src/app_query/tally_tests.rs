@@ -1004,3 +1004,113 @@ fn the_export_answers_a_csv_with_its_window_stated() {
     assert!(none.group.is_none());
     assert!(none.csv.is_empty() && none.file_name.is_empty());
 }
+
+/// A GROUP IS A SEARCH RESULT OF ITS OWN (#1097, R-1097-19..21): its name finds
+/// it beside the expenses, it opens by its group's id and not its circle's, an
+/// archived or deleted group is gone, and a slip in its name is corrected.
+#[test]
+fn a_group_is_found_by_name_and_opens_by_its_group_id() {
+    let scratch = Scratch::founded();
+    let ana = scratch.friend("Ana");
+    let group = scratch.group("Sitwell Road", "GBP", &[&ana]);
+    let search = |term: &str| {
+        let Answer::TallySearch(found) = scratch
+            .ask(Q::TallySearch(wire::TallySearchRequest {
+                term: term.to_owned(),
+                limit: 10,
+            }))
+            .expect("search answers")
+        else {
+            panic!("search answered as something else");
+        };
+        found
+    };
+    let found = search("sitwell");
+    assert_eq!(found.containers.len(), 1);
+    let hit = &found.containers[0];
+    assert_eq!(
+        (hit.entity.as_str(), hit.app_id.as_str()),
+        ("social.circle", "tally")
+    );
+    assert_eq!(hit.open_id, group, "Tally opens a group by its group id");
+    assert_ne!(hit.id, group, "the index row is the circle");
+    assert_eq!(hit.title, "Sitwell Road");
+    assert!(found.results.is_empty());
+
+    // A SLIP in the name is corrected, and says so.
+    let slipped = search("sitwlel");
+    assert_eq!(slipped.corrected, "sitwell");
+    assert_eq!(slipped.containers.len(), 1);
+
+    // ARCHIVED IS NOT FOUND; un-archived is; deleted is not.
+    scratch.run(
+        "tally.archive_group",
+        serde_json::json!({ "group_id": group }),
+    );
+    assert!(search("sitwell").containers.is_empty());
+    scratch.run(
+        "tally.archive_group",
+        serde_json::json!({ "group_id": group, "archived": false }),
+    );
+    assert_eq!(search("sitwell").containers.len(), 1);
+    scratch.run(
+        "tally.delete_group",
+        serde_json::json!({ "group_id": group }),
+    );
+    assert!(search("sitwell").containers.is_empty());
+}
+
+/// THE WALK AND THE GROUPS ARE ONE ANSWER FOR THE CORRECTION: an expense that
+/// matches exactly keeps the groups' words from being corrected away, and a term
+/// that matches a group exactly is not corrected to an expense's word.
+#[test]
+fn the_correction_treats_expenses_and_groups_as_one_answer() {
+    let scratch = Scratch::founded();
+    let ana = scratch.friend("Ana");
+    let me = scratch.me();
+    let group = scratch.group("Cabin crew", "GBP", &[&ana]);
+    scratch.expense(json!({
+        "description": "Cabinet handles",
+        "amount_minor": 1200,
+        "paid_by": me,
+        "category": "food",
+        "spent_on": "2099-05-04",
+        "splits": [
+            { "party_id": me, "share_minor": 600 },
+            { "party_id": ana, "share_minor": 600 }
+        ],
+    }));
+    let search = |term: &str| {
+        let Answer::TallySearch(found) = scratch
+            .ask(Q::TallySearch(wire::TallySearchRequest {
+                term: term.to_owned(),
+                limit: 10,
+            }))
+            .expect("search answers")
+        else {
+            panic!("search answered as something else");
+        };
+        found
+    };
+    // `cabin` is a prefix of both the group's name and the expense's: both are
+    // exact, neither is corrected.
+    let both = search("cabin");
+    assert_eq!(both.results.len(), 1);
+    assert_eq!(both.containers.len(), 1);
+    assert_eq!(both.containers[0].open_id, group);
+    assert!(both.corrected.is_empty());
+    // A WORD ONLY A GROUP'S NAME HOLDS, slipped: the walk has nothing to correct
+    // it to, so the door's vocabulary of group names does, and the walk is asked
+    // again with the corrected words.
+    scratch.group("Heron house", "GBP", &[&ana]);
+    let slipped = search("hreon");
+    assert_eq!(slipped.corrected, "heron");
+    assert!(slipped.results.is_empty());
+    assert_eq!(slipped.containers.len(), 1);
+    // A WORD ONLY AN EXPENSE HOLDS, slipped: the walk corrects it, as before,
+    // and no group is asked for the corrected words.
+    let slipped = search("handlse");
+    assert_eq!(slipped.corrected, "handles");
+    assert_eq!(slipped.results.len(), 1);
+    assert!(slipped.containers.is_empty());
+}

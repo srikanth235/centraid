@@ -28,7 +28,7 @@ use centraid_apps_tally::phone::{self, Activity, Entry, Role};
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
-use super::{VaultDoor, settle, zone_of};
+use super::{RecordingSearch, VaultDoor, containers, settle, zone_of};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
@@ -281,7 +281,19 @@ pub(super) fn spending(
     })
 }
 
-pub(super) fn search(door: &VaultDoor<'_>, asked: &wire::TallySearchRequest) -> Result<Answer> {
+/// `tally.search`: the expense walk, and beside it the groups whose own name
+/// matched (#1097, R-1097-19..21).
+///
+/// **The walk stays a walk** — it reads the ledger it already loads, and its
+/// correction is over the words of those expenses. The groups come from the
+/// FTS door (`social.circle`, a circle with a live `tally_group`), opened by the
+/// group's id. The two are ONE answer for the correction: it runs only when the
+/// expenses and the groups are both empty, and over both vocabularies.
+pub(super) fn search(
+    vault: &Vault,
+    door: &VaultDoor<'_>,
+    asked: &wire::TallySearchRequest,
+) -> Result<Answer> {
     if asked.limit == 0 {
         // REQUIRED AND VALIDATED, not defaulted (`agenda.search`'s rule).
         return Err(CoreError::InvalidRequest {
@@ -291,13 +303,72 @@ pub(super) fn search(door: &VaultDoor<'_>, asked: &wire::TallySearchRequest) -> 
         });
     }
     let limit = usize::try_from(asked.limit).unwrap_or(usize::MAX);
-    answered(door, phone::load_search(door, &asked.term, limit), |data| {
+    let loaded = vault.read(|connection| {
+        let index = match centraid_search::SqliteDoor::open(connection) {
+            Ok(index) => index,
+            Err(error) => {
+                return Ok(Err(CoreError::Invariant {
+                    context: format!("the search index will not open: {error}"),
+                }));
+            }
+        };
+        let search = RecordingSearch {
+            inner: &index,
+            door,
+        };
+        Ok(Ok(search_with_groups(door, &search, &asked.term, limit)))
+    })??;
+    answered(door, loaded, |(data, groups)| {
         Answer::TallySearch(wire::TallySearch {
             total_matches: count(data.total_matches),
             results: data.results.into_iter().map(entry).collect(),
             corrected: data.corrected.unwrap_or_default(),
+            containers: groups.into_iter().map(containers::to_wire).collect(),
         })
     })
+}
+
+/// The walk and the groups as one answer. The exact term runs first; the walk
+/// corrects its own words only when no group matched exactly; and when both are
+/// empty after that, the term is corrected over the groups' names and both are
+/// asked again, the correction kept only if one of them found something.
+fn search_with_groups(
+    door: &VaultDoor<'_>,
+    search: &dyn centraid_search::Search,
+    term: &str,
+    limit: usize,
+) -> KitResult<(phone::SearchResults, Vec<containers::Opened>)> {
+    let rows = limit.min(containers::CONTAINER_ROWS);
+    let groups_of = |words: &str| -> KitResult<Vec<containers::Opened>> {
+        let (found, denial) = containers::of_app(door, search, "tally", words, rows)?;
+        match denial {
+            Some(denial) => Err(KitError::Door(denial.message.unwrap_or_default())),
+            None => Ok(found),
+        }
+    };
+    let mut groups = groups_of(term)?;
+    let walked = phone::load_search_with(door, term, limit, groups.is_empty())?;
+    if let Some(words) = &walked.corrected {
+        groups = groups_of(words)?;
+    }
+    if walked.results.is_empty() && groups.is_empty() && !term.trim().is_empty() {
+        let corrected =
+            search.correct(&centraid_search::Principal::Owner, &["social.circle"], term);
+        if let Ok(Some(words)) = corrected {
+            let named = groups_of(&words)?;
+            let again = phone::load_search_with(door, &words, limit, false)?;
+            if !named.is_empty() || !again.results.is_empty() {
+                return Ok((
+                    phone::SearchResults {
+                        corrected: Some(words),
+                        ..again
+                    },
+                    named,
+                ));
+            }
+        }
+    }
+    Ok((walked, groups))
 }
 
 pub(super) fn trash(
