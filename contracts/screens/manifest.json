@@ -143,6 +143,62 @@
       "binary": "contracts/screens/home/status-urgent.bin"
     },
     {
+      "case": "activity",
+      "screen": "money",
+      "type": "centraid.screen.v1.MoneyHomeState",
+      "textproto": "contracts/screens/money/activity.textproto",
+      "binary": "contracts/screens/money/activity.bin"
+    },
+    {
+      "case": "day-one",
+      "screen": "money",
+      "type": "centraid.screen.v1.MoneyHomeState",
+      "textproto": "contracts/screens/money/day-one.textproto",
+      "binary": "contracts/screens/money/day-one.bin"
+    },
+    {
+      "case": "denied",
+      "screen": "money",
+      "type": "centraid.screen.v1.MoneyHomeState",
+      "textproto": "contracts/screens/money/denied.textproto",
+      "binary": "contracts/screens/money/denied.bin"
+    },
+    {
+      "case": "read-refused",
+      "screen": "money",
+      "type": "centraid.screen.v1.MoneyHomeState",
+      "textproto": "contracts/screens/money/read-refused.textproto",
+      "binary": "contracts/screens/money/read-refused.bin"
+    },
+    {
+      "case": "spending",
+      "screen": "money",
+      "type": "centraid.screen.v1.MoneyHomeState",
+      "textproto": "contracts/screens/money/spending.textproto",
+      "binary": "contracts/screens/money/spending.bin"
+    },
+    {
+      "case": "planned",
+      "screen": "money-import",
+      "type": "centraid.screen.v1.MoneyImportState",
+      "textproto": "contracts/screens/money-import/planned.textproto",
+      "binary": "contracts/screens/money-import/planned.bin"
+    },
+    {
+      "case": "question",
+      "screen": "money-import",
+      "type": "centraid.screen.v1.MoneyImportState",
+      "textproto": "contracts/screens/money-import/question.textproto",
+      "binary": "contracts/screens/money-import/question.bin"
+    },
+    {
+      "case": "offers",
+      "screen": "money-transaction",
+      "type": "centraid.screen.v1.MoneyTransactionState",
+      "textproto": "contracts/screens/money-transaction/offers.textproto",
+      "binary": "contracts/screens/money-transaction/offers.bin"
+    },
+    {
       "case": "draft-dirty",
       "screen": "notes",
       "type": "centraid.screen.v1.NotesEditorState",

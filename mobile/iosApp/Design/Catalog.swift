@@ -45,6 +45,7 @@ public enum CentraidCatalog {
         CentraidAppMeta(id: "tasks", name: "Tasks", desc: "Capture the next thing to do.", iconKey: "Check", colorKey: "ochre"),
         CentraidAppMeta(id: "docs", name: "Docs", desc: "Read and organize your documents.", iconKey: "Folder", colorKey: "teal"),
         CentraidAppMeta(id: "agenda", name: "Agenda", desc: "Your calendar, events and plans.", iconKey: "Calendar", colorKey: "forest"),
+        CentraidAppMeta(id: "money", name: "Money", desc: "Spending, targets and cash flow.", iconKey: "Coin", colorKey: "indigo"),
     ]
 
     /// By id, for the header that names one app.
@@ -59,6 +60,7 @@ public enum CentraidCatalog {
         "tasks": CentraidAppMark(hue: Color(.sRGB, red: 0.517647, green: 0.349020, blue: 0.133333, opacity: 1.000000), chipBackground: Color(.sRGB, red: 0.929412, green: 0.909804, blue: 0.878431, opacity: 1.000000), markColor: Color(.sRGB, red: 0.486275, green: 0.329412, blue: 0.125490, opacity: 1.000000)),
         "docs": CentraidAppMark(hue: Color(.sRGB, red: 0.000000, green: 0.439216, blue: 0.494118, opacity: 1.000000), chipBackground: Color(.sRGB, red: 0.862745, green: 0.921569, blue: 0.925490, opacity: 1.000000), markColor: Color(.sRGB, red: 0.000000, green: 0.403922, blue: 0.454902, opacity: 1.000000)),
         "agenda": CentraidAppMark(hue: Color(.sRGB, red: 0.223529, green: 0.447059, blue: 0.278431, opacity: 1.000000), chipBackground: Color(.sRGB, red: 0.894118, green: 0.921569, blue: 0.894118, opacity: 1.000000), markColor: Color(.sRGB, red: 0.203922, green: 0.407843, blue: 0.254902, opacity: 1.000000)),
+        "money": CentraidAppMark(hue: Color(.sRGB, red: 0.388235, green: 0.352941, blue: 0.576471, opacity: 1.000000), chipBackground: Color(.sRGB, red: 0.913725, green: 0.909804, blue: 0.933333, opacity: 1.000000), markColor: Color(.sRGB, red: 0.372549, green: 0.337255, blue: 0.552941, opacity: 1.000000)),
     ]
 
     public static let darkMarks: [String: CentraidAppMark] = [
@@ -69,6 +71,7 @@ public enum CentraidCatalog {
         "tasks": CentraidAppMark(hue: Color(.sRGB, red: 0.788235, green: 0.607843, blue: 0.396078, opacity: 1.000000), chipBackground: Color(.sRGB, red: 0.200000, green: 0.164706, blue: 0.121569, opacity: 1.000000), markColor: Color(.sRGB, red: 0.788235, green: 0.607843, blue: 0.396078, opacity: 1.000000)),
         "docs": CentraidAppMark(hue: Color(.sRGB, red: 0.345098, green: 0.705882, blue: 0.768627, opacity: 1.000000), chipBackground: Color(.sRGB, red: 0.113725, green: 0.184314, blue: 0.196078, opacity: 1.000000), markColor: Color(.sRGB, red: 0.345098, green: 0.705882, blue: 0.768627, opacity: 1.000000)),
         "agenda": CentraidAppMark(hue: Color(.sRGB, red: 0.482353, green: 0.709804, blue: 0.529412, opacity: 1.000000), chipBackground: Color(.sRGB, red: 0.141176, green: 0.184314, blue: 0.149020, opacity: 1.000000), markColor: Color(.sRGB, red: 0.482353, green: 0.709804, blue: 0.529412, opacity: 1.000000)),
+        "money": CentraidAppMark(hue: Color(.sRGB, red: 0.639216, green: 0.607843, blue: 0.854902, opacity: 1.000000), chipBackground: Color(.sRGB, red: 0.172549, green: 0.164706, blue: 0.215686, opacity: 1.000000), markColor: Color(.sRGB, red: 0.639216, green: 0.607843, blue: 0.854902, opacity: 1.000000)),
     ]
 
     /// Lucide-style silhouettes as raw SVG path data, viewBox 24x24.

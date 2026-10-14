@@ -613,3 +613,98 @@ Doctrine: [docs/decisions.md#money-1099](../docs/decisions.md#money-1099) (R-109
 - `experiments/toolchat/native/authored/coverage.py`
 - `experiments/toolchat/native/authored/gen/drills.py`
 - `experiments/toolchat/native/authored/gen/recover.py`
+
+## Lane W5 — Money on the phone: the shared screens, the Home tile and Android (wave 5a)
+
+Doctrine: [`docs/decisions.md#money-1099`](../docs/decisions.md#money-1099) (rulings R-1099-64 to R-1099-69; R-1099-12, 13, 23 and 62 are the arms, the chrome, the hue and the plan/tile envelope arm they build on) and, for the design contracts, [`docs/decisions.md#typography-and-design-contracts`](../docs/decisions.md#typography-and-design-contracts) (the catalogue edit in `packages/design/src`).
+
+### What changed
+
+- **Catalogue.** `packages/design/src/apps.ts` gains Money (`money`, `Coin`, `indigo`, the hue Tally freed, R-1099-23); the emitter regenerated `design/native-catalog.json`, `Catalog.kt` and `Catalog.swift` (eight apps).
+- **Protos.** `screen.proto` gains `// --- Money ---`: nine screen states with their events, the shared parts (`MoneyRow`, `MoneyChoice`, `MoneyChip`, `MoneyFigure`, `MoneyPageChrome`...) and `TileBody.Spent` (arm 9).
+- **Machines (shared).** `apps/money/`: the base (`MoneyQuery.kt`: held state, inputs, the read loop, `MoneyQueries`), the folds (`MoneyFold.kt`), and one machine per screen (Home with its three tabs and chip sheets, transaction, target, recurring, import, accounts, rules, categories, search) with nine bridges. A view event re-folds the held answers; a search with no term asks nothing on a change.
+- **Wiring.** Navigation destinations, `RowRoutes` (a `money`/`transaction` reference opens the page), `HomeMoneyTile` + `HomeRuntime.readMoney` (the tile rides `Request.money`), the springboard (order, size, empty copy), `HomeReads.TABLES`, and `copy/money.json` with its `MoneyCopy.kt` twin (312 strings, `lint:copy` at its budget).
+- **Specs and fixtures.** `MoneyScreensSpec` (24 tests), eight fixtures under `contracts/screens/money*`, the Money arms in `AppReadsSpec`, and the counts that moved: eleven copy twins, eight catalogue apps, the packed grid, `HomeReads.TABLES`.
+- **Android.** `screens/money/` (`MoneyRoutes`, `MoneyScreens`, `MoneyPages`, `MoneyParts`), one line in `MainActivity.routes`, and the tile body in `HomeScreen`. Written to its siblings' patterns and compiled by nothing here (no Android SDK on the box): an Android hand-off beside the iOS one.
+
+### Hand-offs
+
+- **iOS**: every screen id, bridge, route and copy key is in `HANDOFF-w5.md` (scratchpad); the views mirror `MoneyRoutes.kt`; the fixtures need Swift decode tests; the tile body needs a `HomeView` branch; the Xcode project is regenerated.
+- **Android**: the four files above have never met a compiler. The first machine with an SDK builds `:androidApp -Pcentraid.android=true` and fixes what it finds.
+
+### Every file this section touches
+
+- `CHANGELOG.md`
+- `contracts/screens/manifest.json`
+- `contracts/screens/money-import/planned.bin` (new)
+- `contracts/screens/money-import/planned.textproto` (new)
+- `contracts/screens/money-import/question.bin` (new)
+- `contracts/screens/money-import/question.textproto` (new)
+- `contracts/screens/money-transaction/offers.bin` (new)
+- `contracts/screens/money-transaction/offers.textproto` (new)
+- `contracts/screens/money/activity.bin` (new)
+- `contracts/screens/money/activity.textproto` (new)
+- `contracts/screens/money/day-one.bin` (new)
+- `contracts/screens/money/day-one.textproto` (new)
+- `contracts/screens/money/denied.bin` (new)
+- `contracts/screens/money/denied.textproto` (new)
+- `contracts/screens/money/read-refused.bin` (new)
+- `contracts/screens/money/read-refused.textproto` (new)
+- `contracts/screens/money/spending.bin` (new)
+- `contracts/screens/money/spending.textproto` (new)
+- `contracts/tools/build-screen-fixtures.ts`
+- `contracts/tools/export-native-catalog.ts`
+- `copy/money.json` (new)
+- `crates/api-proto/proto/centraid/screen/v1/screen.proto`
+- `design/native-catalog.json`
+- `docs/decisions.md`
+- `mobile/README.md`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/MainActivity.kt`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/HomeScreen.kt`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/money/MoneyPages.kt` (new)
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/money/MoneyParts.kt` (new)
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/money/MoneyRoutes.kt` (new)
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/money/MoneyScreens.kt` (new)
+- `mobile/iosApp/Design/Catalog.swift`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/design/Catalog.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/MoneyCopy.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyAccounts.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyBridges.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyCategories.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyFold.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyHome.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyImport.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyLists.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyQuery.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyRules.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyTarget.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyTransaction.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/nav/Navigation.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/nav/RowRoutes.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeMoneyTile.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeReads.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeRuntime.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/SpringboardPolicy.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/AppReadsSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/CatalogSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ChangeStreamSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/HomeMachineSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/HomeNoVaultSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/KitTimeMoneyCopySpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/MoneyScreensSpec.kt` (new)
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ScreenFixtureSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/SearchContainersSpec.kt`
+- `packages/design/src/apps.ts`
+- `receipts/issue-1099-money.md` (this section)
+
+### Verification
+
+- `./gradlew :shared:jvmTest`: 1350 tests green (after the two fixes below).
+- `cargo xtask gate --profile mobile-jvm` (under flock): PASS, 134 s of 420 s, including `git diff --exit-code -- design copy mobile contracts/screens`.
+- `cargo xtask rules`: every rule ok (`commonmain-no-platform-import` over 223 files). `bun run check:push:static`: 4/4. `cargo test -p centraid-api-proto`: 2 passed. `buf lint` clean and `buf breaking` against the umbrella clean. `bun run lint:copy` at its budget (no new offender).
+- An inherited red, corrected rather than loosened: `SearchContainersSpec` expected Home's search groups as notes then docs; lane T's Tally edit left that order wrong (Docs' tile is before Notes'), so the spec was red on the base and now states the machine's order.
+
+### Falsification
+
+1. **Import sends the plan's input unchanged.** Throwaway: appended a space to each statement's `publish_input` in `MoneyImportMachine.inputs`. `MoneyScreensSpec` went red in two tests (the publish input and the proposed-duplicates input) at the `inputJson shouldBe` lines; reverted.
+2. **The Home tile never drops or sums a currency.** Throwaway: took only the first amount in `HomeMoneyTile.arrived`. The tile test went red at the two-currency assertion; reverted. Red-first on a real defect: the first run of the new spec failed two tests, a search that read on a change with no term and a categories sheet whose data did not follow its state; both were fixed in the base machine (`idle`, and the view-event re-fold) and are green.

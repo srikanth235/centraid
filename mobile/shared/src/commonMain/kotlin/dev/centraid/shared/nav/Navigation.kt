@@ -329,6 +329,39 @@ public sealed interface Destination {
 
     /** A password-manager file, reviewed and sealed in (#1047 T2): `LockerImportBridge.open(parent)`. */
     public data object LockerImport : Destination
+
+    // --- Money (#1099, R-1099-13) ---
+    // `parent` on a pushed Money page is the pushing page's title: the back
+    // control's word. Empty: "Money".
+
+    /**
+     * MONEY'S HOME: Spending, Activity or Cash flow, as a parameter; More is a
+     * sheet. A shell calls `MoneyHomeBridge.open(destination)`.
+     */
+    public data class MoneyHome(
+        val destination: centraid.screen.v1.MoneyHomeState.Destination =
+            centraid.screen.v1.MoneyHomeState.Destination.DESTINATION_SPENDING,
+    ) : Destination
+
+    /** One transaction: `MoneyTransactionBridge.open(txnId, parent)`. */
+    public data class MoneyTransaction(val txnId: String, val parent: String = "") : Destination
+
+    /** A category's plan for a month, a sheet: `MoneyTargetBridge.open(month, categoryId, currency)`. */
+    public data class MoneyTarget(val month: String, val categoryId: String, val currency: String) : Destination
+
+    public data class MoneyRecurring(val parent: String = "") : Destination
+
+    /** A statement, reviewed and imported: `MoneyImportBridge.open(parent)`. */
+    public data class MoneyImport(val parent: String = "") : Destination
+
+    public data class MoneyAccounts(val parent: String = "") : Destination
+
+    public data class MoneyRules(val parent: String = "") : Destination
+
+    public data class MoneyCategories(val parent: String = "") : Destination
+
+    /** The search bar's page (R-CHROME-2): `MoneySearchBridge.open()`. */
+    public data object MoneySearch : Destination
 }
 
 /**

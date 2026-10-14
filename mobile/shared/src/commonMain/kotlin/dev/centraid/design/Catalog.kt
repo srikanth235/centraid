@@ -56,6 +56,7 @@ public object CentraidCatalog {
         NativeApp(id = "tasks", name = "Tasks", desc = "Capture the next thing to do.", iconKey = "Check", colorKey = "ochre"),
         NativeApp(id = "docs", name = "Docs", desc = "Read and organize your documents.", iconKey = "Folder", colorKey = "teal"),
         NativeApp(id = "agenda", name = "Agenda", desc = "Your calendar, events and plans.", iconKey = "Calendar", colorKey = "forest"),
+        NativeApp(id = "money", name = "Money", desc = "Spending, targets and cash flow.", iconKey = "Coin", colorKey = "indigo"),
     )
 
     /** By id, for the header that names one app. */
@@ -69,6 +70,7 @@ public object CentraidCatalog {
         "tasks" to NativeAppMark(hue = 0xFF845922L, chipBackground = 0xFFEDE8E0L, markColor = 0xFF7C5420L),
         "docs" to NativeAppMark(hue = 0xFF00707EL, chipBackground = 0xFFDCEBECL, markColor = 0xFF006774L),
         "agenda" to NativeAppMark(hue = 0xFF397247L, chipBackground = 0xFFE4EBE4L, markColor = 0xFF346841L),
+        "money" to NativeAppMark(hue = 0xFF635A93L, chipBackground = 0xFFE9E8EEL, markColor = 0xFF5F568DL),
     )
 
     public val darkMarks: Map<String, NativeAppMark> = mapOf(
@@ -79,6 +81,7 @@ public object CentraidCatalog {
         "tasks" to NativeAppMark(hue = 0xFFC99B65L, chipBackground = 0xFF332A1FL, markColor = 0xFFC99B65L),
         "docs" to NativeAppMark(hue = 0xFF58B4C4L, chipBackground = 0xFF1D2F32L, markColor = 0xFF58B4C4L),
         "agenda" to NativeAppMark(hue = 0xFF7BB587L, chipBackground = 0xFF242F26L, markColor = 0xFF7BB587L),
+        "money" to NativeAppMark(hue = 0xFFA39BDAL, chipBackground = 0xFF2C2A37L, markColor = 0xFFA39BDAL),
     )
 
     /**

@@ -1,0 +1,13 @@
+
+ :$
+Import statementMoney	Try againJa-chaseP2�
+1Choose a statement you downloaded from your bank.FileChase_Checking_Oct2026.CSV*Choose another file2Into:!Chase Total Checking ····2291@b�
+statement:0Chase Total CheckingJj
+*Which order does this file write dates in?
+03/04/2026
+11/05/2026
+mdy
+MM/DD/YYYY
+dmy
+DD/MM/YYYYz
+Start over

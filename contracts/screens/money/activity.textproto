@@ -1,0 +1,73 @@
+# ACTIVITY: a transfer keeps its row but greys its amount and says why; an uncategorised row
+# floats up in the seam tone as a chip, not yet and not wrong. The chip row is month, account
+# and category, with no sort chip.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_ACTIVITY
+month: "2026-10"
+data {
+  today: "2026-10-14"
+  month_label: "October 2026"
+  shows_month: true
+  activity {
+    needs_label: "Needs a category · 3"
+    needs_category { label: "USD" amount { minor: 6118 currency: "USD" exponent: 2 } tone: TONE_NEUTRAL }
+    sections {
+      day: "2026-10-14"
+      heading: "Today"
+      rows {
+        txn_id: "t1"
+        title: "Trader Joe’s"
+        meta: "Chase Total Checking"
+        amount { minor: -6418 currency: "USD" exponent: 2 }
+        amount_tone: TONE_NET
+        category_label: "Groceries"
+        accessibility_label: "Trader Joe’s, Today, Groceries, Chase Total Checking"
+      }
+    }
+    sections {
+      day: "2026-10-13"
+      heading: "Yesterday"
+      rows {
+        txn_id: "t2"
+        title: "To Chase Savings"
+        meta: "Chase Total Checking · Not counted as spending"
+        amount { minor: -50000 currency: "USD" exponent: 2 }
+        amount_tone: TONE_SEAM
+        chips { label: "Transfer" tone: TONE_SEAM }
+        dimmed: true
+      }
+    }
+    window: "Showing 2"
+    more: true
+  }
+}
+sheet: SHEET_NONE
+band { key: "spending" label: "Spending" icon_key: "Coin" current: false }
+band { key: "activity" label: "Activity" icon_key: "List" current: true }
+band { key: "cashflow" label: "Cash flow" icon_key: "BarChart2" current: false }
+band { key: "more" label: "More" icon_key: "MoreHoriz" current: false }
+chrome {
+  title: "Money"
+  add_label: "Import statement"
+  retry: "Try again"
+  more_title: "More"
+  more_rows { key: "accounts" label: "Accounts" meta: "Balances and statement checks" icon_key: "Table" }
+  more_rows { key: "rules" label: "Rules" meta: "Name and file rows" icon_key: "Filter" }
+  more_rows { key: "categories" label: "Categories" meta: "Groups and categories" icon_key: "Tag" }
+  more_rows { key: "import" label: "Import statement" meta: "CSV, OFX or QFX" icon_key: "Download" }
+  search_placeholder: "Search transactions"
+  previous_month_label: "Previous month"
+  next_month_label: "Next month"
+  month_sheet_title: "Month"
+  account_sheet_title: "Account"
+  category_sheet_title: "Category"
+  close_label: "Close"
+}
+activity_shown: 50
+chips { key: "month" label: "October 2026" }
+chips { key: "account" label: "All accounts" }
+chips { key: "category" label: "All categories" }

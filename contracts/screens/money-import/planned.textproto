@@ -1,0 +1,62 @@
+# THE REVIEW: every row has a verdict and the counts add up to the file. A row proposed as a
+# duplicate sits under its own count and is skipped unless the member says otherwise; a row
+# that cannot be read says why and never blocks the others. Nothing is written until Import.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+phase: PHASE_PLANNED
+data {
+  lede: "Choose a statement you downloaded from your bank."
+  file_label: "File"
+  file_value: "Chase_Checking_Oct2026.CSV"
+  file_note: "CSV, OFX or QFX from your bank."
+  choose_label: "Choose another file"
+  account_label: "Into"
+  account_value: "Chase Total Checking ····2291"
+  needs_account: true
+  account_options { key: "a-chase" label: "Chase Total Checking" selected: true detail: "····2291" }
+  account_sheet_title: "Import into"
+  statements {
+    key: "statement:0"
+    title: "Chase Total Checking"
+    span: "Sep 15 to Oct 14"
+    totals { label: "In" amount { minor: 488662 currency: "USD" exponent: 2 } tone: TONE_NEUTRAL }
+    totals { label: "Out" amount { minor: 576130 currency: "USD" exponent: 2 } tone: TONE_NET }
+    counts { label: "New" detail: "186" }
+    counts { label: "Already in" detail: "24" }
+    counts { label: "Check these" detail: "2" }
+    counts { label: "Can’t read" detail: "2" }
+    rows {
+      key: "line:31"
+      line_label: "Row 31"
+      title: "NETFLIX.COM"
+      meta: "Oct 3 · Looks like a row already in"
+      has_amount: true
+      amount { minor: -1549 currency: "USD" exponent: 2 }
+      chip { label: "Check" tone: TONE_WARNING }
+      accessibility_label: "NETFLIX.COM, Oct 3, Looks like a row already in, Check"
+    }
+    rows {
+      key: "line:88"
+      line_label: "Row 88"
+      title: ""
+      has_amount: false
+      chip { label: "Can’t read" tone: TONE_WARNING }
+      reason: "Amount has a letter O."
+      accessibility_label: "Can’t read, Amount has a letter O."
+    }
+    checkpoint { label: "Statement balance" amount { minor: 318452 currency: "USD" exponent: 2 } }
+    checkpoint_label: "as of Oct 14"
+    keep_proposed_label: "Import the rows to check anyway"
+    has_proposed: true
+  }
+  publish_label: "Import 186 rows"
+  publish_note: "Nothing is saved until you import."
+  discard_label: "Start over"
+  add_account_label: "Add account"
+}
+chrome { title: "Import statement" back_label: "Money" retry: "Try again" }
+account_id: "a-chase"
+sheet: SHEET_NONE

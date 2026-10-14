@@ -26,14 +26,14 @@ import kotlin.io.path.createTempDirectory
  * A HOME WITH NO VAULT IS NOT A HOME THAT IS LOADING.
  *
  * Seen on a simulator with a fresh install: "No vault yet" in the header over
- * seven tiles on their seeded `LOADING` skeletons, for ever. `HomeSession`
+ * eight tiles on their seeded `LOADING` skeletons, for ever. `HomeSession`
  * starts no [dev.centraid.shared.shell.HomeRuntime] while the shelf has no core,
  * so the read the open asked for was never answered — and an app opened from
  * the same Home said "No vault is open on this device." The three-state read
  * law has a third state for exactly this and Home never reached it.
  *
  * The answer is the FAILED branch and not an empty grid: with no vault there is
- * nothing for a tile to have read, and seven `EMPTY` tiles — or a Day One page —
+ * nothing for a tile to have read, and eight `EMPTY` tiles — or a Day One page —
  * would be a claim about a vault that does not exist.
  */
 class HomeNoVaultSpec : StringSpec({

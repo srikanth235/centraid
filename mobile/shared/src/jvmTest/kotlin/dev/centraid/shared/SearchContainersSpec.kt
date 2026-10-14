@@ -63,13 +63,14 @@ class SearchContainersSpec : StringSpec({
                 hit("docs", "core.concept", "fo", "Cabin papers"),
             ),
         )
-        data.groups.map { it.app_id } shouldContainExactly listOf("notes", "docs")
-        val notes = data.groups[0]
+        // GROUPED IN HOME'S TILE ORDER: Docs' tile comes before Notes'.
+        data.groups.map { it.app_id } shouldContainExactly listOf("docs", "notes")
+        val notes = data.groups[1]
         notes.containers.map { it.title } shouldContainExactly listOf("Cabin")
         notes.rows.map { it.title } shouldContainExactly listOf("Cabin packing", "Cabin key")
         notes.count shouldBe 3
         notes.accessibility_label shouldBe "Notes, 3 results"
-        val docs = data.groups[1]
+        val docs = data.groups[0]
         docs.rows.shouldBeEmpty()
         docs.count shouldBe 1
         docs.containers.single().target shouldBe ChatCard(app = "docs", entity = "folder", id = "fo", title = "Cabin papers")
