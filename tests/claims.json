@@ -2052,42 +2052,6 @@
         }
       },
       {
-        "id": "tally",
-        "engines": {
-          "placement": {
-            "status": "pass",
-            "flow": "blueprint-placement-law"
-          },
-          "custody": {
-            "status": "skip",
-            "reason": "Tally is record-only; its receipt-photo origin edge does not import custody.",
-            "citation": "docs/blueprint-seats.md#engine-contracts"
-          },
-          "consent": {
-            "status": "skip",
-            "reason": "Tally is outside the closed enrichment-domain union.",
-            "citation": "docs/blueprint-seats.md#engine-contracts"
-          },
-          "triage": {
-            "status": "skip",
-            "reason": "Tally declares no proposal queue.",
-            "citation": "docs/blueprint-seats.md#engine-contracts"
-          },
-          "search": {
-            "status": "pass",
-            "flow": "blueprint-search-law"
-          },
-          "enrichment": {
-            "status": "pass",
-            "flow": "blueprint-enrichment-law"
-          },
-          "pendingOverlay": {
-            "status": "pass",
-            "flow": "blueprint-pending-overlay-law"
-          }
-        }
-      },
-      {
         "id": "tasks",
         "engines": {
           "placement": {
@@ -2263,26 +2227,6 @@
             "status": "owned",
             "owner": "apps/web/tests/e2e/photos-grants.spec.ts",
             "tier": "e2e"
-          }
-        }
-      },
-      {
-        "id": "tally",
-        "seats": {
-          "origin": {
-            "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/tally-derived.mjs",
-            "tier": "e2e"
-          },
-          "custodian": {
-            "status": "owned",
-            "owner": "apps/desktop/tests/e2e/tally.spec.ts",
-            "tier": "e2e"
-          },
-          "viewer": {
-            "status": "skip",
-            "reason": "The v17 web interface shipped (#872); the seat's end-to-end journey is not yet written. The app.json doors and the drawn surface are covered by unit and component owners; a seat journey lands with the e2e follow-up on the umbrella issue.",
-            "citation": "#872"
           }
         }
       },
@@ -2536,39 +2480,6 @@
           "denied": {
             "status": "owned",
             "owner": "packages/blueprints/src/app-boot/photos.test.ts"
-          }
-        }
-      },
-      {
-        "id": "tally",
-        "states": {
-          "dayone": {
-            "status": "owned",
-            "owner": "packages/blueprints/apps/tally/states.test.tsx"
-          },
-          "pending": {
-            "status": "owned",
-            "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts"
-          },
-          "offline": {
-            "status": "owned",
-            "owner": "packages/blueprints/apps/tally/states.test.tsx"
-          },
-          "stale": {
-            "status": "owned",
-            "owner": "packages/blueprints/apps/tally/states.test.tsx"
-          },
-          "conflict": {
-            "status": "owned",
-            "owner": "packages/blueprints/apps/tally/states.test.tsx"
-          },
-          "parked": {
-            "status": "owned",
-            "owner": "packages/blueprints/apps/tally/states.test.tsx"
-          },
-          "denied": {
-            "status": "owned",
-            "owner": "packages/blueprints/apps/tally/states.test.tsx"
           }
         }
       },
@@ -3158,110 +3069,6 @@
         ]
       },
       {
-        "id": "tally",
-        "doc": "docs/apps/tally-scenarios.md",
-        "scenarios": [
-          {
-            "id": "designed-states",
-            "label": "designed dayone",
-            "layer": "component",
-            "status": "owned",
-            "owner": "packages/blueprints/apps/tally/states.test.tsx"
-          },
-          {
-            "id": "figure-derivation",
-            "label": "figure sign convention and formatting",
-            "layer": "unit",
-            "status": "owned",
-            "owner": "packages/blueprints/apps/tally/format.test.ts"
-          },
-          {
-            "id": "splits",
-            "label": "split resolution and odd-penny placement",
-            "layer": "unit",
-            "status": "owned",
-            "owner": "packages/blueprints/apps/tally/split-model.test.ts"
-          },
-          {
-            "id": "schedules",
-            "label": "recurring schedule sentences and withheld verbs",
-            "layer": "unit",
-            "status": "owned",
-            "owner": "packages/blueprints/apps/tally/schedule-model.test.ts"
-          },
-          {
-            "id": "writes",
-            "label": "write payloads and refusal narration",
-            "layer": "unit",
-            "status": "owned",
-            "owner": "packages/blueprints/apps/tally/writes.test.ts"
-          },
-          {
-            "id": "derived-origin",
-            "label": "derived origin journey — read-time figures and no verb this seat cannot fire",
-            "layer": "journey",
-            "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/tally-derived.mjs"
-          },
-          {
-            "id": "origin-band",
-            "label": "origin band, Waiting slot and More sheet tables",
-            "layer": "unit",
-            "status": "owned",
-            "owner": "apps/mobile/src/apps/tally/tally-band.test.ts"
-          },
-          {
-            "id": "origin-seat-model",
-            "label": "origin state precedence, honest window foot and the outbox's Waiting rows",
-            "layer": "unit",
-            "status": "owned",
-            "owner": "apps/mobile/src/apps/tally/tally-view-model.test.ts"
-          },
-          {
-            "id": "origin-read-plane",
-            "label": "origin read plane — denial as data, search races, forgetting a payload",
-            "layer": "unit",
-            "status": "owned",
-            "owner": "apps/mobile/src/apps/tally/tally-store.test.ts"
-          },
-          {
-            "id": "origin-balances",
-            "label": "origin Balances — hero derivation, All settled, day one and the sign convention",
-            "layer": "component",
-            "status": "owned",
-            "owner": "apps/mobile/src/apps/tally/BalancesView.test.tsx"
-          },
-          {
-            "id": "origin-waiting",
-            "label": "origin Waiting — the doors this transport has, and the two verbs it does not",
-            "layer": "component",
-            "status": "owned",
-            "owner": "apps/mobile/src/apps/tally/WaitingView.test.tsx"
-          },
-          {
-            "id": "origin-pending-restart",
-            "label": "origin pending writes survive a process restart — same intent ids, same overlay",
-            "layer": "journey",
-            "status": "owned",
-            "owner": "apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx"
-          },
-          {
-            "id": "origin-share-group",
-            "label": "origin share-a-group row — the phone's one commons producer, withheld offline",
-            "layer": "component",
-            "status": "owned",
-            "owner": "apps/mobile/src/apps/tally/TallyShareGroup.test.tsx"
-          },
-          {
-            "id": "origin-sharing",
-            "label": "origin sharing journey — compile a share, make a person reachable on the mounted plane",
-            "layer": "journey",
-            "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/sharing-reach.mjs"
-          }
-        ]
-      },
-      {
         "id": "tasks",
         "doc": "docs/apps/tasks-scenarios.md",
         "scenarios": [
@@ -3445,6 +3252,16 @@
       "owner": "tests/scale/photos-memories.scale.test.ts",
       "reason": "Approved by the maintainer 2026-09-05 as part of the #927 rig diet: the owning rig cited no tests/journeys.json entry and was deleted outright — web|mobile/scroll at year3-photos is the entry a successor would answer to. No surviving rig's floor moves.",
       "issue": "#927"
+    },
+    "mobile-sharing-reach": {
+      "owner": "tests/agent-e2e-mobile/flows/sharing-reach.mjs",
+      "reason": "Tally is deleted from v0 (#1099, PR #1112), so the journey this floor fenced has no subject and no successor; the owner file is gone from the tree. No surviving flow's floor moves.",
+      "issue": "#1099"
+    },
+    "mobile-pending-restart-journey": {
+      "owner": "apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx",
+      "reason": "Tally is deleted from v0 (#1099, PR #1112), so the journey this floor fenced has no subject and no successor; the owner file is gone from the tree. No surviving flow's floor moves.",
+      "issue": "#1099"
     }
   },
   "flows": [
@@ -4017,24 +3834,6 @@
       "tier": "e2e",
       "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
       "minimumTests": 1
-    },
-    {
-      "id": "mobile-sharing-reach",
-      "name": "The phone compiles a share from a Tally group, withholds the verb with its own sentence while the gateway is out of reach, and loads the surface that makes a person reachable",
-      "surface": "mobile",
-      "dimension": "journey",
-      "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/sharing-reach.mjs",
-      "minimumTests": 15
-    },
-    {
-      "id": "mobile-pending-restart-journey",
-      "name": "An expense recorded through the rendered Tally cover with the gateway unreachable still draws its queued row, under the same durable intent id, after session, reader and store are rebuilt over the same SQLite file",
-      "surface": "mobile",
-      "dimension": "offline",
-      "tier": "integration",
-      "owner": "apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx",
-      "minimumTests": 4
     },
     {
       "id": "tunnel-wire",
@@ -4821,12 +4620,6 @@
       "restated": "Locker declares `seats.disabledOn: [\"viewer\"]`, so this is not an absence of behaviour but a required one: the PWA seat must REFUSE at the mount path rather than render the app. Something has to fail if a browser ever mounts Locker, which is why this cell is a prohibition and names the gate that fails.",
       "gate": "packages/blueprints/src/app-manifests.test.ts"
     },
-    "appSeats.tally.viewer": {
-      "kind": "impossibility",
-      "reviewed": "2026-08-30",
-      "citation": "#872",
-      "restated": "Tally's v17 web interface shipped and its doors and drawn surface are covered at the unit and component tiers; what is absent is the seat's end-to-end journey, which is scheduled work rather than a claim that cannot be made. Re-read when #872's e2e follow-up lands — this is the one row here most likely to stop being an n/a."
-    },
     "appEngines.agenda.placement": {
       "kind": "impossibility",
       "reviewed": "2026-08-30",
@@ -4940,24 +4733,6 @@
       "reviewed": "2026-08-30",
       "citation": "docs/blueprint-seats.md#engine-contracts",
       "restated": "People does not consume the shared search scaffold."
-    },
-    "appEngines.tally.custody": {
-      "kind": "impossibility",
-      "reviewed": "2026-08-30",
-      "citation": "docs/blueprint-seats.md#engine-contracts",
-      "restated": "Tally is record-only; its receipt-photo origin edge does not import custody."
-    },
-    "appEngines.tally.consent": {
-      "kind": "impossibility",
-      "reviewed": "2026-08-30",
-      "citation": "docs/blueprint-seats.md#engine-contracts",
-      "restated": "Tally is outside the closed enrichment-domain union."
-    },
-    "appEngines.tally.triage": {
-      "kind": "impossibility",
-      "reviewed": "2026-08-30",
-      "citation": "docs/blueprint-seats.md#engine-contracts",
-      "restated": "Tally declares no proposal queue. An expense is entered or materialised from a recurring template; neither shape produces a candidate row awaiting a member's yes."
     },
     "appEngines.tasks.placement": {
       "kind": "impossibility",
