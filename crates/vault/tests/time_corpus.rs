@@ -59,6 +59,72 @@ fn zone_of(name: &str) -> Option<FireZone> {
 // rrule-cases.json
 // ---------------------------------------------------------------------------
 
+/// The two refusal sentences #1119 rewrote (contracts/time/README.md, "Deliberate departures"). v0's
+/// `BYDAY` sentence said a positional day could never be honoured and its `BYMONTHDAY` sentence that
+/// the expander only steps from the anchor day; since R-1119-1 a MONTHLY rule takes one of either, so
+/// a member reading v0's words would be told something false. The golden is NOT rewritten: a refused
+/// case naming one of these parts must still carry v0's sentence there, and this build's sentence
+/// must differ from it and name what the subset does take.
+const REWORDED_1119: [(&str, &str); 2] = [
+    (
+        "BYDAY",
+        "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY expansion only, \
+         and a positional day (\"-1FR\") or a non-day token is not a rule it can expand",
+    ),
+    (
+        "BYMONTHDAY",
+        "recurrence rule uses BYMONTHDAY, which this engine cannot honour: it pins occurrences to \
+         days of the month; the expander steps from the anchor day",
+    ),
+];
+
+/// **THE FIVE GOLDEN CASES THE VAULT WIDENED ON PURPOSE** (#1119, R-1119-1).
+///
+/// v0 refused `FREQ=MONTHLY` with a positional `BYDAY` or a `BYMONTHDAY`; the
+/// vault now accepts exactly one of each, with RFC 5545 semantics. The golden
+/// is a frozen capture of v0 and is NOT rewritten (a fixture the port could
+/// rewrite proves nothing), so the departure is written down here, once, per
+/// case: the rule, the pin it must parse to, and the sentence the one
+/// summariser says. A rule not in this table still has to agree with v0, and
+/// every one that is must STILL be recorded as refused in the golden, so this
+/// table cannot quietly grow to cover a case v0 accepted.
+const WIDENED_1119: [(&str, rrule::MonthlyPin, &str); 5] = [
+    (
+        "FREQ=MONTHLY;BYDAY=+3WE",
+        rrule::MonthlyPin::NthWeekday {
+            ordinal: 3,
+            day: "WE",
+        },
+        "Monthly on the third Wednesday",
+    ),
+    (
+        "FREQ=MONTHLY;BYDAY=-1FR",
+        rrule::MonthlyPin::NthWeekday {
+            ordinal: -1,
+            day: "FR",
+        },
+        "Monthly on the last Friday",
+    ),
+    (
+        "FREQ=MONTHLY;BYDAY=2MO",
+        rrule::MonthlyPin::NthWeekday {
+            ordinal: 2,
+            day: "MO",
+        },
+        "Monthly on the second Monday",
+    ),
+    (
+        "FREQ=MONTHLY;BYMONTHDAY=-1",
+        rrule::MonthlyPin::MonthDay(-1),
+        "Monthly on the last day",
+    ),
+    (
+        "FREQ=MONTHLY;BYMONTHDAY=1",
+        rrule::MonthlyPin::MonthDay(1),
+        "Monthly on the 1st",
+    ),
+];
+
 #[test]
 fn every_rrule_case_agrees_with_v0() {
     let corpus = fixture("rrule-cases.json");
@@ -70,6 +136,8 @@ fn every_rrule_case_agrees_with_v0() {
     );
     let mut accepted = 0_usize;
     let mut refused = 0_usize;
+    let mut widened_seen = 0_usize;
+    let mut reworded_seen = 0_usize;
     for case in cases {
         let value = text(case, "rrule");
         let label = format!("rrule {value:?}");
@@ -83,6 +151,23 @@ fn every_rrule_case_agrees_with_v0() {
             text(case, "line"),
             "{label}: RRULE: line"
         );
+        if let Some((_, pin, summary)) = WIDENED_1119.iter().find(|(rule, ..)| *rule == value) {
+            assert!(
+                !case["accepted"].as_bool().unwrap_or_default(),
+                "{label}: the table departs from a v0 REFUSAL only"
+            );
+            let rule = rrule::inspect(&value).expect("the vault widened this rule");
+            assert_eq!(rule.monthly_pin, Some(*pin), "{label}: the pin");
+            assert_eq!(rule.freq.as_str(), "MONTHLY", "{label}: freq");
+            assert_eq!(rule.by_day, None, "{label}: a pin is not a weekly day list");
+            assert_eq!(
+                rrule::describe(&value).as_deref(),
+                Some(*summary),
+                "{label}: the one summariser"
+            );
+            widened_seen += 1;
+            continue;
+        }
         assert_eq!(
             rrule::describe(&value),
             case["summary"].as_str().map(str::to_owned),
@@ -130,11 +215,30 @@ fn every_rrule_case_agrees_with_v0() {
                     "{label}: v0 accepted and this build refused with {refusal}"
                 );
                 assert_eq!(refusal.reason(), text(case, "reason"), "{label}: reason");
-                assert_eq!(
-                    refusal.message(),
-                    text(case, "message"),
-                    "{label}: THE SENTENCE — a member reads this one"
-                );
+                let golden = text(case, "message");
+                let reworded = match &refusal {
+                    rrule::Refusal::UnsupportedPart { part } => REWORDED_1119
+                        .iter()
+                        .find(|(name, _)| name == part)
+                        .map(|(_, v0)| *v0),
+                    _ => None,
+                };
+                if let Some(v0) = reworded {
+                    assert_eq!(golden, v0, "{label}: the golden still holds v0's words");
+                    let ours = refusal.message();
+                    assert_ne!(ours, golden, "{label}: #1119 rewrote this sentence");
+                    assert!(
+                        ours.contains("MONTHLY"),
+                        "{label}: the sentence names what the subset takes: {ours}"
+                    );
+                    reworded_seen += 1;
+                } else {
+                    assert_eq!(
+                        refusal.message(),
+                        golden,
+                        "{label}: THE SENTENCE — a member reads this one"
+                    );
+                }
                 match &refusal {
                     rrule::Refusal::UnsupportedPart { part } => {
                         assert_eq!(*part, text(case, "part"), "{label}: part");
@@ -149,6 +253,15 @@ fn every_rrule_case_agrees_with_v0() {
             }
         }
     }
+    assert_eq!(
+        widened_seen,
+        WIDENED_1119.len(),
+        "every widened rule is a golden case"
+    );
+    assert!(
+        reworded_seen >= REWORDED_1119.len(),
+        "each rewritten sentence is met by at least one refused golden case ({reworded_seen})"
+    );
     assert!(
         accepted > 80 && refused > 30,
         "{accepted} accepted / {refused} refused"

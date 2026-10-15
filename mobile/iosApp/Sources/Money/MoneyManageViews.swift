@@ -30,9 +30,14 @@ struct MoneyAccountsView: View {
         let state = state
         let content = state.readContent
         let addLabel = content.loaded?.addLabel ?? ""
-        let sheetBinding = moneySheetBinding(state.hasEditor && state.sheet == .editor) {
+        let open = state.hasEditor && state.sheet == .editor
+        let sheetBinding = moneySheetBinding(open) {
             send(event { $0.sheetClosed = .init() })
         }
+        // A confirm over an open sheet is presented BY that sheet; a SwiftUI view
+        // presents one sheet at a time. On its own it is the page's.
+        let nestedConfirm = moneySheetBinding(state.hasConfirm) { send(event { $0.confirmDismissed = .init() }) }
+        let pageConfirm = moneySheetBinding(state.hasConfirm && !open) { send(event { $0.confirmDismissed = .init() }) }
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
             RoomTrailing(action: addLabel.isEmpty ? nil : RoomAction(
                 iconKey: "Plus",
@@ -61,7 +66,20 @@ struct MoneyAccountsView: View {
                 )
             }
         }
-        .sheet(isPresented: sheetBinding) { editorSheet(state) }
+        .sheet(isPresented: sheetBinding) {
+            editorSheet(state)
+                .sheet(isPresented: nestedConfirm) { confirm(state) }
+        }
+        .sheet(isPresented: pageConfirm) { confirm(state) }
+    }
+
+    @ViewBuilder
+    private func confirm(_ state: Centraid_Screen_V1_MoneyAccountsState) -> some View {
+        ConfirmSheet(
+            state.confirm,
+            onConfirm: { send(event { $0.confirmAccepted = .init() }) },
+            onDismiss: { send(event { $0.confirmDismissed = .init() }) }
+        )
     }
 
     @ViewBuilder
@@ -121,6 +139,12 @@ struct MoneyAccountsView: View {
                     send(event { $0.externalRef = .with { $0.text = text } })
                 }
                 MoneyNote(text: editor.externalRefNote)
+                if !editor.removeNumberLabel.isEmpty {
+                    MoneyQuietButton(label: editor.removeNumberLabel, tone: "net", identifier: "money-account-remove-number") {
+                        send(event { $0.removeNumber = .init() })
+                    }
+                    .disabled(!editor.canRemoveNumber)
+                }
                 MoneyToggleRow(label: editor.onBudgetLabel, on: editor.onBudget, identifier: "money-account-budget") {
                     send(event { $0.onBudget = .init() })
                 }
@@ -151,7 +175,7 @@ struct MoneyRulesView: View {
     }
 
     private func sheetIsOpen(_ state: Centraid_Screen_V1_MoneyRulesState) -> Bool {
-        state.hasEditor && (state.sheet == .editor || state.sheet == .category)
+        state.hasEditor && (state.sheet == .editor || state.sheet == .category || state.sheet == .account)
     }
 
     var body: some View {
@@ -227,6 +251,12 @@ struct MoneyRulesView: View {
                 choices: rules?.categoryOptions ?? [],
                 identifierPrefix: "money-rule-category-option"
             ) { key in send(event { $0.category = .with { $0.categoryID = key } }) }
+        } else if state.sheet == .account {
+            MoneyChoiceSheet(
+                title: rules?.accountSheetTitle ?? "",
+                choices: rules?.accountOptions ?? [],
+                identifierPrefix: "money-rule-account-option"
+            ) { key in send(event { $0.account = .with { $0.accountID = key } }) }
         } else {
             MoneyFormSheet(
                 title: editor.title,
@@ -251,6 +281,20 @@ struct MoneyRulesView: View {
                 MoneyTextField(key: editor.nameLabel, value: editor.displayName, identifier: "money-rule-name") { text in
                     send(event { $0.name = .with { $0.text = text } })
                 }
+                MoneyChoiceField(
+                    key: editor.accountRowLabel,
+                    value: editor.accountLabel.isEmpty ? editor.clearAccountLabel : editor.accountLabel,
+                    identifier: "money-rule-account"
+                ) { send(event { $0.accountSheet = .init() }) }
+                if editor.limitsEnabled {
+                    MoneyTextField(key: editor.amountMinLabel, value: editor.amountMinText, identifier: "money-rule-amount-min") { text in
+                        send(event { $0.amountMin = .with { $0.text = text } })
+                    }
+                    MoneyTextField(key: editor.amountMaxLabel, value: editor.amountMaxText, identifier: "money-rule-amount-max") { text in
+                        send(event { $0.amountMax = .with { $0.text = text } })
+                    }
+                }
+                MoneyNote(text: editor.amountNote)
                 MoneyNote(text: editor.issue, ink: "net")
                 if !editor.applyLabel.isEmpty {
                     MoneyQuietButton(label: editor.applyLabel, identifier: "money-rule-apply") {

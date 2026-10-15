@@ -1,12 +1,16 @@
 package dev.centraid.shared.apps.money
 
 import centraid.core.v1.AppQueryRequest
+import centraid.core.v1.MoneyAccounts
+import centraid.core.v1.MoneyAccountsRequest
+import centraid.core.v1.MoneyAmount
 import centraid.core.v1.MoneyCategoriesRequest
 import centraid.core.v1.MoneyRules
 import centraid.core.v1.MoneyRulesRequest
 import centraid.screen.v1.Confirm
 import centraid.screen.v1.EmptyState
 import centraid.screen.v1.Loading
+import centraid.screen.v1.Money
 import centraid.screen.v1.MoneyChoice
 import centraid.screen.v1.MoneyPageChrome
 import centraid.screen.v1.MoneyRuleEditor
@@ -33,8 +37,13 @@ import dev.centraid.shared.screen.Step
  * edited and deleted here, and can be applied to the lines already in. Rules
  * never touch a line the member filed or named themselves.
  *
- * An edit sends only what this page shows: a rule's amount limits and account
- * are the core's and stay as they are.
+ * AN EDIT SENDS EVERYTHING THE SHEET SHOWS (R-1119-2): the pattern, kind, category
+ * and name, and the rule's amount limits and account. A cleared limit or account
+ * is sent as null, and an untouched one as its current value. The limits are
+ * typed in the units of the account they name; with no account they are typed in
+ * the one exponent every account shares, and when there is none the fields are
+ * locked and the stored limits go back unchanged. A category or account the page
+ * cannot name by its label is left rather than cleared.
  */
 public object MoneyRulesMachine :
     MoneyQueryMachine<MoneyRulesState, MoneyRulesEvent, MoneyRulesData>("money.rules", MONEY_TABLES) {
@@ -95,6 +104,11 @@ public object MoneyRulesMachine :
                 // THE RULE NAMES ITS CATEGORY BY LABEL: the id is found by it, and
                 // when it cannot be (a renamed or archived one) the category is left alone on save.
                 val id = if (label.isEmpty()) "" else categories(held).firstOrNull { it.second == label }?.first.orEmpty()
+                // THE SAME FOR THE ACCOUNT: named by its label (account names are unique), else left alone on save.
+                val accountLabel = rule.account_label.orEmpty()
+                val accountId = if (accountLabel.isEmpty()) "" else accountByName(held, accountLabel)?.account_id.orEmpty()
+                val exponent = limitsExponent(held, accountId, accountLabel)
+                val currency = limitsCurrency(held, accountId, accountLabel)
                 Step(
                     held.copy(
                         screen = screen.copy(
@@ -108,6 +122,12 @@ public object MoneyRulesMachine :
                                 category_id = id,
                                 category_label = label,
                                 display_name = rule.display_name.orEmpty(),
+                                account_id = accountId,
+                                account_label = accountLabel,
+                                amount_min = stored(rule.amount_min, currency, exponent),
+                                amount_max = stored(rule.amount_max, currency, exponent),
+                                amount_min_text = seeded(rule.amount_min, exponent),
+                                amount_max_text = seeded(rule.amount_max, exponent),
                             ),
                         ),
                     ),
@@ -141,9 +161,13 @@ public object MoneyRulesMachine :
                     ),
                 )
             }
+            event.amount_min != null -> Step(held.copy(screen = screen.copy(editor = editor.copy(amount_min_text = event.amount_min.text))))
+            event.amount_max != null -> Step(held.copy(screen = screen.copy(editor = editor.copy(amount_max_text = event.amount_max.text))))
+            event.account_sheet != null -> Step(held.copy(screen = screen.copy(sheet = MoneyRulesState.Sheet.SHEET_ACCOUNT)))
+            event.account != null -> pickAccount(held, editor, event.account.account_id)
             event.sheet_closed != null -> Step(
                 held.copy(
-                    screen = if (screen.sheet == MoneyRulesState.Sheet.SHEET_CATEGORY) {
+                    screen = if (screen.sheet == MoneyRulesState.Sheet.SHEET_CATEGORY || screen.sheet == MoneyRulesState.Sheet.SHEET_ACCOUNT) {
                         screen.copy(sheet = MoneyRulesState.Sheet.SHEET_EDITOR)
                     } else {
                         screen.copy(sheet = MoneyRulesState.Sheet.SHEET_NONE, editor = null)
@@ -163,6 +187,88 @@ public object MoneyRulesMachine :
 
     private fun categories(held: MoneyHeld<MoneyRulesState>): List<Pair<String, String>> =
         held.answers.categories?.groups.orEmpty().flatMap { group -> group.categories.map { it.category_id to it.label } }
+
+    private fun accountLines(held: MoneyHeld<MoneyRulesState>): List<MoneyAccounts.AccountLine> =
+        held.answers.accounts?.let { it.on_budget + it.off_budget }.orEmpty()
+
+    /**
+     * The rule's account, by the name the core printed for it: both answers carry the vault's
+     * stored name byte for byte, so the match is exact. A case-blind match would differ from the
+     * vault's own uniqueness check (SQLite's ASCII-only `lower()`) on a non-ASCII name.
+     */
+    private fun accountByName(held: MoneyHeld<MoneyRulesState>, label: String): MoneyAccounts.AccountLine? =
+        accountLines(held).firstOrNull { it.name == label }
+
+    /**
+     * EACH CURRENCY'S EXPONENT, as the core states it on the amounts the accounts
+     * answer carries (a balance, a statement's figures, net worth). It is never
+     * guessed: a currency none of them states has no entry.
+     */
+    private fun exponents(held: MoneyHeld<MoneyRulesState>): Map<String, Int> {
+        val answer = held.answers.accounts ?: return emptyMap()
+        val seen = linkedMapOf<String, Int>()
+        fun see(amount: MoneyAmount?) {
+            if (amount != null && amount.currency.isNotEmpty()) seen.putIfAbsent(amount.currency, amount.exponent)
+        }
+        (answer.on_budget + answer.off_budget).forEach { line ->
+            see(line.balance)
+            see(line.checkpoint?.stated)
+            see(line.checkpoint?.delta)
+        }
+        answer.net_worth.forEach { see(it.amount) }
+        return seen
+    }
+
+    /** The accounts a rule's limits are typed against: the one it names, else every account. */
+    private fun limitAccounts(held: MoneyHeld<MoneyRulesState>, accountId: String): List<MoneyAccounts.AccountLine> =
+        if (accountId.isEmpty()) accountLines(held) else accountLines(held).filter { it.account_id == accountId }
+
+    /**
+     * THE EXPONENT THE LIMITS ARE TYPED IN, or null when no one is known: an
+     * account the page cannot name, a currency the answer never states, or
+     * accounts that disagree (a limit is a count of minor units, so it means
+     * nothing until an account says which).
+     */
+    private fun limitsExponent(held: MoneyHeld<MoneyRulesState>, accountId: String, accountLabel: String): Int? {
+        if (accountId.isEmpty() && accountLabel.isNotEmpty()) return null
+        val table = exponents(held)
+        return limitAccounts(held, accountId).map { table[it.currency] ?: return null }.distinct().singleOrNull()
+    }
+
+    /** The currency code the limits are in; empty when it is not one currency. */
+    private fun limitsCurrency(held: MoneyHeld<MoneyRulesState>, accountId: String, accountLabel: String): String {
+        if (accountId.isEmpty() && accountLabel.isNotEmpty()) return ""
+        return limitAccounts(held, accountId).map { it.currency }.distinct().singleOrNull().orEmpty()
+    }
+
+    /** A stored limit as the kit's Money, in the currency and exponent the limits are typed in. */
+    private fun stored(minor: Long?, currency: String, exponent: Int?): Money? =
+        minor?.let { Money(minor = it, currency = currency, exponent = exponent ?: 0) }
+
+    /** A stored limit as the field holds it; empty when there is none or no exponent to state it in. */
+    private fun seeded(minor: Long?, exponent: Int?): String =
+        if (minor == null || exponent == null) "" else MoneyFold.amountText(minor, exponent)
+
+    private fun pickAccount(
+        held: MoneyHeld<MoneyRulesState>,
+        editor: MoneyRuleEditor,
+        accountId: String,
+    ): Step<MoneyHeld<MoneyRulesState>> {
+        val line = accountLines(held).firstOrNull { it.account_id == accountId }
+        if (accountId.isNotEmpty() && line == null) return Step(held)
+        val label = line?.name.orEmpty()
+        val before = limitsExponent(held, editor.account_id, editor.account_label)
+        val after = limitsExponent(held, accountId, label)
+        var next = editor.copy(account_id = accountId, account_label = label)
+        // LIMITS THAT WERE LOCKED are in the units of the account the member now names: show them.
+        if (before == null && after != null) {
+            next = next.copy(
+                amount_min_text = seeded(editor.amount_min?.minor, after),
+                amount_max_text = seeded(editor.amount_max?.minor, after),
+            )
+        }
+        return Step(held.copy(screen = held.screen.copy(sheet = MoneyRulesState.Sheet.SHEET_EDITOR, editor = next)))
+    }
 
     private fun applyConfirm(): Confirm = Confirm(
         title = MoneyCopy.APPLY_TITLE,
@@ -200,13 +306,24 @@ public object MoneyRulesMachine :
         }
     }
 
-    private fun check(editor: MoneyRuleEditor): MoneyRuleEditor {
+    /** A typed limit in minor units; null when blank, invalid or locked. */
+    private fun typedLimit(text: String, exponent: Int?): Long? =
+        if (exponent == null || text.isBlank()) null else MoneyFold.parseAmount(text, exponent)
+
+    private fun check(held: MoneyHeld<MoneyRulesState>, editor: MoneyRuleEditor): MoneyRuleEditor {
         val add = editor.mode == MoneyRuleEditor.Mode.MODE_ADD
         val hasEffect = editor.category_label.isNotEmpty() || editor.category_id.isNotEmpty() || editor.display_name.isNotBlank()
+        val exponent = limitsExponent(held, editor.account_id, editor.account_label)
+        val currency = limitsCurrency(held, editor.account_id, editor.account_label)
+        val min = typedLimit(editor.amount_min_text, exponent)
+        val max = typedLimit(editor.amount_max_text, exponent)
         val issue = when {
             editor.pattern.isBlank() -> MoneyCopy.RULE_PATTERN_MISSING
             editor.pattern.length > PATTERN_MAX -> MoneyCopy.RULE_PATTERN_LONG
             !hasEffect -> MoneyCopy.RULE_EFFECT_MISSING
+            exponent != null && editor.amount_min_text.isNotBlank() && min == null -> MoneyCopy.AMOUNT_INVALID
+            exponent != null && editor.amount_max_text.isNotBlank() && max == null -> MoneyCopy.AMOUNT_INVALID
+            min != null && max != null && min > max -> MoneyCopy.RULE_LIMITS_ORDER
             else -> ""
         }
         return editor.copy(
@@ -224,13 +341,38 @@ public object MoneyRulesMachine :
             apply_label = if (add) "" else MoneyCopy.RULE_APPLY,
             cancel_label = MoneyCopy.CANCEL,
             clear_category_label = MoneyCopy.NO_CATEGORY,
+            account_row_label = MoneyCopy.RULE_ACCOUNT,
+            clear_account_label = MoneyCopy.RULE_ACCOUNT_ANY,
+            amount_min_label = listOf(MoneyCopy.RULE_AMOUNT_MIN, currency).filter { it.isNotEmpty() }.joinToString(LABEL_JOIN),
+            amount_max_label = listOf(MoneyCopy.RULE_AMOUNT_MAX, currency).filter { it.isNotEmpty() }.joinToString(LABEL_JOIN),
+            limits_enabled = exponent != null,
+            amount_note = when {
+                exponent == null -> MoneyCopy.RULE_LIMITS_LOCKED_NOTE
+                exponent == 0 -> "${MoneyCopy.RULE_AMOUNT_NOTE} ${MoneyCopy.WHOLE_UNITS}"
+                else -> MoneyCopy.RULE_AMOUNT_NOTE
+            },
         )
     }
 
+    /**
+     * A LIMIT AS THE COMMAND TAKES IT: the typed amount, null once cleared, and
+     * while the fields are locked the stored one, so an untouched limit goes
+     * back as it is.
+     */
+    private fun limitField(exponent: Int?, text: String, stored: Money?): String =
+        when {
+            exponent == null -> stored?.minor?.toString() ?: "null"
+            text.isBlank() -> "null"
+            else -> MoneyFold.parseAmount(text, exponent)?.toString() ?: "null"
+        }
+
     private fun save(held: MoneyHeld<MoneyRulesState>, editor: MoneyRuleEditor): Step<MoneyHeld<MoneyRulesState>> {
-        val checked = check(editor)
+        val checked = check(held, editor)
         if (!checked.can_save) return Step(held.copy(screen = held.screen.copy(editor = checked)))
         val name = checked.display_name.trim().ifEmpty { null }
+        val exponent = limitsExponent(held, checked.account_id, checked.account_label)
+        val min = limitField(exponent, checked.amount_min_text, checked.amount_min)
+        val max = limitField(exponent, checked.amount_max_text, checked.amount_max)
         if (checked.mode == MoneyRuleEditor.Mode.MODE_ADD) {
             val id = "rule-${held.screen.draft_token}-${held.tokens + 1}"
             val input = MoneyFold.json(
@@ -239,6 +381,10 @@ public object MoneyRulesMachine :
                 "pattern" to MoneyFold.str(checked.pattern.trim()),
                 "set_category_concept_id" to checked.category_id.ifEmpty { null }?.let(MoneyFold::str),
                 "set_display_name" to name?.let(MoneyFold::str),
+                // A NEW RULE'S NO-LIMIT IS AN ABSENT KEY.
+                "amount_min_minor" to min.takeIf { it != "null" },
+                "amount_max_minor" to max.takeIf { it != "null" },
+                "account_id" to checked.account_id.ifEmpty { null }?.let(MoneyFold::str),
             )
             return WriteLaw.submit(Writes, held.copy(tokens = held.tokens + 1), CMD_ADD, input, InvokeKeys.of(CMD_ADD, id))
         }
@@ -248,12 +394,21 @@ public object MoneyRulesMachine :
             checked.category_label.isEmpty() -> "null"
             else -> null
         }
+        // THE SAME FOR THE ACCOUNT: a known one is sent, a cleared one is null, one the page could not name stays.
+        val accountField = when {
+            checked.account_id.isNotEmpty() -> MoneyFold.str(checked.account_id)
+            checked.account_label.isEmpty() -> "null"
+            else -> null
+        }
         val input = MoneyFold.json(
             "rule_id" to MoneyFold.str(checked.rule_id),
             "match_kind" to MoneyFold.str(checked.kind),
             "pattern" to MoneyFold.str(checked.pattern.trim()),
             "set_category_concept_id" to categoryField,
             "set_display_name" to MoneyFold.strOrNull(name),
+            "amount_min_minor" to min,
+            "amount_max_minor" to max,
+            "account_id" to accountField,
         )
         val key = InvokeKeys.of(CMD_EDIT, checked.rule_id, (held.tokens + 1).toString())
         return WriteLaw.submit(Writes, held.copy(tokens = held.tokens + 1), CMD_EDIT, input, key)
@@ -296,6 +451,7 @@ public object MoneyRulesMachine :
         val categories = held.answers.categories
         val rows = answer.rules.map { rule -> row(rule) }
         val selected = held.screen.editor?.category_id.orEmpty()
+        val chosenAccount = held.screen.editor?.account_id.orEmpty()
         return MoneyRulesData(
             rows = rows,
             limit_line = if (rows.isEmpty()) "" else MoneyFold.fill(MoneyCopy.RULES_LIMIT, "n" to rows.size.toString(), "limit" to answer.limit.toString()),
@@ -311,6 +467,13 @@ public object MoneyRulesMachine :
                 }
             },
             category_sheet_title = MoneyCopy.CATEGORY_SHEET_TITLE,
+            account_options = buildList<MoneyChoice> {
+                add(MoneyFold.choice("", MoneyCopy.RULE_ACCOUNT_ANY, chosenAccount.isEmpty() && held.screen.editor?.account_label.isNullOrEmpty()))
+                accountLines(held).filter { !it.closed || it.account_id == chosenAccount }.forEach { line ->
+                    add(MoneyFold.choice(line.account_id, line.name, line.account_id == chosenAccount, line.currency))
+                }
+            },
+            account_sheet_title = MoneyCopy.RULE_ACCOUNT_SHEET_TITLE,
         )
     }
 
@@ -332,7 +495,7 @@ public object MoneyRulesMachine :
 
     override fun decorate(held: MoneyHeld<MoneyRulesState>): MoneyRulesState {
         val screen = held.screen
-        return screen.copy(editor = screen.editor?.let(::check))
+        return screen.copy(editor = screen.editor?.let { check(held, it) })
     }
 
     private fun chrome(parent: String): MoneyPageChrome = MoneyPageChrome(
@@ -342,6 +505,7 @@ public object MoneyRulesMachine :
     )
 
     private const val PATTERN_MAX: Int = 200
+    private const val LABEL_JOIN: String = " · "
 
     private object Writes : WriteLens<MoneyHeld<MoneyRulesState>> {
         override fun write(state: MoneyHeld<MoneyRulesState>): WriteState = state.screen.write ?: WriteState()
@@ -367,14 +531,16 @@ public object MoneyRulesMachine :
     }
 }
 
-/** The rules, and the categories their sheet files under. */
+/** The rules, the categories their sheet files under, and the accounts they may be limited to. */
 public object MoneyRulesReads : MoneyQueries<MoneyRulesState, MoneyRulesEvent>(
     screenId = MoneyRulesMachine.SCREEN_ID,
     tables = MONEY_TABLES,
-    ask = { _, _ ->
+    ask = { _, now ->
         listOf(
             AppQueryRequest(money_rules = MoneyRulesRequest()),
             AppQueryRequest(money_categories = MoneyCategoriesRequest()),
+            // The accounts a rule may be limited to, and the exponent its limits are typed in.
+            AppQueryRequest(money_accounts = MoneyAccountsRequest(tz = now.zone)),
         )
     },
 )

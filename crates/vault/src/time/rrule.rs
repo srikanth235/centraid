@@ -20,12 +20,25 @@
 //! ## The subset
 //!
 //! Supported: `FREQ ∈ DAILY | WEEKLY | MONTHLY | YEARLY`, with
-//! `INTERVAL`, `COUNT`, `UNTIL` and (WEEKLY only) `BYDAY`.
+//! `INTERVAL`, `COUNT`, `UNTIL`, and a day part under exactly two shapes:
+//!
+//! - **WEEKLY** takes a `BYDAY` list of plain day tokens (`MO,WE`).
+//! - **MONTHLY** takes ONE of (#1119, R-1119-1) — never both, never a list:
+//!   - one **positional `BYDAY`**, `1MO`..`4SU` or `-1MO`..`-1SU` (the nth
+//!     weekday of the month, or the last);
+//!   - one **`BYMONTHDAY`**, `1..=31` or `-1` (the last day). RFC 5545's
+//!     meaning: a month that lacks the day has NO occurrence that month
+//!     (`BYMONTHDAY=31` skips February, April, June, September, November),
+//!     and a rule that never lands expands to nothing. `COUNT` counts the
+//!     occurrences, not the months.
 //!
 //! Refused, each with the reason accepting it would be a lie: `BYSETPOS`,
-//! `BYMONTHDAY`, `BYMONTH`, `BYYEARDAY`, `BYWEEKNO`, `BYHOUR`, `BYMINUTE`,
-//! `BYSECOND`; sub-daily `FREQ` (`HOURLY`, `MINUTELY`, `SECONDLY`); a
-//! positional or non-WEEKLY `BYDAY`; and a non-`SU` `WKST` under
+//! `BYMONTH`, `BYYEARDAY`, `BYWEEKNO`, `BYHOUR`, `BYMINUTE`, `BYSECOND`;
+//! sub-daily `FREQ` (`HOURLY`, `MINUTELY`, `SECONDLY`); a `BYDAY` that is not
+//! WEEKLY's day list or MONTHLY's one positional day (a MONTHLY list, a
+//! MONTHLY plain day, the ordinals 5 and -2..-5, anything under YEARLY or
+//! DAILY); a `BYMONTHDAY` outside MONTHLY, a list, a value outside `1..=31`
+//! and `-1`, or one beside a `BYDAY`; and a non-`SU` `WKST` under
 //! `INTERVAL > 1`.
 
 /// The seven day tokens, in the order `BYDAY` offsets are taken from — Sunday
@@ -62,6 +75,15 @@ impl Freq {
     }
 }
 
+/// The ONE day a `FREQ=MONTHLY` rule pins each month to (#1119, R-1119-1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MonthlyPin {
+    /// `BYMONTHDAY`: `1..=31`, or `-1` for the month's last day.
+    MonthDay(i64),
+    /// A positional `BYDAY`: `ordinal` is `1..=4` or `-1` (the last).
+    NthWeekday { ordinal: i64, day: &'static str },
+}
+
 /// A rule this engine will expand.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedRrule {
@@ -69,13 +91,18 @@ pub struct ParsedRrule {
     pub interval: i64,
     pub count: Option<i64>,
     pub until: Option<String>,
-    /// WEEKLY only, and in the order they were written.
+    /// WEEKLY only, and in the order they were written. MONTHLY's one
+    /// positional day is [`ParsedRrule::monthly_pin`], not a list.
     pub by_day: Option<Vec<&'static str>>,
+    /// MONTHLY only: the one day each month is pinned to, if any.
+    pub monthly_pin: Option<MonthlyPin>,
 }
 
 /// The parts the expander cannot honour, each with the reason accepting it
 /// would be a lie. **A table, not a chain of `if`s**: this list IS the
-/// engine's stated scope, and the refusal message quotes it back.
+/// engine's stated scope, and the refusal message quotes it back. (`BYMONTHDAY`
+/// is here for the refusals it still gets, with the sentence the corpus holds:
+/// MONTHLY's one day is read past this table in [`inspect`].)
 const UNSUPPORTED_PARTS: [(&str, &str); 8] = [
     (
         "BYSETPOS",
@@ -83,7 +110,8 @@ const UNSUPPORTED_PARTS: [(&str, &str); 8] = [
     ),
     (
         "BYMONTHDAY",
-        "pins occurrences to days of the month; the expander steps from the anchor day",
+        "pins occurrences to days of the month, which only a MONTHLY rule may do, with one day \
+         (1 to 31, or -1 for the last) and no BYDAY beside it",
     ),
     (
         "BYMONTH",
@@ -129,7 +157,11 @@ pub enum Refusal {
 impl Refusal {
     /// ONE SENTENCE naming the part and why the engine will not pretend to
     /// honour it. v0's `rruleRefusalMessage`, word for word — the corpus in
-    /// `contracts/time/rrule-cases.json` compares these strings.
+    /// `contracts/time/rrule-cases.json` compares these strings — except the
+    /// `BYDAY` and `BYMONTHDAY` sentences, which #1119 rewrote when the subset
+    /// took one month position: v0's words said no positional day could ever
+    /// be honoured, which a member would now read as false
+    /// (`time_corpus.rs::REWORDED_1119`).
     #[must_use]
     pub fn message(&self) -> String {
         match self {
@@ -141,9 +173,9 @@ impl Refusal {
                  recurrence is not supported)"
             ),
             Self::UnsupportedPart { part } if part == "BYDAY" => {
-                "recurrence rule uses a BYDAY this engine cannot honour: days steer WEEKLY \
-                 expansion only, and a positional day (\"-1FR\") or a non-day token is not a rule \
-                 it can expand"
+                "recurrence rule uses a BYDAY this engine cannot honour: a list of days steers \
+                 WEEKLY expansion, a MONTHLY rule takes one positional day (\"2MO\", \"-1FR\") \
+                 and nothing else, and a non-day token is not a rule it can expand"
                     .to_owned()
             }
             Self::UnsupportedPart { part } if part == "WKST" => {
@@ -241,44 +273,90 @@ fn positive_integer(value: Option<&str>) -> Option<i64> {
 }
 
 /// A positional BYDAY member: `2MO`, `-1FR` — the nth weekday of a period.
-fn is_positional_day(token: &str) -> bool {
-    let rest = token.strip_prefix(['+', '-']).unwrap_or(token);
+/// Returns the ordinal as written (`0` and `5..=99` included) and the day.
+fn positional_day(token: &str) -> Option<(i64, &'static str)> {
+    let (negative, rest) = match token.as_bytes().first() {
+        Some(b'-') => (true, &token[1..]),
+        Some(b'+') => (false, &token[1..]),
+        _ => (false, token),
+    };
     let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
     if digits.is_empty() || digits.len() > 2 {
-        return false;
+        return None;
     }
-    let tail = &rest[digits.len()..];
-    DAY_TOKENS.contains(&tail)
+    let day = DAY_TOKENS
+        .iter()
+        .copied()
+        .find(|day| *day == &rest[digits.len()..])?;
+    let ordinal: i64 = digits.parse().ok()?;
+    Some((if negative { -ordinal } else { ordinal }, day))
+}
+
+/// Which BYDAY reading a rule asked for.
+enum ByDay {
+    /// WEEKLY's day list, in the order it was written.
+    Weekly(Vec<&'static str>),
+    /// MONTHLY's one positional day.
+    Monthly(MonthlyPin),
 }
 
 /// The days, or the refusal that stops them being dropped.
 ///
-/// Only WEEKLY expansion reads BYDAY, so outside WEEKLY it names a different
-/// rule ("every Monday IN the month"); a positional member (`-1FR`) is
-/// `BYSETPOS` by another spelling; the rest are not day tokens. Filtering any
-/// of them left a rule that parsed and meant something else — `BYDAY=1MO`
-/// became plain WEEKLY, firing every Monday.
-fn read_by_day(raw: Option<&str>, freq: Freq) -> Result<Option<Vec<&'static str>>, Refusal> {
+/// WEEKLY expansion reads a list of plain days, and MONTHLY reads ONE
+/// positional day (`2MO`, `-1FR`; ordinals 1..=4 and -1: the 5th is a day
+/// some months lack and `-2`..`-5` count from the end, and the expander does
+/// neither). Anywhere else BYDAY names a different rule ("every Monday IN the
+/// month", a MONTHLY list), and filtering it left a rule that parsed and meant
+/// something else — `BYDAY=1MO` became plain WEEKLY, firing every Monday.
+fn read_by_day(raw: Option<&str>, freq: Freq) -> Result<Option<ByDay>, Refusal> {
     let Some(raw) = raw else { return Ok(None) };
-    if freq != Freq::Weekly {
-        return Err(Refusal::UnsupportedPart {
-            part: "BYDAY".to_owned(),
-        });
-    }
-    let mut days = Vec::new();
-    for token in raw.split(',') {
-        let token = token.trim();
-        if is_positional_day(token) {
-            return Err(Refusal::UnsupportedPart {
-                part: "BYDAY".to_owned(),
-            });
+    let refused = || Refusal::UnsupportedPart {
+        part: "BYDAY".to_owned(),
+    };
+    match freq {
+        Freq::Weekly => {
+            let mut days = Vec::new();
+            for token in raw.split(',') {
+                let token = token.trim();
+                if positional_day(token).is_some() {
+                    return Err(refused());
+                }
+                match DAY_TOKENS.iter().find(|day| **day == token) {
+                    Some(day) => days.push(*day),
+                    None => return Err(Refusal::Malformed),
+                }
+            }
+            Ok(Some(ByDay::Weekly(days)))
         }
-        match DAY_TOKENS.iter().find(|day| **day == token) {
-            Some(day) => days.push(*day),
-            None => return Err(Refusal::Malformed),
-        }
+        Freq::Monthly => match positional_day(raw.trim()) {
+            Some((ordinal, day)) if matches!(ordinal, 1..=4 | -1) => {
+                Ok(Some(ByDay::Monthly(MonthlyPin::NthWeekday {
+                    ordinal,
+                    day,
+                })))
+            }
+            _ => Err(refused()),
+        },
+        _ => Err(refused()),
     }
-    Ok(Some(days))
+}
+
+/// The one `BYMONTHDAY` a MONTHLY rule may carry: `1..=31` or `-1`. `Err(())`
+/// is "present and not honourable" — outside MONTHLY, a list, out of range,
+/// not a number, or beside a `BYDAY`.
+fn read_month_day(
+    raw: Option<&str>,
+    freq: Freq,
+    has_by_day: bool,
+) -> Result<Option<MonthlyPin>, ()> {
+    let Some(raw) = raw else { return Ok(None) };
+    if freq != Freq::Monthly || has_by_day {
+        return Err(());
+    }
+    match raw.trim().parse::<i64>() {
+        Ok(day @ (1..=31 | -1)) => Ok(Some(MonthlyPin::MonthDay(day))),
+        _ => Err(()),
+    }
 }
 
 /// **Shape 2 — parse a rule, or say why it cannot be honoured.** THE parser:
@@ -306,7 +384,16 @@ pub fn inspect(value: &str) -> Result<ParsedRrule, Refusal> {
         Some("YEARLY") => Freq::Yearly,
         _ => return Err(Refusal::Malformed),
     };
+    let month_day = read_month_day(
+        part(&parts, "BYMONTHDAY").as_deref(),
+        freq,
+        part(&parts, "BYDAY").is_some(),
+    );
     for (name, _) in UNSUPPORTED_PARTS {
+        // The one `BYMONTHDAY` a MONTHLY rule may carry is read below.
+        if name == "BYMONTHDAY" && matches!(month_day, Ok(Some(_))) {
+            continue;
+        }
         if part(&parts, name).is_some() {
             return Err(Refusal::UnsupportedPart {
                 part: name.to_owned(),
@@ -322,13 +409,18 @@ pub fn inspect(value: &str) -> Result<ParsedRrule, Refusal> {
             part: "WKST".to_owned(),
         });
     }
-    let by_day = read_by_day(part(&parts, "BYDAY").as_deref(), freq)?;
+    let (by_day, day_pin) = match read_by_day(part(&parts, "BYDAY").as_deref(), freq)? {
+        Some(ByDay::Weekly(days)) => (Some(days), None),
+        Some(ByDay::Monthly(pin)) => (None, Some(pin)),
+        None => (None, None),
+    };
     Ok(ParsedRrule {
         freq,
         interval,
         count: positive_integer(part(&parts, "COUNT").as_deref()),
         until: part(&parts, "UNTIL"),
         by_day,
+        monthly_pin: day_pin.or(month_day.ok().flatten()),
     })
 }
 
@@ -397,7 +489,51 @@ fn join_days(days: &[&str]) -> String {
     }
 }
 
+const ORDINAL_WORDS: [(i64, &str); 5] = [
+    (1, "first"),
+    (2, "second"),
+    (3, "third"),
+    (4, "fourth"),
+    (-1, "last"),
+];
+
+/// 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st, 22nd, 31st.
+fn day_of_month_label(day: i64) -> String {
+    let suffix = match (day % 100, day % 10) {
+        (11..=13, _) => "th",
+        (_, 1) => "st",
+        (_, 2) => "nd",
+        (_, 3) => "rd",
+        _ => "th",
+    };
+    format!("{day}{suffix}")
+}
+
+/// "the second Monday", "the last day", "the 15th" — the tail of a monthly
+/// rule's sentence.
+fn pin_label(pin: MonthlyPin) -> String {
+    match pin {
+        MonthlyPin::MonthDay(-1) => "the last day".to_owned(),
+        MonthlyPin::MonthDay(day) => format!("the {}", day_of_month_label(day)),
+        MonthlyPin::NthWeekday { ordinal, day } => {
+            let word = ORDINAL_WORDS
+                .iter()
+                .find(|(value, _)| *value == ordinal)
+                .map_or("", |(_, word)| *word);
+            format!("the {word} {}", day_name(day))
+        }
+    }
+}
+
 fn cadence(rule: &ParsedRrule) -> String {
+    if let Some(pin) = rule.monthly_pin {
+        let on = pin_label(pin);
+        return match rule.interval {
+            1 => format!("Monthly on {on}"),
+            2 => format!("Every other month on {on}"),
+            n => format!("Every {n} months on {on}"),
+        };
+    }
     let days: &[&str] = rule.by_day.as_deref().unwrap_or(&[]);
     let unit = rule.freq.unit();
     if rule.interval == 1 {
@@ -580,5 +716,162 @@ mod tests {
             Some("Daily · until Mar 1, 2026")
         );
         assert_eq!(describe("FREQ=MONTHLY;BYSETPOS=-1"), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // MONTHLY with one positional BYDAY or one BYMONTHDAY (#1119, R-1119-1).
+    // -----------------------------------------------------------------------
+
+    fn pin(rule: &str) -> Option<MonthlyPin> {
+        inspect(rule).expect("accepted").monthly_pin
+    }
+
+    #[test]
+    fn monthly_takes_one_positional_day_from_first_to_fourth_or_last() {
+        assert_eq!(
+            pin("FREQ=MONTHLY;BYDAY=2MO"),
+            Some(MonthlyPin::NthWeekday {
+                ordinal: 2,
+                day: "MO"
+            })
+        );
+        assert_eq!(
+            pin("FREQ=MONTHLY;BYDAY=-1FR"),
+            Some(MonthlyPin::NthWeekday {
+                ordinal: -1,
+                day: "FR"
+            })
+        );
+        assert_eq!(
+            pin("FREQ=MONTHLY;BYDAY=+3WE;INTERVAL=2;COUNT=5"),
+            Some(MonthlyPin::NthWeekday {
+                ordinal: 3,
+                day: "WE"
+            })
+        );
+        for ordinal in ["1", "2", "3", "4", "-1"] {
+            assert!(inspect(&format!("FREQ=MONTHLY;BYDAY={ordinal}SU")).is_ok());
+        }
+        // A positional day is not a weekly day list.
+        assert_eq!(inspect("FREQ=MONTHLY;BYDAY=2MO").expect("ok").by_day, None);
+    }
+
+    #[test]
+    fn monthly_takes_one_day_of_the_month_from_1_to_31_or_the_last() {
+        assert_eq!(
+            pin("FREQ=MONTHLY;BYMONTHDAY=1"),
+            Some(MonthlyPin::MonthDay(1))
+        );
+        assert_eq!(
+            pin("FREQ=MONTHLY;BYMONTHDAY=31"),
+            Some(MonthlyPin::MonthDay(31))
+        );
+        assert_eq!(
+            pin("FREQ=MONTHLY;BYMONTHDAY=-1"),
+            Some(MonthlyPin::MonthDay(-1))
+        );
+        assert_eq!(pin("FREQ=MONTHLY"), None);
+    }
+
+    #[test]
+    fn what_the_widening_does_not_reach_is_still_refused_with_its_part() {
+        let part_of = |rule: &str| match inspect(rule) {
+            Err(Refusal::UnsupportedPart { part }) => part,
+            other => panic!("{rule}: expected an unsupported part, got {other:?}"),
+        };
+        // Ordinals the engine does not honour.
+        for rule in [
+            "FREQ=MONTHLY;BYDAY=5MO",
+            "FREQ=MONTHLY;BYDAY=-2MO",
+            "FREQ=MONTHLY;BYDAY=-5SU",
+            "FREQ=MONTHLY;BYDAY=0MO",
+            "FREQ=MONTHLY;BYDAY=2MO,3TU",
+            "FREQ=MONTHLY;BYDAY=MO",
+            "FREQ=MONTHLY;BYDAY=MO,FR",
+            "FREQ=YEARLY;BYDAY=2MO",
+            "FREQ=DAILY;BYDAY=2MO",
+        ] {
+            assert_eq!(part_of(rule), "BYDAY", "{rule}");
+            assert_eq!(parse(rule), None, "{rule}");
+        }
+        for rule in [
+            "FREQ=MONTHLY;BYMONTHDAY=0",
+            "FREQ=MONTHLY;BYMONTHDAY=32",
+            "FREQ=MONTHLY;BYMONTHDAY=-2",
+            "FREQ=MONTHLY;BYMONTHDAY=1,15",
+            "FREQ=MONTHLY;BYMONTHDAY=-1,1",
+            "FREQ=MONTHLY;BYMONTHDAY=x",
+            "FREQ=MONTHLY;BYMONTHDAY=",
+            "FREQ=WEEKLY;BYMONTHDAY=1",
+            "FREQ=DAILY;BYMONTHDAY=-1",
+            "FREQ=YEARLY;BYMONTHDAY=1",
+            // BYDAY and BYMONTHDAY together.
+            "FREQ=MONTHLY;BYDAY=2MO;BYMONTHDAY=8",
+            "FREQ=MONTHLY;BYMONTHDAY=8;BYDAY=2MO",
+        ] {
+            assert_eq!(part_of(rule), "BYMONTHDAY", "{rule}");
+            assert_eq!(parse(rule), None, "{rule}");
+        }
+        // BYSETPOS is refused, with or without a day that would now parse.
+        assert_eq!(part_of("FREQ=MONTHLY;BYDAY=MO;BYSETPOS=2"), "BYSETPOS");
+        assert_eq!(part_of("FREQ=MONTHLY;BYDAY=2MO;BYSETPOS=1"), "BYSETPOS");
+        assert_eq!(part_of("FREQ=MONTHLY;BYMONTHDAY=1;BYSETPOS=1"), "BYSETPOS");
+        assert!(
+            inspect("FREQ=MONTHLY;BYMONTHDAY=1,15")
+                .expect_err("a list is refused")
+                .message()
+                .contains("pins occurrences to days of the month")
+        );
+    }
+
+    #[test]
+    fn the_new_shapes_are_described_in_the_one_summariser() {
+        let said = |rule: &str| describe(rule).expect("described");
+        assert_eq!(
+            said("FREQ=MONTHLY;BYDAY=2MO"),
+            "Monthly on the second Monday"
+        );
+        assert_eq!(
+            said("FREQ=MONTHLY;BYDAY=1SU"),
+            "Monthly on the first Sunday"
+        );
+        assert_eq!(
+            said("FREQ=MONTHLY;BYDAY=3WE"),
+            "Monthly on the third Wednesday"
+        );
+        assert_eq!(
+            said("FREQ=MONTHLY;BYDAY=4TH"),
+            "Monthly on the fourth Thursday"
+        );
+        assert_eq!(
+            said("FREQ=MONTHLY;BYDAY=-1FR"),
+            "Monthly on the last Friday"
+        );
+        assert_eq!(
+            said("FREQ=MONTHLY;BYMONTHDAY=-1"),
+            "Monthly on the last day"
+        );
+        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=1"), "Monthly on the 1st");
+        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=2"), "Monthly on the 2nd");
+        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=3"), "Monthly on the 3rd");
+        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=11"), "Monthly on the 11th");
+        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=22"), "Monthly on the 22nd");
+        assert_eq!(said("FREQ=MONTHLY;BYMONTHDAY=31"), "Monthly on the 31st");
+        assert_eq!(
+            said("FREQ=MONTHLY;INTERVAL=2;BYDAY=-1FR"),
+            "Every other month on the last Friday"
+        );
+        assert_eq!(
+            said("FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=-1;COUNT=4"),
+            "Every 3 months on the last day · 4 times"
+        );
+        assert_eq!(
+            said("FREQ=MONTHLY;BYDAY=2MO;UNTIL=20261231T000000Z"),
+            "Monthly on the second Monday · until Dec 31, 2026"
+        );
+        assert_eq!(describe("FREQ=MONTHLY;BYDAY=5MO"), None);
+        // The old sentences are untouched.
+        assert_eq!(said("FREQ=MONTHLY"), "Every month");
+        assert_eq!(said("FREQ=MONTHLY;INTERVAL=3"), "Every 3 months");
     }
 }
