@@ -9,8 +9,8 @@ Every path-bearing entry in `tests/inventory.json` and `tests/claims.json` was c
 - `tests/inventory.json`, 4,105 entries removed and 107 kept:
   - `commentDensity.files`: 3,861 pins removed, 93 kept. `allowlist`: 74 removed, 5 kept.
   - `fileSize.sites`: 119 removed, 9 kept. `_budget` 128 to 9.
-  - `skips.sites`: 22 removed. `_budget` 25 to 3.
-  - `envRed.sites`: 4 removed. `_budget` 6 to 2.
+  - `skips.sites`: 22 removed. `_budget` 25 to 0: first to 3 by the rows removed, then to 0 in a second commit, because `skip-inventory` reported the 3 as slack against no remaining site.
+  - `envRed.sites`: 4 removed. `_budget` 6 to 0, the same way: `env-red-inventory` reported the 2 as slack.
   - `sleeps.sites`: 25 removed, which counted 36 fixed sleeps. `_budget` 36 to 0.
   - Each budget falls by exactly the rows removed. The five sections' `approvedDeviation` notes now name #1120, because the pairing rule reads a deleted pin or row as a widening. `envRed` and `sleeps` had no note and gained one.
 - `tests/claims.json`:
@@ -65,6 +65,22 @@ node .governance/law/run.mjs
 
 Outcome: pass. Every rule is ok and 4/4 static gates pass. The law window door reports ten rules and one finding, `receipt-per-issue` on this receipt's own Audit, which stays PENDING until an independent auditor fills it.
 
+```sh
+node scripts/test-report/skip-inventory.mjs && node scripts/test-report/env-red-inventory.mjs
+```
+
+Outcome: both pass with exit 0, reporting `skips: 0 inventoried skip sites, budget 0` and `env-red: 0 inventoried environment-guard sites, budget 0`. On the branch's base both were red: the budgets had slack, and several sites named files that no longer exist.
+
 ## Audit
 
-PENDING
+**PASS.** An independent Sonnet auditor checked the law commit against this receipt. It was read-only and had no part in writing the change. Its scripts were kept in the session scratchpad.
+
+- **Nothing live removed: PASS.** The auditor tested every path-like string in about 4,500 removed units with `test -e`, and none of them has a live owner, source, enforcement path, glob, key or file pin. That covers all 35 claims, all 137 flows, consentLedger (8), joinLaws (7), engineRegistry (21), 14 workspaceSurfaces and 4 revisitTriggers. The only live strings inside removed entries were incidental pointers to docs.
+- **Nothing dead kept by mistake: PASS.** 210 of the dead path-like strings that survive are outside prose fields. They are the 133 `removedMinimumTestsFlows` tombstones (intentional), the six deferred flows, and labels such as "N/A" or "linux/x64". All 5 surviving flows and all 10 surviving claims have live owners.
+- **No loosening: PASS.**
+  - Of 8,122 inventory leaves, none rose. Claims and floors have no increases, and the kept rows have identical values.
+  - Four budgets fell, each to no more than the count of remaining rows: fileSize 128→9, sleeps 36→0, skips 25→3 and envRed 6→2.
+  - The auditor found that both inventory consumers fail on slack, and that the exact budgets are 0. Both were tightened to 0 in this change, as recorded above.
+- **Markers: PASS.** All 134 removed floored flows have a marker. The six deferred flows each share their owner with a retired flow.
+- **The receipt's counts match the diff: PASS.**
+- **Pre-existing red, unchanged:** `check-ledgers` fails only on the three expired `quarantine.json` lanes, identically on origin/main.
