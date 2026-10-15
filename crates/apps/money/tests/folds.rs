@@ -749,6 +749,91 @@ fn search_walks_months_newest_first_and_forgives_a_slip() {
     assert_eq!((limited.rows.len(), limited.total_matches), (1, 3));
 }
 
+/// Debits of one merchant on the given days, as the detector reads them.
+fn debits(merchant: &str, days: &[Value]) -> Vec<TxnRow> {
+    days.iter()
+        .enumerate()
+        .map(|(at, day)| TxnRow {
+            txn_id: format!("{merchant}-{at}"),
+            account_id: "A".into(),
+            posted_on: day.as_str().expect("a day").to_owned(),
+            amount_minor: 3000,
+            currency: "USD".into(),
+            direction: Direction::Debit,
+            status: "posted".into(),
+            description: merchant.to_owned(),
+            category_concept_id: None,
+            external_id: None,
+            display_name: None,
+            display_name_source: None,
+            memo: None,
+            check_number: None,
+            bank_type: None,
+            imported_from: None,
+        })
+        .collect()
+}
+
+#[test]
+fn month_positions_match_the_hand_computed_calendar() {
+    use centraid_apps_money::recurring::{Cadence, Status, detect};
+    use centraid_vault::time::rrule::assert_supported;
+    let case = fixture("recurring.json");
+    for want in case["positions"].as_array().unwrap() {
+        let name = want["merchant"].as_str().unwrap();
+        let today = want["today"].as_str().unwrap();
+        let rows = debits(name, want["days"].as_array().unwrap());
+        let found = detect(&rows, &BTreeSet::new(), today);
+        assert_eq!(found.len(), 1, "{name}");
+        let got = &found[0];
+        assert_eq!(got.cadence, Cadence::Monthly, "{name}: monthly on the wire");
+        assert_eq!(got.rrule, want["rrule"].as_str().unwrap(), "{name}");
+        assert!(assert_supported(&got.rrule).is_ok(), "{name}");
+        assert_eq!(got.anchor, want["anchor"].as_str().unwrap(), "{name}");
+        assert_eq!(got.rank_milli, i(&want["rank_milli"]), "{name}");
+        assert_eq!(
+            got.next_due(today).as_deref(),
+            want["next_due"].as_str(),
+            "{name}"
+        );
+        for window in want["projection"].as_array().unwrap() {
+            let projected = got.project(
+                window["from"].as_str().unwrap(),
+                window["to"].as_str().unwrap(),
+                today,
+            );
+            let got_pairs: Vec<(String, &str)> = projected
+                .iter()
+                .map(|p| {
+                    let status = match p.status {
+                        Status::Paid => "paid",
+                        Status::Due => "due",
+                        Status::Late => "late",
+                    };
+                    (p.expected_on.clone(), status)
+                })
+                .collect();
+            let want_pairs: Vec<(String, &str)> = window["expected"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|e| (e[0].as_str().unwrap().to_owned(), e[1].as_str().unwrap()))
+                .collect();
+            assert_eq!(got_pairs, want_pairs, "{name}");
+        }
+    }
+    for none in case["not_offered"].as_array().unwrap() {
+        let rows = debits(
+            none["merchant"].as_str().unwrap(),
+            none["days"].as_array().unwrap(),
+        );
+        assert!(
+            detect(&rows, &BTreeSet::new(), none["today"].as_str().unwrap()).is_empty(),
+            "{none}"
+        );
+    }
+}
+
 #[test]
 fn recurring_series_over_the_ledger_match_the_fixture() {
     use centraid_apps_money::recurring::{

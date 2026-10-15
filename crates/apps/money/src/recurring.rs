@@ -1,5 +1,5 @@
 //! RECURRING CHARGES, detected and never stored (#1099, wave 7; R-1099-14,
-//! R-1099-36).
+//! R-1099-36; month positions R-1119-1).
 //!
 //! A subscription or a bill is a merchant whose debits arrive on a fixed
 //! cadence for about the same amount. Detection is a fold over the posted,
@@ -17,11 +17,24 @@
 //! ## The cadences, and what the one engine can say
 //!
 //! Weekly, every second week, monthly on a day of the month, every third
-//! month, yearly. The vault's RRULE subset has no positional `BYDAY` (`2TU`) and
-//! no `BYMONTHDAY`, so **"the second Tuesday of the month" cannot be written
-//! as an RRULE the engine will expand, and is not offered** (R-1099-47); and a
-//! monthly day past the 28th is not offered either, because `FREQ=MONTHLY`
-//! from the 31st skips the short months while the bank pays on their last day.
+//! month, yearly, and two month positions the vault's RRULE subset learned for
+//! #1119 (R-1119-1, which supersedes R-1099-47):
+//!
+//! - **the nth weekday of the month**: the 1st to 4th, or the last, same
+//!   weekday (`FREQ=MONTHLY;INTERVAL=1;BYDAY=2TU`, `-1FR`);
+//! - **the month's end**: the last day, or the last business day within the
+//!   tolerance (`FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=-1`).
+//!
+//! A position must be matched in EVERY month between its first and last
+//! match (a day of the month may miss one in four): its ±2 day window catches
+//! most dates, so four unrelated charges would otherwise often fit one.
+//!
+//! Both are monthly to a member, so a series prints "every month" and reaches
+//! the phone as [`Cadence::Monthly`]: the wire enum is unchanged. A plain
+//! monthly day past the 28th is still not offered (`FREQ=MONTHLY` from the
+//! 31st would clamp where the bank skips); a charge on the 30th or 31st is
+//! offered as "the month's end" when it falls at the end of the months it is
+//! in.
 //!
 //! ## What qualifies (R-1099-45)
 //!
@@ -85,14 +98,63 @@ impl Cadence {
             Self::Yearly => "every year",
         }
     }
+}
 
-    const ALL: [Self; 5] = [
+/// What a cluster is tried against. A `Cadence` is how often (the wire's
+/// word); a `Shape` is also WHERE in the period, so two shapes can be the same
+/// cadence. **Declaration order is the tie-break** when two shapes rank
+/// equally: the later one wins, so a plain monthly day beats a month position
+/// that fits the same dates no better, and the Nth weekday beats the last one
+/// (a charge that is both the 4th and the last Friday every month is the 4th).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Shape {
+    Weekly,
+    Biweekly,
+    /// The last day of the month, or the last business day within tolerance.
+    MonthEnd,
+    /// The last such weekday of the month.
+    LastWeekday,
+    /// The 1st to 4th such weekday of the month.
+    NthWeekday,
+    /// A day of the month, 1 to 28.
+    MonthDay,
+    Quarterly,
+    Yearly,
+}
+
+impl Shape {
+    const ALL: [Self; 8] = [
         Self::Weekly,
         Self::Biweekly,
-        Self::Monthly,
+        Self::MonthEnd,
+        Self::LastWeekday,
+        Self::NthWeekday,
+        Self::MonthDay,
         Self::Quarterly,
         Self::Yearly,
     ];
+
+    const fn cadence(self) -> Cadence {
+        match self {
+            Self::Weekly => Cadence::Weekly,
+            Self::Biweekly => Cadence::Biweekly,
+            Self::MonthEnd | Self::LastWeekday | Self::NthWeekday | Self::MonthDay => {
+                Cadence::Monthly
+            }
+            Self::Quarterly => Cadence::Quarterly,
+            Self::Yearly => Cadence::Yearly,
+        }
+    }
+
+    /// A month position (R-1119-1). Every charge proposes a pattern of its own
+    /// (its weekday and ordinal, or the month's end) and a ±2 day window around
+    /// a weekday-ordinal catches most dates, so four unrelated charges often
+    /// fit one with a month to spare. A position therefore holds to a stricter
+    /// standard than a day of the month: no expected date between its first
+    /// and last match may go unmatched.
+    const fn is_position(self) -> bool {
+        matches!(self, Self::MonthEnd | Self::LastWeekday | Self::NthWeekday)
+    }
 
     const fn minimum(self) -> usize {
         match self {
@@ -102,14 +164,14 @@ impl Cadence {
     }
 
     /// The expected date `k` periods from `anchor`, or none for a day the
-    /// cadence cannot be written for.
+    /// shape cannot be written for.
     fn expected(self, anchor: &str, k: i32) -> Option<String> {
         match self {
             Self::Weekly => civil::shift(anchor, i64::from(k) * 7),
             Self::Biweekly => civil::shift(anchor, i64::from(k) * 14),
-            Self::Monthly | Self::Quarterly | Self::Yearly => {
+            Self::MonthDay | Self::Quarterly | Self::Yearly => {
                 let step = match self {
-                    Self::Monthly => 1,
+                    Self::MonthDay => 1,
                     Self::Quarterly => 3,
                     _ => 12,
                 };
@@ -120,22 +182,84 @@ impl Cadence {
                 let month = civil::add_months(civil::month_of(anchor), k * step)?;
                 Some(format!("{month}-{day:02}"))
             }
+            Self::MonthEnd => {
+                let month = civil::add_months(civil::month_of(anchor), k)?;
+                Some(format!("{month}-{:02}", civil::month_length(&month)))
+            }
+            Self::NthWeekday | Self::LastWeekday => {
+                let (ordinal, weekday) = position_of(anchor)?;
+                let month = civil::add_months(civil::month_of(anchor), k)?;
+                if self == Self::NthWeekday {
+                    // An anchor on the 5th is the LAST weekday, never the 5th:
+                    // a month without a 5th has no occurrence.
+                    if ordinal > 4 {
+                        return None;
+                    }
+                    nth_weekday(&month, weekday, i64::from(ordinal))
+                } else {
+                    if !is_last_weekday(anchor)? {
+                        return None;
+                    }
+                    nth_weekday(&month, weekday, -1)
+                }
+            }
         }
     }
 
     /// The RRULE for a series anchored on `anchor`.
     fn rrule(self, anchor: &str) -> Option<String> {
-        let (year, month, day) = civil::parse(anchor)?;
-        let weekday = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
-            [civil::weekday(civil::day_number(year, month, day)) as usize];
+        let (_, weekday) = position_of(anchor)?;
+        let token = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"][weekday as usize];
         Some(match self {
-            Self::Weekly => format!("FREQ=WEEKLY;INTERVAL=1;BYDAY={weekday}"),
-            Self::Biweekly => format!("FREQ=WEEKLY;INTERVAL=2;BYDAY={weekday}"),
-            Self::Monthly => "FREQ=MONTHLY;INTERVAL=1".to_owned(),
+            Self::Weekly => format!("FREQ=WEEKLY;INTERVAL=1;BYDAY={token}"),
+            Self::Biweekly => format!("FREQ=WEEKLY;INTERVAL=2;BYDAY={token}"),
+            Self::MonthEnd => "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=-1".to_owned(),
+            Self::LastWeekday => format!("FREQ=MONTHLY;INTERVAL=1;BYDAY=-1{token}"),
+            Self::NthWeekday => {
+                let (ordinal, _) = position_of(anchor)?;
+                format!("FREQ=MONTHLY;INTERVAL=1;BYDAY={ordinal}{token}")
+            }
+            Self::MonthDay => "FREQ=MONTHLY;INTERVAL=1".to_owned(),
             Self::Quarterly => "FREQ=MONTHLY;INTERVAL=3".to_owned(),
             Self::Yearly => "FREQ=YEARLY;INTERVAL=1".to_owned(),
         })
     }
+}
+
+/// `(ordinal, weekday)` of a day: the 1st to 5th such weekday of its month,
+/// and Monday = 0.
+fn position_of(day: &str) -> Option<(u32, u32)> {
+    let (year, month, number) = civil::parse(day)?;
+    Some((
+        (number - 1) / 7 + 1,
+        civil::weekday(civil::day_number(year, month, number)),
+    ))
+}
+
+/// Whether `day` is the last such weekday of its month.
+fn is_last_weekday(day: &str) -> Option<bool> {
+    let (year, month, number) = civil::parse(day)?;
+    Some(number + 7 > civil::days_in_month(year, month))
+}
+
+/// The `ordinal`th (1 to 4) or last (`-1`) `weekday` of `month`.
+fn nth_weekday(month: &str, weekday: u32, ordinal: i64) -> Option<String> {
+    let (year, number) = civil::parse_month(month)?;
+    let length = i64::from(civil::days_in_month(year, number));
+    let day = if ordinal > 0 {
+        let first = i64::from(civil::weekday(civil::day_number(year, number, 1)));
+        1 + (i64::from(weekday) - first).rem_euclid(7) + 7 * (ordinal - 1)
+    } else {
+        let last = i64::from(civil::weekday(civil::day_number(
+            year,
+            number,
+            u32::try_from(length).ok()?,
+        )));
+        length - (last - i64::from(weekday)).rem_euclid(7)
+    };
+    (1..=length)
+        .contains(&day)
+        .then(|| format!("{month}-{day:02}"))
 }
 
 /// A detected series. A value: nothing about it is stored.
@@ -215,8 +339,8 @@ struct Fit {
     rank_milli: i64,
 }
 
-/// The best anchoring of `cadence` over the occurrence days, if it qualifies.
-fn fit(cadence: Cadence, days: &[String]) -> Option<Fit> {
+/// The best anchoring of `shape` over the occurrence days, if it qualifies.
+fn fit(shape: Shape, days: &[String]) -> Option<Fit> {
     let numbers: Vec<i64> = days
         .iter()
         .filter_map(|d| civil::day_number_of(d))
@@ -226,7 +350,7 @@ fn fit(cadence: Cadence, days: &[String]) -> Option<Fit> {
     for anchor in days {
         let mut expected: Vec<(i64, String)> = Vec::new();
         for k in -120..=120 {
-            let Some(date) = cadence.expected(anchor, k) else {
+            let Some(date) = shape.expected(anchor, k) else {
                 continue;
             };
             let Some(number) = civil::day_number_of(&date) else {
@@ -254,7 +378,16 @@ fn fit(cadence: Cadence, days: &[String]) -> Option<Fit> {
                 None => missed_between.push(*number),
             }
         }
-        if matched.len() < cadence.minimum() || matched.len() * 4 < numbers.len() * 3 {
+        if matched.len() < shape.minimum() || matched.len() * 4 < numbers.len() * 3 {
+            continue;
+        }
+        // The anchor is the RRULE's start, so it must be one of the matches: a
+        // stray charge that no expected date takes cannot start the series.
+        let anchor_number = civil::day_number_of(anchor);
+        if !matched
+            .iter()
+            .any(|(at, _)| Some(numbers[*at]) == anchor_number)
+        {
             continue;
         }
         let first_match = matched
@@ -271,7 +404,7 @@ fn fit(cadence: Cadence, days: &[String]) -> Option<Fit> {
             .iter()
             .filter(|n| **n > first_match && **n < last_match)
             .count();
-        if missed * 4 > matched.len() + missed {
+        if missed * 4 > matched.len() + missed || (shape.is_position() && missed > 0) {
             continue;
         }
         let rank_milli: i64 = matched.iter().map(|(_, off)| 1000 / (off + 1)).sum();
@@ -318,21 +451,22 @@ pub fn detect(rows: &[TxnRow], linked: &BTreeSet<String>, today: &str) -> Vec<Se
             let mut ordered = cluster.clone();
             ordered.sort_by(|a, b| (&a.posted_on, &a.txn_id).cmp(&(&b.posted_on, &b.txn_id)));
             let days: Vec<String> = ordered.iter().map(|r| r.posted_on.clone()).collect();
-            let mut chosen: Option<(Cadence, Fit)> = None;
-            for cadence in Cadence::ALL {
-                if let Some(found) = fit(cadence, &days) {
-                    let better = chosen.as_ref().is_none_or(|(old_cadence, old)| {
-                        (found.rank_milli, cadence) > (old.rank_milli, *old_cadence)
+            let mut chosen: Option<(Shape, Fit)> = None;
+            for shape in Shape::ALL {
+                if let Some(found) = fit(shape, &days) {
+                    let better = chosen.as_ref().is_none_or(|(old_shape, old)| {
+                        (found.rank_milli, shape) > (old.rank_milli, *old_shape)
                     });
                     if better {
-                        chosen = Some((cadence, found));
+                        chosen = Some((shape, found));
                     }
                 }
             }
-            let Some((cadence, found)) = chosen else {
+            let Some((shape, found)) = chosen else {
                 continue;
             };
-            let Some(rrule) = cadence.rrule(&found.anchor) else {
+            let cadence = shape.cadence();
+            let Some(rrule) = shape.rrule(&found.anchor) else {
                 continue;
             };
             if assert_supported(&rrule).is_err() {
@@ -670,19 +804,243 @@ mod tests {
     }
 
     #[test]
-    fn the_second_tuesday_of_the_month_and_a_charge_on_the_31st_are_not_offered() {
-        let nth = series_from(
+    fn the_second_tuesday_of_the_month_is_offered_as_a_month_position() {
+        let found = detect_only(&series_from(
             &["2024-04-09", "2024-05-14", "2024-06-11"],
             3000,
             "BOOK CLUB",
+        ));
+        assert_eq!(found.len(), 1);
+        let one = &found[0];
+        assert_eq!(
+            one.cadence,
+            Cadence::Monthly,
+            "a month position is monthly on the wire"
         );
-        assert!(detect_only(&nth).is_empty());
-        let month_end = series_from(
+        assert_eq!(one.rrule, "FREQ=MONTHLY;INTERVAL=1;BYDAY=2TU");
+        assert_eq!(one.anchor, "2024-04-09");
+        assert!(assert_supported(&one.rrule).is_ok());
+        let projected = one.project("2024-06-01", "2024-09-01", "2024-06-30");
+        assert_eq!(
+            projected
+                .iter()
+                .map(|p| (p.expected_on.as_str(), p.status))
+                .collect::<Vec<_>>(),
+            vec![
+                ("2024-06-11", Status::Paid),
+                ("2024-07-09", Status::Due),
+                ("2024-08-13", Status::Due),
+            ]
+        );
+        assert_eq!(one.next_due("2024-06-30").as_deref(), Some("2024-07-09"));
+    }
+
+    #[test]
+    fn each_ordinal_from_the_first_to_the_fourth_is_its_own_rule() {
+        let rule_of = |days: &[&str]| {
+            let found = detect_only(&series_from(days, 1200, "CLUB DUES"));
+            assert_eq!(found.len(), 1, "{days:?}");
+            found[0].rrule.clone()
+        };
+        assert_eq!(
+            rule_of(&["2024-04-01", "2024-05-06", "2024-06-03"]),
+            "FREQ=MONTHLY;INTERVAL=1;BYDAY=1MO"
+        );
+        assert_eq!(
+            rule_of(&["2024-04-17", "2024-05-15", "2024-06-19"]),
+            "FREQ=MONTHLY;INTERVAL=1;BYDAY=3WE"
+        );
+        // April's and June's 25th and 27th are also the LAST Thursday; May's
+        // 23rd is not, so it is the 4th.
+        assert_eq!(
+            rule_of(&["2024-04-25", "2024-05-23", "2024-06-27"]),
+            "FREQ=MONTHLY;INTERVAL=1;BYDAY=4TH"
+        );
+    }
+
+    #[test]
+    fn the_last_friday_is_the_last_when_the_month_has_a_fifth() {
+        let found = detect_only(&series_from(
+            &["2024-04-26", "2024-05-31", "2024-06-28"],
+            4500,
+            "TRIVIA NIGHT",
+        ));
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].rrule, "FREQ=MONTHLY;INTERVAL=1;BYDAY=-1FR");
+        assert_eq!(
+            found[0].next_due("2024-06-30").as_deref(),
+            Some("2024-07-26")
+        );
+    }
+
+    #[test]
+    fn a_position_may_drift_two_days_and_no_further() {
+        // Two days after the 2nd Tuesday of June is fine.
+        let near = series_from(
+            &["2024-04-09", "2024-05-14", "2024-06-13"],
+            3000,
+            "BOOK CLUB",
+        );
+        assert_eq!(
+            detect_only(&near)[0].rrule,
+            "FREQ=MONTHLY;INTERVAL=1;BYDAY=2TU"
+        );
+        // Three days is not.
+        let far = series_from(
+            &["2024-04-09", "2024-05-14", "2024-06-14"],
+            3000,
+            "BOOK CLUB",
+        );
+        assert!(detect_only(&far).is_empty());
+        // Nor are two months' worth a series.
+        let two = series_from(&["2024-05-14", "2024-06-11"], 3000, "BOOK CLUB");
+        assert!(detect_only(&two).is_empty());
+    }
+
+    #[test]
+    fn a_charge_on_each_months_last_day_is_offered_as_the_months_end() {
+        let found = detect_only(&series_from(
+            &[
+                "2024-02-29",
+                "2024-03-31",
+                "2024-04-30",
+                "2024-05-31",
+                "2024-06-30",
+            ],
+            3000,
+            "RENT",
+        ));
+        assert_eq!(found.len(), 1);
+        let one = &found[0];
+        assert_eq!(one.cadence, Cadence::Monthly);
+        assert_eq!(one.rrule, "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=-1");
+        assert_eq!(one.anchor, "2024-02-29");
+        assert_eq!(one.rank_milli, 5000);
+        assert!(assert_supported(&one.rrule).is_ok());
+        assert_eq!(one.next_due("2024-06-30").as_deref(), Some("2024-07-31"));
+        let projected = one.project("2024-06-01", "2024-09-01", "2024-07-02");
+        assert_eq!(
+            projected
+                .iter()
+                .map(|p| (p.expected_on.as_str(), p.status))
+                .collect::<Vec<_>>(),
+            vec![
+                ("2024-06-30", Status::Paid),
+                ("2024-07-31", Status::Due),
+                ("2024-08-31", Status::Due),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_last_business_day_counts_as_the_months_end_within_the_tolerance() {
+        // Payroll on the last business day: June 30th is a Sunday and August
+        // 31st a Saturday, so those months pay on the 28th and the 30th.
+        let rows = series_from(
+            &[
+                "2024-05-31",
+                "2024-06-28",
+                "2024-07-31",
+                "2024-08-30",
+                "2024-09-30",
+            ],
+            250_000,
+            "ACME PAYROLL DEBIT",
+        );
+        let found = detect(&rows, &BTreeSet::new(), "2024-10-05");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].rrule, "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=-1");
+        assert_eq!(found[0].rank_milli, 3833);
+        // The 28th of June is two days off the 30th: paid, not late.
+        let june = found[0].project("2024-06-01", "2024-07-01", "2024-07-15");
+        assert_eq!(june[0].expected_on, "2024-06-30");
+        assert_eq!(june[0].status, Status::Paid);
+        // Three days off the end is not the end.
+        let far = series_from(
+            &["2024-03-28", "2024-04-27", "2024-05-28", "2024-06-27"],
+            250_000,
+            "ACME PAYROLL DEBIT",
+        );
+        assert!(
+            detect_only(&far)
+                .iter()
+                .all(|s| !s.rrule.contains("BYMONTHDAY"))
+        );
+    }
+
+    #[test]
+    fn an_off_pattern_match_may_anchor_a_month_end_series() {
+        // March ends on a Sunday: the 29th is the first match, two days off.
+        let found = detect_only(&series_from(
+            &["2024-03-29", "2024-04-30", "2024-05-31", "2024-06-30"],
+            250_000,
+            "ACME PAYROLL DEBIT",
+        ));
+        assert_eq!(found[0].rrule, "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=-1");
+        assert_eq!(found[0].anchor, "2024-03-29");
+        // The first expected day is March 31st, not before the anchor's month.
+        assert_eq!(
+            found[0].project("2024-03-01", "2024-05-01", "2024-07-01")[0].expected_on,
+            "2024-03-31"
+        );
+    }
+
+    #[test]
+    fn a_skipped_month_ends_a_position_but_not_a_day_of_the_month() {
+        // Third-Friday charges with May missing.
+        let position = series_from(
+            &[
+                "2024-02-16",
+                "2024-03-15",
+                "2024-04-19",
+                "2024-06-21",
+                "2024-07-19",
+            ],
+            900,
+            "GYM",
+        );
+        assert!(detect(&position, &BTreeSet::new(), "2024-08-01").is_empty());
+        // The same gap on the 15th is still a monthly charge.
+        let day = series_from(
+            &[
+                "2024-02-15",
+                "2024-03-15",
+                "2024-04-15",
+                "2024-06-15",
+                "2024-07-15",
+            ],
+            900,
+            "GYM",
+        );
+        assert_eq!(
+            detect(&day, &BTreeSet::new(), "2024-08-01")[0].rrule,
+            "FREQ=MONTHLY;INTERVAL=1"
+        );
+    }
+
+    #[test]
+    fn a_stray_charge_does_not_anchor_a_month_end_series() {
+        let mut rows = series_from(
             &["2024-03-31", "2024-04-30", "2024-05-31", "2024-06-30"],
             3000,
             "RENT",
         );
-        assert!(detect_only(&month_end).is_empty());
+        rows.push(row("stray", "2024-02-10", 3000, "RENT"));
+        let found = detect_only(&rows);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].anchor, "2024-03-31");
+        assert!(!found[0].occurrences.contains(&"2024-02-10".to_owned()));
+    }
+
+    #[test]
+    fn a_plain_day_of_the_month_still_wins_over_a_position_that_fits_no_better() {
+        // The 15th: Netflix-style. No weekday or month-end shape ranks above it.
+        let found = detect_only(&series_from(
+            &["2024-04-15", "2024-05-15", "2024-06-15"],
+            1599,
+            "NETFLIX.COM",
+        ));
+        assert_eq!(found[0].rrule, "FREQ=MONTHLY;INTERVAL=1");
     }
 
     #[test]
