@@ -96,10 +96,6 @@ S("T38-032", "bulk cap ask yes confirm count",
   T("how many finance tasks are left open", val(8),
     ref=[ans(op="count", kind="task", linked_to="$finance_l", where="status = open")]))
 
-S("T38-033", "debt person direction status year k4",
-  T("what hasn't yousef abu ghosh paid me back from last year", rows("debt_40"),
-    ref=[ans(kind="debt", linked_to="$yousef_a", where="direction = owes_me and status = open", when=J(U("year", -1)))]))
-
 S("T38-034", "tasks garden effort status span k4",
   T("open garden jobs that take over an hour and are due before the end of june", rows("t_146"),
     ref=[bad(ans(kind="task", linked_to="$garden_l", where="status = open and effort > 1 hour", when=J({"to": D("2027-06-30")}))),
@@ -108,13 +104,6 @@ S("T38-034", "tasks garden effort status span k4",
 S("T38-035", "count events description year k4",
   T("how many of the friday lunches in 2025 had the mansaf note", val(8),
     ref=[ans(op="count", kind="event", name="Friday lunch", where='description contains "mansaf"', when=J(U("year", -2)))]))
-
-S("T38-036", "find-only exclude group decline-email",
-  T("let me see everyone in the clinic supplies pool apart from nurse rasha",
-    rows("ahmad", "mahmoud", "dr_tala", "issa_khoury", "wafa_hijazi", "jawad_zoubi", "me"),
-    ref=[find(kind="person", linked_to="$clinic_supplies", exclude="$rasha"), ans(rows="@prev")]),
-  T("email them all that the supplies are late", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]))
 
 S("T38-037", "ambiguous event reschedule anchor ask pick",
   T("push the eye test to 11", ask("oo_065", "oo_047", "oo_073"),
@@ -137,14 +126,6 @@ S("T38-039", "locker star two undo star-one",
   T("just the visa one", diff(upd("visa_card", starred=True)),
     ref=[act("star", rows="$visa_card")]))
 
-S("T38-040", "balance person narrowed group settle_up",
-  T("where am i with dr tala", val((138.333, "JOD"), (165, "AED")),
-    ref=[ans(op="balance", kind="person", rows="$dr_tala")]),
-  T("just the clinic supplies one", val((-138.333, "JOD")),
-    ref=[ans(op="balance", kind="group", name="Clinic Supplies Pool", linked_to="$dr_tala")]),
-  T("settle up with her there", diff(settle=[("Tala Khoury", "138.333")]),
-    ref=[act("settle_up", rows="$dr_tala", args="group: $clinic_supplies")]))
-
 S("T38-041", "log undo-not-undone search log",
   T("rang khalto rima, she's sending the recipe", diff(upd("khalto_rima", date=ANY)),
     ref=[act("log", kind="person", name="Khalto Rima", args="kind: call")]),
@@ -152,16 +133,6 @@ S("T38-041", "log undo-not-undone search log",
     ref=[act("undo")]),
   T("ok log it for dana then", diff(upd("dana", date=ANY)),
     ref=[search("Dana", kind="person"), act("log", rows="$dana", args="kind: call")]))
-
-S("T38-042", "add_to group person role-contains relation",
-  T("add fadwa obeidat to yazan's study group", diff(link("study_group", "fadwa_obeidat")),
-    ref=[act("add_to", kind="person", name="Fadwa Obeidat", args="to: $study_group")]),
-  T("and usama yaghmour, he's in the same class", diff(link("study_group", "usama_yaghmour")),
-    ref=[act("add_to", kind="person", name="Usama Yaghmour", args="to: $study_group")]),
-  T("which classmates are in the group now", rows("raji_anabtawi", "dania_nabulsi", "fadwa_obeidat", "usama_yaghmour"),
-    ref=[ans(kind="person", linked_to="$study_group", where='role contains "classmate"')]),
-  T("take fadwa back out, wrong class", diff(unlink("study_group", "fadwa_obeidat")),
-    ref=[act("remove_from", kind="person", name="Fadwa Obeidat", args="from: $study_group")]))
 
 S("T38-043", "cancel apply-all month undo-not-undone count-zero",
   T("cancel all the friday lunches in june, we'll be at the beach",
@@ -184,17 +155,6 @@ S("T38-044", "recovery empty-search not-found log task next reschedule",
   T("move that to thursday at ten", diff(upd("tdoc_270609", date="2027-05-13T10:00")),
     ref=[act("reschedule", kind="task", name="Take Teta to the doctor", where="status = open",
              args=lines(to=U("week", 0, weekday=4, time="10:00")))]))
-
-S("T38-045", "recovery empty-search answer-empty landlord debts settle-both",
-  T("when did i last see the landlady", rows(),
-    ref=[search("landlady", kind="person"), ans(kind="person", name="landlady")]),
-  T("i mean anwar, the clinic landlord", rows("landlord"),
-    ref=[ans(kind="person", name="Anwar", where='role = "clinic landlord"')]),
-  T("what does he owe me", rows("debt_04"),
-    ref=[bad(ans(kind="debt", linked_to="$landlord", where="owes = me and status = open")),
-         ans(kind="debt", linked_to="$landlord", where="direction = owes_me and status = open")]),
-  T("net it off, settle both of them", diff(upd("debt_04", status="settled"), upd("debt_35", status="settled")),
-    ref=[find(kind="debt", linked_to="$landlord", where="status = open"), act("settle_debt", rows="@prev")]))
 
 S("T38-046", "documents ask star pick folder-read unstar year",
   T("star the car registration", ask("doc_025", "doc_085"),

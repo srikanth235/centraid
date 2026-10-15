@@ -7,10 +7,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T08-026", "group person count",
-  T("which groups have more than four people in them", rows("reunion_g", "boosters", "union_fund"),
-    ref=[ans(kind="group", where="person count > 4")]))
-
 S("T08-027", "events next week duration reschedule named edit prev",
   T("what's next week look like", rows("boost_0413", "ptc", "prac_0414", "oil_change", "science_fair", "prac_0416",
                                       "handoff_0417", "epa", "walkthrough"),
@@ -23,14 +19,6 @@ S("T08-027", "events next week duration reschedule named edit prev",
     ref=[ans(kind="event", name="science fair")]),
   T("add to it: bring the volcano on a dolly", diff(upd("science_fair", description="bring the volcano on a dolly")),
     ref=[act("edit", rows="@prev", args=lines(description="bring the volcano on a dolly"))]))
-
-S("T08-028", "remove_from person prev debt count",
-  T("who's omar again", rows("omar"),
-    ref=[ans(kind="person", name="Omar")]),
-  T("take him out of the carpool", diff(unlink("carpool", "omar")),
-    ref=[act("remove_from", rows="@prev", args=lines(from_="$carpool"))]),
-  T("who in the practice carpool do i not have any debts with", rows("tasha", "brandon", "me"),
-    ref=[ans(kind="person", linked_to="$carpool", where="debt count <= 0")]))
 
 S("T08-030", "task priority subtasks",
   T("what's lower than priority two on my plate", rows("dues", "nate", "cleats", "registration", "garage", "manifold", "proposal"),
@@ -105,21 +93,6 @@ S("T08-040", "photo count month spans",
     ref=[ans(op="count", kind="photo", when=W(span(U("month", 0, name=2), U("month", 0, name=3))))]),
   T("and everything before this week?", val(31),
     ref=[ans(op="count", kind="photo", when=W({"to": U("week", -1)}))]))
-
-S("T08-041", "debts since direction amount",
-  T("debts since march twenty-first at noon", rows("d_luis", "d_marcus_b", "d_tanya", "d_quanisha", "d_tanya2"),
-    ref=[ans(kind="debt", when=W({"from": D("2026-03-21", "12:00")}))]),
-  T("which of those aren't people owing me", rows("d_marcus_b", "d_tanya"),
-    ref=[ans(kind="debt", within="@prev", where='direction != "owes_me"')]),
-  T("any under 50 bucks", rows("d_marcus_b"),
-    ref=[ans(kind="debt", within="@prev", where="amount <= 50")]))
-
-S("T08-042", "debts month span sum",
-  T("what debts came up from last month thru april", rows("d_trey", "d_kevin", "d_dre", "d_monique", "d_luis", "d_marcus_b",
-                                                         "d_quanisha", "d_coach", "d_tanya", "d_tanya2"),
-    ref=[ans(kind="debt", when=W(span(U("month", -1), U("month", 0, name=4))))]),
-  T("sum the amounts i owe in that batch", val((135, "USD")),
-    ref=[ans(op="sum", field="amount", kind="debt", within="@prev", where='direction = "i_owe" and status = "open"')]))
 
 S("T08-044", "people month span event count",
   T("who did i last hear from back in jan or feb", rows("bev", "vic"),

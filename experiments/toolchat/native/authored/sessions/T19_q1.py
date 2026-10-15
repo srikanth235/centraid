@@ -29,19 +29,11 @@ S("T19-Q005", "next time person has anything order limit i2pat",
   T("when's the next time baba has anything on", rows("podiatrist"),
     ref=[ans(kind="event", linked_to="$baba", when=J({"from": U("day", 0)}), order="date asc", limit=1)]))
 
-S("T19-Q006", "debts settled status-only i2pat",
-  T("which of my ious are settled", rows("d_simo", "d_zineb"),
-    ref=[ans(kind="debt", where="status = settled")]))
-
 S("T19-Q007", "elliptic and the role drops condition i2pat",
   T("who are the school run parents", rows("samira_b", "samira_a", "driss"),
     ref=[ans(kind="person", where='role contains "school run parent"')]),
   T("and the plumber", rows("khalid"),
     ref=[ans(kind="person", where='role = "plumber"')]))
-
-S("T19-Q008", "members of named group find group first i2pat",
-  T("who's in the pharmacy coffee fund", rows("me", "nadia", "rachid", "imane", "kenza"),
-    ref=[find(kind="group", name="coffee fund"), ans(kind="person", linked_to="@prev")]))
 
 S("T19-Q009", "possessive teacher role i2pat",
   T("who's adam's teacher", rows("hakima"),
@@ -82,19 +74,9 @@ S("T19-Q017", "offset from another row date absolute i2pat",
     diff(new("task", name=has("gift"), date="2026-04-24")),
     ref=[act("create", args=lines(kind="task", name="Buy the gift", date=D("2026-04-24")))]))
 
-S("T19-Q018", "just the descriptive word group of person i2pat",
-  T("which groups is omar in", rows("baba_care", "ifrane", "eid_sheep"),
-    ref=[ans(kind="group", linked_to="$omar")]),
-  T("just the sheep one", rows("eid_sheep"),
-    ref=[ans(kind="group", linked_to="$omar", name="sheep")]))
-
 S("T19-Q019", "last contact verb person row i2pat",
   T("when did i last call baba", rows("baba"),
     ref=[ans(kind="person", name="Baba")]))
-
-S("T19-Q020", "cadence monthly or less often i2pat",
-  T("who do i see monthly or less often", rows("simo", "mouhcine"),
-    ref=[ans(kind="person", where="cadence >= 30 days")]))
 
 S("T19-Q021", "what X stuff name across task document i2pat",
   T("what cnss stuff do i have", rows("reimburse", "cnss_claims", "cnss_mar", "cnss_feb", "cnss_card"),

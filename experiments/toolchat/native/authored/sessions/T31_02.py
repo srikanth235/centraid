@@ -66,26 +66,6 @@ S("T31-032", "adi wedding tasks reschedule",
   T("move the wedding gift for adi to the 14th", diff(upd("adi_wedding", date="2026-11-14")),
     ref=[act("reschedule", kind="task", name="wedding gift", linked_to="$adrian", args=lines(to=D("2026-11-14")))]))
 
-S("T31-033", "zakopane group balance substitution members",
-  T("am i up or down on zakopane", val((300, "PLN")),
-    ref=[search("Tomasz", kind="person"),
-         ans(op="balance", kind="group", name="Zakopane Weekend", linked_to="$me")]),
-  T("and adrian?", val((-340, "PLN")),
-    ref=[ans(op="balance", kind="group", name="Zakopane Weekend", linked_to="$adrian")]),
-  T("anna from nursing school isn't coming, take her out of the group", diff(unlink("zakopane", "anna_wl")),
-    ref=[act("remove_from", rows="$anna_wl", args=lines(from_="$zakopane"))]),
-  T("any notes for the zakopane group", rows("n_trip_zak"),
-    ref=[ans(kind="note", linked_to="$zakopane"), ans(kind="note", name="zakopane")]))
-
-S("T31-034", "football fund balance debt-count match-balls",
-  T("where do i stand in the football fund", val((21.25, "PLN")),
-    ref=[search("Tomasz", kind="person"),
-         ans(op="balance", kind="group", name="Tuesday Football Fund", linked_to="$me")]),
-  T("who from there have i got debts with", rows("marcin_l", "darek", "michal", "piotr"),
-    ref=[ans(kind="person", linked_to="$fiveaside", where="debt count >= 1")]),
-  T("who owes me for the match balls", rows("d_piotr_balls", "d_michal_balls"),
-    ref=[ans(kind="debt", name="match balls", where="direction = owes_me and status = open")]))
-
 S("T31-035", "recipes eggs newest pin",
   T("recipes with eggs in the kitchen notebook", rows("n_zurek", "n_shakshuka"),
     ref=[ans(kind="note", linked_to="$recipes_nb", where='body contains "egg"')]),

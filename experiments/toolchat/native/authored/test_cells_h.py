@@ -316,13 +316,13 @@ class H4StopSignals(unittest.TestCase):
                             "H4 stop signal", "retraction", "any>decline:not_found"))
 
     def test_fyi_outcomes(self):
-        self.assertTrue(has(uses(turn("alice paid me for the tent hire", act("settle_debt", rows="$d"))), "H4 stop signal", "fyi-only", "act"))
+        self.assertTrue(has(uses(turn("alice paid me for the tent hire", act("edit", rows="$d", args="description: paid"))), "H4 stop signal", "fyi-only", "act"))
         self.assertTrue(has(uses(turn("i owe mat for the movie", call("ask", question="how much?"))), "H4 stop signal", "fyi-only", "ask"))
         self.assertTrue(has(uses(turn("i forgot the pin for my visa", call("decline", reason="fabricated_secret"))),
                             "H4 stop signal", "fyi-only", "decline"))
 
     def test_fyi_is_not_a_fragment_or_a_command(self):
-        for msg in ("the one from the gaa", "he paid up, mark it", "what did i owe mat", "the three debts i owe the most"):
+        for msg in ("the one from the gaa", "he paid up, mark it", "what did i owe mat", "the three biggest tasks i have"):
             self.assertFalse(any(c[1] == "H4 stop signal" and c[2] == "fyi-only" for c in uses(turn(msg, act("star", rows="$x")))), msg)
         t1 = turn("he rang about the quote", act("log", rows="$x"))
         self.assertTrue(has(uses(turn("what's on friday", call("answer", kind="event")), t1), "H4 stop signal", "fyi-only", "act"))

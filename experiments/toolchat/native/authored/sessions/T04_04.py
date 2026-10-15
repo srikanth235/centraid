@@ -75,17 +75,6 @@ S("T04-083", "person edit where nickname in task count",
   T("and who from amu has no tasks with me", rows("priya", "james", "dan", "grace"),
     ref=[ans(kind="person", where='role contains "AMU" and task count < 1')]))
 
-S("T04-084", "person time point named month span group count edit prev",
-  T("who was i messaging last night at half 9", rows("zainab"),
-    ref=[ans(kind="person", when=W(U("day", -1, time="21:30")))]),
-  T("who did i talk to from september up to the fifth of october",
-    rows("dad", "imran", "fatima_k", "sana", "hughes", "leah", "owen"),
-    ref=[ans(kind="person", when=W({"from": U("month", 0, name=9), "to": D("2026-10-05")}))]),
-  T("which of those aren't in any group", rows("dad", "fatima_k", "hughes"),
-    ref=[ans(kind="person", within="@prev", where="group count < 1")]),
-  T("put all three on a three week catch up", diff(upd("dad", cadence=21), upd("fatima_k", cadence=21), upd("hughes", cadence=21)),
-    ref=[act("edit", rows="@prev", args=lines(cadence=21))]))
-
 S("T04-085", "person time point month open span named month date span",
   T("who was i texting at 8 this morning", rows("chloe"),
     ref=[ans(kind="person", when=W(U("day", 0, time="08:00")))]),
@@ -112,18 +101,6 @@ S("T04-086", "find ambiguous event fitting describe create undo create",
     ref=[act("undo")]),
   T("what else is due friday", rows("wul_1", "rota_swap"),
     ref=[ans(kind="task", when=W(U("week", 0, weekday=5)))]))
-
-S("T04-087", "events tonight span description in edit where duration",
-  T("anything on from 6 tonight to the end of tomorrow", rows("leah_dinner", "rota_meet", "dark_1015"),
-    ref=[ans(kind="event", when=W({"from": U("day", 0, time="18:00"), "to": U("day", 1)}))]),
-  T("which things are at bundobust or the photo co-op", rows("dark_0903", "dark_0917", "leah_dinner", "dark_1015", "dark_1029", "dark_1112"),
-    ref=[ans(kind="event", where='description in ("Bundobust", "Leeds Photo Co-op")')]),
-  T("add to the leah one: table booked under aisha", diff(upd("leah_dinner", description="Bundobust, table booked under Aisha")),
-    ref=[act("edit", kind="event", linked_to="$leah", when=W(U("day", 0)),
-             args=lines(description="Bundobust, table booked under Aisha"))]),
-  T("what else this week isn't an hour long",
-    rows("ld_1012", "ld_1013", "dark_1015", "ld_1016", "fb_1017", "fitting_1", "lunch_1018"),
-    ref=[ans(kind="event", when=W(U("week", 0)), where="duration != 60 minutes", exclude="$leah_dinner")]))
 
 S("T04-088", "events count date time span description in edit where",
   T("how many things from 7pm tomorrow to the end of next week", val(14),
@@ -169,29 +146,6 @@ S("T04-094", "note empty result search miss single",
 S("T04-095", "task empty result search recover single",
   T("is defrost the fridge on my list", rows("freezer"),
     ref=[find(kind="task", name="Defrost the fridge"), search("defrost", kind="task"), ans(rows="$freezer")]))
-
-S("T04-096", "compute min single",
-  T("what's the least i owe any one person", val((9, "GBP")),
-    ref=[comp(op="min", field="amount", kind="debt", where='direction = "i_owe" and status = "open"'),
-         ans(value="@prev")]))
-
-S("T04-097", "wedding fund balance compute max balance settle_up undo ledger list",
-  T("who's in the wedding fund", rows("zainab", "imran", "fatima_h", "hamza", "me"),
-    ref=[ans(kind="person", linked_to="$wedding")]),
-  T("where am i at in it", val((1255, "GBP")),
-    ref=[ans(op="balance", kind="group", name="Wedding fund", linked_to="$me")]),
-  T("what's the most i owe any one person", val((500, "GBP")),
-    ref=[comp(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"'),
-         ans(value="@prev")]),
-  T("and my balance with imran rahman", val((275, "GBP")),
-    ref=[comp(op="balance", rows="$imran"), ans(value="@prev")]),
-  T("settle up with him in the wedding fund", diff(settle=["Imran Rahman"]),
-    ref=[act("settle_up", rows="$imran", args=lines(group="$wedding"))]),
-  T("undo that", diff(),
-    ref=[act("undo")]),
-  T("ok what's to do on the wedding prep list",
-    rows("rsvps", "favours", "seating", "caterer_nums", "playlist"),
-    ref=[ans(kind="task", linked_to="$wedlist", where='status = "open"')]))
 
 S("T04-098", "locker membership delete trashed restore multi empty result reveal",
   T("which locker items are memberships", rows("puregym", "bma"),

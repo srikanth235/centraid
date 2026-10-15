@@ -22,13 +22,6 @@ S("T11-A003", "ask-options event reschedule never_mind c3a",
   T("and the spread one's done, tick it off", diff(upd("fert", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="spread")]))
 
-S("T11-A004", "ask-options debt settle_debt c3a",
-  T("settle the bales one", ask("d_sean_silage", "d_mick_silage"),
-    ref=[act("settle_debt", kind="debt", name="bales"),
-         askc("Sean's silage bales (you owe 850) or Mick's silage bales (he owes you 240)?", options="$d_sean_silage, $d_mick_silage")]),
-  T("mick's, he dropped it in this morning", diff(upd("d_mick_silage", status="settled")),
-    ref=[act("settle_debt", rows="$d_mick_silage")]))
-
 S("T11-A005", "ask-options note delete never_mind c3a",
   T("delete the committee minutes", ask("min_jun", "min_jul"),
     ref=[act("delete", kind="note", name="committee minutes"),
@@ -49,14 +42,6 @@ S("T11-A007", "follow-up c3a",
     ref=[ans(kind="task", when=J(U("week", 1)), where="effort >= 60 and status = open")]),
   T("any of those priority 1", rows("nitrates"),
     ref=[ans(within="@prev", where="priority = 1")]))
-
-S("T11-A008", "follow-up c3a",
-  T("what do i still owe", rows("d_eileen", "d_fergal", "d_ger", "d_sean_silage", "d_mick_diesel", "d_mary_c"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("those but not the vet bill", rows("d_ger", "d_sean_silage", "d_mick_diesel", "d_eileen", "d_mary_c"),
-    ref=[ans(within="@prev", exclude="$d_fergal")]),
-  T("and the biggest one", rows("d_sean_silage"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
 
 S("T11-A009", "follow-up c3a",
   T("what's in the herd folder", rows("tb_cert", "herd_register", "ai_records"),

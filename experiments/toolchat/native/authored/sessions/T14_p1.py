@@ -3,8 +3,6 @@ import json
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 LIVE = 'status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
 LIVE_EV = 'status != "cancelled"'
 def next_kleber():
     return find(kind="event", name="DJ set at Bar do Kleber", when=W({"from": U("day", 0)}), order="date asc", limit=1)
@@ -17,8 +15,6 @@ WEEKEND = span(U("week", 0, weekday=6), U("week", 0, weekday=7))
 NEXT_WEEKEND = span(U("week", 1, weekday=6), U("week", 1, weekday=7))
 def J(d):
     return json.dumps(d, separators=(",", ":"))
-IOWE = 'direction = "i_owe" and status = "open"'
-
 
 S("T14-001-P", "five turns baile tonight complete para",
   T("what've i got tonight", rows("baile_12"),
@@ -31,13 +27,6 @@ S("T14-001-P", "five turns baile tonight complete para",
     ref=[act("complete", rows="$setlist12")]),
   T("i backed up usb sticks at lunch, tick it off", diff(upd("usb", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Back up USB sticks")]))
-
-S("T14-006-P", "compute min debts group direction para",
-  T("lowest open amount in both directions, my debts against what's owed me",
-    vgroups({"owes_me": (40, "BRL"), "i_owe": (35, "BRL")}),
-    ref=[comp(op="min", field="amount", kind="debt", where='status = "open"', group="direction"), ans(value="@prev")]),
-  T("35 one, which person", rows("d_wesley"),
-    ref=[ans(kind="debt", where='status = "open" and direction = "i_owe" and amount = 35 BRL')]))
 
 S("T14-012-P", "event create reschedule new overlap para",
   T("next friday 3pm, set up a b2b rehearsal with guga", diff(new("event", name=has("rehearsal"), date="2026-10-30T15:00")),
@@ -89,22 +78,6 @@ S("T14-040-P", "photo count eq para",
   T("wesley santos's photos?", rows("football", "haircut_p"),
     ref=[ans(kind="photo", linked_to="$wesley")]))
 
-S("T14-047-P", "debt amount empty status in para",
-  T("debts with the amount left blank", rows(),
-    ref=[ans(kind="debt", where="amount is empty")]),
-  T("all my debts to others, settled or open", rows("d_junior", "d_nath", "d_patricia", "d_larissa", "d_wesley", "d_marcos_t"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status in ("open", "settled")')]))
-
-S("T14-052-P", "person datetime span log settle_up para",
-  T("tuesday 6pm to thursday, who've i spoken with", rows("patricia", "rafa_m", "nath", "mae", "thiago"),
-    ref=[find(kind="person", when=W(span(U("week", 0, weekday=2, time="18:00"), U("week", 0, weekday=4)))), ans(rows="@prev")]),
-  T("mother, sister or cousin among them?", rows("patricia", "mae", "thiago"),
-    ref=[ans(within="@prev", where='role in ("sister", "mother", "cousin")')]),
-  T("rang patrícia again, record it", diff(upd("patricia", date=ANY)),
-    ref=[act("log", rows="$patricia", args=lines(kind="call"))]),
-  T("patrícia ferreira, settle up in mãe's medical bills too", diff(settle=[("Patrícia Ferreira", "50.00")]),
-    ref=[act("settle_up", rows="$patricia", args=lines(group="$mae_g"))]))
-
 S("T14-058-P", "overdue write+read reschedule empty para",
   T("overdue items?", rows("rating", "gas"),
     ref=[ans(kind="task", when=W({"to": U("day", -1)}), where='status = "open"')]),
@@ -127,16 +100,6 @@ S("T14-064-P", "document august span folder remove undo link para",
     ref=[act("undo")]),
   T("mei taxes, document count?", val(3),
     ref=[ans(op="count", kind="document", linked_to="$mei_f")]))
-
-S("T14-069-P", "debt last friday within settle prev undo ledger para",
-  T("debts dated last friday", rows("d_rafa_s", "d_kleber"),
-    ref=[ans(kind="debt", when=W(U("week", -1, weekday=5)))]),
-  T("kleber's one", rows("d_kleber"),
-    ref=[ans(within="@prev", linked_to="$kleber")]),
-  T("he's paid up, mark it settled", diff(upd("d_kleber", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]),
-  T("the pix bounced, so undo it", diff(),
-    ref=[act("undo")]))
 
 S("T14-075-P", "document create star unstar new para",
   T("gig contracts gets a new doc, Niceto tech sheet, and give it a star",
@@ -186,14 +149,6 @@ S("T14-A001-P", "ask-options event cancel c3a para",
   T("i'm in sampa on the 30th so the 13th", diff(upd("kleber_1113", status="cancelled")),
     ref=[act("cancel", rows="$kleber_1113")]))
 
-S("T14-A008-P", "follow-up c3a para",
-  T("what i owe, list it", rows("d_wesley", "d_junior", "d_nath", "d_marcos_t", "d_patricia"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("same list minus the haircut", rows("d_marcos_t", "d_patricia", "d_junior", "d_nath"),
-    ref=[ans(within="@prev", exclude="$d_wesley")]),
-  T("largest of them", rows("d_junior"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T14-B004-P", "c4b state-change complete complete create contrast para",
   T("juninho's tyres, paid", diff(upd("tyre_pay", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Juninho tyres")]),
@@ -213,15 +168,6 @@ S("T14-C902-P", "c3c cell7 rejected delete folder with documents then delete emp
     ref=[bad(act("delete", kind="folder", name="Car documents")), askc("car documents still has 3 documents in it, so it can't be deleted. move them first?")]),
   T("fine, only the empty one then", diff(gone("empty_f")),
     ref=[act("delete", kind="folder", where="document count = 0")]))
-
-S("T14-106-P", "ask options marcos star balance negative para",
-  T("marcos gets a star", ask("marcos_o", "marcos_t"),
-    ref=[act("star", kind="person", name="Marcos"),
-         askc("marcos oliveira the dj or marcos tavares the mechanic?", options="$marcos_o, $marcos_t")]),
-  T("the mechanic one", diff(upd("marcos_t", starred=True)),
-    ref=[act("star", rows="$marcos_t")]),
-  T("what do i still owe him", val((-250, "BRL")),
-    ref=[ans(op="balance", rows="$marcos_t")]))
 
 S("T14-111-P", "ask options cardiology cancel never mind undo para",
   T("mom's cardiology appointment is off", ask("cardio_sep", "cardio_nov"),

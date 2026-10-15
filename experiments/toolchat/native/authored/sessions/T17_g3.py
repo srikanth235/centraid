@@ -9,8 +9,6 @@ def W(expr):
 
 
 LIVE = 'status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
 LIVE_EV = 'status != "cancelled"'
 
 
@@ -32,17 +30,6 @@ S("T17-131", "recovery next ivan lesson then choir list min max sum",
   T("how much time is the whole choir list altogethr, i'd like to know before i plan the weekend", val(65),
     ref=[comp(op="sum", field="effort", kind="task", linked_to="$choir_l", where=LIVE), ans(value="@prev")]))
 
-S("T17-132", "recovery twice rehearsals then renovation sum then owed min max",
-  T("next three choir rehearsals, i need to tell petar which ones i'll miss", rows("choir_0203", "choir_0210", "choir_0217", order=True),
-    ref=[rehearsals(), bad(rehearsals()), bad(rehearsals()),
-         ans(within="@prev", order="date asc", limit=3)]),
-  T("how long is everything on the renovation list all added up, i want to know how much to clear before the demolition", val(230),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$reno_l", where=LIVE)]),
-  T("what's the smallest amount any student owes me right now", val((50, "BGN")),
-    ref=[ans(op="min", field="amount", kind="debt", where=OWED)]),
-  T("and the biggest, i'm guessing it's daniela's for boris's decembr lessons", val((160, "BGN")),
-    ref=[ans(op="max", field="amount", kind="debt", where=OWED)]))
-
 S("T17-133", "ask reschedule veselina rehearsal never mind then viktor list min max",
   T("push the rehearsal with veselina to 7", ask("vesi_reh", "vesi_reh_jan"),
     ref=[act("reschedule", kind="event", name="Rehearsal with Veselina",
@@ -55,26 +42,6 @@ S("T17-133", "ask reschedule veselina rehearsal never mind then viktor list min 
     ref=[ans(op="min", field="effort", kind="task", linked_to="$viktor_l", where=LIVE)]),
   T("and the longest one, i bet it's his pasport", val(20),
     ref=[ans(op="max", field="effort", kind="task", linked_to="$viktor_l", where=LIVE)]))
-
-S("T17-134", "shopping min max teaching sum then biggest owed limit",
-  T("smallest job on the shopping list, i'm standing in the queue at the pharmacy", val(10),
-    ref=[ans(op="min", field="effort", kind="task", linked_to="$shopping_l", where=LIVE)]),
-  T("longest?", val(60),
-    ref=[ans(op="max", field="effort", kind="task", linked_to="$shopping_l", where=LIVE)]),
-  T("total time on the teaching list, i wanna see if it fits into the weekned", val(385),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$teaching_l", where=LIVE)]),
-  T("who are my three biggest debtors", rows("d_daniela", "d_niki", "d_maria_k", order=True),
-    ref=[ans(kind="debt", where=OWED, order="amount desc", limit=3)]))
-
-S("T17-135", "borrowed this month sum max min then two latest notes",
-  T("how much did i borrow this month, i'm going through the renovation costs again", val((1945, "BGN")),
-    ref=[ans(op="sum", field="amount", kind="debt", when=W(U("month", 0)), where=OWE)]),
-  T("and the biggest of those, that's mitko's installment isn't it", rows("d_mitko"),
-    ref=[ans(kind="debt", when=W(U("month", 0)), where=OWE, order="amount desc", limit=1)]),
-  T("smallest one?", val((25, "BGN")),
-    ref=[ans(op="min", field="amount", kind="debt", when=W(U("month", 0)), where=OWE)]),
-  T("my two newest notez", rows("vesi_tempi", "mitko_calls", order=True),
-    ref=[ans(kind="note", order="date desc", limit=2)]))
 
 S("T17-136", "ask delete choir concert never mind then recent contacts then longest this week",
   T("delete the choir concert", ask("concert_dec", "concert_mar"),
@@ -108,26 +75,3 @@ S("T17-138", "latest photos limit then unbounded diary then renovation min max",
     ref=[ans(op="min", field="effort", kind="task", linked_to="$reno_l", where=LIVE)]),
   T("and the biggest one, the bathroom itself i suppose", val(120),
     ref=[ans(op="max", field="effort", kind="task", linked_to="$reno_l", where=LIVE)]))
-
-S("T17-139", "biggest i owe limit then next dentist then sum this week then shortest event next week",
-  T("the two biggest things i owe", rows("d_mitko", "d_mila", order=True),
-    ref=[ans(kind="debt", where=OWE, order="amount desc", limit=2)]),
-  T("when's my next dentist appointmnt", rows("dentist_v"),
-    ref=[ans(kind="event", name="dentist", when=W({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("how much work is sat on my plate this week, all the tasks added up", val(190),
-    ref=[ans(op="sum", field="effort", kind="task", when=W(U("week", 0)), where=LIVE)]),
-  T("shortest thing in my diary next week that isn't cancelled, i need a gap for a phone call", val(15),
-    ref=[ans(op="min", field="duration", kind="event", when=W(U("week", 1)), where=LIVE_EV)]))
-
-S("T17-140", "newest documents limit then unbounded calendar then ask add ivan never mind then viktor sum",
-  T("two newest docuemnts", rows("scan_72", "scan_71", order=True),
-    ref=[ans(kind="document", order="date desc", limit=2)]),
-  T("get rid of everything on my calendar, i'll put it back after the recitl", decline("unbounded_destruction"),
-    ref=[dec("unbounded_destruction")]),
-  T("add ivan to the studio rent", ask("ivan_t", "ivan_d"),
-    ref=[act("add_to", kind="person", name="Ivan", args=lines(to="$studio")),
-         askc("ivan todorov the student or ivan dimov the building manager?", options="$ivan_t, $ivan_d")]),
-  T("actually no, that's not right, ivan the building manager is not in the studio rent so leave it", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("how much time is the viktor list altogether", val(35),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$viktor_l", where=LIVE)]))

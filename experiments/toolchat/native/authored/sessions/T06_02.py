@@ -24,13 +24,6 @@ S("T06-027", "person span date to named month",
   T("log a call with anke", diff(upd("anke", date=ANY)),
     ref=[act("log", rows="$anke", args=lines(kind="call"))]))
 
-S("T06-028", "person span named month to last week group count",
-  T("everyone i contacted from january up to last week",
-    rows("dieter", "olli", "hannah_s", "sophie", "hannah_b", "anke", "tobi", "nele", "greta", "ute"),
-    ref=[ans(kind="person", when=W({"from": U("month", 0, name=1), "to": U("week", -1)}))]),
-  T("who's in more than one group", rows("jonas_w", "lena", "kalle", "sophie", "me"),
-    ref=[ans(kind="person", where="group count > 1")]))
-
 S("T06-029", "events next two weeks duration description",
   T("what's coming up next week and the week after", rows(
       "mix_greta1", "theatre_tech", "reh_0210", "podcast", "premiere", "sc_0213", "gig_tonkeller", "bike", "climbing",
@@ -132,21 +125,6 @@ S("T06-042", "photo open end date album",
   T("hm no, undo", diff(unlink("wg_album", "p_mama")),
     ref=[act("undo")]))
 
-S("T06-043", "debt span date time to weekday",
-  T("debts from after lunch on jan twentieth up to monday", rows("d_lena_cables", "d_sophie_train", "d_mira_pizza",
-                                                       "d_greta_dinner", "d_hannah_b"),
-    ref=[ans(kind="debt", when=W({"from": D("2026-01-20", "12:00"), "to": U("week", 0, weekday=1)}))]),
-  T("which of them are under 20", rows("d_greta_dinner", "d_mira_pizza", "d_hannah_b"),
-    ref=[ans(within="@prev", where="amount < 20")]))
-
-S("T06-044", "debt span rel rel sum",
-  T("how much did i lend people last month and this month", val((117.8, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", when=W({"from": U("month", -1), "to": U("month", 0)}),
-             where='direction = "owes_me"')]),
-  T("and borrowed", val((107, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", when=W({"from": U("month", -1), "to": U("month", 0)}),
-             where='direction = "i_owe"')]))
-
 S("T06-045", "create person edit new cadence",
   T("new contact Jana Weiss, she's the new stage manager at theater lindenau",
     diff(new("person", name="Jana Weiss", role=has("stage manager"))),
@@ -175,28 +153,3 @@ S("T06-047", "create task delete restore new",
     ref=[act("restore", rows="$c1")]),
   T("and put it on the gear list", diff(link("gearlist", "+1")),
     ref=[act("add_to", rows="$c1", args=lines(to="$gearlist"))]))
-
-S("T06-048", "knock-on debt settle plus tasks",
-  T("paid ines for the prints and did the bin bags and the rota, tick all that",
-    diff(upd("d_ines_prints", status="settled"), upd("bin_bags", status="completed", completed=ANY),
-         upd("cleaning_rota", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="prints", more=True),
-         act("complete", rows="$bin_bags, $cleaning_rota")]),
-  T("so which debts am i on the hook for", rows("d_jonask_bvg", "d_lena_cables", "d_olli_mic", "d_greta_dinner"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]))
-
-S("T06-049", "debt count people ambiguous jonas",
-  T("anyone with more than a single debt to me", rows("kalle"),
-    ref=[ans(kind="person", where="debt count > 1")]),
-  T("and what's jonas's balance", ask("jonas_k", "jonas_w"),
-    ref=[bad(ans(op="balance", kind="person", name="Jonas")),
-         askc("jonas keller or jonas wirth?", options="$jonas_k, $jonas_w")]),
-  T("the flatmate", val((-2.9, "EUR")),
-    ref=[ans(op="balance", rows="$jonas_k")]))
-
-S("T06-050", "group person count delete empty",
-  T("which groups have fewer than four people", rows("kitty", "mama60"),
-    ref=[ans(kind="group", where="person count < 4")]),
-  T("delete the harz one, we're done", diff(gone("harz"), unlink("harz", "sophie"), unlink("harz", "hannah_b"),
-                                            unlink("harz", "yusuf"), unlink("harz", "me")),
-    ref=[act("delete", rows="$harz")]))

@@ -57,16 +57,6 @@ S("T31-269", "ask-unstar-which login starred url starred-left",
   T("so which locker entries still have a star", rows("pko_acct", "flat_wifi", "jetbrains"),
     ref=[ans(kind="locker item", where="starred = yes")]))
 
-S("T31-270", "ask-settle-which flowers ewa small-owed",
-  T("settle it", ask(),
-    ref=[askc("Settle which debt?")]),
-  T("the flowers one for ewa", diff(upd("d_ewa", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="flowers", linked_to="$ewa")]),
-  T("how many debts do i still owe under 30", val(1),
-    ref=[ans(op="count", kind="debt", where="direction = i_owe and status = open and amount < 30")]),
-  T("settle the pizza one i owe darek from october", diff(upd("d_darek_pizza", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="pizza", linked_to="$darek", when=J(U("month", -1, name=10)))]))
-
 S("T31-271", "decline-out-of-scope text barber reschedule-haircut twenty-first",
   T("text the barber to move my haircut", decline("out_of_scope"),
     ref=[dec("out_of_scope")]),
@@ -101,20 +91,3 @@ S("T31-274", "ambiguous-event reschedule physio upcoming pick twenty-sixth count
   T("how many physio sessions are left", val(2),
     ref=[ans(op="count", kind="event", name="physio", when=J({"from": U("day", 0)}))]))
 
-# --- groups hold people and money; the model reads the rows by name --------------------------------------------------
-
-S("T31-275", "recovery-nolink ward gifts documents star starred-work",
-  T("any documents for the ward gifts group", rows("d_rota"),
-    ref=[ans(kind="document", linked_to="$ward_gifts"), ans(kind="document", name="ward")]),
-  T("star it", diff(upd("d_rota", starred=True)),
-    ref=[act("star", rows="$d_rota")]),
-  T("which documents are starred in the work folder now", rows("d_contract", "d_licence", "d_rota"),
-    ref=[ans(kind="document", linked_to="$work_f", where="starred = yes")]))
-
-S("T31-276", "recovery-nolink stag photos who-in-it star",
-  T("any photos for adi's stag do group", rows("p_adi_stag"),
-    ref=[ans(kind="photo", linked_to="$stag"), ans(kind="photo", name="adi")]),
-  T("who's in it", rows("adrian"),
-    ref=[ans(kind="person", linked_to="$p_adi_stag")]),
-  T("star it", diff(upd("p_adi_stag", starred=True)),
-    ref=[act("star", rows="$p_adi_stag")]))

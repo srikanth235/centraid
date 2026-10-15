@@ -33,16 +33,6 @@ S("T31-118", "hall november after-15th find-cancel count-left reschedule-same-ti
   T("and push the one on the 10th to the 11th, same time", diff(upd("fas_1110", date="2026-11-11T20:00")),
     ref=[act("reschedule", kind="event", name="five-a-side hall", when=J(D("2026-11-10")), args=lines(to=D("2026-11-11")))]))
 
-S("T31-119", "debts before november smallest biggest-besides sum-within",
-  T("what i owe that dates from before november", rows("d_natalia", "d_ewa", "d_kasia", "d_ola_clean", "d_darek_pizza"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", when=J({"to": D("2026-10-31")}))]),
-  T("of those, which is the lowest", rows("d_ewa"),
-    ref=[ans(within="@1", order="amount asc", limit=1)]),
-  T("and the biggest besides natalia's", rows("d_kasia"),
-    ref=[ans(within="@1", order="amount desc", limit=1, exclude="$d_natalia")]),
-  T("how much do those come to altogether", val((416, "PLN")),
-    ref=[ans(op="sum", field="amount", within="@1")]))
-
 S("T31-120", "ward jobs find-complete short undo name",
   T("tick off the open ward jobs due before the 10th that take 15 minutes or less",
     diff(upd("handover", status="completed", completed=ANY), upd("uniforms", status="completed", completed=ANY)),

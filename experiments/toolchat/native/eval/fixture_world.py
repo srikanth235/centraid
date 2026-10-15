@@ -58,17 +58,14 @@ EVENTS = {
 PEOPLE = {"chloe": {"name": "Chloe Park"}, "meera_i": {"name": "Meera Iyer"}, "meera_s": {"name": "Meera Shah"},
           "jordan_b": {"name": "Jordan Blake"}, "craig": {"name": "Craig Boyd"}, "kenji": {"name": "Kenji Mori"},
           "tomas": {"name": "Tomás Herrera", "nickname": "Tomi"}, "arjun": {"name": "Arjun Rao"}}
-# a debt links to the person it is with
-DEBTS = {"uber": {"name": "Uber", "person": "chloe", "amount": 32.4}, "magazine": {"name": "Magazine", "person": "meera_i"},
-         "jordan_gas": {"name": "Gas money", "person": "jordan_b"}, "acltix": {"name": "Tickets", "person": "jordan_b"}}
-GROUPS = {"casa": {"name": "Casa Bills", "currency": "USD"}}
+TRANSACTIONS = {"uber": {"name": "Uber", "amount": -32.4}, "magazine": {"name": "Magazine", "amount": -4.99}}
 DOCUMENTS = {"lease": {"name": "Lease"}}
 LOCKER = {"wifi": {"name": "Home wifi", "password": "biscuit-2208"}, "officewifi": {"name": "Office wifi", "password": "lanyard-4417"}}
 FOLDERS = {"house": {"name": "House"}}
 LISTS = {"home": {"name": "Home"}}
 PHOTOS = {"en0": {"name": "en0"}, "en1": {"name": "en1"}}
 
-SECTIONS = {"people": PEOPLE, "groups": GROUPS, "events": EVENTS, "tasks": TASKS, "debts": DEBTS, "documents": DOCUMENTS, "locker": LOCKER,
+SECTIONS = {"people": PEOPLE, "events": EVENTS, "tasks": TASKS, "transactions": TRANSACTIONS, "documents": DOCUMENTS, "locker": LOCKER,
             "folders": FOLDERS, "lists": LISTS, "photos": PHOTOS}
 KINDS = {section: kind for section, kind in lib.SECTION_KIND.items()}
 

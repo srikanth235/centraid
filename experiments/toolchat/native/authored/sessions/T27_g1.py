@@ -129,12 +129,3 @@ S("T27-114", "ask event delete midwife never mind then delete",
     ref=[dec("never_mind")]),
   T("delete the morphology scan, it's ancient history", diff(trash("morpho")),
     ref=[act("delete", kind="event", name="Morphology scan")]))
-
-S("T27-115", "ask person add_to group thomas then contrast",
-  T("add thomas to the opening party kitty", ask("thomas_m", "thomas_g"),
-    ref=[act("add_to", kind="person", name="Thomas", args=lines(to="$party_g")),
-         askc("thomas moreau or thomas girard?", options="$thomas_m, $thomas_g")]),
-  T("julien's brother", diff(link("party_g", "thomas_m")),
-    ref=[act("add_to", rows="$thomas_m", args=lines(to="$party_g"))]),
-  T("and add inès to baby shower gifts", diff(link("shower_g", "ines")),
-    ref=[act("add_to", kind="person", name="Inès", args=lines(to="$shower_g"))]))

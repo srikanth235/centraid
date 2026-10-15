@@ -1,17 +1,6 @@
 from gold import *
 
 
-S("T24-051", "four turns ambiguous david ask log debt count balance",
-  T("log a call with david", ask("david_r", "david_s"),
-    ref=[act("log", kind="person", name="David", args=lines(kind="call")),
-         askc("david ruiz from the boosters or david salazar from the union?", options="$david_r, $david_s")]),
-  T("the union one", diff(upd("david_s", date=ANY)),
-    ref=[act("log", rows="$david_s", args=lines(kind="call"))]),
-  T("which team parents have a debt going with me", rows("patty", "gilbert", "yvonne", "veronica"),
-    ref=[ans(kind="person", where='debt count > 0 and role = "team parent"')]),
-  T("and where am i with david salazar", val((-43.75, "USD")),
-    ref=[comp(op="balance", rows="$david_s"), ans(value="@prev")]))
-
 S("T24-052", "ambiguous dentist cancel ask options pick",
   T("cancel the dentist", ask("dentist_mateo", "dentist_lucia"),
     ref=[act("cancel", kind="event", name="Dentist"),
@@ -51,61 +40,6 @@ S("T24-056", "single ask without options",
   T("add something to my diary for next week", ask(),
     ref=[askc("sure, what is it and which day?")]))
 
-S("T24-057", "empty result debt find miss recover settle_debt",
-  T("the uber debt with ray, how much was it", val((40, "USD")),
-    ref=[find(kind="debt", name="Uber"), search("uber", kind="debt"), find(kind="debt", linked_to="$ray"),
-         ans(op="max", field="amount", within="@prev")]),
-  T("settle it, he paid me back at practice", diff(upd("d_ray", status="settled")),
-    ref=[act("settle_debt", rows="$d_ray")]))
-
-S("T24-058", "empty result debt amount != unit compute max group",
-  T("the babysitting money with lupe, how much", rows("d_lupe"),
-    ref=[find(kind="debt", name="babysitting"), search("babysitting", kind="debt"), find(kind="debt", linked_to="$lupe"),
-         ans(rows="@prev")]),
-  T("oh right. which open debts aren't 40 bucks",
-    rows("d_rudy", "d_hector", "d_patty", "d_david_s", "d_beto", "d_marisol", "d_kim", "d_lupe", "d_veronica"),
-    ref=[ans(kind="debt", where='amount != 40 USD and status = "open"')]),
-  T("biggest open one each way", vgroups({"owes_me": (320, "USD"), "i_owe": (150, "USD")}),
-    ref=[comp(op="max", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]))
-
-S("T24-059", "debt status is empty date spans",
-  T("any debts with no status on them", rows(),
-    ref=[ans(kind="debt", where="status is empty")]),
-  T("debts from sept first to the twelfth", rows("d_ray", "d_rudy", "d_hector", "d_patty", "d_kim"),
-    ref=[ans(kind="debt", when=span(D("2026-09-01"), D("2026-09-12")))]),
-  T("and aug fifteenth to the end of august", rows("d_gilbert", "d_beto"),
-    ref=[ans(kind="debt", when=span(D("2026-08-15"), U("month", 0, name=8)))]))
-
-S("T24-060", "debt month to weekday span status is empty",
-  T("from the start of september up to last friday, what debts came up", rows("d_ray", "d_hector", "d_patty", "d_kim"),
-    ref=[ans(kind="debt", when=span(U("month", 0, name=9), U("week", -1, weekday=5)))]),
-  T("any of them missing a status", rows(),
-    ref=[ans(kind="debt", within="@prev", where="status is empty")]))
-
-S("T24-061", "debt open span amount != compute min group",
-  T("debts from before this month", rows("d_gilbert", "d_beto", "d_yvonne", "d_jessica", "d_lupe"),
-    ref=[ans(kind="debt", when={"to": U("month", -1)})]),
-  T("which of those weren't 40 dollars", rows("d_beto", "d_yvonne", "d_jessica", "d_lupe"),
-    ref=[ans(kind="debt", within="@prev", where="amount != 40 USD")]),
-  T("smallest each way", vgroups({"owes_me": (30, "USD"), "i_owe": (45, "USD")}),
-    ref=[comp(op="min", field="amount", within="@prev", group="direction"), ans(value="@prev")]))
-
-S("T24-062", "debt open span date span",
-  T("debts up to last week",
-    rows("d_gilbert", "d_beto", "d_yvonne", "d_jessica", "d_lupe", "d_ray", "d_rudy", "d_hector", "d_patty", "d_kim"),
-    ref=[ans(kind="debt", when={"to": U("week", -1)})]),
-  T("how many between the first and the tenth", val(3),
-    ref=[ans(op="count", kind="debt", when=span(D("2026-09-01"), D("2026-09-10")))]))
-
-S("T24-063", "debt date month span weekday span compute balance",
-  T("debts between july first and end of august", rows("d_yvonne", "d_gilbert", "d_beto"),
-    ref=[ans(kind="debt", when=span(D("2026-07-01"), U("month", 0, name=8)))]),
-  T("and from september till last wednesday", rows("d_patty", "d_hector", "d_kim"),
-    ref=[ans(kind="debt", when=span(U("month", 0, name=9), U("week", -1, weekday=3)))]),
-  T("what's my balance with Patricia Nuñez", val((120, "USD")),
-    ref=[comp(op="balance", rows="$patty"), ans(value="@prev")]))
-
 S("T24-064", "four turns cadence note count person month span log nickname",
   T("who am i supposed to check on every two weeks or less often",
     rows("rudy", "marisol", "beto", "linda", "frank", "jessica", "david_r", "gilbert", "david_s", "kim", "lupe"),
@@ -122,14 +56,6 @@ S("T24-065", "cadence literal person month span",
     ref=[bad(ans(kind="person", where="cadence >= 4 weeks")), ans(kind="person", where="cadence >= 30")]),
   T("who've i been in touch with from two months back to the end of july", rows("micheal"),
     ref=[ans(kind="person", when=span(U("month", -2), U("month", 0, name=7)))]))
-
-S("T24-066", "debt count note count balance",
-  T("anyone on the landscaping side i've got a debt with", rows("hector"),
-    ref=[ans(kind="person", where='debt count > 0 and role contains "landscaping"')]),
-  T("which landscaping people have one note or less", rows("hector", "barbara", "javier"),
-    ref=[ans(kind="person", where='role contains "landscaping" and note count <= 1')]),
-  T("where do i stand with hector", val((-30, "USD")),
-    ref=[ans(op="balance", rows="$hector")]))
 
 S("T24-068", "four turns event person count status open span duration count",
   T("next week, which events have fewer than two people on them",

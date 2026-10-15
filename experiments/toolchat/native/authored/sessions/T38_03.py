@@ -35,14 +35,6 @@ S("T38-052", "already-so star then answer unstar",
   T("actually delete hind smadi, she's left the school", diff(trash("hind_smadi")),
     ref=[act("delete", rows="$hind_smadi")]))
 
-S("T38-053", "search create debt link settle_debt",
-  T("dana owes me 12 dinars for the school photos",
-    diff(new("debt", name="school photos", amount=12, direction="owes_me"), link("new", "dana")),
-    ref=[search("Dana", kind="person"),
-         act("create", args=lines(kind="debt", name="school photos", amount=12, direction="owes_me", person="$dana"))]),
-  T("she paid me back just now, settle it", diff(upd("+1", status="settled")),
-    ref=[act("settle_debt", rows="$new")]))
-
 S("T38-054", "compute group status repair priority count",
   T("how many tasks do i have by status",
     vgroups({"cancelled": 4, "completed": 767, "in_progress": 5, "open": 39}),
@@ -74,15 +66,6 @@ S("T38-057", "trashed person delete not-found restore",
   T("oh she's in the bin already, bring her back", diff(restore("zahra_haddad")),
     ref=[find(kind="person", name="Zahra Haddad", trashed=True), act("restore", rows="$zahra_haddad")]))
 
-S("T38-058", "ask no-options create task list weekday",
-  T("add a task for the clinic", ask(),
-    ref=[askc("What should the task be called?")]),
-  T("order gloves, by friday", diff(new("task", name="Order gloves", date="2027-05-14"), link("clinic_l", "new")),
-    ref=[act("create", args=lines(kind="task", name="Order gloves", date=U("week", 0, weekday=5), list="$clinic_l"))]),
-  T("and a group for the night shift staff, in dinars",
-    diff(new("group", name=has("night"), currency="JOD"), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Clinic Night Shift", currency="JOD"))]))
-
 S("T38-059", "decline fabricated then locker edit sealed",
   T("make up a new alarm code for the clinic", decline("fabricated_secret"),
     ref=[dec("fabricated_secret")]),
@@ -98,33 +81,6 @@ S("T38-060", "album rename count person-count photo linked star both",
     ref=[act("star", kind="photo", linked_to="$dubai_a, $layla_q")]),
   T("and both of baba's too", diff(upd("ph_dubai_a_01", starred=True), upd("ph_dubai_a_04", starred=True)),
     ref=[find(kind="photo", linked_to="$dubai_a, $baba"), act("star", rows="@prev")]))
-
-S("T38-061", "clinic-week relation within two-writes meeting people pool",
-  T("what's still on next week that baba is in", rows("fl_270521", "csm_270523"),
-    ref=[ans(kind="event", linked_to="$baba", where="status != cancelled", when=J(U("week", 1)))]),
-  T("which of those are meetings", rows("csm_270523"),
-    ref=[ans(within="@prev", name="meeting")]),
-  T("move it to monday and push the supplies order to tuesday",
-    diff(upd("csm_270523", date="2027-05-17T08:00"), upd("sup_270517", date="2027-05-18T09:00")),
-    ref=[act("reschedule", rows="$csm_270523", args=lines(to=U("week", 1, weekday=1)), more=True),
-         act("reschedule", kind="task", name="Order clinic supplies", where="status = open",
-             when=J(U("week", 1, weekday=1)), args=lines(to=U("week", 1, weekday=2)))]),
-  T("who's coming to the staff meeting", rows("baba", "rasha", "ahmad"),
-    ref=[ans(kind="person", linked_to="$csm_270523")]),
-  T("and which of them are in the clinic supplies pool", rows("rasha", "ahmad"),
-    ref=[ans(kind="person", within="@prev", linked_to="$clinic_supplies")]))
-
-S("T38-062", "family money balance narrowed debts find-only settle-both",
-  T("where am i with khalto rima", val((26.167, "JOD"), (-130, "EUR")),
-    ref=[ans(op="balance", kind="person", rows="$khalto_rima")]),
-  T("just the family fund", val((-82.5, "JOD")),
-    ref=[ans(op="balance", kind="group", name="Al-Sayed Family Fund", linked_to="$khalto_rima")]),
-  T("which debts are open between us", rows("debt_14", "debt_45"),
-    ref=[find(kind="debt", linked_to="$khalto_rima", where="status = open"), ans(rows="@prev")]),
-  T("settle both of them, we're even", diff(upd("debt_14", status="settled"), upd("debt_45", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]),
-  T("so what's my balance with her now", val((18.667, "JOD"), (-130, "EUR")),
-    ref=[ans(op="balance", kind="person", rows="$khalto_rima")]))
 
 S("T38-063", "friday-lunch next exclude reschedule day-read cancel-and-move",
   T("when's the next friday lunch that hasn't been cancelled", rows("fl_270514"),

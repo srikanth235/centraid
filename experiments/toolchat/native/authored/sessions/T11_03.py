@@ -7,63 +7,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T11-051", "seven turns morning today tasks complete reschedule anchor balance empty",
-  T("morning. what's on today", rows("draw_0726"),
-    ref=[ans(kind="event", when=W(U("day", 0)))]),
-  T("and tasks due today", rows("troughs", "call_mam"),
-    ref=[ans(kind="task", when=W(U("day", 0)))]),
-  T("done the troughs", diff(upd("troughs", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Check the water troughs")]),
-  T("move the mam one to 7 this evening", diff(upd("call_mam", date="2026-07-26T19:00")),
-    ref=[act("reschedule", rows="$call_mam", args=lines(to=U("day", 0, anchor="row", time="19:00")))]),
-  T("what's on tomorrow", rows("ai_call"),
-    ref=[ans(kind="event", when=W(U("day", 1)))]),
-  T("kevin's coming for that, do i owe him anything", val((0, "EUR")),
-    ref=[ans(op="balance", rows="$kevin")]),
-  T("grand. any jobs down for him", rows(),
-    ref=[ans(kind="task", linked_to="$kevin")]))
-
-S("T11-052", "six turns debts amount unit max min order settle sum",
-  T("which debts owed to me are over 100 euro", rows("d_mick_silage", "d_tadhg", "d_tom"),
-    ref=[ans(kind="debt", where='amount > 100 EUR and direction = "owes_me" and status = "open"')]),
-  T("and the biggest open one each way", vgroups({"i_owe": (850, "EUR"), "owes_me": (240, "EUR")}),
-    ref=[comp(op="max", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]),
-  T("smallest each way?", vgroups({"i_owe": (12, "EUR"), "owes_me": (25, "EUR")}),
-    ref=[comp(op="min", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]),
-  T("who's the 12 to", rows("mary_c"),
-    ref=[find(kind="debt", where='direction = "i_owe" and status = "open"', order="amount asc", limit=1),
-         ans(kind="person", linked_to="@prev")]),
-  T("settle it, i dropped the money over", diff(upd("d_mary_c", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Eggs and brown bread")]),
-  T("total i owe now", val((1435, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
-
-S("T11-053", "five turns direction set ambiguous debt ask settle balance",
-  T("all my open debts, both ways",
-    rows("d_sean_silage", "d_mick_silage", "d_fergal", "d_eileen", "d_clodagh", "d_tadhg", "d_ger", "d_mary_c",
-         "d_tom", "d_pj", "d_mick_diesel"),
-    ref=[ans(kind="debt", where='status = "open" and direction is set')]),
-  T("settle the silage one", ask("d_sean_silage", "d_mick_silage"),
-    ref=[act("settle_debt", kind="debt", name="silage"),
-         askc("the bales you owe sean or the ones mick owes you?", options="$d_sean_silage, $d_mick_silage")]),
-  T("micks, he paid me after mass", diff(upd("d_mick_silage", status="settled")),
-    ref=[act("settle_debt", rows="$d_mick_silage")]),
-  T("so where do i stand with him", val((-95, "EUR")),
-    ref=[ans(op="balance", kind="person", linked_to="$d_mick_silage")]),
-  T("i'll give him the diesel money today so mark that done too", diff(upd("d_mick_diesel", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Diesel from Mick")]))
-
-S("T11-054", "find role linked_to all debt max create task",
-  T("what debts have i with the neighbour who farms", rows("d_mick_silage", "d_mick_diesel"),
-    ref=[find(kind="person", where='role contains "farmer"'),
-         ans(kind="debt", linked_to="@prev")]),
-  T("which is bigger", val((240, "EUR")),
-    ref=[ans(op="max", field="amount", within="@prev")]),
-  T("add a task to chase mick for the silage money friday", diff(new("task", name=has("Mick"), date="2026-07-31")),
-    ref=[act("create", args=lines(kind="task", name="Chase Mick for the silage money", date=U("week", 1, weekday=5)))]))
-
 S("T11-055", "trashed people restore window ask delete multi",
   T("which contacts are in the trash", rows("tony", "frank"),
     ref=[ans(kind="person", trashed=True)]),
@@ -95,15 +38,6 @@ S("T11-057", "notes open span date within notebook count note count",
     ref=[ans(within="@prev", where="notebook count > 0")]),
   T("which of the gaa crowd have one note or fewer about them", rows("eileen"),
     ref=[ans(kind="person", where='role contains "GAA" and note count <= 1')]))
-
-S("T11-059", "create debt balance write read log",
-  T("i owe clodagh barry 18 for the swimming togs, add that and tell me where i am with her",
-    val((7, "EUR"), also=diff(new("debt", name=has("togs"), amount=18, direction="i_owe"), link("new", "clodagh"))),
-    ref=[act("create", more=True, args=lines(kind="debt", name="Swimming togs", person="$clodagh", amount="18",
-                                             direction="i_owe")),
-         ans(op="balance", rows="$clodagh")]),
-  T("log a message to her as well", diff(upd("clodagh", date=ANY)),
-    ref=[act("log", rows="$clodagh", args=lines(kind="message"))]))
 
 S("T11-060", "create event span date time reschedule new",
   T("book the parlour service with the dairymaster lad for monday week at 2",

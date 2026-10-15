@@ -82,16 +82,6 @@ S("T21-080", "five turns person datetime spans refused unit cadence log nickname
   T("and of Mama Njeri?", rows("memorial_p", "nyeri_farm"),
     ref=[ans(kind="photo", linked_to="$esther")]))
 
-S("T21-081", "chama members group count note count star",
-  T("chama ladies who aren't in any other group", rows("alice", "mary_a", "beatrice", "rose"),
-    ref=[ans(kind="person", linked_to="$chama", where="group count <= 1")]),
-  T("which of them have exactly one note about them", rows("rose"),
-    ref=[ans(kind="person", within="@prev", where="note count = 1")]),
-  T("what's the note", rows("loans"),
-    ref=[ans(kind="note", linked_to="$rose")]),
-  T("star Rose Wanjiku", diff(upd("rose", starred=True)),
-    ref=[act("star", rows="$rose")]))
-
 S("T21-082", "subtasks task count complete write read priority",
   T("tasks with subtasks that are in progress", rows("mock_tt", "appraisals"),
     ref=[ans(kind="task", where='task count != 0 and status = "in_progress"')]),
@@ -143,17 +133,6 @@ S("T21-086", "photo span count restore window ask restore trashed open span",
   T("photos since yesterday", rows("avocado"),
     ref=[ans(kind="photo", when={"from": U("day", -1)})]))
 
-S("T21-087", "debt month spans",
-  T("debts from june", rows("d_githinji", "d_joseph"),
-    ref=[ans(kind="debt", when=U("month", 0, name=6))]),
-  T("debts between first march and twenty-first may 6pm", rows("d_brian", "d_alice", "d_beatrice", "d_tabby", "d_mary_a",
-                                                 "d_rose", "d_peter_o", "d_susan"),
-    ref=[ans(kind="debt", when=span(D("2026-03-01"), D("2026-05-21", "18:00")))]),
-  T("from february up to tenth march", rows("d_esther", "d_brian"),
-    ref=[ans(kind="debt", when=span(U("month", 0, name=2), D("2026-03-10")))]),
-  T("and what i owe from may onwards", rows("d_kevin", "d_susan", "d_githinji", "d_joseph"),
-    ref=[ans(kind="debt", when={"from": U("month", 0, name=5)}, where='direction = "i_owe"')]))
-
 S("T21-088", "event month spans empty count",
   T("what's on in august", rows("chama_08", "heads_conf"),
     ref=[ans(kind="event", when=U("month", 0, name=8))]),
@@ -191,24 +170,6 @@ S("T21-092", "photo person count edit prev star undo",
     ref=[act("star", rows="@prev")]),
   T("undo the star", diff(upd("chama_cheque", starred=False)),
     ref=[act("undo")]))
-
-S("T21-093", "single debt person count empty",
-  T("are there debts in here with no person on them", rows(),
-    ref=[ans(kind="debt", where="person count <= 0")]))
-
-S("T21-094", "five turns ambiguous mary peter ask log star balance",
-  T("log a call with mary", ask("mary_w", "mary_a"),
-    ref=[act("log", kind="person", name="Mary", args=lines(kind="call")),
-         askc("mary wambui (deputy) or mary achieng (chama treasurer)?", options="$mary_w, $mary_a")]),
-  T("the treasurer", diff(upd("mary_a", date=ANY)),
-    ref=[act("log", rows="$mary_a", args=lines(kind="call"))]),
-  T("and star peter", ask("peter_k", "peter_o"),
-    ref=[act("star", kind="person", name="Peter"),
-         askc("peter kariuki from the BOM or peter otieno from church?", options="$peter_k, $peter_o")]),
-  T("the church one", diff(upd("peter_o", starred=True)),
-    ref=[act("star", rows="$peter_o")]),
-  T("how do i stand with Peter Otieno", val((500, "KES")),
-    ref=[ans(op="balance", rows="$peter_o")]))
 
 S("T21-095", "six turns dentist reschedule cancel ambiguous clinic ordinal",
   T("when's the dentist", rows("dentist_shiru", "dentist_me"),
@@ -271,17 +232,6 @@ S("T21-098", "six turns nickname empty recovery search notes tasks edit ambiguou
     ref=[act("complete", kind="task", name="Submit TSC returns")]),
   T("undo, the portal didn't actually save it", diff(upd("tsc", status="open", completed=None)),
     ref=[act("undo")]))
-
-S("T21-099", "harambee members delete refused settle_up balance",
-  T("who's in Church harambee 2026", rows("peter_o", "rev_kiprono", "susan", "me"),
-    ref=[ans(kind="person", linked_to="$harambee")]),
-  T("delete that group, the committee uses a book", ask(),
-    ref=[bad(act("delete", rows="$harambee")),
-         askc("it still has the card printing expense, so it can't be deleted. settle up with peter first?")]),
-  T("yes settle up with peter", diff(settle=["Peter Otieno"]),
-    ref=[act("settle_up", rows="$peter_o", args=lines(group="$harambee"))]),
-  T("where do i stand with him", val((2000, "KES")),
-    ref=[ans(op="balance", rows="$peter_o")]))
 
 S("T21-100", "single trashed document read",
   T("is Old shop lease in the trash", rows("old_lease"),

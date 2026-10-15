@@ -7,10 +7,6 @@ S("T14-Q026", "will take duration edit minutes event i2pat",
   T("the accountant meeting will take 90 minutes", diff(upd("accountant", duration=90)),
     ref=[act("edit", rows="$accountant", args="duration: 90")]))
 
-S("T14-Q027", "tab word debt kind i2pat",
-  T("what's my tab with marcos tavares", rows("d_marcos_t"),
-    ref=[ans(kind="debt", linked_to="$marcos_t")]))
-
 S("T14-Q028", "numeric options in question not filter i2pat",
   T("how many baile torto parties are left, is it 2 or 3", val(2),
     ref=[ans(op="count", kind="event", name="Baile Torto", where="status != cancelled", when=J({"from": U("day", 0)}))]))
@@ -20,17 +16,6 @@ S("T14-Q029", "ordinal of series second row reschedule i2pat",
     ref=[ans(kind="event", name="Car pool handover", when=J({"from": U("day", 0)}), order="date asc", limit=3)]),
   T("push the 2nd one to 7", diff(upd("hand_1102", date="2026-11-02T07:00")),
     ref=[act("reschedule", rows="$hand_1102", args=lines(to=U("day", 0, anchor="row", time="07:00")))]))
-
-S("T14-Q030", "settle phrase on read debt row i2pat",
-  T("what does kleber owe me", rows("d_kleber"),
-    ref=[ans(kind="debt", linked_to="$kleber", where="status = open")]),
-  T("he's sent it, mark it paid", diff(upd("d_kleber", status="settled")),
-    ref=[act("settle_debt", rows="$d_kleber")]))
-
-S("T14-Q031", "lent me debt i_owe verbatim item i2pat",
-  T("guga lent me 80 for rca cables",
-    diff(new("debt", name=has("rca cables"), amount=80, direction="i_owe"), link("new", "guga")),
-    ref=[act("create", args=lines(kind="debt", name="RCA cables", amount="80", direction="i_owe", person="$guga"))]))
 
 S("T14-Q032", "add before in body insert position i2pat",
   T("what's in the rodizio rules note", rows("rodizio"),
@@ -68,10 +53,6 @@ S("T14-Q037", "which have person search then link within i2pat",
     ref=[ans(kind="photo", linked_to="$mae_album")]),
   T("which have vó lurdes in them", rows("mae_vo"),
     ref=[search("lurdes", kind="person"), ans(within="@1", linked_to="$lurdes")]))
-
-S("T14-Q038", "whos in X event and group membership i2pat",
-  T("who's in baile torto", rows("me", "rafa_m", "nath", "guga", "marcos_o", "ana_paula"),
-    ref=[ans(kind="person", linked_to="$baile")]))
 
 S("T14-Q039", "pick row containing all words among carried i2pat",
   T("what's open on the mãe list", rows("mae_meds", "mae_exam", "mae_plan", "mae_split", "mae_rail", "plan_11"),

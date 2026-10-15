@@ -9,8 +9,6 @@ def W(expr):
 
 
 LIVE = 'status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
 LIVE_EV = 'status != "cancelled"'
 
 
@@ -31,48 +29,6 @@ S("T15-131", "recovery next vet visit then cruise prep min max sum",
     ref=[ans(op="max", field="effort", kind="task", linked_to="$prep_l", where=LIVE)]),
   T("how much time is that whole prep list altogether, i want to see if it fits before the sail", val(275),
     ref=[comp(op="sum", field="effort", kind="task", linked_to="$prep_l", where=LIVE), ans(value="@prev")]))
-
-S("T15-132", "recovery twice bouldering then home list sum debts min max",
-  T("next two bouldring nights, i'm going to tell erik which ones i can make", rows("boulder_1110", "boulder_1117", order=True),
-    ref=[boulder(), bad(boulder()), bad(boulder()),
-         ans(within="@prev", order="date asc", limit=2)]),
-  T("how long is everything on the home list altogeter, i want to blitz it on saturday", val(140),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$home_l", where=LIVE)]),
-  T("what's the smallest amount anyone owes me right now, i want the easy one before i sail", val((75, "NOK")),
-    ref=[ans(op="min", field="amount", kind="debt", where=OWED)]),
-  T("and the biggest i owe anyone, i want to pay that off before i sail", val((2000, "NOK")),
-    ref=[ans(op="max", field="amount", kind="debt", where=OWE)]))
-
-S("T15-133", "ask delete station note never mind then smallest and biggest owed",
-  T("delete the station note", ask("st12", "st19", "cruise_plan_note"),
-    ref=[act("delete", kind="note", name="station"),
-         askc("station 12, station 19 or the HV-2611 station ideas?", options="$st12, $st19, $cruise_plan_note")]),
-  T("hmm no wait, keep them all, i'm going to need every one of them for the cruise report", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("what's the smalest amount anywon owes me, i'm chasing the little ones first", val((75, "NOK")),
-    ref=[ans(op="min", field="amount", kind="debt", where=OWED)]),
-  T("and the biggest one, is that anders and the concert tickets", val((1200, "NOK")),
-    ref=[ans(op="max", field="amount", kind="debt", where=OWED)]))
-
-S("T15-134", "cabin min max climbing sum then biggest debts i owe",
-  T("shortest thing left on the cabin list, i'm waiting for the ferry", val(10),
-    ref=[ans(op="min", field="effort", kind="task", linked_to="$cabin_l", where=LIVE)]),
-  T("longest?", val(90),
-    ref=[ans(op="max", field="effort", kind="task", linked_to="$cabin_l", where=LIVE)]),
-  T("total time on the climbing list, i wanna know if it fits in one eveing", val(105),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$climb_l", where=LIVE)]),
-  T("my three biggest debts to people", rows("d_mum", "d_jonas_groceries", "d_torstein", order=True),
-    ref=[ans(kind="debt", where=OWE, order="amount desc", limit=3)]))
-
-S("T15-135", "borrowed this month sum max min then latest notes",
-  T("how much did i borrow this month, i'm doing my buget before the cruise", val((1155, "NOK")),
-    ref=[ans(op="sum", field="amount", kind="debt", when=W(U("month", 0)), where=OWE)]),
-  T("and the biggest of those", rows("d_jonas_groceries"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]),
-  T("smallest one?", val((95, "NOK")),
-    ref=[ans(op="min", field="amount", kind="debt", when=W(U("month", 0)), where=OWE)]),
-  T("my two newst notes", rows("pusur_note", "lyngen_ice", order=True),
-    ref=[ans(kind="note", order="date desc", limit=2)]))
 
 S("T15-136", "ask delete aurora photo never mind then recent contacts then longest this week",
   T("delete the aurora photo", ask("p_aurora1", "p_aurora2", "p_aurora3"),
@@ -106,16 +62,6 @@ S("T15-138", "latest photos limit then unbounded debts then lab list min max",
     ref=[ans(op="min", field="effort", kind="task", linked_to="$lab_l", where=LIVE)]),
   T("and the biggest one, the copepod samples obviously", val(300),
     ref=[ans(op="max", field="effort", kind="task", linked_to="$lab_l", where=LIVE)]))
-
-S("T15-139", "biggest owed limit then next cabin event then week sum then shortest event",
-  T("the two people who owe me the most", rows("d_anders", "d_jonas_vet", order=True),
-    ref=[ans(kind="debt", where=OWED, order="amount desc", limit=2)]),
-  T("when's the next cabn thing in my calendar", rows("cabin_meeting"),
-    ref=[ans(kind="event", name="Cabin", when=W({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("how much work is on my plate this week, all the tasks added up", val(890),
-    ref=[ans(op="sum", field="effort", kind="task", when=W(U("week", 0)), where=LIVE)]),
-  T("shortest thing in my calendar this week that isn't cancelled, i need a gap for a phone call", val(30),
-    ref=[ans(op="min", field="duration", kind="event", when=W(U("week", 0)), where=LIVE_EV)]))
 
 S("T15-140", "newest documents limit then unbounded calendar then ask delete cruise report never mind then gear sum",
   T("two newest documnts", rows("tyre_receipt", "report_10", order=True),

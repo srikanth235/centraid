@@ -8,15 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T17-101", "star ask person pick balance",
-  T("star maria", ask("maria_d", "maria_k"),
-    ref=[act("star", kind="person", name="Maria"),
-         askc("maria dimitrova or maria koleva?", options="$maria_d, $maria_k")]),
-  T("the adult one", diff(upd("maria_k", starred=True)),
-    ref=[act("star", rows="$maria_k")]),
-  T("what's her balance with me", val((100, "BGN")),
-    ref=[ans(op="balance", rows="$maria_k")]))
-
 S("T17-102", "star person named contrast unstar",
   T("favourite maria dimitrova, she's got the recital", diff(upd("maria_d", starred=True)),
     ref=[act("star", kind="person", name="Maria Dimitrova")]),
@@ -24,16 +15,6 @@ S("T17-102", "star person named contrast unstar",
     ref=[act("star", kind="person", name="Tsvetan")]),
   T("unstar mila for now", diff(upd("mila", starred=False)),
     ref=[act("unstar", kind="person", name="Mila")]))
-
-S("T17-103", "balance negative nickname role",
-  T("do i owe mila anything", val((-200, "BGN")),
-    ref=[ans(op="balance", kind="person", name="Mila")]),
-  T("and vesi", val((-175, "BGN")),
-    ref=[search("vesi", kind="person"), ans(op="balance", rows="$vesi")]),
-  T("what about the tiler", val((-300, "BGN")),
-    ref=[ans(op="balance", kind="person", where='role = "tiler"')]),
-  T("star him, he did a good job", diff(upd("todor", starred=True)),
-    ref=[act("star", kind="person", where='role = "tiler"')]))
 
 S("T17-104", "ask event reschedule pick contrast",
   T("move stefan picks up viktor to 7", ask("handover_0201", "handover_0208"),
@@ -86,14 +67,6 @@ S("T17-110", "locker star ask pick contrast",
     ref=[act("star", rows="$sibelius")]),
   T("star driving licence too", diff(upd("licence", starred=True)),
     ref=[act("star", kind="locker item", name="Driving licence")]))
-
-S("T17-111", "star ask person pick balance",
-  T("star petrov", ask("stefan", "viktor"),
-    ref=[act("star", kind="person", name="Petrov")]),
-  T("the ex", diff(upd("stefan", starred=True)),
-    ref=[act("star", rows="$stefan")]),
-  T("tally between him and me right now", val((135, "BGN")),
-    ref=[ans(op="balance", rows="$stefan")]))
 
 S("T17-112", "log ask person pick contrast nickname",
   T("log a message to koleva", ask("maria_k", "desi"),

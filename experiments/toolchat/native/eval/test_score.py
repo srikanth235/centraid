@@ -131,17 +131,6 @@ class OutcomeTypes(unittest.TestCase):
                  act([updated("lease", starred=(False, True))], verb="undo")]
         self.assertTrue(judge_turn(g, steps, self.ids)["pass"])
 
-    def test_settle_up_balance_row(self):
-        g = gold({"type": "diff", "diff": {"rows": [], "links": []}, "settle": [{"name": "Jordan Blake"}]})
-        zeroed = {"id": vid("jordan_b"), "kind": "person", "n": 30, "change": "updated",
-                  "fields": {"balance": [{"amount": 180.4, "unit": "USD"}, {"amount": 0.0, "unit": "USD"}]}}
-        text = 'settled up: #30 person "Jordan Blake" · no field changed\nsettlement: 180.40 USD paid to you'
-        ok = [{"model": "", "response": {"effect": {"tool": "act", "verb": "settle_up", "diff": {"rows": [zeroed], "links": []}},
-                                         "ends_turn": True, "text": text}}]
-        self.assertTrue(judge_turn(g, ok, self.ids)["pass"])
-        other = gold({"type": "diff", "diff": {"rows": [], "links": []}, "settle": [{"name": "Jordan Lee"}]})
-        self.assertFalse(judge_turn(other, ok, self.ids)["pass"])
-
     # ask -------------------------------------------------------------------------------------
     def test_ask_pass(self):
         g = gold({"type": "ask", "candidates": ["meera_i", "meera_s"]})

@@ -41,14 +41,6 @@ S("T09-004", "delete person prev cancel",
   T("and cancel the cleaning on the twenty-sixth", diff(upd("dentist", status="cancelled")),
     ref=[act("cancel", kind="event", name="Dentist cleaning")]))
 
-S("T09-005", "create person add_to remove_from new",
-  T("add leila mensah to contacts and put her in the wedding party group",
-    diff(new("person", name="Leila Mensah"), link("wparty", "new")),
-    ref=[act("create", more=True, args=lines(kind="person", name="Leila Mensah")),
-         act("add_to", rows="$new", args=lines(to="$wparty"))]),
-  T("wait no she's a guest, take her out of the group", diff(unlink("wparty", "+1")),
-    ref=[act("remove_from", rows="$c1", args=lines(from_="$wparty"))]))
-
 S("T09-006", "log named other priya",
   T("log a coffee with Priya Raman", diff(upd("priya_r", date=ANY)),
     ref=[act("log", kind="person", name="Priya Raman", args=lines(kind="coffee"))]),

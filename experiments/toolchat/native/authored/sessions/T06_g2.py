@@ -85,15 +85,6 @@ S("T06-128", "ask options wg meeting description contrast tech run",
   T("and put 'bring the spare snake' in the tech run description", diff(upd("theatre_tech", description="bring the spare snake")),
     ref=[act("edit", kind="event", name="Tech run Theater Lindenau", args=lines(description="bring the spare snake"))]))
 
-S("T06-129", "ask options add_to jonas never mind",
-  T("add jonas to the crew group", ask("jonas_k", "jonas_w"),
-    ref=[act("add_to", kind="person", name="Jonas", args=lines(to="$crew")),
-         askc("jonas keller or jonas wirth?", options="$jonas_k, $jonas_w")]),
-  T("scratch that, neither of them is coming", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("but add pavla to the prague trip group, she's driving with us", diff(link("prague", "pavla")),
-    ref=[act("add_to", kind="person", name="Pavla", args=lines(to="$prague"))]))
-
 S("T06-130", "ask options delete wifi never mind then delete door code",
   T("delete the wifi one", ask("wifi", "studio_wifi"),
     ref=[act("delete", kind="locker item", name="wifi"),
@@ -102,18 +93,6 @@ S("T06-130", "ask options delete wifi never mind then delete door code",
     ref=[dec("never_mind")]),
   T("but delete the proberaum door code, they changed the lock", diff(trash("door_code")),
     ref=[act("delete", kind="locker item", name="Proberaum door code")]))
-
-S("T06-131", "balances persons and groups positive negative zero",
-  T("what's mira owe me", val((32.96, "EUR")),
-    ref=[ans(op="balance", rows="$mira")]),
-  T("and greta", val((-19, "EUR")),
-    ref=[ans(op="balance", rows="$greta")]),
-  T("yusuf, are we square", val((0, "EUR")),
-    ref=[ans(op="balance", rows="$yusuf")]),
-  T("where's paul at in the band fund", val((0, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Kaeltewelle band fund", linked_to="$paul")]),
-  T("and mira in the kitty", val((-35.83, "EUR")),
-    ref=[ans(op="balance", kind="group", name="WG Kasse", linked_to="$mira")]))
 
 S("T06-132", "decline sealed egress then not found",
   T("send the proberaum door code to kalle", decline("sealed_egress"),

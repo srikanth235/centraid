@@ -11,8 +11,8 @@ league organiser), nicknames (Mamma, Pappa, Micke, Tobbe), a misspelled-looking 
 Petrovic), two "Dentist for Elias" and two "Parents network picnic" events, two swimming
 lessons, recurring padel matches and shift leads meetings, near-duplicate tasks ("Book padel
 court", monthly electricity bills), two lists sharing "Summer house", cancelled events, completed
-tasks, rows trashed inside and past the 30-day restore window, an empty group, an empty folder,
-an empty notebook and an empty album, and one group in EUR.
+tasks, rows trashed inside and past the 30-day restore window, an empty folder,
+an empty notebook and an empty album.
 """
 from __future__ import annotations
 
@@ -79,42 +79,6 @@ def people():
         {"key": "rikard", "name": "Rikard Ahl", "role": "old landlord", "trashed": "2026-05-20T09:00"},
     ]
 
-
-GROUPS = [
-    {"key": "sommarhus", "name": "Summer house Österlen", "members": ["karin", "johan_b", "ahmed"],
-     "created": "2024-04-01T10:00"},
-    {"key": "padel_g", "name": "Padel league kitty", "members": ["erik_s", "erik_l", "hanna", "tobias", "mats"],
-     "created": "2026-04-20T10:00"},
-    {"key": "parents_g", "name": "Parents network", "members": ["maria", "david", "lena"],
-     "created": "2025-09-01T10:00"},
-    {"key": "berlin_g", "name": "Berlin weekend", "currency": "EUR", "members": ["ahmed", "david", "lena"],
-     "created": "2026-06-01T10:00"},
-    {"key": "fika_g", "name": "Late shift fika fund", "members": ["fatima", "mikael", "dragan", "aisha", "olle"],
-     "created": "2026-02-01T10:00"},
-    {"key": "crayfish_g", "name": "Crayfish party 2026", "members": ["karin", "gunnar"],
-     "created": "2026-07-05T10:00"},
-]
-
-EXPENSES = [
-    {"group": "sommarhus", "name": "Roof tiles", "amount": 6400, "paid_by": "me",
-     "split": ["me", "karin", "johan_b"], "date": "2026-05-12"},
-    {"group": "sommarhus", "name": "Electricity Q2", "amount": 1800, "paid_by": "karin",
-     "split": ["me", "karin"], "date": "2026-07-02"},
-    {"group": "sommarhus", "name": "Lawn mower", "amount": 3200, "paid_by": "johan_b",
-     "split": ["me", "karin", "johan_b", "ahmed"], "date": "2026-06-06"},
-    {"group": "padel_g", "name": "Court rent July", "amount": 1500, "paid_by": "me",
-     "split": ["me", "erik_s", "hanna", "tobias", "mats"], "date": "2026-07-01"},
-    {"group": "padel_g", "name": "New balls", "amount": 480, "paid_by": "erik_s",
-     "split": ["me", "erik_s", "erik_l", "mats"], "date": "2026-07-07"},
-    {"group": "parents_g", "name": "Picnic food", "amount": 900, "paid_by": "maria",
-     "split": ["me", "maria", "david"], "date": "2026-06-14"},
-    {"group": "berlin_g", "name": "Hotel deposit", "amount": 360, "paid_by": "david",
-     "split": ["me", "ahmed", "david", "lena"], "date": "2026-06-20", "currency": "EUR"},
-    {"group": "fika_g", "name": "Coffee beans", "amount": 600, "paid_by": "me",
-     "split": ["me", "fatima", "mikael", "dragan"], "date": "2026-07-06"},
-    {"group": "fika_g", "name": "Cinnamon buns", "amount": 250, "paid_by": "fatima",
-     "split": ["me", "fatima", "aisha", "olle", "dragan"], "date": "2026-07-10"},
-]
 
 LISTS = [
     {"key": "home_l", "name": "Home", "area": "family"},
@@ -480,32 +444,6 @@ PHOTOS = [
     {"key": "p_old", "name": "Old office party", "taken": "2024-12-13T21:00", "trashed": "2026-05-30T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_erik", "person": "erik_s", "direction": "owes_me", "amount": 300, "name": "Court share",
-     "date": "2026-07-07"},
-    {"key": "d_tobias", "person": "tobias", "direction": "owes_me", "amount": 250, "name": "Padel balls",
-     "date": "2026-07-11"},
-    {"key": "d_hanna", "person": "hanna", "direction": "owes_me", "amount": 250, "name": "Barbecue meat",
-     "date": "2026-07-11"},
-    {"key": "d_karin", "person": "karin", "direction": "i_owe", "amount": 1200, "name": "Ferry tickets",
-     "date": "2026-06-18"},
-    {"key": "d_david", "person": "david", "direction": "i_owe", "amount": 450, "name": "Concert tickets",
-     "date": "2026-06-05"},
-    {"key": "d_micke", "person": "mikael", "direction": "owes_me", "amount": 120, "name": "Lunch at the canteen",
-     "date": "2026-07-10"},
-    {"key": "d_gunnar", "person": "gunnar", "direction": "i_owe", "amount": 800, "name": "Ladder and paint",
-     "date": "2026-07-05"},
-    {"key": "d_samira", "person": "samira", "direction": "owes_me", "amount": 2000, "name": "Train tickets",
-     "date": "2026-05-28"},
-    {"key": "d_johan_b", "person": "johan_b", "direction": "owes_me", "amount": 650, "name": "Wood stain",
-     "date": "2026-06-06", "settled": "2026-06-20T12:00"},
-    {"key": "d_fatima", "person": "fatima", "direction": "i_owe", "amount": 90, "name": "Coffee",
-     "date": "2026-07-12"},
-    {"key": "d_lena", "person": "lena", "direction": "owes_me", "amount": 500, "name": "Babysitter share",
-     "date": "2026-04-18", "settled": "2026-05-02T10:00"},
-    {"key": "d_mats", "person": "mats", "direction": "i_owe", "amount": 250, "name": "Grip tape",
-     "date": "2026-07-13"},
-]
 
 LOCKER = [
     {"key": "bankid", "name": "Swedbank", "type": "login", "username": "sven.lindqvist",
@@ -588,8 +526,6 @@ def world():
         "seed": "T22",
         "currency": "SEK",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -599,7 +535,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

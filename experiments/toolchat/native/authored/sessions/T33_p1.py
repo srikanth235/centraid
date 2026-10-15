@@ -34,18 +34,6 @@ S("T33-006-P", "documents folder starred year add_to refused-delete still-in par
   T("home loan statement, still sitting in money?", rows("d_loan"),
     ref=[ans(kind="document", name="home loan statement", linked_to="$money_f")]))
 
-S("T33-010-P", "debts sum biggest person settle undo-not-undone para",
-  T("all the open debts i owe from before december, summed up", val((689, "SGD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open", when=J({"to": U("month", -1)}))]),
-  T("the biggest one?", rows("d_junhao"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1)]),
-  T("who's it with", rows("junhao"),
-    ref=[ans(kind="person", linked_to="$d_junhao")]),
-  T("he's been paid back, so settle it", diff(upd("d_junhao", status="settled")),
-    ref=[act("settle_debt", rows="$d_junhao")]),
-  T("undo it", diff(),
-    ref=[act("undo")]))
-
 S("T33-014-P", "condo-fee series find-then-complete repair-completed-field count-four next-empty reopen para",
   T("condo fee paid via giro this morning, mark it done", diff(upd("fee_dec", status="completed", completed=ANY)),
     ref=[find(kind="task", name="pay condo maintenance fee", where="status = open"),
@@ -57,23 +45,6 @@ S("T33-014-P", "condo-fee series find-then-complete repair-completed-field count
     ref=[ans(kind="task", name="pay condo maintenance fee", order="date asc", limit=1, when=J({"from": U("day", 0)}))]),
   T("wrong amount on the october one, so reopen it", diff(upd("fee_oct", status="open", completed=ANY)),
     ref=[act("reopen", kind="task", name="pay condo maintenance fee", when=J(U("month", 0, name=10)))]))
-
-S("T33-018-P", "pa balance narrow-group refused-remove-ask para",
-  T("my balance with pa?", val((-1941.68, "MYR")),
-    ref=[ans(op="balance", kind="person", name="pa")]),
-  T("penang fund only", val((4108.34, "MYR")),
-    ref=[ans(op="balance", kind="group", name="Penang Family Fund", linked_to="$pa")]),
-  T("remove pa from the penang fund", ask("pa", "penang"),
-    ref=[act("remove_from", rows="$pa", args="from: $penang")]))
-
-S("T33-022-P", "priya decoys balance-by-group balance-by-met log para",
-  T("balance with priya from playgroup?", val((-24, "SGD")),
-    ref=[ans(op="balance", kind="person", name="priya", linked_to="$playgroup")]),
-  T("what about priya from work", val((0, "SGD")),
-    ref=[ans(op="balance", kind="person", name="priya", where='met = "work"')]),
-  T("give her a star and add a call with her to the log", diff(upd("priya_nayar", date=ANY, starred=ANY)),
-    ref=[act("star", rows="$priya_nayar", more="true"),
-         act("log", rows="$priya_nayar", args="kind: call")]))
 
 S("T33-026-P", "okaasan notes narrow recipes exclude para",
   T("this year's notes about okaasan", rows("rc_okonomi", "gift_okaasan"),
@@ -92,26 +63,6 @@ S("T33-030-P", "unbounded-decline bounded-delete-apply-all undo-restore para",
          act("delete", rows="@prev")]),
   T("undo it", diff(restore("fee_oct"), restore("fee_nov"), restore("utilities_nov"), restore("starhub")),
     ref=[act("undo")]))
-
-S("T33-034-P", "two-writes star-unstar people starred-read para",
-  T("pa gets a star, ma loses hers", diff(upd("pa", starred=ANY), upd("ma", starred=ANY)),
-    ref=[act("star", rows="$pa", more="true"),
-         act("unstar", rows="$ma")]),
-  T("penang fund members with a star", rows("pa", "mei"),
-    ref=[ans(kind="person", linked_to="$penang", where="starred = yes")]))
-
-S("T33-038-P", "create-group add-members search-role search-empty-recovery group-balance para",
-  T("set up a yen group named osaka trip", diff(new("group", name=has("osaka"), currency="JPY"), link("new", "me")),
-    ref=[act("create", kind="group", args="name: Osaka Trip\ncurrency: JPY")]),
-  T("put my wife and okaasan into it", diff(link("+1", "mei"), link("+1", "okaasan")),
-    ref=[search("wife", kind="person"),
-         act("add_to", rows="$mei, $okaasan", args="to: $c1")]),
-  T("osaka hotel, saved anywhere?", rows(),
-    ref=[search("hotel"),
-         ans(kind="document", name="hotel")]),
-  T("my standing in the osaka group?", val((0, "JPY")),
-    ref=[search("hiro", kind="person"),
-         ans(op="balance", kind="group", name="osaka trip", linked_to="$me")]))
 
 S("T33-042-P", "swim before-christmas ordinal-cancel undo para",
   T("swim lessons before christmas, upcoming and not cancelled", rows("swim_1212", "swim_1219"),
@@ -144,36 +95,6 @@ S("T33-055-P", "role-search find-only para",
   T("maid agency contact, who was it", rows("agency"),
     ref=[search("maid agency", kind="person"),
          ans(rows="@prev")]))
-
-S("T33-059-P", "settle_debt write-read balance second-debt-by-name para",
-  T("wei jie got his omakase money back, so settle it, then what's the balance with him",
-    val((-160, "SGD"), also=diff(upd("d_weijie", status="settled"))),
-    ref=[act("settle_debt", rows="$d_weijie", more="true"),
-         ans(op="balance", kind="person", name="wei jie")]),
-  T("jia hui's pumpkin patch debt as well", diff(upd("d_jiahui", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="pumpkin patch", linked_to="$jiahui")]))
-
-S("T33-063-P", "four-constraints debts ambiguous-delete-ask two-writes count-docs para",
-  T("open debts from before december that i owe, over fifty dollars", rows("d_weijie", "d_junhao", "d_jiahui"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open and amount > 50", when=J({"to": U("month", -1)}))]),
-  T("condo budget doc in the condo folder, get rid of it", ask("d_budget26", "d_budget27"),
-    ref=[act("delete", kind="document", name="condo budget", linked_to="$condo_f")]),
-  T("david has his own copy, so delete the 2026 one and take the star off the 2027 one",
-    diff(trash("d_budget26"), upd("d_budget27", starred=ANY)),
-    ref=[act("delete", rows="$d_budget26", more="true"),
-         act("unstar", rows="$d_budget27")]),
-  T("condo folder doc count now?", val(5),
-    ref=[ans(op="count", kind="document", linked_to="$condo_f")]))
-
-S("T33-067-P", "same-word-pick link-target photo-album person-group count para",
-  T("treasurer photo goes into parc vista", diff(link("condo_a", "p_david")),
-    ref=[act("add_to", rows="$p_david", args="to: $condo_a")]),
-  T("mdm wong goes in there as well", diff(link("committee", "wong")),
-    ref=[act("add_to", rows="$wong", args="to: $committee")]),
-  T("nursery form pages photo into kenji too", diff(link("kenji_a", "p_form")),
-    ref=[act("add_to", rows="$p_form", args="to: $kenji_a")]),
-  T("parc vista photo count now?", val(7),
-    ref=[ans(op="count", kind="photo", linked_to="$condo_a")]))
 
 S("T33-071-P", "create-args login username-label purpose-clause para",
   T("for the parking fines i need a town council portal login, user hiro.tl",

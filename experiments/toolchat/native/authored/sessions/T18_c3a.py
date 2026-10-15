@@ -29,13 +29,6 @@ S("T18-A004", "ask-options document delete never_mind c3a",
   T("oh wait no, chloe needs both of them", decline("never_mind"),
     ref=[dec("never_mind")]))
 
-S("T18-A005", "ask-options debt settle_debt c3a",
-  T("mark the pizza as settled", ask("d_marcus_pizza", "d_jules_pizza"),
-    ref=[act("settle_debt", kind="debt", name="pizza"),
-         askc("Marcus's pizza (he owes you 24) or Jules's pizza (you owe 18)?", options="$d_marcus_pizza, $d_jules_pizza")]),
-  T("marcus, he venmo'd me", diff(upd("d_marcus_pizza", status="settled")),
-    ref=[act("settle_debt", rows="$d_marcus_pizza")]))
-
 S("T18-A007", "follow-up c3a",
   T("what's open on the co-op dev list", rows("cart", "slice", "loc", "trailer", "grant_report", "capsule", "tutorial", "ci", "press_kit"),
     ref=[ans(kind="task", linked_to="$dev_l", where="status = open")]),
@@ -51,14 +44,6 @@ S("T18-A008", "follow-up c3a",
     ref=[ans(within="@prev", when=J(span(U("week", 1, weekday=6), U("week", 1, weekday=7))))]),
   T("what about before that", rows("sprint_0306", "pitch", "vax", "dnd_0305", "climb_mar", "playtest_mar", "shower_call"),
     ref=[ans(within="@1", exclude="@2")]))
-
-S("T18-A009", "follow-up c3a",
-  T("who do i owe", rows("d_priya", "d_alex", "d_chloe", "d_nadia", "d_jules_pizza"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("those but not the pizza", rows("d_nadia", "d_alex", "d_chloe", "d_priya"),
-    ref=[ans(within="@prev", exclude="$d_jules_pizza")]),
-  T("the biggest of those?", rows("d_alex"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
 
 S("T18-A010", "follow-up c3a",
   T("show me the biscuit album", rows("b_class", "b_beach", "b_snow", "b_vet", "b_puppy", "b_creek", "b_couch", "b_bday"),

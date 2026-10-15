@@ -8,9 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-
 S("T19-201", "both reschedule dentists earlier both log call samiras",
   T("dentist appointments coming up", rows("dentist_adam", "dentist_me"),
     ref=[ans(kind="event", name="Dentist", when=W({"from": U("day", 0)}))]),
@@ -31,16 +28,6 @@ S("T19-202", "ordinal second last baba list complete then reschedule",
     ref=[ans(kind="task", linked_to="$baba_l", where='status = "open"')]),
   T("the last one can be friday instead", diff(upd("shoes", date="2026-04-17")),
     ref=[act("reschedule", rows="$shoes", args=lines(to=U("week", 0, weekday=5)))]))
-
-S("T19-203", "owe direction sum owed balance negative settle mine sum",
-  T("what do they owe me all in", val((3150, "MAD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=OWED)]),
-  T("my side with khalid", val((-350, "MAD")),
-    ref=[ans(op="balance", rows="$khalid")]),
-  T("settle mine, paid cash", diff(upd("d_khalid", status="settled")),
-    ref=[act("settle_debt", kind="debt", where=IOWE, linked_to="$khalid")]),
-  T("what do i still owe", val((1450, "MAD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=IOWE)]))
 
 S("T19-204", "except cancel swimming lessons rest still on",
   T("what swimming lessons are left", rows("swim_0415", "swim_0422", "swim_0429", "swim_0506", "swim_0513"),

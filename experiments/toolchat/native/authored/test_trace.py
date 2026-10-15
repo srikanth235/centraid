@@ -238,10 +238,10 @@ class Generate(unittest.TestCase):
         self.assertEqual(s["rows"], "#5")
 
     def test_a_lookup_and_its_filters(self):
-        history = [SYSTEM, user("the two biggest debts i owe")]
-        args = {"kind": "debt", "where": 'direction = "i_owe" and status = "open"', "order": "amount desc", "limit": "2"}
+        history = [SYSTEM, user("the two biggest tasks i have open")]
+        args = {"kind": "task", "where": 'status = "open"', "order": "effort desc", "limit": "2"}
         s = self.round_trip(history, "find", args)
-        self.assertEqual((s["via"], s["kind"], s["order"], s["limit"]), ("find", "debt", "amount desc", "2"))
+        self.assertEqual((s["via"], s["kind"], s["order"], s["limit"]), ("find", "task", "effort desc", "2"))
 
     def test_the_new_slots_of_the_diagnosis(self):
         history = [SYSTEM, user("search dubai")]
@@ -395,13 +395,13 @@ class V31(unittest.TestCase):
     def test_the_rows_an_error_lists_are_text_not_pick_candidates(self):
         """The runtime numbers a row only when a block or a result shows it; the rows an error reply names ("the selection holds
         3: #40 ...") are text. A pick over them is a pick the compile op refuses."""
-        err = 'error: balance is for one person; the selection holds 3: #40 person "Al Ng", #41 person "Bo Li", #32 person "Marisol Garza"'
-        hist = [SYSTEM, user("what's my balance with marisol"), call("answer", op="balance", kind="person"), tool(err)]
-        tr = T.derive_slots({"tool": "answer", "args": {"op": "balance", "rows": "#32"}}, hist, None, retry=True)
+        err = 'error: log is for one person; the selection holds 3: #40 person "Al Ng", #41 person "Bo Li", #32 person "Marisol Garza"'
+        hist = [SYSTEM, user("log a call with marisol"), call("act", verb="log", kind="person"), tool(err)]
+        tr = T.derive_slots({"tool": "act", "args": {"verb": "log", "rows": "#32"}}, hist, None, retry=True)
         self.assertNotIn("pick", tr.slots)
         self.assertEqual(T.build_ctx(hist).lists[-1].kind, "error")
         shown = hist[:3] + [tool('answered:\n@1 · 3 persons (showing 3)   [person]\n#40 [1] person "Al Ng"\n#41 [2] person "Bo Li"\n#32 [3] person "Marisol Garza"')]
-        tr = T.derive_slots({"tool": "answer", "args": {"op": "balance", "rows": "#32"}}, shown, None)
+        tr = T.derive_slots({"tool": "act", "args": {"verb": "log", "rows": "#32"}}, shown, None)
         self.assertEqual([n for n, _ in tr.slots["pick"]], [40, 41, 32])  # a result does show them
 
     def test_the_trace_respells_a_where_in_the_record(self):

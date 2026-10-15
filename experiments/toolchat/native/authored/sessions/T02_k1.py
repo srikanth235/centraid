@@ -33,12 +33,6 @@ S("T02-K004", "referent next event cancel it i3skill S1",
   T("cancel it", diff(upd("dimsum_jun", status="cancelled")),
     ref=[act("cancel", rows="$dimsum_jun")]))
 
-S("T02-K005", "referent count debts narrows direction i3skill S1",
-  T("how many open debts do i have", val(9),
-    ref=[ans(kind="debt", op="count", where='status = "open"')]),
-  T("how many are owed to me", val(5),
-    ref=[ans(kind="debt", op="count", where='status = "open" and direction = "owes_me"')]))
-
 S("T02-K006", "perfect did i this month i3skill S2",
   T("how many times did i climb at the hive this month", val(1),
     ref=[ans(kind="event", op="count", name="Climbing at The Hive", when=J({"from": U("month", 0), "to": U("day", 0)}))]))
@@ -70,12 +64,6 @@ S("T02-K011", "relation to event dates line i3skill S2",
 S("T02-K012", "read not write sent pdf i3skill S3",
   T("did i send rachel the portfolio pdf", rows("rachel_followup"),
     ref=[ans(kind="task", name="portfolio PDF")]))
-
-S("T02-K013", "read debt paid two i3skill S3",
-  T("has marcus paid the greenleaf deposit", rows("d_gl"),
-    ref=[ans(kind="debt", name="Greenleaf deposit")]),
-  T("and tomo's kill fee", rows("d_tomo"),
-    ref=[ans(kind="debt", name="kill fee")]))
 
 S("T02-K014", "read cancelled launch i3skill S3",
   T("did the tomo launch get cancelled", rows("tomo_launch"),

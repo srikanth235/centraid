@@ -56,12 +56,6 @@ S("T33-K103", "diary entry means note i3skill S6",
   T("which one mentions the fever", rows("diary_tired"),
     ref=[ans(kind="note", within="@prev", where='body contains "fever"')]))
 
-S("T33-K104", "iou debt either direction i3skill S6",
-  T("any iou with ravi", rows("d_ravi"),
-    ref=[ans(kind="debt", linked_to="$ravi")]),
-  T("and wei jie", rows("d_weijie"),
-    ref=[ans(kind="debt", linked_to="$weijie")]))
-
 S("T33-K105", "a note about body search then move to notebook i3skill S6",
   T("that note about the rempah", rows("rc_laksa"),
     ref=[ans(kind="note", where='body contains "rempah"')]),

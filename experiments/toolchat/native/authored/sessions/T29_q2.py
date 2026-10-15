@@ -7,12 +7,6 @@ S("T29-Q026", "body is empty read i2pat",
   T("which notes have nothing written in them", rows(),
     ref=[ans(kind="note", where="body is empty")]))
 
-S("T29-Q027", "settle phrase on read debt row i2pat",
-  T("what does juma owe me", rows("d_juma_chai"),
-    ref=[ans(kind="debt", linked_to="$juma", where="status = open")]),
-  T("he's paid, sort it", diff(upd("d_juma_chai", status="settled")),
-    ref=[act("settle_debt", rows="$d_juma_chai")]))
-
 S("T29-Q028", "possessive field phrase edit focus row i2pat",
   T("who's dennis", rows("dennis"),
     ref=[ans(kind="person", name="Dennis")]),

@@ -125,40 +125,6 @@ S("T20-062", "subtasks count two linked",
   T("what are they", rows("list_whites", "list_print"),
     ref=[ans(kind="task", linked_to="@prev")]))
 
-S("T20-063", "four turns debt span date weekday open balance settle",
-  T("debts from first may to twentieth may", rows("d_andrea", "d_davide", "d_chiara"),
-    ref=[ans(kind="debt", when=W(span(D("2026-05-01"), D("2026-05-20"))))]),
-  T("and since monday", rows("d_giulia", "d_sofia", "d_gianni"),
-    ref=[ans(kind="debt", when=W({"from": U("week", 0, weekday=1)}))]),
-  T("how much do i owe gianni barbieri", val((-150, "EUR")),
-    ref=[comp(op="balance", rows="$gianni"), ans(value="@prev")]),
-  T("settle it, paid him cash this morning", diff(upd("d_gianni", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$gianni")]))
-
-S("T20-064", "debt rel time months direction",
-  T("what did sofia borrow yesterday afternoon", rows("d_sofia"),
-    ref=[ans(kind="debt", linked_to="$sofia", when=W(U("day", -1, time="15:00")))]),
-  T("and anything from two days ago in the morning", rows("d_giulia"),
-    ref=[ans(kind="debt", when=W(U("day", -2, time="09:00")))]),
-  T("what did i borrow april through may", rows("d_fede", "d_marco_l", "d_andrea", "d_chiara", "d_gianni"),
-    ref=[ans(kind="debt", where='direction = "i_owe"', when=W(span(U("month", 0, name=4), U("month", 0, name=5))))]))
-
-S("T20-065", "debts direction set from weekday",
-  T("every debt i've got, settled ones too",
-    rows("d_giulia", "d_andrea", "d_stefano", "d_luca", "d_sofia", "d_davide", "d_fede", "d_chiara", "d_gianni",
-         "d_marco_l", "d_elena", "d_stefano_2"),
-    ref=[ans(kind="debt", where="direction is set")]),
-  T("which are from last saturday on", rows("d_luca", "d_giulia", "d_sofia", "d_gianni"),
-    ref=[ans(kind="debt", within="@prev", when=W({"from": U("week", -1, weekday=6)}))]))
-
-S("T20-066", "ambiguous person marco ask star",
-  T("star marco", diff(upd("marco_l", starred=True)),
-    ref=[act("star", kind="person", name="Marco")]),
-  T("what's his balance with me", val((-30, "EUR")),
-    ref=[ans(op="balance", rows="$marco_l")]),
-  T("who from the club have i seen between last week and sunday", rows("marco_l", "stefano"),
-    ref=[ans(kind="person", where='role contains "club"', when=W(span(U("week", -1), U("week", -1, weekday=7))))]))
-
 S("T20-067", "ambiguous lorenzo ask log",
   T("log a call with lorenzo", ask("lorenzo_g", "lorenzo_r"),
     ref=[act("log", kind="person", name="Lorenzo", args=lines(kind="call")),
@@ -170,16 +136,6 @@ S("T20-067", "ambiguous lorenzo ask log",
   T("who've i talked to from last saturday up to tuesday",
     rows("mamma", "papa", "marco_e", "marco_l", "stefano", "andrea", "carla", "lorenzo_g", "mauro"),
     ref=[ans(kind="person", when=W(span(U("week", -1, weekday=6), U("week", 0, weekday=2))))]))
-
-S("T20-068", "refused delete group ask delete empty group undo",
-  T("delete the vinitaly trip group, that's all done", ask(),
-    ref=[bad(act("delete", rows="$vinitaly")),
-         askc("vinitaly trip still has the hotel and train expenses in it, so it can't be deleted. settle up with federico and sofia first?")]),
-  T("no leave it. delete nonna's birthday gift then, chiara's handling it",
-    diff(gone("gift_pool"), unlink("gift_pool", "chiara"), unlink("gift_pool", "me")),
-    ref=[act("delete", rows="$gift_pool")]),
-  T("what groups are left", rows("casa", "club", "staff", "vinitaly", "stag"),
-    ref=[ans(kind="group")]))
 
 S("T20-069", "refused delete folder ask remove_from",
   T("get rid of the bills folder", ask(),
@@ -206,20 +162,6 @@ S("T20-071", "trashed people restore undo",
     ref=[act("restore", rows="$riccardo")]),
   T("actually no, undo", diff(trash("riccardo")),
     ref=[act("undo")]))
-
-S("T20-072", "single balance person",
-  T("do i owe andrea costa anything", val((-240, "EUR")),
-    ref=[ans(op="balance", rows="$andrea")]))
-
-S("T20-073", "search nickname compute max",
-  T("how much does tommy owe me", val((0, "EUR")),
-    ref=[search("tommy", kind="person"), ans(op="balance", rows="$tommaso")]),
-  T("what's the biggest debt anyone owes me", val((85, "EUR")),
-    ref=[comp(op="max", field="amount", kind="debt", where='direction = "owes_me" and status = "open"'),
-         ans(value="@prev")]),
-  T("what's on with fede next week", rows("fede_visit"),
-    ref=[find(kind="person", name="Fede"), search("fede", kind="person"),
-         ans(kind="event", linked_to="$federico", when=W(U("week", 1)))]))
 
 S("T20-075", "six turns wedding list guests planner",
   T("what's on the wedding list", rows("guest_list", "wine_pairing", "suit", "invites", "invites_print", "honeymoon", "rings_task"),

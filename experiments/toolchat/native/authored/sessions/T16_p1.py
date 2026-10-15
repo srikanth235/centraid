@@ -8,10 +8,7 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 OPEN = 'status = "open"'
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 LIVE = 'status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
 LIVE_EV = 'status != "cancelled"'
 def next_prod():
     return find(kind="event", name="Weekly production meeting", when=W({"from": U("day", 0)}), order="date asc", limit=1)
@@ -27,14 +24,6 @@ S("T16-001-P", "trashed people restore multi restore window refused para",
          act("restore", rows="$liton, $pervez")]),
   T("liton, how is he listed", rows("liton"),
     ref=[ans(rows="$liton")]))
-
-S("T16-006-P", "settle_up prev group balance para",
-  T("what does jahanara khatun do", rows("jahanara"),
-    ref=[ans(kind="person", name="Jahanara Khatun")]),
-  T("eid bonus pool: settle up with her", diff(settle=["Jahanara Khatun"]),
-    ref=[act("settle_up", rows="@prev", args=lines(group="$bonus"))]),
-  T("are we even now, her and me", val((0, "BDT")),
-    ref=[ans(op="balance", rows="$jahanara")]))
 
 S("T16-013-P", "ambiguous reopen narrowed para",
   T("half the last lot were duds, so reopen buy cricket balls", diff(upd("balls_2", status="open", completed=None)),
@@ -94,18 +83,6 @@ S("T16-045-P", "remove_from photo where month linked para",
              args=lines(from_="$family_album"))]),
   T("arif's photos?", rows("arif_bday", "family_dinner"),
     ref=[find(kind="photo", linked_to="$arif"), ans(rows="@prev")]))
-
-S("T16-056-P", "refused delete group ask delete empty group para",
-  T("cox's bazar trip group can go, we're paying cash, delete it", ask(),
-    ref=[bad(act("delete", rows="$coxs")),
-         askc("it still has the hotel advance in it, so it can't be deleted. settle up with masud and shafiq first?")]),
-  T("keep it. factory picnic 2025 is long done, delete that one",
-    diff(gone("picnic"), unlink("picnic", "kamal"), unlink("picnic", "rubina"), unlink("picnic", "me")),
-    ref=[act("delete", rows="$picnic")]),
-  T("which groups are left now", rows("fund", "tigers", "bonus", "coxs", "kolkata"),
-    ref=[ans(kind="group")]),
-  T("shafiq's standing in the cox's one", val((-3000, "BDT")),
-    ref=[ans(op="balance", kind="group", name="Cox's Bazar trip", linked_to="$shafiq")]))
 
 S("T16-061-P", "list area in find count para",
   T("work or sport lists", rows("factory_l", "cricket_l"),
@@ -237,14 +214,3 @@ S("T16-111-P", "contrast star docs tin blood report unstar deed para",
     ref=[act("star", kind="document", name="Abba's blood report")]),
   T("comilla land deed is at the bank now, take its star off", diff(upd("deed", starred=False)),
     ref=[act("unstar", kind="document", name="Comilla land deed")]))
-
-S("T16-117-P", "ask options begum add_to family fund pick then contrast rehana para",
-  T("family fund needs begum in it", ask("amma", "rehana", "salma"),
-    ref=[act("add_to", kind="person", name="Begum", args=lines(to="$fund")),
-         askc("rokeya begum, rehana begum or salma begum?", options="$amma, $rehana, $salma")]),
-  T("amma it is", diff(link("fund", "amma")),
-    ref=[act("add_to", rows="$amma", args=lines(to="$fund"))]),
-  T("rehana begum as well", diff(link("fund", "rehana")),
-    ref=[act("add_to", kind="person", name="Rehana Begum", args=lines(to="$fund"))]),
-  T("salma's been great on line 3, give her a star", diff(upd("salma", starred=True)),
-    ref=[act("star", kind="person", name="Salma Begum")]))

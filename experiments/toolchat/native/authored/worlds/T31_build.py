@@ -5,11 +5,10 @@
 Today in the sessions is Thursday 2026-11-05 20:40 (home in Kazimierz after a day shift on ward 4B).
 
 Persona: Tomasz "Tomek" Wisniewski, 29, a nurse at the University Hospital in Krakow. Shares a three-room
-flat on ul. Krakowska with two flatmates, Kuba Nowak and Ola Mazur (the "Flat Bills" group). Plays
+flat on ul. Krakowska with two flatmates, Kuba Nowak and Ola Mazur. Plays
 five-a-side every Tuesday (the Orlik pitch in summer, a hall from November) and in a Sunday league. His
 sister Kasia lives in London with her partner James; their parents (Mama and Tata) and Babcia live in
-Nowy Sacz. The vault is in PLN; the one foreign-currency position is the GBP group "London Christmas"
-(a vault debt can only be in the vault's own currency).
+Nowy Sacz. The vault is in PLN.
 
 Built-in ambiguity: two Marcins (Marcin Lis, five-a-side captain; Marcin Baran, ward colleague), a Tomek
 who is not me (Tomek Maj, the goalkeeper), look-alike spellings (Anna Wrobel the head nurse and Anna
@@ -83,49 +82,6 @@ people = [
      "trashed": "2026-10-25T10:00"},
 ]
 
-groups = [
-    {"key": "flat_bills", "name": "Flat Bills", "currency": "PLN", "members": ["kuba", "ola"],
-     "created": "2025-02-01T10:00"},
-    {"key": "fiveaside", "name": "Tuesday Football Fund", "currency": "PLN",
-     "members": ["marcin_l", "tomek_m", "piotr", "darek", "bartek", "michal"], "created": "2025-09-02T20:00"},
-    {"key": "london", "name": "London Christmas", "currency": "GBP", "members": ["kasia", "james"],
-     "created": "2026-10-01T19:00"},
-    {"key": "ward_gifts", "name": "Ward 4B Gifts", "currency": "PLN",
-     "members": ["marcin_b", "ewa", "magda", "przemek", "anna_w"], "created": "2025-06-10T08:30"},
-    {"key": "zakopane", "name": "Zakopane Weekend", "currency": "PLN",
-     "members": ["adrian", "natalia", "agnieszka", "basia", "anna_wl"], "created": "2026-09-14T19:00"},
-    {"key": "stag", "name": "Adi's Stag Do 2027", "currency": "PLN", "members": ["adrian", "marcin_l"],
-     "created": "2026-10-28T21:00"},
-]
-
-expenses = [
-    {"group": "flat_bills", "name": "Internet October", "amount": 60, "paid_by": "kuba",
-     "split": ["me", "kuba", "ola"], "date": "2026-10-03"},
-    {"group": "flat_bills", "name": "Electricity bill", "amount": 270, "paid_by": "me",
-     "split": ["me", "kuba", "ola"], "date": "2026-10-12"},
-    {"group": "flat_bills", "name": "Cleaning supplies", "amount": 84, "paid_by": "ola",
-     "split": ["me", "kuba", "ola"], "date": "2026-10-20"},
-    {"group": "flat_bills", "name": "Gas bill", "amount": 150, "paid_by": "kuba",
-     "split": ["me", "kuba", "ola"], "date": "2026-11-02"},
-    {"group": "fiveaside", "name": "Hall rental November", "amount": 480, "paid_by": "marcin_l",
-     "split": ["me", "marcin_l", "tomek_m", "piotr", "darek", "bartek"], "date": "2026-11-01"},
-    {"group": "fiveaside", "name": "New match balls", "amount": 180, "paid_by": "me",
-     "split": ["me", "marcin_l", "piotr", "michal"], "date": "2026-10-06"},
-    {"group": "fiveaside", "name": "Post-game pizza", "amount": 135, "paid_by": "darek",
-     "split": ["me", "darek", "bartek", "michal"], "date": "2026-10-27"},
-    {"group": "london", "name": "Christmas market tickets", "amount": 48, "paid_by": "kasia",
-     "split": ["me", "kasia", "james"], "date": "2026-10-18"},
-    {"group": "london", "name": "Airport transfer", "amount": 36, "paid_by": "me",
-     "split": ["me", "kasia"], "date": "2026-10-19"},
-    {"group": "ward_gifts", "name": "Flowers for Oddzialowa", "amount": 120, "paid_by": "ewa",
-     "split": ["me", "ewa", "marcin_b", "magda", "anna_w"], "date": "2026-09-25"},
-    {"group": "ward_gifts", "name": "Leaving card and chocolates", "amount": 90, "paid_by": "me",
-     "split": ["me", "ewa", "magda"], "date": "2026-10-16"},
-    {"group": "zakopane", "name": "Pension deposit", "amount": 900, "paid_by": "natalia",
-     "split": ["me", "adrian", "natalia", "agnieszka", "basia"], "date": "2026-09-20"},
-    {"group": "zakopane", "name": "Ski passes", "amount": 640, "paid_by": "me",
-     "split": ["me", "adrian", "natalia", "basia"], "date": "2026-10-22"},
-]
 
 lists = [
     {"key": "flat_l", "name": "Flat", "area": "home"},
@@ -515,40 +471,6 @@ photos = [
     {"key": "p_screen", "name": "Screenshot of the rota", "taken": "2026-07-02T12:00", "trashed": "2026-08-04T09:00"},
 ]
 
-# ------------------------------------------------------------------------------------------------
-# debts (in PLN, the vault currency)
-# ------------------------------------------------------------------------------------------------
-
-debts = [
-    {"key": "d_kuba_gas", "person": "kuba", "direction": "i_owe", "amount": 50, "name": "my share of the gas",
-     "date": "2026-11-02"},
-    {"key": "d_ola_clean", "person": "ola", "direction": "i_owe", "amount": 28, "name": "cleaning supplies",
-     "date": "2026-10-20"},
-    {"key": "d_kuba_net", "person": "kuba", "direction": "owes_me", "amount": 20, "name": "internet top-up",
-     "date": "2026-10-03"},
-    {"key": "d_darek_pizza", "person": "darek", "direction": "i_owe", "amount": 34, "name": "pizza after the game",
-     "date": "2026-10-27"},
-    {"key": "d_marcin_hall", "person": "marcin_l", "direction": "i_owe", "amount": 80, "name": "the hall for November",
-     "date": "2026-11-01"},
-    {"key": "d_piotr_balls", "person": "piotr", "direction": "owes_me", "amount": 45, "name": "match balls",
-     "date": "2026-10-06"},
-    {"key": "d_michal_balls", "person": "michal", "direction": "owes_me", "amount": 45, "name": "match balls",
-     "date": "2026-10-06"},
-    {"key": "d_adi_tickets", "person": "adrian", "direction": "owes_me", "amount": 90, "name": "concert tickets",
-     "date": "2026-10-10"},
-    {"key": "d_natalia", "person": "natalia", "direction": "i_owe", "amount": 180, "name": "Zakopane pension deposit",
-     "date": "2026-09-20"},
-    {"key": "d_ewa", "person": "ewa", "direction": "i_owe", "amount": 24, "name": "flowers for Oddzialowa",
-     "date": "2026-09-25"},
-    {"key": "d_marcin_b", "person": "marcin_b", "direction": "owes_me", "amount": 60, "name": "night shift taxi",
-     "date": "2026-09-12", "settled": "2026-09-19T10:00"},
-    {"key": "d_basia", "person": "basia", "direction": "owes_me", "amount": 75, "name": "ski helmet rental",
-     "date": "2026-02-14", "settled": "2026-02-20T10:00"},
-    {"key": "d_kasia", "person": "kasia", "direction": "i_owe", "amount": 150, "name": "flights deposit",
-     "date": "2026-10-05"},
-    {"key": "d_hania", "person": "hania", "direction": "owes_me", "amount": 15, "name": "pharmacy run",
-     "date": "2026-10-14", "settled": "2026-10-15T09:00"},
-]
 
 # ------------------------------------------------------------------------------------------------
 # locker
@@ -630,13 +552,13 @@ links = [
 
 world = {
     "me": ME, "today": TODAY, "epoch": "2025-02-01T09:00", "seed": "T31", "currency": "PLN",
-    "people": people, "groups": groups, "expenses": expenses, "lists": lists, "events": events,
+    "people": people, "lists": lists, "events": events,
     "tasks": tasks, "notebooks": notebooks, "notes": notes, "folders": folders, "documents": documents,
-    "albums": albums, "photos": photos, "debts": debts, "locker": locker, "links": links,
+    "albums": albums, "photos": photos, "locker": locker, "links": links,
 }
 
-SIZES = {"people": (25, 35), "groups": (4, 6), "events": (50, 70), "tasks": (50, 70), "notes": (20, 30),
-         "documents": (15, 20), "photos": (30, 40), "debts": (10, 15), "locker": (15, 22)}
+SIZES = {"people": (25, 35), "events": (50, 70), "tasks": (50, 70), "notes": (20, 30),
+         "documents": (15, 20), "photos": (30, 40), "locker": (15, 22)}
 
 
 def check(w):
@@ -656,15 +578,6 @@ def check(w):
     def need(key, kind):
         assert keys.get(key) == kind, f"{key} is not a {kind}"
 
-    for g in w["groups"]:
-        [need(m, "people") for m in g["members"]]
-        assert len(set(g["members"])) == len(g["members"]), g["key"]
-    for e in w["expenses"]:
-        need(e["group"], "groups")
-        [need(m, "people") for m in e["split"]]
-        need(e["paid_by"], "people")
-        members = set(next(g["members"] for g in w["groups"] if g["key"] == e["group"])) | {"me"}
-        assert set(e["split"]) | {e["paid_by"]} <= members, f"expense outside its group: {e['name']}"
     for t in w["tasks"]:
         if "parent" in t:
             need(t["parent"], "tasks")
@@ -679,14 +592,12 @@ def check(w):
     for p in w["photos"]:
         [need(a, "albums") for a in p.get("albums", [])]
         [need(q, "people") for q in p.get("people", [])]
-    for d in w["debts"]:
-        need(d["person"], "people")
     for e in w["events"]:
         [need(a, "people") for a in e.get("attendees", [])]
     for ln in w["links"]:
         assert ln["from"] in keys and ln["to"] in keys, ln
-    names = [g["name"] for g in w["groups"]] + [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
-    assert len(names) == len(set(names)), "group/notebook/album names must be unique"
+    names = [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
+    assert len(names) == len(set(names)), "notebook/album names must be unique"
     spans = sorted((e["start"], e.get("end", e["start"]), e["key"]) for e in w["events"])
     for (s1, e1, k1), (s2, e2, k2) in zip(spans, spans[1:]):
         assert e1 <= s2, f"events overlap: {k1} and {k2}"
@@ -700,7 +611,6 @@ def check(w):
     assert any(t.get("completed") for t in w["tasks"])
     assert any(not [x for x in w["documents"] if x.get("folder") == f["key"]] for f in w["folders"])
     assert any(not [x for x in w["notes"] if x.get("notebook") == n["key"]] for n in w["notebooks"])
-    assert any(not [x for x in w["expenses"] if x["group"] == g["key"]] for g in w["groups"])
 
 
 if __name__ == "__main__":

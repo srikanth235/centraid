@@ -105,30 +105,6 @@ S("T02-040-P", "document create edit delete para",
     ref=[ans(kind="document", name="Tomo kill fee invoice"),
          ans(kind="document", name="Tomo kill fee invoice", trashed=True)]))
 
-S("T02-045-P", "debt create repair enum balance para",
-  T("jess okoro owes me 23.50 for pizza on friday, put that in as a debt",
-    diff(new("debt", name=has("pizza"), amount=23.5, direction="owes_me"), link("new", "jess")),
-    ref=[bad(act("create", args=lines(kind="debt", name="Pizza", person="$jess", amount="23.50", direction="owed_to_me"))),
-         act("create", args=lines(kind="debt", name="Pizza", person="$jess", amount="23.50", direction="owes_me"))]),
-  T("jess's total debt to me?", val((88.60, "CAD")),
-    ref=[ans(op="balance", rows="$jess")]),
-  T("number of open debts linked to a person?", val(10),
-    ref=[ans(op="count", kind="debt", where='status = "open" and person count > 0')]),
-  T("her debts to me dating from before last friday", rows("d_jess_hydro"),
-    ref=[ans(kind="debt", linked_to="$jess", when=W({"to": U("week", -1, weekday=5)}))]))
-
-S("T02-050-P", "list create task create in list para",
-  T("picture book pitch needs its own list, area work",
-    diff(new("list", name=has("picture book"), area="work")),
-    ref=[act("create", args=lines(kind="list", name="Picture book pitch", area="work"))]),
-  T("draft 3 spreads goes on it, due end of the month",
-    diff(new("task", name=has("spreads"), date="2027-06-30"), link("+1", "new")),
-    ref=[act("create", args=lines(kind="task", name="Draft 3 spreads", date=D("2027-06-30"), list="$new"))]),
-  T("also, a new group: Crit night", diff(new("group", name="Crit night"), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Crit night"))]),
-  T("nobody replied, so crit night can be wiped", diff(gone("+3"), unlink("+3", "me")),
-    ref=[act("delete", rows="$c3")]))
-
 import json
 
 def W(expr):
@@ -159,22 +135,6 @@ S("T02-063-P", "where contains empty result para",
              args=lines(body="Fuunji tsukemen, Afuri yuzu ramen, depachika at Isetan, tamagoyaki at Tsukiji, matcha at Ippodo"))]),
   T("notes created from june onwards", rows("packing", "mf_brief", "journal_jun1", "fox", "idea_fox", "idea_crow"),
     ref=[ans(kind="note", when=W({"from": U("month", 0, name=6)}))]))
-
-S("T02-068-P", "compute rows within exclude para",
-  T("all open debts, list them", rows("d_mf", "d_tomo", "d_arun_tix", "d_sophie_taxi", "d_diego_chalk",
-                                              "d_kai_books", "d_priya_sushi", "d_mom_phone", "d_carlos"),
-    ref=[ans(kind="debt", where='status = "open"')]),
-  T("break that down by direction", vgroups({"owes_me": (1375, "CAD"), "i_owe": (215.5, "CAD")}),
-    ref=[comp(op="sum", field="amount", group="direction", rows="@prev"), ans(value="@prev")]),
-  T("redo that excluding the tomo kill fee, it's never getting paid",
-    vgroups({"owes_me": (1075, "CAD"), "i_owe": (215.5, "CAD")}),
-    ref=[comp(op="sum", field="amount", group="direction", kind="debt", where='status = "open"', exclude="$d_tomo"),
-         ans(value="@prev")]),
-  T("open debts above 200 CAD", rows("d_mf", "d_tomo"),
-    ref=[ans(kind="debt", where='status = "open" and amount > 200 CAD')]),
-  T("open debts predating last friday",
-    rows("d_mf", "d_arun_tix", "d_sophie_taxi", "d_diego_chalk", "d_kai_books", "d_priya_sushi", "d_mom_phone", "d_carlos"),
-    ref=[ans(kind="debt", where='status = "open"', when=W({"to": U("week", -1, weekday=5)}))]))
 
 S("T02-073-P", "count last month invoices repair kind para",
   T("last month's invoice count, the ones i sent", val(2),
@@ -248,8 +208,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 OPEN = 'status = "open"'
-
-OWED = 'direction = "owes_me" and status = "open"'
 
 S("T02-B003-P", "c3b superlative task quickest latest due count para",
   T("open task with the least effort?", rows("glaze_order"),

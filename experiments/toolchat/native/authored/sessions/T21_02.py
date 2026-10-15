@@ -15,15 +15,6 @@ S("T21-026", "five turns person datetime span cadence log undo ledger",
   T("undo that, it was naomi on his phone", diff(),
     ref=[act("undo")]))
 
-S("T21-027", "person span weekday group count star",
-  T("who have i contacted from monday till yesterday 3pm",
-    rows("wanjiru", "peter_o", "daniel", "mary_a", "brian", "joseph"),
-    ref=[ans(kind="person", when=span(U("week", 0, weekday=1), U("day", -1, time="15:00")))]),
-  T("which of those aren't in any of my groups", rows("wanjiru", "daniel"),
-    ref=[ans(kind="person", within="@prev", where="group count <= 0")]),
-  T("star Daniel Ruto", diff(upd("daniel", starred=True)),
-    ref=[act("star", rows="$daniel")]))
-
 S("T21-028", "event named month within duration",
   T("what's on in july", rows("brief_0706", "brief_0713", "brief_0720", "brief_0727", "chama_07", "parents_day",
                              "brian_grad", "shiru_halfterm", "ruracio"),
@@ -114,44 +105,6 @@ S("T21-040", "photo span rel count starred",
          askc("there are two in the bin, 2 june and 14 april. which one?", options="$salon, $salon_old")]),
   T("the june one", diff(restore("salon")),
     ref=[act("restore", rows="$salon")]))
-
-S("T21-042", "debt named month amount",
-  T("debts from may", rows("d_mary_a", "d_rose", "d_kevin", "d_peter_o", "d_susan"),
-    ref=[ans(kind="debt", when=U("month", 0, name=5))]),
-  T("which are exactly 500", rows("d_mary_a", "d_rose", "d_susan"),
-    ref=[ans(kind="debt", within="@prev", where="amount = 500")]))
-
-S("T21-043", "debt span date datetime status",
-  T("debts between first may and june first 6pm", rows("d_mary_a", "d_rose", "d_kevin", "d_peter_o", "d_susan",
-                                                 "d_githinji"),
-    ref=[ans(kind="debt", when=span(D("2026-05-01"), D("2026-06-01", "18:00")))]),
-  T("only the open ones i owe", rows("d_kevin", "d_susan", "d_githinji"),
-    ref=[ans(kind="debt", within="@prev", where='status = "open" and direction = "i_owe"')]))
-
-S("T21-044", "single debt span month date status settled",
-  T("any debts from march up to the fifteenth of may that are settled", rows("d_tabby"),
-    ref=[ans(kind="debt", when=span(U("month", 0, name=3), D("2026-05-15")), where='status = "settled"')]))
-
-S("T21-045", "debt open span sum rows",
-  T("total i've lent since april that's owed to me", val((3000, "KES")),
-    ref=[ans(op="sum", field="amount", kind="debt", when={"from": U("month", 0, name=4)},
-             where='direction = "owes_me" and status = "open"')]),
-  T("list them", rows("d_mary_a", "d_rose", "d_peter_o"),
-    ref=[ans(kind="debt", when={"from": U("month", 0, name=4)}, where='direction = "owes_me" and status = "open"')]))
-
-S("T21-046", "create person star new add_to group count",
-  T("new contact Agnes Chepkemoi, the kiswahili teacher TSC is sending",
-    diff(new("person", name="Agnes Chepkemoi", role=ANY)),
-    ref=[act("create", args=lines(kind="person", name="Agnes Chepkemoi", role="Kiswahili teacher"))]),
-  T("star her, put her in BOM tea fund and log a call, i rang her. who's in the fund",
-    rows("peter_k", "mary_w", "joseph", "me", "+1",
-         also=diff(upd("+1", starred=True, date=ANY), link("bom_tea", "+1"))),
-    ref=[act("star", rows="$c1", more=True),
-         act("add_to", rows="$c1", args=lines(to="$bom_tea"), more=True),
-         act("log", rows="$c1", args=lines(kind="call"), more=True),
-         ans(kind="person", linked_to="$bom_tea")]),
-  T("how many is that", val(5),
-    ref=[ans(op="count", kind="person", linked_to="$bom_tea")]))
 
 S("T21-047", "create event delete new undo delete",
   T("dinner with the area MCA friday 7pm", diff(new("event", name=has("MCA"), date="2026-06-12T19:00")),

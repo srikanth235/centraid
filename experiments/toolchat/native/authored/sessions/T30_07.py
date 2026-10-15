@@ -14,14 +14,6 @@ S("T30-138", "decline-out-of-scope read document name",
   T("which notice of assessment documents do i have", rows("doc_02", "doc_28", "doc_54"),
     ref=[ans(kind="document", name="notice of assessment")]))
 
-S("T30-139", "compute group role where met events status when",
-  T("what roles are the ruelle people and how many of each", vgroups({"landlord's cousin": 5, "neighbour": 13, "ruelle verte volunteer": 5}),
-    ref=[comp(op="count", kind="person", group="role", where='met = "ruelle verte"'),
-         ans(value="@prev")]),
-  T("and events by status this year", vgroups({"cancelled": 1, "tentative": 83}),
-    ref=[comp(op="count", kind="event", group="status", when=J(U("year", 0))),
-         ans(value="@prev")]))
-
 S("T30-140", "trashed read restore photo name",
   T("pull up everything i've thrown out of the photos, i think the bike rack one is in there", rows("ph_loose_242", "ph_loose_245", "ph_loose_248", "ph_loose_252", "ph_loose_255", "ph_loose_259", "ph_loose_263", "ph_loose_268"),
     ref=[ans(kind="photo", trashed=True)]),

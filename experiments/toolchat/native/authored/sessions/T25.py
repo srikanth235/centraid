@@ -40,32 +40,6 @@ S("T25-005", "create person star unstar new already star",
   T("ok star Nadia Haddad", diff(already=["nadia"]), rows("nadia"),
     ref=[act("star", kind="person", name="Nadia Haddad"), ans(rows="$nadia")]))
 
-S("T25-006", "create group add_to edit new",
-  T("make a group for ski season with daniel",
-    diff(new("group", name=has("Ski")), link("new", "me"), link("new", "daniel")),
-    ref=[act("create", args=lines(kind="group", name="Ski season"), more=True),
-         act("add_to", rows="$daniel", args=lines(to="$new"))]),
-  T("rename it Mika ski season", diff(upd("+1", name="Mika ski season")),
-    ref=[act("edit", rows="$c1", args=lines(name="Mika ski season"))]))
-
-S("T25-007", "four turns create group usd edit new add_to members",
-  T("new group NYC trip, in US dollars", diff(new("group", name="NYC trip", currency="USD"), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="NYC trip", currency="USD"))]),
-  T("call it NYC in december", diff(upd("+1", name="NYC in December")),
-    ref=[act("edit", rows="$c1", args=lines(name="NYC in December"))]),
-  T("add nadia and jess", diff(link("+1", "nadia"), link("+1", "jess")),
-    ref=[act("add_to", rows="$nadia, $jess", args=lines(to="$c1"))]),
-  T("who's in it now", rows("me", "nadia", "jess"),
-    ref=[ans(kind="person", linked_to="$c1")]))
-
-S("T25-009", "refused delete group ask delete group named",
-  T("delete the vermont weekend group", ask(),
-    ref=[bad(act("delete", kind="group", name="Vermont weekend")),
-         askc("it still has the airbnb and the dinner in it, so it can't be deleted. settle it up first?")]),
-  T("nah leave it. get rid of the halloween party fund",
-    diff(gone("halloween"), unlink("halloween", "me")),
-    ref=[act("delete", kind="group", name="Halloween party fund")]))
-
 S("T25-011", "event person count next week delete multi",
   T("next week, what's on with one person or fewer",
     rows("one_on_one", "therapy_1013", "coffee_marc", "portfolio_rev", "lawyer_call", "handoff_1016",

@@ -80,10 +80,9 @@ class Common(unittest.TestCase):
             "error: nothing to undo": "undo_nothing",
             "error: repeated call. You already made this exact call": "repeated_call",
             'error: tasks have no field "duration". task editable fields': "field_wrong_kind",
-            "error: balance is for one person; the selection holds 32": "balance_person",
             "error: #97 was never shown.": "unshown_row",
             'error: status has no value "todo". task status values': "bad_value",
-            "error: sum needs field. debt number fields: amount.": "op_needs_field",
+            "error: sum needs field. transaction number fields: amount.": "op_needs_field",
             "error: where has no name field; filter names with name=": "where_name",
             "error: effort is a number of minutes (60, not 1 hour)": "number_field",
             "error: complete takes no args; not \"status\".": "args_not_taken",
@@ -182,13 +181,6 @@ class Recover(unittest.TestCase):
         self.assertEqual(out, [self.call("find", kind="task", text="skip")])
         self.assertEqual(recover.m_param(self.call("search", text="x"), self.cx()), [self.call("search", name="x")])
 
-    def test_balance(self):
-        self.assertEqual(recover.m_balance(self.call("answer", op="balance", kind="group", name="G", linked_to="$me"), self.cx()),
-                         [self.call("answer", op="balance", kind="group", name="G")])
-        self.assertEqual(recover.m_balance(self.call("answer", op="balance", rows="$b"), self.cx()),
-                         [self.call("answer", op="balance", kind="person")])
-        self.assertEqual(recover.m_balance(self.call("answer", kind="task"), self.cx()), [])
-
     def test_rows_needed_and_verbs(self):
         c = self.call("act", verb="complete", kind="task", name="x")
         self.assertEqual(recover.m_rows_needed(c, self.cx()), [self.call("act", verb="complete")])
@@ -225,8 +217,8 @@ class Recover(unittest.TestCase):
         self.assertEqual(k, [self.call("act", verb="create", args="kind: task\nname: x")])
         w = recover.m_where_name(self.call("find", kind="task", name="skip", where="effort > 5"), self.cx())
         self.assertEqual(w[0]["args"], {"kind": "task", "where": 'name = "skip" and effort > 5'})
-        self.assertEqual(recover.m_opfield(self.call("answer", op="sum", field="amount", kind="debt"), self.cx())[0]["args"],
-                         {"op": "sum", "kind": "debt"})
+        self.assertEqual(recover.m_opfield(self.call("answer", op="sum", field="amount", kind="transaction"), self.cx())[0]["args"],
+                         {"op": "sum", "kind": "transaction"})
         self.assertRegex(recover.m_unshown(self.call("act", verb="star", rows="$b"), self.cx())[0]["args"]["rows"], r"^#[7-9]\d$")
         self.assertEqual(recover.m_addslot(self.call("act", verb="add_to", rows="$b", args="to: $b"), self.cx())[0]["args"]["args"],
                          "to: Book")
@@ -407,7 +399,7 @@ class Collide(unittest.TestCase):
 
 class Rewrite(unittest.TestCase):
     def test_block_and_dates_line(self):
-        b = 'vault: #3 group "G" · #8 album "A"\nfocus: @1: #37 person "Me"\ndates: fri = 2026-03-13 · lunchtime = 12:00 · next week = 2026-03-16..2026-03-22'
+        b = 'vault: #3 list "G" · #8 album "A"\nfocus: @1: #37 person "Me"\ndates: fri = 2026-03-13 · lunchtime = 12:00 · next week = 2026-03-16..2026-03-22'
         lines = rewrite.block_lines(b)
         self.assertEqual(rewrite.ns_of(lines["vault"]), [3, 8])
         self.assertEqual(rewrite.ns_of(lines["focus"]), [37])
@@ -502,12 +494,12 @@ class Rewrite(unittest.TestCase):
 
         def run(user, focus):
             rec_c = {"turns": [{"preground": focus, "steps": [{"response": {"effect": amb}}]}]}
-            sess = {"turns": [{"user": user, "ref": [{"tool": "answer", "args": {"kind": "person", "name": "priya", "op": "balance"}}]}]}
+            sess = {"turns": [{"user": user, "ref": [{"tool": "answer", "args": {"kind": "person", "name": "priya", "op": "count"}}]}]}
             return rewrite.analyse_pick(sess, rec_c, base, key_c, key_b, names)
 
         picks, dropped = run("how much does nair owe me", "")
         self.assertEqual((len(picks), dropped), (1, []))
-        self.assertEqual(picks[0][2]["args"], {"op": "balance", "rows": "$priya_n"})
+        self.assertEqual(picks[0][2]["args"], {"op": "count", "rows": "$priya_n"})
         picks, dropped = run("and priya?", 'focus: @1: #5 person "Priya Nair"')
         self.assertEqual(len(picks), 1)
         picks, dropped = run("how much does priya owe me", "")

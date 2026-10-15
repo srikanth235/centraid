@@ -43,22 +43,6 @@ S("T13-078", "ambiguous notebook ask never mind count",
   T("how many notes are in lab notebook 2025", val(2),
     ref=[ans(op="count", kind="note", linked_to="$lab25")]))
 
-S("T13-079", "groups linked_to all delete group currency contains",
-  T("which groups are priya menon and daniel mensah both in", rows("walkers"),
-    ref=[ans(kind="group", linked_to="$priya, $daniel")]),
-  T("delete it, we never use it",
-    diff(gone("walkers"), unlink("walkers", "priya"), unlink("walkers", "daniel"), unlink("walkers", "me")),
-    ref=[act("delete", rows="$walkers")]),
-  T("which groups are in naira", rows("family"),
-    ref=[ans(kind="group", where='currency contains "NGN"')]))
-
-S("T13-080", "refused group delete ask never mind",
-  T("delete the lab coffee fund", ask(),
-    ref=[bad(act("delete", kind="group", name="Lab coffee fund")),
-         askc("it still has expenses in it, so it can't be deleted. settle everyone up first?")]),
-  T("nah leave it", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
 S("T13-081", "refused folder delete ask trashed doc restore add_to",
   T("delete the tenancy folder, i'm moving out next june", ask(),
     ref=[bad(act("delete", kind="folder", name="Tenancy")),
@@ -133,19 +117,6 @@ S("T13-087", "people counts since cadence before weekday log prev multi",
          upd("seun", date=ANY), upd("daniel", date=ANY)),
     ref=[act("log", rows="@prev", args=lines(kind="message"))]))
 
-S("T13-088", "five turns role not met count note count ambiguous person ask log",
-  T("who on the nigsoc committee isn't the president", rows("ngozi_e", "emeka", "tunde", "seun", "me"),
-    ref=[ans(kind="person", linked_to="$nigsoc", where='role != "NigSoc president"')]),
-  T("how many people have i got a 'met' for", val(11),
-    ref=[ans(op="count", kind="person", where="met is set")]),
-  T("anyone with three or more notes about them", rows("mum", "wei"),
-    ref=[ans(kind="person", where="note count >= 3")]),
-  T("log a call with ngozi", ask("ngozi_e", "aunty_ngozi"),
-    ref=[act("log", kind="person", name="Ngozi", args=lines(kind="call")),
-         askc("ngozi eze or aunty ngozi?", options="$ngozi_e, $aunty_ngozi")]),
-  T("the treasurer", diff(upd("ngozi_e", date=ANY)),
-    ref=[act("log", rows="$ngozi_e", args=lines(kind="call"))]))
-
 S("T13-089", "five turns all day weekday overlap refused ask create body in",
   T("any all-day things the week after next", rows("chichi_bday"),
     ref=[ans(kind="event", when=W(U("week", 2)), where="duration is empty")]),
@@ -166,39 +137,6 @@ S("T13-090", "notes span no people delete pin named",
     ref=[act("delete", rows="$seminar_note")]),
   T("pin tolerance factor idea", diff(upd("tolerance", pinned=True)),
     ref=[act("edit", kind="note", name="Tolerance factor idea", args=lines(pinned="yes"))]))
-
-S("T13-091", "five turns debts last month sums status amount ask settle",
-  T("how much did i lend out last month", val((120.5, "GBP")),
-    ref=[ans(op="sum", field="amount", kind="debt", when=W(U("month", -1)), where='direction = "owes_me"')]),
-  T("not counting what's been paid back", val((85.5, "GBP")),
-    ref=[ans(op="sum", field="amount", kind="debt", when=W(U("month", -1)),
-             where='direction = "owes_me" and status != "settled"')]),
-  T("which of those were 20 quid or more", rows("d_kasia", "d_tunde"),
-    ref=[ans(kind="debt", when=W(U("month", -1)),
-             where='direction = "owes_me" and status != "settled" and amount >= 20 GBP')]),
-  T("settle tom's", ask("tom_h", "tom_b"),
-    ref=[find(kind="person", name="Tom"), askc("tom hargreaves or tom bennett?", options="$tom_h, $tom_b")]),
-  T("hargreaves", diff(upd("d_tom_h", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$tom_h")]))
-
-S("T13-092", "debts spans substitution nickname log recovery search",
-  T("what did i borrow from two months ago to the end of august", rows("d_obinna", "d_priya", "d_wei"),
-    ref=[ans(kind="debt", when=W(span(U("month", -2), U("month", 0, name=8))), where='direction = "i_owe"')]),
-  T("and between last tuesday and wednesday this week?", rows("d_wei", "d_emeka"),
-    ref=[ans(kind="debt", when=W(span(U("week", -1, weekday=2), U("week", 0, weekday=3))), where='direction = "i_owe"')]),
-  T("had coffee with seun yesterday, log it", diff(upd("seun", date=ANY)),
-    ref=[act("log", kind="person", name="Seun", args=lines(kind="coffee")), search("Seun", kind="person"),
-         act("log", rows="$seun", args=lines(kind="coffee"))]))
-
-S("T13-093", "compute sum grouped locker notes decline fabricated reveal",
-  T("last month, how much went out vs came in, by direction", vgroups({"i_owe": (42, "GBP"), "owes_me": (120.5, "GBP")}),
-    ref=[comp(op="sum", field="amount", group="direction", kind="debt", when=W(U("month", -1))), ans(value="@prev")]),
-  T("which locker things say renews january", rows("rsc", "iom3"),
-    ref=[ans(kind="locker item", where='notes = "renews January"')]),
-  T("make me up a strong password for the new router", decline("fabricated_secret"),
-    ref=[dec("fabricated_secret")]),
-  T("fine, what's my zotero password", diff(reveal=[("zotero_login", "halide-films-4")]),
-    ref=[act("reveal", rows="$zotero_login", args=lines(field="password"))]))
 
 S("T13-094", "six turns lisbon ask create event write read star",
   T("when do i fly to lisbon", rows("lisbon_out"),

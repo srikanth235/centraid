@@ -7,15 +7,14 @@ Today in the sessions is Thursday 2026-11-12 19:20 (home from the lab, Jonas arr
 Persona: Freya Lindqvist, 44, a marine biologist at the university marine lab in Tromso. Divorced from
 Henrik Dahl; their son Jonas (15) lives with her on alternate weeks (handover every second Friday). She
 keeps the kitty of the Tromso Seilforening sailing club, her parents Per and Ingrid are in Bergen and her
-sister Astrid is in Oslo. The vault is in NOK; the one foreign-currency position is the EUR group
-"Kiel Week 2026" (a vault debt can only be in the vault's own currency).
+sister Astrid is in Oslo. The vault is in NOK.
 
 Built-in ambiguity: two Larses (Lars Hansen, club commodore; Lars Eide, colleague) and two Ingrids (her
 mother, "Mamma", and Ingrid Moe, a neighbour), look-alike events (Dinner with Astrid, Dentist check-up vs
 Dentist - Jonas, Lab meeting vs Cod team meeting, Coffee with Kjersti), near-duplicate tasks (four Pay
 mortgage, nine Stock the fridge for Jonas, two grant reports), nicknames (Mamma, Pappa, Commodore, Prof
 Marit), hard-to-spell names (Kjersti Jossang, Gunnhild Odegard, Hjordis Thorbjornsen), cancelled events,
-completed and cancelled tasks, an empty group and an empty folder, and trashed rows of every trashable
+completed and cancelled tasks, an empty folder, and trashed rows of every trashable
 kind (one inside the 30-day restore window, one past it).
 """
 from __future__ import annotations
@@ -75,49 +74,6 @@ people = [
     {"key": "old_builder", "name": "Camilla Roth", "role": "old contractor", "trashed": "2026-11-05T10:00"},
 ]
 
-groups = [
-    {"key": "seilklubb", "name": "Seilforening Kitty", "currency": "NOK",
-     "members": ["lars_h", "tuva", "hjordis", "bjorn", "roar"], "created": "2026-02-10T19:00"},
-    {"key": "lab_coffee", "name": "Lab Coffee Club", "currency": "NOK", "members": ["lars_e", "ola", "sigrid", "marit"],
-     "created": "2026-01-12T09:00"},
-    {"key": "jonas_costs", "name": "Jonas Shared Costs", "currency": "NOK", "members": ["henrik"],
-     "created": "2026-01-05T10:00"},
-    {"key": "kiel", "name": "Kiel Week 2026", "currency": "EUR", "members": ["jens", "mia", "bjorn"],
-     "created": "2026-04-02T20:00"},
-    {"key": "bergen", "name": "Bergen Family", "currency": "NOK", "members": ["mamma", "pappa", "astrid"],
-     "created": "2026-03-01T20:00"},
-    {"key": "hurtigruten", "name": "Hurtigruten 2027", "currency": "NOK", "members": ["kjersti", "gunnhild"],
-     "created": "2026-11-02T20:00"},  # empty on purpose: no expenses yet
-]
-
-expenses = [
-    {"group": "seilklubb", "name": "Race buoys", "amount": 5400, "paid_by": "me",
-     "split": ["me", "lars_h", "tuva", "hjordis", "bjorn"], "date": "2026-05-12"},
-    {"group": "seilklubb", "name": "Rescue boat fuel", "amount": 2100, "paid_by": "roar",
-     "split": ["me", "lars_h", "roar", "bjorn"], "date": "2026-07-04"},
-    {"group": "seilklubb", "name": "Season end pizza", "amount": 1800, "paid_by": "tuva",
-     "split": ["me", "lars_h", "tuva", "hjordis", "bjorn", "roar"], "date": "2026-10-03"},
-    {"group": "seilklubb", "name": "Lift-out crane", "amount": 6000, "paid_by": "lars_h",
-     "split": ["me", "lars_h", "tuva", "bjorn"], "date": "2026-10-03"},
-    {"group": "lab_coffee", "name": "Coffee beans", "amount": 960, "paid_by": "ola",
-     "split": ["me", "lars_e", "ola", "sigrid"], "date": "2026-09-14"},
-    {"group": "lab_coffee", "name": "Milk and oat drink", "amount": 340, "paid_by": "me",
-     "split": ["me", "lars_e", "ola", "sigrid", "marit"], "date": "2026-10-19"},
-    {"group": "jonas_costs", "name": "Football boots", "amount": 1899, "paid_by": "me", "split": ["me", "henrik"],
-     "date": "2026-09-05"},
-    {"group": "jonas_costs", "name": "Winter jacket", "amount": 2600, "paid_by": "henrik", "split": ["me", "henrik"],
-     "date": "2026-10-11"},
-    {"group": "jonas_costs", "name": "Dentist braces check", "amount": 1450, "paid_by": "me",
-     "split": ["me", "henrik"], "date": "2026-10-22"},
-    {"group": "kiel", "name": "Harbour fees", "amount": 310, "paid_by": "jens", "split": ["me", "jens", "mia", "bjorn"],
-     "date": "2026-06-21"},
-    {"group": "kiel", "name": "Crew dinner", "amount": 188, "paid_by": "me", "split": ["me", "jens", "mia", "bjorn"],
-     "date": "2026-06-24"},
-    {"group": "bergen", "name": "Pappa's 75th present", "amount": 3200, "paid_by": "astrid",
-     "split": ["me", "astrid", "mamma"], "date": "2026-08-14"},
-    {"group": "bergen", "name": "Christmas hamper", "amount": 1500, "paid_by": "me", "split": ["me", "astrid"],
-     "date": "2026-11-02"},
-]
 
 lists = [
     {"key": "lab_list", "name": "Lab", "area": "work"},
@@ -459,38 +415,6 @@ photos = [
      "trashed": "2026-09-25T09:00"},
 ]
 
-# ----------------------------------------------------------------------------------------------
-# debts
-# ----------------------------------------------------------------------------------------------
-
-debts = [
-    {"key": "d_henrik_boots", "person": "henrik", "direction": "owes_me", "amount": 950, "name": "football boots half",
-     "date": "2026-09-05"},
-    {"key": "d_henrik_jacket", "person": "henrik", "direction": "i_owe", "amount": 1300, "name": "jacket half",
-     "date": "2026-10-11"},
-    {"key": "d_astrid", "person": "astrid", "direction": "owes_me", "amount": 750, "name": "Christmas hamper half",
-     "date": "2026-11-02"},
-    {"key": "d_lars_e", "person": "lars_e", "direction": "i_owe", "amount": 120, "name": "coffee run",
-     "date": "2026-11-05"},
-    {"key": "d_tuva", "person": "tuva", "direction": "i_owe", "amount": 450, "name": "pizza share",
-     "date": "2026-10-03"},
-    {"key": "d_bjorn", "person": "bjorn", "direction": "owes_me", "amount": 1500, "name": "crane share",
-     "date": "2026-10-03"},
-    {"key": "d_lars_h", "person": "lars_h", "direction": "owes_me", "amount": 900, "name": "buoys share",
-     "date": "2026-05-12"},
-    {"key": "d_kjersti", "person": "kjersti", "direction": "owes_me", "amount": 640, "name": "concert tickets",
-     "date": "2026-09-12"},
-    {"key": "d_gunnhild", "person": "gunnhild", "direction": "i_owe", "amount": 2200, "name": "aurora trip share",
-     "date": "2026-10-17"},
-    {"key": "d_trond", "person": "trond", "direction": "i_owe", "amount": 3800, "name": "shrink-wrap and storage",
-     "date": "2026-10-10"},
-    {"key": "d_siv", "person": "siv", "direction": "owes_me", "amount": 300, "name": "yoga drop-in",
-     "date": "2026-07-11", "settled": "2026-07-18T10:00"},
-    {"key": "d_frode", "person": "frode", "direction": "i_owe", "amount": 5200, "name": "brake pads",
-     "date": "2026-08-12", "settled": "2026-08-14T10:00"},
-    {"key": "d_ola", "person": "ola", "direction": "owes_me", "amount": 480, "name": "coffee beans share",
-     "date": "2026-09-14", "settled": "2026-09-30T10:00"},
-]
 
 # ----------------------------------------------------------------------------------------------
 # locker
@@ -561,9 +485,9 @@ links = [
 
 world = {
     "me": ME, "today": TODAY, "epoch": "2026-01-05T09:00", "seed": "T35", "currency": "NOK",
-    "people": people, "groups": groups, "expenses": expenses, "lists": lists, "events": events,
+    "people": people, "lists": lists, "events": events,
     "tasks": tasks, "notebooks": notebooks, "notes": notes, "folders": folders, "documents": documents,
-    "albums": albums, "photos": photos, "debts": debts, "locker": locker, "links": links,
+    "albums": albums, "photos": photos, "locker": locker, "links": links,
 }
 
 
@@ -585,15 +509,6 @@ def check(w):
     def need(key, kind):
         assert keys.get(key) == kind, f"{key} is not a {kind}"
 
-    for g in w["groups"]:
-        [need(m, "people") for m in g["members"]]
-        assert len(set(g["members"])) == len(g["members"]), g["key"]
-    for e in w["expenses"]:
-        need(e["group"], "groups")
-        [need(m, "people") for m in e["split"]]
-        need(e["paid_by"], "people")
-        members = set(next(g["members"] for g in w["groups"] if g["key"] == e["group"])) | {"me"}
-        assert set(e["split"]) | {e["paid_by"]} <= members, f"expense outside its group: {e['name']}"
     for t in w["tasks"]:
         if "parent" in t:
             need(t["parent"], "tasks")
@@ -609,14 +524,12 @@ def check(w):
         [need(a, "albums") for a in p.get("albums", [])]
         [need(q, "people") for q in p.get("people", [])]
         assert len(set(p.get("albums", []))) == len(p.get("albums", [])), p["key"]
-    for d in w["debts"]:
-        need(d["person"], "people")
     for e in w["events"]:
         [need(a, "people") for a in e.get("attendees", [])]
     for ln in w["links"]:
         assert ln["from"] in keys and ln["to"] in keys, ln
-    names = [g["name"] for g in w["groups"]] + [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
-    assert len(names) == len(set(names)), "group/notebook/album names must be unique"
+    names = [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
+    assert len(names) == len(set(names)), "notebook/album names must be unique"
     assert len({p["name"] for p in w["people"]}) == len(w["people"]), "duplicate person names"
     spans = sorted((e["start"], e["end"], e["key"]) for e in w["events"])
     for (s1, e1, k1), (s2, e2, k2) in zip(spans, spans[1:]):
@@ -625,8 +538,8 @@ def check(w):
     assert w["me"] and w["today"]
     # size, per the brief's ordinary ranges
     n = {k: len(v) for k, v in w.items() if isinstance(v, list)}
-    for kind, lo, hi in [("people", 25, 35), ("groups", 4, 6), ("events", 50, 70), ("tasks", 50, 70), ("notes", 20, 30),
-                         ("documents", 15, 20), ("photos", 30, 40), ("debts", 10, 15), ("locker", 15, 20)]:
+    for kind, lo, hi in [("people", 25, 35), ("events", 50, 70), ("tasks", 50, 70), ("notes", 20, 30),
+                         ("documents", 15, 20), ("photos", 30, 40), ("locker", 15, 20)]:
         assert lo <= n[kind] <= hi, f"{kind}: {n[kind]} not in {lo}-{hi}"
     # trashed rows of every trashable kind, one inside the restore window and one past it
     for kind in ("people", "events", "tasks", "notes", "documents", "photos", "locker"):
@@ -639,7 +552,6 @@ def check(w):
     assert sum(1 for f in set(firsts) if firsts.count(f) >= 2) >= 2, "need two same-first-name pairs"
     assert any(e.get("cancelled") for e in w["events"])
     assert any(t.get("completed") for t in w["tasks"]) and any(t.get("status") == "cancelled" for t in w["tasks"])
-    assert any(not g["members"] or not [e for e in w["expenses"] if e["group"] == g["key"]] for g in w["groups"])
     assert any(f["key"] not in {d.get("folder") for d in w["documents"]} for f in w["folders"])
 
 

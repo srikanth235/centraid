@@ -8,10 +8,10 @@ vertical slice to a publisher this week), play in a Thursday D&D group run by Be
 co-hosting their sister Tess's baby shower on Sat 21 March with Tess's friend Chloe.
 Built-in ambiguity: two Sams (co-op artist, D&D player), two Alexes (dog walker, cake baker),
 nicknames (Mum, Dad, Nana, Bex, Jules, Ollie, Mei, Aunty Ro, Danno, Dr Farah), an accented
-name (Zoë, Tomás), two "Pizza" debts, two "Playtest night" and three "Biscuit's vet check-up"-ish
+name (Zoë, Tomás), two "Pizza" tasks, two "Playtest night" and three "Biscuit's vet check-up"-ish
 events, near-duplicate tasks ("Buy dog food", "Pay rent", "Bring snacks for D&D"), cancelled
 events, completed tasks, rows trashed inside and past the 30-day restore window, an empty
-group, an empty folder, an empty notebook and an empty album, and a USD trip group.
+folder, an empty notebook and an empty album.
 """
 from __future__ import annotations
 
@@ -81,37 +81,6 @@ def people():
         {"key": "grace", "name": "Grace Liu", "role": "recruiter", "trashed": "2025-12-10T09:00"},
     ]
 
-
-GROUPS = [
-    {"key": "coop", "name": "Tinfoil Owl co-op", "currency": "AUD",
-     "members": ["priya", "sam_o", "mei", "oliver"], "created": "2025-05-01T10:00"},
-    {"key": "dnd", "name": "Thursday D&D", "members": ["bex", "marcus", "jules", "tomas", "sam_t"],
-     "created": "2025-09-04T19:00"},
-    {"key": "shower", "name": "Tess's baby shower", "members": ["chloe", "aunt_rose", "mum"],
-     "created": "2026-02-05T20:00"},
-    {"key": "gdc", "name": "GDC 2025 trip", "currency": "USD", "members": ["priya", "mei"],
-     "created": "2025-03-01T10:00"},
-    {"key": "ski", "name": "Ski weekend 2025", "members": ["brooke", "zoe"], "created": "2025-06-10T10:00"},
-]
-
-EXPENSES = [
-    {"group": "coop", "name": "PAX booth deposit", "amount": 1200, "paid_by": "me",
-     "split": ["me", "priya", "sam_o", "mei", "oliver"], "date": "2025-08-01"},
-    {"group": "coop", "name": "Pizza for playtest", "amount": 150, "paid_by": "priya",
-     "split": ["me", "priya", "sam_o"], "date": "2026-02-20"},
-    {"group": "coop", "name": "Steam Direct fee", "amount": 160, "paid_by": "mei",
-     "split": ["me", "priya", "sam_o", "mei", "oliver"], "date": "2025-11-03"},
-    {"group": "dnd", "name": "Starter module", "amount": 90, "paid_by": "bex",
-     "split": ["me", "bex", "marcus", "jules", "tomas", "sam_t"], "date": "2026-01-08"},
-    {"group": "dnd", "name": "Pizza night", "amount": 120, "paid_by": "me",
-     "split": ["me", "marcus", "jules", "tomas"], "date": "2026-02-19"},
-    {"group": "shower", "name": "Cake deposit", "amount": 160, "paid_by": "me",
-     "split": ["me", "chloe"], "date": "2026-02-23"},
-    {"group": "shower", "name": "Decorations", "amount": 90, "paid_by": "chloe",
-     "split": ["me", "chloe", "aunt_rose"], "date": "2026-02-24"},
-    {"group": "gdc", "name": "Airbnb in SF", "amount": 1800, "paid_by": "mei",
-     "split": ["me", "priya", "mei"], "date": "2025-03-15", "currency": "USD"},
-]
 
 LISTS = [
     {"key": "dev_l", "name": "Co-op dev", "area": "work"},
@@ -446,34 +415,6 @@ PHOTOS = [
     {"key": "tram_copy", "name": "Tram at dusk copy", "taken": "2026-01-22T20:10", "trashed": "2026-01-23T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_marcus_pizza", "person": "marcus", "direction": "owes_me", "amount": 24, "name": "Pizza",
-     "date": "2026-02-19"},
-    {"key": "d_jules_pizza", "person": "jules", "direction": "i_owe", "amount": 18, "name": "Pizza",
-     "date": "2026-02-26"},
-    {"key": "d_sam_dice", "person": "sam_t", "direction": "owes_me", "amount": 35, "name": "Dice set",
-     "date": "2026-02-05"},
-    {"key": "d_tess_cake", "person": "tess", "direction": "owes_me", "amount": 80, "name": "Cake deposit share",
-     "date": "2026-02-23"},
-    {"key": "d_chloe", "person": "chloe", "direction": "i_owe", "amount": 45, "name": "Balloons",
-     "date": "2026-02-24"},
-    {"key": "d_nadia", "person": "nadia", "direction": "i_owe", "amount": 60, "name": "Dog sitting",
-     "date": "2026-02-16"},
-    {"key": "d_priya", "person": "priya", "direction": "i_owe", "amount": 22, "name": "Lunch at Kaiju",
-     "date": "2026-02-27"},
-    {"key": "d_ollie", "person": "oliver", "direction": "owes_me", "amount": 150, "name": "Microphone",
-     "date": "2026-01-12"},
-    {"key": "d_zoe", "person": "zoe", "direction": "owes_me", "amount": 95, "name": "Concert tickets",
-     "date": "2025-12-05"},
-    {"key": "d_dad", "person": "dad", "direction": "i_owe", "amount": 40, "name": "Petrol money",
-     "date": "2026-02-08", "settled": "2026-02-10T18:00"},
-    {"key": "d_brooke", "person": "brooke", "direction": "owes_me", "amount": 70, "name": "Climbing shoes",
-     "date": "2026-01-25", "settled": "2026-02-23T19:40"},
-    {"key": "d_alex", "person": "alex_b", "direction": "i_owe", "amount": 120, "name": "Dog walks",
-     "date": "2026-02-28"},
-    {"key": "d_bex", "person": "bex", "direction": "owes_me", "amount": 55, "name": "Module book",
-     "date": "2026-02-26"},
-]
 
 LOCKER = [
     {"key": "steamworks", "name": "Steamworks", "type": "login", "username": "jordan@tinfoilowl.games",
@@ -549,8 +490,6 @@ def world():
         "seed": "T18",
         "currency": "AUD",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -560,7 +499,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

@@ -767,6 +767,78 @@ fn a_row_for_a_container_of_another_kind_declines_out_of_scope() {
     assert_eq!(reply["effect"]["refusal"]["predicate"], "wrong_container");
 }
 
+/// A person goes into no container (#1099 removed the group), so adding one to anything ends in the
+/// decline `wrong_container`, as it did when a group could hold one (#1115).
+#[test]
+fn a_person_added_to_an_event_declines_wrong_container() {
+    let world = seeded();
+    let mut session = world.session();
+    session.user("add ray to the dentist");
+    let dentist = find_in_turn(&mut session, "event", "Dentist");
+    let reply = call(
+        &mut session,
+        "act",
+        json!({"verb": "add_to", "kind": "person", "name": "Ray Ochoa", "args": format!("to: {dentist}")}),
+    );
+    assert_declined(&reply, "out_of_scope");
+    assert_eq!(reply["effect"]["refusal"]["predicate"], "wrong_container");
+    assert_eq!(reply["effect"]["refusal"]["outcome"], "decline");
+    assert!(reply["effect"].get("diff").is_none(), "{reply}");
+}
+
+/// The destination decides, not the name: a row of another kind whose name the person's words fit is
+/// no repair for a person who cannot go anywhere (the near spelling used to preempt the decline).
+#[test]
+fn a_near_spelling_of_another_row_does_not_preempt_the_wrong_container_decline() {
+    let world = world_with(|world| {
+        push(
+            world,
+            "tasks",
+            json!({"key": "rayfee", "name": "Pay Ray Ochoa the deposit"}),
+        );
+    });
+    let mut session = world.session();
+    session.user("invite ray to the dentist");
+    let dentist = find_in_turn(&mut session, "event", "Dentist");
+    let reply = call(
+        &mut session,
+        "act",
+        json!({"verb": "add_to", "kind": "person", "name": "Ray Ochoa", "args": format!("to: {dentist}")}),
+    );
+    assert_declined(&reply, "out_of_scope");
+    assert_eq!(reply["effect"]["refusal"]["predicate"], "wrong_container");
+    assert!(!text(&reply).contains("Did you mean"), "{reply}");
+}
+
+/// Only a person lost its container with the group. A wrong-kind target that is itself a container
+/// (an album named where a photo was meant) keeps the repair: the photo its words fit is offered.
+#[test]
+fn an_album_added_somewhere_still_gets_the_photo_its_words_fit() {
+    let world = world_with(|world| {
+        push(
+            world,
+            "photos",
+            json!({"key": "summer_sunset", "name": "Summer sunset", "taken": "2026-07-02T19:00"}),
+        );
+    });
+    let mut session = world.session();
+    session.user("add summer to taxes");
+    let taxes = find_in_turn(&mut session, "folder", "Taxes");
+    let reply = call(
+        &mut session,
+        "act",
+        json!({"verb": "add_to", "kind": "album", "name": "Summer", "args": format!("to: {taxes}")}),
+    );
+    assert!(
+        text(&reply).contains("Did you mean") && text(&reply).contains("Summer sunset"),
+        "{reply}"
+    );
+    assert!(
+        reply["effect"].get("refusal").is_none(),
+        "no decline preempts the repair: {reply}"
+    );
+}
+
 #[test]
 fn an_event_that_clashes_in_time_asks_over_the_events_in_the_way() {
     let world = seeded();

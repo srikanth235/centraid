@@ -8,19 +8,6 @@ def J(d):
     return json.dumps(d, separators=(",", ":"))
 
 
-S("T36-001-P", "relation chain group event role exclude besides in-laws para",
-  T("sangeet attendees from the settle-up group who are in-laws", rows("sneha"),
-    ref=[ans(kind="person", linked_to="$wedding, $sangeet", where='role contains "in-law"')]),
-  T("what about the pune wedding", rows("baba"),
-    ref=[ans(kind="person", linked_to="$wedding, $wedding_day", where='role contains "in-law"')]),
-  T("who else came to the sangeet apart from sneha", rows("kunal", "rohan_m"),
-    ref=[ans(kind="person", linked_to="$sangeet", exclude="$sneha")]),
-  T("those two go into a new rupee group named sangeet crew",
-    diff(new("group", name=has("sangeet"), currency="INR"), link("new", "me"), link("new", "kunal"),
-         link("new", "rohan_m")),
-    ref=[act("create", kind="group", args="name: Sangeet crew\ncurrency: INR", more=True),
-         act("add_to", rows="$kunal, $rohan_m", args="to: $new")]))
-
 S("T36-005-P", "scooter list open before event reschedule other one exclude para",
   T("scooter jobs still open ahead of the puc check, each under half an hour", rows("scooter_tyre", "scooter_puc_t"),
     ref=[ans(kind="task", linked_to="$scooter_list", where="status = open and effort < 30",

@@ -20,13 +20,6 @@ S("T01-A002", "ask-options event reschedule never_mind c3a",
   T("actually leave it, i'll sort it with them", decline("never_mind"),
     ref=[dec("never_mind")]))
 
-S("T01-A004", "ask-options debt settle_debt c3a",
-  T("mark the share as paid", ask("d_gemma_tickets", "d_kunle"),
-    ref=[act("settle_debt", kind="debt", name="share"),
-         askc("Gemma's Beyonce ticket share (35) or Kunle's cake share (60)?", options="$d_gemma_tickets, $d_kunle")]),
-  T("gemma's, she sent it just now", diff(upd("d_gemma_tickets", status="settled")),
-    ref=[act("settle_debt", rows="$d_gemma_tickets")]))
-
 S("T01-A005", "ask-options note delete never_mind c3a",
   T("delete the diary entry", ask("diary_rough", "diary_good"),
     ref=[act("delete", kind="note", name="diary entry"),
@@ -45,14 +38,6 @@ S("T01-A006", "follow-up c3a",
   T("which of those are before friday", rows("ld_0309", "training_0311", "fiveaside_0310", "ld_0310"),
     ref=[ans(within="@prev", when=J({"to": U("week", 0, weekday=4)}))]),
   T("what about the others", rows("worktop_visit", "mothering", "swim_0314", "plumber_visit", "match_0315"),
-    ref=[ans(within="@1", exclude="@2")]))
-
-S("T01-A007", "follow-up c3a",
-  T("what's owed to me", rows("d_kunle", "d_priya_lunch", "d_gemma_tickets", "d_jess_w", "d_callum"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 30", rows("d_kunle", "d_gemma_tickets", "d_callum"),
-    ref=[ans(within="@prev", where="amount > 30 GBP")]),
-  T("the rest then", rows("d_priya_lunch", "d_jess_w"),
     ref=[ans(within="@1", exclude="@2")]))
 
 S("T01-A008", "follow-up c3a",

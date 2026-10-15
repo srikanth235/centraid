@@ -6,37 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T14-076", "seven turns baile night balance settle_up",
-  T("what's the plan for baile 12", rows("baile_12"),
-    ref=[ans(kind="event", name="Baile 12")]),
-  T("who from the collective is on five or more things in my diary", rows("nath", "guga"),
-    ref=[ans(kind="person", where='event count >= 5 and role contains "Baile Torto"')]),
-  T("log a message with nathalia prado, sent her the setlist", diff(upd("nath", date=ANY)),
-    ref=[act("log", rows="$nath", args=lines(kind="message"))]),
-  T("who's in coletivo baile torto again", rows("rafa_m", "nath", "guga", "marcos_o", "ana_paula", "me"),
-    ref=[ans(kind="person", linked_to="$baile")]),
-  T("how much am i down in coletivo baile torto", val((-90, "BRL")),
-    ref=[ans(op="balance", kind="group", name="Coletivo Baile Torto", linked_to="$me")]),
-  T("settle up with rafael mendes in there, the speaker rental", diff(settle=[("Rafael Mendes", "160.00")]),
-    ref=[act("settle_up", rows="$rafa_m", args=lines(group="$baile"))]),
-  T("and what do i owe nath outside the group", rows("d_nath"),
-    ref=[ans(kind="debt", linked_to="$nath")]))
-
-S("T14-077", "ambiguous marcos ask log debt settle",
-  T("log a visit with marcos", ask("marcos_t", "marcos_o"),
-    ref=[act("log", kind="person", name="Marcos", args=lines(kind="visit")),
-         askc("marcos tavares the mechanic or marcos oliveira from the collective?", options="$marcos_t, $marcos_o")]),
-  T("the mechanic", diff(upd("marcos_t", date=ANY)),
-    ref=[act("log", rows="$marcos_t", args=lines(kind="visit"))]),
-  T("when's the oil change at marcos", rows("oil"),
-    ref=[ans(kind="event", name="Oil change at Marcos")]),
-  T("do i owe him for the brake pads", rows("d_marcos_t"),
-    ref=[ans(kind="debt", linked_to="$marcos_t")]),
-  T("settle it, paid him cash", diff(upd("d_marcos_t", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]),
-  T("what else do i owe", rows("d_junior", "d_nath", "d_patricia", "d_wesley"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]))
-
 S("T14-078", "trashed people restore where prev window decline",
   T("who's in the contacts trash", rows("felipe", "renata", "caio"),
     ref=[find(kind="person", trashed=True), ans(rows="@prev")]),
@@ -236,18 +205,6 @@ S("T14-094", "photo spans trashed restore undo",
   T("undo that", diff(trash("felipe_p")),
     ref=[act("undo")]))
 
-S("T14-095", "debt weekday from month span sum",
-  T("debts from friday", rows("d_guga", "d_wesley"),
-    ref=[ans(kind="debt", when=W(U("week", 0, weekday=5)))]),
-  T("debts from last month onward",
-    rows("d_patricia", "d_diego", "d_thiago", "d_kleber_old", "d_junior", "d_bianca", "d_rafa_s", "d_kleber", "d_nath",
-         "d_guga", "d_wesley", "d_larissa"),
-    ref=[find(kind="debt", when=W({"from": U("month", -1)})), ans(rows="@prev")]),
-  T("from monday to the end of october, what do i owe", rows("d_junior", "d_nath", "d_wesley"),
-    ref=[ans(kind="debt", when=W(span(U("week", -2, weekday=1), U("month", 0, name=10))), where='direction = "i_owe"')]),
-  T("total of those", val((495, "BRL")),
-    ref=[ans(op="sum", field="amount", within="@prev")]))
-
 S("T14-096", "six turns ambiguous folder refused delete move",
   T("delete the car folder", ask("car_docs_f", "car_pool_f"),
     ref=[act("delete", kind="folder", name="car"),
@@ -294,33 +251,8 @@ S("T14-099", "recoveries misspelling nickname log",
          search("dona neide", kind="person"),
          act("log", rows="$neide", args=lines(kind="visit"))]))
 
-S("T14-100", "seven turns mae medical group balance complete log ambiguous",
-  T("who's in mãe's medical bills", rows("patricia", "diego", "me"),
-    ref=[ans(kind="person", linked_to="$mae_g")]),
-  T("how's my balance in there", val((-10, "BRL")),
-    ref=[ans(op="balance", kind="group", name="Mãe's medical bills", linked_to="$me")]),
-  T("and diego's", val((-130, "BRL")),
-    ref=[ans(op="balance", kind="group", name="Mãe's medical bills", linked_to="$diego")]),
-  T("is call diego about mom's appointment open", rows("diego_call"),
-    ref=[ans(kind="task", name="Call Diego about Mom's appointment")]),
-  T("done, called him now. tick it and log the call",
-    diff(upd("diego_call", status="completed", completed=ANY), upd("diego", date=ANY)),
-    ref=[act("complete", rows="$diego_call", more=True),
-         act("log", rows="$diego", args=lines(kind="call"))]),
-  T("what tasks are still open in the mãe list", rows("mae_meds", "mae_exam", "mae_plan", "mae_split", "mae_rail", "plan_11"),
-    ref=[ans(kind="task", linked_to="$mae_l", where='status = "open"')]),
-  T("move mom's cardiology appointment to 9am", diff(upd("cardio_nov", date="2026-11-03T09:00")),
-    ref=[act("reschedule", kind="event", name="Mom's cardiology appointment", args=lines(to=U("day", 0, anchor="row", time="09:00"))),
-         act("reschedule", rows="$cardio_nov", args=lines(to=U("day", 0, anchor="row", time="09:00")))]))
-
 
 # --- follow-up turns appended to earlier sessions ---------------------------------------------
-
-X("T14-006",
-  T("and the one with bianka?", rows("d_bianca"),
-    ref=[ans(kind="person", name="Bianka"),
-         search("bianka", kind="person"),
-         ans(kind="debt", linked_to="$bianca")]))
 
 X("T14-008",
   T("who've i talked to from last week up to the twentieth", rows("otavio", "ana_paula", "kleber", "neide", "rafa_s", "patricia"),
@@ -374,10 +306,6 @@ X("T14-040",
   T("who did i see between friday 11am and today", rows("wesley", "guga", "junior", "larissa"),
     ref=[ans(kind="person", when=W(span(U("week", 0, weekday=5, time="11:00"), U("day", 0))))]))
 
-X("T14-047",
-  T("where do i stand with juninho", val((-640, "BRL")),
-    ref=[ans(op="balance", rows="$junior")]))
-
 X("T14-049",
   T("which list has both pay das mei and renew passport", rows("admin_l"),
     ref=[ans(kind="list", linked_to="$das, $passport")]))
@@ -394,15 +322,6 @@ X("T14-062",
     ref=[act("unstar", rows="$echo_doc", more=True),
          ans(kind="document", where="starred = yes")]))
 
-X("T14-070",
-  T("both of kleber's debts, settled or not", rows("d_kleber", "d_kleber_old"),
-    ref=[ans(kind="debt", linked_to="$kleber", where='status in ("open", "settled")')]))
-
-X("T14-073",
-  T("and from next monday to the end of december, what's on with nath",
-    rows("reh_1028", "reh_1104", "reh_1111", "reh_1118", "reh_1125", "baile_13"),
-    ref=[ans(kind="event", linked_to="$nath", when=W(span(U("week", 1, weekday=1), U("month", 0, name=12))))]))
-
 X("T14-081",
   T("and which lists aren't home", rows("carro_l", "dj_l", "mae_l", "admin_l", "compras_l"),
     ref=[ans(kind="list", where='area != "home"')]))
@@ -410,15 +329,3 @@ X("T14-081",
 X("T14-083",
   T("which locker items have a username on them", rows("gmail", "gov", "soundcloud", "uber_login", "+1"),
     ref=[ans(kind="locker item", where="username is set")]))
-
-X("T14-095",
-  T("any debts where the amount's missing", rows(),
-    ref=[ans(kind="debt", where="amount is empty")]))
-
-X("T14-011",
-  T("and me vs him overall, debts and all", val((-400, "BRL")),
-    ref=[comp(op="balance", rows="$junior"), ans(value="@prev")]))
-
-X("T14-095",
-  T("biggest open one each way", vgroups({"owes_me": (600, "BRL"), "i_owe": (400, "BRL")}),
-    ref=[comp(op="max", field="amount", kind="debt", where='status = "open"', group="direction"), ans(value="@prev")]))

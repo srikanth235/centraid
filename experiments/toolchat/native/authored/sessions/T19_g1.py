@@ -81,16 +81,6 @@ S("T19-106", "ask event nurse visit reschedule at-N",
   T("and baba's podiatrist to 6, it's right after my shift and the traffic is bad", diff(upd("podiatrist", date="2026-04-17T18:00")),
     ref=[act("reschedule", kind="event", name="Podiatrist for Baba", args=lines(to=U("day", 0, anchor="row", time="18:00")))]))
 
-S("T19-107", "event next nurse reschedule undo never_mind balance find",
-  T("when's baba's next nurse visit", rows("nurse_1"),
-    ref=[ans(kind="event", name="Nurse visit for Baba", when=W({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("push it to 7", diff(upd("nurse_1", date="2026-04-20T19:00")),
-    ref=[act("reschedule", rows="@prev", args=lines(to=U("day", 0, anchor="row", time="19:00")))]),
-  T("never mind, keep it at 6", diff(upd("nurse_1", date="2026-04-20T18:00")),
-    ref=[act("undo")]),
-  T("what do i owe the plumber, i never paid him properly for the sink", val((-350, "MAD")),
-    ref=[find(kind="person", where='role contains "plumber"'), ans(op="balance", rows="@prev")]))
-
 S("T19-108", "ask task insurance renewal reschedule",
   T("push the insurance renewal to next friday", ask("insurance_ph", "car_ins"),
     ref=[search("insurance", kind="task"),

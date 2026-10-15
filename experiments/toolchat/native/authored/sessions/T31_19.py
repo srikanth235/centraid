@@ -21,27 +21,6 @@ S("T31-234", "ask-missing-album-name create album newest-photo add-to-album",
   T("put it in the summer album", diff(link("+1", "p_tr_gdansk")),
     ref=[act("add_to", rows="$p_tr_gdansk", args=lines(to="$c1"))]))
 
-S("T31-235", "ask-missing-debt create kuba biggest count-open-small",
-  T("add a debt", ask(),
-    ref=[askc("Who, how much, and which way?")]),
-  T("kuba owes me 15 for the pizza", diff(new("debt", name=has("pizza"), amount=15, direction="owes_me"), link("new", "kuba")),
-    ref=[act("create", kind="debt", args=lines(person="$kuba", amount=15, direction="owes_me", name="the pizza"))]),
-  T("which of kuba's debts is the biggest", rows("d_kuba_gas"),
-    ref=[ans(kind="debt", linked_to="$kuba", order="amount desc", limit=1)]),
-  T("how many of kuba's open debts are under 40", val(2),
-    ref=[ans(op="count", kind="debt", linked_to="$kuba", where="status = open and amount < 40")]))
-
-S("T31-236", "ask-missing-rename group flat bills besides balance",
-  T("rename the group", ask(),
-    ref=[askc("Which group, and to what?")]),
-  T("flat bills to flat money", diff(upd("flat_bills", name="Flat money")),
-    ref=[act("edit", kind="group", name="flat bills", args="name: Flat money")]),
-  T("who's in it besides kuba", rows("ola", "me"),
-    ref=[ans(kind="person", linked_to="$flat_bills", exclude="$kuba")]),
-  T("and my own balance in that group", val((82, "PLN")),
-    ref=[search("Tomasz", kind="person"),
-         ans(op="balance", kind="group", name="Flat money", linked_to="$me")]))
-
 S("T31-237", "ask-missing-folder move document taxes-left older",
   T("move it to another folder", ask(),
     ref=[askc("Which document, and which folder?")]),
@@ -104,14 +83,3 @@ S("T31-242", "decline-out-of-scope phone mama then last-spoke log next-call",
   T("and when's my next call with mama in the diary", rows("mama_1108"),
     ref=[ans(kind="event", name="call mama", order="date asc", limit=1, when=J({"from": U("day", 0)}))]))
 
-# --- debts with three conditions ------------------------------------------------------------------------------
-
-S("T31-243", "values5 count-owed-big-year count-owed-me-big biggest-owed-me who",
-  T("how many open debts do i owe that are over 40 and from this year", val(4),
-    ref=[ans(op="count", kind="debt", where="direction = i_owe and status = open and amount > 40", when=J(U("year", 0)))]),
-  T("and how many of the ones people owe me are over 40", val(3),
-    ref=[ans(op="count", kind="debt", where="direction = owes_me and status = open and amount > 40")]),
-  T("biggest sum anyone owes me", rows("d_adi_tickets"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open", order="amount desc", limit=1)]),
-  T("and who's it with", rows("adrian"),
-    ref=[ans(kind="person", linked_to="$d_adi_tickets")]))

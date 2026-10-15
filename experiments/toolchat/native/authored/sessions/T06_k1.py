@@ -45,12 +45,6 @@ S("T06-K006", "referent list then the noun i3skill S1",
   T("done with the cables", diff(upd("xlr", status="completed", completed=ANY)),
     ref=[act("complete", rows="$xlr")]))
 
-S("T06-K007", "referent debt he it paid i3skill S1",
-  T("what's the beer crate thing", rows("d_kalle_beer"),
-    ref=[ans(kind="debt", name="Beer crate")]),
-  T("has he paid it", rows("d_kalle_beer"),
-    ref=[ans(rows="$d_kalle_beer")]))
-
 S("T06-K008", "perfect did we this month i3skill S2",
   T("how many rehearsals have we had this month", val(1),
     ref=[ans(kind="event", op="count", name="Band rehearsal", when=J({"from": U("month", 0), "to": U("day", 0)}))]))
@@ -88,16 +82,6 @@ S("T06-K014", "relation to event dates line i3skill S2",
 S("T06-K015", "read not write invoice sent i3skill S3",
   T("did i send the invoice to theater lindenau", rows("inv_jan", "inv_feb"),
     ref=[ans(kind="task", name="Send invoice to Theater Lindenau")]))
-
-S("T06-K016", "read debt i owe ines i3skill S3",
-  T("did i pay ines for the prints", rows("d_ines_prints"),
-    ref=[ans(kind="debt", name="Gig photo prints")]))
-
-S("T06-K017", "read debt two follow i3skill S3",
-  T("has kalle paid me for the beer", rows("d_kalle_beer"),
-    ref=[ans(kind="debt", name="Beer crate")]),
-  T("and the strings", rows("d_kalle_strings"),
-    ref=[ans(kind="debt", name="Guitar strings")]))
 
 S("T06-K018", "read cancelled open mic i3skill S3",
   T("was the open mic cancelled", rows("open_mic"),

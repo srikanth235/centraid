@@ -1,7 +1,7 @@
 """The decision drills (phase 7, slice M2, #1044): minimal pairs of one- or two-turn sessions, each isolating one decision.
 
     python3 authored/gen/drills.py gen --worlds T01,T02 --out OUT --per-world 200 --seed 7 [--cells C2,REF] [--jobs 4]
-                                       [--templates group,REF.nick] [--shares REF=0.06,C3=0.3] [--split train]
+                                       [--templates REF.nick] [--shares REF=0.06,C3=0.3] [--split train]
                                        [--avoid OUT1,OUT2] [--weights train-coverage.json] [--no-build]
     python3 authored/gen/drills.py measure --run RUN.jsonl --gold GOLD.jsonl [--cells OUT/cells.json] [--md FILE]
     python3 authored/gen/drills.py cells            # the cell universe with the count of templates and phrasings each has
@@ -50,9 +50,9 @@ A `$key` the pre-grounding block of the first message does not show cannot be re
 pair whose first turn names a row the block leaves out is not generated (over 1,380 built sessions it flags the one that failed that way
 and none of the others). Containers are in the system prompt and always resolve.
 
-The cells (a cell is the decision, not a production): C2 and C3 (reads, counts, sums, superlatives, grouped values and bounded
+The cells (a cell is the decision, not a production): C2 and C3 (reads, counts, superlatives, grouped values and bounded
 writes with exactly two or three constraints by authored/hardness.py), REF (a referent with a decoy in view: twins by role,
-group, nickname, date, container, state, focus, or an ask that offered both), CM (create versus modify), TWO (two writes, or a
+nickname, date, container, state, focus, or an ask that offered both), CM (create versus modify), TWO (two writes, or a
 write then a read), DATES (two dates in one message, every shape), CONT (containers and subtasks), FOLLOW (turn 2 leaning on
 turn 1: an ordinal, "the other", "what else" (exclude), "same for" (another person), "both", a narrowing of the rows shown
 (within), and writes on `@prev`), JUDGE (the judgements the model keeps) and AMB (an ambiguous write: the reference is the
@@ -109,16 +109,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common  # noqa: E402
 from common import AUTHORED, NATIVE, rng  # noqa: E402
 
-SECTIONS = {"people": "person", "groups": "group", "lists": "list", "events": "event", "tasks": "task",
+SECTIONS = {"people": "person", "lists": "list", "events": "event", "tasks": "task",
             "notebooks": "notebook", "notes": "note", "folders": "folder", "documents": "document", "albums": "album",
-            "photos": "photo", "debts": "debt", "locker": "locker item", "transactions": "transaction"}
-NOUN = {"person": "people", "group": "groups", "list": "lists", "event": "events", "task": "tasks",
+            "photos": "photo", "locker": "locker item", "transactions": "transaction"}
+NOUN = {"person": "people", "list": "lists", "event": "events", "task": "tasks",
         "notebook": "notebooks", "note": "notes", "folder": "folders", "document": "documents", "album": "albums",
-        "photo": "photos", "debt": "debts", "locker item": "locker items", "transaction": "transactions"}
-NOUN1 = {"person": "person", "group": "group", "list": "list", "event": "event", "task": "task",
+        "photo": "photos", "locker item": "locker items", "transaction": "transactions"}
+NOUN1 = {"person": "person", "list": "list", "event": "event", "task": "task",
          "notebook": "notebook", "note": "note", "folder": "folder", "document": "document", "album": "album",
-         "photo": "photo", "debt": "debt", "locker item": "locker item", "transaction": "transaction"}
-DATE_KINDS = {"person", "event", "task", "note", "document", "photo", "debt", "transaction"}  # kinds with a date field (kind card)
+         "photo": "photo", "locker item": "locker item", "transaction": "transaction"}
+DATE_KINDS = {"person", "event", "task", "note", "document", "photo", "transaction"}  # kinds with a date field (kind card)
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november",
           "december"]
@@ -344,8 +344,6 @@ class Vault:
                     r.update(role=x.get("role"), nickname=x.get("nickname"), met=x.get("met"),
                              cadence=x.get("cadence") or None, starred=bool(x.get("starred")),
                              date=parse_stamp(x.get("last_contacted")))
-                elif kind == "group":
-                    r.update(currency=(x.get("currency") or self.currency).upper(), members=list(x.get("members", [])) + ["me"])
                 elif kind == "list":
                     r.update(area=x.get("area"))
                 elif kind == "event":
@@ -376,10 +374,6 @@ class Vault:
                 elif kind == "photo":
                     r.update(date=parse_stamp(x.get("taken")) or self.epoch, starred=bool(x.get("starred")),
                              albums=list(x.get("albums", [])), people=list(x.get("people", [])))
-                elif kind == "debt":
-                    r.update(date=parse_stamp(x.get("date")) or self.epoch, amount=float(x["amount"]),
-                             direction=x.get("direction", "owes_me"), status="settled" if x.get("settled") else "open",
-                             person=x["person"])
                 elif kind == "locker item":
                     r.update(type=x.get("type", "login"), username=x.get("username"), url=x.get("url"),
                              notes=x.get("notes"), starred=bool(x.get("starred")))
@@ -495,10 +489,6 @@ class Vault:
             return a["key"] in self.links.get(r["key"], ())
         if (k, ak) == ("event", "person"):
             return a["key"] in r["attendees"]
-        if (k, ak) == ("person", "group"):
-            return r["key"] in a["members"]
-        if (k, ak) == ("group", "person"):
-            return a["key"] in r["members"]
         if (k, ak) == ("person", "event"):
             return r["key"] in a["attendees"]
         if (k, ak) == ("photo", "album"):
@@ -509,8 +499,6 @@ class Vault:
             return r["notebook"] == a["key"]
         if (k, ak) == ("document", "folder"):
             return r["folder"] == a["key"]
-        if (k, ak) == ("debt", "person"):
-            return r["person"] == a["key"]
         return None
 
     def count_of(self, r: dict, what: str) -> int | None:
@@ -537,16 +525,10 @@ class Vault:
             return len(r["people"])
         if (k, what) == ("photo", "album"):
             return len(r["albums"])
-        if (k, what) == ("group", "person"):
-            return len(r["members"])
-        if (k, what) == ("debt", "person"):
-            return 1
         if (k, what) == ("task", "person"):
             return sum(1 for o in self.links.get(r["key"], ()) if self.rows[o]["kind"] == "person")
         if (k, what) == ("task", "list"):
             return 1 if r["list"] else 0
-        if (k, what) == ("person", "group"):
-            return sum(1 for g in self.of("group") if r["key"] in g["members"])
         if (k, what) == ("person", "event"):
             return sum(1 for e in self.of("event") if r["key"] in e["attendees"])
         if (k, what) == ("person", "task"):
@@ -555,8 +537,6 @@ class Vault:
             return sum(1 for o in self.links.get(r["key"], ()) if self.rows[o]["kind"] == "note" and self.rows[o]["live"])
         if (k, what) == ("person", "photo"):
             return sum(1 for p in self.of("photo") if r["key"] in p["people"])
-        if (k, what) == ("person", "debt"):
-            return sum(1 for d in self.of("debt") if d["person"] == r["key"])
         if (k, what) == ("note", "notebook"):
             return 1 if r["notebook"] else 0
         if (k, what) == ("note", "person"):
@@ -769,12 +749,12 @@ def phone(frame: str, r) -> str:
     return text
 
 
-KIND_WORDS = r"(list|album|notebook|folder|group)"
+KIND_WORDS = r"(list|album|notebook|folder)"
 
 
 def tidy(msg: str) -> str:
     """Spaces, the space before punctuation, and the words a frame and a name both bring ('the the garden album' for a container
-    called The Garden, 'the bar prep study group group' for one called Bar Prep Study Group)."""
+    called The Garden, 'the family photos album album' for one called Family Photos Album)."""
     msg = re.sub(r"\s+", " ", msg).strip()
     msg = re.sub(r"\s+([?!.,])", r"\1", msg)
     msg = re.sub(r"\bthe the\b", "the", msg)
@@ -965,7 +945,7 @@ def when_forms(kind: str, p: Ph) -> list[str]:
     if kind == "task":
         return ["due {t}", "due on {t}"] if fam == "weekday" else ["due {t}"]
     forms = {"person": ["i contacted {t}", "contacted {t}"], "note": ["from {t}", "written {t}"], "document": ["from {t}", "added {t}"],
-             "photo": ["taken {t}", "from {t}"], "debt": ["from {t}", "dated {t}"]}[kind]
+             "photo": ["taken {t}", "from {t}"]}[kind]
     # a span says "from" itself, and "from friday" reads as a span that starts there: a day or a weekday takes the dated form
     return [f for f in forms if not (fam in ("span", "weekday", "day") and f.startswith("from "))]
 
@@ -1190,9 +1170,6 @@ class FacetBank:
         out = []
         out += self.text_facets("person", "role", [p["role"] for p in v.of("person") if p.get("role")], phrase_role, lambda r_: [role_head(r_)] if role_head(r_) and fold(role_head(r_)) != fold(r_) else [], cap=6, rank=4)
         out.append(Facet("starred", "person", [Opt("starred", [_tx(pre="starred"), _tx(pre="favourite")], where=[("starred", "=", "yes")])], frozenset({"starred"}), rank=1))
-        groups = [g for g in v.of("group") if len(v.select("person", linked_to=g["key"])) >= 2]
-        out.append(Facet("group", "person", [Opt(g["key"], [_tx(post=f"in {g['name'].lower()}"), _tx(post=f"from {g['name'].lower()}")], linked=g["key"]) for g in groups],
-                         frozenset({"linked"}), rank=3))
         out += self.text_facets("person", "met", [p["met"] for p in v.of("person") if p.get("met")], phrase_met, lambda m: text_parts(m, first=True)[:1], cap=10, rank=4)
         cad = []
         for n in (7, 14, 21, 30):
@@ -1201,28 +1178,6 @@ class FacetBank:
                     cad.append(Opt(f"cadence {op} {n}", [_tx(post=f"on a cadence of {w} {n} days")], where=[("cadence", op, n)]))
         out.append(Facet("cadence", "person", cad, frozenset({"cadence"}), rank=6))
         out.append(self.when_facet("person"))
-        return out
-
-    # -- debt
-    def f_debt(self):
-        v = self.v
-        out = []
-        out.append(Facet("direction", "debt", [Opt("owes_me", [_tx(post="owed to me"), _tx(post="that people owe me")], where=[("direction", "=", "owes_me")]),
-                                                Opt("i_owe", [_tx(post="i owe"), _tx(post="that i owe")], where=[("direction", "=", "i_owe")])],
-                         frozenset({"direction"}), rank=4))
-        out.append(Facet("status", "debt", [Opt("open", [_tx(pre="open"), _tx(pre="unpaid"), _tx(pre="outstanding")], where=[("status", "=", "open")]),
-                                             Opt("settled", [_tx(pre="settled"), _tx(pre="paid off"), _tx(pre="cleared")], where=[("status", "=", "settled")])],
-                         frozenset({"status"}), rank=1))
-        am = []
-        for n in (10, 20, 25, 30, 50, 100, 200):
-            for op, w in ((">", "over"), ("<", "under")):
-                if 0 < len(v.select("debt", where=[("amount", op, n)])) <= ROW_CAP:
-                    am.append(Opt(f"amount {op} {n}", [_tx(post=f"{w} {n}"), _tx(post=f"{'more' if op == '>' else 'less'} than {n}")], where=[("amount", op, n)]))
-        out.append(Facet("amount", "debt", am, frozenset({"amount"}), rank=6))
-        pp = sorted({d["person"] for d in v.of("debt")})
-        out.append(Facet("person", "debt", [Opt(p, [_tx(post=f"with {v.get(p)['name']}")], linked=p) for p in pp if p in v.rows and v.rows[p]["live"]],
-                         frozenset({"linked"}), rank=3))
-        out.append(self.when_facet("debt"))
         return out
 
     # -- note
@@ -1280,12 +1235,6 @@ class FacetBank:
         out.append(Facet("starred", "locker item", [Opt("starred", [_tx(pre="starred")], where=[("starred", "=", "yes")])], frozenset({"starred"}), rank=2))
         return out
 
-    def f_group(self):
-        v = self.v
-        cur = collections.Counter(g["currency"] for g in v.of("group"))
-        return [Facet("currency", "group", [Opt(f"currency {c}", [_tx(post=f"in {c.lower()}"), _tx(post=f"that use {c.lower()}")], where=[("currency", "=", c)])
-                                             for c, n in sorted(cur.items()) if 1 <= n <= 8], frozenset({"currency"}), rank=4)]
-
     def f_album(self):
         return []
 
@@ -1296,7 +1245,6 @@ SUPER = {  # kind -> [(order, label variants)]
     "task": [(("effort", "desc"), ["longest", "biggest"]), (("effort", "asc"), ["shortest", "quickest"]), (("priority", "asc"), ["highest priority", "most urgent"]),
              (("date", "asc"), ["earliest due", "soonest due"]), (("date", "desc"), ["latest due", "last due"])],
     "event": [(("duration", "desc"), ["longest"]), (("duration", "asc"), ["shortest"]), (("date", "asc"), ["earliest", "first"]), (("date", "desc"), ["latest", "last"])],
-    "debt": [(("amount", "desc"), ["largest", "highest"]), (("amount", "asc"), ["smallest", "lowest"])],
 }
 
 
@@ -1371,10 +1319,6 @@ COUNT_FRAMES = [("command", "count {X}"), ("command", "give me a count of {X}"),
                 ("question", "how many {X} do i have"), ("question", "how many {X}?"), ("question", "number of {X}?"),
                 ("question", "how many {X} are there"), ("question", "how many {X} have i got"), ("question", "{X} count?"),
                 ("indirect", "can you count {X}"), ("indirect", "could you tell me how many {X}"), ("indirect", "can you tell me how many {X} i have")]
-SUM_FRAMES = [("command", "total up {X}"), ("command", "add up {X}"), ("command", "give me the total of {X}"),
-              ("question", "how much are {X}"), ("question", "what do {X} come to"), ("question", "what's the total of {X}?"),
-              ("question", "total of {X}?"), ("question", "how much in all for {X}"), ("indirect", "can you total up {X}"),
-              ("indirect", "could you add up {X}"), ("indirect", "can you tell me the total of {X}")]
 SUPER_FRAMES = [("command", "show me the {X}"), ("command", "find the {X}"), ("command", "give me the {X}"), ("command", "pull up the {X}"),
                 ("question", "what's the {X}?"), ("question", "which is the {X}"), ("question", "which one is the {X}?"), ("question", "the {X}?"),
                 ("indirect", "can you show me the {X}"), ("indirect", "could you find the {X}"), ("indirect", "can you tell me the {X}"),
@@ -1430,7 +1374,7 @@ def fill(frame: str, x: str) -> str:
 # C2 / C3: reads, counts, sums, superlatives and bounded writes with exactly two or three constraints
 # =============================================================================================================
 
-KIND_W = {"task": 30, "event": 26, "person": 12, "debt": 8, "note": 6, "document": 4, "photo": 8, "locker item": 3, "group": 3, "list": 2, "folder": 2, "notebook": 2, "album": 2}
+KIND_W = {"task": 30, "event": 26, "person": 12, "note": 6, "document": 4, "photo": 8, "locker item": 3, "list": 2, "folder": 2, "notebook": 2, "album": 2}
 # a bounded write: kind, verb, a forced facet-free where, the gold diff of a changed row, frames key
 WRITES = {
     "task": [dict(verb="complete", force=[("status", "=", "open")], pre="open", diff=lambda k: g_upd(k, status="completed", completed=ANY),
@@ -1546,28 +1490,22 @@ def make_item(ctx: Ctx, cell: str, template: str, frame_id: str, feature: str, t
 
 # grouped values: `compute op [field] group=<field> <selector>` then `answer value=@prev`, one value per label of the group field
 # (values.rs: the label is the field's text, "none" for an unset one). (group field, op, number field) per kind.
-GROUPS = {"task": [("status", "count", None)], "event": [("status", "count", None)],
-          "debt": [("direction", "sum", "amount"), ("status", "sum", "amount"), ("direction", "count", None), ("status", "count", None)]}
-GROUP_WORDS = {"status": ["by status", "per status"], "direction": ["by direction", "by who owes who"]}
+GROUPS = {"task": [("status", "count", None)], "event": [("status", "count", None)]}
+GROUP_WORDS = {"status": ["by status", "per status"]}
 GROUP_COUNT_FRAMES = [("command", "count {X} {G}"), ("command", "break {X} down {G}"), ("command", "split {X} {G}"), ("command", "give me a count of {X} {G}"),
                       ("question", "how many {X} {G}?"), ("question", "how many {X} do i have {G}?"), ("question", "{X} count {G}?"),
                       ("question", "what's the split of {X} {G}?"), ("indirect", "can you break {X} down {G}"), ("indirect", "could you count {X} {G}"),
                       ("indirect", "can you split {X} {G}")]
-GROUP_SUM_FRAMES = [("command", "total up {X} {G}"), ("command", "add up {X} {G}"), ("command", "break the total of {X} down {G}"),
-                    ("command", "give me the total of {X} {G}"), ("question", "how much are {X} {G}?"), ("question", "what's the total of {X} {G}?"),
-                    ("question", "total of {X} {G}?"), ("question", "how much in all for {X} {G}?"), ("indirect", "can you total up {X} {G}"),
-                    ("indirect", "could you add up {X} {G}"), ("indirect", "can you break down the total of {X} {G}")]
+
 
 
 def group_values(v: Vault, keys: list[str], gfield: str, gop: str, gnum: str | None) -> dict:
-    """The gold of a grouped compute over `keys`: label -> count, or label -> (sum, currency)."""
+    """The gold of a grouped compute over `keys`: label -> count."""
     by: dict[str, list[dict]] = collections.defaultdict(list)
     for k in keys:
         row = v.get(k)
         by[str(row.get(gfield) if row.get(gfield) is not None else "none")].append(row)
-    if gop == "count":
-        return {label: len(rows) for label, rows in by.items()}
-    return {label: (round(sum(r_[gnum] for r_ in rows), 2), v.currency) for label, rows in by.items()}
+    return {label: len(rows) for label, rows in by.items()}
 
 
 KEEP_SPAN_WITH_DURATION = 0.5  # of the reads that have a duration condition and a date: the natural sessions keep 18% a from..to span, the drills 39%
@@ -1596,13 +1534,13 @@ def drop_duration_spans(chosen: list, flips: list, r, always: bool, says_duratio
 
 
 def sel_pair(ctx: Ctx, r, intent: str, target_k: int):
-    """One minimal pair of a selector drill. intent: read | count | sum | super | group | write."""
+    """One minimal pair of a selector drill. intent: read | count | super | group | write."""
     v, bank = ctx.v, ctx.bank
-    kinds = {"sum": ["debt"], "super": list(SUPER), "write": list(WRITES), "group": list(GROUPS)}.get(intent, list(KIND_W))
+    kinds = {"super": list(SUPER), "write": list(WRITES), "group": list(GROUPS)}.get(intent, list(KIND_W))
     weights = [KIND_W.get(k, 5) for k in kinds]
     kind = r.choices(kinds, weights)[0]
     facs = bank.facets(kind)
-    extra = {"count": 1, "sum": 1, "super": 1, "group": 1}.get(intent, 0)
+    extra = {"count": 1, "super": 1, "group": 1}.get(intent, 0)
     forced: list[Facet] = []
     spec = None
     gfield = gop = gnum = None
@@ -1656,9 +1594,8 @@ def sel_pair(ctx: Ctx, r, intent: str, target_k: int):
     if intent == "super":
         so = r.choice(sup_opts)
     flip = choose_flip(df.opts, (lambda o: len(evaluate(o))) if intent in ("count",) else
-                       ((lambda o: round(sum(v.get(k)["amount"] for k in evaluate(o)), 2) if evaluate(o) else None) if intent == "sum" else
-                        ((lambda o: group_values(v, evaluate(o), gfield, gop, gnum)) if intent == "group" else
-                         (lambda o: evaluate(o)))), r, wfn=(lambda o: tier_w(ctx, kind, o)))
+                       ((lambda o: group_values(v, evaluate(o), gfield, gop, gnum)) if intent == "group" else
+                        (lambda o: evaluate(o))), r, wfn=(lambda o: tier_w(ctx, kind, o)))
     if flip is None:
         return None
     oa, ob = flip
@@ -1689,8 +1626,8 @@ def sel_pair(ctx: Ctx, r, intent: str, target_k: int):
                 return None
         if any(len(s[3]) != 1 for s in sides) or sides[0][3] == sides[1][3]:
             return None
-    frames = ({"read": READ_FRAMES, "count": COUNT_FRAMES, "sum": SUM_FRAMES, "super": SUPER_FRAMES,
-               "group": GROUP_COUNT_FRAMES if gop == "count" else GROUP_SUM_FRAMES}[intent] if intent != "write" else VERB_FRAMES[spec.get("key", spec["verb"])])
+    frames = ({"read": READ_FRAMES, "count": COUNT_FRAMES, "super": SUPER_FRAMES,
+               "group": GROUP_COUNT_FRAMES}[intent] if intent != "write" else VERB_FRAMES[spec.get("key", spec["verb"])])
     gword = r.choice(GROUP_WORDS[gfield]) if intent == "group" else ""
     edit_n = r.choice(spec["edit"][1]) if intent == "write" and spec.get("edit") else None
     fi = r.randrange(len(frames))
@@ -1713,11 +1650,6 @@ def sel_pair(ctx: Ctx, r, intent: str, target_k: int):
         elif intent == "count":
             ref = [C("answer", op="count", **args)]
             gold = gold_val(len(keys))
-        elif intent == "sum":
-            ref = [C("answer", op="sum", field="amount", **args)]
-            if not keys:
-                return None
-            gold = gold_val((round(sum(v.get(k)["amount"] for k in keys), 2), ctx.v.currency))
         else:
             if not keys or len(keys) > 6:
                 return None
@@ -1760,7 +1692,7 @@ CELL_DOC = {
     "C2": "a read, count, sum, superlative, grouped value or bounded write with exactly two constraints; the pair flips one constraint's value",
     "C3": "the same with exactly three constraints",
     "C4": "the same with exactly four constraints (the hardest calls on val; no share by default: --shares C4=0.06)",
-    "REF": "a referent with a decoy in view (twins of the world); the message settles it (role, the role alone, a role clause that is no filter, group, nickname, date, container, state, focus, an ask); the pair flips which twin is meant",
+    "REF": "a referent with a decoy in view (twins of the world); the message settles it (role, the role alone, a role clause that is no filter, nickname, date, container, state, focus, an ask); the pair flips which twin is meant",
     "CM": "create versus modify with near-identical wording, and the create's fields as constraints; the pair flips the verb class",
     "TWO": "two writes on different rows in one message, or a write then a read of its result; the pair flips one of the rows",
     "DATES": "two dates in one message and every date shape, the hour conventions; the pair flips one date",
@@ -1790,11 +1722,11 @@ def register(cell, name, fn, weight=1.0, frames=0, needs_m1=False, asks=False):
 
 
 def _reg_selectors():
-    nf = {"read": len(READ_FRAMES), "count": len(COUNT_FRAMES), "sum": len(SUM_FRAMES), "super": len(SUPER_FRAMES), "write": 72,
-          "group": len(GROUP_COUNT_FRAMES) + len(GROUP_SUM_FRAMES)}
-    wt = {"read": 3.0, "count": 2.2, "sum": 0.8, "super": 1.2, "write": 2.0, "group": 0.9}
+    nf = {"read": len(READ_FRAMES), "count": len(COUNT_FRAMES), "super": len(SUPER_FRAMES), "write": 72,
+          "group": len(GROUP_COUNT_FRAMES)}
+    wt = {"read": 3.0, "count": 2.2, "super": 1.2, "write": 2.0, "group": 0.9}
     for k in (2, 3, 4):
-        for intent in ("read", "count", "sum", "super", "write", "group"):
+        for intent in ("read", "count", "super", "write", "group"):
             register(f"C{k}", f"{intent}", (lambda c, r, i=intent, kk=k: sel_pair(c, r, i, kk)), wt[intent], nf[intent])
 
 
@@ -1900,7 +1832,6 @@ VERBS = {
     "edit": dict(kinds=tuple(NOUN), gold=None, ok=lambda v, r: r["live"] and not r.get("me")),
     "reschedule": dict(kinds=("task", "event"), gold=None, ok=lambda v, r: r["live"] and r.get("status") != "cancelled" and r.get("date") is not None),
     "restore": dict(kinds=tuple(NOUN), gold=lambda v, k: g_restore(k), ok=lambda v, r: not r["live"]),
-    "settle_debt": dict(kinds=("debt",), gold=lambda v, k: g_upd(k, status="settled"), ok=lambda v, r: r["status"] == "open"),
 }
 VERB_FRAMES.update({
     "unstar": [("command", "unstar {X}"), ("command", "take the star off {X}"), ("command", "remove the star from {X}"), ("command", "un-favourite {X}"),
@@ -1956,13 +1887,13 @@ def twin_sets(v: Vault) -> dict[str, list[list[dict]]]:
             first[toks(p["name"])[0]].append(p)
     out["first"] = [x for x in first.values() if 2 <= len(x) <= 4]
     same = collections.defaultdict(list)
-    for kind in ("task", "event", "note", "document", "photo", "debt"):
+    for kind in ("task", "event", "note", "document", "photo"):
         for r_ in v.of(kind):
             same[(kind, tuple(toks(r_["name"])))].append(r_)
     out["same"] = [x for x in same.values() if 2 <= len(x) <= 12]
     cont = collections.defaultdict(list)
     for r_ in v.rows.values():
-        if r_["live"] and r_["kind"] in ("list", "album", "notebook", "folder", "group"):
+        if r_["live"] and r_["kind"] in ("list", "album", "notebook", "folder"):
             cont[tuple(toks(r_["name"]))].append(r_)
     out["container"] = [x for x in cont.values() if len({y["kind"] for y in x}) >= 2]
     return out
@@ -1982,10 +1913,10 @@ PG_VERB_FORMS = set("""stars starred starring unstarred deleted deleting deletes
 canceling cancels restored restoring restores logged logging logs reopened reopening rescheduled rescheduling postpone postponed push pushed move moved created
 creating new edited editing change changed update updated rename renamed added adding removed removing settled settling pay paid revealed revealing undone trash
 trashed pin pinned unpin archive archived mark marked open opened remind save saved create edit reschedule complete reopen cancel delete restore star unstar add to
-remove from log settle up debt reveal undo""".split())
+remove from log reveal undo""".split())
 PG_CAP = 8
-PG_CONTAINERS = {"group", "list", "notebook", "folder", "album"}
-KIND_ORDER = ["person", "group", "event", "task", "note", "document", "photo", "album", "debt", "locker item", "notebook", "folder", "list"]
+PG_CONTAINERS = {"list", "notebook", "folder", "album"}
+KIND_ORDER = ["person", "event", "task", "note", "document", "photo", "album", "locker item", "notebook", "folder", "list"]
 
 
 def spoken(text: str) -> list[str]:
@@ -2080,7 +2011,7 @@ def unseen_keys(v: "Vault", item: "Item") -> list[str]:
 
 UNNAMING = {"the", "a", "an", "to", "on", "in", "at", "for", "of", "and", "my", "with", "from", "by", "is", "be", "as", "up", "off", "out", "do", "did", "i", "me",
             "we", "you", "was", "just", "please", "now", "all", "s", "tick", "star", "unstar", "cancel", "delete", "restore", "complete", "reopen", "move",
-            "push", "add", "put", "file", "remove", "take", "mark", "log", "settle", "reveal", "undo"}
+            "push", "add", "put", "file", "remove", "take", "mark", "log", "reveal", "undo"}
 PICKED = {"it", "them", "that", "this", "those", "these", "he", "she", "her", "him", "his", "they", "one", "ones", "too", "also", "same", "again", "both",
           "other", "another", "first", "second", "third", "last", "latest", "previous", "next", "earlier", "later", "open", "done", "finished", "paid", "old",
           "new", "oldest", "newest"}
@@ -2352,36 +2283,6 @@ def ref_clause(ctx: Ctx, r):
             make_item(ctx, "REF", "clause", f"{verb}.{fi}", "a role clause: a filter only when the name is shared", [sides[1]], tags=("person", verb)))
 
 
-def ref_group(ctx: Ctx, r):
-    """R2: two people share a first name; the message says which by the group they are in."""
-    v = ctx.v
-    cands = []
-    for a, b, S in twin_person_pairs(v):
-        if a["key"] >= b["key"]:
-            continue
-        ga = [g for g in v.of("group") if a["key"] in g["members"] and b["key"] not in g["members"]]
-        gb = [g for g in v.of("group") if b["key"] in g["members"] and a["key"] not in g["members"]]
-        if ga and gb:
-            cands.append((a, b, ga, gb))
-    if not cands:
-        return None
-    a, b, ga, gb = r.choice(cands)
-    ga_, gb_ = r.choice(ga), r.choice(gb)
-    verb = _person_verb(v, a, b, r)
-    first = a["name"].split()[0]
-    conn = r.choice(["from {g}", "in {g}", "from the {g} group", "that's in {g}"])
-    fi, mood, frame = verb_frame(ctx, r, verb)
-    turns = []
-    for P, G in ((a, ga_), (b, gb_)):
-        if v.select("person", name=first, linked_to=G["key"]) != [P["key"]]:
-            return None
-        x = f"{first.lower()} " + conn.format(g=G["name"].lower())
-        ref = C("act", verb=verb, kind="person", name=first, linked_to=f"${G['key']}", args=VERBS[verb].get("args"))
-        turns.append(Turn(fill(frame, x), gold_diff([VERBS[verb]["gold"](v, P["key"])]), [ref]))
-    return (make_item(ctx, "REF", "group", f"{verb}.{fi}", "which twin: group", [turns[0]], tags=("person", verb)),
-            make_item(ctx, "REF", "group", f"{verb}.{fi}", "which twin: group", [turns[1]], tags=("person", verb)))
-
-
 def ref_nick(ctx: Ctx, r):
     """R7: two people share a first name and one has a nickname: the nickname names that one, the full name the other."""
     v = ctx.v
@@ -2496,7 +2397,7 @@ def ref_state(ctx: Ctx, r):
             make_item(ctx, "REF", "state", f"complete-reopen.{i}", "verb: complete vs reopen", [turns[1]], tags=("task",)))
 
 
-CHILD_KIND = {"list": "task", "album": "photo", "notebook": "note", "folder": "document", "group": "person"}
+CHILD_KIND = {"list": "task", "album": "photo", "notebook": "note", "folder": "document"}
 CONT_READ_FRAMES = [("command", "show me what's in the {n} {kw}"), ("command", "open up the {n} {kw}"), ("command", "list everything in the {n} {kw}"),
                     ("command", "pull up the {n} {kw}"), ("question", "what's in the {n} {kw}?"), ("question", "what's in my {n} {kw}"),
                     ("question", "what have i got in the {n} {kw}?"), ("question", "the {n} {kw}?"),
@@ -2710,7 +2611,7 @@ def ref_ask_pick(ctx: Ctx, r):
             make_item(ctx, "REF", "ask-pick", fam, "which twin: after an ask, date", sides[1], shape=p2.shape, tags=("event",)))
 
 
-for _n, _f, _w, _fr in (("role", ref_role, 0.5, 48), ("clause", ref_clause, 0.5, 48), ("role-only", ref_roleonly, 1.6, 48), ("nick", ref_nick, 0.9, 48), ("group", ref_group, 1.0, 48), ("date", ref_date, 2.2, 36), ("state", ref_state, 1.2, 12),
+for _n, _f, _w, _fr in (("role", ref_role, 0.5, 48), ("clause", ref_clause, 0.5, 48), ("role-only", ref_roleonly, 1.6, 48), ("nick", ref_nick, 0.9, 48), ("date", ref_date, 2.2, 36), ("state", ref_state, 1.2, 12),
                         ("container", ref_container, 1.4, 21), ("focus", ref_focus, 2.0, 16), ("ask-pick", ref_ask_pick, 1.4, 12)):
     register("REF", _n, _f, _w, _fr)
 
@@ -3274,7 +3175,7 @@ BETWEEN_COUNT = [("command", "count {X} between {a} and {b}"), ("question", "how
 def dates_between(ctx: Ctx, r):
     """D2: a span between two dates: 'what's on between monday and wednesday'; the pair moves one end."""
     v = ctx.v
-    kind = r.choice(["event", "task", "event", "task", "photo", "debt", "note", "document"])
+    kind = r.choice(["event", "task", "event", "task", "photo", "note", "document"])
     phs = point_phrases(ctx, future=False)
     phs = [p for p in phs if p.fam in ("weekday", "day", "abs")]
     for _ in range(30):
@@ -3337,7 +3238,7 @@ OPEN_COUNT = [("command", "count {X} {o}"), ("question", "how many {X} {o}?"), (
 def dates_open(ctx: Ctx, r):
     """D6: a span with one end open: 'by friday' against 'after friday', 'before' against 'from ... on'."""
     v = ctx.v
-    kind = r.choice(["event", "task", "task", "photo", "debt", "note", "document"])
+    kind = r.choice(["event", "task", "task", "photo", "note", "document"])
     wd = r.randrange(7)
     use_abs = r.random() < 0.3
     if use_abs:
@@ -3516,7 +3417,7 @@ for _n, _f, _w, _fr in (("from-to", dates_from_to, 2.0, len(MOVE_FROM_TO)), ("be
 # CONT: containers and subtasks
 # =============================================================================================================
 
-CONT_OF = {"task": ("list", "list"), "note": ("notebook", "notebook"), "document": ("folder", "folder"), "photo": ("album", "album"), "person": ("group", "group")}
+CONT_OF = {"task": ("list", "list"), "note": ("notebook", "notebook"), "document": ("folder", "folder"), "photo": ("album", "album")}
 SINGLE = {"task": lambda r: r["list"], "note": lambda r: r["notebook"], "document": lambda r: r["folder"]}  # one container per row
 
 
@@ -3527,8 +3428,6 @@ def containers_of(v: Vault, row: dict) -> list[str]:
         return [c] if c else []
     if k == "photo":
         return [a for a in row["albums"] if v.rows[a]["live"]]
-    if k == "person":
-        return [g["key"] for g in v.of("group") if row["key"] in g["members"]]
     return []
 
 
@@ -3611,7 +3510,7 @@ IN_FRAMES = [("command", "check whether {X} is in the {C} {kw}"), ("command", "t
 def cont_member(ctx: Ctx, r):
     """'is X in the Y album': a row when it is, an empty answer when it is not; the pair flips the container."""
     v = ctx.v
-    kind = r.choice(["photo", "task", "note", "document", "person"])
+    kind = r.choice(["photo", "task", "note", "document"])
     rows = [x for x in v.of(kind) if containers_of(v, x) and name_options(v, x) and not x.get("me")]
     if not rows:
         return None
@@ -3649,7 +3548,7 @@ MOVE_FRAMES = [("command", "move {X} to the {C} {kw}"), ("command", "put {X} in 
 def cont_move(ctx: Ctx, r):
     """'move X to the Y list': the pair flips the destination container (the old link goes where a row has one container)."""
     v = ctx.v
-    kind = r.choice(["task", "note", "document", "photo", "person"])
+    kind = r.choice(["task", "note", "document", "photo"])
     rows = [x for x in v.of(kind) if name_options(v, x) and not x.get("me") and (kind != "task" or x["status"] in ACTIVE)]
     if not rows:
         return None
@@ -3791,10 +3690,10 @@ class Gaps:
 # richer facets (numbers with and without units, every comparison, link counts, status sets) and span phrases
 # =============================================================================================================
 
-PLURAL = {"person": "people", "event": "events", "task": "tasks", "note": "notes", "photo": "photos", "debt": "debts", "group": "groups",
+PLURAL = {"person": "people", "event": "events", "task": "tasks", "note": "notes", "photo": "photos",
           "document": "documents", "album": "albums", "list": "lists", "notebook": "notebooks", "folder": "folders"}
-COUNT_PAIRS = {"person": ["group", "event", "task", "note", "photo", "debt"], "task": ["person", "list", "task"], "event": ["person"], "note": ["notebook", "person"],
-               "document": ["folder"], "photo": ["album", "person"], "debt": ["person"], "group": ["person"], "list": ["task"], "notebook": ["note"],
+COUNT_PAIRS = {"person": ["event", "task", "note", "photo"], "task": ["person", "list", "task"], "event": ["person"], "note": ["notebook", "person"],
+               "document": ["folder"], "photo": ["album", "person"], "list": ["task"], "notebook": ["note"],
                "folder": ["document"], "album": ["photo"]}
 
 
@@ -3829,7 +3728,7 @@ def num_phrase(op: str, n: int, unit_word: str | None, unit_in_text: bool, kind_
 
 class RichBank(FacetBank):
     NUMERIC = {("task", "effort"): ((15, 20, 30, 45, 60, 90, 120), "minutes", "time", 6), ("event", "duration"): ((30, 45, 60, 90, 120, 180), "minutes", "time", 6),
-               ("person", "cadence"): ((7, 14, 21, 30), "days", "plain", 6), ("debt", "amount"): ((10, 20, 25, 30, 50, 100, 200), None, "money", 6)}
+               ("person", "cadence"): ((7, 14, 21, 30), "days", "plain", 6)}
 
     def numeric_facet(self, kind: str, field: str) -> Facet | None:
         v = self.v
@@ -3838,8 +3737,6 @@ class RichBank(FacetBank):
         opts = []
         for n in thresholds:
             for op in (">", "<", ">=", "<=", "=", "!="):
-                if kind == "debt" and field == "amount" and op in ("=", "!=") and n not in {int(d["amount"]) for d in v.of("debt") if float(d["amount"]).is_integer()}:
-                    continue
                 res = v.select(kind, where=[(field, op, n)])
                 if not (0 < len(res) <= ROW_CAP + 6):
                     continue
@@ -3909,13 +3806,6 @@ class RichBank(FacetBank):
             out.append(Facet("status-in", "event", [Opt("status in tentative or cancelled", [_tx(pre="tentative or cancelled")], where=[("status", "in", ["tentative", "cancelled"])]),
                                                       Opt("status in tentative", [_tx(pre="unconfirmed"), _tx(pre="not yet confirmed")], where=[("status", "in", ["tentative"])])],
                              frozenset({"status"}), rank=1))
-        if kind == "debt":
-            out.append(Facet("status-in", "debt", [Opt("status in open", [_tx(pre="still-open")], where=[("status", "in", ["open"])]),
-                                                     Opt("status in settled", [_tx(pre="paid-up")], where=[("status", "in", ["settled"])])],
-                             frozenset({"status"}), rank=1))
-            out.append(Facet("direction-in", "debt", [Opt("direction in owes_me", [_tx(post="people owe me")], where=[("direction", "in", ["owes_me"])]),
-                                                        Opt("direction in i_owe", [_tx(post="i owe people")], where=[("direction", "in", ["i_owe"])])],
-                             frozenset({"direction"}), rank=4))
         if kind == "document":
             out.append(Facet("unstarred", "document", [Opt("starred != yes", [_tx(pre="unstarred"), _tx(pre="un-starred")], where=[("starred", "!=", "yes")])],
                              frozenset({"starred"}), rank=1))
@@ -4158,13 +4048,13 @@ def follow_else(ctx: Ctx, r):
 
 
 SAME_T2 = ["same for {p}", "and {p}?", "what about {p}", "how about {p}", "and for {p}", "{p} too?", "same with {p}", "and {p}'s?"]
-SAME_KINDS = {"event": ("events with {p}", "what's on with {p}", "event"), "photo": ("photos of {p}", "what photos have {p}", "photo"), "debt": ("debts with {p}", "what's open with {p}", "debt")}
+SAME_KINDS = {"event": ("events with {p}", "what's on with {p}", "event"), "photo": ("photos of {p}", "what photos have {p}", "photo")}
 
 
 def follow_same_for(ctx: Ctx, r):
     """F3: turn 1 reads something about a person, turn 2 'same for B' keeps the call and swaps the person."""
     v = ctx.v
-    kind = r.choice(["event", "event", "photo", "debt"])
+    kind = r.choice(["event", "event", "photo"])
     people = [p for p in v.of("person") if not p.get("me") and 1 <= len(v.select(kind, linked_to=p["key"])) <= ROW_CAP]
     if len(people) < 3:
         return None
@@ -4255,7 +4145,7 @@ def follow_within(ctx: Ctx, r):
     """F8: turn 1 lists a set, turn 2 narrows it ('which of those are due friday'): `within=@prev` plus one more constraint;
     both siblings share turn 1 and differ in the narrowing."""
     v, bank = ctx.v, ctx.bank
-    kind = r.choice(["task", "task", "event", "debt", "person", "photo"])
+    kind = r.choice(["task", "task", "event", "person", "photo"])
     facs = bank.facets(kind)
     vi = r.randrange(4)
     for _ in range(12):
@@ -4433,7 +4323,6 @@ PREV_FRAMES = {
     "star": ["star them", "star all of those", "give them a star", "favourite them", "can you star them", "could you star all of those", "add stars to those", "star the lot"],
     "reopen": ["reopen them", "put those back on my list", "un-tick all of those", "reopen all of them", "can you reopen them", "could you put those back", "mark them as not done", "open them up again"],
     "restore": ["restore them", "bring those back", "undelete them", "restore all of those", "can you restore them", "could you bring them back", "put them back", "get those back"],
-    "settle_debt": ["mark those as settled", "settle them", "mark them paid", "those are all settled now", "can you settle those", "could you mark them as paid", "settle all of those", "tick those off as paid"],
     "edit-event": ["make them {n} minutes", "set them to {n} minutes", "change them to {n} minutes long", "make those {n} minutes each", "can you make them {n} minutes",
                    "could you set those to {n} minutes", "they should be {n} minutes", "update them to {n} minutes"],
     "edit-task": ["set them to {n} minutes", "make them {n} minutes of effort", "give them {n} minutes each", "estimate {n} minutes for them", "can you set those to {n} minutes",
@@ -4448,7 +4337,7 @@ PREV_FRAMES = {
 }
 PREV_KINDS = {"delete": ["person", "task", "event", "note", "document", "photo", "locker item"], "unstar": ["person", "document", "photo", "locker item"],
               "star": ["photo", "locker item", "person", "document"], "reopen": ["task"], "restore": ["task", "event", "note", "document", "photo", "person", "locker item"],
-              "settle_debt": ["debt"], "edit": ["event", "task", "note", "person", "list", "folder", "album", "notebook", "group", "document", "photo"], "reschedule": ["event", "task"]}
+              "edit": ["event", "task", "note", "person", "list", "folder", "album", "notebook", "document", "photo"], "reschedule": ["event", "task"]}
 NAME_BANK = ["Spring Clear-out", "Shared Stuff", "Misc", "Keepers", "To Sort", "Archive", "Family", "Admin", "Hold", "Later"]
 
 
@@ -4462,9 +4351,6 @@ def prev_forced(ctx: Ctx, verb: str, kind: str) -> list[Facet]:
         return [Facet("unstarred", kind, [Opt("starred = no", [_tx(pre="unstarred")], where=[("starred", "=", "no")])], frozenset({"starred"}), rank=1)]
     if verb == "reopen":
         o = next((o for o in f["status"].opts if o.id == "completed"), None) if "status" in f else None
-        return [Facet("status", kind, [o], frozenset({"status"}), rank=1)] if o else []
-    if verb == "settle_debt":
-        o = next((o for o in f["status"].opts if o.id == "open"), None) if "status" in f else None
         return [Facet("status", kind, [o], frozenset({"status"}), rank=1)] if o else []
     if verb == "reschedule" and kind == "event":
         return [Facet("status", kind, [Opt("tentative", [_tx(pre="tentative")], where=[("status", "=", "tentative")])], frozenset({"status"}), rank=1)]
@@ -4485,10 +4371,10 @@ def prev_write(ctx: Ctx, r):
     verb, kind = r.choices(cells, ws)[0]
     if verb == "restore":
         return prev_restore(ctx, r, kind)
-    if kind in ("list", "folder", "album", "notebook", "group", "document", "photo") and verb == "edit":
+    if kind in ("list", "folder", "album", "notebook", "document", "photo") and verb == "edit":
         return prev_rename(ctx, r, kind)
     forced = prev_forced(ctx, verb, kind)
-    if verb in ("unstar", "star", "reopen", "settle_debt", "reschedule") and not forced:
+    if verb in ("unstar", "star", "reopen", "reschedule") and not forced:
         return None
     facs = [f for f in ctx.bank.facets(kind) if not (forced and f.groups & set().union(*[x.groups for x in forced]))]
     if verb == "reschedule" and kind == "event":

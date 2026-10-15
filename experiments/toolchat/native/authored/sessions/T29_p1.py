@@ -139,16 +139,6 @@ S("T29-046-P", "where-four person-count narrow-when two-writes complete para",
     ref=[act("complete", kind="task", name="dog food", more=True),
          act("complete", kind="task", name="kitty spreadsheet")]))
 
-S("T29-050-P", "ask-missing create-group members-new two-calls para",
-  T("start a new group", ask(),
-    ref=[askc("What should the group be called, and which currency?")]),
-  T("call it weekend riders, shillings, kip and juma in it",
-    diff(new("group", name="Weekend Riders", currency="KES"), link("new", "me"), link("new", "kip"), link("new", "juma")),
-    ref=[act("create", args=lines(kind="group", name="Weekend Riders", currency="KES"), more=True),
-         act("add_to", rows="$kip, $juma", args="to: $new")]),
-  T("members?", rows("me", "kip", "juma"),
-    ref=[ans(kind="person", linked_to="$c1")]))
-
 S("T29-054-P", "repair-unit container-subtasks narrow where when exclude write-read role-search log para",
   T("karen house, which sub-tasks are open",
     rows("karen_dwgs", "karen_roof", "karen_boq", "karen_tiles", "inv_faith_sep", "karen_mockup"),
@@ -166,33 +156,6 @@ S("T29-054-P", "repair-unit container-subtasks narrow where when exclude write-r
          ans(kind="task", where="status = open", when=J(U("week", 2, weekday=1)), exclude="$karen_roof")]),
   T("engineer, log a call", diff(upd("peter", date=ANY)),
     ref=[search("engineer"), act("log", rows="$peter", args="kind: call")]))
-
-S("T29-058-P", "compute-max value order-limit decline-text repair-create-field count-open para",
-  T("largest amount owed to me?", val((5000, "KES")),
-    ref=[comp(op="max", field="amount", kind="debt", where="direction = owes_me and status = open"),
-         ans(value="@1")]),
-  T("whose is it", rows("d_naomi"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open", order="amount desc", limit=1)]),
-  T("send her a text about it", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("on friday i need to chase her for it, add a task", diff(new("task", name=has("chase"), date="2026-09-25")),
-    ref=[bad(act("create", args="kind: task\nname: Chase Naomi for the bus fare\ndue: friday")),
-         act("create", args=lines(kind="task", name="Chase Naomi for the bus fare", date=U("week", 0, weekday=5)))]),
-  T("total number of open debts", val(10),
-    ref=[ans(op="count", kind="debt", where="status = open")]))
-
-S("T29-061-P", "debts bulk settle-debt over-ten-thousand before-august sum owes-me year repair-sum-field ambiguous-debt para",
-  T("from before august, settle my debts over 10000",
-    diff(upd("d_lena", status="settled"), upd("d_otieno", status="settled")),
-    ref=[find(kind="debt", where="direction = i_owe and status = open and amount > 10000", when=J({"to": D("2026-07-31")})),
-         act("settle_debt", rows="@prev")]),
-  T("total owed to me this year, all in", val((8300, "KES")),
-    ref=[bad(ans(op="sum", kind="debt", where="direction = owes_me and status = open", when=J(U("year", 0)))),
-         ans(op="sum", field="amount", kind="debt", where="direction = owes_me and status = open", when=J(U("year", 0)))]),
-  T("wambs' debt, settle it", ask("d_wambui_wifi", "d_wambui_tokens"),
-    ref=[act("settle_debt", kind="debt", linked_to="$wambui")]),
-  T("wifi", diff(upd("d_wambui_wifi", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="wifi", linked_to="$wambui")]))
 
 S("T29-064-P", "photos docs trash bulk-star september count-person-count exclude archive past-window restore search-miss ambiguous-note pin para",
   T("unstarred things in the karen site album from september, give them stars",
@@ -221,16 +184,6 @@ S("T29-064-P", "photos docs trash bulk-star september count-person-count exclude
     ref=[search("lamu"), ans(kind="photo", name="lamu", when=J(U("month", 0, name=8)))]),
   T("electrician for karen site?", rows(),
     ref=[search("electrician"), ans(kind="person", name="electrician")]))
-
-S("T29-067-P", "r2 same-word possessor-vs-relation debt person baba otieno empty settle para",
-  T("baba, what do i owe him", rows(),
-    ref=[ans(kind="debt", linked_to="$baba")]),
-  T("and the hospital share with baba", rows("d_otieno"),
-    ref=[ans(kind="debt", name="hospital share")]),
-  T("that one's owed to whom", rows("otieno"),
-    ref=[ans(kind="person", linked_to="$d_otieno")]),
-  T("mark it settled", diff(upd("d_otieno", status="settled")),
-    ref=[act("settle_debt", rows="$d_otieno")]))
 
 S("T29-071-P", "r2 create-args locker login username-label type-implied wifi inert-purpose star-new para",
   T("nca portal login please, username a.odhiambo, url nca.go.ke, it's for the site inspections",

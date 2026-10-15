@@ -8,9 +8,7 @@ Persona: Liam O'Brien, 61, a retired primary-school teacher in Galway (Salthill)
 daughter Aoife (Cian, 8, and Saoirse, 5) lives ten minutes away, son Conor and his baby Oisin are in
 Dublin. Liam minds the grandchildren on Wednesdays, coaches the under-12 hurlers at Kilcorran GAA, runs
 the Claddagh Book Club kitty and has a long list of medical appointments (cardiology, physio for the
-knee, hearing, eyes). His brother Declan ("Dec") lives in Boston; the one foreign-currency position is
-the USD group "Boston Trip" (a vault debt can only be in the vault's own currency, so the USD money
-lives in the group, where Declan is owed it). The vault is in EUR.
+knee, hearing, eyes). His brother Declan ("Dec") lives in Boston. The vault is in EUR.
 
 Built-in ambiguity: two Seans (Sean Murphy, GAA chairman; Sean Burke, book club), two Declans (his brother and the
 optician Declan Joyce) and two Marys (Mary Keane,
@@ -18,7 +16,7 @@ book club; Mary O'Brien, Maura's sister), look-alike events (Cardiology clinic v
 knee vs Physio review, Hurling training vs Hurling match, Dentist - Liam vs Dentist - Cian), near-duplicate
 tasks (four Pay ESB bill, five Order repeat prescription, two Book Cian's communion tasks), nicknames (Mo,
 Dec, Granda, Fr Tom), hard-to-spell names (Siobhan Ni Chonghaile, Caoimhe Ni Dhomhnaill, Tadhg O Se),
-cancelled events, completed and cancelled tasks, an empty group and an empty folder, and trashed rows of every
+cancelled events, completed and cancelled tasks, an empty folder, and trashed rows of every
 trashable kind (one inside the 30-day restore window, one past it).
 """
 from __future__ import annotations
@@ -80,49 +78,6 @@ people = [
     {"key": "old_coach", "name": "Ciaran Naughton", "role": "old coach", "trashed": "2027-02-27T10:00"},
 ]
 
-groups = [
-    {"key": "bookclub", "name": "Book Club Kitty", "currency": "EUR",
-     "members": ["siobhan", "mary_k", "sean_b", "brendan"], "created": "2026-12-05T20:00"},
-    {"key": "gaa", "name": "Kilcorran Coaches Fund", "currency": "EUR",
-     "members": ["tadhg", "padraig", "caoimhe", "sean_m"], "created": "2026-12-10T20:00"},
-    {"key": "family", "name": "Family Birthdays", "currency": "EUR", "members": ["aoife", "conor", "maura"],
-     "created": "2026-12-15T20:00"},
-    {"key": "boston", "name": "Boston Trip", "currency": "USD", "members": ["declan", "kathleen", "jack"],
-     "created": "2026-12-20T20:00"},
-    {"key": "golf", "name": "Golf Society Pot", "currency": "EUR", "members": ["gerry", "brendan", "sean_m"],
-     "created": "2027-01-05T20:00"},
-    {"key": "camino", "name": "Camino 2027", "currency": "EUR", "members": ["gerry", "tadhg"],
-     "created": "2027-02-20T20:00"},  # empty on purpose: no expenses yet
-]
-
-expenses = [
-    {"group": "bookclub", "name": "Book order for March", "amount": 96, "paid_by": "siobhan",
-     "split": ["me", "siobhan", "mary_k", "sean_b"], "date": "2027-02-10"},
-    {"group": "bookclub", "name": "Wine and cheese", "amount": 60, "paid_by": "me",
-     "split": ["me", "siobhan", "mary_k", "sean_b", "brendan"], "date": "2027-03-04"},
-    {"group": "bookclub", "name": "Christmas dinner deposit", "amount": 150, "paid_by": "mary_k",
-     "split": ["me", "siobhan", "mary_k", "brendan"], "date": "2026-12-12"},
-    {"group": "gaa", "name": "New sliotars", "amount": 180, "paid_by": "tadhg", "split": ["me", "tadhg", "padraig"],
-     "date": "2027-02-17"},
-    {"group": "gaa", "name": "Training bibs", "amount": 120, "paid_by": "me", "split": ["me", "tadhg", "caoimhe"],
-     "date": "2027-02-24"},
-    {"group": "gaa", "name": "Minibus diesel", "amount": 75, "paid_by": "padraig", "split": ["me", "padraig", "sean_m"],
-     "date": "2027-03-01"},
-    {"group": "family", "name": "Maura's birthday cake", "amount": 48, "paid_by": "aoife", "split": ["me", "aoife", "conor"],
-     "date": "2027-01-23"},
-    {"group": "family", "name": "Cian's birthday present", "amount": 90, "paid_by": "me", "split": ["me", "maura"],
-     "date": "2027-02-27"},
-    {"group": "boston", "name": "Fenway tickets", "amount": 240, "paid_by": "declan",
-     "split": ["me", "declan", "kathleen", "jack"], "date": "2026-12-27"},
-    {"group": "boston", "name": "Dinner in the North End", "amount": 180, "paid_by": "me",
-     "split": ["me", "declan", "kathleen"], "date": "2026-12-28"},
-    {"group": "boston", "name": "Hire car", "amount": 310, "paid_by": "jack", "split": ["me", "declan", "jack"],
-     "date": "2026-12-29"},
-    {"group": "golf", "name": "Society prizes", "amount": 120, "paid_by": "gerry", "split": ["me", "gerry", "brendan"],
-     "date": "2027-02-06"},
-    {"group": "golf", "name": "Fees for the outing", "amount": 210, "paid_by": "me", "split": ["me", "gerry", "sean_m"],
-     "date": "2027-02-20"},
-]
 
 lists = [
     {"key": "house_list", "name": "House", "area": "home"},
@@ -473,38 +428,6 @@ photos = [
      "trashed": "2027-01-28T09:00"},
 ]
 
-# ----------------------------------------------------------------------------------------------
-# debts
-# ----------------------------------------------------------------------------------------------
-
-debts = [
-    {"key": "d_aoife_cake", "person": "aoife", "direction": "owes_me", "amount": 16, "name": "cake share",
-     "date": "2027-01-23"},
-    {"key": "d_mary_k", "person": "mary_k", "direction": "i_owe", "amount": 37.5, "name": "Christmas dinner deposit",
-     "date": "2026-12-12"},
-    {"key": "d_siobhan", "person": "siobhan", "direction": "i_owe", "amount": 24, "name": "March books",
-     "date": "2027-02-10"},
-    {"key": "d_sean_b", "person": "sean_b", "direction": "owes_me", "amount": 12, "name": "wine and cheese share",
-     "date": "2027-03-04"},
-    {"key": "d_tadhg", "person": "tadhg", "direction": "i_owe", "amount": 60, "name": "sliotars share",
-     "date": "2027-02-17"},
-    {"key": "d_padraig", "person": "padraig", "direction": "i_owe", "amount": 25, "name": "minibus diesel share",
-     "date": "2027-03-01"},
-    {"key": "d_gerry", "person": "gerry", "direction": "owes_me", "amount": 70, "name": "golf outing fees",
-     "date": "2027-02-20"},
-    {"key": "d_declan", "person": "declan", "direction": "i_owe", "amount": 140, "name": "Boston hire car and tickets in euro",
-     "date": "2026-12-29"},
-    {"key": "d_nuala", "person": "nuala", "direction": "owes_me", "amount": 18, "name": "bin collection",
-     "date": "2027-02-18"},
-    {"key": "d_conor", "person": "conor", "direction": "owes_me", "amount": 200, "name": "baby gear loan",
-     "date": "2026-11-10"},
-    {"key": "d_plumber", "person": "plumber", "direction": "i_owe", "amount": 180, "name": "radiator valve",
-     "date": "2027-01-20", "settled": "2027-01-22T10:00"},
-    {"key": "d_brendan", "person": "brendan", "direction": "owes_me", "amount": 40, "name": "round of drinks",
-     "date": "2026-12-12", "settled": "2026-12-19T10:00"},
-    {"key": "d_eoin", "person": "eoin", "direction": "owes_me", "amount": 15, "name": "hurl grips",
-     "date": "2027-02-10", "settled": "2027-02-17T10:00"},
-]
 
 # ----------------------------------------------------------------------------------------------
 # locker
@@ -575,9 +498,9 @@ links = [
 
 world = {
     "me": ME, "today": TODAY, "epoch": "2026-11-01T09:00", "seed": "T37", "currency": "EUR",
-    "people": people, "groups": groups, "expenses": expenses, "lists": lists, "events": events,
+    "people": people, "lists": lists, "events": events,
     "tasks": tasks, "notebooks": notebooks, "notes": notes, "folders": folders, "documents": documents,
-    "albums": albums, "photos": photos, "debts": debts, "locker": locker, "links": links,
+    "albums": albums, "photos": photos, "locker": locker, "links": links,
 }
 
 
@@ -599,15 +522,6 @@ def check(w):
     def need(key, kind):
         assert keys.get(key) == kind, f"{key} is not a {kind}"
 
-    for g in w["groups"]:
-        [need(m, "people") for m in g["members"]]
-        assert len(set(g["members"])) == len(g["members"]), g["key"]
-    for e in w["expenses"]:
-        need(e["group"], "groups")
-        [need(m, "people") for m in e["split"]]
-        need(e["paid_by"], "people")
-        members = set(next(g["members"] for g in w["groups"] if g["key"] == e["group"])) | {"me"}
-        assert set(e["split"]) | {e["paid_by"]} <= members, f"expense outside its group: {e['name']}"
     for t in w["tasks"]:
         if "parent" in t:
             need(t["parent"], "tasks")
@@ -623,14 +537,12 @@ def check(w):
         [need(a, "albums") for a in p.get("albums", [])]
         [need(q, "people") for q in p.get("people", [])]
         assert len(set(p.get("albums", []))) == len(p.get("albums", [])), p["key"]
-    for d in w["debts"]:
-        need(d["person"], "people")
     for e in w["events"]:
         [need(a, "people") for a in e.get("attendees", [])]
     for ln in w["links"]:
         assert ln["from"] in keys and ln["to"] in keys, ln
-    names = [g["name"] for g in w["groups"]] + [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
-    assert len(names) == len(set(names)), "group/notebook/album names must be unique"
+    names = [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
+    assert len(names) == len(set(names)), "notebook/album names must be unique"
     assert len({p["name"] for p in w["people"]}) == len(w["people"]), "duplicate person names"
     spans = sorted((e["start"], e["end"], e["key"]) for e in w["events"])
     for (s1, e1, k1), (s2, e2, k2) in zip(spans, spans[1:]):
@@ -639,8 +551,8 @@ def check(w):
     assert w["me"] and w["today"]
     # size, per the brief's ordinary ranges
     n = {k: len(v) for k, v in w.items() if isinstance(v, list)}
-    for kind, lo, hi in [("people", 25, 35), ("groups", 4, 6), ("events", 50, 70), ("tasks", 50, 70), ("notes", 20, 30),
-                         ("documents", 15, 20), ("photos", 30, 40), ("debts", 10, 15), ("locker", 15, 20)]:
+    for kind, lo, hi in [("people", 25, 35), ("events", 50, 70), ("tasks", 50, 70), ("notes", 20, 30),
+                         ("documents", 15, 20), ("photos", 30, 40), ("locker", 15, 20)]:
         assert lo <= n[kind] <= hi, f"{kind}: {n[kind]} not in {lo}-{hi}"
     # trashed rows of every trashable kind, one inside the restore window and one past it
     for kind in ("people", "events", "tasks", "notes", "documents", "photos", "locker"):
@@ -653,7 +565,6 @@ def check(w):
     assert sum(1 for f in set(firsts) if firsts.count(f) >= 2) >= 2, "need two same-first-name pairs"
     assert any(e.get("cancelled") for e in w["events"])
     assert any(t.get("completed") for t in w["tasks"]) and any(t.get("status") == "cancelled" for t in w["tasks"])
-    assert any(not g["members"] or not [e for e in w["expenses"] if e["group"] == g["key"]] for g in w["groups"])
     assert any(f["key"] not in {d.get("folder") for d in w["documents"]} for f in w["folders"])
 
 

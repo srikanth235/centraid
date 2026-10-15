@@ -30,7 +30,6 @@ S("T10-202", "ordinal second mosque list complete ask pick physio at 11",
   T("3 is fine", diff(upd("physio_0706", date="2026-07-06T11:00")),
     ref=[act("reschedule", rows="$physio_0706", args=lines(to=U("day", 0, anchor="row", time="11:00")))]))
 
-# 203 which way the money goes
 # 204 everything but the last one
 S("T10-204", "except exclude last one chess nights cancel status",
   T("chess club nights in july", rows("chess_0707", "chess_0714", "chess_0721", "chess_0728"),

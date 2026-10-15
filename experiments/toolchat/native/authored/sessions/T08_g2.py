@@ -59,15 +59,6 @@ S("T08-122", "reschedule ask boosters meeting decline oos",
   T("put on it, budget and car wash sign up", diff(upd("boost_0413", description="budget and car wash sign up")),
     ref=[act("edit", rows="$boost_0413", args=lines(description="budget and car wash sign up"))]))
 
-S("T08-123", "reschedule contrast month group balance negative",
-  T("move this month's boosters meeting to 8", diff(upd("boost_0413", date="2026-04-13T20:00")),
-    ref=[act("reschedule", kind="event", name="Boosters meeting", when=W(U("month", 0)),
-             args=lines(to=U("day", 0, anchor="row", time="20:00")))]),
-  T("who's on the lanier fishing trip", rows("trey", "kevin", "reggie", "me"),
-    ref=[ans(kind="person", linked_to="$fishing")]),
-  T("where am i at in it", val((-27.18, "USD")),
-    ref=[ans(op="balance", kind="group", name="Lanier fishing trip", linked_to="$me")]))
-
 S("T08-125", "star ask report card unstar star two writes",
   T("star the report card", ask("rc_jalen", "rc_jada"),
     ref=[act("star", kind="document", name="report card"),
@@ -90,24 +81,6 @@ S("T08-126", "star contrast report card locker decline not found",
     ref=[ans(op="count", kind="locker item", where="starred = yes")]),
   T("delete the water heater task", decline("not_found"),
     ref=[search("water heater"), dec("not_found")]))
-
-S("T08-127", "star person balance group members balance",
-  T("star quanisha", diff(upd("quanisha", starred=True)),
-    ref=[act("star", kind="person", name="Quanisha")]),
-  T("what does she owe me all in", val((49.1, "USD")),
-    ref=[ans(op="balance", rows="$quanisha")]),
-  T("who's in the union dinner fund", rows("darnell", "vic", "marcus_b", "luis", "me"),
-    ref=[ans(kind="person", linked_to="$union_fund")]),
-  T("where am i at in it", val((40, "USD")),
-    ref=[ans(op="balance", kind="group", name="Union dinner fund", linked_to="$me")]))
-
-S("T08-128", "star nickname search balance unstar nickname",
-  T("star dre", diff(upd("dre", starred=True)),
-    ref=[search("Dre", kind="person"), act("star", rows="@prev")]),
-  T("what does he owe me", val((205, "USD")),
-    ref=[ans(op="balance", rows="$dre")]),
-  T("take the star off mama", diff(upd("mama", starred=False)),
-    ref=[act("unstar", kind="person", where='nickname = "Mama"')]))
 
 S("T08-130", "reschedule ask union meeting next weekend at N",
   T("push the union chapter meeting to thursday at 8", ask("union_0408", "union_0513"),

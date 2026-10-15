@@ -29,13 +29,6 @@ S("T04-A003", "ask-options photo star c3a",
   T("and the honour one's done, tick it off", diff(upd("speech", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="honour")]))
 
-S("T04-A005", "ask-options debt settle_debt c3a",
-  T("settle the deposit one", ask("d_zainab", "d_dad"),
-    ref=[act("settle_debt", kind="debt", name="deposit"),
-         askc("Zainab's lehenga fabric deposit (she owes you 85) or the car deposit help from your dad (you owe 500)?", options="$d_zainab, $d_dad")]),
-  T("zainab, she paid me back at the fitting", diff(upd("d_zainab", status="settled")),
-    ref=[act("settle_debt", rows="$d_zainab")]))
-
 S("T04-A006", "ask-options event cancel c3a",
   T("cancel the wedding planning call", ask("wcall_1022", "wcall_1104"),
     ref=[act("cancel", kind="event", name="wedding planning call"),

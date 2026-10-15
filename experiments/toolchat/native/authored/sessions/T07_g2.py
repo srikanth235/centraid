@@ -76,35 +76,6 @@ S("T07-123", "lucho nickname star search carla decline delete all",
   T("just delete all my people, start clean", decline("unbounded_destruction"),
     ref=[dec("unbounded_destruction")]))
 
-S("T07-124", "balance three named sonia julio efrain decline rate",
-  T("what do i owe sonia", val((-350, "PEN")),
-    ref=[ans(op="balance", kind="person", name="Sonia")]),
-  T("and julio?", val((170, "PEN")),
-    ref=[ans(op="balance", kind="person", name="Julio")]),
-  T("efrain?", val((140, "PEN")),
-    ref=[ans(op="balance", kind="person", name="Efrain")]),
-  T("what's the sol to dollar exchange rate today", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]))
-
-S("T07-125", "debt create balance negative repair effort unit farm",
-  T("ana lent me 40 for the gas cylinder", diff(new("debt", name=has("gas"), amount=40, direction="i_owe"), link("new", "ana")),
-    ref=[act("create", args=lines(kind="debt", name="Gas cylinder", person="$ana", amount="40", direction="i_owe"))]),
-  T("ok and where do i stand with her after that", val((-40, "PEN")),
-    ref=[ans(op="balance", rows="$ana")]),
-  T("push everything on the farm list that takes more than an hour to next friday",
-    diff(upd("scout_report", date="2026-03-20"), upd("trial_data", date="2026-03-20"), upd("storehouse", date="2026-03-20")),
-    ref=[bad(find(kind="task", linked_to="$farm_l", where="effort > 1 hour")),
-         find(kind="task", linked_to="$farm_l", where="effort > 60"),
-         act("reschedule", rows="@prev", args=lines(to=U("week", 1, weekday=5)))]))
-
-S("T07-126", "group balance coop efrain wilber",
-  T("where does efrain stand in the coop", val((-200, "PEN")),
-    ref=[ans(op="balance", kind="group", name="coop", linked_to="$efrain")]),
-  T("and wilber", val((-400, "PEN")),
-    ref=[ans(op="balance", kind="group", name="coop", linked_to="$wilber")]),
-  T("log a visit with efrain, he came by the plots this morning", diff(upd("efrain", date=ANY)),
-    ref=[act("log", rows="$efrain", args=lines(kind="visit"))]))
-
 S("T07-128", "next weekend read create saturday decline bus",
   T("anything on next weekend?", rows("julio_bday", "mass_0322", "vcall_0322"),
     ref=[ans(kind="event", when=W(span(U("week", 1, weekday=6), U("week", 1, weekday=7))))]),

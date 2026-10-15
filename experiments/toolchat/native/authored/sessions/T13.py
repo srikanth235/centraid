@@ -52,23 +52,6 @@ S("T13-006", "find role log prev linked",
   T("and what tasks have i got with him", rows("xrd_book", "xrd_book_lukas"),
     ref=[ans(kind="task", linked_to="$raj")]))
 
-S("T13-008", "group members balance settle_up undo ledger five turns",
-  T("who's in the house bills kitty", rows("kasia", "tom_h", "priya", "me"),
-    ref=[ans(kind="person", linked_to="$house")]),
-  T("what's my balance in it", val((107, "GBP")),
-    ref=[ans(op="balance", kind="group", name="House bills kitty", linked_to="$me")]),
-  T("and tom hargreaves", val((-17, "GBP")),
-    ref=[ans(op="balance", kind="group", name="House bills kitty", linked_to="$tom_h")]),
-  T("ok settle up with him", diff(settle=["Tom Hargreaves"]),
-    ref=[act("settle_up", rows="$tom_h", args=lines(group="$house"))]),
-  T("wait undo that, he hasn't paid yet", diff(),
-    ref=[act("undo")]))
-
-S("T13-009", "single compute sum grouped debts",
-  T("totals pls, what i owe vs what i'm owed", vgroups({"i_owe": (112, "GBP"), "owes_me": (203.5, "GBP")}),
-    ref=[comp(op="sum", field="amount", group="direction", kind="debt", where='status = "open"'),
-         ans(value="@prev")]))
-
 S("T13-010", "create note add_to new count",
   T("new note: Annealing run 15 - 160C, film went hazy",
     diff(new("note", name=has("Annealing run 15"), body=has("hazy"))),
@@ -133,12 +116,6 @@ S("T13-017", "find photo add_to prev star prev",
     ref=[act("add_to", rows="@prev", args=lines(to="$lab_al"))]),
   T("and star it", diff(upd("p_xrd", starred=True)),
     ref=[act("star", rows="@prev")]))
-
-S("T13-018", "settle debt linked balance",
-  T("tom bennett paid me back for kro", diff(upd("d_tom_b", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$tom_b")]),
-  T("does he owe me anything else", val((-5, "GBP")),
-    ref=[ans(op="balance", rows="$tom_b")]))
 
 S("T13-019", "edit locker multi starred find",
   T("put originals in the blue folder as the notes on nigerian passport and nigerian driving licence",

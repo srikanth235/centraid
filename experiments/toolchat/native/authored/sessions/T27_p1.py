@@ -8,13 +8,7 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 OPEN = 'status = "open"'
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 WEEKEND = W(span(U("week", 0, weekday=6), U("week", 0, weekday=7)))
-
-S("T27-004-P", "add_to person named shower group para",
-  T("maxime belongs in baby shower gifts, put him there", diff(link("shower_g", "maxime")),
-    ref=[act("add_to", rows="$maxime", args=lines(to="$shower_g"))]))
 
 S("T27-010-P", "restore event where trashed last saturday undo restore para",
   T("i deleted an event that was on last saturday, get it back", diff(restore("neighbours")),
@@ -74,14 +68,6 @@ S("T27-053-P", "person span weekday datetime role empty open edit para",
     ref=[opn("$aurelie"), ans(rows="$aurelie")]),
   T("her role is neighbour, set it", diff(upd("aurelie", role="neighbour")),
     ref=[act("edit", rows="$aurelie", args=lines(role="neighbour"))]))
-
-S("T27-058-P", "prenatal photo count linked_to all star photo para",
-  T("prenatal group members appearing in just one photo, who", rows("camille_p", "margaux", "sarah", "yasmine"),
-    ref=[ans(kind="person", linked_to="$prenatal_g", where="photo count = 1")]),
-  T("do they all share one photo", rows("p_class"),
-    ref=[ans(kind="photo", linked_to="@prev")]),
-  T("give it a star", diff(upd("p_class", starred=True)),
-    ref=[act("star", rows="@prev")]))
 
 S("T27-063-P", "event open start datetime person count duration empty lease para",
   T("events ahead of sixteenth october 9am involving two or more people",
@@ -145,28 +131,6 @@ S("T27-083-P", "five turns note anchor time edit body midwife ambiguous ask resc
   T("obviously next thursday's", diff(upd("midwife_dec", date="2026-12-10T09:00")),
     ref=[act("reschedule", rows="$midwife_dec", args=lines(to=U("day", 0, anchor="row", time="09:00")))]))
 
-S("T27-093-P", "six turns debt span date weekday amount literal settle debt margaux balance settle up para",
-  T("up to last sunday, debts since fifteenth nov", rows("d_max", "d_margaux", "d_thomas", "d_sarah"),
-    ref=[ans(kind="debt", when=W(span(D("2026-11-15"), U("week", -1, weekday=7))))]),
-  T("open ones at thirty or under", rows("d_max", "d_margaux"),
-    ref=[ans(within="@prev", where='status = "open" and amount <= 30')]),
-  T("max paid up, so Pizza night is settled, mark it", diff(upd("d_max", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Pizza night")]),
-  T("margaux's yoga class debt?", rows("d_margaux"),
-    ref=[ans(kind="debt", name="Yoga class")]),
-  T("where do things stand with her", val((17, "EUR")),
-    ref=[comp(op="balance", rows="$margaux"), ans(value="@prev")]),
-  T("in the Prenatal group, settle up with her", diff(settle=["Margaux Fontaine"]),
-    ref=[act("settle_up", rows="$margaux", args=lines(group="$prenatal_g"))]))
-
-S("T27-098-P", "debt open start date person count ask remind para",
-  T("before tenth november, which debts are open", rows("d_lea", "d_camille", "d_antoine"),
-    ref=[ans(kind="debt", when=W({"to": D("2026-11-10")}), where='status = "open"')]),
-  T("among them, anything over 100 that has a person attached", rows("d_lea", "d_camille", "d_antoine"),
-    ref=[ans(within="@prev", where="person count != 0 and amount > 100")]),
-  T("i should pay antoine back, set a reminder", ask(),
-    ref=[askc("when do you want to be reminded? i'll add it as a task due that day.")]))
-
 S("T27-A003-P", "ask-options task complete c3a para",
   T("opening one is done, tick it", ask("prep", "guests"),
     ref=[act("complete", kind="task", name="opening"),
@@ -189,12 +153,6 @@ S("T27-B005-P", "c4b state-change cancel event restore trashed task para",
     ref=[act("cancel", kind="event", name="Oven inspection")]),
   T("get the old stand mixer one back", diff(restore("old_mixer")),
     ref=[act("restore", kind="task", name="stand mixer", trashed=True)]))
-
-S("T27-C003-P", "c3c compound both debts settle log find para",
-  T("both of chloe's debts are paid, settle them, and add a coffee with her to the log",
-    diff(upd("d_chloe", status="settled"), upd("d_chloe2", status="settled"), upd("chloe", date=ANY)),
-    ref=[search("chloe", kind="person"), find(kind="debt", linked_to="$chloe"), act("settle_debt", rows="@prev", more=True),
-         act("log", rows="$chloe", args=lines(kind="coffee"))]))
 
 S("T27-103-P", "contrast complete reschedule complete star para",
   T("confirm butter order with matthieu is finished, he's got it", diff(upd("butter_conf", status="completed", completed=ANY)),
@@ -226,14 +184,3 @@ S("T27-113-P", "ask event cancel flour delivery then butter para",
     ref=[act("cancel", kind="event", name="Butter delivery")]),
   T("i told thomas girard about the snow, put the call in the log", diff(upd("thomas_g", date=ANY)),
     ref=[act("log", kind="person", name="Thomas Girard", args=lines(kind="call"))]))
-
-S("T27-118-P", "balance margaux julien prenatal group para",
-  T("where do margaux and i stand", val((17, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Margaux")]),
-  T("after the crib and groceries julien says we're square, so what's his real balance with me", val((117, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Julien")]),
-  T("my share in the prenatal group", val((22, "EUR")),
-    ref=[find(kind="person", linked_to="$prenatal_g"),
-         ans(op="balance", kind="group", name="Prenatal group", linked_to="$me")]),
-  T("number of people in it", val(5),
-    ref=[ans(op="count", kind="person", linked_to="$prenatal_g")]))

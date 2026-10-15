@@ -3,16 +3,6 @@ from gold import *
 def J(d):
     return json.dumps(d, separators=(",", ":"))
 
-S("T01-051", "find-only group linked-prev delete prev",
-  T("find me the ward night out group", rows("night_out"),
-    ref=[find(kind="group", name="Ward Night Out"), ans(rows="@prev")]),
-  T("who's in it", rows("me", "priya_n", "priya_s", "zainab", "siobhan"),
-    ref=[ans(kind="person", linked_to="@1")]),
-  T("its off, delete the group",
-    diff(gone("night_out"), unlink("night_out", "me"), unlink("night_out", "priya_n"),
-         unlink("night_out", "priya_s"), unlink("night_out", "zainab"), unlink("night_out", "siobhan")),
-    ref=[act("delete", rows="@1")]))
-
 S("T01-053", "ambiguous-act ask pick cancel",
   T("cancel one of my nights, kwame's covering",
     ask("night_0319", "night_0320", "night_0416", "night_0417"),
@@ -157,21 +147,6 @@ S("T01-069", "create task delete restore-new same-day",
     ref=[act("restore", rows="$c1")]),
   T("what's due that same day", rows("reno", "fire_safety", "infection", "+1"),
     ref=[ans(kind="task", when=J(D("2026-03-31")))]))
-
-S("T01-070", "event spans ambiguous-act ask cancel",
-  T("what's on from 6 tonight through next monday",
-    rows("plumber_visit", "swim_0314", "worktop_visit", "match_0315", "mothering", "ld_0316"),
-    ref=[ans(kind="event", when=J(span(U("day", 0, time="18:00"), U("week", 1, weekday=1))))]),
-  T("football matches up to sunday?", rows("match_0308", "match_0315"),
-    ref=[ans(kind="event", name="football match", when=J({"to": U("week", 0, weekday=7)}))]),
-  T("what's on from first april that's work", rows("ld_0413", "ld_0414", "night_0416", "night_0417"),
-    ref=[ans(kind="event", where='description contains "Ward 7"', when=J({"from": D("2026-04-01")}))]),
-  T("cancel cal's 5-a-side", ask("fiveaside_0317", "fiveaside_0324"),
-    ref=[act("cancel", kind="event", name="5-a-side"),
-         find(kind="event", name="5-a-side"),
-         askc("Which one - Tue 17th or Tue 24th?", options="$fiveaside_0317, $fiveaside_0324")]),
-  T("next tuesday's", diff(upd("fiveaside_0317", status="cancelled")),
-    ref=[act("cancel", rows="$fiveaside_0317")]))
 
 S("T01-071", "create task date+time delete restore-new",
   T("add a task to ring the council about the bins, the sixteenth at 9am",

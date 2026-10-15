@@ -3,14 +3,6 @@ import json
 def J(d):
     return json.dumps(d, separators=(",", ":"))
 
-S("T30-003-P", "same-name read description balance para",
-  T("sam?", rows("sam_b", "sam_n"),
-    ref=[ans(kind="person", name="Sam")]),
-  T("balance with the colleague sam", val((46, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Sam", where='role = "colleague"')]),
-  T("neighbour sam?", val((-17.84, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Sam", where='role = "neighbour"')]))
-
 S("T30-009-P", "relation event person span cancel reschedule same-time read-back para",
   T("until sunday, what does zoé have on", rows("pl_270217", "sw_270220"),
     ref=[ans(kind="event", linked_to="$zoe", when=J(span(U("day", 0), U("week", 0, weekday=7))))]),
@@ -49,17 +41,6 @@ S("T30-025-P", "role search find-only log message para",
   T("i emailed her today, put that in the log", diff(upd("annie_belanger", date=ANY)),
     ref=[act("log", rows="$annie_belanger", args="kind: message")]))
 
-S("T30-029-P", "event next relation group exclude reschedule anchor-row para",
-  T("next book club, when", rows("bc_270226"),
-    ref=[ans(kind="event", name="Book club", when=J({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("which cercle members are going", rows("book_host", "marie_eve", "genevieve_t"),
-    ref=[ans(kind="person", linked_to="$cercle, $bc_270226")]),
-  T("cercle people not going?",
-    rows("antoine_thibault", "yasmine_khoury", "raj_gauthier", "camille_paquette", "thierry_leclerc", "me"),
-    ref=[ans(kind="person", linked_to="$cercle", exclude="@prev")]),
-  T("a day later for it", diff(upd("bc_270226", date="2027-02-27T19:30")),
-    ref=[act("reschedule", rows="$bc_270226", args=lines(to=U("day", 1, anchor="row")))]))
-
 S("T30-034-P", "two-writes complete reschedule undo read where para",
   T("streaming one is done, and the gutters move to the fourteenth",
     diff(upd("t_106", status="completed", completed=ANY), upd("t_017", date="2027-03-14")),
@@ -79,14 +60,6 @@ S("T30-039-P", "trashed restore event decline-window when read para",
     ref=[act("restore", kind="event", name="Hair appointment", trashed=True)]),
   T("léa's doctor appointments in 2026, which are there", rows("oo_005"),
     ref=[ans(kind="event", name="Doctor - Léa", when=J(span(D("2026-01-01"), D("2026-12-31"))))]))
-
-S("T30-038-P", "debt create write-read balance settle_debt amount relation para",
-  T("carpool gas, 15 from marie-pier, she owes me, so what's her total balance",
-    val((209.68, "CAD"), also=diff(new("debt", name="carpool gas", amount=15, direction="owes_me"), link("new", "marie_pier"))),
-    ref=[act("create", args="kind: debt\nname: carpool gas\namount: 15\ndirection: owes_me\nperson: $marie_pier", more=True),
-         ans(op="balance", rows="$marie_pier")]),
-  T("the 15 is paid by her, settle it", diff(upd("+1", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$marie_pier", where="amount = 15")]))
 
 S("T30-047-P", "trashed restore locker decline-window para",
   T("old wifi, restore it", diff(restore("old_wifi")),
@@ -146,17 +119,6 @@ S("T30-073-P", "ask-referent reschedule event name trashed read restore para",
   T("restore the report card night", diff(restore("oo_011")),
     ref=[act("restore", kind="event", name="Report card night", trashed=True)]))
 
-S("T30-078-P", "ask-referent reschedule event name write-read settle_debt balance linked when order-limit para",
-  T("make it tuesday", ask(),
-    ref=[askc("Move which one to tuesday?")]),
-  T("march's furnace service", diff(upd("oo_034", date="2027-02-23T09:00")),
-    ref=[act("reschedule", kind="event", name="Furnace service", when=J(U("month", 0, name=3)), args=lines(to=U("week", 1, weekday=2)))]),
-  T("lucie settled the coffee run from 2024, so where do things stand with her now", val((554, "CAD"), also=diff(upd("debt_10", status="settled"))),
-    ref=[act("settle_debt", kind="debt", name="coffee run", linked_to="$lucie_boucher", when=J(U("year", -3)), more=True),
-         ans(op="balance", kind="person", name="Lucie Boucher")]),
-  T("largest debt she still has with me", rows("debt_16"),
-    ref=[ans(kind="debt", linked_to="$lucie_boucher", where="direction = owes_me and status = open", order="amount desc", limit=1)]))
-
 S("T30-082-P", "find-act reschedule undo count maison list week where when para",
   T("everything due this week on the maison list moves to next week",
     diff(upd("wat_270220", date="2027-02-27T10:00"), upd("t_104", date="2027-02-23"),
@@ -202,16 +164,6 @@ S("T30-097-P", "ambiguous-ask delete event date-select brunch decline-out-of-sco
     ref=[dec("out_of_scope")]),
   T("last time we talked, when was it", rows("maman"),
     ref=[ans(kind="person", name="Maman")]))
-
-S("T30-102-P", "write-read reschedule event name when two-dates read find-act settle_debt linked where raj para",
-  T("furnace service shifts to the fifth, then what's on that day", rows("oo_034", also=diff(upd("oo_034", date="2027-03-05T09:00"))),
-    ref=[act("reschedule", kind="event", name="Furnace service", when=J(D("2027-03-04")), args=lines(to=D("2027-03-05")), more=True),
-         ans(kind="event", when=J(D("2027-03-05")))]),
-  T("settle raj roy's debts from before 2026, all of them are paid", diff(upd("debt_12", status="settled"), upd("debt_24", status="settled"), upd("debt_18", status="settled")),
-    ref=[find(kind="debt", linked_to="$raj_roy", where="direction = owes_me and status = open", when=J({"to": D("2025-12-31")})),
-         act("settle_debt", rows="@prev")]),
-  T("his remaining open debts?", rows("debt_30", "debt_36"),
-    ref=[ans(kind="debt", linked_to="$raj_roy", where="direction = owes_me and status = open")]))
 
 S("T30-106-P", "reschedule task name where when linked two-dates k4 cancel event para",
   T("on the maison list, the open furnace filter task due march 15th goes to the 22nd", diff(upd("furn_270315", date="2027-03-22T10:00")),

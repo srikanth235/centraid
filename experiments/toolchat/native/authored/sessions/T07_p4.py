@@ -30,17 +30,6 @@ S("T07-202", "ordinal last rename ask pick cadence rosa",
   T("2 is fine", diff(upd("rosa_c", cadence=30)),
     ref=[act("edit", rows="$rosa_c", args=lines(cadence=30))]))
 
-# 203 which way the money goes
-S("T07-203", "debts owe direction my side settle both signs",
-  T("my side first, what do i owe", rows("d_wilber", "d_carla", "d_efrain", "d_sonia", "d_lucia", "d_hugo"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("and what do they owe me", rows("d_rosa", "d_luis", "d_jaime", "d_carmen", "d_teodoro"),
-    ref=[ans(kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("settle mine with lucia, paid her at rehearsal", diff(upd("d_lucia", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$lucia", where='direction = "i_owe"')]),
-  T("luis paid the tractor money, clear that one too", diff(upd("d_luis", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$luis")]))
-
 # 204 everything but one
 S("T07-204", "except exclude tasks reschedule delete dues",
   T("what tasks are due tomorrow", rows("fung_1", "agenda", "seed_pay"),

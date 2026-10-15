@@ -27,53 +27,6 @@ S("T25-027", "person note count linked notes delete named",
   T("delete Lawyer questions, she answered all of it", diff(trash("lawyer_q")),
     ref=[act("delete", kind="note", name="Lawyer questions")]))
 
-S("T25-028", "person event count debt count",
-  T("book club people who actually show up in my diary", rows("sarah_c", "ines"),
-    ref=[ans(kind="person", where='met = "book club" and event count != 0')]),
-  T("who do i have two or more debts with", rows("daniel"),
-    ref=[ans(kind="person", where="debt count >= 2")]),
-  T("what's the balance with Daniel Roy", val((444, "CAD")),
-    ref=[ans(op="balance", rows="$daniel")]))
-
-S("T25-029", "five turns debt amount literal within sum max",
-  T("small debts under 50", rows("d_nadia", "d_jess", "d_sarah_c", "d_elise", "d_gab", "d_priya", "d_matthieu", "d_daniel_piano"),
-    ref=[ans(kind="debt", where="amount < 50")]),
-  T("just the open ones", rows("d_nadia", "d_jess", "d_elise", "d_priya", "d_matthieu"),
-    ref=[ans(kind="debt", within="@prev", where='status = "open"')]),
-  T("how much do those people owe me in total", val((112, "CAD")),
-    ref=[ans(op="sum", field="amount", within="@prev", where='direction = "owes_me"')]),
-  T("biggest open one each way", vgroups({"owes_me": (180, "CAD"), "i_owe": (300, "CAD")}),
-    ref=[comp(op="max", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]),
-  T("who's the 300 one to", rows("d_kenji"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and amount = 300')]))
-
-S("T25-030", "debt spans month names open end weekday",
-  T("debts from august through september",
-    rows("d_kenji", "d_marc_g", "d_daniel_piano", "d_sarah_c", "d_tom", "d_nadia", "d_zoe"),
-    ref=[ans(kind="debt", when=span(U("month", 0, name=8), U("month", 0, name=9)))]),
-  T("since sept twentieth", rows("d_tom", "d_nadia", "d_zoe", "d_priya", "d_elise", "d_daniel_boots", "d_jess"),
-    ref=[ans(kind="debt", when={"from": D("2026-09-20")})]),
-  T("anything logged before last friday that i owe",
-    rows("d_daniel_piano", "d_tom", "d_sarah_c", "d_kenji", "d_zoe"),
-    ref=[ans(kind="debt", when={"to": U("week", -1, weekday=5)}, where='direction = "i_owe"')]),
-  T("from sept first to oct second at 6pm, same thing", rows("d_daniel_piano", "d_sarah_c", "d_tom", "d_zoe"),
-    ref=[ans(kind="debt", when=span(D("2026-09-01"), D("2026-10-02", "18:00")), where='direction = "i_owe"')]))
-
-S("T25-031", "five turns debt spans status set count",
-  T("what did people borrow from me in june and july", rows("d_daniel_camp", "d_gab", "d_matthieu"),
-    ref=[ans(kind="debt", when=span(U("month", 0, name=6), U("month", 0, name=7)), where='direction = "owes_me"')]),
-  T("and from oct first on", rows("d_priya", "d_daniel_boots", "d_jess"),
-    ref=[ans(kind="debt", when={"from": D("2026-10-01")}, where='direction = "owes_me"')]),
-  T("everything up to tuesday this week, both ways, open only",
-    rows("d_daniel_camp", "d_daniel_boots", "d_nadia", "d_tom", "d_kenji", "d_marc_g", "d_elise", "d_zoe",
-         "d_priya", "d_matthieu"),
-    ref=[ans(kind="debt", when={"to": U("week", 0, weekday=2)}, where='status = "open"')]),
-  T("between sept twenty-sixth and oct sixth at noon", rows("d_nadia", "d_zoe", "d_priya", "d_elise", "d_daniel_boots"),
-    ref=[ans(kind="debt", when=span(D("2026-09-26"), D("2026-10-06", "12:00")))]),
-  T("how many debts have i logged in total, open or settled", val(14),
-    ref=[ans(op="count", kind="debt", where="status is set")]))
-
 S("T25-032", "event status enum week duration month",
   T("last week, what wasn't cancelled", rows("therapy_0929", "piano_0930"),
     ref=[ans(kind="event", when=U("week", -1), where="status != cancelled")]),

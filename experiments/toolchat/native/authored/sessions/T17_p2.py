@@ -3,8 +3,6 @@ import json
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 WEEKEND = {"from": U("week", 0, weekday=6), "to": U("week", 0, weekday=7)}
@@ -12,26 +10,12 @@ NEXT_WEEKEND = {"from": U("week", 1, weekday=6), "to": U("week", 1, weekday=7)}
 def J(d):
     return json.dumps(d, separators=(",", ":"))
 LIVE = 'status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
 LIVE_EV = 'status != "cancelled"'
 def next_ivan():
     return find(kind="event", name="Ivan's lesson", when=W({"from": U("day", 0)}), order="date asc", limit=1)
 def rehearsals():
     return find(kind="event", name="Choir rehearsal", when=W({"from": U("day", 0)}))
 
-
-S("T17-125-P", "group balance repair ask pick negative positive para",
-  T("bathroom works, how does mila stand", val((-300, "BGN")),
-    ref=[ans(op="balance", kind="group", name="Bathroom works", linked_to="$mila")]),
-  T("studio rent, vesi's position", val((150, "BGN")),
-    ref=[search("vesi", kind="person"), ans(op="balance", kind="group", name="Studio rent", linked_to="$vesi")]),
-  T("koleva, what does she owe me", ask("maria_k", "desi"),
-    ref=[bad(ans(op="balance", kind="person", name="Koleva")),
-         askc("maria koleva or desislava koleva?", options="$maria_k, $desi")]),
-  T("student one", val((100, "BGN")),
-    ref=[ans(op="balance", rows="$maria_k")]),
-  T("give her a star", diff(upd("maria_k", starred=True)),
-    ref=[act("star", rows="$maria_k")]))
 
 S("T17-131-P", "recovery next ivan lesson then choir list min max sum para",
   T("ivan's next lesson date? preparing scales for him", rows("ivan_0202"),

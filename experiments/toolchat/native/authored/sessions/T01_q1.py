@@ -33,19 +33,11 @@ S("T01-Q005", "next-time person event order limit i2pat",
   T("when's the next time dean has anything on", rows("match_0315"),
     ref=[ans(kind="event", linked_to="$dean", when=J({"from": U("day", 0)}), order="date asc", limit=1)]))
 
-S("T01-Q006", "debts settled status-only i2pat",
-  T("which ious have been settled", rows("d_priya_s", "d_dev", "d_kwame_old"),
-    ref=[ans(kind="debt", where="status = settled")]))
-
 S("T01-Q007", "fresh date drops link filter i2pat",
   T("what's tobi got on this week", rows("training_0311", "match_0315"),
     ref=[ans(kind="event", linked_to="$tobi", when=J(U("week", 0)))]),
   T("and what's on monday the sixteenth", rows("ld_0316"),
     ref=[ans(kind="event", when=J(D("2026-03-16")))]))
-
-S("T01-Q008", "group members find group first i2pat",
-  T("who's in the coffee club", rows("me", "priya_n", "priya_s", "gemma", "kwame", "siobhan"),
-    ref=[find(kind="group", name="coffee club"), ans(kind="person", linked_to="@prev")]))
 
 S("T01-Q009", "possessive teacher role i2pat",
   T("who's tobi's teacher", rows("harpreet"),
@@ -60,10 +52,6 @@ S("T01-Q010", "remove two named rows from list i2pat",
 S("T01-Q011", "personal fact no field decline i2pat",
   T("dayo's birthday is the ninth of june", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
-
-S("T01-Q012", "generic group word ask candidates i2pat",
-  T("add gemma to the ward group", ask("coffee", "night_out"),
-    ref=[askc("Ward 7 Coffee Club or Ward Night Out?", options="$coffee, $night_out")]))
 
 S("T01-Q013", "add_to destination missing ask create i2pat",
   T("file the falls audit note in my nursing notebook", ask(),
@@ -99,10 +87,6 @@ S("T01-Q020", "last contacted person row i2pat",
   T("when did i last ring kunle", rows("kunle"),
     ref=[ans(kind="person", name="Kunle")]))
 
-S("T01-Q021", "cadence monthly or less often i2pat",
-  T("who do i only keep in touch with monthly or less often", rows("ifeoma"),
-    ref=[ans(kind="person", where="cadence >= 30 days")]))
-
 S("T01-Q022", "cadence every three weeks or rarer i2pat",
   T("who's on a cadence of three weeks or longer", rows("maureen", "ifeoma"),
     ref=[ans(kind="person", where="cadence >= 21 days")]))
@@ -114,9 +98,3 @@ S("T01-Q023", "gift notes of person i2pat",
 S("T01-Q024", "when do we leave flight event i2pat",
   T("when do we leave for lisbon", rows("flight_out"),
     ref=[ans(kind="event", name="Flight to Lisbon")]))
-
-S("T01-Q025", "which most within prev order desc i2pat",
-  T("what are people holding over me", rows("d_priya_lunch", "d_gemma_tickets", "d_kunle", "d_jess_w", "d_callum"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which is the most", rows("d_kunle"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))

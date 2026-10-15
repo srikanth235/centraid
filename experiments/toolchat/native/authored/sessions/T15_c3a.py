@@ -42,14 +42,6 @@ S("T15-A008", "follow-up c3a",
   T("and the earlier ones", rows("defence", "boulder_1117", "survival"),
     ref=[ans(within="@1", exclude="@2")]))
 
-S("T15-A009", "follow-up c3a",
-  T("what's owed to me", rows("d_jonas_vet", "d_linnea", "d_erik_j", "d_silje", "d_anders", "d_marianne"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 300", rows("d_jonas_vet", "d_erik_j", "d_anders"),
-    ref=[ans(within="@prev", where="amount > 300 NOK")]),
-  T("and the biggest one", rows("d_anders"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T15-A010", "follow-up c3a",
   T("what's in the cruise album", rows("p_crew", "p_net", "p_gull", "p_galley", "p_winch", "p_ice_edge", "p_copepod", "p_walrus"),
     ref=[ans(kind="photo", linked_to="$cruise_al")]),

@@ -35,48 +35,6 @@ S("T24-102", "contrast star document context multi",
     ref=[act("star", kind="document", name="Mortgage statement", more=True),
          act("unstar", kind="document", name="Home insurance policy")]))
 
-S("T24-103", "ask options person log balance settle",
-  T("log a visit with garza", ask("rudy", "marisol"),
-    ref=[act("log", kind="person", name="Garza", args=lines(kind="visit")),
-         askc("rudy garza or marisol garza?", options="$rudy, $marisol")]),
-  T("marisol, dropped off the party stuff", diff(upd("marisol", date=ANY)),
-    ref=[act("log", rows="$marisol", args=lines(kind="visit"))]),
-  T("what's my balance with her", val((45, "USD")),
-    ref=[ans(op="balance", rows="$marisol")]),
-  T("she paid me back, settle it", diff(upd("d_marisol", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$marisol")]))
-
-S("T24-104", "contrast log person context star count",
-  T("who's my brother-in-law", rows("rudy"),
-    ref=[ans(kind="person", where='role contains "brother-in-law"')]),
-  T("log a visit with garza", diff(upd("rudy", date=ANY)),
-    ref=[act("log", rows="@prev", args=lines(kind="visit"))]),
-  T("star him", diff(upd("rudy", starred=True)),
-    ref=[act("star", rows="$rudy")]),
-  T("how many debts are still open", val(11),
-    ref=[ans(op="count", kind="debt", where='status = "open"')]))
-
-S("T24-105", "ask options person add_to count already",
-  T("add david to the banquet group", ask("david_r", "david_s"),
-    ref=[act("add_to", kind="person", name="David", args=lines(to="$banquet_g")),
-         askc("david ruiz from the boosters or david salazar the union rep?", options="$david_r, $david_s")]),
-  T("ruiz", diff(link("banquet_g", "david_r")),
-    ref=[act("add_to", rows="$david_r", args=lines(to="$banquet_g"))]),
-  T("how many in the banquet group now", val(4),
-    ref=[ans(op="count", kind="person", linked_to="$banquet_g")]),
-  T("star patty", diff(already=["patty"]),
-    ref=[act("star", kind="person", where='nickname = "Patty"'), ans(kind="person", where='nickname = "Patty"')]))
-
-S("T24-106", "contrast add_to person context balance",
-  T("who's the booster club treasurer", rows("david_r"),
-    ref=[ans(kind="person", where='role contains "treasurer"')]),
-  T("add david to the banquet group", diff(link("banquet_g", "david_r")),
-    ref=[act("add_to", rows="@prev", args=lines(to="$banquet_g"))]),
-  T("does he owe me anything", val((45, "USD")),
-    ref=[ans(op="balance", rows="$david_r")]),
-  T("log a call with him, we talked about the concession stand schedule for friday night", diff(upd("david_r", date=ANY)),
-    ref=[act("log", rows="$david_r", args=lines(kind="call"))]))
-
 S("T24-107", "ask options event reschedule at repair",
   T("push the dentist to 6", ask("dentist_mateo", "dentist_lucia"),
     ref=[act("reschedule", kind="event", name="Dentist", args=lines(to=U("day", 0, anchor="row", time="18:00"))),
@@ -88,16 +46,6 @@ S("T24-107", "ask options event reschedule at repair",
   T("how many open tasks take more than an hour", val(5),
     ref=[bad(ans(op="count", kind="task", where='effort > 1 hour and status = "open"')),
          ans(op="count", kind="task", where='effort > 60 and status = "open"')]))
-
-S("T24-108", "contrast reschedule event context balance",
-  T("when's mateo's dentist", rows("dentist_mateo"),
-    ref=[ans(kind="event", name="Dentist Mateo")]),
-  T("push the dentist to 6", diff(upd("dentist_mateo", date="2026-09-22T18:00")),
-    ref=[act("reschedule", rows="@prev", args=lines(to=U("day", 0, anchor="row", time="18:00")))]),
-  T("and mateo's science fair to 7", diff(upd("science_fair", date="2026-10-15T19:00")),
-    ref=[act("reschedule", kind="event", name="Mateo's science fair", args=lines(to=U("day", 0, anchor="row", time="19:00")))]),
-  T("does ray owe me for lunch", val((40, "USD")),
-    ref=[ans(op="balance", kind="person", name="Ray Dominguez")]))
 
 S("T24-109", "ask options locker star unstar",
   T("star the membership", ask("sams", "aft_card"),

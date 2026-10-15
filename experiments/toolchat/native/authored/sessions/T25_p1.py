@@ -5,7 +5,6 @@ import json
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
-OWED = 'direction = "owes_me" and status = "open"'
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
@@ -37,14 +36,6 @@ S("T25-023-P", "single delete album named knock-on para",
     diff(gone("vermont_album"), unlink("vermont_album", "burlington"), unlink("vermont_album", "waterbury"),
          unlink("vermont_album", "camels_hump")),
     ref=[act("delete", kind="album", name="Green Mountains")]))
-
-S("T25-028-P", "person event count debt count para",
-  T("in my diary, which book club people actually appear", rows("sarah_c", "ines"),
-    ref=[ans(kind="person", where='met = "book club" and event count != 0')]),
-  T("people i've got two or more debts with", rows("daniel"),
-    ref=[ans(kind="person", where="debt count >= 2")]),
-  T("Daniel Roy, where do we stand", val((444, "CAD")),
-    ref=[ans(op="balance", rows="$daniel")]))
 
 S("T25-032-P", "event status enum week duration month para",
   T("last week's events that weren't cancelled", rows("therapy_0929", "piano_0930"),
@@ -89,19 +80,6 @@ S("T25-048-P", "create task undo create para",
   T("mom bought some already, undo it", diff(trash("+1")),
     ref=[act("undo")]))
 
-S("T25-054-P", "five turns book club ambiguous ask log balance settle_up para",
-  T("is book club happening next week", rows("book_10"),
-    ref=[ans(kind="event", name="Book club", when=U("week", 1))]),
-  T("coffee with sarah, put it in the log", ask("sarah_c", "sarah_n"),
-    ref=[act("log", kind="person", name="Sarah", args=lines(kind="coffee")),
-         askc("sarah cohen or sarah nguyen?", options="$sarah_c, $sarah_n")]),
-  T("sarah cohen", diff(upd("sarah_c", date=ANY)),
-    ref=[act("log", rows="$sarah_c", args=lines(kind="coffee"))]),
-  T("where do she and i stand", val((-12, "CAD")),
-    ref=[comp(op="balance", rows="$sarah_c"), ans(value="@prev")]),
-  T("in the Book club kitty, settle up with her", diff(settle=["Sarah Cohen"]),
-    ref=[act("settle_up", rows="$sarah_c", args=lines(group="$bookclub"))]))
-
 S("T25-060-P", "four turns create notebook edit new note month add_to para",
   T("i want a notebook named Tremblant 2026", diff(new("notebook", name="Tremblant 2026")),
     ref=[act("create", args=lines(kind="notebook", name="Tremblant 2026"))]),
@@ -142,16 +120,6 @@ S("T25-084-P", "five turns event count month open span datetime reschedule ambig
 S("T25-089-P", "single decline unbounded_destruction para",
   T("clear out all of my photos", decline("unbounded_destruction"),
     ref=[dec("unbounded_destruction")]))
-
-S("T25-098-P", "three turns find miss search decline overlap ask never_mind para",
-  T("any vet appointment on the horizon", decline("not_found"),
-    ref=[find(kind="event", name="vet"), search("vet", kind="event"), dec("not_found")]),
-  T("put Flu shot clinic in for oct fourteenth at 9", ask(),
-    ref=[bad(act("create", args=lines(kind="event", name="Flu shot clinic", date=D("2026-10-14", "09:00"),
-                                      duration=30))),
-         askc("mika's pediatrician checkup is 9 to 9:40 that morning and covers the flu shot. still add it?")]),
-  T("ah, then forget it", decline("never_mind"),
-    ref=[dec("never_mind")]))
 
 S("T25-A003-P", "ask-options task complete never_mind c3a para",
   T("parenting plan one is done, tick it", ask("plan", "sign_plan"),

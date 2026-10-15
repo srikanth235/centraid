@@ -27,15 +27,6 @@ S("T15-003", "log multi undo ledger",
   T("undo that, it was friday actually", diff(),
     ref=[act("undo")]))
 
-S("T15-004", "refused remove_from person ask settle_up group balance",
-  T("take linnea off the crew mess fund, she's not on the next cruise", ask(),
-    ref=[bad(act("remove_from", rows="$linnea", args=lines(from_="$mess"))),
-         askc("linnea still has an unsettled balance in the crew mess fund, so she can't come off it yet. settle up with her?")]),
-  T("yeah settle up with her", diff(settle=[("Linnea Holm", "340.00")]),
-    ref=[act("settle_up", rows="$linnea", args=lines(group="$mess"))]),
-  T("so where does she stand in the fund", val((230, "NOK")),
-    ref=[ans(op="balance", kind="group", name="Crew mess fund", linked_to="$linnea")]))
-
 S("T15-006", "reschedule event multi read",
   T("move the car service and the dentist an hour later",
     diff(upd("car_service", date="2026-11-19T09:00"), upd("dentist", date="2026-11-13T12:00")),
@@ -129,11 +120,6 @@ S("T15-021", "where role in people",
     ref=[find(kind="person", where='role in ("deckhand", "bosun")'), ans(rows="@prev")]),
   T("log a coffee with ailo, we met at the quay", diff(upd("ailo", date=ANY)),
     ref=[act("log", rows="$ailo", args=lines(kind="coffee"))]))
-
-S("T15-023", "compute max group",
-  T("biggest open debt each way, what i owe and what i'm owed",
-    vgroups({"owes_me": (1200, "NOK"), "i_owe": (2000, "NOK")}),
-    ref=[comp(op="max", field="amount", kind="debt", where='status = "open"', group="direction"), ans(value="@prev")]))
 
 S("T15-024", "already complete ambiguous task",
   T("mark the seafarer medical as done", diff(upd("med_new", status="completed", completed=ANY)),

@@ -33,11 +33,6 @@ S("T37-031", "k4 read next-three link where order-limit",
   T("which of those is the longest", rows("hurling_match"),
     ref=[ans(within="@prev", order="duration desc", limit=1)]))
 
-S("T37-032", "k4 read superlative debts where-two when order",
-  T("biggest debt i owe from before the new year", rows("d_declan"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", when=W({"to": D("2026-12-31")}),
-             order="amount desc", limit=1)]))
-
 S("T37-033", "k4 count link where-two",
   T("how many open health tasks take under half an hour", val(2),
     ref=[ans(op="count", kind="task", linked_to="$health_list", where="status = open and effort < 30")]))
@@ -76,20 +71,6 @@ S("T37-038", "two-writes pin unpin then read-pinned",
          act("edit", rows="$bk_rules", args="pinned: no")]),
   T("which pinned notes are in the gaa notebook", rows("gaa_u12", "gaa_agm_note"),
     ref=[ans(kind="note", linked_to="$gaa_nb", where="pinned = yes")]))
-
-S("T37-039", "settle_debt by link then still-owed read",
-  T("nuala paid me back the bin collection money", diff(upd("d_nuala", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="bin collection", linked_to="$nuala")]),
-  T("and what's still owed to me", rows("d_conor", "d_aoife_cake", "d_gerry", "d_sean_b"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]))
-
-S("T37-040", "two-writes settle_debt complete different-rows then sum",
-  T("i paid siobhan for the march books this morning so settle that and tick off the task for it",
-    diff(upd("d_siobhan", status="settled"), upd("book_pay", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="march books", linked_to="$siobhan", more=True),
-         act("complete", rows="$book_pay")]),
-  T("how much do i still owe in total", val((262.5, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]))
 
 S("T37-041", "delete all apply_all cancelled then restore find-trashed",
   T("delete all the cancelled tasks on the house list", diff(trash("cancelled_shed"), trash("cancelled_patio")),

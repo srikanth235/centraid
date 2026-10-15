@@ -79,7 +79,7 @@ def new(kind, **fields):
 
 
 def gone(key):
-    """A container deleted for good (notebook, album, folder, group): no trash, row removed."""
+    """A container deleted for good (notebook, album, folder): no trash, row removed."""
     return {"row": {"key": key, "change": "removed"}}
 
 
@@ -91,15 +91,13 @@ def unlink(a, b):
     return {"link": {"change": "removed", "from": a, "to": b}}
 
 
-def diff(*changes, already=(), reveal=(), settle=()):
+def diff(*changes, already=(), reveal=()):
     out = {"type": "diff", "diff": {"rows": [c["row"] for c in changes if "row" in c],
                                     "links": [c["link"] for c in changes if "link" in c]}}
     if already:
         out["already"] = list(already)
     if reveal:
         out["reveal"] = [{"key": k, "contains": s} for k, s in reveal]
-    if settle:
-        out["settle"] = [dict(zip(("name", "amount"), s)) if isinstance(s, tuple) else {"name": s} for s in settle]
     return out
 
 

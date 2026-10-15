@@ -954,8 +954,8 @@ fn a_request_that_cannot_be_answered_is_refused_and_a_big_file_is_a_sentence() {
 fn the_bytes_of_a_statement_are_in_no_answer_and_an_answer_round_trips() {
     let scratch = Scratch::founded();
     scratch.account("chq", "Everyday", "checking", "USD", None);
-    let secret = "ZEBRA-QUOKKA-7731";
-    let text = format!("Date,Description,Amount\n2024-02-01,{secret},-9.99\n");
+    let marker = "ZEBRA-QUOKKA-7731";
+    let text = format!("Date,Description,Amount\n2024-02-01,{marker},-9.99\n");
     let plan = scratch.csv("chq", &text);
     // The description IS the member's own row, so it is in the plan; the FILE
     // is not: no header line, no delimiter-joined record.

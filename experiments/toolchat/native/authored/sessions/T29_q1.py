@@ -114,10 +114,6 @@ S("T29-Q023", "what X stuff name across task document i2pat",
   T("what simba stuff do i have", rows("vacc_task", "vacc_cert", "dog_tag", "simba_cert"),
     ref=[ans(kind="task,document", name="Simba")]))
 
-S("T29-Q024", "tab word debt kind i2pat",
-  T("what's my tab with wambui", rows("d_wambui_wifi", "d_wambui_tokens"),
-    ref=[ans(kind="debt", linked_to="$wambui")]))
-
 S("T29-Q025", "elliptical past-tense did complete i2pat",
   T("did the kplc tokens", diff(upd("kplc", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="KPLC tokens")]))

@@ -8,8 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 LEFT = 'status = "open"'
 
 S("T21-201", "both reschedule tasks same day both star peters",
@@ -33,16 +31,6 @@ S("T21-202", "ordinal first relist last school list complete reschedule date",
     ref=[ans(kind="task", linked_to="$school_l", where=LEFT)]),
   T("the last one is due on the twenty-sixth", diff(upd("feeding", date="2026-06-26")),
     ref=[act("reschedule", rows="$feeding", args=lines(to=D("2026-06-26")))]))
-
-S("T21-203", "owe direction positive balance negative balance settle mine sum",
-  T("what does brian owe me", val((15000, "KES")),
-    ref=[ans(op="balance", rows="$brian")]),
-  T("my side with githinji", val((-4500, "KES")),
-    ref=[ans(op="balance", rows="$githinji")]),
-  T("settle mine, paid fundi", diff(upd("d_githinji", status="settled")),
-    ref=[act("settle_debt", kind="debt", where=IOWE, linked_to="$githinji")]),
-  T("what do i owe now", val((5500, "KES")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=IOWE)]))
 
 S("T21-204", "except reschedule church list relist then complete last",
   T("what's left on the church list", rows("robes", "cards", "pledges"),

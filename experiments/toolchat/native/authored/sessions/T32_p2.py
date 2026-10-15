@@ -36,17 +36,6 @@ S("T32-097-P", "stray-or-operator-conditions inert-clause by-name-writes star pi
     ref=[act("complete", kind="task", name="thermostat", more=True),
          ans(kind="task", linked_to="$bakery_l", where="status = open", when=W(U("day", 1)))]))
 
-S("T32-100-P", "stray-or-operator-conditions side-clause-with-date effort-when reschedule para",
-  T("before the wedding i want things squared, so which debts are still open",
-    rows("d_memo_flour", "d_teodoro", "d_maria_roof", "d_maria_med", "d_emi", "d_dani", "d_rodrigo", "d_xochitl",
-         "d_aurelio", "d_chela", "d_flor", "d_omar"),
-    ref=[ans(kind="debt", where="status = open")]),
-  T("i'm free friday afternoon, so what's due then that takes under an hour",
-    rows("mu_sugar", "mu_float", "tea_towels", "carmen_meds", "gas_tank", "marigolds", "van_fuel"),
-    ref=[ans(kind="task", where="status = open and effort < 60", when=W(U("week", 0, weekday=5)))]),
-  T("beto's out until friday, so the yeast task goes to friday", diff(upd("yeast", date="2026-10-30")),
-    ref=[act("reschedule", kind="task", name="yeast", args=lines(to=U("week", 0, weekday=5)))]))
-
 S("T32-103-P", "date-window-reads from-on-open-span past-perfect-count closed-at-today count para",
   T("count flour deliveries starting the 10th", val(4),
     ref=[ans(op="count", kind="event", name="Flour delivery", when=W({"from": D("2026-11-10")}))]),

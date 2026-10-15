@@ -10,8 +10,6 @@ def W(expr):
 
 
 OPEN = 'status = "open"'
-IOWE = 'direction = "i_owe" and status = "open"'
-
 S("T18-B001", "c3b superlative task biggest open count",
   T("biggest open job", rows("trailer"),
     ref=[ans(kind="task", where=OPEN, order="effort desc", limit=1)]),
@@ -26,14 +24,6 @@ S("T18-B002", "c3b superlative event next three dnd count photo newest",
   T("what's my newest photo", rows("b_creek"),
     ref=[ans(kind="photo", order="date desc", limit=1)]))
 
-S("T18-B003", "c3b superlative debt top 2 sum oldest document",
-  T("top 2 things i owe", rows("d_alex", "d_nadia", order=True),
-    ref=[ans(kind="debt", where=IOWE, order="amount desc", limit=2)]),
-  T("and how much do i owe in total", val((265, "AUD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=IOWE)]),
-  T("oldest document i've got", rows("microchip"),
-    ref=[ans(kind="document", order="date asc", limit=1)]))
-
 S("T18-B004", "c4b state-change complete complete create contrast",
   T("gave biscuit his flea treatment", diff(upd("flea", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="flea treatment")]),
@@ -47,12 +37,6 @@ S("T18-B005", "c4b state-change cancel event restore trashed task",
     ref=[act("cancel", kind="event", name="Cake tasting")]),
   T("undelete the library books one", diff(restore("library")),
     ref=[act("restore", kind="task", name="library books", trashed=True)]))
-
-S("T18-B006", "c4b state-change settle_debt log",
-  T("ollie finally paid me for the microphone", diff(upd("d_ollie", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Microphone")]),
-  T("texted dad back", diff(upd("dad", date=ANY)),
-    ref=[search("dad", kind="person"), act("log", rows="$dad", args=lines(kind="message"))]))
 
 S("T18-B007", "c4b state-change complete catch up create contrast",
   T("sent the shower invites", diff(upd("invites", status="completed", completed=ANY)),

@@ -301,8 +301,8 @@ class RuntimeCompile(unittest.TestCase):
         self.assertIn("next week = 2026-09-28..2026-10-04", dates)
         for think in ('intent: read\nkind: event\nwhere: status = confirmed · duration >= 30\nwhen: "next week" = dates[1]',
                       'intent: read\nkind: event\nwhen: "next friday" = dates[0]',
-                      'intent: write\nverb: reschedule\nset: to = ~dates[0]\nrows: #9',
-                      'intent: write\nverb: cancel\nrows: #9',
+                      'intent: write\nverb: reschedule\nset: to = ~dates[0]\nrows: #7',
+                      'intent: write\nverb: cancel\nrows: #7',
                       'intent: read\nkind: event\nwhen: "next week" = week+1\norder: date asc\nlimit: 2'):
             reply = req({"op": "compile", "slots": T.slots_json(T.parse3(think))})
             self.assertNotIn("refused", reply, think)
@@ -312,8 +312,8 @@ class RuntimeCompile(unittest.TestCase):
     def test_the_runtime_states_the_call_a_v4_think_compiles_to_and_says_what_it_inferred(self):
         req, dates = self.session("move the dentist to next friday and what is on next week")
         for think, inferred in (('intent: write\nverb: complete\nname: Pay rent', ["kind: task", "scope: all"]),
-                                ('intent: write\nverb: reschedule\npick: #9 (name)\nset: to = ~dates[0]', ["scope: one"]),
-                                ('intent: write\nverb: cancel\npick: #9 (focus)', ["scope: one", "refer: it -> #9"]),
+                                ('intent: write\nverb: reschedule\npick: #7 (name)\nset: to = ~dates[0]', ["scope: one"]),
+                                ('intent: write\nverb: cancel\npick: #7 (focus)', ["scope: one", "refer: it -> #7"]),
                                 ('intent: read\nkind: event\nwhen: "next week" = dates[1]', [])):
             reply = req({"op": "compile", "slots": T.slots_json(T.parse4(think))})
             self.assertNotIn("refused", reply, think)
@@ -323,7 +323,7 @@ class RuntimeCompile(unittest.TestCase):
     def test_a_refusal_names_the_slot(self):
         req, _ = self.session("what is on next week")
         for think, slot in (('intent: read\nkind: event\nrows: #99', "rows[0]"), ('intent: read\nkind: event\nwhere: status is bogus', "where"),
-                            ('intent: read\nkind: event\nwhen: "x" = dates[5]', "when"), ('intent: write\nrows: #9', "verb")):
+                            ('intent: read\nkind: event\nwhen: "x" = dates[5]', "when"), ('intent: write\nrows: #7', "verb")):
             reply = req({"op": "compile", "slots": T.slots_json(T.parse3(think))})
             self.assertEqual(reply.get("refused", {}).get("slot"), slot, (think, reply))
 
@@ -336,7 +336,7 @@ class RuntimeCompile(unittest.TestCase):
         compile = lambda slots: req({"op": "compile", "slots": slots})  # noqa: E731
         call = lambda think, rows: "<think>\n%s\n</think>\n\n%s" % (think, fmt.render.call_text("act", T.canon_call({"tool": "act", "args": {"verb": "cancel", "rows": rows}})["args"]))  # noqa: E731
         bad = call("intent: write\nverb: cancel\nrows: #99", "#99")
-        good = call("retry: rows[0]\nintent: write\nverb: cancel\nrows: #9", "#9")
+        good = call("retry: rows[0]\nintent: write\nverb: cancel\nrows: #7", "#7")
         seen = []
 
         def again(prefix):
@@ -354,11 +354,11 @@ class RuntimeCompile(unittest.TestCase):
         self.assertEqual((how, text), ("fallback", bad))
         self.assertEqual(hf_backend.compiled_message("no trace here", compile, again), ("no trace here", "none"))
         # the compiled call is the runtime's, not the draw's: a draw whose written call differs is overwritten
-        drawn = call("intent: write\nverb: cancel\nrows: #9", "#7")
+        drawn = call("intent: write\nverb: cancel\nrows: #7", "#8")
         text, how = hf_backend.compiled_message(drawn, compile, again)
         self.assertEqual(how, "compiled")
-        self.assertIn("<parameter=rows>\n#9\n", text)
-        self.assertNotIn("#7", text)
+        self.assertIn("<parameter=rows>\n#7\n", text)
+        self.assertNotIn("#8", text)
 
 
 if __name__ == "__main__":

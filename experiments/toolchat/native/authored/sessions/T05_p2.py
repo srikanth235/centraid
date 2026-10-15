@@ -6,10 +6,6 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 
-OWE = 'direction = "i_owe" and status = "open"'
-
-OWED = 'direction = "owes_me" and status = "open"'
-
 LIVE = 'status = "open"'
 
 def next_day_shift():

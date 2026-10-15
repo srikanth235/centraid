@@ -25,14 +25,6 @@ S("T08-002", "task reschedule prev ambiguous timesheet",
   T("so what's due tmrw", rows("restock", "bigmama_meds", "recovery_tank", "ts_apr"),
     ref=[ans(kind="task", when=W(U("day", 1)))]))
 
-S("T08-003", "person met cadence when-to",
-  T("who in eagles boosters didn't i meet thru eastside eagles", rows("tasha", "me"),
-    ref=[ans(kind="person", linked_to="$boosters", where='met != "Eastside Eagles"')]),
-  T("who am i supposed to check in with every two weeks or more", rows("mama", "bigmama", "tanya", "dre", "keisha", "monique", "tasha"),
-    ref=[ans(kind="person", where="cadence <= 14")]),
-  T("which of them haven't i heard from since last monday", rows("bigmama", "dre"),
-    ref=[ans(kind="person", within="@prev", when=W({"to": U("week", -1, weekday=1)}))]))
-
 S("T08-004", "delete person named restore",
   T("delete sheila grant, she left the company", diff(trash("sheila")),
     ref=[act("delete", kind="person", name="Sheila Grant")]),
@@ -54,23 +46,6 @@ S("T08-006", "restore person window",
   T("and jerome watts", ask(),
     ref=[bad(act("restore", kind="person", name="Jerome Watts", trashed=True)),
          askc("jerome's been in the trash too long to restore. make a new contact for him?")]))
-
-S("T08-007", "remove_from person multi delete empty group",
-  T("take brandon lee and omar haddad out of the practice carpool, they got another ride",
-    diff(unlink("carpool", "brandon"), unlink("carpool", "omar")),
-    ref=[act("remove_from", rows="$brandon, $omar", args=lines(from_="$carpool"))]),
-  T("who's left in it", rows("tasha", "me"),
-    ref=[ans(kind="person", linked_to="$carpool")]),
-  T("and fantasy league 2025 can go, nobody uses it", diff(gone("fantasy"), unlink("fantasy", "trey"), unlink("fantasy", "kevin"),
-                                                  unlink("fantasy", "me")),
-    ref=[act("delete", rows="$fantasy")]))
-
-S("T08-008", "refused group delete ask never_mind",
-  T("get rid of the boosters group", ask(),
-    ref=[bad(act("delete", rows="$boosters")),
-         askc("it still has expenses in it so it can't be deleted. want to settle up with everyone first?")]),
-  T("nah leave it", decline("never_mind"),
-    ref=[dec("never_mind")]))
 
 S("T08-009", "folder create edit new delete empty",
   T("make a folder called Reunion receipts", diff(new("folder", name="Reunion receipts")),

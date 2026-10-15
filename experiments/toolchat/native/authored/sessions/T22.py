@@ -22,30 +22,6 @@ S("T22-002", "unstar named nickname empty",
   T("which padel people don't have a nickname saved", rows("erik_s", "erik_l", "hanna", "mats"),
     ref=[ans(kind="person", where='nickname is empty and role contains "padel"')]))
 
-S("T22-004", "group person count edit group named count",
-  T("which groups have more than five people in them", rows("padel_g", "fika_g"),
-    ref=[ans(kind="group", where="person count > 5")]),
-  T("rename the fika fund one to Late shift fika", diff(upd("fika_g", name="Late shift fika")),
-    ref=[act("edit", rows="$fika_g", args=lines(name="Late shift fika"))]),
-  T("how many people in it", val(6),
-    ref=[ans(op="count", kind="person", linked_to="$fika_g")]))
-
-S("T22-005", "find-only group edit group prev",
-  T("the group that's me karin and gunnar, what's it called", rows("crayfish_g"),
-    ref=[find(kind="group", where="person count < 4"), ans(rows="@prev")]),
-  T("call it Crayfish party instead, we do it every year", diff(upd("crayfish_g", name="Crayfish party")),
-    ref=[act("edit", rows="@prev", args=lines(name="Crayfish party"))]))
-
-S("T22-006", "group currency edit group prev compute balance debt",
-  T("which of my groups is in euros", rows("berlin_g"),
-    ref=[ans(kind="group", where='currency = "EUR"')]),
-  T("rename that to Berlin September", diff(upd("berlin_g", name="Berlin September")),
-    ref=[act("edit", rows="@prev", args=lines(name="Berlin September"))]),
-  T("where am i with david", val((-90, "EUR"), (-450, "SEK")),
-    ref=[comp(op="balance", rows="$david"), ans(value="@prev")]),
-  T("and on the debts side?", rows("d_david"),
-    ref=[ans(kind="debt", linked_to="$david")]))
-
 S("T22-007", "delete event where empty read",
   T("delete the cancelled thing on sunday", diff(trash("kayak")),
     ref=[act("delete", kind="event", when=W(U("week", 0, weekday=7)), where='status = "cancelled"')]),

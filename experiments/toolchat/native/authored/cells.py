@@ -58,7 +58,7 @@ VERB_CLASS = {"create": "create", "delete": "delete", "restore": "restore",
               "edit": "field", "reschedule": "field", "complete": "field", "reopen": "field",
               "cancel": "field", "star": "field", "unstar": "field",
               "add_to": "link", "remove_from": "link",
-              "log": "ledger", "settle_up": "ledger", "settle_debt": "ledger", "reveal": "read"}
+              "log": "ledger", "reveal": "read"}
 BEHAVIOURS = ["ambiguous", "empty result", "trashed row", "restore window", "refused delete",
               "knock-on diff", "linked_to all", "photo undo", "event overlap"]
 PHRASINGS = [(m, v) for m in ("command", "question", "indirect") for v in ("verbatim", "non-verbatim")]
@@ -129,7 +129,7 @@ H_STOP = set("""the and for with from your you are was were has have had not but
 
 # H3 same-word lookalike: words too generic to make two rows lookalikes (kind nouns, small connectives)
 H3_GENERIC = set("""list lists note notes task tasks event events album albums photo photos folder folders document documents
-    group groups person people debt debts locker item items login logins the and for with from new old plan plans trip trips day days week
+    person people locker item items login logins the and for with from new old plan plans trip trips day days week
     weeks home work general misc other stuff things thing""".split())
 # the lookalike carries every name word the message says of the target (so the words alone do not pick the row);
 # extent: the message says only part of the target's name (partial) or all of it (whole, e.g. target "Kids",
@@ -147,7 +147,7 @@ H4_EXCEPT = r"\b(?:except|but|apart from|other than|bar|keep (?:just|only)|leave
 H4_DESTROY = r"\b(?:delete|erase|wipe|clear|remove|get rid of|bin|trash|purge|throw away|dump)\b"
 # a message with none of these (and a statement shape) is an FYI: it states a fact and asks for nothing
 H4_COMMAND = (r"\b(?:add|log|star|unstar|move|push|shove|delete|remove|cancel|complete|tick|mark|set|change|make|create|show|find|tell|"
-              r"give|remind|restore|bring|undo|settle|put|rename|edit|update|bump|clear|read|reveal|get|jot|reopen|reschedule|"
+              r"give|remind|restore|bring|undo|put|rename|edit|update|bump|clear|read|reveal|get|jot|reopen|reschedule|"
               r"what|when|who|how|where|which|why|is|are|do|does|did|can|could|please|any|anything|anyone|erase|wipe|search|look|check|"
               r"display|print|export|need|want|wanna)\b")
 _FYI_PRED = (r"paid|got|went|saw|gave|took|left|sent|made|came|met|had|has|have|is|are|was|were|will|'ll|owe|owes|wants?|needs?|"
@@ -206,13 +206,12 @@ H6_PAST_ONLY = ("last-year", "N-years-ago")  # a year ago is only ever read back
 
 # H7 container word collision: container kind -> the field of a member row that names it
 H7_CONTAINERS = {"list": ("task", "list"), "notebook": ("note", "notebook"), "folder": ("document", "folder"),
-                 "album": ("photo", "albums"), "group": ("expense", "group")}
+                 "album": ("photo", "albums")}
 H7_FORMS = ["linked_to", "name-filter"]
 # how the message names the container: its kind word ("the kitchen list"), its full name, or only a theme word of its name
 H7_NAMING = ["full-name", "kind-word", "theme-word"]
 # the kind word of each container kind
-H7_KIND_WORD = {"list": r"\blist\b", "notebook": r"\b(?:notebook|notes)\b", "folder": r"\bfolder\b", "album": r"\balbum\b",
-                "group": r"\b(?:group|split|expenses|trip|fund|pool)\b"}
+H7_KIND_WORD = {"list": r"\blist\b", "notebook": r"\b(?:notebook|notes)\b", "folder": r"\bfolder\b", "album": r"\balbum\b"}
 
 
 def _table_h():
@@ -425,8 +424,8 @@ def _table_e(x):
         "empty result": (set(x["kinds"]), ""),
         "trashed row": (restorable, "has no trash (deleted for good, or never deleted)"),
         "restore window": (restorable, "has no restore verb"),
-        "refused delete": ({"group", "folder", "person"},
-                           "is never refused: the runtime refuses only group/folder deletes and person remove_from"),
+        "refused delete": ({"folder"},
+                           "is never refused: the runtime refuses only folder deletes"),
         "knock-on diff": (set(x["kinds"]), ""),
         "linked_to all": (linked, "has no links"),
         "photo undo": ({"photo"}, "is not a photo: undo restoring albums is photo-only"),
@@ -485,8 +484,6 @@ CONFIRMED_UNREACHABLE = {
     ("A", "edit", "notebook", "multi"): "notebook names are unique and name is its only editable "
                                         "field, so a multi-row edit is always refused",
     ("G", "tool×outcome", "find:ambiguous"): "find:ambiguous is unreachable (table D)",
-    ("A", "edit", "group", "multi"): "group names are unique and name is its only editable field "
-                                     "(currency cannot be edited), so a multi-row edit is refused",
 }
 
 

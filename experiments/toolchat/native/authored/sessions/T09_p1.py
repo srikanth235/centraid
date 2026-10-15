@@ -141,16 +141,6 @@ S("T09-053-P", "restore window event refusal restore undo para",
   T("thursday's events then?", rows("checkin_0514", "cb_0514"),
     ref=[ans(kind="event", when=W(U("week", 0, weekday=4)))]))
 
-S("T09-058-P", "delete group with expenses refused balance para",
-  T("exam's in june, so the bar prep study group can be wiped", ask(),
-    ref=[bad(act("delete", kind="group", name="Bar prep study group")),
-         askc("it still has expenses in it, so it can't be deleted. want to see balances first?")]),
-  T("yes, what's my balance there", val((103, "CAD")),
-    ref=[find(kind="person", linked_to="$barprep"),
-         ans(op="balance", kind="group", name="Bar prep study group", linked_to="$me")]),
-  T("also, folders with no documents?", rows("old_f"),
-    ref=[ans(kind="folder", where="document count < 1")]))
-
 S("T09-061-P", "repair refused unit effort within sum max para",
   T("open tasks needing more than two hours of effort",
     rows("factum", "disc_outline", "vows", "cpd", "mock_exam", "invites"),
@@ -265,18 +255,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 OPEN = 'status = "open"'
-
-IOWE = 'direction = "i_owe" and status = "open"'
-
-OWED = 'direction = "owes_me" and status = "open"'
-
-S("T09-B003-P", "c3b superlative debt top 3 sum biggest owed para",
-  T("three biggest debts owed to me", rows("d_mom", "d_ada", "d_kemi", order=True),
-    ref=[ans(kind="debt", where=OWED, order="amount desc", limit=3)]),
-  T("sum of what they owe me", val((527.5, "CAD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=OWED)]),
-  T("my largest debt?", rows("d_dad"),
-    ref=[ans(kind="debt", where=IOWE, order="amount desc", limit=1)]))
 
 import json
 

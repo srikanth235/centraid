@@ -54,16 +54,6 @@ S("T37-053", "repair cadence-unit within-when log",
   T("rang mary o'brien this morning, log it", diff(upd("mary_o", date="2027-03-09T10:40")),
     ref=[act("log", rows="$mary_o", args="kind: call")]))
 
-S("T37-054", "balance person then narrowed group K2 substitution",
-  T("where am i with dec", val((-140, "EUR")),
-    ref=[ans(op="balance", kind="person", name="dec")]),
-  T("just the boston one", val((16.67, "USD")),
-    ref=[ans(op="balance", kind="group", name="Boston Trip", linked_to="$declan")]),
-  T("and kathleen's", val((-120, "USD")),
-    ref=[ans(op="balance", kind="group", name="Boston Trip", linked_to="$kathleen")]),
-  T("photos with kathleen from the boston album in december", rows("p_bos_northend", "p_bos_kath"),
-    ref=[ans(kind="photo", linked_to="$kathleen, $boston_album", when=W(U("month", -1, name=12)))]))
-
 S("T37-055", "create subtask container read complete-two exclude",
   T("add a subtask to the easter project, iron the good tablecloth, due the 26th",
     diff(new("task", name=has("tablecloth"), date="2027-03-26"), link("easter_proj", "new")),
@@ -129,36 +119,6 @@ S("T37-058", "rename-then-count delete-event-where reschedule-edit-two cancel-by
     ref=[ans(kind="task", linked_to="$family_list", where="status = open", when=W(U("week", 0)),
              exclude="$easter_lamb")]))
 
-S("T37-059", "two-writes star-unstar then read starred ambiguous-person ask pick unstar-two where-two",
-  T("unstar the home wifi and star the aoife one, then show me which starred ones aren't logins",
-    rows("joint_acct", "aoife_wifi", "gaa_member",
-         also=diff(upd("home_wifi", starred=False), upd("aoife_wifi", starred=True))),
-    ref=[act("unstar", rows="$home_wifi", more=True), act("star", rows="$aoife_wifi", more=True),
-         ans(kind="locker item", where='starred = yes and type != "login"')]),
-  T("star sean", ask("sean_b", "sean_m"),
-    ref=[act("star", kind="person", name="sean")]),
-  T("the one from the gaa", diff(upd("sean_m", starred=True)),
-    ref=[find(kind="person", name="sean", linked_to="$gaa"), act("star", rows="@prev")]),
-  T("unstar tadhg and cian", diff(upd("tadhg", starred=False), upd("cian", starred=False)),
-    ref=[act("unstar", rows="$tadhg, $cian")]),
-  T("which starred people are on weekly cadence", rows("declan"),
-    ref=[ans(kind="person", where="starred = yes and cadence = 7")]),
-  T("which starred people are in golf pot", rows("sean_m"),
-    ref=[ans(kind="person", linked_to="$golf", where="starred = yes")]))
-
-S("T37-060", "debts k4 settle-then-read superlative min link",
-  T("what do i still owe over twenty euro before christmas", rows("d_mary_k"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open and amount > 20 EUR",
-             when=W({"to": D("2026-12-25")}))]),
-  T("settle that and show me what else i owe", rows("d_siobhan", "d_tadhg", "d_padraig", "d_declan",
-                                                    also=diff(upd("d_mary_k", status="settled"))),
-    ref=[act("settle_debt", rows="$d_mary_k", more=True),
-         ans(kind="debt", where="direction = i_owe and status = open", exclude="$d_mary_k")]),
-  T("and the smallest one anyone owes me", rows("d_sean_b"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open", order="amount asc", limit=1)]),
-  T("what's sean burke's march debt for", rows("d_sean_b"),
-    ref=[ans(kind="debt", linked_to="$sean_b", when=W(U("month", 0, name=3)))]))
-
 S("T37-061", "k3 completed-since reopen reschedule-then-read link",
   T("what did i finish on the gaa list since the start of february", rows("gaa_vests"),
     ref=[ans(kind="task", linked_to="$gaa_list", where="status = completed", when=W({"from": D("2027-02-01")}))]),
@@ -170,25 +130,6 @@ S("T37-061", "k3 completed-since reopen reschedule-then-read link",
          ans(kind="task", linked_to="$gaa_list", where="status = open", when=W({"to": D("2027-03-12")}),
              exclude="$gaa_vests")]))
 
-
-S("T37-062", "chain find-event balance repair-create-date two-writes ambiguous-person pick",
-  T("who from the golf pot was at the february outing", rows("gerry", "brendan", "sean_m"),
-    ref=[find(kind="event", name="golf society outing", when=W(U("month", 0, name=2))),
-         ans(kind="person", linked_to="$golf, @prev")]),
-  T("where am i with sean murphy", val((70, "EUR")),
-    ref=[ans(op="balance", kind="person", name="sean murphy")]),
-  T("put a golf lesson with gerry in the diary friday at 11",
-    diff(new("event", name=has("golf", "lesson"), date="2027-03-12T11:00")),
-    ref=[bad(act("create", args="kind: event\nname: Golf lesson with Gerry\ndate: friday 11:00")),
-         act("create", args="kind: event\nname: Golf lesson with Gerry\n" + lines(date=U("week", 0, weekday=5, time="11:00")))]),
-  T("move the lesson to four and cancel the call with dec on the 14th",
-    diff(upd("+1", date="2027-03-12T16:00"), upd("calldec_0314", status="cancelled")),
-    ref=[act("reschedule", rows="$new", args=lines(to=U("week", 0, weekday=5, time="16:00")), more=True),
-         act("cancel", kind="event", name="call declan", when=W(D("2027-03-14")))]),
-  T("star mary", ask("mary_k", "mary_o"),
-    ref=[act("star", kind="person", name="mary")]),
-  T("the book club one", diff(upd("mary_k", starred=True)),
-    ref=[find(kind="person", name="mary", linked_to="$bookclub"), act("star", rows="@prev")]))
 
 S("T37-063", "repair where-date two-writes search-role star count-group delete-where undo-restore",
   T("health list due before the 20th", rows("knee_ex", "hearing_aid"),

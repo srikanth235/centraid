@@ -28,17 +28,6 @@ S("T13-052", "seven turns nigsoc upcoming members write read log subtasks",
   T("got the logo from emeka already, mark that one", diff(upd("logo", status="completed", completed=ANY)),
     ref=[act("complete", rows="$logo")]))
 
-S("T13-053", "ambiguous person log ask balance",
-  T("log a coffee with tom", ask("tom_h", "tom_b"),
-    ref=[act("log", kind="person", name="Tom", args=lines(kind="coffee")),
-         askc("tom hargreaves or tom bennett?", options="$tom_h, $tom_b")]),
-  T("the lab one", diff(upd("tom_b", date=ANY)),
-    ref=[act("log", rows="$tom_b", args=lines(kind="coffee"))]),
-  T("last time i spoke to tom hargreaves?", rows("tom_h"),
-    ref=[ans(rows="$tom_h")]),
-  T("and what's he owe me", val((49.5, "GBP")),
-    ref=[ans(op="balance", rows="$tom_h")]))
-
 S("T13-054", "ambiguous event reschedule ask linked",
   T("move the xrd session to 10am", ask("xrd_0908", "xrd_0915"),
     ref=[act("reschedule", kind="event", name="XRD session", args=lines(to=U("day", 0, anchor="row", time="10:00"))),
@@ -211,16 +200,3 @@ S("T13-074", "event status empty cancelled delete undo",
     ref=[act("delete", rows="$gp")]),
   T("undo", diff(restore("gp")),
     ref=[act("undo")]))
-
-S("T13-075", "five turns groups linked_to all status empty weekend cancel",
-  T("which groups are wei and fatima al-sayed both in", rows("coffee", "lisbon"),
-    ref=[ans(kind="group", linked_to="$wei, $fatima")]),
-  T("and wei and tom bennett", rows("coffee"),
-    ref=[ans(kind="group", linked_to="$wei, $tom_b")]),
-  T("any events that don't have a status?", rows(),
-    ref=[ans(kind="event", where="status is empty")]),
-  T("what's tentative this weekend", rows("seun_coffee", "mumcall_0906", "house_meeting"),
-    ref=[ans(kind="event", where='status = "tentative"',
-             when=W(span(U("week", 0, weekday=6), U("week", 0, weekday=7))))]),
-  T("cancel the coffee with seun, he's i'll", diff(upd("seun_coffee", status="cancelled")),
-    ref=[act("cancel", kind="event", name="Coffee with Seun")]))

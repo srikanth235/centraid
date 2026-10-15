@@ -32,12 +32,6 @@ S("T31-K102", "list word is a document and a task name i3skill S6",
   T("when's the zakopane packing list due", rows("zak_pack"),
     ref=[ans(kind="task", name="Zakopane packing list")]))
 
-S("T31-K103", "iou debt both directions same person i3skill S6",
-  T("any ious with kuba", rows("d_kuba_gas", "d_kuba_net"),
-    ref=[ans(kind="debt", linked_to="$kuba")]),
-  T("and darek", rows("d_darek_pizza"),
-    ref=[ans(kind="debt", linked_to="$darek")]))
-
 S("T31-K104", "diary entry means note i3skill S6",
   T("show my diary entries", rows("n_diary_shift", "n_diary_good"),
     ref=[ans(kind="note", name="Diary entry")]),

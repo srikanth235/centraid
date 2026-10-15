@@ -1,18 +1,6 @@
 from gold import *
 
 
-S("T25-052", "five turns group balance settle_up amount undo ledger settle_debt",
-  T("where's Daniel Roy at in Mika expenses", val((-199.5, "CAD")),
-    ref=[ans(op="balance", kind="group", name="Mika expenses", linked_to="$daniel")]),
-  T("he paid me back 64.50 for the boots", diff(upd("daniel", balance=ANY), settle=[("Daniel Roy", "64.50")]),
-    ref=[act("settle_up", rows="$daniel", args=lines(group="$mika_exp", amount=64.5))]),
-  T("undo that, it was the camp money not the boots", diff(),
-    ref=[act("undo")]),
-  T("fine, settle all of it with him", diff(settle=["Daniel Roy"]),
-    ref=[act("settle_up", rows="$daniel", args=lines(group="$mika_exp"))]),
-  T("and mark the Half of winter boots debt settled", diff(upd("d_daniel_boots", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Half of winter boots")]))
-
 S("T25-053", "six turns decline out_of_scope ambiguous log members tasks four calls write read note",
   T("text marc that i'm in for tremblant", decline("out_of_scope"),
     ref=[dec("out_of_scope")]),
@@ -32,19 +20,6 @@ S("T25-053", "six turns decline out_of_scope ambiguous log members tasks four ca
          ans(kind="task", linked_to="$hike_l", where='status = open')]),
   T("what's in the Tremblant packing list", rows("tremblant_pack"),
     ref=[ans(kind="note", name="Tremblant packing list")]))
-
-S("T25-054", "five turns book club ambiguous ask log balance settle_up",
-  T("book club next week?", rows("book_10"),
-    ref=[ans(kind="event", name="Book club", when=U("week", 1))]),
-  T("log a coffee with sarah", ask("sarah_c", "sarah_n"),
-    ref=[act("log", kind="person", name="Sarah", args=lines(kind="coffee")),
-         askc("sarah cohen or sarah nguyen?", options="$sarah_c, $sarah_n")]),
-  T("cohen", diff(upd("sarah_c", date=ANY)),
-    ref=[act("log", rows="$sarah_c", args=lines(kind="coffee"))]),
-  T("what's my balance with her", val((-12, "CAD")),
-    ref=[comp(op="balance", rows="$sarah_c"), ans(value="@prev")]),
-  T("settle up with her in the Book club kitty", diff(settle=["Sarah Cohen"]),
-    ref=[act("settle_up", rows="$sarah_c", args=lines(group="$bookclub"))]))
 
 S("T25-055", "ambiguous event ask reschedule",
   T("move the dentist to next friday 8:30", ask("dentist_mika", "dentist_me"),
@@ -77,14 +52,6 @@ S("T25-057", "five turns hydro count complete undo field reschedule",
     ref=[act("undo")]),
   T("push it to friday", diff(upd("hydro_10", date="2026-10-16")),
     ref=[act("reschedule", rows="$hydro_10", args=lines(to=U("week", 1, weekday=5)))]))
-
-S("T25-058", "compute min debt group sum direction",
-  T("smallest open debt each way", vgroups({"owes_me": (12, "CAD"), "i_owe": (25, "CAD")}),
-    ref=[comp(op="min", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]),
-  T("and total open each way", vgroups({"owes_me": (416.5, "CAD"), "i_owe": (535, "CAD")}),
-    ref=[comp(op="sum", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]))
 
 S("T25-059", "create notebook edit new add_to note",
   T("new notebook Co-parenting", diff(new("notebook", name="Co-parenting")),

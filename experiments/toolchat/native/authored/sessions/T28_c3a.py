@@ -30,13 +30,6 @@ S("T28-A004", "ask-options document delete never_mind c3a",
   T("oh no, not the whakapapa chart. leave them both", decline("never_mind"),
     ref=[dec("never_mind")]))
 
-S("T28-A005", "ask-options debt settle_debt c3a",
-  T("settle the petrol one", ask("d_kevin", "d_pita", "d_sam"),
-    ref=[act("settle_debt", kind="debt", name="petrol"),
-         askc("Kevin's petrol to Taupō (he owes you 40), Pita's tangi petrol (you owe 80) or Sam's mower petrol (you owe 15)?", options="$d_kevin, $d_pita, $d_sam")]),
-  T("pita's, i paid him at the marae", diff(upd("d_pita", status="settled")),
-    ref=[act("settle_debt", rows="$d_pita")]))
-
 S("T28-A006", "ask-options photo star never_mind c3a",
   T("star the aroha photo", ask("p_aroha", "p_bday"),
     ref=[act("star", kind="photo", name="aroha"),
@@ -66,14 +59,6 @@ S("T28-A008", "follow-up c3a",
     ref=[ans(within="@prev", when=J({"to": U("week", 1, weekday=3)}))]),
   T("what's after that", rows("cricket_0228", "marae_0301", "netball", "waka_0227", "aroha_bday", "depot_lunch"),
     ref=[ans(within="@1", exclude="@2")]))
-
-S("T28-A009", "follow-up c3a",
-  T("what's owed to me", rows("d_kiri", "d_rawiri", "d_moana", "d_mere", "d_kevin"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 50", rows("d_kiri", "d_rawiri", "d_mere"),
-    ref=[ans(within="@prev", where="amount > 50 NZD")]),
-  T("and the biggest one", rows("d_rawiri"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
 
 S("T28-A010", "follow-up c3a",
   T("what's in the mokopuna album", rows("p_ro", "p_moko_all", "p_netball", "p_waka", "p_cricket", "p_touch"),

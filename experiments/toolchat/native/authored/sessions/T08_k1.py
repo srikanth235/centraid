@@ -77,10 +77,6 @@ S("T08-K013", "read not write water bill i3skill S3",
   T("did i pay the water bill", rows("water_01", "water_02", "water_03", "water_04"),
     ref=[ans(kind="task", name="Pay water bill")]))
 
-S("T08-K014", "read debt i owe kevin i3skill S3",
-  T("did i pay kevin for the ladder", rows("d_kevin"),
-    ref=[ans(kind="debt", name="ladder")]))
-
 S("T08-K015", "read cancelled softball i3skill S3",
   T("was the softball game cancelled", rows("softball"),
     ref=[ans(kind="event", name="softball")]))
@@ -100,12 +96,6 @@ S("T08-K017", "read starred of them memberships i3skill S3",
 S("T08-K018", "read trashed did i delete i3skill S3",
   T("did i delete the gym task", rows("gym_cancel"),
     ref=[ans(kind="task", name="gym", trashed=True)]))
-
-S("T08-K019", "read debt two follow i3skill S3",
-  T("has trey paid me for the hawks tickets", rows("d_trey"),
-    ref=[ans(kind="debt", name="Hawks tickets")]),
-  T("and dre's shirt deposit", rows("d_dre"),
-    ref=[ans(kind="debt", name="Reunion shirt deposit")]))
 
 S("T08-K020", "no invention task description search i3skill S4",
   T("mark the royal blue one as done", diff(upd("shirts", status="completed", completed=ANY)),
@@ -134,12 +124,6 @@ S("T08-K025", "no invention note body search read i3skill S4",
 S("T08-K026", "no invention task description search overtime i3skill S4",
   T("complete the overtime rotation one", diff(upd("grievance", status="completed", completed=ANY)),
     ref=[search("overtime rotation", kind="task"), act("complete", rows="$grievance")]))
-
-S("T08-K027", "referent debt that one i3skill S1",
-  T("what's the biggest debt i owe", rows("d_mama"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"', order="amount desc", limit=1)]),
-  T("what's that for", rows("d_mama"),
-    ref=[ans(rows="$d_mama")]))
 
 S("T08-K028", "read starred named row i3skill S3",
   T("is the union card starred", rows("union_card"),

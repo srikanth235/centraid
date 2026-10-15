@@ -24,20 +24,6 @@ S("T09-051", "wedding morning edit reschedule ambiguous pick add_to",
   T("log a message with anton petrov, sent him our dietary list", diff(upd("anton", date=ANY)),
     ref=[act("log", kind="person", name="Anton Petrov", args=lines(kind="message"))]))
 
-S("T09-052", "condo evening balance repair pick settle complete",
-  T("when's the next condo board meeting", rows("cb_0514"),
-    ref=[ans(kind="event", name="Condo board meeting", when=W({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("who's in the board group", rows("priya_s", "gord", "linh", "me"),
-    ref=[ans(kind="person", linked_to="$condo")]),
-  T("how much do i owe priya", val((-15, "CAD")),
-    ref=[ans(op="balance", rows="$priya_s")]),
-  T("settle up with her in the condo group", diff(settle=[("Priya Sandhu", "7.5")]),
-    ref=[act("settle_up", rows="$priya_s", args=lines(group="$condo"))]),
-  T("what's open on the condo list", rows("agm_notice", "reserve", "repaint"),
-    ref=[ans(kind="task", linked_to="$condo_list", where='status = "open"')]),
-  T("circulate agm notice is done, mark it", diff(upd("agm_notice", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Circulate AGM notice")]))
-
 S("T09-053", "restore window event refusal restore undo",
   T("can you bring back the engagement shoot rain date", decline("not_found"),
     ref=[bad(act("restore", kind="event", name="Engagement shoot rain date", trashed=True)), dec("not_found")]),
@@ -49,16 +35,6 @@ S("T09-053", "restore window event refusal restore undo",
     ref=[act("undo")]),
   T("so what's on thursday", rows("checkin_0514", "cb_0514"),
     ref=[ans(kind="event", when=W(U("week", 0, weekday=4)))]))
-
-S("T09-054", "restore window ski balance star",
-  T("did i delete the blue mountain ski weekend", rows("ski"),
-    ref=[ans(kind="event", name="Blue Mountain", trashed=True)]),
-  T("restore it, hugo wants the dates", decline("not_found"),
-    ref=[bad(act("restore", kind="event", name="Blue Mountain", trashed=True)), dec("not_found")]),
-  T("fine. what's my balance with hugo mensah", val((0, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Hugo Mensah")]),
-  T("star him while you're at it", diff(upd("hugo", starred=True)),
-    ref=[act("star", rows="$hugo")]))
 
 S("T09-055", "trashed person restore undo",
   T("is greg tully in the trash", rows("greg"),
@@ -77,16 +53,6 @@ S("T09-057", "folder doc count then delete nonempty folder refused ask",
     ref=[bad(act("delete", kind="folder", name="Honeymoon")),
          askc("the honeymoon folder still has the tap and alfama bookings in it. move them somewhere first?")]))
 
-S("T09-058", "delete group with expenses refused balance",
-  T("delete the bar prep study group, exam's in june", ask(),
-    ref=[bad(act("delete", kind="group", name="Bar prep study group")),
-         askc("it still has expenses in it, so it can't be deleted. want to see balances first?")]),
-  T("yeah where am i at in it", val((103, "CAD")),
-    ref=[find(kind="person", linked_to="$barprep"),
-         ans(op="balance", kind="group", name="Bar prep study group", linked_to="$me")]),
-  T("ok and any folders with nothing in them", rows("old_f"),
-    ref=[ans(kind="folder", where="document count < 1")]))
-
 S("T09-059", "overlap create refused ask create linked reschedule",
   T("put a haircut on thursday at 7:15", ask(),
     ref=[bad(act("create", args=lines(kind="event", name="Haircut", date=U("week", 0, weekday=4, time="19:15")))),
@@ -97,15 +63,6 @@ S("T09-059", "overlap create refused ask create linked reschedule",
     ref=[ans(kind="person", linked_to="$team_lunch")]),
   T("move the team lunch to 1", diff(upd("team_lunch", date="2026-05-15T13:00")),
     ref=[act("reschedule", rows="$team_lunch", args=lines(to=U("day", 0, anchor="row", time="13:00")))]))
-
-S("T09-060", "overlap create refused create balance",
-  T("book drinks with marcus thursday at 7", ask(),
-    ref=[bad(act("create", args=lines(kind="event", name="Drinks with Marcus", date=U("week", 0, weekday=4, time="19:00")))),
-         askc("thursday at 7 you've got the condo board meeting till 8:30. another time?")]),
-  T("friday 5:30 then", diff(new("event", name=has("Marcus"), date="2026-05-15T17:30")),
-    ref=[act("create", args=lines(kind="event", name="Drinks with Marcus", date=U("week", 0, weekday=5, time="17:30")))]),
-  T("overall, what does my debt to him come to", val((-165, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Marcus Bell")]))
 
 S("T09-061", "repair refused unit effort within sum max",
   T("tasks that'll take more than two hours that i haven't done",
@@ -129,27 +86,6 @@ S("T09-062", "missing weekday reschedule log",
     ref=[ans(kind="person", linked_to="$florist")]),
   T("mark her called, all confirmed", diff(upd("rachel", date=ANY)),
     ref=[act("log", rows="$rachel", args=lines(kind="call"))]))
-
-S("T09-065", "search two priyas ask balance settle",
-  T("how much does priya owe me", ask("priya_r", "priya_s"),
-    ref=[search("priya", kind="person"),
-         askc("priya raman or priya sandhu from the condo board?", options="$priya_r, $priya_s")]),
-  T("raman", val((138, "CAD")),
-    ref=[ans(op="balance", rows="$priya_r")]),
-  T("she paid me back for the coffee and pastries", diff(upd("d_priya_r", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Coffee and pastries")]),
-  T("so what's she at", val((120, "CAD")),
-    ref=[ans(op="balance", rows="$priya_r")]))
-
-S("T09-066", "ambiguous jordan add_to group log cadence empty",
-  T("add jordan to the stag and doe group", diff(link("stag", "jordan_p")),
-    ref=[act("add_to", kind="person", name="Jordan", args=lines(to="$stag"))]),
-  T("so who's in the stag and doe group", rows("marcus", "jordan_l", "jordan_p", "me"),
-    ref=[ans(kind="person", linked_to="$stag")]),
-  T("log a message with jordan lee, texted him the address", diff(upd("jordan_l", date=ANY)),
-    ref=[act("log", kind="person", name="Jordan Lee", args=lines(kind="message"))]),
-  T("which articling students have i not set a check-in for", rows("mateo"),
-    ref=[ans(kind="person", where='role contains "articling" and cadence is empty')]))
 
 S("T09-067", "ambiguous photo unstar find-only add_to",
   T("unstar the cherry blossoms photo", diff(upd("blossom_dan", starred=False)),
@@ -202,16 +138,6 @@ S("T09-072", "delete person prev document",
     ref=[act("delete", rows="@prev")]),
   T("delete the photographer contract", diff(trash("photo_contract")),
     ref=[act("delete", kind="document", name="Photographer contract")]))
-
-S("T09-073", "create person remove_from new delete new",
-  T("add nina castillo, new articling student, to the bar prep group",
-    diff(new("person", name="Nina Castillo"), link("barprep", "new")),
-    ref=[act("create", more=True, args=lines(kind="person", name="Nina Castillo", role="articling student")),
-         act("add_to", rows="$new", args=lines(to="$barprep"))]),
-  T("hm she's in the other cohort, take her out", diff(unlink("barprep", "+1")),
-    ref=[act("remove_from", rows="$c1", args=lines(from_="$barprep"))]),
-  T("and delete her contact", diff(trash("+1")),
-    ref=[act("delete", rows="$c1")]))
 
 S("T09-074", "create event edit new reschedule where",
   T("add a call with colette next monday 7pm", diff(new("event", name=has("Colette"), date="2026-05-18T19:00")),

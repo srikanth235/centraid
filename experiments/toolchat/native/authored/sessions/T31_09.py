@@ -73,18 +73,6 @@ S("T31-149", "when templates mama after-15th five-a-side flat dinner league year
   T("how many league matches are in december", val(1),
     ref=[ans(op="count", kind="event", name="league match", when=J(U("month", 0, name=12)))]))
 
-S("T31-150", "debts over a hundred older other-one min max owed-to-me compute",
-  T("which debts over a hundred are still open", rows("d_natalia", "d_kasia"),
-    ref=[ans(kind="debt", where="amount > 100 and status = open")]),
-  T("which of those is older", rows("d_natalia"),
-    ref=[ans(within="@1", order="date asc", limit=1)]),
-  T("and what's the other one for", rows("d_kasia"),
-    ref=[ans(within="@1", exclude="$d_natalia")]),
-  T("lowest amount someone still owes me", val((20, "PLN")),
-    ref=[comp(op="min", field="amount", kind="debt", where="direction = owes_me and status = open"), ans(value="@prev")]),
-  T("and the highest one", val((90, "PLN")),
-    ref=[comp(op="max", field="amount", kind="debt", where="direction = owes_me and status = open"), ans(value="@prev")]))
-
 S("T31-151", "find-act four facets flat jobs football photos admin tasks ward priority",
   T("tick off the open flat jobs due before the weekend that take under 15 minutes",
     diff(upd("bin_rota", status="completed", completed=ANY)),
@@ -102,25 +90,6 @@ S("T31-151", "find-act four facets flat jobs football photos admin tasks ward pr
     diff(upd("swap_shift", priority=2), upd("gift_card", priority=2)),
     ref=[find(kind="task", linked_to="$ward_l", where="status = open and person count >= 1", when=J(U("month", 0))),
          act("edit", rows="@4", args="priority: 2")]))
-
-S("T31-152", "recovery-nolink london group tasks zakopane packing ward list events",
-  T("what's due for the london group", rows("london_gifts", "london_pounds", "london_pack"),
-    ref=[ans(kind="task", linked_to="$london", where="status = open"),
-         ans(kind="task", linked_to="$london_trip", where="status = open")]),
-  T("tick off the zakopane group's packing list", diff(upd("zak_pack", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", linked_to="$zakopane"),
-         act("complete", kind="task", name="zakopane packing list")]),
-  T("what's on the ward list this year", rows("hospital_party"),
-    ref=[find(kind="event", linked_to="$ward_l", when=J(U("year", 0))),
-         ans(kind="event", name="ward", when=J(U("year", 0)))]))
-
-S("T31-153", "compute max min sum open tasks debts",
-  T("which open task eats the most time", val(120),
-    ref=[comp(op="max", field="effort", kind="task", where="status = open"), ans(value="@prev")]),
-  T("and the shortest", val(5),
-    ref=[comp(op="min", field="effort", kind="task", where="status = open"), ans(value="@prev")]),
-  T("sum up everything i owe", val((546, "PLN")),
-    ref=[comp(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open"), ans(value="@prev")]))
 
 S("T31-154", "write-then-read complete star log create read-where",
   T("tick off the cpr module and show me what's still open that takes over an hour",

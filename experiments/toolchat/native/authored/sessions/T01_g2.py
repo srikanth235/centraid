@@ -7,45 +7,6 @@ def J(d):
 
 WEEKEND = span(U("week", 0, weekday=6), U("week", 0, weekday=7))
 
-S("T01-116", "balance negative people",
-  T("what do i owe kwame", val((-17, "GBP")),
-    ref=[ans(op="balance", rows="$kwame")]),
-  T("and siobhan", val((-8.5, "GBP")),
-    ref=[ans(op="balance", rows="$siobhan")]),
-  T("zainab?", val((6, "GBP")),
-    ref=[ans(op="balance", rows="$zainab")]),
-  T("paid kwame back for the taxi", diff(upd("d_kwame_taxi", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="taxi")]))
-
-S("T01-117", "balance group hen do both signs",
-  T("how much am i up on the hen do", val((54, "GBP")),
-    ref=[search("Oluwaseun", kind="person"), ans(op="balance", kind="group", name="Hen Do", linked_to="$me")]),
-  T("and okoro", val((-126, "GBP")),
-    ref=[ans(op="balance", kind="group", name="Hen Do", linked_to="$jess_o")]),
-  T("laura?", val((414, "GBP")),
-    ref=[ans(op="balance", kind="group", name="Hen Do", linked_to="$laura")]))
-
-S("T01-118", "balance group house bills coffee",
-  T("where does callum stand on house bills", val((-13, "GBP")),
-    ref=[ans(op="balance", kind="group", name="House Bills", linked_to="$callum")]),
-  T("and me", val((13, "GBP")),
-    ref=[search("Oluwaseun", kind="person"), ans(op="balance", kind="group", name="House Bills", linked_to="$me")]),
-  T("coffee club, am i owed anything", val((2, "GBP")),
-    ref=[ans(op="balance", kind="group", name="Ward 7 Coffee Club", linked_to="$me")]),
-  T("log that i rang callum on the way home", diff(upd("callum", date=ANY)),
-    ref=[act("log", kind="person", name="Callum", args="kind: call")]))
-
-S("T01-119", "balance people repair effort-unit",
-  T("what does gemma owe me altogether", val((31, "GBP")),
-    ref=[ans(op="balance", rows="$gemma")]),
-  T("jess whitfield?", val((55, "GBP")),
-    ref=[ans(op="balance", rows="$jess_w")]),
-  T("tasks i'd need over an hour for", rows("revalidation", "cupboards", "temp_kitchen"),
-    ref=[bad(ans(kind="task", where="effort > 1 hour")),
-         ans(kind="task", where="effort > 60 minutes")]),
-  T("settle gemma's beyonce ticket money, she sent it", diff(upd("d_gemma_tickets", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Beyonce ticket share")]))
-
 S("T01-120", "decline out-of-scope weekend multi-write bare-weekday",
   T("will it rain at tobi's match on sunday", decline("out_of_scope"),
     ref=[dec("out_of_scope")]),

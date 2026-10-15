@@ -35,16 +35,6 @@ S("T31-093", "compute-locker types within exclude star empty-cards",
   T("which of my cards are starred", rows(),
     ref=[ans(kind="locker item", where="type = card and starred = yes")]))
 
-S("T31-094", "debts max compute biggest settle max-again",
-  T("what's the most i owe anyone at the moment", val((180, "PLN")),
-    ref=[comp(op="max", field="amount", kind="debt", where="direction = i_owe and status = open"), ans(value="@1")]),
-  T("which debt is that one", rows("d_natalia"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1)]),
-  T("settled it, paid natalia this morning", diff(upd("d_natalia", status="settled")),
-    ref=[act("settle_debt", rows="$d_natalia")]),
-  T("so what's the most i owe now", val((150, "PLN")),
-    ref=[comp(op="max", field="amount", kind="debt", where="direction = i_owe and status = open"), ans(value="@prev")]))
-
 S("T31-095", "mama calls count left within-babcia reschedule day-before",
   T("how many calls with mama have i got left", val(5),
     ref=[ans(op="count", kind="event", name="call mama", when=J({"from": U("day", 0)}))]),
@@ -85,17 +75,6 @@ S("T31-098", "ask-new-note gas meter notebook pin pinned",
     ref=[act("edit", rows="$c1", args="pinned: yes")]),
   T("which notes are pinned now", rows("n_flat_rules", "n_handover", "+1"),
     ref=[ans(kind="note", where="pinned = yes")]))
-
-S("T31-099", "ask-settle-up missing person group two-settles balance-compute",
-  T("settle up", ask(),
-    ref=[askc("With whom, and in which group?")]),
-  T("with piotr in the football fund", diff(upd("piotr", balance=ANY)),
-    ref=[act("settle_up", rows="$piotr", args=lines(group="$fiveaside"))]),
-  T("and darek", diff(upd("darek", balance=ANY)),
-    ref=[act("settle_up", rows="$darek", args=lines(group="$fiveaside"))]),
-  T("where do i stand in the football fund now", val((10, "PLN")),
-    ref=[search("Tomasz", kind="person"),
-         comp(op="balance", kind="group", name="Tuesday Football Fund", linked_to="$me"), ans(value="@prev")]))
 
 S("T31-100", "ask-diary-when create sunday read calls",
   T("put a call with babcia in the diary", ask(),

@@ -8,23 +8,6 @@ def J(d):
     return json.dumps(d, separators=(",", ":"))
 
 
-S("T36-023", "group delete members unlink refused expenses rename",
-  T("delete the honeymoon fund group",
-    diff(gone("honeymoon"), unlink("honeymoon", "anjali"), unlink("honeymoon", "shreya"), unlink("honeymoon", "me")),
-    ref=[act("delete", rows="$honeymoon")]),
-  T("and the baner flat bills one", ask(),
-    ref=[act("delete", rows="$flat")]),
-  T("ok just rename it to flat expenses", diff(upd("flat", name="Flat expenses")),
-    ref=[act("edit", rows="$flat", args="name: Flat expenses")]))
-
-S("T36-024", "remove_from balance ask settle_up",
-  T("take shreya off the honeymoon fund", diff(unlink("honeymoon", "shreya")),
-    ref=[act("remove_from", rows="$shreya", args="from: $honeymoon")]),
-  T("and kunal off the wedding group", ask("kunal", "wedding"),
-    ref=[act("remove_from", rows="$kunal", args="from: $wedding")]),
-  T("settle up with kunal in the wedding group first", diff(upd("kunal", balance=ANY), settle=[("Kunal", "9000.00")]),
-    ref=[act("settle_up", rows="$kunal", args="group: $wedding")]))
-
 S("T36-025", "find act prev reschedule list when status within effort",
   T("push everything due tomorrow on the work list to monday",
     diff(upd("release_notes", date="2026-12-14"), upd("pr_review", date="2026-12-14")),
@@ -83,31 +66,6 @@ S("T36-029", "photos person decoy month starred unstar",
     val(1, also=diff(upd("p_dubai_burj", starred=True))),
     ref=[act("star", rows="$p_dubai_burj", more=True),
          ans(op="count", kind="photo", linked_to="$rohan_k", where="starred = yes")]))
-
-S("T36-030", "balance person narrowed group superlative debt",
-  T("where am i with anju", val((-630, "INR")),
-    ref=[ans(op="balance", kind="person", name="anju")]),
-  T("just the household one", val((40, "INR")),
-    ref=[ans(op="balance", kind="group", name="Baner Flat Bills", linked_to="$anjali")]),
-  T("what's the biggest debt i have to pay off", rows("d_baba"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1)]))
-
-S("T36-031", "group balance me then member substitution",
-  T("where do i stand in the dubai trip", val((960, "AED")),
-    ref=[ans(op="balance", kind="group", name="Dubai Trip", linked_to="$me")]),
-  T("and arjun's", val((240, "AED")),
-    ref=[ans(op="balance", kind="group", name="Dubai Trip", linked_to="$arjun")]),
-  T("same for the wedding group, mine", val((-61300, "INR")),
-    ref=[ans(op="balance", kind="group", name="Wedding Settle-Up", linked_to="$me")]))
-
-S("T36-032", "settle_debt two more sum owed",
-  T("paid siddharth for the shuttlecocks and kunal for the dj",
-    diff(upd("d_siddharth", status="settled"), upd("d_kunal", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="shuttlecocks", more=True),
-         act("settle_debt", kind="debt", name="dj")]),
-  T("what's the smallest thing i still owe", val((590, "INR")),
-    ref=[comp(op="min", field="amount", kind="debt", where="direction = i_owe and status = open"),
-         ans(value="@prev")]))
 
 S("T36-033", "notes body contains notebook month pin",
   T("notes that mention the caterer", rows("w_vendors", "w_settle"),

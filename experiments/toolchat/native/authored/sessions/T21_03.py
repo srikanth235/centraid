@@ -1,16 +1,6 @@
 from gold import *
 
 
-S("T21-051", "four turns nickname in debt count linked read",
-  T("who are shiru and mama njeri in my contacts", rows("wanjiru", "esther"),
-    ref=[ans(kind="person", where='nickname in ("Shiru", "Mama Njeri")')]),
-  T("do either of them have debts on record with me", rows("esther"),
-    ref=[ans(kind="person", within="@prev", where="debt count != 0")]),
-  T("what's that one about", rows("d_esther"),
-    ref=[ans(kind="debt", linked_to="$esther")]),
-  T("is it still open?", rows("d_esther"),
-    ref=[ans(kind="debt", linked_to="$esther", where='status = "settled"')]))
-
 S("T21-052", "note count linked notebook linked_to all",
   T("which people have exactly two notes about them", rows("brian", "wanjiru", "beatrice", "kevin"),
     ref=[ans(kind="person", where="note count = 2")]),
@@ -22,14 +12,6 @@ S("T21-052", "note count linked notebook linked_to all",
 S("T21-053", "single nickname in",
   T("are Tabby and Fundi in my contacts", rows("tabby", "githinji"),
     ref=[ans(kind="person", where='nickname in ("Tabby", "Fundi")')]))
-
-S("T21-054", "debt count starred linked settle_debt",
-  T("any starred contacts with debts between us", rows("kevin", "alice"),
-    ref=[ans(kind="person", where="starred = yes and debt count != 0")]),
-  T("what's alice's one", rows("d_alice"),
-    ref=[ans(kind="debt", linked_to="$alice")]),
-  T("she paid me at the chama, mark it settled", diff(upd("d_alice", status="settled")),
-    ref=[act("settle_debt", rows="$d_alice")]))
 
 S("T21-055", "event duration week cancel decline",
   T("short things next week, half an hour or less", rows("brief_0608", "clinic_june"),
@@ -93,10 +75,6 @@ S("T21-061", "locker notes type sealed_egress read",
   T("fine what's the username on it", rows("nemis"),
     ref=[ans(rows="$nemis")]))
 
-S("T21-062", "single debt person count empty",
-  T("any debts with nobody attached to them?", rows(),
-    ref=[ans(kind="debt", where="person count <= 0")]))
-
 S("T21-063", "compute max effort status",
   T("biggest job by effort, open vs in progress", vgroups({"open": 240, "in_progress": 300}),
     ref=[comp(op="max", field="effort", kind="task", where='status in ("open", "in_progress")', group="status"),
@@ -105,38 +83,6 @@ S("T21-063", "compute max effort status",
     ref=[ans(kind="task", where='effort = 300 and status = "in_progress"')]),
   T("and the smallest open job?", val(5),
     ref=[ans(op="min", field="effort", kind="task", where='status = "open"')]))
-
-S("T21-064", "balance min search",
-  T("where do i stand with mary achieng", val((1500, "KES")),
-    ref=[ans(op="balance", rows="$mary_a")]),
-  T("smallest debt i owe anyone", val((500, "KES")),
-    ref=[ans(op="min", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("who's that to", rows("susan"),
-    ref=[find(kind="debt", where='direction = "i_owe" and status = "open"', order="amount asc", limit=1),
-         ans(kind="person", linked_to="@prev")]))
-
-S("T21-065", "star multi find",
-  T("star Collins Omondi and Janet Akinyi, they carried the book fair", diff(upd("collins", starred=True), upd("janet", starred=True)),
-    ref=[act("star", rows="$collins, $janet")]),
-  T("who's starred now, just the teachers", rows("mary_w", "collins", "janet"),
-    ref=[ans(kind="person", where='starred = yes and role contains "teacher"')]),
-  T("find the Mwangi family members", rows("kevin", "brian", "naomi", "me"),
-    ref=[find(kind="person", linked_to="$family"), ans(rows="@prev")]),
-  T("log a message with naomi, sent her the grad plan", diff(upd("naomi", date=ANY)),
-    ref=[act("log", rows="$naomi", args=lines(kind="message"))]))
-
-S("T21-066", "create group undo create",
-  T("start a group Heads conference Mombasa", diff(new("group", name="Heads conference Mombasa"), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Heads conference Mombasa"))]),
-  T("undo that, the county is paying for it all", diff(gone("+1"), unlink("+1", "me")),
-    ref=[act("undo")]))
-
-S("T21-067", "group where rename count",
-  T("rename the group that has six of us in it to Tumaini women's chama",
-    diff(upd("chama", name="Tumaini women's chama")),
-    ref=[act("edit", kind="group", where="person count >= 6", args=lines(name="Tumaini women's chama"))]),
-  T("and which groups have four or fewer", rows("harambee", "bom_tea", "family", "grad_trip"),
-    ref=[ans(kind="group", where="person count <= 4")]))
 
 S("T21-068", "reopen task where yesterday knock-on reschedule",
   T("reopen the task i ticked off yesterday, the airtime didn't go through",

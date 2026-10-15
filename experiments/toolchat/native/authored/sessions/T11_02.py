@@ -55,27 +55,6 @@ S("T11-030", "log named undo ledger not undone log named",
   T("log it for mary considine", diff(upd("mary_c", date=ANY)),
     ref=[act("log", kind="person", name="Mary Considine", args=lines(kind="visit"))]))
 
-S("T11-031", "single group currency literal",
-  T("which groups are in sterling", rows("chelt"),
-    ref=[ans(kind="group", where='currency = "GBP"')]))
-
-S("T11-032", "ambiguous group act ask edit",
-  T("rename the gaa group to GAA lotto 2026", ask("lotto", "juvenile"),
-    ref=[act("edit", kind="group", name="GAA", args=lines(name="GAA lotto 2026")),
-         askc("the club lotto or the juvenile fundraiser?", options="$lotto, $juvenile")]),
-  T("the lotto one", diff(upd("lotto", name="GAA lotto 2026")),
-    ref=[act("edit", rows="$lotto", args=lines(name="GAA lotto 2026"))]))
-
-S("T11-033", "ambiguous group delete refused ask never mind",
-  T("delete the gaa group", ask("lotto", "juvenile"),
-    ref=[act("delete", kind="group", name="GAA"),
-         askc("which one, the club lotto or the juvenile fundraiser?", options="$lotto, $juvenile")]),
-  T("the juvenile one, the fundraiser's over", ask(),
-    ref=[bad(act("delete", rows="$juvenile")),
-         askc("it still has the cones and the bag pack float in it, so it can't be deleted. leave it?")]),
-  T("leave it so", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
 S("T11-034", "add_to photo named undo link add_to count",
   T("add PJ on the old Massey to the farm album", diff(link("farm_al", "p_pj_tractor")),
     ref=[act("add_to", kind="photo", name="PJ on the old Massey", args=lines(to="$farm_al"))]),
@@ -168,26 +147,6 @@ S("T11-044", "event date time duration person count within",
   T("which of them have more than one person going", rows("show"),
     ref=[ans(within="@prev", where="person count > 1")]))
 
-S("T11-045", "status != enum role log prev sum debt",
-  T("u12 training this month that wasn't cancelled", rows("u12_0701", "u12_0715", "u12_0722", "u12_0729"),
-    ref=[ans(kind="event", name="U12 training", when=W(U("month", 0)), where='status != "cancelled"')]),
-  T("who's the coach again", rows("tadhg"),
-    ref=[find(kind="person", where='role contains "coach"'),
-         ans(rows="@prev")]),
-  T("log a message to him, told him cian's off wednesday", diff(upd("tadhg", date=ANY)),
-    ref=[act("log", rows="@prev", args=lines(kind="message"))]),
-  T("how much does he owe me for jerseys", val((150, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", linked_to="$tadhg")]))
-
-S("T11-046", "debt date span rel",
-  T("any debts from the twelfth of july", rows("d_sean_silage"),
-    ref=[ans(kind="debt", when=W(D("2026-07-12")))]),
-  T("and the open ones from june through last week",
-    rows("d_sean_silage", "d_mick_silage", "d_fergal", "d_eileen", "d_clodagh", "d_tom", "d_pj", "d_mick_diesel"),
-    ref=[ans(kind="debt", when=W(span(U("month", -1), U("week", -1))), where='status = "open"')]),
-  T("what about from wednesday up to 5 on friday", rows("d_tadhg", "d_mary_c"),
-    ref=[ans(kind="debt", when=W(span(U("week", 0, weekday=3), U("week", 0, weekday=5, time="17:00"))))]))
-
 S("T11-047", "task span priority set task count complete named",
   T("anything with a priority due between aug first and the end of next month",
     rows("bulk_tank", "calf_shed", "house_ins", "jerseys", "books", "cian_present"),
@@ -204,13 +163,3 @@ S("T11-048", "find miss search miss decline multi-kind",
          dec("not_found")]),
   T("ok anything about the co-op", rows("coop_mtg", "coop_q"),
     ref=[ans(kind="task,event,note", name="co-op")]))
-
-S("T11-049", "group members balance settle_up",
-  T("who's in the cheltenham group", rows("declan", "noreen", "pj", "me"),
-    ref=[ans(kind="person", linked_to="$chelt")]),
-  T("where's noreen in it", val((-280, "GBP")),
-    ref=[ans(op="balance", kind="group", name="Cheltenham 2026", linked_to="$noreen")]),
-  T("she gave me the cash, settle her up", diff(settle=["Noreen Kelly"]),
-    ref=[act("settle_up", rows="$noreen", args=lines(group="$chelt"))]),
-  T("and declan kelly's?", val((360, "GBP")),
-    ref=[ans(op="balance", kind="group", name="Cheltenham 2026", linked_to="$declan")]))

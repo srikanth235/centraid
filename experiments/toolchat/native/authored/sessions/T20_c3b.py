@@ -10,8 +10,6 @@ def W(expr):
 
 
 OPEN = 'status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-
 S("T20-B001", "c3b superlative event next three briefings count",
   T("next three staff wine briefings", rows("brief_0602", "brief_0609", "brief_0616", order=True),
     ref=[ans(kind="event", name="Staff wine briefing", when=W({"from": U("day", 0)}), order="date asc", limit=3)]),
@@ -31,12 +29,6 @@ S("T20-B005", "c4b state-change cancel event restore trashed task",
     ref=[act("cancel", kind="event", name="Electrician")]),
   T("bring back the helmet one", diff(restore("helmet")),
     ref=[act("restore", kind="task", name="helmet", trashed=True)]))
-
-S("T20-B006", "c4b state-change settle_debt log nickname",
-  T("stefano paid me for the gran fondo entry", diff(upd("d_stefano", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Gran fondo entry")]),
-  T("had coffee with mamma", diff(upd("mamma", date=ANY)),
-    ref=[search("mamma", kind="person"), act("log", rows="$mamma", args=lines(kind="coffee"))]))
 
 S("T20-B007", "c4b state-change complete catch up create contrast",
   T("ordered the chianti", diff(upd("chianti_1", status="completed", completed=ANY)),

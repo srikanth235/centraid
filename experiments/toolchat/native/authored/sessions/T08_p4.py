@@ -30,17 +30,6 @@ S("T08-202", "ordinal second reunion list complete ask pick star easter photos",
   T("3 is fine", diff(upd("p_table", starred=True)),
     ref=[act("star", rows="$p_table")]))
 
-# 203 which way the money goes
-S("T08-203", "debts owe direction negative balance sum settle both signs tanya",
-  T("what do i owe mama", val((-300, "USD")),
-    ref=[search("mama", kind="person"), ans(op="balance", kind="person", rows="$mama")]),
-  T("total they owe me", val((465.5, "USD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("settle mine with tanya, sent her the easter money", diff(upd("d_tanya", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$tanya", where='direction = "i_owe"')]),
-  T("and her side, she covered the decorations", diff(upd("d_tanya2", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$tanya", where='direction = "owes_me"')]))
-
 # 204 everything but one
 S("T08-204", "except exclude photos star reunion 2024 besides",
   T("photos from the 2024 reunion", rows("p_r24_shirts", "p_r24_grill", "p_r24_group", "p_r24_spades", "p_r24_kids"),
@@ -62,12 +51,3 @@ S("T08-205", "bare weekday at N haircut oil change range create friday night",
     ref=[act("create", args=lines(kind="event", name="Call with Dre", date=U("week", 0, weekday=6, time="20:00")))]))
 
 # 206 two writes in one message
-S("T08-206", "two writes settle debt complete star document",
-  T("paid marcus the gas money and cleaned the gutters", diff(upd("d_marcus_b", status="settled"), upd("gutters", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="gas money", more=True),
-         act("complete", kind="task", name="Clean gutters")]),
-  T("gave kevin the ladder money and star the dental card", diff(upd("d_kevin", status="settled"), upd("dental_card", starred=True)),
-    ref=[act("settle_debt", kind="debt", name="ladder", more=True),
-         act("star", kind="document", name="Dental insurance card")]),
-  T("what's my overall debt right now", val((375, "USD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))

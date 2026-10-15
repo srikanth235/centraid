@@ -19,13 +19,6 @@ S("T34-091", "container-link-read list-name-collision parent-narrow within linke
   T("mark the plaque as in progress, the supplier's started", diff(upd("church_hall_1", status="in_progress")),
     ref=[act("edit", rows="$church_hall_1", args="status: in_progress")]))
 
-S("T34-092", "container-link-read owner-row count groups-i-am-in within linked_to person",
-  T("how many groups am i in", val(15),
-    ref=[ans(op="count", kind="group", linked_to="$me")]),
-  T("which has my brother chidi in it", rows("family_fund", "mama_care", "london", "wedding"),
-    ref=[find(kind="person", name="Chidi", where='role = "brother"'),
-         ans(within="@1", linked_to="$chidi_o")]))
-
 S("T34-093", "container-link-read person-appointments name-collision within name",
   T("what's coming up with chidi anyanwu", rows("sd_270621", "shop_anniv", "sd_270705", "sd_270719"),
     ref=[ans(kind="event", linked_to="$chidi_a", when=W({"from": U("day", 0)}))]),
@@ -79,17 +72,6 @@ S("T34-099", "stray-condition by-name-write inert-purpose-clause complete star, 
   T("which notebook has the egusi recipe", rows("kitchen_nb"),
     ref=[bad(ans(kind="notebook", where='body contains "egusi"')),
          opn("$rec_2"), ans(rows="$kitchen_nb")]))
-
-S("T34-100", "stray-condition role-contains-vs-exact within met inert-purpose within linked_to group-decoy",
-  T("who are my drivers",
-    rows("damilola_oyelaran", "emmanuel_edet", "ifunanya_ogundipe", "kingsley_chukwu", "musa", "somto_okoro", "temitope_opara",
-         "ugochukwu_okoro"),
-    ref=[ans(kind="person", where='role contains "driver"')]),
-  T("which of them are at the shop, for the christmas bonus",
-    rows("damilola_oyelaran", "kingsley_chukwu", "musa", "temitope_opara"),
-    ref=[ans(within="@prev", where='met contains "Okafor and Sons"')]),
-  T("any of them in the staff group", rows("musa"),
-    ref=[ans(within="@prev", linked_to="$staff")]))
 
 # ---- date-window-reads ----------------------------------------------------------------------------
 
@@ -149,12 +131,6 @@ S("T34-107", "mixed note body-append open edit pin",
              args=lines(body="change oil every 200 hours, filters every 400, Engr Segun comes in March, June, September and December. oil change due in august"))]),
   T("and pin it", diff(upd("loose_6", pinned=True)),
     ref=[act("edit", rows="$loose_6", args="pinned: yes")]))
-
-S("T34-108", "mixed settle_up amount person group search",
-  T("my sister ngozi gave me 100k toward the family fund, settle her up",
-    diff(upd("ngozi_o", balance=ANY), settle=[("Ngozi Okafor-Bello", "100000.00")]),
-    ref=[search("ngozi", kind="person"),
-         act("settle_up", rows="$ngozi_o", args=lines(group="$family_fund", amount="100k"))]))
 
 S("T34-109", "mixed kind-word-decides documents photos tasks same-topic",
   T("any documents on the generator", rows("doc_12", "doc_24", "doc_39", "doc_51"),

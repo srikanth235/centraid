@@ -34,12 +34,6 @@ S("T26-K102", "list word is a note name not the list kind i3skill S6",
   T("and the party menu", rows("party_menu"),
     ref=[ans(kind="note", name="Party menu")]))
 
-S("T26-K103", "iou debt either direction i3skill S6",
-  T("any ious with bayo", rows("d_bayo"),
-    ref=[ans(kind="debt", linked_to="$bayo")]),
-  T("and with victor", rows("d_victor"),
-    ref=[ans(kind="debt", linked_to="$victor")]))
-
 S("T26-K104", "a note about body search then which notebook i3skill S6",
   T("that note about the soakaway", rows("archi_n"),
     ref=[ans(kind="note", where='body contains "soakaway"')]),

@@ -64,13 +64,6 @@ S("T33-033", "locker star find-then-restore past-window-decline",
     ref=[find(kind="locker item", name="hdb wifi", trashed="true"),
          act("restore", rows="@prev")]))
 
-S("T33-034", "two-writes star-unstar people starred-read",
-  T("star pa and unstar ma", diff(upd("pa", starred=ANY), upd("ma", starred=ANY)),
-    ref=[act("star", rows="$pa", more="true"),
-         act("unstar", rows="$ma")]),
-  T("starred people in the penang fund", rows("pa", "mei"),
-    ref=[ans(kind="person", linked_to="$penang", where="starred = yes")]))
-
 S("T33-035", "create-event two-writes-one-row wrong-container-decline",
   T("dinner with celine thursday at 7:30", diff(new("event", name=has("celine"), date="2026-12-17T19:30")),
     ref=[act("create", kind="event", args="name: Dinner with Celine\ndate: " + J(U("week", 1, weekday=4, time="19:30")))]),
@@ -100,19 +93,6 @@ S("T33-037", "create-person repair-met star-log-two-writes colleagues-starred",
          act("log", rows="$c1", args="kind: coffee")]),
   T("which of my colleagues are starred", rows("+1"),
     ref=[ans(kind="person", where='role = "colleague" and starred = yes')]))
-
-S("T33-038", "create-group add-members search-role search-empty-recovery group-balance",
-  T("new group osaka trip, in yen", diff(new("group", name=has("osaka"), currency="JPY"), link("new", "me")),
-    ref=[act("create", kind="group", args="name: Osaka Trip\ncurrency: JPY")]),
-  T("add my wife and okaasan to it", diff(link("+1", "mei"), link("+1", "okaasan")),
-    ref=[search("wife", kind="person"),
-         act("add_to", rows="$mei, $okaasan", args="to: $c1")]),
-  T("did i save an osaka hotel anywhere", rows(),
-    ref=[search("hotel"),
-         ans(kind="document", name="hotel")]),
-  T("how am i doing in the osaka group", val((0, "JPY")),
-    ref=[search("hiro", kind="person"),
-         ans(op="balance", kind="group", name="osaka trip", linked_to="$me")]))
 
 S("T33-039", "create-album add_to-two-rows delete-album-unlink",
   T("make an album called swim days and put kenji's first swim class and the bubbles photo in it",
@@ -160,14 +140,6 @@ S("T33-043", "bare-plural ask all-three pay-tasks monday",
     ref=[act("reschedule", kind="task", name="pay", when=J(U("week", 1, weekday=1)), args=lines(to=U("week", 1, weekday=2)))]),
   T("all three", diff(upd("pay_david", date="2026-12-15"), upd("pay_priya", date="2026-12-15"), upd("pay_jiahui", date="2026-12-15")),
     ref=[act("reschedule", rows="$pay_david, $pay_priya, $pay_jiahui", args=lines(to=U("week", 1, weekday=2)))]))
-
-S("T33-044", "create-debt balance settle-debt-by-link",
-  T("ravi owes me 20 for grab ride", diff(new("debt", name=has("grab"), amount=20, direction="owes_me"), link("new", "ravi")),
-    ref=[act("create", kind="debt", args="name: grab ride\namount: 20\ndirection: owes_me\nperson: $ravi")]),
-  T("so what's his total with me now", val((162.5, "SGD")),
-    ref=[ans(op="balance", kind="person", name="ravi")]),
-  T("settle the hotpot one", diff(upd("d_ravi", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="hotpot", linked_to="$ravi")]))
 
 S("T33-046", "two-dates move-lunch read-day",
   T("move tuesday's lunch with david to thursday at 1", diff(upd("lunch_david", date="2026-12-17T13:00")),

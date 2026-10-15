@@ -6,16 +6,6 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 
-S("T02-122-P", "ask options sophie debt settle then contrast tom balance para",
-  T("sophie's debt needs settling", ask("sophie_t", "sophie_d"),
-    ref=[askc("sophie tran or sophie delacroix?", options="$sophie_t, $sophie_d")]),
-  T("tran's, for the taxi", diff(upd("d_sophie_taxi", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$sophie_t")]),
-  T("the tomo logo kill fee came in from tom", diff(upd("d_tomo", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Tomo logo kill fee")]),
-  T("tom's balance with me now?", val((0, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Tom Nguyen")]))
-
 S("T02-128-P", "decline unbounded twice then bounded delete cv para",
   T("clear everything out of my calendar, fresh start", decline("unbounded_destruction"),
     ref=[dec("unbounded_destruction")]),
@@ -31,10 +21,6 @@ import json
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
-
-OWE = 'direction = "i_owe" and status = "open"'
-
-OWED = 'direction = "owes_me" and status = "open"'
 
 LIVE = 'status = "open"'
 

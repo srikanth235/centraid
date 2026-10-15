@@ -19,15 +19,6 @@ S("T31-197", "where4-read nurses hospital cadence star count-starred",
   T("how many people from the hospital are starred now", val(3),
     ref=[ans(op="count", kind="person", where='met = "University Hospital" and starred = yes')]))
 
-S("T31-198", "where4-read debts between settle-selector october sum",
-  T("what do i still owe that's between 30 and 100", rows("d_kuba_gas", "d_darek_pizza", "d_marcin_hall"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open and amount >= 30 and amount <= 100")]),
-  T("settle the ones under 40 from october", diff(upd("d_ola_clean", status="settled"), upd("d_darek_pizza", status="settled")),
-    ref=[find(kind="debt", where="direction = i_owe and status = open and amount < 40", when=J(U("month", -1, name=10))),
-         act("settle_debt", rows="@2")]),
-  T("what's my total debt after that", val((484, "PLN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]))
-
 S("T31-199", "where4-read friends nursing-school star log",
   T("which friends from nursing school do i keep up with that i haven't starred", rows("anna_wl"),
     ref=[ans(kind="person", where='met = "nursing school" and role = "friend" and cadence is set and starred = no')]),
@@ -101,14 +92,6 @@ S("T31-207", "search-role grandmother open-tasks reschedule",
     ref=[act("reschedule", rows="$babcia_gift", args=lines(to=D("2026-11-12")))]))
 
 # --- counts and sums that pile up conditions ------------------------------------------------------------
-
-S("T31-208", "values4 count tasks hour december nurses debts",
-  T("how many open tasks take under an hour and are due before december", val(21),
-    ref=[ans(op="count", kind="task", where="status = open and effort < 60", when=J({"to": D("2026-11-30")}))]),
-  T("how many nurses at university hospital do i keep up with", val(3),
-    ref=[ans(op="count", kind="person", where='met = "University Hospital" and role contains "nurse" and cadence is set')]),
-  T("how many debts over 40 do i still owe", val(4),
-    ref=[ans(op="count", kind="debt", where="direction = i_owe and status = open and amount > 40")]))
 
 S("T31-209", "values4 count photos starred people year sum flat week ward",
   T("how many starred photos with people in them did i take this year", val(5),

@@ -47,25 +47,6 @@ OVERRIDES: dict[tuple[str, int], list[str]] = {
 }
 
 
-def balance_sign(turn: dict) -> bool:
-    """A balance value whose sign the gold fixes (not accepted with either sign)."""
-    if not any(c["tool"] in ("answer", "compute") and c["args"].get("op") == "balance" for c in turn["ref"]):
-        return False
-    amounts = set()
-    for accept in turn["gold"]:
-        if accept["type"] != "value":
-            continue
-        for v in accept.get("values") or []:
-            if isinstance(v.get("amount"), (int, float)):
-                amounts.add(v["amount"])
-        for vs in (accept.get("groups") or {}).values():
-            for v in vs:
-                if isinstance(v.get("amount"), (int, float)):
-                    amounts.add(v["amount"])
-    signed = {a for a in amounts if a != 0}
-    return bool(signed) and not any(-a in signed for a in signed)
-
-
 def detect(turn: dict) -> list[str]:
     text = turn["user"]
     found = []
@@ -78,8 +59,6 @@ def detect(turn: dict) -> list[str]:
                 found.append(name)
         elif pattern.search(text):
             found.append(name)
-    if balance_sign(turn):
-        found.append("balance")
     return found
 
 
@@ -100,4 +79,4 @@ if __name__ == "__main__":
         for i, t in enumerate(s["turns"], 1):
             which = OVERRIDES.get((s["id"], i), detect(t))
             if which or any(x.startswith(("date:", "ruling:")) for x in t["tags"]):
-                print(f"{s['id']} t{i} {which} {[x for x in t['tags'] if x.startswith(('date:', 'ruling:', 'value:bal'))]} :: {t['user']}")
+                print(f"{s['id']} t{i} {which} {[x for x in t['tags'] if x.startswith(('date:', 'ruling:'))]} :: {t['user']}")

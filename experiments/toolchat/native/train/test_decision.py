@@ -134,7 +134,7 @@ class HardTier(unittest.TestCase):
                           fmt.HARD_WHEN_WORDS, fmt.HARD_PARAMS, fmt.HARD_REF_PARAMS))
         self.assertFalse(c.json_keys or c.pick_reasons or c.quotes or c.param_names or c.ref_sigil)
         for must in ("rows", "row", "where", "within", "exclude", "linked_to", "limit", "order", "when", "verb",
-                     "direction", "op"):
+                     "op"):
             self.assertIn(must, c.params)
         for never in ("kind", "name", "text", "field", "question", "options", "reason", "group"):
             self.assertNotIn(never, c.params)
@@ -204,9 +204,9 @@ class HardTier(unittest.TestCase):
         got = hard_texts(self.body(THINK, args=args), part=fmt.PART_CALL)
         self.assertEqual(got, ["edit", "@3", "@1", "#7, #8", "#4", 'status = "open" and effort is set', "1", "date desc"])
 
-    def test_row_direction_op(self):
-        args = {"row": "#99", "direction": "owes_me", "op": "balance", "kind": "debt", "reason": "never_mind"}
-        self.assertEqual(hard_texts(self.body("kind: debt", "open", args), part=fmt.PART_CALL), ["#99", "owes_me", "balance"])
+    def test_row_and_op(self):
+        args = {"row": "#99", "op": "count", "kind": "task", "reason": "never_mind"}
+        self.assertEqual(hard_texts(self.body("kind: task", "open", args), part=fmt.PART_CALL), ["#99", "count"])
 
     def test_kind_and_free_text_are_not_hard(self):
         args = {"kind": "event", "name": "Squamish climbing day", "text": "tyre", "question": "Which one?",

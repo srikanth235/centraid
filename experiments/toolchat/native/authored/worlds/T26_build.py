@@ -11,9 +11,7 @@ officer Kunle Adeyemi), two Emekas (instrument tech, crane operator), two dentis
 two handover calls with Segun, five crew change flights, recurring site visits and ajo meetings,
 near-duplicate tasks (diesel runs, monthly electricity and ajo payments, two school-fee tasks),
 nicknames (Mama, TB, Iffy), a misspelled-looking name (Ifeanyi Ezeh), cancelled events,
-completed tasks, rows trashed inside and past the 30-day restore window, an empty group, a group
-with members but no expenses (GBP), an empty folder, an empty notebook, an empty album and two
-USD groups.
+completed tasks, rows trashed inside and past the 30-day restore window, an empty folder, an empty notebook and an empty album.
 """
 from __future__ import annotations
 
@@ -80,53 +78,6 @@ def people():
         {"key": "gbenga", "name": "Gbenga Oni", "role": "ex-colleague", "trashed": "2026-09-10T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "rig_g", "name": "Bonga crew kitty", "members": ["chidi", "emeka_n", "emeka_o", "musa", "victor", "tunde"],
-     "created": "2025-03-01T10:00"},
-    {"key": "house_g", "name": "Rumuokoro house build", "members": ["olumide", "ngozi"],
-     "created": "2026-02-01T10:00"},
-    {"key": "ajo_g", "name": "Cousins ajo", "members": ["kunle_b", "bayo", "funmi", "sade", "ibrahim"],
-     "created": "2025-01-05T10:00"},
-    {"key": "family_g", "name": "Bello family", "members": ["ngozi", "mama", "aisha"],
-     "created": "2024-06-01T10:00"},
-    {"key": "aberdeen_g", "name": "Aberdeen BOSIET trip", "currency": "USD", "members": ["chidi", "segun", "john"],
-     "created": "2026-10-01T10:00"},
-    {"key": "welfare_g", "name": "Offshore welfare fund", "currency": "USD", "members": ["musa", "victor", "kunle_a"],
-     "created": "2026-05-01T10:00"},
-    {"key": "fivea_g", "name": "Onne five-a-side", "currency": "GBP", "members": ["tunde", "ifeanyi"],
-     "created": "2026-08-01T10:00"},
-    {"key": "xmas_g", "name": "Christmas party 2026", "members": [], "created": "2026-11-20T10:00"},
-]
-
-EXPENSES = [
-    {"group": "rig_g", "name": "Suya night on the base", "amount": 42000, "paid_by": "me",
-     "split": ["me", "chidi", "emeka_n", "musa"], "date": "2026-11-11"},
-    {"group": "rig_g", "name": "Crew barbecue drinks", "amount": 60000, "paid_by": "chidi",
-     "split": ["me", "chidi", "emeka_o", "victor", "tunde", "musa"], "date": "2026-11-07"},
-    {"group": "rig_g", "name": "Farewell gift for Musa's wife", "amount": 30000, "paid_by": "victor",
-     "split": ["me", "victor", "chidi"], "date": "2026-10-20"},
-    {"group": "house_g", "name": "Cement 200 bags", "amount": 1900000, "paid_by": "me",
-     "split": ["me", "ngozi"], "date": "2026-11-14"},
-    {"group": "house_g", "name": "Builder labour November", "amount": 850000, "paid_by": "me",
-     "split": ["me", "ngozi"], "date": "2026-11-21"},
-    {"group": "house_g", "name": "Sand and gravel", "amount": 420000, "paid_by": "ngozi",
-     "split": ["me", "ngozi"], "date": "2026-10-05"},
-    {"group": "ajo_g", "name": "November contributions", "amount": 500000, "paid_by": "kunle_b",
-     "split": ["me", "kunle_b", "bayo", "funmi", "sade"], "date": "2026-11-01"},
-    {"group": "ajo_g", "name": "Hall rent for meeting", "amount": 25000, "paid_by": "me",
-     "split": ["me", "bayo", "ibrahim"], "date": "2026-10-25"},
-    {"group": "family_g", "name": "Mama's hospital bill", "amount": 180000, "paid_by": "me",
-     "split": ["me", "aisha"], "date": "2026-10-02"},
-    {"group": "family_g", "name": "Mama's birthday cake deposit", "amount": 45000, "paid_by": "aisha",
-     "split": ["me", "aisha", "ngozi"], "date": "2026-11-19"},
-    {"group": "aberdeen_g", "name": "Hotel deposit", "amount": 600, "paid_by": "chidi",
-     "split": ["me", "chidi", "segun"], "date": "2026-10-10", "currency": "USD"},
-    {"group": "aberdeen_g", "name": "Course fee top-up", "amount": 300, "paid_by": "me",
-     "split": ["me", "chidi", "segun", "john"], "date": "2026-10-12", "currency": "USD"},
-    {"group": "welfare_g", "name": "Gym equipment", "amount": 450, "paid_by": "musa",
-     "split": ["me", "musa", "victor", "kunle_a"], "date": "2026-06-03", "currency": "USD"},
-]
 
 LISTS = [
     {"key": "home_l", "name": "Home", "area": "family"},
@@ -509,34 +460,6 @@ PHOTOS = [
     {"key": "p_old_rig", "name": "Old rig selfie", "taken": "2025-11-01T12:00", "trashed": "2026-09-15T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_chidi", "person": "chidi", "direction": "owes_me", "amount": 45000, "name": "Suya and drinks",
-     "date": "2026-11-11"},
-    {"key": "d_tunde", "person": "tunde", "direction": "owes_me", "amount": 20000, "name": "Taxi from Onne",
-     "date": "2026-11-12"},
-    {"key": "d_bayo", "person": "bayo", "direction": "owes_me", "amount": 150000, "name": "Loan for shop rent",
-     "date": "2026-09-05"},
-    {"key": "d_funmi", "person": "funmi", "direction": "owes_me", "amount": 60000, "name": "Ajo cover for October",
-     "date": "2026-10-25"},
-    {"key": "d_victor", "person": "victor", "direction": "i_owe", "amount": 35000, "name": "Welfare top-up",
-     "date": "2026-11-03"},
-    {"key": "d_olumide", "person": "olumide", "direction": "i_owe", "amount": 250000, "name": "Extra labour",
-     "date": "2026-11-21"},
-    {"key": "d_garba", "person": "garba", "direction": "owes_me", "amount": 15000, "name": "Transport advance",
-     "date": "2026-11-18"},
-    {"key": "d_aisha", "person": "aisha", "direction": "i_owe", "amount": 80000, "name": "Aso ebi fabric",
-     "date": "2026-11-19"},
-    {"key": "d_sunday", "person": "sunday", "direction": "i_owe", "amount": 40000, "name": "Brake pads",
-     "date": "2026-08-20"},
-    {"key": "d_ibrahim", "person": "ibrahim", "direction": "owes_me", "amount": 100000, "name": "School fees help",
-     "date": "2026-07-15"},
-    {"key": "d_emeka", "person": "emeka_n", "direction": "owes_me", "amount": 12000, "name": "Phone recharge",
-     "date": "2026-10-30", "settled": "2026-11-12T10:00"},
-    {"key": "d_kunle", "person": "kunle_b", "direction": "i_owe", "amount": 50000, "name": "Hall deposit",
-     "date": "2026-08-28", "settled": "2026-09-27T18:00"},
-    {"key": "d_segun", "person": "segun", "direction": "owes_me", "amount": 25000, "name": "Spare tools",
-     "date": "2026-11-13"},
-]
 
 LOCKER = [
     {"key": "gtbank", "name": "GTBank app", "type": "login", "username": "ahmed.bello", "url": "https://www.gtbank.com",
@@ -624,8 +547,6 @@ def world():
         "seed": "T26",
         "currency": "NGN",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -635,7 +556,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

@@ -70,40 +70,6 @@ def people():
     ]
 
 
-GROUPS = [
-    {"key": "house", "name": "House bills", "members": ["chloe", "tom"], "created": "2025-09-01T10:00"},
-    {"key": "wedding", "name": "Wedding fund", "members": ["zainab", "imran", "fatima_h", "hamza"],
-     "created": "2026-04-02T20:00"},
-    {"key": "hen", "name": "Istanbul hen do", "currency": "TRY", "members": ["zainab", "fatima_h", "sana", "aoife"],
-     "created": "2026-07-18T21:00"},
-    {"key": "rota", "name": "Rota swap pool", "members": ["ellie", "james", "dan"], "created": "2026-08-05T13:00"},
-    {"key": "darkroom", "name": "Darkroom club", "members": ["owen", "ravi"], "created": "2026-03-10T19:00"},
-    {"key": "santa", "name": "Secret Santa 2026", "members": ["chloe", "tom", "leah"], "created": "2026-10-06T21:00"},
-    # no expenses yet: deletable, and "the house group" collides with House bills
-    {"key": "house_party", "name": "House party", "members": ["chloe", "tom", "leah", "ravi"], "created": "2026-10-10T22:00"},
-    {"key": "relay", "name": "Leeds 10k relay", "members": ["priya", "ellie"], "created": "2026-09-18T20:00"},
-]
-
-EXPENSES = [
-    {"group": "house", "name": "Electric bill August", "amount": 126.30, "paid_by": "me", "split": ["me", "chloe", "tom"], "date": "2026-08-28"},
-    {"group": "house", "name": "Broadband September", "amount": 36, "paid_by": "tom", "split": ["me", "chloe", "tom"], "date": "2026-09-03"},
-    {"group": "house", "name": "Big Aldi shop", "amount": 88.20, "paid_by": "chloe", "split": ["me", "chloe", "tom"], "date": "2026-09-19"},
-    {"group": "house", "name": "Gas bill September", "amount": 94.50, "paid_by": "me", "split": ["me", "chloe", "tom"], "date": "2026-09-29"},
-    {"group": "house", "name": "Toilet roll and bin bags", "amount": 17.40, "paid_by": "tom", "split": ["me", "chloe", "tom"], "date": "2026-10-07"},
-    {"group": "wedding", "name": "Oakwood Hall deposit", "amount": 2000, "paid_by": "me", "split": ["me", "zainab", "imran", "hamza"], "date": "2026-05-10"},
-    {"group": "wedding", "name": "Mehndi artist deposit", "amount": 150, "paid_by": "fatima_h", "split": ["me", "zainab", "fatima_h"], "date": "2026-08-02"},
-    {"group": "wedding", "name": "Caterer deposit", "amount": 1200, "paid_by": "imran", "split": ["me", "zainab", "imran", "hamza"], "date": "2026-09-01"},
-    {"group": "wedding", "name": "Invitations printing", "amount": 240, "paid_by": "zainab", "split": ["me", "zainab"], "date": "2026-09-14"},
-    {"group": "wedding", "name": "Stage flowers deposit", "amount": 300, "paid_by": "me", "split": ["me", "zainab", "imran", "hamza"], "date": "2026-10-03"},
-    {"group": "hen", "name": "Hotel in Sultanahmet", "amount": 24000, "paid_by": "me", "split": ["me", "zainab", "fatima_h", "sana", "aoife"], "date": "2026-07-20"},
-    {"group": "hen", "name": "Bosphorus cruise booking", "amount": 7500, "paid_by": "sana", "split": ["me", "zainab", "fatima_h", "sana", "aoife"], "date": "2026-09-05"},
-    {"group": "hen", "name": "Hammam vouchers", "amount": 6000, "paid_by": "fatima_h", "split": ["me", "fatima_h", "sana", "aoife"], "date": "2026-09-25"},
-    {"group": "rota", "name": "Night shift pizzas", "amount": 42, "paid_by": "james", "split": ["me", "ellie", "james", "dan"], "date": "2026-09-26"},
-    {"group": "rota", "name": "Coffee run", "amount": 16, "paid_by": "me", "split": ["me", "ellie", "james", "dan"], "date": "2026-10-06"},
-    {"group": "darkroom", "name": "Ilford chemicals", "amount": 54, "paid_by": "owen", "split": ["me", "owen", "ravi"], "date": "2026-09-15"},
-    {"group": "darkroom", "name": "Paper pack", "amount": 27, "paid_by": "me", "split": ["me", "owen", "ravi"], "date": "2026-09-29"},
-]
-
 LISTS = [
     {"key": "wedlist", "name": "Wedding prep", "area": "family"},
     {"key": "houselist", "name": "House", "area": "home"},
@@ -448,24 +414,6 @@ PHOTOS = [
     {"key": "screenshot", "name": "Rota screenshot", "taken": "2026-09-01T09:05", "trashed": "2026-08-20T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_chloe", "person": "chloe", "direction": "owes_me", "amount": 14.50, "name": "Friday takeaway", "date": "2026-10-09"},
-    {"key": "d_tom", "person": "tom", "direction": "i_owe", "amount": 40, "name": "Boiler engineer callout", "date": "2026-10-05"},
-    {"key": "d_zainab", "person": "zainab", "direction": "owes_me", "amount": 85, "name": "Lehenga fabric deposit", "date": "2026-09-06"},
-    {"key": "d_imran", "person": "imran", "direction": "i_owe", "amount": 23.40, "name": "Train tickets to Bradford", "date": "2026-09-27",
-     "settled": "2026-10-01T10:00"},
-    {"key": "d_leah", "person": "leah", "direction": "owes_me", "amount": 32, "name": "Gig tickets", "date": "2026-09-20"},
-    {"key": "d_james", "person": "james", "direction": "i_owe", "amount": 9, "name": "Vending machine dinner", "date": "2026-10-06"},
-    {"key": "d_ellie", "person": "ellie", "direction": "owes_me", "amount": 6, "name": "Hospital parking", "date": "2026-09-22",
-     "settled": "2026-09-25T10:00"},
-    {"key": "d_dad", "person": "dad", "direction": "i_owe", "amount": 500, "name": "Help with car deposit", "date": "2025-10-20"},
-    {"key": "d_fatima_k", "person": "fatima_k", "direction": "owes_me", "amount": 20, "name": "Eid gift share", "date": "2026-05-26"},
-    {"key": "d_fatima_h", "person": "fatima_h", "direction": "i_owe", "amount": 35, "name": "Hen do decorations", "date": "2026-10-02"},
-    {"key": "d_owen", "person": "owen", "direction": "i_owe", "amount": 18, "name": "Film chemicals", "date": "2026-08-20",
-     "settled": "2026-09-03T21:00"},
-    {"key": "d_aoife", "person": "aoife", "direction": "owes_me", "amount": 12.80, "name": "Lunch at Laynes", "date": "2026-08-15"},
-    {"key": "d_sana", "person": "sana", "direction": "owes_me", "amount": 142, "name": "Istanbul flight", "date": "2026-07-18"},
-]
 
 LOCKER = [
     {"key": "nhsmail", "name": "NHSmail login", "type": "login", "username": "aisha.rahman3@nhs.net", "url": "https://email.nhs.net",
@@ -527,8 +475,6 @@ def world():
         "seed": "T04",
         "currency": "GBP",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -538,7 +484,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

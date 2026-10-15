@@ -7,17 +7,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T08-051", "balance two marcus ask log undo ledger",
-  T("how much do i owe marcus", ask("marcus_b", "marcus_h"),
-    ref=[bad(ans(op="balance", kind="person", name="Marcus")),
-         askc("marcus bell from work or marcus hill from the boosters?", options="$marcus_b, $marcus_h")]),
-  T("marcus bell", val((-19, "USD")),
-    ref=[ans(op="balance", rows="$marcus_b")]),
-  T("log a call with him, got off the phone", diff(upd("marcus_b", date=ANY)),
-    ref=[act("log", rows="$marcus_b", args=lines(kind="call"))]),
-  T("and log a message with marcus hill, texted him about the banner", diff(upd("marcus_h", date=ANY)),
-    ref=[act("log", kind="person", name="Marcus Hill", args=lines(kind="message"))]))
-
 S("T08-052", "trashed task restore reschedule prev anchor",
   T("did i delete the library books task", rows("library"),
     ref=[ans(kind="task", name="library books", trashed=True)]),
@@ -106,58 +95,11 @@ S("T08-059", "ambiguous dentist reschedule edit prev reschedule named",
   T("and push the Pavilion walkthrough in Macon to 1pm", diff(upd("walkthrough", date="2026-04-18T13:00")),
     ref=[act("reschedule", kind="event", name="Pavilion walkthrough in Macon", args=lines(to=U("day", 0, anchor="row", time="13:00")))]))
 
-S("T08-060", "boosters group balance settle debt undo",
-  T("who's in eagles boosters", rows("marcus_h", "quanisha", "coach_t", "tasha", "me"),
-    ref=[ans(kind="person", linked_to="$boosters")]),
-  T("where am i at in it money wise", val((93.8, "USD")),
-    ref=[ans(op="balance", kind="group", name="Eagles boosters", linked_to="$me")]),
-  T("settle up with quanisha dawson", diff(settle=[("Quanisha Dawson", "30.6")]),
-    ref=[act("settle_up", rows="$quanisha", args=lines(group="$boosters"))]),
-  T("she owes me the raffle cash too right", rows("d_quanisha"),
-    ref=[ans(kind="debt", linked_to="$quanisha")]),
-  T("mark that one paid", diff(upd("d_quanisha", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]),
-  T("when's the next boosters meeting", rows("boost_0413"),
-    ref=[ans(kind="event", name="Boosters meeting", when=W({"from": U("day", 0)}), order="date asc", limit=1)]))
-
-S("T08-061", "compute max group direction",
-  T("biggest open debt each way, owed to me vs what i owe", vgroups({"owes_me": (210, "USD"), "i_owe": (300, "USD")}),
-    ref=[comp(op="max", field="amount", kind="debt", where='status = "open"', group="direction"), ans(value="@prev")]))
-
-S("T08-062", "compute min group status",
-  T("smallest debt, open vs settled", vgroups({"open": (12, "USD"), "settled": (40, "USD")}),
-    ref=[comp(op="min", field="amount", kind="debt", group="status"), ans(value="@prev")]),
-  T("who's the 12 bucks from", rows("coach_t"),
-    ref=[find(kind="debt", where="amount = 12"), ans(kind="person", linked_to="@prev")]))
-
-S("T08-064", "search nickname find-only",
-  T("who's keisha again", rows("keisha"),
-    ref=[search("Keisha", kind="person"), ans(rows="@prev")]),
-  T("what's her balance in carter reunion 2026", val((85, "USD")),
-    ref=[ans(op="balance", kind="group", name="Carter reunion 2026", linked_to="$keisha")]))
-
 S("T08-066", "restore undo restore",
   T("get the old pay stub back out of the trash", diff(restore("paystub")),
     ref=[act("restore", kind="document", name="Old pay stub", trashed=True)]),
   T("never mind, undo it", diff(trash("paystub")),
     ref=[act("undo")]))
-
-S("T08-067", "people cadence last friday log met balance settle debt",
-  T("who on my every-two-weeks list haven't i talked to since before last friday",
-    rows("bigmama", "dre", "keisha", "monique", "tasha"),
-    ref=[ans(kind="person", where="cadence <= 14", when=W({"to": U("week", -1, weekday=5)}))]),
-  T("log a call with big mama, hung up with her", diff(upd("bigmama", date=ANY)),
-    ref=[act("log", rows="$bigmama", args=lines(kind="call"))]),
-  T("which of them didn't i meet in macon", rows("monique", "tasha"),
-    ref=[ans(kind="person", within="@prev", where='met != "Macon"')]),
-  T("what's monique's balance", val((210, "USD")),
-    ref=[ans(op="balance", rows="$monique")]),
-  T("she sent the half of summer camp deposit, settle that", diff(upd("d_monique", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Half of summer camp deposit")]),
-  T("anything else open with her", rows(),
-    ref=[ans(kind="debt", linked_to="$monique", where='status = "open"')]),
-  T("next kids to monique's is when", rows("handoff_0417"),
-    ref=[ans(kind="event", name="Kids to Monique's", when=W({"from": U("day", 0)}), order="date asc", limit=1)]))
 
 S("T08-068", "event counts spans duration edit named",
   T("how many things in my diary from today to the end of may", val(40),
@@ -180,18 +122,6 @@ S("T08-069", "short event cancel prev create",
     ref=[act("create", args=lines(kind="event", name="Haircut", date=U("week", 0, weekday=7, time="11:00")))]),
   T("so what's sunday look like", rows("+1", "rcall_0412"),
     ref=[ans(kind="event", when=W(U("week", 0, weekday=7)))]))
-
-S("T08-070", "boosters debt count event count reunion note count",
-  T("which eagles boosters folks do i have no debts with at all", rows("marcus_h", "tasha", "me"),
-    ref=[ans(kind="person", linked_to="$boosters", where="debt count <= 0")]),
-  T("and which of them am i on exactly one event with", rows("tasha"),
-    ref=[ans(kind="person", within="@prev", where="event count = 1")]),
-  T("on the reunion committee who has exactly one note about them", rows("dre", "bev"),
-    ref=[ans(kind="person", linked_to="$reunion_g", where="note count = 1")]))
-
-S("T08-071", "group person count",
-  T("any groups with more than three people", rows("boosters", "reunion_g", "carpool", "union_fund", "fishing"),
-    ref=[ans(kind="group", where="person count > 3")]))
 
 S("T08-072", "reunion effort task count priority",
   T("on the reunion list which tasks aren't an hour long", rows("invites", "menu", "slideshow"),

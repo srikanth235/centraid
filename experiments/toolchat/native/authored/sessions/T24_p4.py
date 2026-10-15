@@ -24,17 +24,6 @@ S("T24-202", "p4 ordinal event cancel reschedule list relist",
   T("last one to 7am", diff(upd("cond_0930", date="2026-09-30T07:00")),
     ref=[act("reschedule", rows="$cond_0930", args=lines(to=U("day", 0, anchor="row", time="07:00")))]))
 
-# 203 owe direction
-S("T24-203", "p4 owe direction debt settle_debt both signs",
-  T("what do i owe", rows("d_hector", "d_david_s", "d_beto", "d_kim", "d_lupe"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("and what they owe me", rows("d_ray", "d_rudy", "d_patty", "d_gilbert", "d_marisol", "d_veronica"),
-    ref=[ans(kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("settle mine with kim, it was only coffee", diff(upd("d_kim", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$kim", where='direction = "i_owe" and status = "open"')]),
-  T("and gilbert's, he paid me at practice", diff(upd("d_gilbert", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$gilbert", where='direction = "owes_me" and status = "open"')]))
-
 # 204 except / besides
 S("T24-204", "p4 except exclude task reschedule complete list",
   T("what's due monday", rows("sizes", "physicals", "grade_tests", "slips", "gatorade", "invoice_soto"),
@@ -62,12 +51,3 @@ S("T24-205", "p4 weekday at-N reschedule create range event",
     ref=[act("create", args=lines(kind="event", name="Dinner with Elena", date=U("week", 0, weekday=5, time="20:00")))]))
 
 # 206 two writes in one message
-S("T24-206", "p4 two writes settle_debt complete direction balance",
-  T("ray paid me back for lunch and i sent the soto invoice", diff(upd("d_ray", status="settled"), upd("invoice_soto", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", linked_to="$ray", where='direction = "owes_me" and status = "open"', more=True),
-         act("complete", kind="task", name="Send invoice to Soto")]),
-  T("gave hector the gas money and bought the mulch", diff(upd("d_hector", status="settled"), upd("mulch", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", linked_to="$hector", where='direction = "i_owe" and status = "open"', more=True),
-         act("complete", kind="task", name="mulch")]),
-  T("what's hector's balance now", val((30, "USD")),
-    ref=[ans(op="balance", kind="person", name="Hector Ramos")]))

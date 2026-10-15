@@ -205,95 +205,7 @@ for key, when in [(SECTION_KEYS["work"][3], "2027-02-09T10:00"), (SECTION_KEYS["
                   (SECTION_KEYS["service"][4], "2025-10-10T10:00")]:
     P[key]["trashed"] = when
 
-# ----------------------------------------------------------------------------------------------
-# groups and expenses
-# ----------------------------------------------------------------------------------------------
 
-groups = []
-expenses = []
-S = SECTION_KEYS
-
-
-def group(key, name, currency, members, created, spend=()):
-    groups.append({"key": key, "name": name, "currency": currency, "members": members, "created": created})
-    for i, (ename, amount, payer, split, date) in enumerate(spend):
-        expenses.append({"group": key, "name": ename, "amount": amount, "paid_by": payer,
-                         "split": split, "date": date})
-
-
-group("famille_gagnon", "Famille Gagnon", "CAD", ["maman", "papa", "isabelle", "martin", "marie_claude"],
-      "2024-02-10T20:00", [
-          ("Cadeau fête des Mères", 180, "me", ["me", "isabelle", "martin"], "2025-05-08"),
-          ("Cadeau Noël Maman et Papa", 320, "isabelle", ["me", "isabelle", "martin", "marie_claude"], "2025-12-10"),
-          ("Souper anniversaire Papa", 210, "martin", ["me", "isabelle", "martin", "marie_claude"], "2026-03-14"),
-          ("Réparation toit chalet", 1800, "papa", ["me", "papa", "isabelle", "martin"], "2026-08-02"),
-          ("Cadeau Noël 2026", 340, "me", ["me", "isabelle", "martin", "marie_claude"], "2026-12-09"),
-      ])
-group("famille_lavoie", "Famille Lavoie", "CAD", ["mamie", "pepere", "mathieu"], "2024-03-02T20:00", [
-    ("Souper de Pâques", 160, "mamie", ["me", "mathieu", "mamie", "pepere"], "2025-04-20"),
-    ("Cadeau 50e anniversaire de mariage", 400, "me", ["me", "mathieu", "mamie"], "2026-06-12"),
-])
-group("ruelle", "Ruelle verte", "CAD", S["neighbour"][:12] + ["sam_b", "melanie_c"], "2024-04-06T10:00", [
-    ("Fleurs pour les bacs", 240, "sam_b", ["me", "sam_b", "melanie_c", S["neighbour"][0]], "2024-05-11"),
-    ("Pizza de la fête de la ruelle", 190, "me", ["me", "sam_b", "melanie_c", S["neighbour"][1],
-                                                  S["neighbour"][2]], "2024-06-22"),
-    ("Location de la table", 60, "melanie_c", ["me", "melanie_c", "sam_b"], "2025-06-21"),
-    ("Sel et pelle", 85, "sam_b", ["me", "sam_b", S["neighbour"][3]], "2025-12-07"),
-    ("Lumières de Noël", 130, "me", ["me", "sam_b", "melanie_c", S["neighbour"][4]], "2026-11-29"),
-])
-group("hockey_atome", "Équipe Hockey Atome", "CAD", ["marie_pier", "coach_pat"] + S["hockey"][:10],
-      "2024-09-20T19:00", [
-          ("Chandails d'équipe", 720, "marie_pier", ["me", "marie_pier"] + S["hockey"][:6], "2024-10-05"),
-          ("Tournoi de Québec hôtel", 1150, "me", ["me", "marie_pier"] + S["hockey"][:4], "2025-02-14"),
-          ("Collations du tournoi", 96, S["hockey"][0], ["me", "marie_pier", S["hockey"][0]], "2025-02-15"),
-          ("Cadeau pour Coach Pat", 140, "marie_pier", ["me", "marie_pier"] + S["hockey"][:5], "2025-03-28"),
-          ("Chandails 2026", 760, "marie_pier", ["me", "marie_pier"] + S["hockey"][:7], "2026-10-03"),
-      ])
-group("cercle", "Cercle de lecture", "CAD", ["book_host", "marie_eve", "genevieve_t"] + S["friend"][:5],
-      "2024-02-25T19:00", [
-          ("Livres de l'année", 210, "book_host", ["me", "book_host", "marie_eve", "genevieve_t"], "2025-01-30"),
-          ("Vin et fromage de fin d'année", 150, "marie_eve", ["me", "marie_eve", "book_host"], "2025-06-27"),
-      ])
-group("boston", "Voyage Boston 2025", "USD", ["mathieu", "isabelle", "martin"], "2025-02-02T20:00", [
-    ("Airbnb Cambridge", 1450, "mathieu", ["me", "mathieu", "isabelle", "martin"], "2025-03-01"),
-    ("Aquarium tickets", 210, "me", ["me", "mathieu", "isabelle"], "2025-08-12"),
-    ("Essence et péages", 140, "martin", ["me", "mathieu", "martin"], "2025-08-16"),
-    ("Souper Faneuil Hall", 265, "isabelle", ["me", "mathieu", "isabelle", "martin"], "2025-08-13"),
-])
-group("paris", "Paris 2026", "EUR", ["mathieu", "marie_eve", "genevieve_t"], "2025-11-08T20:00", [
-    ("Appartement Marais", 2100, "me", ["me", "mathieu", "marie_eve"], "2025-12-14"),
-    ("Billets Louvre", 180, "marie_eve", ["me", "mathieu", "marie_eve"], "2026-06-30"),
-    ("Pass Navigo", 130, "mathieu", ["me", "mathieu"], "2026-07-05"),
-    ("Dîner chez Bouillon", 92, "genevieve_t", ["me", "marie_eve", "genevieve_t"], "2026-07-08"),
-])
-group("tremblant", "Chalet Mont-Tremblant", "CAD", S["friend"][5:11] + ["marie_eve"], "2025-12-01T20:00", [
-    ("Location du chalet", 2400, "marie_eve", ["me", "marie_eve"] + S["friend"][5:9], "2026-01-05"),
-    ("Épicerie du chalet", 380, "me", ["me", "marie_eve"] + S["friend"][5:8], "2026-02-06"),
-    ("Billets de ski", 640, S["friend"][5], ["me", "marie_eve", S["friend"][5]], "2026-02-07"),
-])
-group("cabane", "Cabane à sucre 2025", "CAD", S["extended"][:6] + ["isabelle", "martin"], "2025-03-01T20:00", [
-    ("Réservation cabane", 540, "isabelle", ["me", "isabelle", "martin"] + S["extended"][:3], "2025-03-22"),
-    ("Tire sur la neige", 36, "me", ["me", "isabelle", "martin"], "2025-03-22"),
-])
-group("recital", "Récital de piano", "CAD", S["music"] + ["lise_b"], "2024-05-01T19:00", [
-    ("Location de la salle", 300, "lise_b", ["me", "lise_b"] + S["music"][:3], "2024-06-08"),
-    ("Fleurs pour Madame Lise", 70, "me", ["me", "lise_b"] + S["music"][:2], "2025-06-07"),
-])
-group("cadeaux", "Cadeaux de classe", "CAD", S["school"][:9], "2024-11-20T19:00", [
-    ("Cadeau de Noël pour la maîtresse", 110, S["school"][0], ["me"] + S["school"][:6], "2024-12-12"),
-    ("Cadeau de fin d'année", 140, "me", ["me"] + S["school"][:5], "2025-06-18"),
-    ("Cadeau de Noël pour la maîtresse", 120, S["school"][1], ["me"] + S["school"][:7], "2025-12-11"),
-])
-group("bureau", "Café du bureau", "CAD", ["sam_n", "genevieve_tl"] + S["work"][:8], "2024-03-04T08:30", [
-    ("Café et lait", 64, "sam_n", ["me", "sam_n", "genevieve_tl", S["work"][0]], "2024-03-15"),
-    ("Machine à café", 280, "me", ["me", "sam_n"] + S["work"][:5], "2024-09-12"),
-    ("Biscuits de Noël", 42, "genevieve_tl", ["me", "sam_n", "genevieve_tl"], "2025-12-18"),
-])
-group("anciens", "Anciens collègues", "CAD", S["work"][8:14], "2024-06-14T17:00")
-group("coop", "Coop de l'épicerie", "CAD", S["neighbour"][12:18], "2025-01-10T18:00", [
-    ("Commande de légumes", 220, S["neighbour"][12], ["me", S["neighbour"][12], S["neighbour"][13]], "2025-03-08"),
-    ("Commande de fruits", 175, "me", ["me", S["neighbour"][12], S["neighbour"][14]], "2025-09-13"),
-])
 
 # ----------------------------------------------------------------------------------------------
 # events
@@ -856,31 +768,6 @@ for i, when in [(1, "2027-02-10T10:00"), (4, "2027-01-28T10:00"), (7, "2027-01-1
                 (14, "2026-09-15T10:00"), (18, "2026-04-02T10:00"), (22, "2025-10-02T10:00"), (27, "2025-04-02T10:00")]:
     _p[i]["trashed"] = when
 
-# ----------------------------------------------------------------------------------------------
-# debts
-# ----------------------------------------------------------------------------------------------
-
-DEBT_NAMES = ["lunch", "hockey fees", "taxi", "movie tickets", "pizza", "concert tickets", "gas for the carpool",
-              "birthday gift share", "school photos", "coffee run", "tournament hotel", "ski lift tickets",
-              "bike repair", "groceries", "parking"]
-DEBT_PEOPLE = (["marie_pier", "marie_eve", "marie_claude", "sam_b", "sam_n", "isabelle", "martin", "genevieve_t",
-                "melanie_c", "mathieu", "maman"] + S["hockey"][:6] + S["friend"][:6] + S["work"][:4]
-               + S["neighbour"][:3])
-debts = []
-for i in range(40):
-    d = dt.date(2024, 3, 1) + dt.timedelta(days=(i * 27) % 1080)
-    row = {"key": f"debt_{i + 1:02d}", "person": DEBT_PEOPLE[(i * 5) % len(DEBT_PEOPLE)],
-           "direction": "owes_me" if i % 3 != 1 else "i_owe",
-           "amount": float(5 + (i * 37) % 190) + (0.5 if i % 4 == 0 else 0), "name": DEBT_NAMES[i % len(DEBT_NAMES)],
-           "date": iso(d)}
-    if d < dt.date(2026, 6, 1) and i % 2 == 0:
-        row["settled"] = f"{iso(d + dt.timedelta(days=14))}T12:00"
-    debts.append(row)
-# one pair on the same person, one open and one settled
-debts[4]["person"] = "marie_pier"
-debts[5]["person"] = "marie_pier"
-debts[20]["person"] = "sam_b"
-debts[21]["person"] = "sam_n"
 
 # ----------------------------------------------------------------------------------------------
 # locker
@@ -983,9 +870,9 @@ for d in documents[:30]:
 
 world = {
     "me": ME, "today": TODAY, "epoch": "2024-02-01T09:00", "seed": "T30", "currency": "CAD",
-    "people": people, "groups": groups, "expenses": expenses, "lists": lists, "events": events,
+    "people": people, "lists": lists, "events": events,
     "tasks": tasks, "notebooks": notebooks, "notes": notes, "folders": folders, "documents": documents,
-    "albums": albums, "photos": photos, "debts": debts, "locker": locker, "links": links,
+    "albums": albums, "photos": photos, "locker": locker, "links": links,
 }
 
 
@@ -1006,15 +893,6 @@ def check(w):
     def need(key, kind):
         assert keys.get(key) == kind, f"{key} is not a {kind}"
 
-    for g in w["groups"]:
-        [need(m, "people") for m in g["members"]]
-        assert len(set(g["members"])) == len(g["members"]), g["key"]
-    for e in w["expenses"]:
-        need(e["group"], "groups")
-        [need(m, "people") for m in e["split"]]
-        need(e["paid_by"], "people")
-        members = set(next(g["members"] for g in w["groups"] if g["key"] == e["group"])) | {"me"}
-        assert set(e["split"]) | {e["paid_by"]} <= members, f"expense outside its group: {e['name']}"
     for t in w["tasks"]:
         if "parent" in t:
             need(t["parent"], "tasks")
@@ -1030,14 +908,12 @@ def check(w):
         [need(a, "albums") for a in p.get("albums", [])]
         [need(q, "people") for q in p.get("people", [])]
         assert len(set(p.get("albums", []))) == len(p.get("albums", [])), p["key"]
-    for d in w["debts"]:
-        need(d["person"], "people")
     for e in w["events"]:
         [need(a, "people") for a in e.get("attendees", [])]
     for ln in w["links"]:
         assert ln["from"] in keys and ln["to"] in keys, ln
-    names = [g["name"] for g in w["groups"]] + [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
-    assert len(names) == len(set(names)), "group/notebook/album names must be unique"
+    names = [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
+    assert len(names) == len(set(names)), "notebook/album names must be unique"
     spans = sorted((e["start"], e.get("end", e["start"]), e["key"]) for e in w["events"])
     for (s1, e1, k1), (s2, e2, k2) in zip(spans, spans[1:]):
         assert e1 <= s2, f"events overlap: {k1} and {k2}"

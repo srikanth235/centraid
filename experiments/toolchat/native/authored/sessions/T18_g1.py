@@ -44,34 +44,6 @@ S("T18-104", "wifi bare read then reveal then star itch",
   T("unstar steamworks, i'm never on it now", diff(upd("steamworks", starred=False)),
     ref=[act("unstar", kind="locker item", name="Steamworks")]))
 
-S("T18-105", "balance positive tess oliver priya",
-  T("how much does tess owe me", val((80, "AUD")),
-    ref=[ans(op="balance", rows="$tess")]),
-  T("and oliver", val((390, "AUD")),
-    ref=[ans(op="balance", rows="$oliver")]),
-  T("priya?", val((168, "AUD")),
-    ref=[ans(op="balance", rows="$priya")]),
-  T("star priya, she's the backbone of the co-op", diff(upd("priya", starred=True)),
-    ref=[act("star", kind="person", name="Priya")]))
-
-S("T18-106", "balance negative nadia alex bui then zero dad",
-  T("what do i owe nadia", val((-60, "AUD")),
-    ref=[ans(op="balance", rows="$nadia")]),
-  T("and alex bui", val((-120, "AUD")),
-    ref=[ans(op="balance", rows="$alex_b")]),
-  T("and dad", val((0, "AUD")),
-    ref=[search("dad"), ans(op="balance", rows="$dad")]))
-
-S("T18-107", "balance group coop dnd members",
-  T("who's in the co-op", rows("priya", "sam_o", "mei", "oliver", "me"),
-    ref=[ans(kind="person", linked_to="$coop")]),
-  T("where am i at with them", val((878, "AUD")),
-    ref=[ans(op="balance", kind="group", name="Tinfoil Owl co-op", linked_to="$me")]),
-  T("and the d&d lot", val((75, "AUD")),
-    ref=[ans(op="balance", kind="group", name="Thursday D&D", linked_to="$me")]),
-  T("star mei, she runs the whole co-op", diff(upd("mei", starred=True)),
-    ref=[act("star", kind="person", name="Mei")]))
-
 S("T18-108", "ask options move lunch then contrast vet",
   T("move lunch to 1", ask("mum_lunch", "nana_lunch"),
     ref=[act("reschedule", kind="event", name="lunch", when=NOW,

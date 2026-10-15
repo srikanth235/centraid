@@ -25,11 +25,6 @@ S("T01-Q030", "skip cancel event by day i2pat",
   T("skip ada's swimming on saturday", diff(upd("swim_0314", status="cancelled")),
     ref=[act("cancel", kind="event", name="swimming lesson", when=J(U("week", 0, weekday=6)))]))
 
-S("T01-Q031", "lent me debt i_owe verbatim item i2pat",
-  T("dev lent me 30 for paint brushes",
-    diff(new("debt", name=has("paint brushes"), amount=30, direction="i_owe"), link("new", "dev")),
-    ref=[act("create", args=lines(kind="debt", name="Paint brushes", amount="30", direction="i_owe", person="$dev"))]))
-
 S("T01-Q032", "append line to note keep separator i2pat",
   T("what's in ada's allergy note", rows("allergy"),
     ref=[ans(kind="note", name="allergy")]),

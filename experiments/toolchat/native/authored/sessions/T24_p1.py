@@ -7,8 +7,6 @@ def J(d):
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 WEEKEND = {"from": U("week", 0, weekday=6), "to": U("week", 0, weekday=7)}
 
 S("T24-004-P", "met literal within unstar person prev para",
@@ -101,20 +99,6 @@ S("T24-053-P", "ambiguous volleyball resolved by earlier turn reschedule count p
   T("this month, number of games for her", val(2),
     ref=[ans(op="count", kind="event", name="Sofia volleyball game", when=U("month", 0))]))
 
-S("T24-057-P", "empty result debt find miss recover settle_debt para",
-  T("ray and the uber debt, what's the amount", val((40, "USD")),
-    ref=[find(kind="debt", name="Uber"), search("uber", kind="debt"), find(kind="debt", linked_to="$ray"),
-         ans(op="max", field="amount", within="@prev")]),
-  T("he paid me back at practice, so that one's settled, mark it", diff(upd("d_ray", status="settled")),
-    ref=[act("settle_debt", rows="$d_ray")]))
-
-S("T24-062-P", "debt open span date span para",
-  T("up to last week, which debts are there",
-    rows("d_gilbert", "d_beto", "d_yvonne", "d_jessica", "d_lupe", "d_ray", "d_rudy", "d_hector", "d_patty", "d_kim"),
-    ref=[ans(kind="debt", when={"to": U("week", -1)})]),
-  T("between the first and the tenth, what's the count", val(3),
-    ref=[ans(op="count", kind="debt", when=span(D("2026-09-01"), D("2026-09-10")))]))
-
 S("T24-068-P", "four turns event person count status open span duration count para",
   T("events next week with under two people attached",
     rows("cond_0921", "film_session", "gym_0922", "cond_0923", "gym_0924", "vb_0924", "fb_0925", "ref_clinic"),
@@ -132,20 +116,6 @@ S("T24-072-P", "photo datetime add_to named para",
     ref=[ans(kind="photo", when=D("2026-09-12", "07:10"))]),
   T("put it into rudy's yards", diff(link("yards_al", "p_whit_before")),
     ref=[act("add_to", rows="$p_whit_before", args=lines(to="$yards_al"))]))
-
-S("T24-078-P", "six turns booster role != find-only edit group prev met star para",
-  T("booster group members", rows("david_r", "yvonne", "patty", "gilbert", "me"),
-    ref=[ans(kind="person", linked_to="$booster_g")]),
-  T("among them, who isn't a team parent", rows("david_r"),
-    ref=[ans(kind="person", within="@prev", where='role != "team parent" and role is set')]),
-  T("exact name of the booster group?", rows("booster_g"),
-    ref=[find(kind="group", name="booster"), ans(rows="@prev")]),
-  T("its new name is Booster club 2026-27", diff(upd("booster_g", name="Booster club 2026-27")),
-    ref=[act("edit", rows="@prev", args=lines(name="Booster club 2026-27"))]),
-  T("people i met at Coronado High", rows("linda", "david_r"),
-    ref=[ans(kind="person", where='met = "Coronado High"')]),
-  T("David Ruiz gets a star", diff(upd("david_r", starred=True)),
-    ref=[act("star", rows="$david_r")]))
 
 S("T24-085-P", "ambiguous water bill complete narrow effort literal read para",
   T("finished Pay water bill", diff(upd("water_09", status="completed", completed=ANY)),
@@ -175,21 +145,6 @@ S("T24-098-P", "four turns roster role contains lujan focus star para",
   T("his mom too", diff(upd("veronica", starred=True)),
     ref=[act("star", rows="$veronica")]))
 
-S("T24-A005-P", "ask-options debt settle_debt c3a para",
-  T("gas one, mark as settled", ask("d_hector", "d_veronica"),
-    ref=[act("settle_debt", kind="debt", name="gas"),
-         askc("Hector's gas money (you owe 60) or Veronica's carpool gas (she owes you 55)?", options="$d_hector, $d_veronica")]),
-  T("the veronica one, paid cash at practice", diff(upd("d_veronica", status="settled")),
-    ref=[act("settle_debt", rows="$d_veronica")]))
-
-S("T24-A009-P", "follow-up c3a para",
-  T("who owes me money", rows("d_veronica", "d_patty", "d_gilbert", "d_marisol", "d_ray", "d_rudy"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("over 50 among them", rows("d_veronica", "d_patty", "d_rudy"),
-    ref=[ans(within="@prev", where="amount > 50 USD")]),
-  T("largest?", rows("d_rudy"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T24-B005-P", "c4b state-change cancel event restore trashed task para",
   T("checkup's been called off by dr anand's office", diff(upd("checkup", status="cancelled")),
     ref=[act("cancel", kind="event", name="Checkup")]),
@@ -202,24 +157,3 @@ S("T24-C101-P", "c3c bulk delete per kind decline unbounded then bounded act las
   T("fine, limit it to everything dated last year", diff(trash("p_juarez_plaza"), unlink("juarez_al", "p_juarez_plaza"), trash("p_juarez_cathedral"), unlink("juarez_al", "p_juarez_cathedral"), trash("p_juarez_family"), unlink("juarez_al", "p_juarez_family")),
     ref=[find(kind="event,task,note,document,photo", when=W(U("year", -1))),
          act("delete", rows="$p_juarez_plaza, $p_juarez_cathedral, $p_juarez_family")]))
-
-S("T24-103-P", "ask options person log balance settle para",
-  T("garza, put a visit in the log", ask("rudy", "marisol"),
-    ref=[act("log", kind="person", name="Garza", args=lines(kind="visit")),
-         askc("rudy garza or marisol garza?", options="$rudy, $marisol")]),
-  T("marisol's the one, i dropped off the party stuff", diff(upd("marisol", date=ANY)),
-    ref=[act("log", rows="$marisol", args=lines(kind="visit"))]),
-  T("where do we stand, her and me", val((45, "USD")),
-    ref=[ans(op="balance", rows="$marisol")]),
-  T("paid back by her, so mark it settled", diff(upd("d_marisol", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$marisol")]))
-
-S("T24-108-P", "contrast reschedule event context balance para",
-  T("date of mateo's dentist", rows("dentist_mateo"),
-    ref=[ans(kind="event", name="Dentist Mateo")]),
-  T("dentist slot moves to 6", diff(upd("dentist_mateo", date="2026-09-22T18:00")),
-    ref=[act("reschedule", rows="@prev", args=lines(to=U("day", 0, anchor="row", time="18:00")))]),
-  T("mateo's science fair, 7 instead", diff(upd("science_fair", date="2026-10-15T19:00")),
-    ref=[act("reschedule", kind="event", name="Mateo's science fair", args=lines(to=U("day", 0, anchor="row", time="19:00")))]),
-  T("ray and the lunch, does he owe me", val((40, "USD")),
-    ref=[ans(op="balance", kind="person", name="Ray Dominguez")]))

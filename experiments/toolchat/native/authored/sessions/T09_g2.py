@@ -10,35 +10,6 @@ WEEKEND = span(U("week", 0, weekday=6), U("week", 0, weekday=7))
 NEXT_WEEKEND = span(U("week", 1, weekday=6), U("week", 1, weekday=7))
 FROM_NOW = {"from": U("day", 0)}
 
-S("T09-121", "balance group positive weekend read",
-  T("where am i in the wedding party group", val((35, "CAD")),
-    ref=[find(kind="person", linked_to="$wparty"),
-         ans(op="balance", kind="group", name="Wedding party", linked_to="$me")]),
-  T("and the condo board one", val((67.5, "CAD")),
-    ref=[ans(op="balance", kind="group", name="Condo board", linked_to="$me")]),
-  T("rename the wedding party group to Bridal party", diff(upd("wparty", name="Bridal party")),
-    ref=[act("edit", kind="group", name="Wedding party", args=lines(name="Bridal party"))]))
-
-S("T09-122", "balance negative dad star fabricated_secret",
-  T("how much do i owe my dad", val((-2000, "CAD")),
-    ref=[ans(op="balance", kind="person", where='role = "dad"')]),
-  T("star him", diff(upd("dad", starred=True)),
-    ref=[act("star", kind="person", where='role = "dad"')]),
-  T("log a visit with him, saw him sunday", diff(upd("dad", date=ANY)),
-    ref=[act("log", kind="person", where='role = "dad"', args=lines(kind="visit"))]),
-  T("come up with a good password for my rsvp site login and save it", decline("fabricated_secret"),
-    ref=[dec("fabricated_secret")]))
-
-S("T09-123", "balance kemi star weekend cancel log multi",
-  T("what does kemi owe me", val((102.5, "CAD")),
-    ref=[search("kemi", kind="person"), ans(op="balance", rows="$kemi")]),
-  T("star her", diff(upd("kemi", starred=True)),
-    ref=[act("star", rows="$kemi")]),
-  T("cancel the spin class this weekend and log a call with mom, she rang about the fitting",
-    diff(upd("spin_0516", status="cancelled"), upd("mom", date=ANY)),
-    ref=[act("cancel", kind="event", name="Spin class", when=W(WEEKEND), more=True),
-         act("log", kind="person", where='role = "mom"', args=lines(kind="call"))]))
-
 S("T09-124", "star document already-so unbounded",
   T("star the alfama booking", diff(upd("alfama", starred=True)),
     ref=[act("star", kind="document", name="Alfama apartment booking")]),

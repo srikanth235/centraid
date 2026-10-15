@@ -21,36 +21,6 @@ S("T26-051", "seven turns events span dentist ambiguous overlap ask create cance
   T("delete both", diff(trash("tunde_wedding"), trash("chidi_dinner")),
     ref=[act("delete", rows="@prev")]))
 
-S("T26-052", "five turns balance person group settle_up add_to log knock-on person",
-  T("where do i stand with chidi", val((45500, "NGN"), (-125, "USD")),
-    ref=[ans(op="balance", kind="person", name="Chidi Okafor")]),
-  T("and what's his position in the bonga crew kitty", val((29500, "NGN")),
-    ref=[ans(op="balance", kind="group", name="Bonga crew kitty", linked_to="$chidi")]),
-  T("go ahead and settle that kitty up with him", diff(settle=["Chidi Okafor"]),
-    ref=[act("settle_up", rows="$chidi", args=lines(group="$rig_g"))]),
-  T("put him in Christmas party 2026 and log a visit, he left the house",
-    diff(link("xmas_g", "chidi"), upd("chidi", date=ANY)),
-    ref=[act("add_to", rows="$chidi", args=lines(to="$xmas_g"), more=True),
-         act("log", rows="$chidi", args=lines(kind="visit"))]),
-  T("who's in that group", rows("me", "chidi"),
-    ref=[ans(kind="person", linked_to="$xmas_g")]))
-
-S("T26-053", "five turns debt span amount unit compute max settle add_to knock-on debt",
-  T("debts from first october to the end of this month",
-    rows("d_funmi", "d_emeka", "d_victor", "d_chidi", "d_tunde", "d_segun", "d_garba", "d_aisha", "d_olumide"),
-    ref=[ans(kind="debt", when=span(D("2026-10-01"), U("month", 0)))]),
-  T("the small ones under 30000", rows("d_emeka", "d_tunde", "d_segun", "d_garba"),
-    ref=[ans(kind="debt", within="@prev", where="amount < 30000 NGN")]),
-  T("biggest open debt each way", vgroups({"owes_me": (150000, "NGN"), "i_owe": (250000, "NGN")}),
-    ref=[comp(op="max", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]),
-  T("garba paid back the transport advance, settle it and add him to the christmas party group",
-    diff(upd("d_garba", status="settled"), link("xmas_g", "garba")),
-    ref=[act("settle_debt", kind="debt", name="Transport advance", more=True),
-         act("add_to", rows="$garba", args=lines(to="$xmas_g"))]),
-  T("who still owes me", rows("d_chidi", "d_tunde", "d_bayo", "d_funmi", "d_ibrahim", "d_segun"),
-    ref=[ans(kind="debt", where='direction = "owes_me" and status = "open"')]))
-
 S("T26-054", "five turns notebook miss search empty add_to note count person count delete named",
   T("what's in my poltry notebook", rows(),
     ref=[find(kind="notebook", name="poltry"), search("poltry", kind="notebook"),
@@ -163,38 +133,6 @@ S("T26-068", "document spans datetime weekday datetime month",
     rows("statement", "roster", "fees_letter", "elec_drawings", "kemi_report", "mortgage_offer"),
     ref=[ans(kind="document", where="folder count > 0",
              when=span(D("2026-11-01", "09:00"), U("month", 0, name=11)))]))
-
-S("T26-069", "debt open spans named month settle named",
-  T("debts since september",
-    rows("d_bayo", "d_funmi", "d_emeka", "d_victor", "d_chidi", "d_tunde", "d_segun", "d_garba", "d_aisha", "d_olumide"),
-    ref=[ans(kind="debt", when={"from": U("month", 0, name=9)})]),
-  T("and older ones, up to end of august", rows("d_ibrahim", "d_sunday", "d_kunle"),
-    ref=[ans(kind="debt", when={"to": U("month", 0, name=8)})]),
-  T("settle the Brake pads one, paid sunday yesterday", diff(upd("d_sunday", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Brake pads")]))
-
-S("T26-070", "debt spans datetime date and date month",
-  T("debts between twelfth nov 2pm and the twentieth", rows("d_tunde", "d_segun", "d_garba", "d_aisha"),
-    ref=[ans(kind="debt", when=span(D("2026-11-12", "14:00"), D("2026-11-20")))]),
-  T("and from first october to the end of last month", rows("d_funmi", "d_emeka"),
-    ref=[ans(kind="debt", when=span(D("2026-10-01"), U("month", -1)))]))
-
-S("T26-071", "debt direction open spans",
-  T("what have i lent people since october", rows("d_funmi", "d_emeka", "d_chidi", "d_tunde", "d_segun", "d_garba"),
-    ref=[ans(kind="debt", where='direction = "owes_me"', when={"from": U("month", 0, name=10)})]),
-  T("and before september", rows("d_ibrahim"),
-    ref=[ans(kind="debt", where='direction = "owes_me"', when={"to": U("month", 0, name=8)})]),
-  T("smallest open one each way", vgroups({"owes_me": (15000, "NGN"), "i_owe": (35000, "NGN")}),
-    ref=[comp(op="min", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]))
-
-S("T26-072", "debt person count empty count",
-  T("any debt not tied to a person", rows(),
-    ref=[ans(kind="debt", where="person count = 0")]),
-  T("how many have exactly one person on them", val(13),
-    ref=[ans(op="count", kind="debt", where="person count = 1")]),
-  T("which ones are from twelfth nov 6pm to the nineteenth", rows("d_tunde", "d_segun", "d_garba", "d_aisha"),
-    ref=[ans(kind="debt", when=span(D("2026-11-12", "18:00"), D("2026-11-19")))]))
 
 S("T26-073", "person span weekday date log named other kunle",
   T("who did i talk to between last monday and sunday", rows("kunle_b", "chidi", "segun", "olumide", "aisha"),

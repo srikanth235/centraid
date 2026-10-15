@@ -34,44 +34,6 @@ S("T08-105", "star document already fabricated pin",
   T("what's the pin on my visa, i blanked", decline("not_found"),
     ref=[search("visa"), dec("not_found")]))
 
-S("T08-106", "star ask person marcus balance",
-  T("star marcus", ask("marcus_b", "marcus_h"),
-    ref=[act("star", kind="person", name="Marcus"),
-         askc("marcus bell from work or marcus hill from the boosters?", options="$marcus_b, $marcus_h")]),
-  T("the boosters one", diff(upd("marcus_h", starred=True)),
-    ref=[act("star", rows="$marcus_h")]),
-  T("what does he owe me these days", val((16.6, "USD")),
-    ref=[ans(op="balance", rows="$marcus_h")]),
-  T("log a message with him, texted about the banner", diff(upd("marcus_h", date=ANY)),
-    ref=[act("log", rows="$marcus_h", args=lines(kind="message"))]))
-
-S("T08-107", "star person contrast balance negative substitution",
-  T("star marcus bell", diff(upd("marcus_b", starred=True)),
-    ref=[act("star", kind="person", name="Marcus Bell")]),
-  T("what do i owe darnell", val((-8, "USD")),
-    ref=[ans(op="balance", kind="person", name="Darnell")]),
-  T("and kevin", val((-12.34, "USD")),
-    ref=[ans(op="balance", kind="person", name="Kevin")]))
-
-S("T08-108", "tanya balance settle debt ask",
-  T("where do i stand with tanya", val((70, "USD")),
-    ref=[ans(op="balance", kind="person", name="Tanya")]),
-  T("settle her debt", ask("d_tanya", "d_tanya2"),
-    ref=[act("settle_debt", kind="debt", linked_to="$tanya"),
-         askc("the easter groceries you owe her, or the decorations she owes you?", options="$d_tanya, $d_tanya2")]),
-  T("the groceries one, paid her sunday", diff(upd("d_tanya", status="settled")),
-    ref=[act("settle_debt", rows="$d_tanya")]),
-  T("and call aunt bev about the guest list is done", diff(upd("call_bev", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Call Aunt Bev about the guest list")]))
-
-S("T08-109", "settle debt contrast balance luis decline oos",
-  T("tanya paid me for the twins' decorations, settle that", diff(upd("d_tanya2", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="birthday decorations")]),
-  T("what does luis owe me", val((16, "USD")),
-    ref=[ans(op="balance", kind="person", name="Luis")]),
-  T("text him to bring it tomorrow", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]))
-
 S("T08-110", "cancel event ask on-call reschedule bare weekday at N decline",
   T("cancel my on-call shift, i swapped with luis and he's covering one of them", ask("oncall_0410", "oncall_0424", "oncall_0508"),
     ref=[act("cancel", kind="event", name="On-call shift"),
@@ -83,16 +45,6 @@ S("T08-110", "cancel event ask on-call reschedule bare weekday at N decline",
     ref=[act("reschedule", kind="event", name="Tax appointment", args=lines(to=U("week", 0, weekday=4, time="13:00")))]),
   T("call the dentist and confirm jalen's slot", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
-
-S("T08-111", "cancel event contrast on-call reschedule prev balance trey",
-  T("cancel the on-call shift this friday", diff(upd("oncall_0410", status="cancelled")),
-    ref=[act("cancel", kind="event", name="On-call shift", when=W(U("week", 0, weekday=5)))]),
-  T("move the haircut to friday at 5", diff(upd("haircut", date="2026-04-10T17:00")),
-    ref=[act("reschedule", kind="event", name="Haircut", args=lines(to=U("week", 0, weekday=5, time="17:00")))]),
-  T("what does trey owe me", val((20.16, "USD")),
-    ref=[ans(op="balance", kind="person", name="Trey")]),
-  T("and push the smoke detector batteries to saturday", diff(upd("smoke", date="2026-04-11")),
-    ref=[act("reschedule", kind="task", name="Replace smoke detector batteries", args=lines(to=U("week", 0, weekday=6)))]))
 
 S("T08-112", "reveal ask card number star locker",
   T("show me the card number", ask("visa", "gas_card"),
@@ -129,15 +81,6 @@ S("T08-115", "reveal contrast star undo scratch that",
     ref=[act("star", rows="$portal")]),
   T("scratch that", diff(upd("portal", starred=False)),
     ref=[act("undo")]))
-
-S("T08-116", "log ask brooks balance mom role",
-  T("log a visit with brooks", ask("tanya", "reggie"),
-    ref=[act("log", kind="person", name="Brooks", args=lines(kind="visit")),
-         askc("tanya or reggie?", options="$tanya, $reggie")]),
-  T("reggie, we grilled at his place", diff(upd("reggie", date=ANY)),
-    ref=[act("log", rows="$reggie", args=lines(kind="visit"))]),
-  T("what do i owe my mom", val((-300, "USD")),
-    ref=[ans(op="balance", kind="person", where='role = "mom"')]))
 
 S("T08-117", "log contrast next event reschedule prev anchor",
   T("log a call with tanya brooks", diff(upd("tanya", date=ANY)),

@@ -12,8 +12,8 @@ Hemi Rangi), nicknames (Nanny Ria, Whaea Hine, Trev, Ro), a misspelled-looking n
 Tomoana), two "Reunion planning hui" and two "GP appointment with Dr Lim" events, recurring kapa
 haka practice, touch, cricket, waka ama and marae meetings, near-duplicate tasks ("Pay the power
 bill"), two lists sharing "Reunion", cancelled events, completed tasks, rows trashed inside and
-past the 30-day restore window, empty groups, an empty folder, an empty notebook, a one-note
-notebook and an empty album, and one group in AUD.
+past the 30-day restore window, an empty folder, an empty notebook, a one-note
+notebook and an empty album.
 """
 from __future__ import annotations
 
@@ -80,42 +80,6 @@ def people():
         {"key": "gary", "name": "Gary Hunt", "role": "old landlord", "trashed": "2025-12-01T09:00"},
     ]
 
-
-GROUPS = [
-    {"key": "marae_g", "name": "Marae committee koha fund", "members": ["hemi_r", "huia", "moana", "pita"],
-     "created": "2025-06-01T10:00"},
-    {"key": "reunion_g", "name": "Tane reunion 2026", "members": ["hemi_t", "mere", "rawiri", "kiri", "ria"],
-     "created": "2026-01-05T10:00"},
-    {"key": "kapa_g", "name": "Kapa haka koha", "members": ["hine", "rangi", "wiki"],
-     "created": "2025-11-01T10:00"},
-    {"key": "brisbane_g", "name": "Brisbane trip", "currency": "AUD", "members": ["rawiri", "aroha", "mere"],
-     "created": "2026-02-15T10:00"},
-    {"key": "tangi_g", "name": "Uncle Hohepa's tangi", "members": ["pita", "tui", "ria"],
-     "created": "2026-02-09T10:00"},
-    {"key": "bus_g", "name": "Bus depot old boys", "members": ["kevin", "trev"],
-     "created": "2026-01-20T10:00"},
-    {"key": "fish_g", "name": "Tarawera fishing", "members": ["hemi_t", "dave", "tama"],
-     "created": "2026-02-01T10:00"},
-]
-
-EXPENSES = [
-    {"group": "marae_g", "name": "Working bee sausages", "amount": 120, "paid_by": "me",
-     "split": ["me", "hemi_r", "moana", "pita"], "date": "2026-02-14"},
-    {"group": "marae_g", "name": "Printer ink", "amount": 60, "paid_by": "huia",
-     "split": ["me", "huia"], "date": "2026-02-04"},
-    {"group": "reunion_g", "name": "Hall deposit", "amount": 400, "paid_by": "me",
-     "split": ["me", "hemi_t", "mere", "rawiri", "kiri"], "date": "2026-02-09"},
-    {"group": "reunion_g", "name": "T-shirt sample", "amount": 45, "paid_by": "mere",
-     "split": ["me", "mere", "kiri"], "date": "2026-02-19"},
-    {"group": "kapa_g", "name": "Uniform dry cleaning", "amount": 90, "paid_by": "hine",
-     "split": ["me", "hine", "rangi"], "date": "2026-02-17"},
-    {"group": "brisbane_g", "name": "Airbnb deposit", "amount": 600, "paid_by": "rawiri",
-     "split": ["me", "aroha", "mere", "rawiri"], "date": "2026-02-18", "currency": "AUD"},
-    {"group": "tangi_g", "name": "Kai for the tangi", "amount": 900, "paid_by": "pita",
-     "split": ["me", "pita", "tui", "ria"], "date": "2026-02-11"},
-    {"group": "tangi_g", "name": "Flowers", "amount": 150, "paid_by": "me",
-     "split": ["me", "ria"], "date": "2026-02-10"},
-]
 
 LISTS = [
     {"key": "marae_l", "name": "Marae", "area": "community"},
@@ -493,34 +457,6 @@ PHOTOS = [
      "trashed": "2025-12-01T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_kevin", "person": "kevin", "direction": "owes_me", "amount": 40, "name": "Petrol to Taupō",
-     "date": "2026-01-24"},
-    {"key": "d_trev", "person": "trev", "direction": "i_owe", "amount": 25, "name": "Bowls fees",
-     "date": "2026-02-11"},
-    {"key": "d_mere", "person": "mere", "direction": "owes_me", "amount": 150, "name": "Power bill share",
-     "date": "2026-02-02"},
-    {"key": "d_hemi", "person": "hemi_t", "direction": "i_owe", "amount": 300, "name": "Ute repairs",
-     "date": "2026-01-12"},
-    {"key": "d_kiri", "person": "kiri", "direction": "owes_me", "amount": 60, "name": "Netball fees",
-     "date": "2026-02-16"},
-    {"key": "d_rawiri", "person": "rawiri", "direction": "owes_me", "amount": 500, "name": "Flights deposit",
-     "date": "2026-02-18"},
-    {"key": "d_ngaire", "person": "ngaire", "direction": "i_owe", "amount": 220, "name": "Hāngī catering deposit",
-     "date": "2026-02-19"},
-    {"key": "d_pita", "person": "pita", "direction": "i_owe", "amount": 80, "name": "Tangi petrol",
-     "date": "2026-02-12"},
-    {"key": "d_moana", "person": "moana", "direction": "owes_me", "amount": 35, "name": "Koha tin top-up",
-     "date": "2026-02-14"},
-    {"key": "d_ria", "person": "ria", "direction": "i_owe", "amount": 50, "name": "Groceries",
-     "date": "2026-02-20"},
-    {"key": "d_dave", "person": "dave", "direction": "owes_me", "amount": 120, "name": "Fishing gear",
-     "date": "2025-12-28", "settled": "2026-01-15T10:00"},
-    {"key": "d_huia", "person": "huia", "direction": "owes_me", "amount": 25, "name": "Printing",
-     "date": "2026-01-05", "settled": "2026-01-20T10:00"},
-    {"key": "d_sam", "person": "sam", "direction": "i_owe", "amount": 15, "name": "Mower petrol",
-     "date": "2026-02-21"},
-]
 
 LOCKER = [
     {"key": "asb", "name": "ASB online banking", "type": "login", "username": "wiremu.tane",
@@ -611,8 +547,6 @@ def world():
         "seed": "T28",
         "currency": "NZD",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -622,7 +556,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

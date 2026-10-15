@@ -9,7 +9,7 @@ Nigerian society (NigSoc) committee; keeps the house bills kitty. Built-in ambig
 Eze), nicknames (Obi, Chichi, Kasia, TJ, Raj), a misspelled-looking name (Oluwaseun), two XRD
 sessions, two supervisor meetings, two "Book XRD slot" tasks, monthly "Pay rent" and timesheet
 tasks, two lab notebooks, cancelled events, completed tasks, trashed rows inside and past the
-30-day restore window, an empty group, an empty folder and an empty album.
+30-day restore window, an empty folder and an empty album.
 """
 from __future__ import annotations
 
@@ -79,49 +79,6 @@ def people():
         {"key": "jess", "name": "Jess Taylor", "role": "old flatmate", "trashed": "2026-06-10T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "house", "name": "House bills kitty", "currency": "GBP", "members": ["tom_h", "priya", "kasia"],
-     "created": "2025-09-01T12:00"},
-    {"key": "coffee", "name": "Lab coffee fund", "currency": "GBP", "members": ["wei", "tom_b", "fatima", "lukas", "sandra"],
-     "created": "2025-10-01T12:00"},
-    {"key": "nigsoc", "name": "NigSoc committee", "currency": "GBP",
-     "members": ["chinedu", "ngozi_e", "emeka", "tunde", "seun"], "created": "2026-05-01T18:00"},
-    {"key": "family", "name": "Enugu family fund", "currency": "NGN", "members": ["obinna", "chiamaka", "dad"],
-     "created": "2026-01-10T10:00"},
-    {"key": "lisbon", "name": "Lisbon conference", "currency": "EUR", "members": ["wei", "fatima"],
-     "created": "2026-07-05T10:00"},
-    {"key": "walkers", "name": "Peak District walkers", "currency": "GBP", "members": ["priya", "daniel"],
-     "created": "2026-06-01T10:00"},
-]
-
-EXPENSES = [
-    {"group": "house", "name": "Electricity August", "amount": 180, "paid_by": "me",
-     "split": ["me", "tom_h", "priya", "kasia"], "date": "2026-08-29"},
-    {"group": "house", "name": "Broadband", "amount": 32, "paid_by": "kasia",
-     "split": ["me", "tom_h", "priya", "kasia"], "date": "2026-08-15"},
-    {"group": "house", "name": "Cleaning supplies", "amount": 24, "paid_by": "priya",
-     "split": ["me", "tom_h", "priya", "kasia"], "date": "2026-08-22"},
-    {"group": "house", "name": "Water bill", "amount": 56, "paid_by": "tom_h",
-     "split": ["me", "tom_h", "priya", "kasia"], "date": "2026-08-10"},
-    {"group": "coffee", "name": "Coffee beans", "amount": 28, "paid_by": "wei",
-     "split": ["me", "wei", "tom_b", "fatima"], "date": "2026-08-24"},
-    {"group": "coffee", "name": "Milk", "amount": 6.4, "paid_by": "me", "split": ["me", "wei"], "date": "2026-09-01"},
-    {"group": "coffee", "name": "New kettle", "amount": 25, "paid_by": "tom_b",
-     "split": ["me", "wei", "tom_b", "fatima", "lukas"], "date": "2026-07-14"},
-    {"group": "nigsoc", "name": "Hall deposit", "amount": 150, "paid_by": "me",
-     "split": ["me", "chinedu", "ngozi_e"], "date": "2026-08-18"},
-    {"group": "nigsoc", "name": "Drinks for movie night", "amount": 64, "paid_by": "chinedu",
-     "split": ["me", "chinedu", "emeka", "tunde"], "date": "2026-08-21"},
-    {"group": "family", "name": "Mum's birthday cake", "amount": 45000, "paid_by": "obinna",
-     "split": ["me", "obinna", "chiamaka"], "date": "2026-07-18"},
-    {"group": "family", "name": "Generator repair", "amount": 120000, "paid_by": "dad",
-     "split": ["me", "obinna", "chiamaka", "dad"], "date": "2026-08-09"},
-    {"group": "lisbon", "name": "Airbnb in Alfama", "amount": 540, "paid_by": "wei",
-     "split": ["me", "wei", "fatima"], "date": "2026-07-20"},
-    {"group": "lisbon", "name": "Conference dinner booking", "amount": 96, "paid_by": "me",
-     "split": ["me", "wei", "fatima"], "date": "2026-08-30"},
-]
 
 LISTS = [
     {"key": "thesis_l", "name": "Thesis", "area": "research"},
@@ -478,34 +435,6 @@ PHOTOS = [
      "trashed": "2026-07-10T10:00"},
 ]
 
-DEBTS = [
-    {"key": "d_tom_h", "person": "tom_h", "direction": "owes_me", "amount": 18.5, "name": "Takeaway",
-     "date": "2026-08-28"},
-    {"key": "d_priya", "person": "priya", "direction": "i_owe", "amount": 12, "name": "Cinema tickets",
-     "date": "2026-08-15"},
-    {"key": "d_kasia", "person": "kasia", "direction": "owes_me", "amount": 45, "name": "New router",
-     "date": "2026-08-03"},
-    {"key": "d_wei", "person": "wei", "direction": "i_owe", "amount": 30, "name": "Conference dinner deposit",
-     "date": "2026-08-25"},
-    {"key": "d_tom_b", "person": "tom_b", "direction": "owes_me", "amount": 8, "name": "Lunch at Kro",
-     "date": "2026-09-01"},
-    {"key": "d_chinedu", "person": "chinedu", "direction": "owes_me", "amount": 60, "name": "Speaker gift",
-     "date": "2026-07-20"},
-    {"key": "d_seun", "person": "seun", "direction": "owes_me", "amount": 25, "name": "Party ticket float",
-     "date": "2026-08-10", "settled": "2026-08-20T12:00"},
-    {"key": "d_obinna", "person": "obinna", "direction": "i_owe", "amount": 50, "name": "Share of Mum's phone",
-     "date": "2026-07-02"},
-    {"key": "d_fatima", "person": "fatima", "direction": "owes_me", "amount": 15, "name": "Taxi from the lab",
-     "date": "2026-09-02"},
-    {"key": "d_emeka", "person": "emeka", "direction": "i_owe", "amount": 20, "name": "Printing flyers",
-     "date": "2026-09-01"},
-    {"key": "d_lukas", "person": "lukas", "direction": "owes_me", "amount": 10, "name": "Pizza",
-     "date": "2026-08-27", "settled": "2026-08-29T12:00"},
-    {"key": "d_nkechi", "person": "nkechi", "direction": "owes_me", "amount": 35, "name": "Books from Enugu",
-     "date": "2026-06-12"},
-    {"key": "d_tunde", "person": "tunde", "direction": "owes_me", "amount": 22, "name": "Society jersey",
-     "date": "2026-08-31"},
-]
 
 LOCKER = [
     {"key": "uni_login", "name": "University login", "type": "login", "username": "a.nwosu@manchester.ac.uk",
@@ -584,8 +513,6 @@ def world():
         "seed": "T13",
         "currency": "GBP",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -595,7 +522,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }
@@ -625,8 +551,8 @@ def check_overlaps(evs):
 if __name__ == "__main__":
     w = world()
     check_overlaps(w["events"])
-    allkeys = [r["key"] for sec in ("people", "groups", "lists", "events", "tasks", "notebooks", "notes", "folders",
-                                    "documents", "albums", "photos", "debts", "locker") for r in w[sec]]
+    allkeys = [r["key"] for sec in ("people", "lists", "events", "tasks", "notebooks", "notes", "folders",
+                                    "documents", "albums", "photos", "locker") for r in w[sec]]
     dup = {k for k in allkeys if allkeys.count(k) > 1}
     assert not dup, dup
     out = HERE / "T13.json"

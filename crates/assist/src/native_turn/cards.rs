@@ -17,7 +17,7 @@
 //! | notebook | notes | `notebook` | the library under that notebook |
 //! | folder | docs | `folder` | the folder's page |
 //! | list | tasks | `project` | the project |
-//! | transaction | money | `transaction` | Money's home (no row route yet) |
+//! | transaction | money | `transaction` | the transaction's page |
 //! | locker item | none | none | never drawn: the Locker is off on the phone (R-1088-3) |
 //!
 //! The album, notebook and folder routes are the shell's since the containers became search results
@@ -61,15 +61,6 @@ const fn row(kind: Kind, app: App, entity: &'static str) -> CardKind {
     }
 }
 
-const fn home(kind: Kind, app: App, entity: &'static str) -> CardKind {
-    CardKind {
-        kind,
-        app,
-        entity,
-        opens: Opens::AppHome,
-    }
-}
-
 /// THE TABLE. Every kind but the Locker item.
 pub const TABLE: [CardKind; 11] = [
     row(Kind::Person, App::People, "person"),
@@ -82,7 +73,7 @@ pub const TABLE: [CardKind; 11] = [
     row(Kind::Notebook, App::Notes, "notebook"),
     row(Kind::Folder, App::Docs, "folder"),
     row(Kind::List, App::Tasks, "project"),
-    home(Kind::Transaction, App::Money, "transaction"),
+    row(Kind::Transaction, App::Money, "transaction"),
 ];
 
 /// How a kind is drawn, or `None` for the one that is never drawn.
@@ -156,7 +147,7 @@ mod tests {
         }
     }
     #[test]
-    fn a_transaction_card_names_money_opens_its_home_and_carries_the_signed_amount() {
+    fn a_transaction_card_names_money_opens_its_row_and_carries_the_signed_amount() {
         use crate::native::dates::Stamp;
         use std::collections::BTreeMap;
         let mut fields = BTreeMap::new();
@@ -179,7 +170,7 @@ mod tests {
         assert_eq!(card.meta, "-4.50 USD");
         assert_eq!(
             card_kind(Kind::Transaction).map(|how| how.opens),
-            Some(Opens::AppHome)
+            Some(Opens::Row)
         );
     }
 }

@@ -58,13 +58,3 @@ S("T10-120-P", "ask options event reschedule hour para",
     ref=[act("reschedule", kind="event", name="Drive back from Aqaba", args=lines(to=U("hour", -2, anchor="row")))]),
   T("we'll talk in aqaba, so the coffee with abu fadi is off: cancel it", diff(upd("abu_fadi_coffee", status="cancelled")),
     ref=[act("cancel", kind="event", name="Coffee with Abu Fadi")]))
-
-S("T10-123-P", "contrast star document person balance group para",
-  T("car insurance policy gets a star", diff(upd("car_ins", starred=True)),
-    ref=[act("star", kind="document", name="Car insurance policy")]),
-  T("hani too, he's saved me twice", diff(upd("hani", starred=True)),
-    ref=[act("star", kind="person", name="Hani")]),
-  T("hasan's balance in the mosque fund?", val((-80, "JOD")),
-    ref=[ans(op="balance", kind="group", name="Mosque renovation fund", linked_to="$hasan")]),
-  T("basel's after the flat again, so bring him back", diff(restore("basel")),
-    ref=[act("restore", kind="person", name="Basel", trashed=True)]))

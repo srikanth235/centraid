@@ -19,14 +19,6 @@ S("T34-066", "same-word-pick document star applicability folder-target lookalike
   T("how many in there now", val(10),
     ref=[ans(op="count", kind="document", linked_to="$taxes_f")]))
 
-S("T34-067", "same-word-pick person role-gloss possessor-vs-relation add_to group-target lookalike count",
-  T("put kemi the sunday school teacher in the church group", diff(link("church_build", "kemi_okonkwo")),
-    ref=[act("add_to", kind="person", name="Kemi", where='role contains "Sunday school"', args=lines(to="$church_build"))]),
-  T("and add adaobi to chidi's wedding group", diff(link("wedding", "adaobi")),
-    ref=[act("add_to", kind="person", name="Adaobi", args=lines(to="$wedding"))]),
-  T("how many are in the church group now", val(14),
-    ref=[ans(op="count", kind="person", linked_to="$church_build")]))
-
 S("T34-068", "same-word-pick photos two-row-linked_to album-lookalike star within",
   T("photos of ngozi eze in the church album",
     rows("ph_church_a_01", "ph_church_a_05", "ph_church_a_15", "ph_church_a_17", "ph_church_a_19"),
@@ -88,29 +80,6 @@ S("T34-073", "create-args person role nickname label-words log",
     ref=[act("create", kind="person", args=lines(name="Amaka Obi", role="caterer", nickname="Mama Cake"))]),
   T("she called me back, log that", diff(upd("+1", date=ANY)),
     ref=[act("log", rows="$c1", args="kind: call")]))
-
-S("T34-074", "create-args debt inert-clause direction amount-suffix sum",
-  T("i owe aunty uche 40k for airtime, i'll pay after the anniversary",
-    diff(new("debt", name="airtime", amount=40000, direction="i_owe"), link("new", "aunty_uche")),
-    ref=[act("create", kind="debt", args=lines(name="airtime", person="$aunty_uche", amount="40k", direction="i_owe"))]),
-  T("my brother chidi owes me 15k for the generator diesel",
-    diff(new("debt", name="generator diesel", amount=15000, direction="owes_me"), link("new", "chidi_o")),
-    ref=[find(kind="person", name="Chidi", where='role = "brother"'),
-         act("create", kind="debt", args=lines(name="generator diesel", person="$chidi_o", amount="15k", direction="owes_me"))]),
-  T("so what is my total debt to aunty uche now", val((181900, "NGN")),
-    ref=[ans(op="sum", field="amount", kind="debt", linked_to="$aunty_uche", where="direction = i_owe and status = open")]))
-
-S("T34-075", "create-args album group inert-purpose task container-link list",
-  T("start an album for nkem's second birthday, the family can add pictures",
-    diff(new("album", name="Nkem's second birthday")),
-    ref=[act("create", kind="album", args=lines(name="Nkem's second birthday"))]),
-  T("and a group for the anniversary expenses, me emeka and chinwe splitting it",
-    diff(new("group", name="Anniversary expenses"), link("new", "me")),
-    ref=[act("create", kind="group", args=lines(name="Anniversary expenses"))]),
-  T("new task for the church list, order banners for the dedication, due friday",
-    diff(new("task", name="Order banners for the dedication", date="2027-06-25"), link("church_l", "new")),
-    ref=[act("create", kind="task", args=lines(name="Order banners for the dedication", date=U("week", 1, weekday=5),
-                                               list_="$church_l"))]))
 
 # ---- verb-choice ----------------------------------------------------------------------------------
 
@@ -216,22 +185,6 @@ S("T34-086", "set-answers role-noun live-vs-trashed-namesake search pick log",
   T("just rang her, booked saturday", diff(upd("amaka_idowu", date=ANY)),
     ref=[act("log", rows="$amaka_idowu", args="kind: call")]))
 
-S("T34-087", "set-answers role-exact in-law-namesake within group",
-  T("who are my cousins",
-    rows("nneka_salami", "efosa_aniekwe", "abubakar_usman", "chisom_onwuka", "chukwuemeka", "lanre_madu", "onyinye_okeke",
-         "somto_ibekwe", "yetunde_ogunleye"),
-    ref=[ans(kind="person", where='role = "cousin"')]),
-  T("and the ones in the cousins group", rows("chukwuemeka", "chisom_onwuka", "onyinye_okeke"),
-    ref=[ans(within="@prev", linked_to="$cousins")]))
-
-S("T34-088", "set-answers debts direction owes_me i_owe one-meant year-arithmetic settle_debt",
-  T("what hasn't dayo nwosu paid me back yet", rows("debt_12", "debt_40"),
-    ref=[ans(kind="debt", linked_to="$dayo_nwosu", where="direction = owes_me and status = open")]),
-  T("and my debts to him from two years ago", rows("debt_26"),
-    ref=[ans(kind="debt", linked_to="$dayo_nwosu", where="direction = i_owe and status = open", when=W(U("year", -2)))]),
-  T("i paid that one yesterday, settle it", diff(upd("debt_26", status="settled")),
-    ref=[act("settle_debt", rows="$debt_26")]))
-
 S("T34-089", "set-answers same-word events weekday-decides find then persons",
   T("who was at the meeting on thursday last week", rows("mrs_bakare", "principal"),
     ref=[find(kind="event", name="meeting", when=W(U("week", -1, weekday=4))),
@@ -239,12 +192,3 @@ S("T34-089", "set-answers same-word events weekday-decides find then persons",
   T("and the one on saturday last week", rows("tunde_b", "mr_odili"),
     ref=[find(kind="event", name="meeting", when=W(U("week", -1, weekday=6))),
          ans(kind="person", linked_to="$ra_270612")]))
-
-S("T34-090", "set-answers superlative smallest find-then-act settle_debt order-limit within oldest same-first-name-gloss",
-  T("what does bukola from the choir owe me", rows("debt_04", "debt_18", "debt_39"),
-    ref=[find(kind="person", name="Bukola", where='role contains "choir"'),
-         ans(kind="debt", linked_to="$bukola_danjuma", where="direction = owes_me and status = open")]),
-  T("settle the smallest one, she paid", diff(upd("debt_39", status="settled")),
-    ref=[find(kind="debt", within="@prev", order="amount asc", limit=1), act("settle_debt", rows="@prev")]),
-  T("and the oldest of what's left", rows("debt_04"),
-    ref=[ans(kind="debt", within="@2", where="status = open", order="date asc", limit=1)]))

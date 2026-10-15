@@ -105,15 +105,6 @@ S("T01-035", "delete restore person starred-ne",
     rows("ifeoma", "kunle", "maureen", "bisi", "kwame"),
     ref=[ans(kind="person", where="starred != yes and cadence is set")]))
 
-S("T01-036", "ambiguous-act remove_from ask unstar",
-  T("take priya out of the night out group", ask("priya_n", "priya_s"),
-    ref=[act("remove_from", kind="person", name="Priya", args="from: $night_out"),
-         askc("Which Priya - Priya Nair or Priya Shah?", options="$priya_n, $priya_s")]),
-  T("shah", diff(unlink("night_out", "priya_s")),
-    ref=[act("remove_from", rows="$priya_s", args="from: $night_out")]),
-  T("can you unstar gemma, she's moved to ICU", diff(upd("gemma", starred=False)),
-    ref=[act("unstar", kind="person", name="Gemma")]))
-
 S("T01-037", "reopen add_to remove_from task completed-set",
   T("reopen the worktop one, the oak's discontinued", diff(upd("worktops", status="open", completed=None)),
     ref=[act("reopen", kind="task", name="worktops")]),
@@ -149,18 +140,6 @@ S("T01-040", "trashed note restore add_to more",
     ref=[act("restore", rows="$old_note", more=True), act("add_to", rows="$old_note", args="to: $family_nb")]),
   T("how many notes in family", val(7),
     ref=[ans(op="count", kind="note", linked_to="$family_nb")]))
-
-S("T01-041", "find-only group members delete prev",
-  T("is the secret santa group on here", rows("santa"),
-    ref=[find(kind="group", name="Secret Santa"), ans(rows="@prev")]),
-  T("who's in it", rows("me", "gemma", "kwame", "siobhan"),
-    ref=[ans(kind="person", linked_to="$santa")]),
-  T("delete it, that's long done",
-    diff(gone("santa"), unlink("santa", "me"), unlink("santa", "gemma"), unlink("santa", "kwame"),
-         unlink("santa", "siobhan")),
-    ref=[act("delete", rows="@1")]),
-  T("any groups not in pounds, like euros or naira", rows("lisbon", "family_fund"),
-    ref=[ans(kind="group", where='currency in ("EUR", "NGN")')]))
 
 S("T01-042", "photo spans starred time add_to find-only trashed restore prev",
   T("pics from december up to the first day back, sixth jan 9am",

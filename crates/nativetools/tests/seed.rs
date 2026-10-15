@@ -101,3 +101,23 @@ fn the_seeded_world_reads_back_as_written() {
     let error = centraid_nativetools::seed::seed(&bad, &dir.path().join("v.db")).unwrap_err();
     assert!(error.contains("used twice"), "{error}");
 }
+
+/// A world that names a section the seeder does not read fails, loudly: Tally's `groups`, `expenses`
+/// and `debts` once seeded as nothing (#1099, #1115).
+#[test]
+fn a_section_the_seeder_does_not_read_is_an_error() {
+    let dir = tempfile::tempdir().unwrap();
+    for section in ["groups", "expenses", "debts"] {
+        let world = serde_json::json!({ "people": [], section: [] });
+        let error =
+            centraid_nativetools::seed::seed(&world, &dir.path().join(format!("{section}.db")))
+                .unwrap_err();
+        assert!(
+            error.contains(section) && error.contains("does not read"),
+            "{error}"
+        );
+    }
+    // `today` is the Python tools' field: a world that carries it seeds
+    let carried = serde_json::json!({ "today": "2026-09-30T10:00", "people": [] });
+    centraid_nativetools::seed::seed(&carried, &dir.path().join("today.db")).unwrap();
+}
