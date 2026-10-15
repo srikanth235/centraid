@@ -82,8 +82,19 @@ struct MoneyHomeView: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { home in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) { page(home, state: state) }
-                        .padding(.bottom, 16)
+                    // SPENDING AND CASH FLOW ARE BOUNDED AND EAGER; ACTIVITY IS THE
+                    // LONG LIST AND STAYS LAZY. A `LazyVStack` here drew the
+                    // Spending page with its "In" row missing and a blank band in
+                    // its place (a figure row among sibling `ForEach(…, id:
+                    // \.offset)` blocks), so only the page that can hold hundreds
+                    // of rows pays for laziness.
+                    if state.destination == .activity {
+                        LazyVStack(alignment: .leading, spacing: 0) { page(home, state: state) }
+                            .padding(.bottom, 16)
+                    } else {
+                        VStack(alignment: .leading, spacing: 0) { page(home, state: state) }
+                            .padding(.bottom, 16)
+                    }
                 }
                 .refreshable { send(event { $0.refreshed = .init() }) }
                 .accessibilityIdentifier("money-home-list")
@@ -135,12 +146,15 @@ struct MoneyHomeView: View {
             }
             MoneyNote(text: spending.daysLeftLabel)
             ForEach(Array(spending.inOutNet.enumerated()), id: \.offset) { _, group in
-                ForEach(Array(group.figures.enumerated()), id: \.offset) { _, figure in
-                    MoneyFigureRow(figure: figure)
-                }
+                MoneyFigureCard(figures: group.figures)
             }
             ForEach(Array(spending.tables.enumerated()), id: \.offset) { _, table in
                 MoneySection(title: table.heading)
+                MoneyCategoryHeader(
+                    planned: MoneyCopy.shared.PLANNED,
+                    spent: MoneyCopy.shared.SPENT.capitalized,
+                    left: MoneyCopy.shared.LEFT
+                )
                 ForEach(Array(table.rows.enumerated()), id: \.offset) { _, line in
                     categoryLine(line, currency: table.currency)
                 }
@@ -163,14 +177,11 @@ struct MoneyHomeView: View {
     }
 
     private func categoryLine(_ line: Centraid_Screen_V1_MoneyCategoryLine, currency: String) -> some View {
-        // A line with a plan reads what is left; a line without one, what was spent.
+        // Planned, spent and left across the page; a line with no plan has only what was spent.
         let figure = line.hasPlan_p ? line.left : line.spent
         let categoryID = line.categoryID
-        return CentraidRow(
-            title: line.label,
-            meta: line.hasPlan_p ? MoneyWords.amount(line.planned) : "",
-            trailing: MoneyWords.amount(figure),
-            trailingTone: line.over ? "net" : "text",
+        return MoneyCategoryRow(
+            line: line,
             accessibility: MoneyWords.spoken(line.accessibilityLabel, figure),
             identifier: "money-category-\(categoryID)"
         ) {
@@ -187,9 +198,10 @@ struct MoneyHomeView: View {
             EmptyStateView(activity.empty, onAction: addStatement)
         } else {
             if !activity.needsLabel.isEmpty {
-                MoneyNote(text: activity.needsLabel)
-                ForEach(Array(activity.needsCategory.enumerated()), id: \.offset) { _, figure in
-                    MoneyFigureRow(figure: figure)
+                // THE FILTER THAT LISTS THESE ROWS is one of the state's own category choices.
+                let needsKey = activity.categoryOptions.first { $0.label == MoneyCopy.shared.NEEDS_CATEGORY_OPTION }?.key ?? ""
+                MoneyNeedsRow(label: activity.needsLabel, figures: activity.needsCategory) {
+                    send(event { $0.categoryPicked = .with { $0.key = needsKey } })
                 }
             }
             ForEach(Array(activity.sections.enumerated()), id: \.offset) { _, section in
@@ -213,18 +225,18 @@ struct MoneyHomeView: View {
         } else {
             ForEach(Array(flow.series.enumerated()), id: \.offset) { _, series in
                 MoneySection(title: series.heading)
-                ForEach(Array(series.months.enumerated()), id: \.offset) { _, month in
-                    CentraidRow(
-                        title: month.label,
-                        meta: MoneyWords.meta(month.rateLabel, month.partial ? MoneyCopy.shared.PARTIAL_MONTH : ""),
-                        trailing: MoneyWords.amount(month.net),
-                        trailingTone: StatusChipView.ink(month.netTone, neutral: "text"),
-                        dimmed: month.partial,
-                        accessibility: MoneyWords.spoken(month.accessibilityLabel, month.net),
-                        identifier: "money-month-\(month.month)"
-                    )
-                    MoneyFigureRow(label: MoneyCopy.shared.IN, amount: month.incoming)
-                    MoneyFigureRow(label: MoneyCopy.shared.OUT, amount: month.outgoing)
+                MoneyCashflowChart(
+                    months: series.months,
+                    summary: series.months.map { MoneyWords.spoken($0.accessibilityLabel, $0.net) }.joined(separator: ". ")
+                )
+                MoneyLegend(
+                    incoming: MoneyCopy.shared.IN,
+                    outgoing: MoneyCopy.shared.OUT,
+                    partial: MoneyCopy.shared.PARTIAL_MONTH
+                )
+                // NEWEST FIRST under the chart, which runs oldest to newest.
+                ForEach(Array(series.months.reversed().enumerated()), id: \.offset) { _, month in
+                    MoneyMonthRow(month: month, identifier: "money-month-\(month.month)")
                 }
             }
             ForEach(Array(flow.definitions.enumerated()), id: \.offset) { _, fact in

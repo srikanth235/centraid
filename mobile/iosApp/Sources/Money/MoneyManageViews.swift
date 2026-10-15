@@ -54,7 +54,7 @@ struct MoneyAccountsView: View {
                     EmptyStateView(accounts.empty, onAction: { send(event { $0.add = .init() }) })
                 } else {
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 0) { page(accounts) }
+                        VStack(alignment: .leading, spacing: 0) { page(accounts) }
                             .padding(.bottom, 16)
                     }
                 }
@@ -85,26 +85,14 @@ struct MoneyAccountsView: View {
     @ViewBuilder
     private func page(_ accounts: Centraid_Screen_V1_MoneyAccountsData) -> some View {
         if !accounts.netWorth.isEmpty {
-            MoneySection(title: accounts.netWorthLabel)
-            ForEach(Array(accounts.netWorth.enumerated()), id: \.offset) { _, figure in
-                MoneyFigureRow(figure: figure)
-            }
-            MoneyNote(text: accounts.netWorthNote)
+            MoneyNetWorthCard(label: accounts.netWorthLabel, figures: accounts.netWorth, note: accounts.netWorthNote)
         }
         ForEach(Array(accounts.sections.enumerated()), id: \.offset) { _, section in
             MoneySection(title: section.title)
             ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
                 let accountID = row.accountID
-                CentraidRow(
-                    title: row.name,
-                    meta: MoneyWords.meta(row.meta, row.checkpointLine),
-                    trailing: row.hasBalance_p ? MoneyWords.amount(row.balance) : row.balanceNote,
-                    accessibility: MoneyWords.spoken(row.accessibilityLabel, row.hasBalance_p ? row.balance : nil),
-                    identifier: "money-account-\(accountID)"
-                ) { send(event { $0.account = .with { $0.accountID = accountID } }) }
-                if row.hasDelta_p {
-                    MoneyFigureRow(label: row.checkpointLine, amount: row.delta, tone: row.checkpointTone)
-                }
+                MoneyAccountRowView(row: row) { send(event { $0.account = .with { $0.accountID = accountID } }) }
+                    .accessibilityIdentifier("money-account-\(accountID)")
             }
         }
         ForEach(Array(accounts.definitions.enumerated()), id: \.offset) { _, fact in
@@ -228,7 +216,7 @@ struct MoneyRulesView: View {
         MoneyNote(text: rules.limitLine)
         ForEach(Array(rules.rows.enumerated()), id: \.offset) { _, row in
             let ruleID = row.ruleID
-            CentraidRow(
+            MoneyChevronRow(
                 title: row.title,
                 meta: row.meta,
                 accessibility: row.accessibilityLabel,
@@ -275,7 +263,7 @@ struct MoneyRulesView: View {
                 MoneyNote(text: editor.patternNote)
                 MoneyChoiceField(
                     key: editor.categoryRowLabel,
-                    value: editor.categoryLabel.isEmpty ? editor.clearCategoryLabel : editor.categoryLabel,
+                    value: editor.categoryLabel.isEmpty ? editor.clearCategoryLabel_p : editor.categoryLabel,
                     identifier: "money-rule-category"
                 ) { send(event { $0.categorySheet = .init() }) }
                 MoneyTextField(key: editor.nameLabel, value: editor.displayName, identifier: "money-rule-name") { text in
@@ -366,7 +354,7 @@ struct MoneyCategoriesView: View {
                     EmptyStateView(categories.empty)
                 } else {
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 0) { page(categories) }
+                        VStack(alignment: .leading, spacing: 0) { page(categories) }
                             .padding(.bottom, 16)
                     }
                 }

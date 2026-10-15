@@ -43,7 +43,7 @@ struct MoneySearchView: View {
                 CentraidSearchField(
                     field: field(state),
                     placeholder: state.placeholder,
-                    closeLabel: state.clearLabel.isEmpty ? KitWords.shared.CLOSE_SEARCH : state.clearLabel,
+                    closeLabel: state.clearLabel_p.isEmpty ? KitWords.shared.CLOSE_SEARCH : state.clearLabel_p,
                     identifier: "money-search",
                     onTerm: { term in send(event { $0.term = .with { $0.term = term } }) },
                     onClose: { send(event { $0.cleared = .init() }) }

@@ -246,7 +246,10 @@ public object MoneyHomeMachine :
             today = today,
             month_label = MoneyFold.monthLabel(month),
             can_step_next = month.isNotEmpty() && month < MoneyFold.monthOf(today),
-            shows_month = screen.destination != MoneyHomeState.Destination.DESTINATION_UNSPECIFIED,
+            // THE STEPPER IS SPENDING'S AND ACTIVITY'S. Cash flow reads twelve months at
+            // once, so a month to step through there would move nothing it draws.
+            shows_month = screen.destination != MoneyHomeState.Destination.DESTINATION_UNSPECIFIED &&
+                screen.destination != MoneyHomeState.Destination.DESTINATION_CASHFLOW,
             month_options = MoneyFold.monthOptions(MoneyFold.monthOf(today), month),
         )
         return when (screen.destination) {

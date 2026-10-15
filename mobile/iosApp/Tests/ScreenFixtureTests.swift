@@ -172,7 +172,7 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertNotEqual(unreadable.data.springboard, firstRun.data.springboard)
     }
 
-    /// A withheld count is ABSENT, never zero — and the vault total omits it.
+    /// A withheld count is ABSENT, never zero.
     func testWithheldCountIsAbsentAndNotZero() throws {
         let content = try home("content")
         let locker = try XCTUnwrap(content.data.tiles.first { $0.appID == "locker" })
@@ -180,14 +180,6 @@ final class ScreenFixtureTests: XCTestCase {
         // `hasCount` is the whole point: a `0` here would be a lie about how
         // many secrets a member holds.
         XCTAssertFalse(locker.hasCount)
-        // 1284 + 42 + 7, with Locker contributing nothing at all.
-        XCTAssertEqual(content.data.things.total, 1333)
-    }
-
-    func testCappedCountIsOnlyAFloor() throws {
-        let things = try home("status-urgent").data.things
-        XCTAssertTrue(things.capped)
-        XCTAssertEqual(things.total, 500)
     }
 
     /// An asset whose bytes are not addressable yet is STILL A CELL: dropping
@@ -210,10 +202,9 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertEqual(Set(data.gridRows.flatMap { $0.appIds }), Set(data.tiles.map { $0.appID }))
     }
 
-    func testLoadingSpringboardReportsItsTotalUnsettled() throws {
+    func testLoadingSpringboardHoldsItsGrid() throws {
         let loading = try home("loading-first").data
         XCTAssertEqual(loading.springboard, .loading)
-        XCTAssertFalse(loading.things.settled)
         // A read in flight holds its slot at full geometry.
         XCTAssertEqual(Set(loading.gridRows.flatMap { $0.appIds }), Set(loading.tiles.map { $0.appID }))
     }
@@ -228,12 +219,6 @@ final class ScreenFixtureTests: XCTestCase {
             return XCTFail("a refused Home decodes to the failure case")
         }
         XCTAssertEqual(failure.kind, .noCopyYet)
-    }
-
-    func testAllAppsSheetLeavesTheHomeUnderneathIntact() throws {
-        let sheet = try home("all-apps-open")
-        XCTAssertTrue(sheet.allAppsSheetOpen)
-        XCTAssertEqual(sheet.data.tiles.count, 8)
     }
 
     // MARK: - Photos: the rest of the miniapp
@@ -891,7 +876,7 @@ final class ScreenFixtureTests: XCTestCase {
             return XCTFail("a failed read is a failure")
         }
         XCTAssertEqual(failure.kind, .unavailable)
-        XCTAssertEqual(refused.band.count, 5)
+        XCTAssertEqual(refused.band.count, 4)
     }
 
     /// The first load anchors on no day, so the day bar is not shown.

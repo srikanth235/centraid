@@ -43,7 +43,7 @@ struct MoneyTransactionView: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { transaction in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) { page(transaction) }
+                    VStack(alignment: .leading, spacing: 0) { page(transaction) }
                         .padding(.bottom, 16)
                 }
             }
@@ -86,45 +86,94 @@ struct MoneyTransactionView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(MoneyWords.spoken(transaction.accessibilityLabel.isEmpty ? transaction.title : transaction.accessibilityLabel, transaction.amount))
-        ForEach(Array(transaction.facts.enumerated()), id: \.offset) { _, fact in
-            FieldRow(key: fact.label, value: fact.detail)
+        // A FACT THE MEMBER CAN CHANGE is the row that changes it: the state's
+        // Category and Name facts carry the `category` and `name` actions, so those
+        // two actions are not drawn a second time below.
+        let folded = Set(transaction.facts.compactMap { actionKey(forFact: $0.label, in: transaction) })
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(transaction.facts.enumerated()), id: \.offset) { _, fact in
+                if let key = actionKey(forFact: fact.label, in: transaction),
+                   let action = transaction.actions.first(where: { $0.key == key }) {
+                    MoneyFactRow(
+                        label: fact.label,
+                        value: fact.detail,
+                        owed: fact.detail == MoneyCopy.shared.NO_CATEGORY,
+                        onTap: action.enabled ? { send(event { $0.action = .with { $0.key = key } }) } : nil,
+                        identifier: "money-fact-\(key)"
+                    )
+                } else {
+                    MoneyFactRow(label: fact.label, value: fact.detail)
+                }
+            }
         }
+        .padding(.top, 8)
         ForEach(Array(transaction.notes.enumerated()), id: \.offset) { _, note in
             MoneyNote(text: note)
         }
         if transaction.hasTransferOffer { offer(transaction.transferOffer, key: "transfer") }
         if transaction.hasRuleOffer { offer(transaction.ruleOffer, key: "rule") }
-        ForEach(Array(transaction.actions.enumerated()), id: \.offset) { _, action in
-            let key = action.key
-            CentraidRow(
-                title: action.label,
-                dimmed: !action.enabled,
-                identifier: "money-action-\(key)",
-                onTap: action.enabled ? { send(event { $0.action = .with { $0.key = key } }) } : nil
-            )
+        VStack(spacing: 8) {
+            ForEach(Array(transaction.actions.filter { !folded.contains($0.key) }.enumerated()), id: \.offset) { _, action in
+                let key = action.key
+                MoneyActionButton(
+                    label: action.label,
+                    destructive: action.destructive,
+                    enabled: action.enabled,
+                    identifier: "money-action-\(key)"
+                ) { send(event { $0.action = .with { $0.key = key } }) }
+            }
         }
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.top, 24)
+    }
+
+    /// The action a fact stands for, when the state offers one.
+    private func actionKey(forFact label: String, in transaction: Centraid_Screen_V1_MoneyTransactionData) -> String? {
+        let key: String
+        if label == MoneyCopy.shared.FACT_CATEGORY { key = "category" }
+        else if label == MoneyCopy.shared.FACT_NAME { key = "name" }
+        else { return nil }
+        return transaction.actions.contains { $0.key == key } ? key : nil
     }
 
     /// An offer the app proposes: words, and the member's two choices. Nothing is
     /// written until Accept.
     @ViewBuilder
     private func offer(_ offer: Centraid_Screen_V1_MoneyOffer, key: String) -> some View {
-        MoneySection(title: offer.title)
-        MoneyNote(text: offer.body, ink: "text")
-        MoneyNote(text: offer.detail)
-        HStack(spacing: 8) {
-            KitOutlineButton(label: offer.acceptLabel) {
-                send(event { $0.offerAccepted = .with { $0.key = key } })
+        VStack(alignment: .leading, spacing: 8) {
+            Text(offer.title)
+                .centraidType("smallStrong")
+                .foregroundStyle(Theme.color("text", scheme))
+            if !offer.body.isEmpty {
+                Text(offer.body)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
             }
-            .accessibilityIdentifier("money-offer-accept-\(key)")
-            KitOutlineButton(label: offer.dismissLabel) {
-                send(event { $0.offerDismissed = .with { $0.key = key } })
+            if !offer.detail.isEmpty {
+                Text(offer.detail)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
             }
-            .accessibilityIdentifier("money-offer-dismiss-\(key)")
-            Spacer(minLength: 0)
+            HStack(spacing: 8) {
+                KitOutlineButton(label: offer.acceptLabel) {
+                    send(event { $0.offerAccepted = .with { $0.key = key } })
+                }
+                .accessibilityIdentifier("money-offer-accept-\(key)")
+                KitOutlineButton(label: offer.dismissLabel) {
+                    send(event { $0.offerDismissed = .with { $0.key = key } })
+                }
+                .accessibilityIdentifier("money-offer-dismiss-\(key)")
+                Spacer(minLength: 0)
+            }
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radius("lg", scheme))
+                .strokeBorder(Theme.color("seam", scheme), lineWidth: 1)
+        )
         .padding(.horizontal, CentraidGeometry.pageMargin)
-        .padding(.vertical, 6)
+        .padding(.top, 16)
     }
 
     @ViewBuilder
@@ -191,7 +240,7 @@ struct MoneyTargetView: View {
                 onRetry: { send(event { $0.refreshed = .init() }) }
             ) { target in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) { page(target, state: state) }
+                    VStack(alignment: .leading, spacing: 0) { page(target, state: state) }
                         .padding(.bottom, 16)
                 }
             }
@@ -210,7 +259,8 @@ struct MoneyTargetView: View {
         MoneyTextField(
             key: MoneyWords.meta(target.amountLabel, target.currencyLabel),
             value: state.amountText,
-            identifier: "money-target-amount"
+            identifier: "money-target-amount",
+            large: true
         ) { text in send(event { $0.amount = .with { $0.text = text } }) }
         MoneyNote(text: target.issue, ink: "net")
         MoneyNote(text: target.exponentHint)
@@ -224,9 +274,7 @@ struct MoneyTargetView: View {
             send(event { $0.carry = .init() })
         }
         MoneyNote(text: target.carryNote)
-        MoneyHeading(text: target.previewLabel)
-        MoneyFigureRow(label: target.previewLabel, amount: target.preview)
-        MoneyNote(text: target.previewNote)
+        MoneyPreviewCard(label: target.previewLabel, amount: target.preview, note: target.previewNote)
         MoneyInkButton(label: target.saveLabel, enabled: target.canSave, identifier: "money-target-save") {
             send(event { $0.save = .init() })
         }

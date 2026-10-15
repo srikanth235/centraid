@@ -94,20 +94,25 @@ struct MoneyImportView: View {
 
     @ViewBuilder
     private func page(_ plan: Centraid_Screen_V1_MoneyImportData, state: Centraid_Screen_V1_MoneyImportState) -> some View {
-        MoneyNote(text: plan.lede)
-        FieldRow(key: plan.fileLabel, value: plan.fileValue, note: plan.fileNote)
-        if !plan.chooseLabel.isEmpty {
-            MoneyQuietButton(label: plan.chooseLabel, identifier: "money-import-choose") {
-                send(event { $0.choose = .init() })
-                importing = true
+        // THE HEAD IS ONE EAGER BLOCK: a lazy stack drops rows from sibling blocks
+        // like these (a count and its neighbour went missing), so only the plan's
+        // lines, which can run to thousands, are left to be lazy.
+        VStack(alignment: .leading, spacing: 0) {
+            MoneyNote(text: plan.lede)
+            FieldRow(key: plan.fileLabel, value: plan.fileValue, note: plan.fileNote)
+            if !plan.chooseLabel.isEmpty {
+                MoneyQuietButton(label: plan.chooseLabel, identifier: "money-import-choose") {
+                    send(event { $0.choose = .init() })
+                    importing = true
+                }
             }
-        }
-        if plan.needsAccount {
-            MoneyChoiceField(key: plan.accountLabel, value: plan.accountValue, identifier: "money-import-account") {
-                send(event { $0.accountSheetOpened = .init() })
+            if plan.needsAccount {
+                MoneyChoiceField(key: plan.accountLabel, value: plan.accountValue, identifier: "money-import-account") {
+                    send(event { $0.accountSheetOpened = .init() })
+                }
             }
+            MoneyNote(text: plan.refusal, ink: "net")
         }
-        MoneyNote(text: plan.refusal, ink: "net")
         ForEach(Array(plan.statements.enumerated()), id: \.offset) { _, statement in
             statementView(statement, keepProposed: state.keepProposed)
         }
@@ -133,38 +138,38 @@ struct MoneyImportView: View {
     /// it was checked against, the questions it asks, then each line with its verdict.
     @ViewBuilder
     private func statementView(_ statement: Centraid_Screen_V1_MoneyImportStatement, keepProposed: Bool) -> some View {
-        MoneySection(title: statement.title)
-        MoneyNote(text: statement.refusal, ink: "net")
-        MoneyNote(text: statement.span)
-        ForEach(Array(statement.totals.enumerated()), id: \.offset) { _, figure in
-            MoneyFigureRow(figure: figure)
-        }
-        ForEach(Array(statement.counts.enumerated()), id: \.offset) { _, fact in
-            FieldRow(key: fact.label, value: fact.detail)
-        }
-        ForEach(Array(statement.warnings.enumerated()), id: \.offset) { _, warning in
-            MoneyNote(text: warning)
-        }
-        if statement.hasCheckpoint {
-            MoneyFigureRow(figure: statement.checkpoint)
-        }
-        MoneyNote(text: statement.checkpointLabel)
-        if statement.hasQuestion {
-            MoneyHeading(text: statement.question.prompt)
-            MoneyNote(text: statement.question.samples.joined(separator: ", "))
-            MoneyChoiceChips(choices: statement.question.options, identifierPrefix: "money-import-order") { order in
-                send(event { $0.dateOrder = .with { $0.order = order } })
+        VStack(alignment: .leading, spacing: 0) {
+            MoneySection(title: statement.title)
+            MoneyNote(text: statement.refusal, ink: "net")
+            MoneyNote(text: statement.span)
+            ForEach(Array(statement.totals.enumerated()), id: \.offset) { _, figure in
+                MoneyFigureRow(figure: figure)
             }
-        }
-        if !statement.signOptions.isEmpty {
-            MoneyHeading(text: statement.signLabel)
-            MoneyChoiceChips(choices: statement.signOptions, identifierPrefix: "money-import-sign") { choice in
-                send(event { $0.sign = .with { $0.choice = choice } })
+            MoneyCountTiles(counts: statement.counts)
+            ForEach(Array(statement.warnings.enumerated()), id: \.offset) { _, warning in
+                MoneyNote(text: warning)
             }
-        }
-        if statement.hasProposed_p {
-            MoneyToggleRow(label: statement.keepProposedLabel, on: keepProposed, identifier: "money-import-keep") {
-                send(event { $0.keepProposed = .init() })
+            if statement.hasCheckpoint {
+                MoneyFigureRow(figure: statement.checkpoint)
+            }
+            MoneyNote(text: statement.checkpointLabel)
+            if statement.hasQuestion {
+                MoneyHeading(text: statement.question.prompt)
+                MoneyNote(text: statement.question.samples.joined(separator: ", "))
+                MoneyChoiceChips(choices: statement.question.options, identifierPrefix: "money-import-order") { order in
+                    send(event { $0.dateOrder = .with { $0.order = order } })
+                }
+            }
+            if !statement.signOptions.isEmpty {
+                MoneyHeading(text: statement.signLabel)
+                MoneyChoiceChips(choices: statement.signOptions, identifierPrefix: "money-import-sign") { choice in
+                    send(event { $0.sign = .with { $0.choice = choice } })
+                }
+            }
+            if statement.hasProposed_p {
+                MoneyToggleRow(label: statement.keepProposedLabel, on: keepProposed, identifier: "money-import-keep") {
+                    send(event { $0.keepProposed = .init() })
+                }
             }
         }
         ForEach(Array(statement.rows.enumerated()), id: \.offset) { _, line in
