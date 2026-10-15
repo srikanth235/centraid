@@ -108,7 +108,7 @@ cargo clippy --locked -p centraid-assist -p centraid-nativetools --all-targets -
 cargo fmt -p centraid-assist -p centraid-nativetools -- --check
 ```
 
-pass: 51 test binaries `ok`, none failed, among them the three new tests, `export_fixture` (the exporter output is unchanged, so `contracts/assist/export` is as committed) and the error-family catalogue; clippy clean (it needed `vault_of` gone from `tests/phase9_nt9b.rs`, an unused helper #1112 left); fmt clean. `centraid-assist`'s `native_turn::cards::tests::the_shells_row_routes_are_exactly_the_entries_that_open_a_row` failed in two earlier runs of this tree ("money transaction: ChatRouting.swift and the table disagree") and passed in this one; neither it nor `ChatRouting.swift` is touched here, and I have no explanation. `cargo fmt --all -- --check` also flags `crates/core/tests/assist_door.rs`, untouched too.
+pass: 51 test binaries `ok`, none failed, among them the three new tests, `export_fixture` (the exporter output is unchanged, so `contracts/assist/export` is as committed) and the error-family catalogue; clippy clean (it needed `vault_of` gone from `tests/phase9_nt9b.rs`, an unused helper #1112 left); fmt clean. `centraid-assist`'s `native_turn::cards::tests::the_shells_row_routes_are_exactly_the_entries_that_open_a_row` failed in the runs made before commit 98ec6505b ("money transaction: ChatRouting.swift and the table disagree"), as it does on origin/main. It passes from that commit on; see "The card route" above. `cargo fmt --all -- --check` also flags `crates/core/tests/assist_door.rs`, which this branch does not touch. #1122 (#1119) carries that one-line fix.
 
 ```sh
 cargo test --locked -p centraid-nativetools --test phase7_compose wrong_container   # on 40d96f5de's act.rs, before the fix
@@ -143,4 +143,24 @@ Outcome: pass. Clippy is clean. Every `centraid-assist` test passes, including `
 
 ## Audit
 
-PENDING
+**PASS**, after two rounds of REFUTED. An independent Sonnet auditor reviewed the branch read-only and wrote none of it. It rebuilt the old and new trees outside this one.
+
+**Round 1: REFUTED on one claim.**
+
+- **PASS.** The 21 removed tests covered only debt, group, balance or settle machinery. Surviving tests lost three assertions: one on a removed `me_hit`, one on the removed `linked_to="tahoe"` group, and one on a `direction` hard parameter. Their debt data was swapped for task or transaction data with the same assertion shape.
+- **PASS.** `test_trace3` changes only the dentist `#9`→`#7` and the drawn `#7`→`#8`. `#99` is untouched.
+- **PASS.** The seeder's allowed keys are exactly what it reads, plus `today`.
+- **PASS.** No skip, xfail, tolerance or timeout was added.
+- **PASS.** The rebuilt worlds equal the old ones minus `groups`, `expenses` and `debts`. Only those 35 hashes changed in `artefacts.json`.
+- **PASS.** `run2.log` shows 29 modules, 1,118 ran, 0 skipped, 0 red.
+- **REFUTED on the 23 "no longer verify" removals.** 20 of them are honest: their `where` literals were sourced only from group or debt text. Three, T33-035, T34-017 and T35-009, hid a runtime regression from #1112. "Add X to it", where "it" is an event, had lost its composed `wrong_container` decline, and a fuzzy `Did you mean` took its place. The runtime was fixed and the three sessions restored, as described under "Runtime fix".
+
+**Round 2: REFUTED, narrowly.** The first runtime guard was keyed on any kind that goes into no container. It also stole the `Did you mean` repair from a container target: an album "Summer" next to a photo "Summer sunset" now declined. The guard was narrowed to `Kind::Person`, the one kind `40d96f5de^` shows lost its container. A test pins the album case.
+
+**Round 3: PASS.**
+
+- Every non-person kind is back on its pre-fix path. The album probe again answers `Did you mean #7 photo "Summer sunset"`.
+- The new test fails under the broad guard and passes under the narrow one.
+- Both person tests pass, and the three sessions verify 1/1 each.
+- `cargo test -p centraid-assist -p centraid-nativetools --all-features` passes: 52 binaries, 1,015 tests, 0 failed. This includes the route-parity test, which was red on origin/main. The auditor confirmed that it was red there and that the card-table fix (R-1099-86) is right: iOS `ChatRouting.swift` and Android `RowRoutes.kt` both route `(money, transaction)` to the row.
+- `contracts/assist/export` has no diff.
