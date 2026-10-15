@@ -12194,6 +12194,10 @@ message MoneyAccountsState {
   optional MoneyAccountEditor editor = 9;
   optional StatusLine status = 10;
   string draft_token = 11;
+  // Asks before the bank's number is removed (R-1119-2).
+  optional Confirm confirm = 12;
+  // What the open Confirm is about: `remove_number`.
+  string pending = 13;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -12263,6 +12267,13 @@ message MoneyAccountEditor {
   string external_ref_note = 19;
   string closed_label = 20;
   string cancel_label = 21;
+  // Edit only: the account holds a bank number (the phone shows its last four
+  // digits and never sends them back).
+  bool has_external_ref = 22;
+  // "Remove bank number"; empty when the account holds none.
+  string remove_number_label = 23;
+  // False while a write is out, and when there is no number to remove.
+  bool can_remove_number = 24;
 
   enum Mode {
     MODE_UNSPECIFIED = 0;
@@ -12285,6 +12296,9 @@ message MoneyAccountsEvent {
     ClosedToggled closed = 10;
     Save save = 11;
     SheetClosed sheet_closed = 12;
+    RemoveNumberTapped remove_number = 13;
+    ConfirmAccepted confirm_accepted = 14;
+    ConfirmDismissed confirm_dismissed = 15;
   }
 
   message Opened {
@@ -12323,6 +12337,12 @@ message MoneyAccountsEvent {
   message Save {}
 
   message SheetClosed {}
+
+  message RemoveNumberTapped {}
+
+  message ConfirmAccepted {}
+
+  message ConfirmDismissed {}
 }
 
 // ---------------------------------------------------------------------------
@@ -12352,6 +12372,7 @@ message MoneyRulesState {
     SHEET_NONE = 1;
     SHEET_EDITOR = 2;
     SHEET_CATEGORY = 3;
+    SHEET_ACCOUNT = 4;
   }
 }
 
@@ -12365,6 +12386,9 @@ message MoneyRulesData {
   // The category sheet's choices.
   repeated MoneyChoice category_options = 6;
   string category_sheet_title = 7;
+  // The account sheet's choices: "Any account" first.
+  repeated MoneyChoice account_options = 8;
+  string account_sheet_title = 9;
 }
 
 message MoneyRuleRow {
@@ -12399,6 +12423,28 @@ message MoneyRuleEditor {
   string apply_label = 19;
   string cancel_label = 20;
   string clear_category_label = 21;
+  // The amount limits as the field holds them: typed text in the account's
+  // currency; empty is no limit. The limits compare the amount's magnitude.
+  string amount_min_text = 22;
+  string amount_max_text = 23;
+  // The rule's stored limits, as the core holds them (absent is no limit);
+  // what an edit sends back while the fields are locked (`limits_enabled` false).
+  Money amount_min = 24;
+  Money amount_max = 25;
+  // The account the rule is limited to; both empty is any account. A rule
+  // whose account the page cannot name has a label and no id, and an edit
+  // leaves it.
+  string account_id = 26;
+  string account_label = 27;
+  string account_row_label = 28;
+  string clear_account_label = 29;
+  // "Smallest amount · USD": the currency is named when the limits are in one.
+  string amount_min_label = 30;
+  string amount_max_label = 31;
+  // False when no one exponent is known for the limits (pick an account).
+  bool limits_enabled = 32;
+  // Why the limits are locked, or what to type.
+  string amount_note = 33;
 
   enum Mode {
     MODE_UNSPECIFIED = 0;
@@ -12424,6 +12470,10 @@ message MoneyRulesEvent {
     SheetClosed sheet_closed = 13;
     ConfirmAccepted confirm_accepted = 14;
     ConfirmDismissed confirm_dismissed = 15;
+    AmountMinEdited amount_min = 16;
+    AmountMaxEdited amount_max = 17;
+    AccountSheetOpened account_sheet = 18;
+    AccountPicked account = 19;
   }
 
   message Opened {
@@ -12456,6 +12506,21 @@ message MoneyRulesEvent {
   // EMPTY clears the category.
   message CategoryPicked {
     string category_id = 1;
+  }
+
+  message AmountMinEdited {
+    string text = 1;
+  }
+
+  message AmountMaxEdited {
+    string text = 1;
+  }
+
+  message AccountSheetOpened {}
+
+  // EMPTY is any account.
+  message AccountPicked {
+    string account_id = 1;
   }
 
   message Save {}

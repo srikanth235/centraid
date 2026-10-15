@@ -26,10 +26,10 @@
 //!   20:00 in New York. Such a series has no zone of its own, so `zone` names
 //!   the calendar `now` (or a completion) is read on: the member's.
 
-use super::rrule::{self, DAY_TOKENS, Freq, ParsedRrule};
+use super::rrule::{self, DAY_TOKENS, Freq, MonthlyPin, ParsedRrule};
 use super::temporal;
 use super::zone::{
-    FireZone, WallTime, add_wall_days, add_wall_months, parse_wall_iso, wall_epoch,
+    FireZone, WallTime, add_wall_days, add_wall_months, days_in_month, parse_wall_iso, wall_epoch,
     wall_from_epoch, wall_iso, wall_weekday,
 };
 
@@ -301,6 +301,45 @@ fn weekly_candidates(initial: WallTime, rule: &ParsedRrule, week_index: i64) -> 
     walls
 }
 
+/// The ONE candidate of a MONTHLY rule pinned to a day (#1119, R-1119-1) in
+/// the month `period` steps from the anchor — or none, because **that month
+/// has no such day** (RFC 5545: the 31st of February is skipped, not clamped).
+/// It carries the anchor's wall clock, like every other candidate.
+fn monthly_candidates(
+    initial: WallTime,
+    rule: &ParsedRrule,
+    pin: MonthlyPin,
+    period: i64,
+) -> Vec<WallTime> {
+    let month = add_wall_months(initial, period * rule.interval);
+    let length = days_in_month(month.year, month.month);
+    let day = match pin {
+        MonthlyPin::MonthDay(-1) => length,
+        MonthlyPin::MonthDay(day) => day,
+        MonthlyPin::NthWeekday { ordinal, day } => {
+            let Some(target) = DAY_TOKENS.iter().position(|token| *token == day) else {
+                return Vec::new();
+            };
+            let target = target as i64;
+            if ordinal > 0 {
+                let first = wall_weekday(WallTime { day: 1, ..month });
+                1 + (target - first).rem_euclid(7) + 7 * (ordinal - 1)
+            } else {
+                let last = wall_weekday(WallTime {
+                    day: length,
+                    ..month
+                });
+                length - (last - target).rem_euclid(7)
+            }
+        }
+    };
+    if (1..=length).contains(&day) {
+        vec![WallTime { day, ..month }]
+    } else {
+        Vec::new()
+    }
+}
+
 fn resolve_candidate(
     wall: WallTime,
     semantics: Semantics,
@@ -411,6 +450,8 @@ pub fn expand(input: &ExpandInput<'_>) -> Vec<Occurrence> {
         guard += 1;
         let walls = if rule.freq == Freq::Weekly && rule.by_day.is_some() {
             weekly_candidates(initial, &rule, period)
+        } else if let Some(pin) = rule.monthly_pin {
+            monthly_candidates(initial, &rule, pin, period)
         } else {
             vec![step_anchor(initial, &rule, period)]
         };
@@ -1345,6 +1386,410 @@ mod tests {
             )
             .as_deref(),
             Some("2026-10-04T14:00:00.000Z")
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // MONTHLY with ONE positional BYDAY or ONE BYMONTHDAY (#1119, R-1119-1).
+    // -----------------------------------------------------------------------
+
+    /// The wall clocks (date part) of an expansion over `[from, to)`.
+    fn days_of(rule: &str, start: &str, zone_name: &str, from: &str, to: &str) -> Vec<String> {
+        let zone = zone(zone_name);
+        expand(&ExpandInput::new(rule, start, from, to).in_zone(&zone))
+            .iter()
+            .map(|occurrence| occurrence.wall_start[..10].to_owned())
+            .collect()
+    }
+
+    const YEAR_2026: (&str, &str) = ("2026-01-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z");
+
+    #[test]
+    fn the_second_monday_of_every_month_across_a_year() {
+        assert_eq!(
+            days_of(
+                "FREQ=MONTHLY;BYDAY=2MO",
+                "2026-01-12T09:00:00.000Z",
+                "Etc/UTC",
+                YEAR_2026.0,
+                YEAR_2026.1
+            ),
+            [
+                "2026-01-12",
+                "2026-02-09",
+                "2026-03-09",
+                "2026-04-13",
+                "2026-05-11",
+                "2026-06-08",
+                "2026-07-13",
+                "2026-08-10",
+                "2026-09-14",
+                "2026-10-12",
+                "2026-11-09",
+                "2026-12-14",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_last_friday_of_every_month_is_the_last_not_the_fourth() {
+        assert_eq!(
+            days_of(
+                "FREQ=MONTHLY;BYDAY=-1FR",
+                "2026-01-30T09:00:00.000Z",
+                "Etc/UTC",
+                YEAR_2026.0,
+                YEAR_2026.1
+            ),
+            [
+                "2026-01-30",
+                "2026-02-27",
+                "2026-03-27",
+                "2026-04-24",
+                "2026-05-29",
+                "2026-06-26",
+                "2026-07-31",
+                "2026-08-28",
+                "2026-09-25",
+                "2026-10-30",
+                "2026-11-27",
+                "2026-12-25",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_positional_day_before_the_anchor_starts_the_series_at_the_next_match() {
+        // The anchor is the 20th; the 2nd Monday of January 2026 (the 12th) is
+        // behind it, so the first occurrence is February's.
+        assert_eq!(
+            days_of(
+                "FREQ=MONTHLY;BYDAY=2MO;COUNT=2",
+                "2026-01-20T09:00:00.000Z",
+                "Etc/UTC",
+                YEAR_2026.0,
+                YEAR_2026.1
+            ),
+            ["2026-02-09", "2026-03-09"]
+        );
+    }
+
+    #[test]
+    fn the_31st_skips_the_months_that_have_none() {
+        assert_eq!(
+            days_of(
+                "FREQ=MONTHLY;BYMONTHDAY=31",
+                "2026-01-31T09:00:00.000Z",
+                "Etc/UTC",
+                YEAR_2026.0,
+                YEAR_2026.1
+            ),
+            [
+                "2026-01-31",
+                "2026-03-31",
+                "2026-05-31",
+                "2026-07-31",
+                "2026-08-31",
+                "2026-10-31",
+                "2026-12-31",
+            ],
+            "RFC 5545: February, April, June, September and November have no 31st"
+        );
+        // The 30th skips only February; the 29th only a non-leap February.
+        let thirtieth = days_of(
+            "FREQ=MONTHLY;BYMONTHDAY=30",
+            "2026-01-30T09:00:00.000Z",
+            "Etc/UTC",
+            YEAR_2026.0,
+            YEAR_2026.1,
+        );
+        assert_eq!(thirtieth.len(), 11);
+        assert!(!thirtieth.iter().any(|day| day.starts_with("2026-02")));
+        let twenty_ninth = days_of(
+            "FREQ=MONTHLY;BYMONTHDAY=29",
+            "2028-01-29T09:00:00.000Z",
+            "Etc/UTC",
+            "2028-01-01T00:00:00.000Z",
+            "2029-01-01T00:00:00.000Z",
+        );
+        assert_eq!(twenty_ninth.len(), 12, "2028 is a leap year");
+    }
+
+    #[test]
+    fn the_last_day_of_the_month_is_the_28th_29th_30th_or_31st() {
+        let days = days_of(
+            "FREQ=MONTHLY;BYMONTHDAY=-1",
+            "2027-01-31T09:00:00.000Z",
+            "Etc/UTC",
+            "2027-01-01T00:00:00.000Z",
+            "2029-01-01T00:00:00.000Z",
+        );
+        assert_eq!(days.len(), 24);
+        assert_eq!(days[1], "2027-02-28");
+        assert_eq!(days[3], "2027-04-30");
+        assert_eq!(days[12], "2028-01-31");
+        assert_eq!(days[13], "2028-02-29", "a leap February");
+        assert_eq!(days[23], "2028-12-31");
+    }
+
+    #[test]
+    fn count_until_and_interval_apply_to_the_pinned_months() {
+        // COUNT counts occurrences, not months: the skipped ones do not count.
+        assert_eq!(
+            days_of(
+                "FREQ=MONTHLY;BYMONTHDAY=31;COUNT=4",
+                "2026-01-31T09:00:00.000Z",
+                "Etc/UTC",
+                YEAR_2026.0,
+                YEAR_2026.1
+            ),
+            ["2026-01-31", "2026-03-31", "2026-05-31", "2026-07-31"]
+        );
+        assert_eq!(
+            days_of(
+                "FREQ=MONTHLY;BYDAY=2MO;UNTIL=20260610T000000Z",
+                "2026-01-12T09:00:00.000Z",
+                "Etc/UTC",
+                YEAR_2026.0,
+                YEAR_2026.1
+            ),
+            [
+                "2026-01-12",
+                "2026-02-09",
+                "2026-03-09",
+                "2026-04-13",
+                "2026-05-11",
+                "2026-06-08"
+            ]
+        );
+        // Every other month from January: Jan, Mar, May, Jul, Sep, Nov.
+        assert_eq!(
+            days_of(
+                "FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=-1",
+                "2026-01-31T09:00:00.000Z",
+                "Etc/UTC",
+                YEAR_2026.0,
+                YEAR_2026.1
+            ),
+            [
+                "2026-01-31",
+                "2026-03-31",
+                "2026-05-31",
+                "2026-07-31",
+                "2026-09-30",
+                "2026-11-30"
+            ]
+        );
+        assert_eq!(
+            days_of(
+                "FREQ=MONTHLY;INTERVAL=2;BYDAY=-1FR",
+                "2026-01-30T09:00:00.000Z",
+                "Etc/UTC",
+                YEAR_2026.0,
+                YEAR_2026.1
+            ),
+            [
+                "2026-01-30",
+                "2026-03-27",
+                "2026-05-29",
+                "2026-07-31",
+                "2026-09-25",
+                "2026-11-27"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_window_far_past_the_anchor_lands_on_the_same_days_as_a_walk_from_it() {
+        // The fast-forward must not skip a period that still has a candidate.
+        let windowed = days_of(
+            "FREQ=MONTHLY;INTERVAL=2;BYDAY=2MO",
+            "2020-01-13T09:00:00.000Z",
+            "Etc/UTC",
+            "2026-01-01T00:00:00.000Z",
+            "2026-07-01T00:00:00.000Z",
+        );
+        assert_eq!(windowed, ["2026-01-12", "2026-03-09", "2026-05-11"]);
+        let thirty_first = days_of(
+            "FREQ=MONTHLY;BYMONTHDAY=31",
+            "2020-01-31T09:00:00.000Z",
+            "Etc/UTC",
+            "2026-02-01T00:00:00.000Z",
+            "2026-06-01T00:00:00.000Z",
+        );
+        assert_eq!(thirty_first, ["2026-03-31", "2026-05-31"]);
+    }
+
+    #[test]
+    fn a_timed_series_keeps_its_wall_clock_across_dst_in_los_angeles() {
+        let la = zone("America/Los_Angeles");
+        let occurrences = expand(
+            &ExpandInput::new(
+                "FREQ=MONTHLY;BYDAY=2SU",
+                "2026-02-08T17:00:00.000Z", // 09:00 PST
+                "2026-02-01T00:00:00.000Z",
+                "2026-12-01T00:00:00.000Z",
+            )
+            .in_zone(&la),
+        );
+        let find = |wall: &str| {
+            occurrences
+                .iter()
+                .find(|occurrence| occurrence.wall_start == wall)
+                .unwrap_or_else(|| panic!("{wall} is missing from {occurrences:?}"))
+                .start
+                .clone()
+        };
+        assert_eq!(find("2026-02-08T09:00:00"), "2026-02-08T17:00:00.000Z");
+        assert_eq!(
+            find("2026-03-08T09:00:00"),
+            "2026-03-08T16:00:00.000Z",
+            "the second Sunday of March is the day DST starts: 09:00 is already PDT"
+        );
+        assert_eq!(find("2026-11-08T09:00:00"), "2026-11-08T17:00:00.000Z");
+    }
+
+    #[test]
+    fn a_pinned_day_in_the_spring_gap_is_skipped_and_one_in_the_fold_occurs_once() {
+        let la = zone("America/Los_Angeles");
+        // 02:30 on the 8th of March 2026 does not exist in Los Angeles.
+        let gap = expand(
+            &ExpandInput::new(
+                "FREQ=MONTHLY;BYMONTHDAY=8",
+                "2026-02-08T10:30:00.000Z", // 02:30 PST
+                "2026-02-01T00:00:00.000Z",
+                "2026-05-01T00:00:00.000Z",
+            )
+            .in_zone(&la),
+        );
+        let walls: Vec<&str> = gap.iter().map(|o| o.wall_start.as_str()).collect();
+        assert_eq!(walls, ["2026-02-08T02:30:00", "2026-04-08T02:30:00"]);
+        // 01:30 on the 1st of November happens twice; the earlier instant wins.
+        let fold = expand(
+            &ExpandInput::new(
+                "FREQ=MONTHLY;BYMONTHDAY=1",
+                "2026-10-01T08:30:00.000Z", // 01:30 PDT
+                "2026-10-01T00:00:00.000Z",
+                "2026-12-01T00:00:00.000Z",
+            )
+            .in_zone(&la),
+        );
+        assert_eq!(fold.len(), 2);
+        assert_eq!(fold[1].wall_start, "2026-11-01T01:30:00");
+        assert_eq!(fold[1].start, "2026-11-01T08:30:00.000Z");
+        assert!(fold[1].overlap);
+    }
+
+    #[test]
+    fn floating_and_all_day_series_expand_the_pinned_forms_too() {
+        let floating = expand(
+            &ExpandInput::new(
+                "FREQ=MONTHLY;BYMONTHDAY=-1",
+                "2026-01-31T09:00:00",
+                "2026-01-01T00:00:00",
+                "2026-04-01T00:00:00",
+            )
+            .with_semantics(Semantics::Floating),
+        );
+        let walls: Vec<&str> = floating.iter().map(|o| o.wall_start.as_str()).collect();
+        assert_eq!(
+            walls,
+            [
+                "2026-01-31T09:00:00",
+                "2026-02-28T09:00:00",
+                "2026-03-31T09:00:00"
+            ]
+        );
+        let all_day = expand(
+            &ExpandInput::new(
+                "FREQ=MONTHLY;BYDAY=1MO",
+                "2026-01-05",
+                "2026-01-01",
+                "2026-04-01",
+            )
+            .with_semantics(Semantics::AllDay),
+        );
+        let days: Vec<&str> = all_day.iter().map(|o| o.wall_start.as_str()).collect();
+        assert_eq!(days, ["2026-01-05", "2026-02-02", "2026-03-02"]);
+    }
+
+    #[test]
+    fn a_rule_that_never_lands_expands_to_nothing_and_terminates() {
+        // Every 12 months from February: the 31st never exists in February.
+        assert!(
+            days_of(
+                "FREQ=MONTHLY;INTERVAL=12;BYMONTHDAY=31",
+                "2026-02-28T09:00:00.000Z",
+                "Etc/UTC",
+                "2026-01-01T00:00:00.000Z",
+                "2036-01-01T00:00:00.000Z"
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn the_forms_still_refused_expand_to_nothing() {
+        for rule in [
+            "FREQ=MONTHLY;BYDAY=2MO;BYSETPOS=1",
+            "FREQ=MONTHLY;BYDAY=MO,TU",
+            "FREQ=MONTHLY;BYDAY=MO",
+            "FREQ=MONTHLY;BYDAY=2MO;BYMONTHDAY=8",
+            "FREQ=MONTHLY;BYMONTHDAY=1,15",
+            "FREQ=YEARLY;BYDAY=2MO",
+            "FREQ=WEEKLY;BYMONTHDAY=1",
+        ] {
+            assert!(
+                days_of(
+                    rule,
+                    "2026-01-12T09:00:00.000Z",
+                    "Etc/UTC",
+                    YEAR_2026.0,
+                    YEAR_2026.1
+                )
+                .is_empty(),
+                "{rule} is refused"
+            );
+        }
+    }
+
+    #[test]
+    fn a_repeating_task_on_a_month_position_advances_to_the_next_one() {
+        // Tasks advance through `next_occurrence` / `collapse_missed`, which are
+        // built on `expand` — so a month position needs no code of its own.
+        let utc = zone("Etc/UTC");
+        let next = |rule: &str, start: &str, after: &str| {
+            next_occurrence(&NextOccurrenceInput {
+                rrule: rule,
+                scheduled_start: start,
+                after,
+                zone: Some(&utc),
+                anchor: RecurrenceAnchor::Scheduled,
+            })
+        };
+        // A bare-date task answers a date: the last day of the month, then the next.
+        assert_eq!(
+            next("FREQ=MONTHLY;BYMONTHDAY=-1", "2026-01-31", "2026-01-31").as_deref(),
+            Some("2026-02-28")
+        );
+        assert_eq!(
+            next("FREQ=MONTHLY;BYMONTHDAY=-1", "2026-01-31", "2026-02-28").as_deref(),
+            Some("2026-03-31")
+        );
+        assert_eq!(
+            next("FREQ=MONTHLY;BYDAY=2MO", "2026-01-12", "2026-01-12").as_deref(),
+            Some("2026-02-09")
+        );
+        // A timed task answers an instant.
+        assert_eq!(
+            next(
+                "FREQ=MONTHLY;BYMONTHDAY=31",
+                "2026-01-31T09:00:00.000Z",
+                "2026-01-31T09:00:00.000Z"
+            )
+            .as_deref(),
+            Some("2026-03-31T09:00:00.000Z"),
+            "February has no 31st"
         );
     }
 }

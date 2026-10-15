@@ -1,5 +1,5 @@
 {
-  "_": "Over rows.json, today 2024-03-20. NETFLIX.COM is 1599 on the 15th of January, February and March from checking: a monthly series with three matches, all exact, anchored on the first. Whole Foods debits (8000, 9000, 7000) differ by more than 7.5% so they cluster apart and none has three; Chipotle varies too; the payroll is a credit. March's charge is paid, April's is due on the 15th. Nothing expected is left in March after the 20th, so the month-end forecast is what was spent.",
+  "_": "Over rows.json, today 2024-03-20. NETFLIX.COM is 1599 on the 15th of January, February and March from checking: a monthly series with three matches, all exact, anchored on the first. Whole Foods debits (8000, 9000, 7000) differ by more than 7.5% so they cluster apart and none has three; Chipotle varies too; the payroll is a credit. March's charge is paid, April's is due on the 15th. Nothing expected is left in March after the 20th, so the month-end forecast is what was spent. The `positions` block is separate from that ledger and worked out on a calendar by hand (#1119, R-1119-1): each entry is one merchant's debits (3000 minor units, one account), the day `today` is read on, and what the detector must say. 2024-06-11 is the second Tuesday of June (Tuesdays: 4, 11), May 14 the second of May (7, 14), April 9 the second of April (2, 9); the next second Tuesdays are July 9 (2, 9) and August 13 (6, 13). The last Fridays of April, May, June and July are 26, 31, 28 and 26. The month ends are February 29 (2024 is a leap year), March 31, April 30, May 31, June 30, July 31, August 31 and September 30; payroll on the last business day is paid on June 28 (June 30 is a Sunday) and August 30 (August 31 is a Saturday), so those are two and one days off, and the rank is 1000 + 333 + 1000 + 500 + 1000. `not_offered` lists day sets that must find nothing: the third of them is 3 days off the second Tuesday, the fourth skips May, and a position holds to every month between its first and last match.",
   "today": "2024-03-20",
   "month": "2024-03",
   "series": [
@@ -34,5 +34,121 @@
   },
   "forecast": {
     "USD": { "spent_so_far": 16599, "expected": 0, "month_end": 16599 }
-  }
+  },
+  "positions": [
+    {
+      "merchant": "BOOK CLUB",
+      "today": "2024-06-30",
+      "days": ["2024-04-09", "2024-05-14", "2024-06-11"],
+      "rrule": "FREQ=MONTHLY;INTERVAL=1;BYDAY=2TU",
+      "anchor": "2024-04-09",
+      "rank_milli": 3000,
+      "next_due": "2024-07-09",
+      "projection": [
+        {
+          "from": "2024-06-01",
+          "to": "2024-09-01",
+          "expected": [
+            ["2024-06-11", "paid"],
+            ["2024-07-09", "due"],
+            ["2024-08-13", "due"]
+          ]
+        }
+      ]
+    },
+    {
+      "merchant": "TRIVIA NIGHT",
+      "today": "2024-06-30",
+      "days": ["2024-04-26", "2024-05-31", "2024-06-28"],
+      "rrule": "FREQ=MONTHLY;INTERVAL=1;BYDAY=-1FR",
+      "anchor": "2024-04-26",
+      "rank_milli": 3000,
+      "next_due": "2024-07-26",
+      "projection": [
+        {
+          "from": "2024-06-01",
+          "to": "2024-08-01",
+          "expected": [
+            ["2024-06-28", "paid"],
+            ["2024-07-26", "due"]
+          ]
+        }
+      ]
+    },
+    {
+      "merchant": "RENT",
+      "today": "2024-07-02",
+      "days": [
+        "2024-02-29",
+        "2024-03-31",
+        "2024-04-30",
+        "2024-05-31",
+        "2024-06-30"
+      ],
+      "rrule": "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=-1",
+      "anchor": "2024-02-29",
+      "rank_milli": 5000,
+      "next_due": "2024-07-31",
+      "projection": [
+        {
+          "from": "2024-06-01",
+          "to": "2024-09-01",
+          "expected": [
+            ["2024-06-30", "paid"],
+            ["2024-07-31", "due"],
+            ["2024-08-31", "due"]
+          ]
+        }
+      ]
+    },
+    {
+      "merchant": "ACME PAYROLL DEBIT",
+      "today": "2024-10-05",
+      "days": [
+        "2024-05-31",
+        "2024-06-28",
+        "2024-07-31",
+        "2024-08-30",
+        "2024-09-30"
+      ],
+      "rrule": "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=-1",
+      "anchor": "2024-05-31",
+      "rank_milli": 3833,
+      "next_due": "2024-10-31",
+      "projection": [
+        {
+          "from": "2024-08-01",
+          "to": "2024-11-01",
+          "expected": [
+            ["2024-08-31", "paid"],
+            ["2024-09-30", "paid"],
+            ["2024-10-31", "due"]
+          ]
+        }
+      ]
+    }
+  ],
+  "not_offered": [
+    {
+      "merchant": "BOOK CLUB",
+      "today": "2024-06-30",
+      "days": ["2024-05-14", "2024-06-11"]
+    },
+    {
+      "merchant": "BOOK CLUB",
+      "today": "2024-06-30",
+      "days": ["2024-04-09", "2024-05-14", "2024-06-14"]
+    },
+    {
+      "merchant": "GYM",
+      "today": "2024-08-01",
+      "days": [
+        "2024-02-16",
+        "2024-03-15",
+        "2024-04-19",
+        "2024-06-21",
+        "2024-07-19"
+      ]
+    }
+  ]
 }

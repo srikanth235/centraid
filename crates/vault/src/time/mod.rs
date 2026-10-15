@@ -50,6 +50,8 @@ pub use recurrence::{
     RecurrenceAnchor, RecurrenceException, Semantics, apply_exceptions, collapse_missed, expand,
     next_occurrence, parse_instant_ms, shift_temporal,
 };
-pub use rrule::{Freq, ParsedRrule, Refusal, assert_supported, canonicalize, describe, inspect};
+pub use rrule::{
+    Freq, MonthlyPin, ParsedRrule, Refusal, assert_supported, canonicalize, describe, inspect,
+};
 pub use temporal::{Kind as TemporalKind, classify as classify_temporal};
 pub use zone::{FireZone, WallClock, WallTime, ZoneUnset, sunday_zero};

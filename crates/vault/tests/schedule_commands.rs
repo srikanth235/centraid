@@ -841,9 +841,21 @@ fn a_task_cannot_be_its_own_parent_and_an_unreadable_due_date_is_refused() {
     );
     let unsupported = bench.denied(
         "schedule.add_task",
-        json!({ "title": "Rent", "due_at": "2026-03-01", "rrule": "FREQ=MONTHLY;BYMONTHDAY=1" }),
+        json!({ "title": "Rent", "due_at": "2026-03-01", "rrule": "FREQ=MONTHLY;BYMONTHDAY=1,15" }),
     );
     assert!(unsupported.contains("BYMONTHDAY"), "{unsupported}");
+    // One day of the month is a rule the one expander honours (#1119).
+    for rrule in ["FREQ=MONTHLY;BYMONTHDAY=-1", "FREQ=MONTHLY;BYDAY=2MO"] {
+        bench.run(
+            "schedule.add_task",
+            json!({ "title": "Rent", "due_at": "2026-03-01", "rrule": rrule }),
+        );
+    }
+    let positional = bench.denied(
+        "schedule.add_task",
+        json!({ "title": "Rent", "due_at": "2026-03-01", "rrule": "FREQ=MONTHLY;BYDAY=5MO" }),
+    );
+    assert!(positional.contains("BYDAY"), "{positional}");
     let ruleless = bench.denied(
         "schedule.add_task",
         json!({ "title": "Rent", "rrule": "FREQ=MONTHLY" }),
@@ -852,7 +864,11 @@ fn a_task_cannot_be_its_own_parent_and_an_unreadable_due_date_is_refused() {
         ruleless.contains("needs a due date"),
         "a rule with nothing to advance never recurs: {ruleless}"
     );
-    assert_eq!(bench.number("SELECT COUNT(*) FROM schedule_task", &[]), 0);
+    assert_eq!(
+        bench.number("SELECT COUNT(*) FROM schedule_task", &[]),
+        2,
+        "only the two accepted rules were stored"
+    );
 }
 
 #[test]

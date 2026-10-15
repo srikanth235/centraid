@@ -290,6 +290,15 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
                 onEdit = { onEvent(MoneyAccountsEvent(external_ref = MoneyAccountsEvent.ExternalRefEdited(text = it))) },
             )
             MoneyNote(editor.external_ref_note)
+            if (editor.remove_number_label.isNotEmpty()) {
+                QuietButton(
+                    label = editor.remove_number_label,
+                    ink = "net",
+                    enabled = editor.can_remove_number,
+                    testTag = "money-account-remove-number",
+                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
+                ) { onEvent(MoneyAccountsEvent(remove_number = MoneyAccountsEvent.RemoveNumberTapped())) }
+            }
             MoneyToggleRow(editor.on_budget_label, editor.on_budget, "money-account-budget") {
                 onEvent(MoneyAccountsEvent(on_budget = MoneyAccountsEvent.OnBudgetToggled()))
             }
@@ -300,6 +309,13 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
             }
             MoneyNote(editor.issue, ink = "net")
         }
+    }
+    state.confirm?.let { confirm ->
+        ConfirmSheet(
+            confirm = confirm,
+            onConfirm = { onEvent(MoneyAccountsEvent(confirm_accepted = MoneyAccountsEvent.ConfirmAccepted())) },
+            onDismiss = { onEvent(MoneyAccountsEvent(confirm_dismissed = MoneyAccountsEvent.ConfirmDismissed())) },
+        )
     }
 }
 
@@ -362,6 +378,13 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
                 onPick = { key -> onEvent(MoneyRulesEvent(category = MoneyRulesEvent.CategoryPicked(category_id = key))) },
                 onDismiss = { onEvent(MoneyRulesEvent(sheet_closed = MoneyRulesEvent.SheetClosed())) },
             )
+        } else if (state.sheet == MoneyRulesState.Sheet.SHEET_ACCOUNT) {
+            OptionSheet(
+                title = data?.account_sheet_title.orEmpty(),
+                options = data?.account_options.orEmpty().map { SheetOption(key = it.key, label = it.label, detail = it.detail, selected = it.selected) },
+                onPick = { key -> onEvent(MoneyRulesEvent(account = MoneyRulesEvent.AccountPicked(account_id = key))) },
+                onDismiss = { onEvent(MoneyRulesEvent(sheet_closed = MoneyRulesEvent.SheetClosed())) },
+            )
         } else {
             SheetRoom(
                 title = editor.title,
@@ -405,6 +428,29 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
                     testTag = "money-rule-name",
                     onEdit = { onEvent(MoneyRulesEvent(name = MoneyRulesEvent.NameEdited(text = it))) },
                 )
+                ChoiceFieldRow(
+                    key = editor.account_row_label,
+                    value = editor.account_label.ifEmpty { editor.clear_account_label },
+                    testTag = "money-rule-account",
+                    onTap = { onEvent(MoneyRulesEvent(account_sheet = MoneyRulesEvent.AccountSheetOpened())) },
+                )
+                if (editor.limits_enabled) {
+                    EditableFieldRow(
+                        key = editor.amount_min_label,
+                        value = editor.amount_min_text,
+                        reload = reload,
+                        testTag = "money-rule-amount-min",
+                        onEdit = { onEvent(MoneyRulesEvent(amount_min = MoneyRulesEvent.AmountMinEdited(text = it))) },
+                    )
+                    EditableFieldRow(
+                        key = editor.amount_max_label,
+                        value = editor.amount_max_text,
+                        reload = reload,
+                        testTag = "money-rule-amount-max",
+                        onEdit = { onEvent(MoneyRulesEvent(amount_max = MoneyRulesEvent.AmountMaxEdited(text = it))) },
+                    )
+                }
+                MoneyNote(editor.amount_note)
                 MoneyNote(editor.issue, ink = "net")
                 if (editor.apply_label.isNotEmpty()) {
                     QuietButton(

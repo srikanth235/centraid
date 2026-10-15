@@ -3,6 +3,7 @@ package dev.centraid.shared.apps.money
 import centraid.core.v1.AppQueryRequest
 import centraid.core.v1.MoneyAccounts
 import centraid.core.v1.MoneyAccountsRequest
+import centraid.screen.v1.Confirm
 import centraid.screen.v1.EmptyState
 import centraid.screen.v1.Loading
 import centraid.screen.v1.MoneyAccountEditor
@@ -33,12 +34,19 @@ import dev.centraid.shared.screen.Step
  * dollars stay on separate lines and are never added. An account is added or
  * edited in a sheet (name, kind, whether it counts toward spending, the bank's
  * own account number so an OFX file finds it).
+ *
+ * THE BANK'S NUMBER IS NEVER SENT BACK (R-1119-2): the phone holds only its last
+ * four digits, so the number is sent when typed and removed by its own action,
+ * which asks first and sends `external_ref: null`. Saving with the field empty
+ * keeps the number.
  */
 public object MoneyAccountsMachine :
     MoneyQueryMachine<MoneyAccountsState, MoneyAccountsEvent, MoneyAccountsData>("money.accounts", MONEY_TABLES) {
     public const val SCREEN_ID: String = "money.accounts"
     public const val CMD_ADD: String = "money.add_account"
     public const val CMD_EDIT: String = "money.edit_account"
+
+    private const val PENDING_REMOVE_NUMBER: String = "remove_number"
 
     private val KINDS: List<Pair<String, String>> = listOf(
         "checking" to MoneyCopy.KIND_CHECKING,
@@ -102,13 +110,22 @@ public object MoneyAccountsMachine :
                                 currency = line.first.currency,
                                 on_budget = line.second,
                                 closed = line.first.closed,
+                                has_external_ref = line.first.mask != null,
                             ),
                         ),
                     ),
                 )
             }
 
+            event.confirm_dismissed != null -> Step(held.copy(screen = screen.copy(confirm = null, pending = "")))
+
+            event.confirm_accepted != null && screen.confirm != null -> confirmed(held)
+
             editor == null -> Step(held)
+
+            // ASK FIRST: removing the number is the one edit the member cannot see to undo.
+            event.remove_number != null && editor.mode == MoneyAccountEditor.Mode.MODE_EDIT && editor.has_external_ref ->
+                Step(held.copy(screen = screen.copy(confirm = removeNumberConfirm(), pending = PENDING_REMOVE_NUMBER)))
 
             event.name != null -> Step(held.copy(screen = screen.copy(editor = editor.copy(name = event.name.text))))
             event.kind_picked != null -> Step(held.copy(screen = screen.copy(editor = editor.copy(kind = event.kind_picked.kind))))
@@ -130,7 +147,28 @@ public object MoneyAccountsMachine :
         held.answers.accounts?.on_budget.orEmpty().map { it to true } +
             held.answers.accounts?.off_budget.orEmpty().map { it to false }
 
-    private fun check(editor: MoneyAccountEditor): MoneyAccountEditor {
+    private fun removeNumberConfirm(): Confirm = Confirm(
+        title = MoneyCopy.ACCOUNT_REMOVE_NUMBER_TITLE,
+        body = MoneyCopy.ACCOUNT_REMOVE_NUMBER_BODY,
+        confirm_label = MoneyCopy.ACCOUNT_REMOVE_NUMBER_CONFIRM,
+        destructive = true,
+    )
+
+    private fun confirmed(held: MoneyHeld<MoneyAccountsState>): Step<MoneyHeld<MoneyAccountsState>> {
+        val screen = held.screen
+        val editor = screen.editor
+        val cleared = held.copy(screen = screen.copy(confirm = null, pending = ""))
+        if (screen.pending != PENDING_REMOVE_NUMBER || editor == null || editor.account_id.isEmpty()) return Step(cleared)
+        // ONLY THE NUMBER: the rest of the sheet is unsaved typing, and stays unsent.
+        val input = MoneyFold.json(
+            "account_id" to MoneyFold.str(editor.account_id),
+            "external_ref" to "null",
+        )
+        val key = InvokeKeys.of(CMD_EDIT, editor.account_id, INTENT_REMOVE_NUMBER, (held.tokens + 1).toString())
+        return WriteLaw.submit(Writes, cleared.copy(tokens = held.tokens + 1), CMD_EDIT, input, key)
+    }
+
+    private fun check(held: MoneyHeld<MoneyAccountsState>, editor: MoneyAccountEditor): MoneyAccountEditor {
         val issue = when {
             editor.name.isBlank() -> MoneyCopy.ACCOUNT_NAME_MISSING
             editor.mode == MoneyAccountEditor.Mode.MODE_ADD && editor.currency.isNotEmpty() &&
@@ -138,6 +176,7 @@ public object MoneyAccountsMachine :
             else -> ""
         }
         val add = editor.mode == MoneyAccountEditor.Mode.MODE_ADD
+        val removable = !add && editor.has_external_ref
         return editor.copy(
             can_save = issue.isEmpty(),
             issue = issue,
@@ -152,11 +191,13 @@ public object MoneyAccountsMachine :
             external_ref_note = if (add) MoneyCopy.ACCOUNT_NUMBER_NOTE else MoneyCopy.ACCOUNT_NUMBER_EDIT_NOTE,
             closed_label = if (add) "" else MoneyCopy.ACCOUNT_CLOSED,
             cancel_label = MoneyCopy.CANCEL,
+            remove_number_label = if (removable) MoneyCopy.ACCOUNT_REMOVE_NUMBER else "",
+            can_remove_number = removable && held.screen.write?.phase != WriteState.Phase.PHASE_IN_FLIGHT,
         )
     }
 
     private fun save(held: MoneyHeld<MoneyAccountsState>, editor: MoneyAccountEditor): Step<MoneyHeld<MoneyAccountsState>> {
-        val checked = check(editor)
+        val checked = check(held, editor)
         if (!checked.can_save) return Step(held.copy(screen = held.screen.copy(editor = checked)))
         val number = checked.external_ref.trim().ifEmpty { null }
         val screen = held.screen
@@ -193,12 +234,13 @@ public object MoneyAccountsMachine :
         val screen = step.state.screen
         return if (settled.committed) {
             // SAVED: the sheet goes, and the change event reads the list again.
+            val removed = settled.invoke_key.split(':').getOrNull(2) == INTENT_REMOVE_NUMBER
             Step(
                 step.state.copy(
                     screen = screen.copy(
                         sheet = MoneyAccountsState.Sheet.SHEET_NONE,
                         editor = null,
-                        status = StatusLine(sentence = MoneyCopy.DONE_ACCOUNT),
+                        status = StatusLine(sentence = if (removed) MoneyCopy.ACCOUNT_NUMBER_REMOVED else MoneyCopy.DONE_ACCOUNT),
                     ),
                 ),
                 step.effects,
@@ -275,7 +317,7 @@ public object MoneyAccountsMachine :
 
     override fun decorate(held: MoneyHeld<MoneyAccountsState>): MoneyAccountsState {
         val screen = held.screen
-        return screen.copy(editor = screen.editor?.let(::check))
+        return screen.copy(editor = screen.editor?.let { check(held, it) })
     }
 
     private fun chrome(parent: String): MoneyPageChrome = MoneyPageChrome(
@@ -285,6 +327,7 @@ public object MoneyAccountsMachine :
     )
 
     private const val CURRENCY_LENGTH: Int = 3
+    private const val INTENT_REMOVE_NUMBER: String = "number"
 
     private object Writes : WriteLens<MoneyHeld<MoneyAccountsState>> {
         override fun write(state: MoneyHeld<MoneyAccountsState>): WriteState = state.screen.write ?: WriteState()
