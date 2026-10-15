@@ -38,3 +38,5 @@ Verification: `bun run governance:law:test` PASS, 181/181 including dependency c
 ## Current-main reconciliation, 2026-10-15 afternoon
 
 Merged main 448aacb82082f09d89e1cc8827756d0256fe46b0 after #1117 and its #1121 fossil cleanup. tests/inventory.json now matches main exactly: the owner's complete cleanup supersedes this draft's inventory edits. The remaining law diff is the KaTeX override and lockfiles, compatibility regression tests, and stale arrival-fixture workflow path removal, with their registry evidence. No owner ledger cleanup is undone. Current exact-head validation is recorded on PR #1111.
+
+Reconciliation verification found one remaining inventory repair: `bun run test:hygiene-ratchet` fails on main's slack matcher budgets, 378 versus 11 truthiness assertions and 778 versus 7 mock-call assertions. `node scripts/test-report/hygiene-ratchet.mjs --write` restores exactly those two tighten-only changes in tests/inventory.json; all owner fossil cleanup is retained. The preceding statement that inventory has no diff is superseded for these two counters only.
