@@ -36,6 +36,8 @@
 
 **Not done, and why (owner hand-offs, `HANDOFF.md`).** The data version stays `data-v7`. data-v8 is made by `artefacts.py version` from files that are on the Hub, and published with the token: the held-out world builders and sessions (T03, T12, T23, the eval worlds A to G), `eval/sets/*.jsonl` (val and test), the screen set and `data/train*.jsonl.gz` all still hold Tally. `collide.TARGETS` are measured on A to D and must be measured again on the rebuilt worlds (`verify-heldout` will say so). `authored/golden_v3.json` is not regenerated: it comes from the r1 corpus, 117 of its 871 shapes name Tally, and regenerating it from the corpus the tree builds today (1,136 shapes) would drop 144 older-form shapes that `think.rs` and `test_trace.py` use to prove the compiler still takes the older form. R-1099-82: nothing was trained or scored on the `transaction` kind.
 
+**The card route** (`crates/assist/src/native_turn/cards.rs`). `centraid_assist`'s `the_shells_row_routes_are_exactly_the_entries_that_open_a_row` has been red since #1112. The iOS shell routes `("money", "transaction")` to the transaction's page (`ChatRouting.swift`, `MoneyScreens.transactionRoute`), while the table still said `Opens::AppHome`. The table now says `row(...)`, which is what the shell does. The unused `home` helper goes, and the transaction card's test asserts `Opens::Row`. R-1099-86 supersedes R-1099-83.
+
 ## Verification
 
 The job's own steps, on `40d96f5de` (before) and on this branch (after). `NATIVETOOLS=/home/user/target-npy/debug/nativetools`, `HF_HOME` the pinned tokenizer cache, `EVAL_VAULTS` a scratch directory, `GEN_INTEGRATION=1 NOISE_INTEGRATION=1`.
@@ -132,6 +134,12 @@ bun run check:push:static
 ```
 
 pass: every rule `ok`; `4/4 gates passed` (format:check, lint, turbo:lint, typecheck:affected).
+
+```sh
+cargo clippy -p centraid-assist --all-targets --all-features -- -D warnings && cargo test -p centraid-assist --all-features
+```
+
+Outcome: pass. Clippy is clean. Every `centraid-assist` test passes, including `the_shells_row_routes_are_exactly_the_entries_that_open_a_row`, which failed on main.
 
 ## Audit
 
