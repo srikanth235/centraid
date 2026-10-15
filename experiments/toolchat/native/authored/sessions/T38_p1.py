@@ -195,18 +195,6 @@ S("T38-075-P", "recovery empty-search answer-empty babysitter para",
   T("babysitter's phone number?", rows(),
     ref=[search("babysitter", kind="person"), ans(kind="person", name="babysitter")]))
 
-S("T38-079-P", "same-word school-photos debt-vs-task settle_debt person-possessor read complete para",
-  T("settle the school photos debt, yazan paid me back", diff(upd("debt_39", status="settled")),
-    ref=[search("Yazan", kind="person"),
-         act("settle_debt", kind="debt", name="school photos", linked_to="$yazan")]),
-  T("samar's school photos debt still open?", rows("debt_24"),
-    ref=[search("Samar", kind="person"),
-         ans(kind="debt", name="school photos", linked_to="$samar_shraideh", where="status = open")]),
-  T("ordered dana's school photos today, mark it done", diff(upd("t_068", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Order Dana's school photos")]),
-  T("the card i use for the clinic gets a star", diff(upd("clinic_card", starred=True)),
-    ref=[act("star", kind="locker item", name="clinic", where="type = card")]))
-
 S("T38-083-P", "create-args task-vs-event call-tradesperson appointment errand para",
   T("friday, call the plumber about the kitchen tap, it's been dripping all week",
     diff(new("task", name=has("plumber"), date="2027-05-14")),

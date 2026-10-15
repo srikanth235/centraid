@@ -106,42 +106,6 @@ S("T13-037", "open event reschedule",
          act("cancel", kind="event", name="Badminton at the Armitage", when=W(U("week", 1, weekday=5)), more=True),
          ans(kind="event", when=W(U("week", 1, weekday=5)))]))
 
-S("T13-038", "debts last month status amount unit",
-  T("debts from last month", rows("d_tom_h", "d_priya", "d_kasia", "d_wei", "d_seun", "d_lukas", "d_tunde"),
-    ref=[ans(kind="debt", when=W(U("month", -1)))]),
-  T("only the ones not settled", rows("d_tom_h", "d_priya", "d_kasia", "d_wei", "d_tunde"),
-    ref=[ans(within="@prev", where='status != "settled"')]),
-  T("and 20 quid or more", rows("d_kasia", "d_wei", "d_tunde"),
-    ref=[ans(within="@prev", where="amount >= 20 GBP")]),
-  T("smallest of those?", rows("d_tunde"),
-    ref=[ans(within="@prev", order="amount asc", limit=1)]))
-
-S("T13-039", "debts span month named max",
-  T("who did i lend money to from two months ago through august",
-    rows("d_chinedu", "d_tom_h", "d_kasia", "d_seun", "d_lukas", "d_tunde"),
-    ref=[ans(kind="debt", when=W(span(U("month", -2), U("month", 0, name=8))), where='direction = "owes_me"')]),
-  T("biggest of those", rows("d_chinedu"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
-S("T13-040", "debts weekday span sum",
-  T("anything i borrowed or lent between last monday and this wednesday",
-    rows("d_tom_h", "d_wei", "d_tom_b", "d_fatima", "d_emeka", "d_lukas", "d_tunde"),
-    ref=[ans(kind="debt", when=W(span(U("week", -1, weekday=1), U("week", 0, weekday=3))))]),
-  T("total of what i owe in that lot", val((50, "GBP")),
-    ref=[ans(op="sum", field="amount", within="@prev", where='direction = "i_owe"')]))
-
-S("T13-041", "groups currency members balance decline five turns",
-  T("which groups aren't in pounds", rows("family", "lisbon"),
-    ref=[ans(kind="group", where='currency != "GBP"')]),
-  T("the euro one?", rows("lisbon"),
-    ref=[ans(kind="group", where='currency contains "EUR"')]),
-  T("who's in it", rows("wei", "fatima", "me"),
-    ref=[ans(kind="person", linked_to="$lisbon")]),
-  T("where am i in it", val((-116, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Lisbon conference", linked_to="$me")]),
-  T("send wei 50 euros from my monzo", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]))
-
 S("T13-042", "cadence unit contacted before weekday log",
   T("who've i set to catch up with every two weeks or less often",
     rows("dad", "obinna", "aunty_ngozi", "nkechi", "helen", "tom_b", "fatima", "chinedu", "ngozi_e", "seun", "daniel"),

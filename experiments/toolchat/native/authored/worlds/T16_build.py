@@ -11,7 +11,7 @@ Abdul Karim, HR officer Karim Hossain), nicknames (Abba, Amma, Mim, Mizan, Babu,
 misspelled-looking name (Jewel), two "Team photo" photos, two cardiology check-ups for Abba,
 recurring cricket nets and production meetings, near-duplicate tasks ("Buy cricket balls",
 monthly bills), cancelled events, completed tasks, people trashed inside and past the 30-day
-restore window, an empty group, an empty folder, and groups with and without a currency.
+restore window, an empty folder.
 """
 from __future__ import annotations
 
@@ -78,41 +78,6 @@ def people():
         {"key": "delwar", "name": "Delwar Hossain", "role": "old landlord", "trashed": "2026-09-20T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "fund", "name": "Family fund", "members": ["nasrin", "shafiq", "farzana", "abba"],
-     "created": "2026-01-10T10:00"},
-    {"key": "tigers", "name": "Mirpur Tigers kitty", "currency": "BDT",
-     "members": ["rahim_m", "sohel", "imran", "babu", "jewel"], "created": "2025-10-01T09:00"},
-    {"key": "bonus", "name": "Line 3 Eid bonus pool", "currency": "BDT",
-     "members": ["rahim_u", "jahanara", "salma", "mizan"], "created": "2026-05-01T10:00"},
-    {"key": "coxs", "name": "Cox's Bazar trip", "members": ["shafiq", "masud", "nasrin"],
-     "created": "2026-10-20T20:00"},
-    {"key": "kolkata", "name": "Kolkata shopping", "currency": "INR", "members": ["shafiq", "farzana"],
-     "created": "2026-09-01T10:00"},
-    {"key": "picnic", "name": "Factory picnic 2025", "members": ["kamal", "rubina"], "created": "2025-01-05T10:00"},
-]
-
-EXPENSES = [
-    {"group": "fund", "name": "Abba's medicine", "amount": 4800, "paid_by": "me",
-     "split": ["me", "shafiq"], "date": "2026-12-02"},
-    {"group": "fund", "name": "Gas bill November", "amount": 1080, "paid_by": "shafiq",
-     "split": ["me", "shafiq"], "date": "2026-11-28"},
-    {"group": "fund", "name": "Roof repair", "amount": 12000, "paid_by": "me",
-     "split": ["me", "shafiq", "abba"], "date": "2026-10-15"},
-    {"group": "tigers", "name": "Ground rent December", "amount": 3000, "paid_by": "me",
-     "split": ["me", "rahim_m", "sohel", "imran", "babu", "jewel"], "date": "2026-12-04"},
-    {"group": "tigers", "name": "New balls", "amount": 1800, "paid_by": "sohel",
-     "split": ["me", "rahim_m", "sohel", "jewel"], "date": "2026-12-11"},
-    {"group": "bonus", "name": "Sweets for the line", "amount": 2400, "paid_by": "me",
-     "split": ["me", "rahim_u", "jahanara", "salma"], "date": "2026-06-10"},
-    {"group": "bonus", "name": "Gift for Salma's wedding", "amount": 2000, "paid_by": "rahim_u",
-     "split": ["me", "rahim_u", "jahanara", "mizan"], "date": "2026-11-18"},
-    {"group": "coxs", "name": "Hotel advance", "amount": 9000, "paid_by": "masud",
-     "split": ["me", "shafiq", "masud"], "date": "2026-11-05"},
-    {"group": "kolkata", "name": "Saree shopping", "amount": 6400, "paid_by": "farzana",
-     "split": ["me", "farzana"], "date": "2026-09-14", "currency": "INR"},
-]
 
 LISTS = [
     {"key": "home_l", "name": "Home", "area": "family"},
@@ -481,32 +446,6 @@ PHOTOS = [
     {"key": "blurry_3", "name": "Blurry bus window", "taken": "2026-10-24T08:00", "trashed": "2026-10-30T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_shafiq", "person": "shafiq", "direction": "owes_me", "amount": 5000, "name": "Motorbike repair",
-     "date": "2026-11-22"},
-    {"key": "d_babu", "person": "babu", "direction": "owes_me", "amount": 500, "name": "Kitty for November",
-     "date": "2026-11-01"},
-    {"key": "d_jewel", "person": "jewel", "direction": "owes_me", "amount": 500, "name": "Kitty for December",
-     "date": "2026-12-01"},
-    {"key": "d_imran", "person": "imran", "direction": "owes_me", "amount": 800, "name": "Wicketkeeping gloves",
-     "date": "2026-12-07"},
-    {"key": "d_masud", "person": "masud", "direction": "i_owe", "amount": 3000, "name": "Hotel share Cox's Bazar",
-     "date": "2026-11-05"},
-    {"key": "d_mizan", "person": "mizan", "direction": "i_owe", "amount": 1200, "name": "Lunch for the cutting section",
-     "date": "2026-12-09"},
-    {"key": "d_selim", "person": "selim", "direction": "i_owe", "amount": 350, "name": "CNG fare to Gazipur",
-     "date": "2026-12-14"},
-    {"key": "d_rahim_u", "person": "rahim_u", "direction": "owes_me", "amount": 2000, "name": "Advance for his mother's operation",
-     "date": "2026-10-12"},
-    {"key": "d_topu", "person": "topu", "direction": "owes_me", "amount": 1500, "name": "Bat from Bangabazar",
-     "date": "2026-09-20", "settled": "2026-10-10T18:00"},
-    {"key": "d_farzana", "person": "farzana", "direction": "i_owe", "amount": 700, "name": "Pitha ingredients",
-     "date": "2026-12-02", "settled": "2026-12-05T20:00"},
-    {"key": "d_monir", "person": "monir", "direction": "i_owe", "amount": 600, "name": "Fan wiring",
-     "date": "2026-12-15"},
-    {"key": "d_sohel", "person": "sohel", "direction": "i_owe", "amount": 400, "name": "Tea and singara after nets",
-     "date": "2026-12-11"},
-]
 
 LOCKER = [
     {"key": "gmail", "name": "Gmail", "type": "login", "username": "rafiq.chowdhury78@gmail.com",
@@ -584,8 +523,6 @@ def world():
         "seed": "T16",
         "currency": "BDT",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -595,7 +532,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

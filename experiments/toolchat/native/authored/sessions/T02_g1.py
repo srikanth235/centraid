@@ -81,16 +81,6 @@ S("T02-111", "ask options sophie star pick then unstar mom",
   T("what's my starred people total at the moment", val(3),
     ref=[ans(op="count", kind="person", where="starred = yes")]))
 
-S("T02-112", "balance sophie delacroix then star her then tom mina",
-  T("how much does sophie delacroix owe me", val((850, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Sophie Delacroix")]),
-  T("star her", diff(upd("sophie_d", starred=True)),
-    ref=[act("star", rows="$sophie_d")]),
-  T("and tom?", val((300, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Tom Nguyen")]),
-  T("mina park", val((258, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Mina Park")]))
-
 S("T02-113", "ask options chau log never_mind then contrast full name",
   T("log a call with chau", ask("kai", "mom", "dad"),
     ref=[act("log", kind="person", name="Chau", args=lines(kind="call")),
@@ -101,28 +91,6 @@ S("T02-113", "ask options chau log never_mind then contrast full name",
     ref=[act("log", kind="person", name="Henry Chau", args=lines(kind="visit"))]),
   T("star kai while you're at it", diff(upd("kai", starred=True)),
     ref=[act("star", kind="person", name="Kai Chau")]))
-
-S("T02-114", "balance negative positive mixed group repair",
-  T("what do i owe mom", val((-60, "CAD")),
-    ref=[search("mom", kind="person"), ans(op="balance", rows="$mom")]),
-  T("and diego", val((-11.5, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Diego Ramirez")]),
-  T("arun pillai?", val((123, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Arun Pillai")]),
-  T("where's nadia at in the crew group", val((-37, "CAD")),
-    ref=[bad(ans(op="balance", kind="group", name="Climbing Crew")),
-         ans(op="balance", kind="group", name="Climbing Crew", linked_to="$nadia")]))
-
-S("T02-115", "balance carlos then debt create then balance negative",
-  T("how much does carlos owe me", val((75, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Carlos Mendes")]),
-  T("log that i owe him 150 for the amp",
-    diff(new("debt", name=has("amp"), amount=150, direction="i_owe"), link("new", "carlos")),
-    ref=[act("create", args=lines(kind="debt", name="Amp", person="$carlos", amount="150", direction="i_owe"))]),
-  T("so where do we stand now", val((-75, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Carlos Mendes")]),
-  T("also mark the hydro bill paid", diff(upd("hydro", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay hydro bill")]))
 
 S("T02-116", "ask options licence star pick then door code",
   T("star the licence", ask("procreate", "clipstudio", "licence"),

@@ -45,12 +45,6 @@ S("T09-K006", "referent list then the noun reschedule i3skill S1",
   T("push the outline to friday", diff(upd("disc_outline", date="2026-05-15")),
     ref=[act("reschedule", rows="$disc_outline", args=lines(to=U("week", 0, weekday=5)))]))
 
-S("T09-K007", "referent debt she it i3skill S1",
-  T("what's the veil deposit", rows("d_mom"),
-    ref=[ans(kind="debt", name="Veil deposit")]),
-  T("has she paid it", rows("d_mom"),
-    ref=[ans(rows="$d_mom")]))
-
 S("T09-K008", "perfect had this month i3skill S2",
   T("how many bar prep sessions have we had this month", val(2),
     ref=[ans(kind="event", op="count", name="Bar prep session", when=J({"from": U("month", 0), "to": U("day", 0)}))]))
@@ -66,10 +60,6 @@ S("T09-K010", "single day friday i3skill S2",
 S("T09-K011", "read not write library books i3skill S3",
   T("did i return dan's library books", rows("library"),
     ref=[ans(kind="task", name="Return Dan's library books")]))
-
-S("T09-K012", "read debt i owe marcus i3skill S3",
-  T("did i pay marcus for the raptors tickets", rows("d_marcus"),
-    ref=[ans(kind="debt", name="Raptors tickets")]))
 
 S("T09-K013", "read cancelled yoga i3skill S3",
   T("was the yoga cancelled", rows("yoga"),

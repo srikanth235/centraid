@@ -41,14 +41,6 @@ S("T13-A006", "follow-up c3a",
   T("which is the longest", rows("xrd_analyse"),
     ref=[ans(within="@prev", order="effort desc", limit=1)]))
 
-S("T13-A007", "follow-up c3a",
-  T("who owes me", rows("d_kasia", "d_chinedu", "d_tom_b", "d_nkechi", "d_tom_h", "d_tunde", "d_fatima"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 20", rows("d_nkechi", "d_kasia", "d_tunde", "d_chinedu"),
-    ref=[ans(within="@prev", where="amount > 20 GBP")]),
-  T("and everything else", rows("d_tom_h", "d_tom_b", "d_fatima"),
-    ref=[ans(within="@1", exclude="@2")]))
-
 S("T13-A008", "follow-up c3a",
   T("show me next week", rows("mumcall_0913", "gym", "walk", "badminton_0911", "helen_0909", "jc_0909", "committee", "landlord", "group_0907", "xrd_0908"),
     ref=[ans(kind="event", when=J(U("week", 1)))]),

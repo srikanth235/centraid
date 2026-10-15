@@ -81,11 +81,6 @@ S("T30-054", "unmatched-write nearest ask nickname-typo",
   T("log a call with dr bergeon", ask("dr_bergeron"),
     ref=[act("log", kind="person", name="Dr Bergeon", args="kind: call")]))
 
-S("T30-055", "chain find-person sum debt relation where when",
-  T("how much do i still owe my sister isabelle from last year", val((226, "CAD")),
-    ref=[find(kind="person", name="Isabelle", where='role = "sister"'),
-         ans(op="sum", field="amount", kind="debt", linked_to="@prev", where="direction = i_owe and status = open", when=J(U("year", -1)))]))
-
 S("T30-056", "note where pinned body-contains edit",
   T("which pinned notes mention tyre pressures", rows("loose_3"),
     ref=[ans(kind="note", where='pinned = yes and body contains "tyre pressures"')]),
@@ -126,16 +121,6 @@ S("T30-060", "weekend events tasks two-writes find-chain person decline",
   T("text marie-pier to confirm the carpool", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
 
-S("T30-061", "group balance relation settle_up refusal-ask member-position",
-  T("where do i stand in the paris group", val((1244.32, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Paris", linked_to="$me")]),
-  T("and marie-eve", val((-610.66, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Paris", linked_to="$marie_eve")]),
-  T("she owes me for the apartment, settle up with her for paris", diff(settle=[("Marie-Ève Pelletier", "640.00")]),
-    ref=[act("settle_up", rows="$marie_eve", args="group: $paris")]),
-  T("and take her out of the group", ask("marie_eve", "paris"),
-    ref=[act("remove_from", rows="$marie_eve", args="from: $paris")]))
-
 S("T30-062", "tasks relation where delete reschedule two-dates empty-recovery opus date-select",
   T("what's still open for zoé", rows("t_020", "t_099", "t_115"),
     ref=[ans(kind="task", linked_to="$zoe", where="status = open")]),
@@ -165,23 +150,6 @@ S("T30-063", "locker reveal decline-fabricated where-type document star unstar w
     ref=[ans(within="@prev", linked_to="$ecole_f")]),
   T("unstar it", diff(upd("doc_10", starred=False)),
     ref=[act("unstar", rows="$doc_10")]))
-
-S("T30-064", "relation where compute-group star bulk balance focus log empty next",
-  T("which neighbours are in the ruelle group",
-    rows("caroline_perreault", "guillaume_petrov", "mei_poulin", "karine_dubois", "david_savard", "sam_b", "melanie_c"),
-    ref=[ans(kind="person", linked_to="$ruelle", where='role = "neighbour"')]),
-  T("how many of each role are in there", vgroups({"neighbour": 7, "ruelle verte volunteer": 3, "landlord's cousin": 3, "none": 1}),
-    ref=[comp(op="count", kind="person", group="role", linked_to="$ruelle"),
-         ans(value="@prev")]),
-  T("star the volunteer ones", diff(upd("melissa_lavoie", starred=True), upd("leonie_gagnon", starred=True), upd("chantal_rossi", starred=True)),
-    ref=[find(kind="person", linked_to="$ruelle", where='role contains "volunteer"'),
-         act("star", rows="@prev")]),
-  T("which of the ruelle neighbours did i talk to since january", rows("sam_b", "caroline_perreault"),
-    ref=[ans(kind="person", linked_to="$ruelle", where='role = "neighbour"', when=J({"from": D("2027-01-01")}))]),
-  T("log a visit with him, bumped into him today", diff(upd("sam_b", date=ANY)),
-    ref=[act("log", rows="$sam_b", args="kind: visit")]),
-  T("and when's the next réunion de ruelle", rows(),
-    ref=[ans(kind="event", name="Réunion de ruelle", when=J({"from": U("day", 0)}), order="date asc", limit=1)]))
 
 S("T30-065", "decline fabricated-secret",
   T("invent a guest wifi password", decline("fabricated_secret"),

@@ -17,16 +17,6 @@ S("T16-101", "ask options rahim star pick then jahanara",
   T("and jahanara", diff(upd("jahanara", starred=True)),
     ref=[act("star", kind="person", name="Jahanara Khatun")]))
 
-S("T16-102", "ask options rahim balance pick then contrast balances",
-  T("what does rahim owe me", ask("rahim_u", "rahim_m"),
-    ref=[askc("rahim uddin or rahim mia?", options="$rahim_u, $rahim_m")]),
-  T("the supervisor", val((2100, "BDT")),
-    ref=[ans(op="balance", rows="$rahim_u")]),
-  T("and rahim mia", val((500, "BDT")),
-    ref=[ans(op="balance", kind="person", name="Rahim Mia")]),
-  T("sohel?", val((-350, "BDT")),
-    ref=[ans(op="balance", kind="person", name="Sohel Rana")]))
-
 S("T16-103", "ask options karim log call never_mind then contrast",
   T("log a call with karim", ask("karim_h", "abba"),
     ref=[act("log", kind="person", name="Karim", args=lines(kind="call")),

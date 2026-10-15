@@ -29,21 +29,11 @@ S("T04-Q005", "the one with field value read i2pat",
   T("the one with username arahman", rows("horus"),
     ref=[ans(kind="locker item", where='username = "arahman"')]))
 
-S("T04-Q006", "debts settled status-only i2pat",
-  T("which ious have been settled", rows("d_imran", "d_ellie", "d_owen"),
-    ref=[ans(kind="debt", where="status = settled")]))
-
 S("T04-Q007", "fresh date drops link filter i2pat",
   T("what've i got with zainab on saturday", rows("fitting_1"),
     ref=[ans(kind="event", linked_to="$zainab", when=J(U("week", 0, weekday=6)))]),
   T("and what's on the 24th", rows("fb_1024", "cake", "yoga_1024"),
     ref=[ans(kind="event", when=J(D("2026-10-24")))]))
-
-S("T04-Q008", "bare noun across kinds ask no inherit i2pat",
-  T("what's open on the house list", rows("rent_nov", "boiler", "wul_1", "bins"),
-    ref=[ans(kind="task", linked_to="$houselist", where="status = open")]),
-  T("boiler", ask("boiler", "d_tom"),
-    ref=[askc("The boiler email task or the boiler callout debt?", options="$boiler, $d_tom")]))
 
 S("T04-Q009", "possessive role fiance i2pat",
   T("who's zainab's fiance", rows("hamza"),
@@ -53,16 +43,6 @@ S("T04-Q010", "remove two named rows from list i2pat",
   T("take the two mehndi tasks off the wedding prep list",
     diff(unlink("wedlist", "mehndi_outfit"), unlink("wedlist", "playlist")),
     ref=[find(kind="task", name="mehndi", linked_to="$wedlist"), act("remove_from", rows="@prev", args="from: $wedlist")]))
-
-S("T04-Q011", "second clause whos left open owes_me i2pat",
-  T("chloe's paid me for the takeaway, so who's left",
-    rows("d_zainab", "d_leah", "d_fatima_k", "d_aoife", "d_sana", also=diff(upd("d_chloe", status="settled"))),
-    ref=[act("settle_debt", kind="debt", linked_to="$chloe", where="status = open", more=True),
-         ans(kind="debt", where="direction = owes_me and status = open")]))
-
-S("T04-Q012", "generic group word ask candidates i2pat",
-  T("add ravi to the house group", ask("house", "house_party"),
-    ref=[askc("House bills or House party?", options="$house, $house_party")]))
 
 S("T04-Q013", "add_to destination missing ask create i2pat",
   T("put the sepsis six note in my cardiology notebook", ask(),
@@ -96,10 +76,6 @@ S("T04-Q019", "list word zero lists notes docs i2pat",
 S("T04-Q020", "document by name with month no verb i2pat",
   T("my payslip from september", rows("payslip"),
     ref=[ans(kind="document", name="payslip")]))
-
-S("T04-Q021", "cadence monthly or less often i2pat",
-  T("who do i only catch up with monthly or less often", rows("nasreen", "fatima_k", "aoife"),
-    ref=[ans(kind="person", where="cadence >= 30 days")]))
 
 S("T04-Q022", "cadence three weeks or rarer i2pat",
   T("anyone i see every three weeks or less often", rows("nasreen", "fatima_k", "sana", "leah", "aoife"),

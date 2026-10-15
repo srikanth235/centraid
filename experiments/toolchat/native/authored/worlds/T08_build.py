@@ -75,41 +75,6 @@ def people():
     ]
 
 
-GROUPS = [
-    {"key": "boosters", "name": "Eagles boosters", "members": ["marcus_h", "quanisha", "coach_t", "tasha"],
-     "created": "2025-08-10T19:00"},
-    {"key": "reunion_g", "name": "Carter reunion 2026", "members": ["dre", "keisha", "tanya", "bev"],
-     "created": "2026-01-18T16:00"},
-    {"key": "carpool", "name": "Practice carpool", "members": ["tasha", "brandon", "omar"], "created": "2026-03-10T20:00"},
-    {"key": "union_fund", "name": "Union dinner fund", "members": ["darnell", "vic", "marcus_b", "luis"],
-     "created": "2026-02-01T12:00"},
-    {"key": "fishing", "name": "Lanier fishing trip", "members": ["trey", "kevin", "reggie"], "created": "2026-03-01T10:00"},
-    {"key": "fantasy", "name": "Fantasy league 2025", "members": ["trey", "kevin"], "created": "2025-08-20T21:00"},
-]
-
-EXPENSES = [
-    {"group": "boosters", "name": "Concession stand supplies", "amount": 186.40, "paid_by": "me",
-     "split": ["me", "marcus_h", "quanisha", "coach_t"], "date": "2026-03-07"},
-    {"group": "boosters", "name": "Car wash signs", "amount": 64, "paid_by": "quanisha",
-     "split": ["me", "marcus_h", "quanisha", "tasha"], "date": "2026-03-28"},
-    {"group": "boosters", "name": "Team banner", "amount": 120, "paid_by": "marcus_h",
-     "split": ["me", "marcus_h", "quanisha", "coach_t"], "date": "2026-02-20"},
-    {"group": "reunion_g", "name": "Pavilion deposit", "amount": 400, "paid_by": "me",
-     "split": ["me", "dre", "keisha", "tanya"], "date": "2026-02-05"},
-    {"group": "reunion_g", "name": "T-shirt design proof", "amount": 45, "paid_by": "dre",
-     "split": ["me", "dre", "keisha"], "date": "2026-03-18"},
-    {"group": "reunion_g", "name": "Hotel block hold", "amount": 250, "paid_by": "keisha",
-     "split": ["me", "dre", "keisha", "tanya", "bev"], "date": "2026-03-25"},
-    {"group": "union_fund", "name": "Wings for the meeting", "amount": 96, "paid_by": "darnell",
-     "split": ["me", "darnell", "vic", "marcus_b"], "date": "2026-03-11"},
-    {"group": "union_fund", "name": "Retirement plaque", "amount": 80, "paid_by": "me",
-     "split": ["me", "darnell", "vic", "marcus_b", "luis"], "date": "2026-02-11"},
-    {"group": "fishing", "name": "Cabin deposit", "amount": 210, "paid_by": "trey",
-     "split": ["me", "trey", "kevin", "reggie"], "date": "2026-03-15"},
-    {"group": "fishing", "name": "Bait and ice", "amount": 38, "paid_by": "me",
-     "split": ["me", "trey", "kevin"], "date": "2026-03-21"},
-]
-
 LISTS = [
     {"key": "reunion_l", "name": "Reunion", "area": "family"},
     {"key": "house_l", "name": "House", "area": "home"},
@@ -440,27 +405,6 @@ PHOTOS = [
     {"key": "p_blurry", "name": "Blurry kickoff shot", "taken": "2025-10-18T11:00", "trashed": "2026-02-10T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_trey", "person": "trey", "direction": "owes_me", "amount": 60, "name": "Hawks tickets", "date": "2026-03-06"},
-    {"key": "d_kevin", "person": "kevin", "direction": "i_owe", "amount": 25, "name": "Borrowed ladder rental", "date": "2026-03-20"},
-    {"key": "d_tanya", "person": "tanya", "direction": "i_owe", "amount": 75, "name": "Easter groceries", "date": "2026-04-04"},
-    {"key": "d_dre", "person": "dre", "direction": "owes_me", "amount": 120, "name": "Reunion shirt deposit", "date": "2026-03-18"},
-    {"key": "d_monique", "person": "monique", "direction": "owes_me", "amount": 210, "name": "Half of summer camp deposit",
-     "date": "2026-03-02"},
-    {"key": "d_luis", "person": "luis", "direction": "owes_me", "amount": 40, "name": "Lunch money for the week", "date": "2026-03-27",
-     "settled": "2026-04-03T12:00"},
-    {"key": "d_marcus_b", "person": "marcus_b", "direction": "i_owe", "amount": 35, "name": "Gas money to the supply house",
-     "date": "2026-04-01"},
-    {"key": "d_mama", "person": "mama", "direction": "i_owe", "amount": 300, "name": "Truck repair loan", "date": "2025-12-10"},
-    {"key": "d_quanisha", "person": "quanisha", "direction": "owes_me", "amount": 18.50, "name": "Raffle ticket cash",
-     "date": "2026-03-30"},
-    {"key": "d_reggie", "person": "reggie", "direction": "owes_me", "amount": 50, "name": "Fantasy league buy-in",
-     "date": "2025-09-01", "settled": "2025-10-15T10:00"},
-    {"key": "d_coach", "person": "coach_t", "direction": "owes_me", "amount": 12, "name": "Pizza for film night",
-     "date": "2026-03-19"},
-    {"key": "d_tanya2", "person": "tanya", "direction": "owes_me", "amount": 45, "name": "Twins' birthday decorations",
-     "date": "2026-04-02"},
-]
 
 LOCKER = [
     {"key": "wifi", "name": "Home wifi", "type": "wifi", "password": "EaglesNest2026!", "starred": True},
@@ -529,8 +473,6 @@ def world():
         "seed": "T08",
         "currency": "USD",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -540,7 +482,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

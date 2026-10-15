@@ -28,12 +28,6 @@ S("T36-K102", "list word is a note name not the list kind i3skill S6",
   T("and the who paid what one", rows("w_settle"),
     ref=[ans(kind="note", name="Who paid what")]))
 
-S("T36-K103", "iou debt either direction i3skill S6",
-  T("any ious with sneha", rows("d_sneha"),
-    ref=[ans(kind="debt", linked_to="$sneha")]),
-  T("and kunal", rows("d_kunal"),
-    ref=[ans(kind="debt", linked_to="$kunal")]))
-
 # --- S7 look then pick --------------------------------------------------------------------------
 
 S("T36-K201", "pick later dinner reschedule i3skill S7",
@@ -61,9 +55,3 @@ S("T36-K204", "other two subtasks reschedule i3skill S7",
     ref=[act("complete", rows="$nc_aadhaar, $nc_pan")]),
   T("push the other two to the 15th of january", diff(upd("nc_bank", date="2027-01-15"), upd("nc_passport", date="2027-01-15")),
     ref=[find(within="@1", exclude="$nc_aadhaar, $nc_pan"), act("reschedule", rows="@prev", args=lines(to=D("2027-01-15")))]))
-
-S("T36-K205", "pick by description debt settle i3skill S7",
-  T("which debts are over 25000", rows("d_vikram", "d_baba", "d_rohan_m"),
-    ref=[ans(kind="debt", where="amount > 25000 INR")]),
-  T("settle the caterer one", diff(upd("d_vikram", status="settled")),
-    ref=[act("settle_debt", rows="$d_vikram")]))

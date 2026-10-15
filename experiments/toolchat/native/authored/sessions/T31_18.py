@@ -82,14 +82,6 @@ S("T31-231", "find-act3 add-to-list ward short undo",
 
 # --- counts and sums that need three conditions -----------------------------------------------------------
 
-S("T31-232", "values3 count tasks hour sum owed-to-me documents flat starred",
-  T("open tasks over an hour, how many", val(2),
-    ref=[ans(op="count", kind="task", where="status = open and effort > 60")]),
-  T("what's the total of the debts people still owe me", val((200, "PLN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = owes_me and status = open")]),
-  T("how many documents have i starred in the flat folder", val(1),
-    ref=[ans(op="count", kind="document", linked_to="$flat_f", where="starred = yes")]))
-
 S("T31-233", "values3 count five-a-side starred notes pinned year",
   T("how many people from tuesday football have i starred", val(1),
     ref=[ans(op="count", kind="person", where='met = "Tuesday football" and starred = yes')]),

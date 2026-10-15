@@ -40,12 +40,6 @@ S("T25-K103", "list word note then which notebook i3skill S6",
   T("which notebook is that in", rows("hike_nb"),
     ref=[ans(kind="notebook", linked_to="$tremblant_pack")]))
 
-S("T25-K104", "iou debt either direction i3skill S6",
-  T("any iou with nadia", rows("d_nadia"),
-    ref=[ans(kind="debt", linked_to="$nadia")]),
-  T("and tom", rows("d_tom"),
-    ref=[ans(kind="debt", linked_to="$tom")]))
-
 S("T25-K105", "family word brother log call i3skill S6",
   T("log a call with my brother", diff(upd("kenji", date=ANY)),
     ref=[find(kind="person", where='role contains "brother"'), act("log", rows="@prev", args=lines(kind="call"))]))
@@ -69,12 +63,6 @@ S("T25-K203", "ask then the landlord one log i3skill S7",
     ref=[act("log", kind="person", name="Marc", args=lines(kind="call"))]),
   T("the landlord", diff(upd("marc_t", date=ANY)),
     ref=[act("log", rows="$marc_t", args=lines(kind="call"))]))
-
-S("T25-K204", "pick by description debt settle i3skill S7",
-  T("what does daniel owe me right now", rows("d_daniel_camp", "d_daniel_boots"),
-    ref=[ans(kind="debt", linked_to="$daniel", where="status = open")]),
-  T("settle the camp one, he paid", diff(upd("d_daniel_camp", status="settled")),
-    ref=[act("settle_debt", rows="$d_daniel_camp")]))
 
 S("T25-K205", "other two subtasks reschedule i3skill S7",
   T("what's under the update parenting plan task", rows("holiday_sched", "review_lawyer", "sign_plan"),

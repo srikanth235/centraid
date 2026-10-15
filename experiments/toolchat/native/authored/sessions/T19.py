@@ -146,11 +146,3 @@ S("T19-024", "restore window note refused decline",
          askc("the ramadan menu was binned in february, past the 30 days, so it can't come back. start a new one?")]),
   T("no forget it", decline("never_mind"),
     ref=[dec("never_mind")]))
-
-S("T19-025", "create group knock-on add_to",
-  T("start a group Lina's party for splitting the costs with Youssef", diff(new("group", name="Lina's party"), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Lina's party"))]),
-  T("add him", diff(link("+1", "youssef_a")),
-    ref=[act("add_to", rows="$youssef_a", args=lines(to="$c1"))]),
-  T("and hajja zineb", diff(link("+1", "zineb")),
-    ref=[act("add_to", rows="$zineb", args=lines(to="$c1"))]))

@@ -97,38 +97,6 @@ S("T28-060", "single photo rel time today",
   T("the photo from this morning at quarter past 8", rows("p_aroha"),
     ref=[ans(kind="photo", when=W(U("day", 0, time="08:15")))]))
 
-S("T28-061", "debt span date named month amount unit within settle debt",
-  T("debts since valentines day", rows("d_moana", "d_kiri", "d_rawiri", "d_ngaire", "d_ria", "d_sam"),
-    ref=[ans(kind="debt", when=W(span(D("2026-02-14"), U("month", 0, name=2))))]),
-  T("the small ones, 50 bucks or under", rows("d_moana", "d_ria", "d_sam"),
-    ref=[ans(within="@prev", where="amount <= 50 NZD")]),
-  T("and of those, which ones am i the one owing", rows("d_ria", "d_sam"),
-    ref=[ans(within="@prev", where='direction = "i_owe"')]),
-  T("paid nanny ria back for the Groceries, settle that one", diff(upd("d_ria", status="settled")),
-    ref=[act("settle_debt", rows="$d_ria")]))
-
-S("T28-062", "debt span date named month compute max person count empty",
-  T("debts from first jan to the end of january", rows("d_kevin", "d_hemi", "d_huia"),
-    ref=[ans(kind="debt", when=W(span(D("2026-01-01"), U("month", 0, name=1))))]),
-  T("biggest one i owe anyone", val((300, "NZD")),
-    ref=[comp(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"'),
-         ans(value="@prev")]),
-  T("any debts not tied to a person", rows(),
-    ref=[ans(kind="debt", where="person count < 1")]))
-
-S("T28-064", "single debt open to datetime",
-  T("any debts from before the end of january", rows("d_kevin", "d_hemi", "d_dave", "d_huia"),
-    ref=[ans(kind="debt", when=W({"to": D("2026-01-31", "23:00")}))]))
-
-S("T28-065", "debt span datetime week open to datetime person count",
-  T("debts from tuesday noon last week to sunday", rows("d_trev", "d_pita", "d_moana"),
-    ref=[ans(kind="debt", when=W(span(U("week", -1, weekday=2, time="12:00"), U("week", -1))))]),
-  T("and anything up to wednesday midday",
-    rows("d_kevin", "d_hemi", "d_dave", "d_huia", "d_mere", "d_trev"),
-    ref=[ans(kind="debt", when=W({"to": U("week", -1, weekday=3, time="12:00")}))]),
-  T("do any of them have nobody on them", rows(),
-    ref=[ans(within="@prev", where="person count < 1")]))
-
 S("T28-066", "note span date datetime within person count open edit note",
   T("notes from the nineteenth till yesterday lunchtime", rows("doc_qs", "tshirt_sizes", "ria_qs"),
     ref=[ans(kind="note", when=W(span(D("2026-02-19"), U("day", -1, time="12:00"))))]),
@@ -183,18 +151,6 @@ S("T28-073", "document from datetime span week date",
     ref=[ans(kind="document", when=W({"from": U("week", 0, weekday=1, time="14:00")}))]),
   T("last week through tuesday, same filter", rows("venue_booking", "notice", "roof_quote", "draw"),
     ref=[ans(kind="document", when=W(span(U("week", -1), U("week", 0, weekday=2))))]))
-
-S("T28-074", "five turns person met empty span named month datetime event count log balance",
-  T("which of my weekly people haven't got a met place saved", rows("mere", "ria", "hine"),
-    ref=[ans(kind="person", where="met is empty and cadence = 7")]),
-  T("who'd i talk to between the start of jan and wednesday at noon", rows("kevin", "huia", "rawiri", "trev"),
-    ref=[ans(kind="person", when=W(span(U("month", 0, name=1), U("week", -1, weekday=3, time="12:00"))))]),
-  T("which of them are on more than 3 events", rows("huia"),
-    ref=[ans(within="@prev", where="event count > 3")]),
-  T("messaged Huia Morgan about the minutes, log it", diff(upd("huia", date=ANY)),
-    ref=[act("log", rows="$huia", args=lines(kind="message"))]),
-  T("where am i at with her money wise", val((-30, "NZD")),
-    ref=[comp(op="balance", rows="$huia"), ans(value="@prev")]))
 
 S("T28-075", "person span weekday met set date time log",
   T("who did i speak to since monday",

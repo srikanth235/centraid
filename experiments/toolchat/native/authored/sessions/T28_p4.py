@@ -24,17 +24,6 @@ S("T28-202", "p4 ordinal event cancel reschedule kapa relist",
   T("third one to 7", diff(upd("kapa_0318", date="2026-03-18T19:00")),
     ref=[act("reschedule", rows="$kapa_0318", args=lines(to=D("2026-03-18", "19:00")))]))
 
-# 203 owe direction
-S("T28-203", "p4 owe direction balance debt settle_debt both signs",
-  T("where am i with ria", val((25, "NZD")),
-    ref=[ans(op="balance", kind="person", name="Ria Tane")]),
-  T("and ngaire", val((-220, "NZD")),
-    ref=[ans(op="balance", kind="person", name="Ngaire Tomoana")]),
-  T("paid ngaire her deposit, settle mine", diff(upd("d_ngaire", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$ngaire", where='direction = "i_owe" and status = "open"')]),
-  T("rawiri sent the deposit back, settle his", diff(upd("d_rawiri", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$rawiri", where='direction = "owes_me" and status = "open"')]))
-
 # 204 except / besides
 S("T28-204", "p4 except exclude subtask complete person log visit",
   T("what's under the reunion invites task", rows("inv_aus", "inv_fb", "inv_kaum"),
@@ -58,12 +47,3 @@ S("T28-205", "p4 weekday at-N reschedule create range event",
     ref=[act("create", args=lines(kind="event", name="Call with Ria", date=U("week", 0, weekday=7, time="17:00")))]))
 
 # 206 two writes in one message
-S("T28-206", "p4 two writes settle_debt complete direction debt read",
-  T("kevin paid me the petrol money and i updated the koha book", diff(upd("d_kevin", status="settled"), upd("koha_book", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", linked_to="$kevin", where='direction = "owes_me" and status = "open"', more=True),
-         act("complete", kind="task", name="Update the koha book")]),
-  T("gave pita the tangi petrol money and rang the kaumātua", diff(upd("d_pita", status="settled"), upd("inv_kaum", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", linked_to="$pita", where='direction = "i_owe" and status = "open"', more=True),
-         act("complete", kind="task", name="kaumātua")]),
-  T("what's left on my side", rows("d_trev", "d_hemi", "d_ngaire", "d_ria", "d_sam"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]))

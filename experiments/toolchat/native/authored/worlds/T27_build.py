@@ -12,8 +12,8 @@ Thomas Moreau, miller Thomas Girard), nicknames (Jules, Maman, Mamie, Max), a mi
 name (Matthieu Faure), two "Midwife appointment" and two "Flour delivery" events, recurring
 prenatal classes, test bakes and partners meetings, near-duplicate tasks ("Order flour", "Call
 the insurer", monthly rent and electricity), cancelled events, completed tasks, rows trashed
-inside and past the 30-day restore window, two groups without expenses, an empty folder, an
-empty notebook and an empty album, and groups in CHF and GBP.
+inside and past the 30-day restore window, an empty folder, an
+empty notebook and an empty album.
 """
 from __future__ import annotations
 
@@ -90,42 +90,6 @@ def people():
         {"key": "vincent", "name": "Vincent Pujol", "role": "old Paris landlord", "trashed": "2026-09-10T09:00"},
     ]
 
-
-GROUPS = [
-    {"key": "startup_g", "name": "Bakery startup costs", "members": ["camille_r", "antoine"],
-     "created": "2026-09-01T10:00"},
-    {"key": "prenatal_g", "name": "Prenatal group", "members": ["camille_p", "margaux", "sarah", "yasmine"],
-     "created": "2026-10-06T21:00"},
-    {"key": "flat_g", "name": "Croix-Rousse flat", "members": ["julien"], "created": "2025-03-01T10:00"},
-    {"key": "geneva_g", "name": "Geneva pastry fair", "currency": "CHF", "members": ["camille_r", "nadia"],
-     "created": "2026-10-10T10:00"},
-    {"key": "london_g", "name": "London weekend", "currency": "GBP", "members": ["chloe", "maxime"],
-     "created": "2026-08-20T10:00"},
-    {"key": "shower_g", "name": "Baby shower gifts", "members": ["lea", "chloe"], "created": "2026-11-25T10:00"},
-    {"key": "party_g", "name": "Opening party kitty", "members": ["nadia", "hugo", "ines"],
-     "created": "2026-11-30T10:00"},
-]
-
-EXPENSES = [
-    {"group": "startup_g", "name": "Proofing cabinet", "amount": 2400, "paid_by": "me",
-     "split": ["me", "camille_r", "antoine"], "date": "2026-11-10"},
-    {"group": "startup_g", "name": "Display case", "amount": 3600, "paid_by": "antoine",
-     "split": ["me", "camille_r", "antoine"], "date": "2026-11-28"},
-    {"group": "startup_g", "name": "Shop sign deposit", "amount": 450, "paid_by": "camille_r",
-     "split": ["me", "camille_r"], "date": "2026-11-19"},
-    {"group": "prenatal_g", "name": "Birth ball rental", "amount": 40, "paid_by": "me",
-     "split": ["me", "camille_p", "margaux", "sarah"], "date": "2026-11-17"},
-    {"group": "prenatal_g", "name": "Snacks after class", "amount": 24, "paid_by": "margaux",
-     "split": ["me", "margaux", "yasmine"], "date": "2026-11-24"},
-    {"group": "flat_g", "name": "Groceries", "amount": 86, "paid_by": "julien",
-     "split": ["me", "julien"], "date": "2026-11-29"},
-    {"group": "flat_g", "name": "Crib", "amount": 320, "paid_by": "me",
-     "split": ["me", "julien"], "date": "2026-11-21"},
-    {"group": "geneva_g", "name": "Stand fee", "amount": 600, "paid_by": "me",
-     "split": ["me", "camille_r", "nadia"], "date": "2026-10-12", "currency": "CHF"},
-    {"group": "london_g", "name": "Afternoon tea", "amount": 90, "paid_by": "chloe",
-     "split": ["me", "chloe", "maxime"], "date": "2026-09-05", "currency": "GBP"},
-]
 
 LISTS = [
     {"key": "open_l", "name": "Opening day", "area": "bakery"},
@@ -479,32 +443,6 @@ PHOTOS = [
     {"key": "p_oldflat", "name": "Old Paris flat", "taken": "2026-08-01T12:00", "trashed": "2026-10-01T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_chloe", "person": "chloe", "direction": "owes_me", "amount": 45, "name": "Concert tickets",
-     "date": "2026-11-14"},
-    {"key": "d_chloe2", "person": "chloe", "direction": "owes_me", "amount": 25, "name": "Flowers for Mamie",
-     "date": "2026-12-01"},
-    {"key": "d_max", "person": "maxime", "direction": "owes_me", "amount": 30, "name": "Pizza night",
-     "date": "2026-11-20"},
-    {"key": "d_lea", "person": "lea", "direction": "i_owe", "amount": 120, "name": "Train to Paris",
-     "date": "2026-10-25"},
-    {"key": "d_camille", "person": "camille_r", "direction": "i_owe", "amount": 250, "name": "Flour sample boxes",
-     "date": "2026-11-02"},
-    {"key": "d_antoine", "person": "antoine", "direction": "i_owe", "amount": 1500, "name": "Advance for the mixer",
-     "date": "2026-10-01"},
-    {"key": "d_hugo", "person": "hugo", "direction": "owes_me", "amount": 20, "name": "Knife sharpening",
-     "date": "2026-12-01"},
-    {"key": "d_margaux", "person": "margaux", "direction": "owes_me", "amount": 15, "name": "Yoga class",
-     "date": "2026-11-24"},
-    {"key": "d_thomas", "person": "thomas_m", "direction": "i_owe", "amount": 60, "name": "Paint for the nursery",
-     "date": "2026-11-21"},
-    {"key": "d_sarah", "person": "sarah", "direction": "owes_me", "amount": 35, "name": "Baby book",
-     "date": "2026-11-17", "settled": "2026-11-30T10:00"},
-    {"key": "d_matthieu", "person": "matthieu", "direction": "i_owe", "amount": 80, "name": "Butter samples",
-     "date": "2026-11-05", "settled": "2026-11-12T10:00"},
-    {"key": "d_nadia", "person": "nadia", "direction": "owes_me", "amount": 12, "name": "Lunch",
-     "date": "2026-12-02"},
-]
 
 LOCKER = [
     {"key": "bank_login", "name": "Crédit Agricole", "type": "login", "username": "sophie.dubois",
@@ -588,8 +526,6 @@ def world():
         "seed": "T27",
         "currency": "EUR",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -599,7 +535,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

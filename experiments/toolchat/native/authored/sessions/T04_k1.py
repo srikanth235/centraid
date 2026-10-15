@@ -63,12 +63,6 @@ S("T04-K010", "duration hours minutes effort i3skill S2",
   T("and under 10 minutes", rows("bins"),
     ref=[ans(kind="task", where="effort < 10")]))
 
-S("T04-K011", "cadence weeks days i3skill S2",
-  T("who do i check in with every three weeks", rows("sana", "leah"),
-    ref=[ans(kind="person", where="cadence = 21 days")]),
-  T("and monthly", rows("nasreen", "fatima_k", "aoife"),
-    ref=[ans(kind="person", where="cadence = 30 days")]))
-
 S("T04-K012", "relation to event dates line i3skill S2",
   T("what's left on the work admin list before the arcp", rows("audit", "reflections", "cbd", "rota_swap", "als_prep", "teaching_prep"),
     ref=[ans(kind="task", linked_to="$worklist", where=OPEN, when=J({"to": D("2026-11-18")}))]))
@@ -76,10 +70,6 @@ S("T04-K012", "relation to event dates line i3skill S2",
 S("T04-K013", "read not write rent paid i3skill S3",
   T("did i pay the rent", rows("rent_oct", "rent_nov"),
     ref=[ans(kind="task", name="Pay rent")]))
-
-S("T04-K014", "read debt i owe tom i3skill S3",
-  T("did i pay tom for the boiler engineer", rows("d_tom"),
-    ref=[ans(kind="debt", name="Boiler engineer")]))
 
 S("T04-K015", "read cancelled pub quiz i3skill S3",
   T("was the pub quiz cancelled", rows("pub_quiz"),

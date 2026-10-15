@@ -25,18 +25,6 @@ S("T06-004", "search miss then fix, reveal named",
   T("and which locker stuff has a username on it", rows("thomann", "elster"),
     ref=[ans(kind="locker item", where="username is set")]))
 
-S("T06-005", "settle debt new undo ledger",
-  T("kalle owes me 18 for the pizza after rehearsal",
-    diff(new("debt", name=has("pizza"), amount=18, direction="owes_me"), link("new", "kalle")),
-    ref=[search("kalle", kind="person"),
-         act("create", args=lines(kind="debt", name="Pizza after rehearsal", amount="18", direction="owes_me", person="$kalle"))]),
-  T("he paid it, mark it settled", diff(upd("+1", status="settled")),
-    ref=[act("settle_debt", rows="$c1")]),
-  T("wait undo that, it was the strings money he paid", diff(),
-    ref=[act("undo")]),
-  T("fine, settle the guitar strings one instead", diff(upd("d_kalle_strings", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Guitar strings")]))
-
 S("T06-006", "task effort unit where",
   T("anything that takes exactly half an hour", rows("snake", "cleaning_rota", "rates", "xlr", "climb_shoes"),
     ref=[ans(kind="task", where='effort = 30 minutes and status = "open"')]))
@@ -63,36 +51,6 @@ S("T06-009", "edit person multi cadence",
   T("who else is on short check ins, under a week", rows(),
     ref=[ans(kind="person", where="cadence < 7", exclude="$mira, $jonas_k")]))
 
-S("T06-010", "create person edit new add_to group",
-  T("add a contact: Milan Horak, sound guy, Klub Rybka",
-    diff(new("person", name="Milan Horak", role=has("sound"))),
-    ref=[act("create", args=lines(kind="person", name="Milan Horak", role="sound guy, Klub Rybka"))]),
-  T("his nickname is Mili", diff(upd("+1", nickname="Mili")),
-    ref=[act("edit", rows="$c1", args=lines(nickname="Mili"))]),
-  T("and put him in the prague trip group", diff(link("prague", "+1")),
-    ref=[act("add_to", rows="$c1", args=lines(to="$prague"))]),
-  T("and who's in Prague gig trip at this point", rows("jonas_w", "lena", "kalle", "marek", "+1", "me"),
-    ref=[ans(kind="person", linked_to="$prague")]))
-
-S("T06-011", "remove_from person prev zero balance",
-  T("is marek in the prague group? take him out, he's not coming with us", diff(unlink("prague", "marek")),
-    ref=[find(kind="person", name="Marek", linked_to="$prague"),
-         act("remove_from", rows="@prev", args=lines(from_="$prague"))]),
-  T("who's left in it", rows("jonas_w", "lena", "kalle", "me"),
-    ref=[ans(kind="person", linked_to="$prague")]),
-  T("how much am i up or down in it", val((1400, "CZK")),
-    ref=[ans(op="balance", kind="group", name="Prague gig trip", linked_to="$me")]))
-
-S("T06-012", "compute max min debts",
-  T("biggest thing i owe anyone right", val((90, "EUR")),
-    ref=[ans(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("and the smallest thing people owe me", val((9.5, "EUR")),
-    ref=[comp(op="min", field="amount", kind="debt", where='direction = "owes_me" and status = "open"'),
-         ans(value="@prev")]),
-  T("what's the most anyone owes me", val((60, "EUR")),
-    ref=[comp(op="max", field="amount", kind="debt", where='direction = "owes_me" and status = "open"'),
-         ans(value="@prev")]))
-
 S("T06-013", "folder empty result recovery",
   T("what's in my receipts folder", rows("receipts_doc"),
     ref=[find(kind="folder", name="Receipts"),
@@ -110,18 +68,6 @@ S("T06-014", "event overlap refused create",
     ref=[act("create", args=lines(kind="event", name="Call with Pavla", date=U("week", 1, weekday=2, time="17:00")))]),
   T("what's tuesday look like", rows("theatre_tech", "+1", "reh_0210"),
     ref=[ans(kind="event", when=W(U("week", 1, weekday=2)))]))
-
-S("T06-015", "remove_from person named group",
-  T("take yusuf out of the harz weekend group", diff(unlink("harz", "yusuf")),
-    ref=[act("remove_from", kind="person", name="Yusuf Demir", args=lines(from_="$harz"))]),
-  T("and delete the group, the trip's done", diff(gone("harz"), unlink("harz", "sophie"), unlink("harz", "hannah_b"),
-                                                       unlink("harz", "me")),
-    ref=[act("delete", rows="$harz")]))
-
-S("T06-016", "delete group refused",
-  T("delete the band fund group", ask(),
-    ref=[bad(act("delete", rows="$band")),
-         askc("it still has expenses in it, so the vault won't delete it. settle up with everyone first?")]))
 
 S("T06-017", "star document where",
   T("star the doc i saved on thursday", diff(upd("rental_offer", starred=True)),

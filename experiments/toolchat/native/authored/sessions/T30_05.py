@@ -52,16 +52,6 @@ S("T30-093", "ambiguous-ask log person role-select sister empty-recovery search 
   T("ok what does she have this week", rows("pl_270217", "sw_270220"),
     ref=[ans(kind="event", linked_to="$zoe", when=J(U("week", 0)))]))
 
-S("T30-094", "ask-referent balance person read ambiguous-ask delete event state-select cancelled",
-  T("what's the balance", ask(),
-    ref=[askc("With whom?")]),
-  T("papa", val((-450, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Papa")]),
-  T("delete the coffee with marie-ève", ask("oo_040", "oo_059", "oo_022", "oo_030"),
-    ref=[act("delete", kind="event", name="Coffee with Marie-Ève")]),
-  T("the cancelled one", diff(trash("oo_030")),
-    ref=[act("delete", kind="event", name="Coffee with Marie-Ève", where="status = cancelled")]))
-
 S("T30-095", "ambiguous-ask reopen task date-select windshield empty-recovery search thanksgiving event order-limit",
   T("reopen the windshield fluid task", ask("t_031", "t_107"),
     ref=[act("reopen", kind="task", name="windshield fluid")]),
@@ -126,25 +116,6 @@ S("T30-100", "write-read delete name where when event also repair name-in-where 
   T("and which was the latest", rows("hg_270206"),
     ref=[ans(kind="event", name="Hockey game", where='description contains "carpool"', when=J({"to": U("day", 0)}), order="date desc", limit=1)]))
 
-S("T30-101", "find-act unstar document linked where when settle_debt name i_owe balance k4",
-  T("unstar the starred impôts documents from 2025", diff(upd("doc_28", starred=False)),
-    ref=[find(kind="document", linked_to="$impots_f", where="starred = yes", when=J(U("year", -2))),
-         act("unstar", rows="@prev")]),
-  T("i paid camille paquette back for last year's pizza", diff(upd("debt_35", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="pizza", linked_to="$camille_paquette", where="direction = i_owe", when=J(U("year", -1)))]),
-  T("and what's my balance with her after that", val((0, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Camille Paquette")]))
-
-S("T30-102", "write-read reschedule event name when two-dates read find-act settle_debt linked where raj",
-  T("move the furnace service to the fifth and tell me what's on that day", rows("oo_034", also=diff(upd("oo_034", date="2027-03-05T09:00"))),
-    ref=[act("reschedule", kind="event", name="Furnace service", when=J(D("2027-03-04")), args=lines(to=D("2027-03-05")), more=True),
-         ans(kind="event", when=J(D("2027-03-05")))]),
-  T("raj roy's debts from before 2026 are all settled", diff(upd("debt_12", status="settled"), upd("debt_24", status="settled"), upd("debt_18", status="settled")),
-    ref=[find(kind="debt", linked_to="$raj_roy", where="direction = owes_me and status = open", when=J({"to": D("2025-12-31")})),
-         act("settle_debt", rows="@prev")]),
-  T("so which of his debts are still open", rows("debt_30", "debt_36"),
-    ref=[ans(kind="debt", linked_to="$raj_roy", where="direction = owes_me and status = open")]))
-
 S("T30-103", "write-read delete event name where count edit task linked when effort k4 read",
   T("delete the cancelled coffee with marie-ève and tell me how many coffees are left", val(3, also=diff(trash("oo_030"))),
     ref=[act("delete", kind="event", name="Coffee with Marie-Ève", where="status = cancelled", more=True),
@@ -188,17 +159,6 @@ S("T30-107", "reschedule task name where when linked two-dates k4 event count de
   T("i just called her tonight, so log it for me", diff(upd("maman", date=ANY)),
     ref=[act("log", rows="$maman", args="kind: call")]))
 
-S("T30-108", "empty-recovery search bakery debt where decline-out-of-scope find-act star photos",
-  T("do we owe the bakery anything", rows(),
-    ref=[search("bakery"),
-         ans(kind="debt", name="bakery", where="status = open")]),
-  T("whatsapp the cabane photos to isabelle", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("ok star the sugar shack ones, those are the ones i want on the home screen", diff(upd("ph_cabane_a_07", starred=True), upd("ph_cabane_a_12", starred=True),
-                                          upd("ph_cabane_a_02", starred=True), upd("ph_cabane_a_17", starred=True)),
-    ref=[find(kind="photo", name="Sugar shack"),
-         act("star", rows="@prev")]))
-
 S("T30-109", "empty-recovery search karate event photos find-act star unstar undo name where when count",
   T("when's the next karate class", rows(),
     ref=[search("karate"),
@@ -214,20 +174,6 @@ S("T30-109", "empty-recovery search karate event photos find-act star unstar und
   T("undo that", diff(upd("ph_hockey24_18", starred=True), upd("ph_hockey24_12", starred=True)),
     ref=[act("undo")]))
 
-S("T30-110", "empty-recovery search wedding event debts i_owe where ambiguous-ask settle_debt date-select sum",
-  T("did we get a wedding invite", rows(),
-    ref=[search("wedding"),
-         ans(kind="event", name="wedding", when=J({"from": U("day", 0)}))]),
-  T("show me the debts i owe that are over a hundred dollars", rows("debt_14", "debt_20", "debt_26", "debt_35"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open and amount > 100")]),
-  T("the pizza one is paid, did it today", ask("debt_35", "debt_20", "debt_05"),
-    ref=[act("settle_debt", kind="debt", name="pizza")]),
-  T("the 2025 one", diff(upd("debt_20", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="pizza", when=J(U("year", -2)))]),
-  T("so what's the total i still owe, all debts together", val((571, "CAD")),
-    ref=[bad(ans(op="sum", kind="debt", where="direction = i_owe and status = open")),
-         ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]))
-
 S("T30-111", "event span two-reschedules undo complete task name where when linked k4 recycling",
   T("anything on the calendar between monday and wednesday next week", rows("vb_270222", "hp_270223", "pl_270224"),
     ref=[ans(kind="event", when=J(span(U("week", 1, weekday=1), U("week", 1, weekday=3))))]),
@@ -240,17 +186,6 @@ S("T30-111", "event span two-reschedules undo complete task name where when link
     ref=[act("undo")]),
   T("complete the open recycling task due thursday the eighteenth on the maison list", diff(upd("rec_270218", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Take out recycling", where="status = open", when=J(D("2027-02-18")), linked_to="$maison")]))
-
-S("T30-112", "settle_debt name linked where when k4 lucie repair people role cadence edit focus-pick",
-  T("lucie boucher paid me for this year's coffee run", diff(upd("debt_40", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="coffee run", linked_to="$lucie_boucher", where="direction = owes_me", when=J(U("year", 0)))]),
-  T("which neighbours do i keep in touch with monthly", rows("sam_b", "caroline_perreault"),
-    ref=[bad(ans(kind="person", where='role = "neighbour" and cadence <= 1 month')),
-         ans(kind="person", where='role = "neighbour" and cadence <= 30')]),
-  T("put sam on every two weeks instead, we hang out all the time", diff(upd("sam_b", cadence=14)),
-    ref=[act("edit", rows="$sam_b", args="cadence: 14")]),
-  T("and how often do i see caroline", rows("caroline_perreault"),
-    ref=[ans(kind="person", name="Caroline", where='role = "neighbour"')]))
 
 S("T30-113", "empty-recovery search pool event write-read complete count where priority",
   T("when's the pool party", rows(),

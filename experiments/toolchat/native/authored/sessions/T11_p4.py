@@ -30,17 +30,6 @@ S("T11-202", "ordinal third club list reschedule bare weekday ask pick star phot
   T("2 is grand", diff(upd("p_comm_cake", starred=True)),
     ref=[act("star", rows="$p_comm_cake")]))
 
-# 203 which way the money goes (mick owes me and i owe mick)
-S("T11-203", "debts owe direction negative balance mick both ways settle mine settle",
-  T("what do i owe sean mahon", val((-850, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Sean Mahon")]),
-  T("and where am i with mick", val((145, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Mick Considine")]),
-  T("settle mine with him, gave him the diesel money at mass", diff(upd("d_mick_diesel", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$mick", where='direction = "i_owe"')]),
-  T("tadhg paid the jersey deposit, clear his", diff(upd("d_tadhg", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$tadhg")]))
-
 # 204 everything but one, by its date
 S("T11-204", "except exclude date ordinal u12 training cancel count",
   T("u12 training in august", rows("u12_0805", "u12_0812", "u12_0819", "u12_0826"),

@@ -44,14 +44,6 @@ S("T15-028", "create person delete restore new",
   T("ugh no it was right, erik confirmed. bring him back", diff(restore("+1")),
     ref=[act("restore", rows="$c1")]))
 
-S("T15-029", "group currency in balance min debts",
-  T("which of my groups aren't in kroner", rows("kiel", "abisko"),
-    ref=[find(kind="group", where='currency in ("EUR", "SEK")'), ans(rows="@prev")]),
-  T("where do me and jan schröder stand", val((115, "EUR")),
-    ref=[ans(op="balance", rows="$jan")]),
-  T("smallest thing anyone owes me?", val((75, "NOK")),
-    ref=[ans(op="min", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]))
-
 S("T15-030", "bouldering open span cancel span duration people",
   T("what bouldering nights have i got from next monday on", rows("boulder_1117", "boulder_1215"),
     ref=[ans(kind="event", name="Bouldering night", when=W({"from": U("week", 1, weekday=1)}))]),
@@ -64,12 +56,6 @@ S("T15-030", "bouldering open span cancel span duration people",
     ref=[ans(within="@prev", where="duration = 90")]),
   T("who's coming to it", rows("erik_n", "hallvard", "tor"),
     ref=[ans(kind="person", linked_to="$plan_1118")]))
-
-S("T15-031", "debt date substitution",
-  T("what debts are from the fifth", rows("d_silje"),
-    ref=[ans(kind="debt", when=W(D("2026-11-05")))]),
-  T("and the fourth", rows("d_hallvard"),
-    ref=[ans(kind="debt", when=W(D("2026-11-04")))]))
 
 S("T15-032", "trashed locker restore reveal restore window",
   T("did i delete the netflix login", rows("old_netflix"),
@@ -134,21 +120,6 @@ S("T15-039", "ambiguous list edit multi",
   T("both of them", diff(upd("prep_l", area="at sea"), upd("gear_l", area="at sea")),
     ref=[act("edit", rows="$prep_l, $gear_l", args=lines(area="at sea"))]))
 
-S("T15-040", "refused group delete never mind empty group delete undo",
-  T("delete the abisko ski trip group, that was march", ask(),
-    ref=[bad(act("delete", kind="group", name="Abisko ski trip")),
-         askc("the abisko ski trip still has expenses in it, so it can't be deleted. rename it instead?")]),
-  T("nah leave it", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("who's in the whale safari one", rows("silje", "ingvild", "me"),
-    ref=[ans(kind="person", linked_to="$whale")]),
-  T("delete that group, the trip's cancelled",
-    diff(gone("whale"), unlink("whale", "silje"), unlink("whale", "ingvild"), unlink("whale", "me")),
-    ref=[act("delete", rows="$whale")]),
-  T("undo, silje wants to rebook it",
-    diff(),
-    ref=[act("undo")]))
-
 S("T15-041", "task status in description ne person count",
   T("what's open or in progress on cruise prep", rows("nets", "ctd", "formalin", "cruise_plan", "freezer", "crew_list", "med_new"),
     ref=[ans(kind="task", linked_to="$prep_l", where='status in ("open", "in_progress")')]),
@@ -184,10 +155,6 @@ S("T15-044", "person cadence set task count photo count",
   T("which of them turn up in photos", rows("erik_n", "tor", "erik_j", "jan", "silje"),
     ref=[ans(within="@prev", where="photo count != 0")]))
 
-S("T15-045", "single debt status empty",
-  T("any debts with no status on them", rows(),
-    ref=[ans(kind="debt", where="status is empty")]))
-
 S("T15-046", "document anchor dates span ambiguous payslip",
   T("anything i scanned yesterday at 17:45", rows("tyre_receipt"),
     ref=[ans(kind="document", when=W(U("day", -1, anchor="today", time="17:45")))]),
@@ -198,12 +165,6 @@ S("T15-046", "document anchor dates span ambiguous payslip",
   T("star the payslip from that", diff(upd("pay_oct", starred=True)),
     ref=[act("star", kind="document", name="Payslip"),
          act("star", rows="$pay_oct")]))
-
-S("T15-047", "debt open span weekday",
-  T("debts since last monday", rows("d_hallvard", "d_silje", "d_jonas_groceries", "d_torstein"),
-    ref=[ans(kind="debt", when=W({"from": U("week", -1, weekday=1)}))]),
-  T("only up to the fifth", rows("d_hallvard", "d_silje"),
-    ref=[ans(kind="debt", when=W(span(U("week", -1, weekday=1), D("2026-11-05"))))]))
 
 S("T15-048", "six turns planning meeting reschedule log multi linked_to all",
   T("when's the next cruise planning meeting", rows("plan_1111"),
@@ -238,25 +199,6 @@ S("T15-050", "event trashed recovery restore undo date",
   T("what's on that monday", rows("survival"),
     ref=[ans(kind="event", when=W(U("week", 1, weekday=1)))]))
 
-X("T15-029",
-  T("and my balance with jonas and torstein", ask("jonas", "torstein"),
-    ref=[bad(ans(op="balance", rows="$jonas, $torstein")),
-         askc("a balance is one person at a time. jonas or torstein first?", options="$jonas, $torstein")]),
-  T("jonas first", val((610, "NOK"), (-700, "SEK")),
-    ref=[ans(op="balance", rows="$jonas")]),
-  T("now torstein", val((10, "NOK")),
-    ref=[comp(op="balance", rows="$torstein"), ans(value="@prev")]))
-
-X("T15-031",
-  T("add a task: pick up the survival suit from bjørn", diff(new("task", name=has("survival suit"))),
-    ref=[act("create", args=lines(kind="task", name="Pick up the survival suit from Bjørn"))]),
-  T("undo that, he's dropping it off", diff(trash("+1")),
-    ref=[act("undo")]))
-
 X("T15-042",
   T("what's on the list for the svalbard trip", decline("not_found"),
     ref=[search("Svalbard"), dec("not_found")]))
-
-X("T15-047",
-  T("does kapteinen owe me anything", val((200, "NOK")),
-    ref=[search("Kapteinen", kind="person"), ans(op="balance", rows="$erik_n")]))

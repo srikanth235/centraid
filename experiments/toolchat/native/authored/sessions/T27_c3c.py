@@ -20,12 +20,6 @@ S("T27-C002", "c3c compound cancel delete event document",
     ref=[act("cancel", kind="event", name="Photo shoot for the website", more=True),
          act("delete", kind="document", name="Menu draft")]))
 
-S("T27-C003", "c3c compound both debts settle log find",
-  T("chloe paid me back for both, settle them and log a coffee with her",
-    diff(upd("d_chloe", status="settled"), upd("d_chloe2", status="settled"), upd("chloe", date=ANY)),
-    ref=[search("chloe", kind="person"), find(kind="debt", linked_to="$chloe"), act("settle_debt", rows="@prev", more=True),
-         act("log", rows="$chloe", args=lines(kind="coffee"))]))
-
 S("T27-C004", "c3c compound three writes add_to star complete",
   T("file the menu draft in shop and star it, and tick off the menu boards",
     diff(link("shop_f", "menu_draft"), upd("menu_draft", starred=True), upd("menu_boards", status="completed", completed=ANY)),

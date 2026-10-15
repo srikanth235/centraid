@@ -61,15 +61,6 @@ S("T32-013-P", "photos linked album within star add_to count-k4 para",
     ref=[act("edit", rows="$kids_a", args="name: The kids", more=True),
          ans(op="count", kind="photo", linked_to="$kids_a")]))
 
-S("T32-016-P", "group create add_to-new members para",
-  T("set up crew as a group in pesos with beto, yesenia and emi in it",
-    diff(new("group", name=has("crew"), currency="MXN"), link("new", "me"), link("new", "beto"), link("new", "yesenia"),
-         link("new", "emi")),
-    ref=[act("create", args="kind: group\nname: Crew\ncurrency: MXN", more=True),
-         act("add_to", rows="$beto, $yesenia, $emi", args="to: $new")]),
-  T("also need a list called crew jobs for the same people", diff(new("list", name=has("crew", "jobs"))),
-    ref=[act("create", args="kind: list\nname: Crew jobs")]))
-
 S("T32-019-P", "repair refused-unit cadence edit-and-unstar two-writes para",
   T("starred people i should be in touch with more often than every two weeks",
     rows("emi", "dani", "carmen", "beto", "aurelio"),
@@ -89,16 +80,6 @@ S("T32-022-P", "trashed find-restore decline-window read trashed-filters restore
     ref=[ans(kind="task", linked_to="$bakery_l", where="status = open", trashed=True)]),
   T("karla's wages task on the bakery list needs to come back", diff(restore("old_karla_t")),
     ref=[act("restore", kind="task", trashed=True, name="Karla", linked_to="$bakery_l")]))
-
-S("T32-025-P", "balance person-role group-narrow settle_up-and-remove para",
-  T("maria my sister, where do i stand", val((-2477.5, "MXN")),
-    ref=[ans(op="balance", kind="person", name="Maria", where='role = "sister"')]),
-  T("familia group only", val((1237.5, "MXN")),
-    ref=[ans(op="balance", kind="group", name="Familia Delgado Ortiz", linked_to="$maria_o")]),
-  T("first settle up with her in that group, then take her out of it",
-    diff(upd("maria_o", balance=ANY), unlink("familia", "maria_o"), settle=[("Maria Ortiz", "1237.50")]),
-    ref=[act("settle_up", rows="$maria_o", args="group: $familia", more=True),
-         act("remove_from", rows="$maria_o", args="from: $familia")]))
 
 S("T32-028-P", "bulk-cap ask yes delete events exclude para",
   T("every event that's already passed, get rid of them",
@@ -133,17 +114,6 @@ S("T32-034-P", "create task fields list priority filter within-longest para",
     ref=[ans(kind="task", linked_to="$family_l", where="status = open", when=W({"to": D("2026-11-30")}))]),
   T("longest one?", rows("carmen_gift"),
     ref=[ans(within="@prev", order="effort desc", limit=1)]))
-
-S("T32-037-P", "misspelled two-logs balance usd-group where-when para",
-  T("log them, i rang gabriella just now and had coffee with don memo this morning",
-    diff(upd("gaby", date=ANY), upd("memo", date=ANY)),
-    ref=[act("log", kind="person", name="Gabriella", args="kind: call", more=True),
-         act("log", rows="$memo", args="kind: coffee")]),
-  T("what's the balance with her", val((-30, "USD")),
-    ref=[ans(op="balance", rows="$gaby")]),
-  T("who did i talk to this week among starred people with a cadence under 4 days",
-    rows("emi", "dani", "carmen", "beto"),
-    ref=[ans(kind="person", where="starred = yes and cadence <= 3", when=W(U("week", 0)))]))
 
 S("T32-040-P", "photos person where star-both-then-read empty-search para",
   T("rodrigo's photos without a star", rows("p_wedding_venue", "p_ki_ring"),
@@ -193,26 +163,6 @@ S("T32-052-P", "trashed note find-restore window para",
   T("sign text draft too", decline("not_found"),
     ref=[act("restore", kind="note", trashed=True, name="sign text")]))
 
-S("T32-058-P", "choir find-answer exclude count-k4 decline create-task para",
-  T("thursday's choir rehearsal, who's on the list", rows("aurelio", "marilu", "marichuy"),
-    ref=[find(kind="event", name="Choir rehearsal", when=W(U("week", 0, weekday=4))),
-         ans(kind="person", linked_to="@prev")]),
-  T("any sopranos missing from it", rows("lupita", "xochitl"),
-    ref=[ans(kind="person", linked_to="$coro", where='role contains "soprano"', exclude="@prev")]),
-  T("how many choir rehearsals did the maestro call off this month", val(1),
-    ref=[ans(op="count", kind="event", name="Choir rehearsal", where="status = cancelled", when=W(U("month", 0)))]),
-  T("text them", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("choir list, new task by tomorrow, call lupita and xochitl",
-    diff(new("task", name=has("lupita", "xochitl"), date="2026-10-29", status="open"), link("choir_l", "new")),
-    ref=[act("create", args=lines(kind="task", name="Call Lupita and Xochitl", date=U("day", 1), list="$choir_l"))]))
-
-S("T32-064-P", "find-then-star several relation where para",
-  T("give a star to all three sopranos in the choir", diff(upd("marilu", starred=True), upd("lupita", starred=True),
-                                              upd("xochitl", starred=True)),
-    ref=[find(kind="person", linked_to="$coro", where='role contains "soprano"'),
-         act("star", rows="@prev")]))
-
 S("T32-067-P", "same-word-pick star document topic two-row-linked_to ask-person para",
   T("put a star on the health inspection one", diff(upd("d_health", starred=True)),
     ref=[act("star", kind="document", name="health inspection")]),
@@ -222,15 +172,6 @@ S("T32-067-P", "same-word-pick star document topic two-row-linked_to ask-person 
     ref=[ans(kind="task", linked_to="$wedding_l, $rodrigo")]),
   T("star maria as well", ask("maria_o", "marilu", "marichuy"),
     ref=[act("star", kind="person", name="Maria")]))
-
-S("T32-070-P", "same-word-pick both second-event posada group-decoy event-vs-group para",
-  T("the bakery posada and the vecinal posada both need to happen a day earlier",
-    diff(upd("posada_bakery", date="2026-12-15T18:00"), upd("posada_street", date="2026-12-22T19:00")),
-    ref=[act("reschedule", rows="$posada_bakery, $posada_street", args=lines(to=U("day", -1, anchor="row")))]),
-  T("vecinal one, who's coming", rows("chela", "lupe_r"),
-    ref=[ans(kind="person", linked_to="$posada_street")]),
-  T("and the group itself, who's in it", rows("me", "chela", "lupe_r"),
-    ref=[ans(kind="person", linked_to="$posada")]))
 
 S("T32-076-P", "verb-choice put-it-back remove_from add_to album count para",
   T("remove the old sign pic from la espiga, then count what's left in there",

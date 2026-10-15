@@ -9,47 +9,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T07-101", "star rosa ask pick balance",
-  T("star rosa", ask("rosa_m", "rosa_c"),
-    ref=[act("star", kind="person", name="Rosa"),
-         askc("rosa mamani from the coop or rosa condori from the choir?", options="$rosa_m, $rosa_c")]),
-  T("the choir one", diff(upd("rosa_c", starred=True)),
-    ref=[act("star", rows="$rosa_c")]),
-  T("what does the coop rosa owe me", val((20, "PEN")),
-    ref=[ans(op="balance", rows="$rosa_m")]),
-  T("log a visit with her, we met at the assembly hall", diff(upd("rosa_m", date=ANY)),
-    ref=[act("log", rows="$rosa_m", args=lines(kind="visit"))]))
-
-S("T07-102", "star treasurer where unstar balance prev",
-  T("star the coop treasurer", diff(upd("rosa_m", starred=True)),
-    ref=[act("star", kind="person", where='role contains "treasurer"')]),
-  T("and unstar teodoro, he's not really a favourite anymore", diff(upd("teodoro", starred=False)),
-    ref=[act("unstar", kind="person", name="Teodoro")]),
-  T("what does she owe me", val((20, "PEN")),
-    ref=[ans(op="balance", rows="$rosa_m")]))
-
-S("T07-103", "balance mamani ask pick luis",
-  T("how much does mamani owe me", ask("rosa_m", "ana"),
-    ref=[find(kind="person", name="Mamani"),
-         askc("rosa mamani from the coop or ana mamani, the neighbour?", options="$rosa_m, $ana")]),
-  T("rosa", val((20, "PEN")),
-    ref=[ans(op="balance", rows="$rosa_m")]),
-  T("and luis", val((300, "PEN")),
-    ref=[ans(op="balance", kind="person", name="Luis")]),
-  T("make him monthly, i only see him at the workshop", diff(upd("luis", cadence=30)),
-    ref=[act("edit", kind="person", name="Luis", args=lines(cadence=30))]))
-
-S("T07-104", "balance quispe ask pick log prev",
-  T("where do i stand with quispe", ask("luis", "carla", "valeria", "benito"),
-    ref=[find(kind="person", name="Quispe"),
-         askc("luis, carla, valeria or benito?", options="$luis, $carla, $valeria, $benito")]),
-  T("my sister", val((-80, "PEN")),
-    ref=[ans(op="balance", rows="$carla")]),
-  T("log a call with her, we just talked about the glasses", diff(upd("carla", date=ANY)),
-    ref=[act("log", rows="$carla", args=lines(kind="call"))]),
-  T("and make her weekly for a while", diff(upd("carla", cadence=7)),
-    ref=[act("edit", rows="$carla", args=lines(cadence=7))]))
-
 S("T07-105", "agrobanco meeting reschedule ask friday at 3 trashed not_found",
   T("move the agrobanco meeting to friday at 3", ask("agro_0305", "agro_0319"),
     ref=[act("reschedule", kind="event", name="Meeting with Agrobanco", args=lines(to=U("week", 0, weekday=5, time="15:00"))),

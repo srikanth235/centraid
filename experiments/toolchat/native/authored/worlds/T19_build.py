@@ -9,9 +9,9 @@ sister Salma, keeps the pharmacy coffee fund, and splits the school run with thr
 Built-in ambiguity: two Youssefs (husband, wholesaler rep), two Samiras (school run parents),
 nicknames (Baba, Hajja, Simo, Lilou, Dada), a misspelled-looking name (Mouhcine), two
 endocrinologist appointments for Baba, two dentist appointments, two nurse visits, a recurring
-wholesaler order and monthly bills (near-duplicate tasks), two "Fuel for the school run" debts,
+wholesaler order and monthly bills (near-duplicate tasks), two "Fuel for the school run" tasks,
 two wifi locker items, cancelled events, completed tasks, rows trashed inside and past the 30-day
-restore window, an empty group, an empty folder, an empty notebook and an empty list.
+restore window, an empty folder, an empty notebook and an empty list.
 """
 from __future__ import annotations
 
@@ -82,38 +82,6 @@ def people():
         {"key": "jamal", "name": "Jamal Ziani", "role": "old landlord", "trashed": "2026-02-10T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "coffee", "name": "Pharmacy coffee fund", "members": ["nadia", "rachid", "imane", "kenza"],
-     "created": "2025-09-01T09:00"},
-    {"key": "baba_care", "name": "Baba's care", "members": ["omar", "salma"], "created": "2025-06-01T10:00"},
-    {"key": "school_run", "name": "School run fuel", "members": ["samira_b", "samira_a", "driss"],
-     "created": "2025-09-10T08:00"},
-    {"key": "ifrane", "name": "Ifrane weekend", "members": ["omar", "simo", "youssef_a"],
-     "created": "2026-03-30T21:00"},
-    {"key": "madrid", "name": "Madrid with Salma", "currency": "EUR", "members": ["salma"],
-     "created": "2026-01-20T20:00"},
-    {"key": "eid_sheep", "name": "Eid sheep", "members": ["omar", "simo"], "created": "2026-04-12T20:00"},
-]
-
-EXPENSES = [
-    {"group": "coffee", "name": "Coffee capsules", "amount": 240, "paid_by": "me",
-     "split": ["me", "nadia", "rachid", "imane"], "date": "2026-04-01"},
-    {"group": "coffee", "name": "Sugar and mint tea", "amount": 100, "paid_by": "nadia",
-     "split": ["me", "nadia", "rachid", "imane", "kenza"], "date": "2026-04-08"},
-    {"group": "baba_care", "name": "Insulin pens April", "amount": 900, "paid_by": "me",
-     "split": ["me", "omar", "salma"], "date": "2026-04-03"},
-    {"group": "baba_care", "name": "Glucose strips", "amount": 330, "paid_by": "omar",
-     "split": ["me", "omar", "salma"], "date": "2026-04-09"},
-    {"group": "baba_care", "name": "Nurse home visits March", "amount": 1200, "paid_by": "salma",
-     "split": ["me", "omar", "salma"], "date": "2026-03-31"},
-    {"group": "school_run", "name": "Fuel March", "amount": 600, "paid_by": "driss",
-     "split": ["me", "samira_b", "samira_a", "driss"], "date": "2026-03-31"},
-    {"group": "ifrane", "name": "Chalet deposit", "amount": 1500, "paid_by": "simo",
-     "split": ["me", "omar", "simo"], "date": "2026-04-05"},
-    {"group": "madrid", "name": "Hotel in Madrid", "amount": 300, "paid_by": "salma",
-     "split": ["me", "salma"], "date": "2026-02-20", "currency": "EUR"},
-]
 
 LISTS = [
     {"key": "pharm_l", "name": "Pharmacy", "area": "work"},
@@ -457,34 +425,6 @@ PHOTOS = [
     {"key": "screenshot", "name": "Old screenshot", "taken": "2025-12-01T10:00", "trashed": "2026-01-05T10:00"},
 ]
 
-DEBTS = [
-    {"key": "d_omar", "person": "omar", "direction": "owes_me", "amount": 1200, "name": "Baba's new glucometer",
-     "date": "2026-04-02"},
-    {"key": "d_salma", "person": "salma", "direction": "owes_me", "amount": 800, "name": "Share of the insulin",
-     "date": "2026-04-10"},
-    {"key": "d_simo", "person": "simo", "direction": "i_owe", "amount": 500, "name": "Taxi money in Ifrane",
-     "date": "2025-12-29", "settled": "2026-01-15T10:00"},
-    {"key": "d_nadia", "person": "nadia", "direction": "i_owe", "amount": 150, "name": "Lunch from the snack bar",
-     "date": "2026-04-13"},
-    {"key": "d_kenza", "person": "kenza", "direction": "owes_me", "amount": 300, "name": "Night duty dinner",
-     "date": "2026-04-04"},
-    {"key": "d_samira", "person": "samira_b", "direction": "i_owe", "amount": 200, "name": "Fuel for the school run",
-     "date": "2026-04-07"},
-    {"key": "d_driss", "person": "driss", "direction": "owes_me", "amount": 200, "name": "Fuel for the school run",
-     "date": "2026-03-31"},
-    {"key": "d_hamza", "person": "hamza", "direction": "owes_me", "amount": 400, "name": "Advance on salary",
-     "date": "2026-04-01"},
-    {"key": "d_youssef", "person": "youssef_a", "direction": "i_owe", "amount": 1000,
-     "name": "Cash for the pharmacy till", "date": "2026-04-11"},
-    {"key": "d_aicha", "person": "aicha", "direction": "i_owe", "amount": 100, "name": "Bread and milk for Baba",
-     "date": "2026-04-12"},
-    {"key": "d_zineb", "person": "zineb", "direction": "i_owe", "amount": 2500, "name": "Loan for the car repair",
-     "date": "2026-03-26", "settled": "2026-04-09T18:00"},
-    {"key": "d_rachid", "person": "rachid", "direction": "owes_me", "amount": 250, "name": "Phone credit",
-     "date": "2026-04-14"},
-    {"key": "d_khalid", "person": "khalid", "direction": "i_owe", "amount": 350, "name": "Sink repair",
-     "date": "2026-04-09"},
-]
 
 LOCKER = [
     {"key": "gmail", "name": "Gmail", "type": "login", "username": "fatima.alsayed@gmail.com",
@@ -575,8 +515,6 @@ def world():
         "seed": "T19",
         "currency": "MAD",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -586,7 +524,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

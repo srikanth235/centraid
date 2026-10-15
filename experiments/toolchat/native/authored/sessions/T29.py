@@ -24,39 +24,6 @@ S("T29-002", "decoy-invoices ask date-narrow complete what-else exclude",
   T("what else is still open for faith", rows("karen_tiles"),
     ref=[ans(kind="task", linked_to="$faith", where="status = open", exclude="$inv_faith_sep, $inv_faith_c")]))
 
-S("T29-003", "balance person group-balance me-search superlative debts settle write-read",
-  T("where am i with wambs", val((-2000, "KES")),
-    ref=[ans(op="balance", rows="$wambui")]),
-  T("and my share of the flat bills", val((-1450, "KES")),
-    ref=[search("Achieng", kind="person"),
-         ans(op="balance", kind="group", name="Kilimani Flat Bills", linked_to="$me")]),
-  T("biggest debt i owe", rows("d_otieno"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1)]),
-  T("smallest owed to me?", rows("d_juma_chai"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open", order="amount asc", limit=1)]),
-  T("settle that one and show me what's still owed to me",
-    rows("d_kevin_m", "d_wambui_tokens", "d_naomi", also=diff(upd("d_juma_chai", status="settled"))),
-    ref=[act("settle_debt", rows="$d_juma_chai", more=True),
-         ans(kind="debt", where="direction = owes_me and status = open")]))
-
-S("T29-004", "name month-name within pick people reschedule",
-  T("which club rides are on in october", rows("ride_1003", "ride_1010", "ride_1017", "ride_1024", "ride_1031"),
-    ref=[ans(kind="event", name="club ride", when=J(U("month", 0, name=10)))]),
-  T("the ngong hills one", rows("ride_1031"),
-    ref=[ans(within="@prev", name="ngong hills")]),
-  T("who from the riders is coming to it", rows("kip", "kevin_m"),
-    ref=[ans(kind="person", linked_to="$riders, $ride_1031")]),
-  T("start it at 7am instead", diff(upd("ride_1031", date="2026-10-31T07:00")),
-    ref=[act("reschedule", rows="$ride_1031", args=lines(to=D("2026-10-31", "07:00")))]))
-
-S("T29-005", "ambiguous-person ask log role-narrow next-event substitution",
-  T("log a coffee with kevin", ask("kevin_m", "kevin_o"),
-    ref=[act("log", kind="person", name="kevin", args="kind: coffee")]),
-  T("the one from the club", diff(upd("kevin_m", date=ANY)),
-    ref=[act("log", kind="person", name="kevin", linked_to="$riders", args="kind: coffee")]),
-  T("what's the next thing i've got with him", rows("ride_0926"),
-    ref=[ans(kind="event", linked_to="$kevin_m", when=J({"from": U("day", 0)}), order="date asc", limit=1)]))
-
 S("T29-006", "role-search accountant event task-count order-limit reschedule ordinal",
   T("when am i seeing the accountant", rows("tax_meeting"),
     ref=[search("accountant"), ans(kind="event", linked_to="$gladys")]),
@@ -150,14 +117,6 @@ S("T29-014", "undo complete due-day narrow-person",
   T("which of those are about faith", rows("karen_tiles", "inv_faith_sep"),
     ref=[ans(within="@prev", linked_to="$faith")]))
 
-S("T29-015", "remove-with-balance ask settle-up remove",
-  T("take wambs out of the flat bills group", ask("wambui", "flat"),
-    ref=[act("remove_from", kind="person", name="wambs", args="from: $flat")]),
-  T("settle up with her first", diff(upd("wambui", balance=ANY), settle=[("Wambui", "1450.00")]),
-    ref=[act("settle_up", rows="$wambui", args="group: $flat")]),
-  T("ok now take her out", diff(unlink("flat", "wambui")),
-    ref=[act("remove_from", rows="$wambui", args="from: $flat")]))
-
 S("T29-016", "name-week two-dates same-time past-last order-limit photo-day",
   T("what's on for simba this week", rows("vet_vacc", "groom"),
     ref=[ans(kind="event", name="simba", when=J(U("week", 0)))]),
@@ -187,14 +146,6 @@ S("T29-018", "two-writes cancel create-task still-open",
   T("and which tasks due next week are about someone",
     rows("inv_faith_c", "karen_roof", "runda_concept", "runda_inv", "kitty_dues", "berlin_reimb", "vacc_cert", "runda_submit"),
     ref=[ans(kind="task", where="status = open and person count >= 1", when=J(U("week", 1)))]))
-
-S("T29-019", "debt order-limit settle sum-with-where",
-  T("which debt have i been sitting on the longest", rows("d_lena"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="date asc", limit=1)]),
-  T("settle it", diff(upd("d_lena", status="settled")),
-    ref=[act("settle_debt", rows="$d_lena")]),
-  T("what i owe in total", val((49250, "KES")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]))
 
 S("T29-020", "find-oldest delete undo body-contains",
   T("delete the oldest note in the kitchen notebook", diff(trash("pilau")),

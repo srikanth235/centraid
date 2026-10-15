@@ -25,7 +25,7 @@ import regen  # noqa: E402
 sys.path.insert(0, str(HERE.parent / "authored" / "gen"))
 import collide  # noqa: E402
 
-EXPECTED_KINDS = {("T03", "d_glasses"): "debt"}  # "who's that to": the debt row beside the person (D-1044-15)
+EXPECTED_KINDS: dict[tuple[str, str], str] = {}  # (world, key) -> the kind a fix must name there
 
 
 def main() -> int:

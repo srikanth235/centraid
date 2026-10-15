@@ -19,12 +19,6 @@ S("T35-091", "container-link-reads notebook lab-notes name-collision within body
   T("any other notes that mention the lab", rows("diary_whale"),
     ref=[ans(kind="note", where='body contains "lab"')]))
 
-S("T35-092", "container-link-reads owner-row groups-i-am-in count within person-link",
-  T("how many groups am i in", val(6),
-    ref=[ans(op="count", kind="group", linked_to="$me")]),
-  T("and which of those is bjorn in", rows("seilklubb", "kiel"),
-    ref=[ans(within="@prev", linked_to="$bjorn")]))
-
 S("T35-093", "container-link-reads person-appointments role-lookup linked-event name-filter-misses",
   T("who's the group leader at the lab", rows("marit"),
     ref=[ans(kind="person", where='role = "group leader"')]),
@@ -72,14 +66,6 @@ S("T35-097", "stray-conditions reads inert purpose clause photos documents tasks
     ref=[ans(kind="document", name="boat")]),
   T("lab tasks under an hour, got a quiet afternoon", rows("cod_gear", "poster", "sample_log", "buy_ice"),
     ref=[ans(kind="task", linked_to="$lab_list", where="status = open and effort < 60 minutes")]))
-
-S("T35-098", "stray-conditions role-looking noun club teacher group-link role-exact event-link",
-  T("who's in the coffee club that i've spoken to this month", rows("lars_e", "sigrid", "marit"),
-    ref=[ans(kind="person", linked_to="$lab_coffee", when=J(U("month", 0)))]),
-  T("and who's the club treasurer", rows("tuva"),
-    ref=[ans(kind="person", where='role = "club treasurer"')]),
-  T("who's at the parent-teacher meeting", rows("hanne"),
-    ref=[ans(kind="person", linked_to="$parent_teacher")]))
 
 S("T35-099", "stray-conditions right-condition description-contains met-contains body-contains",
   T("which event in december has the poster session", rows("symposium"),
@@ -169,10 +155,6 @@ S("T35-107", "mixed body-append note open-then-edit",
              args=lines(body="sunrise lamp at 7, vitamin D, one outdoor evening a week, aurora trip with Gunnhild, buy a spare headlamp"))]),
   T("is the old kayak idea still in the trash", rows("old_idea"),
     ref=[ans(kind="note", name="kayak", trashed=True)]))
-
-S("T35-108", "mixed settle_up amount person group",
-  T("bjorn gave me 1000 towards the kitty, settle that", diff(upd("bjorn", balance=ANY), settle=[("Bjorn Nilsen", "1000.00")]),
-    ref=[act("settle_up", rows="$bjorn", args=lines(group="$seilklubb", amount="1000"))]))
 
 S("T35-109", "mixed read kind-word-decides cod photos notes documents",
   T("the cod photos from this year", rows("p_field_cod"),

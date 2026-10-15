@@ -7,26 +7,6 @@ def J(d):
 
 # --- same-word-pick: one word, several rows; the verb, the topic, a gloss or the kind of row decides ------------------
 
-S("T33-066", "same-word-pick person-vs-debt possessor topic-decides substitution settle-debt",
-  T("how much is ma's surgery share", val((400, "SGD")),
-    ref=[ans(op="sum", field="amount", kind="debt", name="ma's surgery")]),
-  T("and the omakase one", val((160, "SGD")),
-    ref=[ans(op="sum", field="amount", kind="debt", name="omakase")]),
-  T("paid wei jie back this morning, settle it and tell me what i still owe in total",
-    val((619, "SGD"), also=diff(upd("d_weijie", status="settled"))),
-    ref=[act("settle_debt", rows="$d_weijie", more="true"),
-         ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]))
-
-S("T33-067", "same-word-pick link-target photo-album person-group count",
-  T("put the treasurer photo in parc vista", diff(link("condo_a", "p_david")),
-    ref=[act("add_to", rows="$p_david", args="to: $condo_a")]),
-  T("and mdm wong in there too", diff(link("committee", "wong")),
-    ref=[act("add_to", rows="$wong", args="to: $committee")]),
-  T("and the nursery form pages photo in kenji", diff(link("kenji_a", "p_form")),
-    ref=[act("add_to", rows="$p_form", args="to: $kenji_a")]),
-  T("how many photos are in parc vista now", val(7),
-    ref=[ans(op="count", kind="photo", linked_to="$condo_a")]))
-
 S("T33-068", "same-word-pick two-row-linked_to photos person-album star verb-decides unstar",
   T("photos of jun hao in penang", rows("p_p_family", "p_p_temple"),
     ref=[ans(kind="photo", linked_to="$junhao, $penang_a")]),
@@ -79,20 +59,6 @@ S("T33-072", "create-args task-vs-event call-tradesperson appointment errand rem
   T("also pick up the cake from bengawan solo on sunday",
     diff(new("task", name=has("cake"), date="2026-12-13")),
     ref=[act("create", args=lines(kind="task", name="Pick up the cake from Bengawan Solo", date=U("week", 0, weekday=7)))]))
-
-S("T33-073", "create-args person-label group-purpose debt-purpose album-purpose",
-  T("new contact, name is mr goh, he's the carpenter, for the shoe cabinet",
-    diff(new("person", name=has("goh"), role="carpenter")),
-    ref=[act("create", args=lines(kind="person", name="Mr Goh", role="carpenter"))]),
-  T("make a group called bali trip in rupiah so we can split the villa",
-    diff(new("group", name=has("bali"), currency="IDR"), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Bali Trip", currency="IDR"))]),
-  T("celine owes me 12 for the popcorn, she said she'd pay at the next dinner",
-    diff(new("debt", name=has("popcorn"), amount=12, direction="owes_me"), link("new", "celine")),
-    ref=[act("create", args=lines(kind="debt", name="popcorn", amount=12, direction="owes_me", person="$celine"))]),
-  T("and an album called bali photos for the trip",
-    diff(new("album", name=has("bali", "photos"))),
-    ref=[act("create", args=lines(kind="album", name="Bali photos"))]))
 
 S("T33-074", "create-args implied-wifi-type container-link-named task-on-list container-link-to-it new-notebook",
   T("add okaasan's wifi to the locker", diff(new("locker item", name=has("okaasan", "wifi"), type="wifi")),
@@ -225,19 +191,6 @@ S("T33-087", "set-answers role-noun colleagues within-month treasurer role-conta
     ref=[ans(kind="person", where='role contains "treasurer"')]),
   T("is marcus teo in the trash", rows("old_col"),
     ref=[ans(kind="person", name="marcus teo", trashed="true")]))
-
-S("T33-088", "set-answers debts both-directions within superlative oldest find-then-settle remaining-sum",
-  T("what debts are still open",
-    rows("d_david_print", "d_fong_lights", "d_priya_art", "d_jiahui", "d_sarah", "d_weijie", "d_ravi", "d_kim",
-         "d_junhao", "d_stella", "d_celine"),
-    ref=[ans(kind="debt", where="status = open")]),
-  T("just the ones people owe me", rows("d_david_print", "d_sarah", "d_ravi", "d_kim", "d_celine"),
-    ref=[ans(within="@prev", where="direction = owes_me")]),
-  T("the oldest one's been paid, settle it", diff(upd("d_celine", status="settled")),
-    ref=[find(within="@prev", order="date asc", limit=1),
-         act("settle_debt", rows="@prev")]),
-  T("so how much are people still holding", val((242.5, "SGD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = owes_me and status = open")]))
 
 S("T33-089", "set-answers same-word-events weekday-decides substitution",
   T("what time's the christmas thing next sunday", rows("tree_lighting"),

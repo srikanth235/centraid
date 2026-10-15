@@ -79,36 +79,6 @@ def people():
     ]
 
 
-GROUPS = [
-    {"key": "coop_g", "name": "Papa Andina coop", "members": ["rosa_m", "efrain", "wilber", "nilda", "teodoro", "fortunata"],
-     "created": "2024-04-10T10:00"},
-    {"key": "choir_g", "name": "San Blas choir", "members": ["rosa_c", "lucia", "jaime", "carmen", "alfredo"],
-     "created": "2025-02-01T19:00"},
-    {"key": "family_g", "name": "Valeria's Lima costs", "members": ["julio", "valeria"], "created": "2026-01-20T20:00"},
-    {"key": "quito_g", "name": "Quito congress trip", "currency": "USD", "members": ["hugo", "teodoro"],
-     "created": "2026-02-18T10:00"},
-    {"key": "pisac_g", "name": "Pisac market stall", "members": ["nilda", "fortunata"], "created": "2025-09-01T09:00"},
-    {"key": "raffle_g", "name": "Choir raffle fund", "members": ["carmen", "jaime"], "created": "2026-03-01T19:00"},
-]
-
-EXPENSES = [
-    {"group": "coop_g", "name": "Guano fertilizer", "amount": 1200, "paid_by": "me",
-     "split": ["me", "rosa_m", "efrain", "wilber", "nilda", "teodoro"], "date": "2026-02-20"},
-    {"group": "coop_g", "name": "Truck rental to Urcos", "amount": 600, "paid_by": "teodoro",
-     "split": ["me", "teodoro", "wilber"], "date": "2026-02-27"},
-    {"group": "coop_g", "name": "Expo stand fee", "amount": 900, "paid_by": "rosa_m",
-     "split": ["me", "rosa_m", "teodoro"], "date": "2026-02-10"},
-    {"group": "choir_g", "name": "Robe dry cleaning", "amount": 150, "paid_by": "me",
-     "split": ["me", "rosa_c", "lucia"], "date": "2026-02-28"},
-    {"group": "choir_g", "name": "Sheet music", "amount": 60, "paid_by": "lucia",
-     "split": ["me", "lucia", "jaime"], "date": "2026-02-25"},
-    {"group": "family_g", "name": "Room deposit", "amount": 800, "paid_by": "me", "split": ["me", "julio"], "date": "2026-01-25"},
-    {"group": "family_g", "name": "Flights to Lima", "amount": 460, "paid_by": "julio", "split": ["me", "julio"], "date": "2026-02-01"},
-    {"group": "quito_g", "name": "Hotel in Quito", "amount": 360, "paid_by": "hugo", "split": ["me", "hugo", "teodoro"],
-     "date": "2026-02-20"},
-    {"group": "pisac_g", "name": "Stall permit", "amount": 80, "paid_by": "nilda", "split": ["me", "nilda"], "date": "2025-09-05"},
-]
-
 LISTS = [
     {"key": "farm_l", "name": "Farm", "area": "farm"},
     {"key": "coop_l", "name": "Coop", "area": "coop"},
@@ -408,23 +378,6 @@ PHOTOS = [
     {"key": "bus_ticket", "name": "Screenshot of the bus ticket", "taken": "2026-01-10T08:00", "trashed": "2026-01-15T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_rosa", "person": "rosa_m", "direction": "owes_me", "amount": 120, "name": "Fertilizer share", "date": "2026-02-20"},
-    {"key": "d_wilber", "person": "wilber", "direction": "i_owe", "amount": 45, "name": "Diesel for the pump", "date": "2026-03-02"},
-    {"key": "d_luis", "person": "luis", "direction": "owes_me", "amount": 300, "name": "Tractor part", "date": "2025-11-15"},
-    {"key": "d_carla", "person": "carla", "direction": "i_owe", "amount": 80, "name": "Mama Juana's glasses", "date": "2026-01-25"},
-    {"key": "d_jaime", "person": "jaime", "direction": "owes_me", "amount": 25, "name": "Raffle ticket money", "date": "2026-03-08"},
-    {"key": "d_carmen", "person": "carmen", "direction": "owes_me", "amount": 15, "name": "Robe cleaning share", "date": "2026-03-04"},
-    {"key": "d_efrain", "person": "efrain", "direction": "i_owe", "amount": 60, "name": "Day wages for scouting", "date": "2026-03-09T18:00"},
-    {"key": "d_sonia", "person": "sonia", "direction": "i_owe", "amount": 350, "name": "Seed potatoes balance", "date": "2026-03-10T17:00"},
-    {"key": "d_nilda", "person": "nilda", "direction": "owes_me", "amount": 30, "name": "Bus fare to Urubamba", "date": "2026-02-12",
-     "settled": "2026-02-20T10:00"},
-    {"key": "d_raul", "person": "raul", "direction": "i_owe", "amount": 200, "name": "Truck deposit", "date": "2026-01-15",
-     "settled": "2026-01-20T10:00"},
-    {"key": "d_teodoro", "person": "teodoro", "direction": "owes_me", "amount": 50, "name": "Assembly lunch", "date": "2026-02-14"},
-    {"key": "d_lucia", "person": "lucia", "direction": "i_owe", "amount": 20, "name": "Sheet music copies", "date": "2026-02-25"},
-    {"key": "d_hugo", "person": "hugo", "direction": "i_owe", "amount": 90, "name": "Lab fee share", "date": "2026-03-03"},
-]
 
 LOCKER = [
     {"key": "agro_login", "name": "Agrobanco online banking", "type": "login", "username": "mquispe",
@@ -498,8 +451,6 @@ def world():
         "seed": "T07",
         "currency": "PEN",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -509,7 +460,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

@@ -10,16 +10,6 @@ def W(expr):
 WEEKEND = {"from": U("week", 0, weekday=6), "to": U("week", 0, weekday=7)}
 NEXT_WEEKEND = {"from": U("week", 1, weekday=6), "to": U("week", 1, weekday=7)}
 
-S("T10-116", "ask options cross-kind rename count",
-  T("rename mosque fund to Masjid fund", ask("mosque_nb", "mosque_f", "mosque"),
-    ref=[askc("the notebook, the folder or the mosque renovation fund group?", options="$mosque_nb, $mosque_f, $mosque")]),
-  T("the notebook", diff(upd("mosque_nb", name="Masjid fund")),
-    ref=[act("edit", rows="$mosque_nb", args=lines(name="Masjid fund"))]),
-  T("how many notes are in there", val(3),
-    ref=[ans(op="count", kind="note", linked_to="$mosque_nb")]),
-  T("bring back the old speech draft note", diff(restore("old_draft")),
-    ref=[find(kind="note", name="Old speech draft"), act("restore", rows="$old_draft")]))
-
 S("T10-117", "contrast rename notebook folder repair unbounded",
   T("rename the mosque fund notebook to Masjid fund", diff(upd("mosque_nb", name="Masjid fund")),
     ref=[act("edit", kind="notebook", name="Mosque fund", args=lines(name="Masjid fund"))]),
@@ -30,18 +20,6 @@ S("T10-117", "contrast rename notebook folder repair unbounded",
     ref=[dec("unbounded_destruction")]),
   T("ok just the cancelled ones", diff(trash("chess_0526"), trash("walid_coffee"), trash("reunion")),
     ref=[find(kind="event", where='status = "cancelled"'), act("delete", rows="@prev")]))
-
-S("T10-118", "ask options task delete never mind balance",
-  T("delete renew car license", ask("license_25", "license_26"),
-    ref=[act("delete", kind="task", name="Renew car license"),
-         find(kind="task", name="Renew car license"),
-         askc("the 2025 one that's done or the open one due 1 july?", options="$license_25, $license_26")]),
-  T("never mind, leave them", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("what do i owe hani", val((-35, "JOD")),
-    ref=[ans(op="balance", kind="person", name="Hani Suleiman")]),
-  T("and tariq", val((-39, "JOD")),
-    ref=[ans(op="balance", kind="person", name="Tariq Jaber")]))
 
 S("T10-119", "contrast delete task where undo not_found",
   T("delete last year's renew car license", diff(trash("license_25")),
@@ -82,16 +60,6 @@ S("T10-122", "ask options document star already",
   T("and the social security letter", diff(already=["pension_letter"]),
     ref=[act("star", kind="document", name="Social security"), ans(rows="$pension_letter")]))
 
-S("T10-123", "contrast star document person balance group",
-  T("star the car insurance policy", diff(upd("car_ins", starred=True)),
-    ref=[act("star", kind="document", name="Car insurance policy")]),
-  T("and hani, he's saved me twice", diff(upd("hani", starred=True)),
-    ref=[act("star", kind="person", name="Hani")]),
-  T("how does hasan stand in the mosque fund", val((-80, "JOD")),
-    ref=[ans(op="balance", kind="group", name="Mosque renovation fund", linked_to="$hasan")]),
-  T("basel wants the flat again, restore him", diff(restore("basel")),
-    ref=[act("restore", kind="person", name="Basel", trashed=True)]))
-
 S("T10-124", "ask options photo add_to reveal wifi",
   T("put the blurry one in phone dump", ask("blur_1", "blur_2"),
     ref=[act("add_to", kind="photo", name="Blurry", args=lines(to="$dump_album")),
@@ -109,27 +77,6 @@ S("T10-125", "contrast add_to photo multi star out_of_scope",
   T("email ziad the tile quote", decline("out_of_scope"),
     ref=[dec("out_of_scope")]),
   T("who won the world chess championship last year", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]))
-
-S("T10-126", "group members balance me person",
-  T("who's in the eid family group", rows("nabil", "huda", "rami", "lina", "me"),
-    ref=[ans(kind="person", linked_to="$eid")]),
-  T("where am i in it", val((209, "JOD")),
-    ref=[ans(op="balance", kind="group", name="Eid family group", linked_to="$me")]),
-  T("does jamal owe me", val((120, "JOD")),
-    ref=[ans(op="balance", kind="person", name="Jamal Rawashdeh")]),
-  T("restore the tournament poster, the club wants it again", diff(restore("tourney_poster")),
-    ref=[act("restore", kind="document", name="Tournament poster", trashed=True)]))
-
-S("T10-127", "balance group repair person out_of_scope",
-  T("what's faris's share in the chess kitty", val((-30, "JOD")),
-    ref=[bad(ans(op="balance", kind="group", name="Chess club kitty")),
-         ans(op="balance", kind="group", name="Chess club kitty", linked_to="$faris")]),
-  T("and rami", val((56, "JOD")),
-    ref=[ans(op="balance", kind="person", name="Rami Haddad")]),
-  T("walid?", val((40, "JOD")),
-    ref=[ans(op="balance", kind="person", name="Walid Azzam")]),
-  T("book me a table at reem al bawadi for friday night", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
 
 S("T10-128", "declines fabricated egress unbounded",

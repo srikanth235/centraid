@@ -6,30 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T18-052", "group count photo count already star",
-  T("who's in two of my groups", rows("priya", "mei"),
-    ref=[ans(kind="person", where="group count = 2")]),
-  T("who's tagged in more than three photos", rows("tess", "mum"),
-    ref=[ans(kind="person", where="photo count > 3")]),
-  T("more than 2?", rows("tess", "mum", "bex"),
-    ref=[ans(kind="person", where="photo count > 2")]),
-  T("which people with a cadence did i talk to from last week to end of feb",
-    rows("tess", "mum", "priya", "mei", "bex", "chloe", "nadia", "zoe"),
-    ref=[ans(kind="person", when=W(span(U("week", -1), U("month", 0, name=2))), where="cadence is set")]),
-  T("star the dm", diff(already=["bex"]),
-    ref=[act("star", rows="$bex"), ans(rows="$bex")]))
-
-S("T18-054", "group person count delete group knock-on refused group ask settle",
-  T("which groups have exactly three people in them", rows("gdc", "ski"),
-    ref=[find(kind="group", where="person count = 3"), ans(rows="@prev")]),
-  T("delete the ski one, never happening", diff(gone("ski"), unlink("ski", "brooke"), unlink("ski", "zoe"), unlink("ski", "me")),
-    ref=[act("delete", rows="$ski")]),
-  T("and the gdc one, that trip was a year ago", ask(),
-    ref=[bad(act("delete", rows="$gdc")),
-         askc("GDC 2025 trip still has the Airbnb in SF on it, so it can't be deleted until everyone's square. how do you want to handle it?")]),
-  T("settle up with mei in it then, she paid the airbnb", diff(settle=["Mei Lin Zhao"]),
-    ref=[act("settle_up", rows="$mei", args=lines(group="$gdc"))]))
-
 S("T18-055", "five turns event empty search miss decline description contains within reschedule weekday",
   T("when's yoga", decline("not_found"),
     ref=[ans(kind="event", name="Yoga"), search("yoga"), dec("not_found")]),
@@ -178,42 +154,3 @@ S("T18-070", "note span weekday datetime open compute count loose",
     ref=[opn("$tax_q"), ans(rows="$tax_q")]),
   T("how many loose notes have i got, not in any notebook", val(6),
     ref=[comp(op="count", kind="note", where="notebook count = 0"), ans(value="@prev")]))
-
-S("T18-071", "five turns ambiguous debt ask settle weekday sum settle",
-  T("settle the pizza debt", ask("d_marcus_pizza", "d_jules_pizza"),
-    ref=[act("settle_debt", kind="debt", name="Pizza"),
-         find(kind="debt", name="Pizza"),
-         askc("there are two pizza ones: marcus owes you 24, you owe jules 18. which?", options="$d_marcus_pizza, $d_jules_pizza")]),
-  T("the one marcus owes me", diff(upd("d_marcus_pizza", status="settled")),
-    ref=[act("settle_debt", rows="$d_marcus_pizza")]),
-  T("what debts came up on thursday", rows("d_jules_pizza", "d_bex"),
-    ref=[ans(kind="debt", when=W(U("week", 0, weekday=4)))]),
-  T("how much do i owe out of those", val((18, "AUD")),
-    ref=[ans(op="sum", field="amount", within="@prev", kind="debt", where='direction = "i_owe"')]),
-  T("paid jules back now, settle it", diff(upd("d_jules_pizza", status="settled")),
-    ref=[act("settle_debt", rows="$d_jules_pizza")]))
-
-S("T18-072", "ambiguous debt narrowed anchor direction in compute max",
-  T("mark the pizza debt settled, i paid jules last night", diff(upd("d_jules_pizza", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Pizza"),
-         act("settle_debt", kind="debt", name="Pizza", where='direction = "i_owe"')]),
-  T("anything lent or borrowed two days ago", rows("d_priya"),
-    ref=[ans(kind="debt", when=W(U("day", -2, anchor="today")))]),
-  T("all the open ones either way over 50 bucks", rows("d_tess_cake", "d_nadia", "d_ollie", "d_zoe", "d_alex", "d_bex"),
-    ref=[ans(kind="debt", where='direction in ("owes_me", "i_owe") and amount > 50 and status = "open"')]),
-  T("biggest one?", val((150, "AUD")),
-    ref=[ans(op="max", field="amount", within="@prev")]))
-
-S("T18-074", "debt span last monday weekday direction in",
-  T("list the debts running last monday up through this wednesday", rows("d_nadia", "d_marcus_pizza", "d_tess_cake", "d_chloe"),
-    ref=[find(kind="debt", when=W(span(U("week", -1, weekday=1), U("week", 0, weekday=3)))), ans(rows="@prev")]),
-  T("the ones i owe", rows("d_nadia", "d_chloe"),
-    ref=[ans(within="@prev", kind="debt", where='direction = "i_owe"')]))
-
-S("T18-075", "debt anchor yesterday settle undo ledger",
-  T("did i borrow anything yesterday", rows("d_alex"),
-    ref=[ans(kind="debt", when=W(U("day", -1, anchor="today")))]),
-  T("paid alex this morning, settle it", diff(upd("d_alex", status="settled")),
-    ref=[act("settle_debt", rows="$d_alex")]),
-  T("undo that, transfer bounced", diff(),
-    ref=[act("undo")]))

@@ -157,18 +157,6 @@ S("T07-064", "note date span create undo edit",
          act("edit", rows="$blight_log",
              args=lines(body="first lesions 16 Feb on the Canchan rows, sprayed 18 Feb and 2 Mar; late blight spores on the leaf undersides, lot 5"))]))
 
-S("T07-065", "debt span within sum settle multi",
-  T("show debts that start in last month and run until last sunday",
-    rows("d_rosa", "d_jaime", "d_carmen", "d_wilber", "d_nilda", "d_teodoro", "d_lucia", "d_hugo"),
-    ref=[ans(kind="debt", when=W(span(U("month", -1), U("week", -1, weekday=7))))]),
-  T("the open ones i owe", rows("d_wilber", "d_lucia", "d_hugo"),
-    ref=[ans(kind="debt", within="@prev", where='direction = "i_owe" and status = "open"')]),
-  T("settle lucia's and wilber's", diff(upd("d_lucia", status="settled"), upd("d_wilber", status="settled")),
-    ref=[act("settle_debt", more=True, kind="debt", linked_to="$lucia", where='status = "open"'),
-         act("settle_debt", kind="debt", linked_to="$wilber", where='status = "open"')]),
-  T("how's my total left to pay", val((580, "PEN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
-
 S("T07-067", "misspelled search recover log tasks reschedule",
   T("when did i last see efrain cahuana", rows("efrain"),
     ref=[ans(kind="person", name="Cahuana"), search("cahuana", kind="person"), ans(rows="$efrain")]),
@@ -186,22 +174,6 @@ S("T07-068", "reveal where api key star where",
     ref=[act("reveal", kind="locker item", where='type = "note"', args=lines(field="content"))]),
   T("and star the ssh key while you're there", diff(upd("station_ssh", starred=True)),
     ref=[act("star", kind="locker item", where='type = "ssh_key"')]))
-
-S("T07-069", "valeria budget note laptop group settle",
-  T("what's in valeria's budget note", rows("vale_budget"),
-    ref=[ans(kind="note", linked_to="$valeria", name="budget")]),
-  T("change food to 550", diff(upd("vale_budget", body="room 650, food 550, bus 120, books 80")),
-    ref=[act("edit", rows="$vale_budget", args=lines(body="room 650, food 550, bus 120, books 80"))]),
-  T("look for a laptop for valeria, give it the thirty-first as a due date", diff(upd("vale_laptop", date="2026-03-31")),
-    ref=[act("reschedule", kind="task", name="Look for a laptop for Valeria", args=lines(to=D("2026-03-31")))]),
-  T("and priority two", diff(upd("vale_laptop", priority=2)),
-    ref=[act("edit", rows="$vale_laptop", args=lines(priority=2))]),
-  T("where's julio at in the lima costs group", val((-170, "PEN")),
-    ref=[ans(op="balance", kind="group", name="Valeria's Lima costs", linked_to="$julio")]),
-  T("settle up with him there", diff(settle=[("Julio Huaman", "170")]),
-    ref=[act("settle_up", rows="$julio", args=lines(group="$family_g"))]),
-  T("wait undo that, he said he'd pay it into my account instead", diff(),
-    ref=[act("undo")]))
 
 S("T07-070", "notes linked_to all rename",
   T("notes linked to both sonia and the coop notebook", rows("seed_2025"),

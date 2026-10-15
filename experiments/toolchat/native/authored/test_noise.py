@@ -29,17 +29,17 @@ import noise  # noqa: E402
 
 CORPUS = [
     "what's on friday", "whats due this weekend", "move the dentist to tuesday at 3", "push it to next monday",
-    "how much does priya owe me", "star the kitchen fitting", "delete the old photos", "undo that", "what's left on my list",
+    "how many tasks does priya have", "star the kitchen fitting", "delete the old photos", "undo that", "what's left on my list",
     "any tasks overdue", "add milk to the shopping list", "mark the boiler service as done",
     "tick off the council tax, paid it on my lunch", "can you rename the budget note to household budget please",
     "who's coming to the barbecue on saturday", "what's in the trash", "what's the wifi password", "show me the router password",
     "text jordan that i'm running late", "forget it", "never mind, i'll do it later", "actually no, leave it", "yes", "go ahead",
     "all of them", "ok so delete everything on the list", "what else is on besides the dentist", "everything except the invoices",
     "the 25th of november", "end of march", "3pm tomorrow", "from monday to wednesday next week", "how many tasks are open",
-    "what's my balance with him", "what do i owe her", "my share of the trip", "move the folder to archive", "that album",
+    "what's my week like with him", "when do i see her next", "the rest of the trip", "move the folder to archive", "that album",
     'add "pay the rent" to my tasks', "email me at sam.park@example.com", "it costs 40 pounds a month", "twenty quid for the plumber",
     "log a call with mum", "quick one, what's today", "could you tell me which events are cancelled", "hey, can you add a reminder for the bins",
-    "settle up with the neighbour for the fence", "which documents are in the taxes folder", "rename the holiday album to summer 2025",
+    "sort out the fence with the neighbour", "which documents are in the taxes folder", "rename the holiday album to summer 2025",
     "what time is the physio appointment on thursday", "give me the biggest expense this month", "restore the invoice i deleted",
     "who did i speak to last week", "put the reunion in the diary for saturday at 6", "i need to book the boiler engineer before december",
     "which of those are still open", "and the one after", "wifi pw?", "tick it off", "thanks", "ok", "remind me to water the plants every sunday",
@@ -56,12 +56,12 @@ WORLD = {
                {"key": "kwame", "name": "Kwame Mensah"}, {"key": "kwabena", "name": "Kwabena Owusu"},
                {"key": "gemma", "name": "Gemma Wells"}, {"key": "gemma2", "name": "Emma Wells"},
                {"key": "ruth", "name": "Ruth Okafor"}, {"key": "ruben", "name": "Ruben Okafor"}],
-    "groups": [{"key": "trip", "name": "Lisbon Easter Trip"}], "lists": [{"key": "shop", "name": "Shopping"}],
+    "lists": [{"key": "shop", "name": "Shopping"}],
     "events": [{"key": "dentist", "name": "Dentist"}, {"key": "fitting", "name": "Kitchen fitting starts"}],
     "tasks": [{"key": "tax", "name": "Pay council tax"}, {"key": "tiles", "name": "Order tiles"}],
     "notebooks": [{"key": "work", "name": "Work Notes"}], "notes": [{"key": "bud", "name": "Household budget"}],
     "folders": [{"key": "taxes", "name": "Taxes"}], "documents": [{"key": "inv", "name": "Invoice 2025"}],
-    "albums": [{"key": "kids", "name": "Kids"}], "photos": [], "debts": [{"key": "d1", "name": "canteen lunch"}],
+    "albums": [{"key": "kids", "name": "Kids"}], "photos": [],
     "locker": [{"key": "wifi", "name": "Mum's wifi"}],
 }
 NAMES = noise.names_of_world(WORLD)
@@ -167,7 +167,7 @@ class Protected(unittest.TestCase):
 
     def test_decline_cues_and_closed_words_of_the_runtime_are_not_typo_targets(self):
         for word in ["whatsapp", "forward", "message", "invent", "everything", "tomorrow", "overdue", "remaining", "finished", "yesterday",
-                     "weekend", "balance", "reschedule", "postpone", "december", "afternoon", "completed", "cancelled", "everything"]:
+                     "weekend", "reschedule", "postpone", "december", "afternoon", "completed", "cancelled", "everything"]:
             self.assertTrue(noise.protected(word), word)
         for seed in range(50):
             for m in ["text jordan that the weekend is overdue", "send everything to the whatsapp group", "invent a password for the router"]:
@@ -355,7 +355,7 @@ class Ops(unittest.TestCase):
 
     def test_function_words_beside_dates_numbers_and_conventions_stay(self):
         for m in ["move it to friday", "push it to 3", "the 25th of november", "end of the month", "for tomorrow", "a couple of days", "all of them",
-                  "what's the balance", "what's my balance with kwame", "the folder", "that album", "the weekend", "up to saturday", "text the landlord",
+                  "the folder", "that album", "the weekend", "up to saturday", "text the landlord",
                   "in the next week", "for the week", "once a week", "half an hour", "a month ago"]:
             for seed in range(30):
                 text, ops = noise.perturb(m, NAMES, seed, "light", only=["drop"])
@@ -448,11 +448,10 @@ class Guards(unittest.TestCase):
                     text, _ = noise.perturb(m, NAMES, seed, level)
                     self.assertEqual(noise.signature(m), noise.signature(text), f"{m!r} -> {text!r}")
 
-    def test_my_stays_beside_a_balance_and_the_container_words_keep_their_determiner(self):
-        for m in ["what's my balance with kwame", "where do i stand in the trip group", "the folder", "that album please", "is the list empty"]:
+    def test_the_container_words_keep_their_determiner(self):
+        for m in ["the folder", "that album please", "is the list empty"]:
             for seed in range(40):
                 text, _ = noise.perturb(m, NAMES, seed, "heavy")
-                self.assertEqual(noise.me_hit(m), noise.me_hit(text), text)
                 self.assertEqual(noise.container_pair(m), noise.container_pair(text), text)
 
 
@@ -462,7 +461,7 @@ class Fuzz(unittest.TestCase):
         rng = random.Random(2026)
         alphabet = list("abcdefghijklmnopqrstuvwxyz ABCDEFGHIJ0123456789   ,.?!'’\"“”:;-/@#£$%é日😀\n\t")
         pool = ["what's", "tomorrow", "3pm", "kwame", "priya's", "the", "to", "please", "can you", "never mind", "don't", "wifi", "NHS", "e-mail", "o'clock",
-                "plumber", "reminder", "balance", "my", "folder", "besides", "friday", "40", "£5.50", "a", "of", "for", "yes", "ok so", "hey"]
+                "plumber", "reminder", "invoice", "my", "folder", "besides", "friday", "40", "£5.50", "a", "of", "for", "yes", "ok so", "hey"]
         for i in range(400):
             if i % 2:
                 m = "".join(rng.choice(alphabet) for _ in range(rng.randint(0, 40)))
@@ -524,7 +523,7 @@ class Lexicon(unittest.TestCase):
     """The protected words cover every word the runtime reads in a message: arrays of crates/assist/src/native, and the cue
     regexes of eval/regen.py. A word added there and not here fails this test."""
     SRC = HERE.parents[3] / "crates" / "assist" / "src" / "native"
-    ARRAYS = {"act.rs": ["UNNAMING", "PICKED", "YES", "WITHHOLD"], "block.rs": ["PRONOUNS", "FIRST_PERSON", "SENSE"], "follow.rs": ["OTHER_NOT", "FILLER"],
+    ARRAYS = {"act.rs": ["UNNAMING", "PICKED", "YES", "WITHHOLD"], "recover.rs": ["PRONOUNS", "FIRST_PERSON"], "follow.rs": ["OTHER_NOT", "FILLER"],
               "ground.rs": ["WORD_LIKE", "BROAD", "SPANNING", "SINCE_ENDS", "BEFORE_SHORT_WEEKDAY", "WAITING", "UNITS", "TIME_SPANS", "ROW_MARKERS", "SETTERS",
                             "DESTINATIONS", "STATUS_WORDS", "EVERY_STATUS", "NEXT_NOT", "NUMBER_WORDS"],
               "phrases.rs": ["RETRACTIONS", "RETRACTION_LEAD", "RETRACTION_TAIL", "RESIGNATIONS", "SHORT_WEEKDAYS", "BEFORE_SHORT_WEEKDAY", "JOINS", "MONTH_WORDS",
@@ -579,8 +578,8 @@ def load_perturb():
 SESSIONS = [
     {"id": "TX-001", "set": "train", "world": "TX", "today": "2026-03-12T18:20", "me": "Sam Park", "tags": ["a", "b"], "replay": [{"x": 1}],
      "turns": [
-         {"user": "how much does kwabena owe me", "gold": [{"type": "value", "values": [{"amount": 5, "unit": None}]}],
-          "ref": [{"tool": "answer", "args": {"op": "balance", "rows": "$kwabena"}}], "tags": ["convention"]},
+         {"user": "how many tasks does kwabena have", "gold": [{"type": "value", "values": [{"amount": 5, "unit": None}]}],
+          "ref": [{"tool": "answer", "args": {"op": "count", "kind": "task", "linked_to": "$kwabena"}}], "tags": ["convention"]},
          {"user": "move the dentist to tuesday at 3", "gold": [{"type": "diff", "diff": {"rows": [{"key": "dentist", "change": "updated", "fields": {"date": "2026-03-17T15:00"}}], "links": []}}],
           "ref": [{"tool": "act", "args": {"verb": "reschedule", "name": "Dentist", "args": "to: {\"date\":\"2026-03-17\",\"time\":\"15:00\"}"}}], "tags": []},
          {"user": "what's in the household budget note", "gold": [{"type": "rows", "rows": ["bud"]}],

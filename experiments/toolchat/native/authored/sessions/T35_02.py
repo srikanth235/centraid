@@ -23,19 +23,6 @@ S("T35-027", "count name month status",
   T("same for the wednesday races in september", val(4),
     ref=[ans(op="count", kind="event", name="wednesday race", when=J(U("month", 0, name=9)), where="status != cancelled")]))
 
-S("T35-028", "group balance me compute search",
-  T("where do i stand in the kiel week 2026 group", val((63.5, "EUR")),
-    ref=[search("Freya", kind="person"),
-         comp(op="balance", kind="group", name="Kiel Week 2026", linked_to="$me"), ans(value="@prev")]),
-  T("and the lab coffee club", val((32, "NOK")),
-    ref=[comp(op="balance", kind="group", name="Lab Coffee Club", linked_to="$me"), ans(value="@prev")]),
-  T("what about tuva in the seilforening kitty group", val((-1080, "NOK")),
-    ref=[comp(op="balance", kind="group", name="Seilforening Kitty", linked_to="$tuva"), ans(value="@prev")]),
-  T("how many people are in the lab coffee club", val(5),
-    ref=[ans(op="count", kind="person", linked_to="$lab_coffee")]),
-  T("and sigrid's position in the lab coffee club", val((-308, "NOK")),
-    ref=[ans(op="balance", kind="group", name="Lab Coffee Club", linked_to="$sigrid")]))
-
 S("T35-029", "locker logins reveal fabricated",
   T("which logins have i got saved that aren't starred", rows("uit_login", "tromso_kraft"),
     ref=[ans(kind="locker item", where="type = login and starred = no")]),
@@ -117,16 +104,6 @@ S("T35-038", "restore task reschedule what-else exclude",
   T("what else is due that weekend", rows("heat_pump"),
     ref=[ans(kind="task", where="status = open", when=J(span(U("week", 1, weekday=6), U("week", 1, weekday=7))), exclude="$old_gutter")]))
 
-S("T35-039", "debt sum exclude compute rows-superlative",
-  T("how much do i owe", val((7870, "NOK")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]),
-  T("without the shrink-wrap one", val((4070, "NOK")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open", exclude="$d_trond")]),
-  T("and what's owed to me", val((4740, "NOK")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = owes_me and status = open")]),
-  T("who's the biggest one", rows("d_bjorn"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open", order="amount desc", limit=1)]))
-
 S("T35-040", "notes body month find-only pin",
   T("notes from november that mention ethics", rows("lab_meeting2"),
     ref=[ans(kind="note", where='body contains "ethics"', when=J(U("month", 0, name=11)))]),
@@ -144,16 +121,6 @@ S("T35-041", "count name-where delete undo date-narrow",
     ref=[act("undo")]),
   T("ok just the ones before october", diff(trash("mortgage_aug"), trash("mortgage_sep")),
     ref=[find(kind="task", name="pay mortgage", where="status = completed", when=J({"to": D("2026-09-30")})), act("delete", rows="@prev")]))
-
-S("T35-042", "create group add_to remove_from linked-new",
-  T("make a group for the christmas presents with mamma, pappa and astrid",
-    diff(new("group", name=has("christmas"), currency="NOK"), link("new", "me"), link("new", "mamma"), link("new", "pappa"), link("new", "astrid")),
-    ref=[act("create", args="kind: group\nname: Christmas Presents\ncurrency: NOK", more=True),
-         act("add_to", rows="$mamma, $pappa, $astrid", args="to: $new")]),
-  T("who's in it", rows("me", "mamma", "pappa", "astrid"),
-    ref=[find(kind="person", linked_to="$c1"), ans(rows="@prev")]),
-  T("take pappa out, it's a surprise", diff(unlink("+1", "pappa")),
-    ref=[act("remove_from", rows="$pappa", args="from: $c1")]))
 
 S("T35-043", "ambiguous delete note restore",
   T("delete the diary entry", ask("diary_ski", "diary_whale"),

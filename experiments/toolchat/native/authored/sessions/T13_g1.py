@@ -61,25 +61,6 @@ S("T13-106", "ask event cancel supervisor meeting then log",
   T("log a message to helen, told her it's off", diff(upd("helen", date=ANY)),
     ref=[act("log", kind="person", name="Helen", args=lines(kind="message"))]))
 
-S("T13-108", "balance person emeka priya chinedu",
-  T("what do i owe emeka", val((-20, "GBP")),
-    ref=[ans(op="balance", kind="person", name="Emeka")]),
-  T("and does priya owe me anything", val((27, "GBP")),
-    ref=[ans(op="balance", kind="person", name="Priya")]),
-  T("chinedu?", val((94, "GBP")),
-    ref=[ans(op="balance", kind="person", name="Chinedu")]),
-  T("star chinedu, he's been solid about it", diff(upd("chinedu", starred=True)),
-    ref=[act("star", kind="person", name="Chinedu")]))
-
-S("T13-109", "balance group house priya coffee",
-  T("am i up or down in the house kitty", val((107, "GBP")),
-    ref=[find(kind="person", linked_to="$house"),
-         ans(op="balance", kind="group", name="House bills kitty", linked_to="$me")]),
-  T("and priya", val((-49, "GBP")),
-    ref=[ans(op="balance", kind="group", name="House bills kitty", linked_to="$priya")]),
-  T("what about me in the lab coffee fund", val((-8.8, "GBP")),
-    ref=[ans(op="balance", kind="group", name="Lab coffee fund", linked_to="$me")]))
-
 S("T13-110", "wifi password read then reveal",
   T("where's the wifi password saved", rows("wifi"),
     ref=[ans(kind="locker item", name="wifi")]),

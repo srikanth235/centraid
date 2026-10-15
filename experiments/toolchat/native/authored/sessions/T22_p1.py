@@ -8,16 +8,6 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 OPEN = 'status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-
-S("T22-004-P", "group person count edit group named count para",
-  T("groups holding over five people, which are they", rows("padel_g", "fika_g"),
-    ref=[ans(kind="group", where="person count > 5")]),
-  T("call the fika fund one Late shift fika", diff(upd("fika_g", name="Late shift fika")),
-    ref=[act("edit", rows="$fika_g", args=lines(name="Late shift fika"))]),
-  T("number of people in that group", val(6),
-    ref=[ans(op="count", kind="person", linked_to="$fika_g")]))
-
 S("T22-013-P", "delete task where list read para",
   T("on the summer house repairs list, get rid of the task that got cancelled", diff(trash("sauna")),
     ref=[act("delete", kind="task", linked_to="$shr_l", where='status = "cancelled"')]),
@@ -39,14 +29,6 @@ S("T22-023-P", "remove_from document where folder read para",
              args=lines(from_="$work_f"))]),
   T("what remains in there now", rows("contract", "payslip_may", "forklift_cert"),
     ref=[ans(kind="document", linked_to="$work_f")]))
-
-S("T22-028-P", "person group count debt count para",
-  T("which people are in at least two of my groups", rows("ahmed", "karin", "david", "lena", "me"),
-    ref=[ans(kind="person", where="group count > 1")]),
-  T("padel people i have no debts with in either direction", rows("erik_l"),
-    ref=[ans(kind="person", where='debt count < 1 and role contains "padel"')]),
-  T("he's the organiser, right?", rows("erik_l"),
-    ref=[ans(rows="$erik_l")]))
 
 S("T22-033-P", "event person count week anchor tomorrow para",
   T("next week, which things have no one else attending", rows("car_service", "drive_osterlen"),
@@ -114,12 +96,6 @@ S("T22-068-P", "list task count ambiguous list resolved count para",
   T("shopping, how many tasks", val(3),
     ref=[ans(op="count", kind="task", linked_to="$shop_l")]))
 
-S("T22-073-P", "debt span named month datetime open to date para",
-  T("from june to friday noon, which debts fall in that window", rows("d_karin", "d_david", "d_erik", "d_micke", "d_gunnar", "d_johan_b"),
-    ref=[ans(kind="debt", when=W(span(U("month", 0, name=6), U("week", -1, weekday=5, time="12:00"))))]),
-  T("before the first of june, any debts", rows("d_samira", "d_lena"),
-    ref=[ans(kind="debt", when=W({"to": D("2026-06-01")}))]))
-
 S("T22-078-P", "single note notebook count linked person para",
   T("which of the notes tied to Birgitta Lindqvist sit in a notebook", rows("meatballs"),
     ref=[ans(kind="note", linked_to="$birgitta", where="notebook count > 0")]))
@@ -174,14 +150,6 @@ S("T22-A004-P", "ask-options photo delete never_mind c3a para",
   T("no wait, they stay, from our first date", decline("never_mind"),
     ref=[dec("never_mind")]))
 
-S("T22-A009-P", "follow-up c3a para",
-  T("what do i still owe", rows("d_david", "d_gunnar", "d_karin", "d_mats", "d_fatima"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("same list minus the coffee one", rows("d_gunnar", "d_karin", "d_david", "d_mats"),
-    ref=[ans(within="@prev", exclude="$d_fatima")]),
-  T("largest of them", rows("d_karin"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T22-B005-P", "c4b state-change cancel event restore trashed task para",
   T("the plumber visit is off, kent called", diff(upd("plumber", status="cancelled")),
     ref=[act("cancel", kind="event", name="Plumber")]),
@@ -193,25 +161,6 @@ S("T22-C003-P", "c3c compound delete restore photos para",
     diff(trash("p_whiteboard"), restore("p_blurry")),
     ref=[act("delete", kind="photo", name="Rota whiteboard", more=True),
          act("restore", kind="photo", name="Blurry jetty", trashed=True)]))
-
-S("T22-103-P", "star ask person johan balance para",
-  T("johan gets a star", ask("johan_b", "johan_n"),
-    ref=[act("star", kind="person", name="Johan"),
-         askc("johan berg or johan nilsson?", options="$johan_b, $johan_n")]),
-  T("i mean berg, my brother in law", diff(upd("johan_b", starred=True)),
-    ref=[act("star", rows="$johan_b")]),
-  T("how much of it does he still owe me", val((1333.33, "SEK")),
-    ref=[ans(op="balance", rows="$johan_b")]))
-
-S("T22-108-P", "cancel contrast swimming date balance para",
-  T("swimming lesson on the 21st is off, cancel it", diff(upd("swim_2", status="cancelled")),
-    ref=[act("cancel", kind="event", name="Swimming lesson", when=W(D("2026-07-21")))]),
-  T("where do things stand with samira", val((2000, "SEK")),
-    ref=[ans(op="balance", kind="person", name="Samira")]),
-  T("mats?", val((50, "SEK")),
-    ref=[ans(op="balance", kind="person", name="Mats")]),
-  T("send schedule to johan is finished, tick it", diff(upd("send_sched", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Send schedule to Johan")]))
 
 S("T22-113-P", "reveal ask login fabricated para",
   T("tell me the password for my login", ask("bankid", "ikea_portal", "matchi"),

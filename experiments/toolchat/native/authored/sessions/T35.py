@@ -34,48 +34,6 @@ S("T35-003", "trashed restore document folder",
   T("which folder is it in", rows("house_f"),
     ref=[ans(kind="folder", linked_to="$old_scan")]))
 
-S("T35-004", "relation empty next decline",
-  T("who from the coffee club is at the cod team meeting", rows("sigrid", "ola", "lars_e"),
-    ref=[ans(kind="person", linked_to="$cod_team, $lab_coffee")]),
-  T("is marit going", rows(),
-    ref=[ans(kind="event", name="cod team meeting", linked_to="$marit")]),
-  T("when's the next thing she's at", rows("lab_1116"),
-    ref=[ans(kind="event", linked_to="$marit", when=J({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("text her i'm running late monday", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]))
-
-S("T35-005", "debt person month settle balance",
-  T("which of henrik's debts are from october", rows("d_henrik_jacket"),
-    ref=[ans(kind="debt", linked_to="$henrik", when=J(U("month", 0, name=10)))]),
-  T("i paid him that one, mark it settled", diff(upd("d_henrik_jacket", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]),
-  T("where am i with him", val((1324.5, "NOK")),
-    ref=[ans(op="balance", rows="$henrik")]))
-
-S("T35-006", "group members nickname balance same-for",
-  T("who's in the kitty group", rows("me", "lars_h", "tuva", "hjordis", "bjorn", "roar"),
-    ref=[ans(kind="person", linked_to="$seilklubb")]),
-  T("any with a nickname", rows("lars_h"),
-    ref=[ans(within="@prev", where="nickname is set")]),
-  T("what's his balance in the seilforening kitty group", val((2595, "NOK")),
-    ref=[ans(op="balance", kind="group", name="Seilforening Kitty", linked_to="$lars_h")]),
-  T("and bjorn's", val((-3405, "NOK")),
-    ref=[ans(op="balance", kind="group", name="Seilforening Kitty", linked_to="$bjorn")]))
-
-S("T35-007", "debts owed narrowing superlative settle",
-  T("what's owed to me", rows("d_henrik_boots", "d_astrid", "d_bjorn", "d_lars_h", "d_kjersti"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("anything from before october", rows("d_henrik_boots", "d_lars_h", "d_kjersti"),
-    ref=[ans(within="@prev", when=J({"to": U("month", 0, name=9)}))]),
-  T("which is the biggest", rows("d_henrik_boots"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]),
-  T("he paid me today", diff(upd("d_henrik_boots", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]),
-  T("what's owed to me now", rows("d_astrid", "d_bjorn", "d_lars_h", "d_kjersti"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("add those up", val((3790, "NOK")),
-    ref=[ans(op="sum", field="amount", within="@prev")]))
-
 S("T35-008", "event name month status person",
   T("wednesday races in september", rows("race_0902", "race_0909", "race_0916", "race_0923", "race_0930"),
     ref=[ans(kind="event", name="wednesday race", when=J(U("month", 0, name=9)))]),
@@ -87,14 +45,6 @@ S("T35-008", "event name month status person",
     ref=[ans(kind="event", name="wednesday race", when=J(U("month", 0, name=10)))]),
   T("how many actually ran in august", val(3),
     ref=[ans(op="count", kind="event", name="wednesday race", when=J(U("month", 0, name=8)), where="status != cancelled")]))
-
-S("T35-009", "create clash ask wrong-container decline",
-  T("book a call with marit friday at 11", ask("cod_team"),
-    ref=[act("create", args=lines(kind="event", name="Call with Marit", date=U("week", 0, weekday=5, time="11:00")))]),
-  T("ok make it 2", diff(new("event", name=has("marit"), date="2026-11-13T14:00")),
-    ref=[act("create", args=lines(kind="event", name="Call with Marit", date=U("week", 0, weekday=5, time="14:00")))]),
-  T("add sigrid to it", decline("out_of_scope"),
-    ref=[act("add_to", rows="$sigrid", args=lines(to="$c1"))]))
 
 S("T35-010", "person tasks narrowing complete reschedule",
   T("what do i still have for ola", rows("sample_log", "cod_echo"),
@@ -168,16 +118,6 @@ S("T35-016", "create task list reschedule new-row read",
   T("and next week", rows("+1", "elec_bill", "heat_pump"),
     ref=[ans(kind="task", linked_to="$home_list", when=J(U("week", 1)))]))
 
-S("T35-017", "remove member balance ask settle_up never_mind",
-  T("take hjordis out of the seilforening kitty group", ask("hjordis", "seilklubb"),
-    ref=[act("remove_from", rows="$hjordis", args="from: $seilklubb")]),
-  T("settle up with her first", diff(settle=[("Hjordis Thorbjornsen", "1080.00")]),
-    ref=[act("settle_up", rows="$hjordis", args="group: $seilklubb")]),
-  T("ok try again", ask("hjordis", "seilklubb"),
-    ref=[act("remove_from", rows="$hjordis", args="from: $seilklubb")]),
-  T("forget it then", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
 S("T35-018", "two-writes complete reschedule list-open",
   T("tick off the heat pump filter and push the window lights to next friday",
     diff(upd("heat_pump", status="completed", completed=ANY), upd("lights", date="2026-11-20")),
@@ -229,15 +169,3 @@ S("T35-024", "cancel name-date undo",
     ref=[act("cancel", kind="event", name="morning swim", when=D("2026-12-01"))]),
   T("undo that", diff(),
     ref=[act("undo")]))
-
-S("T35-025", "debts owed amount exclude settle",
-  T("what do i owe over 1000", rows("d_henrik_jacket", "d_gunnhild", "d_trond"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open and amount > 1000 NOK")]),
-  T("besides trond's", rows("d_henrik_jacket", "d_gunnhild"),
-    ref=[ans(within="@prev", exclude="$d_trond")]),
-  T("settle gunnhild's one, paid her this morning", diff(upd("d_gunnhild", status="settled")),
-    ref=[act("settle_debt", rows="$d_gunnhild")]),
-  T("what do i still owe that's over 500", rows("d_henrik_jacket", "d_trond"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open and amount > 500 NOK")]),
-  T("and the total of everything i still owe", val((5670, "NOK")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]))

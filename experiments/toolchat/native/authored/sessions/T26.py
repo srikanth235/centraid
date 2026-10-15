@@ -15,17 +15,6 @@ S("T26-002", "person rel time log prev event named",
   T("when's her birthday thing", rows("mama70"),
     ref=[ans(kind="event", name="Mama's 70th birthday")]))
 
-S("T26-004", "refused unit cadence cousins cadence empty log debt linked",
-  T("which cousins have a cadence longer than two weeks", rows("kunle_b", "ibrahim"),
-    ref=[bad(ans(kind="person", where='role contains "cousin" and cadence > 2 weeks')),
-         ans(kind="person", where='role contains "cousin" and cadence > 14')]),
-  T("and the ones with none", rows("bayo", "funmi", "sade"),
-    ref=[ans(kind="person", where='role contains "cousin" and cadence is empty')]),
-  T("log a message with bayo, texted him about the loan", diff(upd("bayo", date=ANY)),
-    ref=[act("log", rows="$bayo", args=lines(kind="message"))]),
-  T("remind me how much that loan was", val((150000, "NGN")),
-    ref=[ans(op="sum", field="amount", kind="debt", linked_to="$bayo")]))
-
 S("T26-005", "role in star multi",
   T("show me everyone saved as cousin or builder", rows("bayo", "funmi", "sade", "ibrahim", "olumide"),
     ref=[ans(kind="person", where='role in ("cousin", "builder")')]),
@@ -48,25 +37,6 @@ S("T26-007", "person event count note count",
     ref=[ans(kind="person", where="note count >= 2")]),
   T("open garba", rows("garba"),
     ref=[ans(rows="$garba")]))
-
-S("T26-008", "group currency edit refused ask never mind",
-  T("which groups are in dollars", rows("aberdeen_g", "welfare_g"),
-    ref=[ans(kind="group", where='currency = "USD"')]),
-  T("switch both to naira, we settle locally", ask(),
-    ref=[bad(act("edit", rows="@prev", args=lines(currency="NGN"))),
-         askc("a group's currency can't be changed once it has one. want new naira groups for aberdeen and the welfare fund instead?")]),
-  T("no leave them", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
-S("T26-009", "single edit group notebook folder multi named",
-  T("rename the house build folder, the house build notebook and Rumuokoro house build group all to Rumuokoro house",
-    diff(upd("house_f", name="Rumuokoro house"), upd("house_nb", name="Rumuokoro house"),
-         upd("house_g", name="Rumuokoro house")),
-    ref=[act("edit", rows="$house_f, $house_nb, $house_g", args=lines(name="Rumuokoro house"))]))
-
-S("T26-011", "single delete group where person count",
-  T("delete whichever group has me in it", diff(gone("xmas_g"), unlink("xmas_g", "me")),
-    ref=[act("delete", kind="group", where="person count = 1")]))
 
 S("T26-012", "restore event named trashed reschedule",
   T("restore Meeting with the surveyor, i deleted it by mistake", diff(restore("surveyor")),

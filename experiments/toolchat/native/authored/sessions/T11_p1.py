@@ -5,16 +5,12 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 def J(d):
     return json.dumps(d, separators=(",", ":"))
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 OPEN = 'status = "open"'
 FROM_NOW = W({"from": U("day", 0)})
 NEXT2 = find(kind="event", name="U12 hurling training", when=FROM_NOW, order="date asc", limit=2)
 FARM = find(kind="task", linked_to="$farm_l", where=OPEN)
-TOP3 = find(kind="debt", where=IOWE, order="amount desc", limit=3)
-
 
 S("T11-001-P", "event weekday reschedule named create overlap refused ask para",
   T("what've i got tuesday", rows("tb_test"),
@@ -24,15 +20,6 @@ S("T11-001-P", "event weekday reschedule named create overlap refused ask para",
   T("thursday half 10, book me a call with pat about the lame ones", ask(),
     ref=[bad(act("create", args=lines(kind="event", name="Call with Pat", date=U("week", 1, weekday=4, time="10:30")))),
          askc("hoof trimming runs 10 to 1 that thursday, so half 10 clashes. after 1?")]))
-
-S("T11-008-P", "role find log prev balance para",
-  T("name of the relief milker?", rows("ger"),
-    ref=[find(kind="person", where='role contains "relief"'),
-         ans(rows="@prev")]),
-  T("put down a visit for him, he covered saturday morning", diff(upd("ger", date=ANY)),
-    ref=[act("log", rows="@prev", args=lines(kind="visit"))]),
-  T("how do we stand on money, him and me", val((-180, "EUR")),
-    ref=[ans(op="balance", rows="$ger")]))
 
 S("T11-014-P", "star photo named para",
   T("U12 team photo, give it a star", diff(upd("p_u12_team", starred=True)),
@@ -80,32 +67,6 @@ S("T11-041-P", "single ambiguous event ask para",
   T("tb test, an hour later please", ask("tb_test", "tb_read"),
     ref=[act("reschedule", kind="event", name="TB test", args=lines(to=U("hour", 1, anchor="row"))),
          askc("the tb test on tuesday or the reading on friday?", options="$tb_test, $tb_read")]))
-
-S("T11-046-P", "debt date span rel para",
-  T("anything in debts from the twelfth of july", rows("d_sean_silage"),
-    ref=[ans(kind="debt", when=W(D("2026-07-12")))]),
-  T("now the open ones only, june through to last week",
-    rows("d_sean_silage", "d_mick_silage", "d_fergal", "d_eileen", "d_clodagh", "d_tom", "d_pj", "d_mick_diesel"),
-    ref=[ans(kind="debt", when=W(span(U("month", -1), U("week", -1))), where='status = "open"')]),
-  T("and wednesday until 5 on friday", rows("d_tadhg", "d_mary_c"),
-    ref=[ans(kind="debt", when=W(span(U("week", 0, weekday=3), U("week", 0, weekday=5, time="17:00"))))]))
-
-S("T11-052-P", "six turns debts amount unit max min order settle sum para",
-  T("debts people owe me that top 100 euro", rows("d_mick_silage", "d_tadhg", "d_tom"),
-    ref=[ans(kind="debt", where='amount > 100 EUR and direction = "owes_me" and status = "open"')]),
-  T("largest open one in each direction", vgroups({"i_owe": (850, "EUR"), "owes_me": (240, "EUR")}),
-    ref=[comp(op="max", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]),
-  T("and the lowest of each", vgroups({"i_owe": (12, "EUR"), "owes_me": (25, "EUR")}),
-    ref=[comp(op="min", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]),
-  T("who do i owe the 12 to", rows("mary_c"),
-    ref=[find(kind="debt", where='direction = "i_owe" and status = "open"', order="amount asc", limit=1),
-         ans(kind="person", linked_to="@prev")]),
-  T("money's been dropped over, mark it settled", diff(upd("d_mary_c", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Eggs and brown bread")]),
-  T("so what do i owe all together now", val((1435, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
 
 S("T11-057-P", "notes open span date within notebook count note count para",
   T("what did i jot down since 6 yesterday morning", rows("coop_q"),
@@ -165,17 +126,6 @@ S("T11-083-P", "single ask without options para",
   T("accounts meeting needs shifting", ask(),
     ref=[askc("to when?")]))
 
-S("T11-089-P", "group currency delete group dead end other kind para",
-  T("euro groups, what are they", rows("lotto", "juvenile", "tour", "silage_coop", "tanker"),
-    ref=[ans(kind="group", where='currency = "EUR"')]),
-  T("get rid of the silage co-op one, it never got used",
-    diff(gone("silage_coop"), unlink("silage_coop", "mick"), unlink("silage_coop", "sean_m"),
-         unlink("silage_coop", "me")),
-    ref=[act("delete", kind="group", name="Silage co-op 2025")]),
-  T("what day is the NCT on", rows("nct"),
-    ref=[find(kind="event", name="NCT"),
-         ans(rows="$nct")]))
-
 S("T11-094-P", "five turns find-only date reschedule where month span effort complete para",
   T("what falls due on the first of august", rows("raffle", "swim", "nuts_08"),
     ref=[find(kind="task", when=W(D("2026-08-01"))),
@@ -222,15 +172,6 @@ S("T11-103-P", "ask june statement star pick already-so star para",
     ref=[act("star", kind="document", name="statement")]),
   T("house insurance policy next", diff(already=["house_policy"]),
     ref=[act("star", kind="document", name="House insurance policy"), ans(rows="$house_policy")]))
-
-S("T11-108-P", "repair balance two sean ask pick balance substitution para",
-  T("sean, what do i owe him", ask("sean_m", "sean_h"),
-    ref=[bad(ans(op="balance", kind="person", name="Sean")),
-         askc("sean mahon the silage man or sean hehir from the club?", options="$sean_m, $sean_h")]),
-  T("mahon?", val((-850, "EUR")),
-    ref=[ans(op="balance", rows="$sean_m")]),
-  T("hehir?", val((-20, "EUR")),
-    ref=[ans(op="balance", rows="$sean_h")]))
 
 S("T11-113-P", "ask login username reveal pick para",
   T("password for the IE5512890 login, give it to me", ask("icbf", "agfood"),

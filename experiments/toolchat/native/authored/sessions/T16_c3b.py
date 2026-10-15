@@ -10,9 +10,6 @@ def W(expr):
 
 
 OPEN = 'status = "open"'
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-
 S("T16-B001", "c3b superlative event next three nets count note latest",
   T("next 3 net practices", rows("nets_1218", "nets_1225", "nets_0101", order=True),
     ref=[ans(kind="event", name="Tigers net practice", when=W({"from": U("day", 0)}), order="date asc", limit=3)]),
@@ -36,12 +33,6 @@ S("T16-B004", "c4b state-change complete complete create contrast",
     ref=[act("complete", kind="task", name="cricket balls")]),
   T("add a task: ring nazmul about the overlock machine", diff(new("task", name=has("Nazmul"))),
     ref=[act("create", args=lines(kind="task", name="Ring Nazmul about the overlock machine"))]))
-
-S("T16-B006", "c4b state-change settle_debt log nickname",
-  T("shafiq paid me for the motorbike repair", diff(upd("d_shafiq", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Motorbike repair")]),
-  T("popped round to monir's", diff(upd("monir", date=ANY)),
-    ref=[search("monir", kind="person"), act("log", rows="$monir", args=lines(kind="visit"))]))
 
 S("T16-B007", "c4b state-change complete catch up create contrast",
   T("ordered the rice sack", diff(upd("rice", status="completed", completed=ANY)),

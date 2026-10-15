@@ -43,13 +43,6 @@ S("T29-026", "kisumu flights name two-writes reschedule create-task",
   T("what else is on between the flights", rows("ride_1024", "baba_bday"),
     ref=[ans(kind="event", when=J(span(D("2026-10-22"), D("2026-10-27"))), exclude="$kisumu_flight, $kisumu_back")]))
 
-S("T29-027", "group-balance-me-search berlin eur other-person",
-  T("where do i stand in berlin build week", val((-76, "EUR")),
-    ref=[search("Achieng", kind="person"),
-         ans(op="balance", kind="group", name="Berlin Build Week", linked_to="$me")]),
-  T("and hanna", val((-172, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Berlin Build Week", linked_to="$hanna")]))
-
 S("T29-028", "search-empty ask-recover role-search planning",
   T("who's my physio", rows(),
     ref=[search("physio"), ans(kind="person", name="physio")]),

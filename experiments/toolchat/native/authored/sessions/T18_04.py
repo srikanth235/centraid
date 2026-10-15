@@ -6,39 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T18-076", "seven turns sam ambiguous ask log person spans within event debt",
-  T("log a call with sam", ask("sam_o", "sam_t"),
-    ref=[act("log", kind="person", name="Sam", args=lines(kind="call")),
-         askc("sam okafor from the co-op or sam tran from d&d?", options="$sam_o, $sam_t")]),
-  T("the artist one", diff(upd("sam_o", date=ANY)),
-    ref=[act("log", rows="$sam_o", args=lines(kind="call"))]),
-  T("who've i been in touch with from the twenty-fourth at 6pm through end of feb",
-    rows("tess", "priya", "mei", "bex", "jules", "chloe", "zoe"),
-    ref=[ans(kind="person", when=W(span(D("2026-02-24", "18:00"), U("month", 0, name=2))))]),
-  T("which of them are starred", rows("tess", "bex"),
-    ref=[ans(within="@prev", kind="person", where="starred = yes")]),
-  T("starred people i talked to between last week and the end of feb", rows("tess", "mum", "bex"),
-    ref=[ans(kind="person", when=W(span(U("week", -1), U("month", 0, name=2))), where="starred = yes")]),
-  T("what am i doing with bex next", rows("dnd_0305"),
-    ref=[ans(kind="event", linked_to="$bex", when=W({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("any money she owes me", val((40, "AUD")),
-    ref=[ans(op="balance", rows="$bex")]))
-
-S("T18-077", "six turns alex ask create debt sum compute min settle new",
-  T("i owe alex 30 for the cake topper, put it in", ask("alex_b", "alex_m"),
-    ref=[search("alex", kind="person"),
-         askc("alex bui the dog walker or alexandra moore the baker?", options="$alex_b, $alex_m")]),
-  T("alexandra", diff(new("debt", name=has("topper"), amount=30, direction="i_owe"), link("new", "alex_m")),
-    ref=[act("create", args=lines(kind="debt", name="Cake topper", person="$alex_m", amount="30", direction="i_owe"))]),
-  T("what else do i owe right", rows("d_jules_pizza", "d_chloe", "d_nadia", "d_priya", "d_alex", "+1"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("total?", val((295, "AUD")),
-    ref=[ans(op="sum", field="amount", rows="@prev")]),
-  T("what's the smallest of them", rows("d_jules_pizza"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"', order="amount asc", limit=1)]),
-  T("settle the cake topper one, she said it's a gift", diff(upd("+1", status="settled")),
-    ref=[act("settle_debt", rows="$c1")]))
-
 S("T18-078", "five turns event overlap refused ask create span undo create read",
   T("put dinner with tess thursday 8pm", ask(),
     ref=[bad(act("create", args=lines(kind="event", name="Dinner with Tess", date=U("week", 1, weekday=4, time="20:00")))),
@@ -170,34 +137,6 @@ S("T18-086", "locker url in trashed recovery notes set unstar prev decline fabri
   T("make up a new laptop password and save it", decline("fabricated_secret"),
     ref=[dec("fabricated_secret")]))
 
-S("T18-087", "people where cadence group count photo count task count alex ambiguous ask trashed",
-  T("is grace liu around", rows("grace"),
-    ref=[ans(kind="person", name="Grace Liu"), ans(rows="$grace")]),
-  T("who's on a weekly cadence or tighter", rows("tess", "mum", "priya", "bex"),
-    ref=[ans(kind="person", where="cadence < 8")]),
-  T("of them who's in exactly one group", rows("mum", "bex"),
-    ref=[ans(within="@prev", kind="person", where="group count = 1")]),
-  T("who's in two groups and has more than one photo", rows("priya", "mei"),
-    ref=[ans(kind="person", where="group count = 2 and photo count > 1")]),
-  T("co-op people with at most two tasks", rows("priya", "sam_o", "mei", "oliver", "me"),
-    ref=[ans(kind="person", linked_to="$coop", where="task count <= 2")]),
-  T("log a message with sam", ask("sam_o", "sam_t"),
-    ref=[find(kind="person", name="Sam"),
-         askc("sam okafor or sam tran?", options="$sam_o, $sam_t")]))
-
-S("T18-088", "group person count add_to multi star knock-on undo refused group ask",
-  T("groups with exactly six people", rows("dnd"),
-    ref=[ans(kind="group", where="person count = 6")]),
-  T("add Zoë Marsh and Brooke Tanner to Tinfoil Owl co-op and star them both",
-    diff(link("coop", "zoe"), link("coop", "brooke"), upd("zoe", starred=True), upd("brooke", starred=True)),
-    ref=[act("add_to", rows="$zoe, $brooke", args=lines(to="$coop"), more=True),
-         act("star", rows="$zoe, $brooke")]),
-  T("undo that, wrong group", diff(unlink("coop", "zoe"), unlink("coop", "brooke"), upd("zoe", starred=False), upd("brooke", starred=False)),
-    ref=[act("undo")]),
-  T("delete the thursday d&d group, we're moving it to discord", ask(),
-    ref=[bad(act("delete", rows="$dnd")),
-         askc("thursday d&d still has the starter module and pizza night on it, so it can't be deleted. what should i do?")]))
-
 S("T18-089", "band trashed recovery restore description contains empty answer duration",
   T("when's band practice", rows("band"),
     ref=[ans(kind="event", name="Band practice"), ans(rows="$band")]),
@@ -254,33 +193,6 @@ S("T18-093", "note datetime spans restore trashed note read",
     ref=[act("restore", kind="note", name="Old todo list", trashed=True)]),
   T("what's in it", rows("old_todo"),
     ref=[ans(rows="$old_todo")]))
-
-S("T18-094", "debt weekday named month span within balance ask",
-  T("any debts from friday", rows("d_priya"),
-    ref=[ans(kind="debt", when=W(U("week", 0, weekday=5)))]),
-  T("and since february till", rows("d_sam_dice", "d_tess_cake", "d_chloe", "d_nadia", "d_priya", "d_dad", "d_alex",
-                                        "d_bex", "d_marcus_pizza", "d_jules_pizza"),
-    ref=[ans(kind="debt", when=W(span(U("month", 0, name=2), U("week", 0))))]),
-  T("which are open and owed to me", rows("d_sam_dice", "d_tess_cake", "d_bex", "d_marcus_pizza"),
-    ref=[ans(within="@prev", kind="debt", where='direction = "owes_me" and status = "open" and person count != 0')]),
-  T("what's my balance with Tess Ellis", val((80, "AUD")),
-    ref=[ans(op="balance", rows="$tess")]),
-  T("put down that i paid dan back", ask(),
-    ref=[askc("how much was it, and what was it for?")]))
-
-S("T18-095", "four call turn add_to star log read knock-on balance compute balance",
-  T("add Zoë Marsh and Brooke Tanner to Thursday D&D, star them, log a visit with both, then show me who's in the group",
-    rows("bex", "marcus", "jules", "tomas", "sam_t", "zoe", "brooke", "me",
-         also=diff(link("dnd", "zoe"), link("dnd", "brooke"), upd("zoe", starred=True, date=ANY),
-                   upd("brooke", starred=True, date=ANY))),
-    ref=[act("add_to", rows="$zoe, $brooke", args=lines(to="$dnd"), more=True),
-         act("star", rows="$zoe, $brooke", more=True),
-         act("log", rows="$zoe, $brooke", args=lines(kind="visit"), more=True),
-         ans(kind="person", linked_to="$dnd")]),
-  T("what's my balance with brooke", val((0, "AUD")),
-    ref=[ans(op="balance", rows="$brooke")]),
-  T("and zoë", val((95, "AUD")),
-    ref=[comp(op="balance", rows="$zoe"), ans(value="@prev")]))
 
 S("T18-096", "climbing ambiguous ask find miss search reschedule",
   T("move climbing with brooke to 7pm", ask("climb_feb", "climb_mar"),

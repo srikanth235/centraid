@@ -117,33 +117,11 @@ S("T08-057-P", "delete person where restore named delete para",
   T("any tasks of mine with her on them", rows("dishwasher"),
     ref=[ans(kind="task", linked_to="$gloria")]))
 
-S("T08-060-P", "boosters group balance settle debt undo para",
-  T("list the people in eagles boosters", rows("marcus_h", "quanisha", "coach_t", "tasha", "me"),
-    ref=[ans(kind="person", linked_to="$boosters")]),
-  T("money-wise, how do i stand there", val((93.8, "USD")),
-    ref=[ans(op="balance", kind="group", name="Eagles boosters", linked_to="$me")]),
-  T("quanisha dawson and i need settling up", diff(settle=[("Quanisha Dawson", "30.6")]),
-    ref=[act("settle_up", rows="$quanisha", args=lines(group="$boosters"))]),
-  T("isn't there raffle cash she owes me as well", rows("d_quanisha"),
-    ref=[ans(kind="debt", linked_to="$quanisha")]),
-  T("that one's been paid, mark it", diff(upd("d_quanisha", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]),
-  T("next boosters meeting is when", rows("boost_0413"),
-    ref=[ans(kind="event", name="Boosters meeting", when=W({"from": U("day", 0)}), order="date asc", limit=1)]))
-
 S("T08-066-P", "restore undo restore para",
   T("the old pay stub shouldn't be in the trash, restore it", diff(restore("paystub")),
     ref=[act("restore", kind="document", name="Old pay stub", trashed=True)]),
   T("ignore that, undo what you just did", diff(trash("paystub")),
     ref=[act("undo")]))
-
-S("T08-070-P", "boosters debt count event count reunion note count para",
-  T("eagles boosters people i don't have any debt with", rows("marcus_h", "tasha", "me"),
-    ref=[ans(kind="person", linked_to="$boosters", where="debt count <= 0")]),
-  T("out of those, exactly one event together with whom", rows("tasha"),
-    ref=[ans(kind="person", within="@prev", where="event count = 1")]),
-  T("reunion committee members that have just one note about them", rows("dre", "bev"),
-    ref=[ans(kind="person", linked_to="$reunion_g", where="note count = 1")]))
 
 S("T08-074-P", "notes spans notebook count para",
   T("notes written between march tenth at 9am and last friday", rows("contract_q", "grievance_notes", "custody", "heat_pump", "jada_sizes",
@@ -161,14 +139,6 @@ import json
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
-
-S("T08-079-P", "debts amount since direction settle para",
-  T("what do i owe that's under 40", rows("d_kevin", "d_marcus_b"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and amount <= 40')]),
-  T("from april first at 9am on, which ones aren't owed to me", rows("d_marcus_b", "d_tanya"),
-    ref=[ans(kind="debt", when=W({"from": D("2026-04-01", "09:00")}), where='direction != "owes_me"')]),
-  T("sunday i paid tanya back for the Easter groceries, mark it settled", diff(upd("d_tanya", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Easter groceries")]))
 
 S("T08-084-P", "house tasks span ambiguous filter reschedule anchor para",
   T("due from april till the twentieth, house list stuff", rows("filter_apr", "rent_apr", "dishwasher", "gutters"),
@@ -242,10 +212,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 OPEN = 'status = "open"'
-
-IOWE = 'direction = "i_owe" and status = "open"'
-
-OWED = 'direction = "owes_me" and status = "open"'
 
 S("T08-B002-P", "c3b superlative note latest document oldest count para",
   T("most recent note", rows("franklin"),

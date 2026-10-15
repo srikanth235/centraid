@@ -23,13 +23,6 @@ S("T17-A003", "ask-options task complete c3a",
   T("and the prepare one's done, tick it off", diff(upd("programme", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="prepare")]))
 
-S("T17-A005", "ask-options debt settle_debt c3a",
-  T("settle the lessons one", ask("d_maria_k", "d_kalina", "d_daniela"),
-    ref=[act("settle_debt", kind="debt", name="lessons"),
-         askc("Maria's January lessons (100), Kalina's two January lessons (80) or Daniela's for Boris's December lessons (160)?", options="$d_maria_k, $d_kalina, $d_daniela")]),
-  T("daniela's, she brought cash", diff(upd("d_daniela", status="settled")),
-    ref=[act("settle_debt", rows="$d_daniela")]))
-
 S("T17-A006", "ask-options note delete never_mind c3a",
   T("delete the progress note", ask("maria_notes", "ivan_notes"),
     ref=[act("delete", kind="note", name="progress"),
@@ -58,14 +51,6 @@ S("T17-A008", "follow-up c3a",
   T("now only the lessons", rows("maria_0128", "niki_lesson", "ivan_0126"),
     ref=[ans(within="@prev", name="lesson")]),
   T("what else is on", rows("tiling_start", "vesi_reh_jan", "choir_0127", "coffee_mila", "handover_0201", "sofia_run", "lunch_petar"),
-    ref=[ans(within="@1", exclude="@2")]))
-
-S("T17-A009", "follow-up c3a",
-  T("who still owes me money", rows("d_kalina", "d_daniela", "d_stefan", "d_maria_k", "d_niki", "d_sofia"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 90", rows("d_niki", "d_daniela", "d_maria_k"),
-    ref=[ans(within="@prev", where="amount > 90 BGN")]),
-  T("the rest of them", rows("d_sofia", "d_stefan", "d_kalina"),
     ref=[ans(within="@1", exclude="@2")]))
 
 S("T17-A010", "follow-up c3a",

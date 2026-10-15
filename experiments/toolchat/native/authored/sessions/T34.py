@@ -29,18 +29,6 @@ S("T34-002", "empty-recovery history count follow-up",
   T("which ones", rows("ss_240107", "ss_240128", "ss_240317", "ss_240818"),
     ref=[ans(within="@prev")]))
 
-S("T34-003", "group-event-chain empty members",
-  T("who from the church building fund was at last year's harvest thanksgiving", rows("pastor", "funmi", "deacon"),
-    ref=[find(kind="event", name="harvest thanksgiving", when=W(U("year", -1))),
-         ans(kind="person", linked_to="$church_build, $harvest_2026")]),
-  T("and who from the umunna group was at the village christmas in 2025", rows("daddy"),
-    ref=[find(kind="event", name="Christmas in the village", when=W(U("year", -2))),
-         ans(kind="person", linked_to="$village, $village_25")]),
-  T("is mama nnukwu in the care fund", rows(),
-    ref=[ans(kind="person", name="Mama Nnukwu", linked_to="$mama_care")]),
-  T("who is in it then", rows("me", "chidi_o", "ngozi_o", "aunty_uche", "blessing"),
-    ref=[ans(kind="person", linked_to="$mama_care")]))
-
 S("T34-004", "subtasks reschedule anchor-row order-limit",
   T("what's left on the solar job", rows("solar_5", "solar_6", "solar_7"),
     ref=[ans(kind="task", linked_to="$solar", where="status = open")]),
@@ -62,16 +50,6 @@ S("T34-005", "photos relation album star add_to within",
     ref=[ans(within="@1", linked_to="$shop_a")]),
   T("add the sunset one to it", diff(link("shop_a", "ph_village26_06")),
     ref=[act("add_to", rows="$ph_village26_06", args="to: $shop_a")]))
-
-S("T34-006", "debts relation date person-decoy settle_debt balance",
-  T("which of my brother chidi's debts are from last year", rows("debt_29", "debt_36"),
-    ref=[ans(kind="debt", linked_to="$chidi_o", when=W(U("year", -1)))]),
-  T("the one he owes me", rows("debt_36"),
-    ref=[ans(within="@prev", where="direction = owes_me")]),
-  T("settle that one, he paid me cash", diff(upd("debt_36", status="settled")),
-    ref=[act("settle_debt", rows="$debt_36")]),
-  T("what's his balance now", val((51766.65, "NGN"), (-20, "GBP")),
-    ref=[ans(op="balance", kind="person", rows="$chidi_o")]))
 
 S("T34-007", "ambiguous-write ask date-pick still-on substitution",
   T("cancel the bible study", ask("bs_270623", "bs_270707", "bs_270721"),
@@ -136,16 +114,6 @@ S("T34-012", "documents series star unstar add_to",
   T("put the 2024 company tax return in the taxes folder", diff(link("taxes_f", "doc_13")),
     ref=[act("add_to", rows="$doc_13", args="to: $taxes_f")]))
 
-S("T34-013", "group-balance member-refusal settle_up",
-  T("where do i stand in the residents group", val((230297.58, "NGN")),
-    ref=[ans(op="balance", kind="group", name="residents", linked_to="$me")]),
-  T("and the diesel pool", val((13761.84, "NGN")),
-    ref=[ans(op="balance", kind="group", name="diesel pool", linked_to="$me")]),
-  T("take obiora yakubu out of the diesel pool", ask("obiora_yakubu", "diesel_pool"),
-    ref=[act("remove_from", kind="person", name="Obiora Yakubu", args="from: $diesel_pool")]),
-  T("ok settle up with him in there first", diff(settle=[("Obiora Yakubu", "60666.68")]),
-    ref=[act("settle_up", rows="$obiora_yakubu", args="group: $diesel_pool")]))
-
 S("T34-014", "series open overdue complete count-year",
   T("which nepa payments are still open", rows("nepa_250117", "nepa_270212", "nepa_270702"),
     ref=[ans(kind="task", name="Pay NEPA", where="status = open")]),
@@ -179,16 +147,6 @@ S("T34-016", "two-writes undo redo-one",
     ref=[act("undo")]),
   T("just the diesel one, the salaries aren't paid yet", diff(upd("dsl_270622", status="completed", completed=ANY)),
     ref=[act("complete", rows="$dsl_270622")]))
-
-S("T34-017", "create-clash ask create wrong-container decline day",
-  T("put a meeting with chinwe on monday at half seven", ask("sd_270621"),
-    ref=[act("create", kind="event", args=lines(name="Meeting with Chinwe", date=D("2027-06-21", "07:30")))]),
-  T("make it ten then", diff(new("event", name=has("chinwe"), date="2027-06-21T10:00")),
-    ref=[act("create", kind="event", args=lines(name="Meeting with Chinwe", date=D("2027-06-21", "10:00")))]),
-  T("and add chinwe to it", decline("out_of_scope"),
-    ref=[act("add_to", rows="$chinwe", args="to: $c1")]),
-  T("what's on monday now", rows("sd_270621", "+1"),
-    ref=[ans(kind="event", when=W(U("week", 1, weekday=1)))]))
 
 S("T34-018", "model-ask create note add_to body-contains",
   T("add a note", ask(),
@@ -244,14 +202,6 @@ S("T34-023", "search-role log relation-name",
     ref=[act("log", rows="$chinwe", args="kind: call")]),
   T("which meetings did we have about tax", rows("oo_004", "oo_066", "oo_077", "oo_080", "oo_083"),
     ref=[ans(kind="event", name="tax", linked_to="$chinwe")]))
-
-S("T34-024", "debt superlative sum direction",
-  T("which debt owed to me is the smallest", rows("debt_39"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open", order="amount asc", limit=1)]),
-  T("and the largest i owe", rows("debt_38"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1)]),
-  T("how much do i owe altogether", val((527100, "NGN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]))
 
 S("T34-025", "decline-unbounded bulk-ask bounded",
   T("delete all my tasks", decline("unbounded_destruction"),
@@ -335,17 +285,3 @@ S("T34-036", "trashed-tasks restore-two window add_to-move",
     ref=[act("restore", rows="$t_014")]),
   T("put the insurance one in the money list", diff(link("money", "t_009"), unlink("health_l", "t_009")),
     ref=[act("add_to", rows="$t_009", args="to: $money")]))
-
-S("T34-035", "long relation within create-two list-date reschedule-new",
-  T("who's coming to the shop anniversary", rows("daddy", "emeka_n", "chinwe", "musa", "chidi_a"),
-    ref=[ans(kind="person", linked_to="$shop_anniv")]),
-  T("which of them are in the staff group", rows("emeka_n", "musa", "chinwe"),
-    ref=[ans(within="@prev", linked_to="$staff")]),
-  T("add a task to order the cake, due the 28th", diff(new("task", name=has("cake"), date="2027-06-28")),
-    ref=[act("create", kind="task", args=lines(name="order the cake", date=D("2027-06-28")))]),
-  T("and one to confirm the caterers by friday", diff(new("task", name=has("caterers"), date="2027-06-25")),
-    ref=[act("create", kind="task", args=lines(name="confirm the caterers", date=U("week", 1, weekday=5)))]),
-  T("what's due on the business list before the anniversary", rows("cem_270620", "sal_270625"),
-    ref=[ans(kind="task", linked_to="$business_l", where="status = open", when=W(span(U("day", 0), D("2027-07-02"))))]),
-  T("push the cake one to the 30th", diff(upd("+1", date="2027-06-30")),
-    ref=[act("reschedule", rows="$c1", args=lines(to=D("2027-06-30")))]))

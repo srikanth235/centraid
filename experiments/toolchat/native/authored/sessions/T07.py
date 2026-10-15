@@ -19,13 +19,6 @@ S("T07-001", "events tomorrow edit description span count",
   T("how many rehearsals are left from 7 tonight on", val(7),
     ref=[ans(op="count", kind="event", name="Choir rehearsal", when=W({"from": U("day", 0, time="19:00")}))]))
 
-S("T07-002", "balance two rosas repair ask",
-  T("how much do i owe rosa", ask("rosa_m", "rosa_c"),
-    ref=[bad(ans(op="balance", kind="person", name="Rosa")),
-         askc("rosa mamani from the coop or rosa condori from the choir?", options="$rosa_m, $rosa_c")]),
-  T("the choir one", val((50, "PEN")),
-    ref=[ans(op="balance", rows="$rosa_c")]))
-
 S("T07-003", "tasks priority edit prev",
   T("what's urgent, priority one or 2", rows("fung_1", "seed_pay", "rent_mar", "scout_report", "expo_samples", "sunat", "vale_fees", "insurance"),
     ref=[ans(kind="task", where='priority <= 2 and status = "open"')]),
@@ -46,14 +39,6 @@ S("T07-004", "note ambiguous seed order ask pick",
 S("T07-005", "single wifi reveal where",
   T("show me the wifi password, the plumber wants it", diff(reveal=[("wifi", "chacra-huasao-58")]),
     ref=[act("reveal", kind="locker item", where='type = "wifi"', args=lines(field="password"))]))
-
-S("T07-008", "choir remove_from where soprano balance",
-  T("carmen's leaving the choir group, take her out", diff(unlink("choir_g", "carmen")),
-    ref=[act("remove_from", kind="person", name="carmen", linked_to="$choir_g", args=lines(from_="$choir_g"))]),
-  T("who's left in it", rows("rosa_c", "lucia", "jaime", "alfredo", "me"),
-    ref=[ans(kind="person", linked_to="$choir_g")]),
-  T("where does lucia stand in there", val((-10, "PEN")),
-    ref=[ans(op="balance", kind="group", name="San Blas choir", linked_to="$lucia")]))
 
 S("T07-009", "photos album count unstar named",
   T("which photos are in more than one album", rows("h_huayro", "h_pachamanca", "h_vale", "c_xmas", "e_ribbon"),
@@ -151,16 +136,6 @@ S("T07-020", "open row agrobanco meeting",
   T("note on it: bring the loan folder and the land title", diff(upd("agro_0319", description="bring the loan folder and the land title")),
     ref=[act("edit", rows="$agro_0319", args=lines(description="bring the loan folder and the land title"))]))
 
-S("T07-021", "debts direction amount compute max",
-  T("who do i owe", rows("d_wilber", "d_carla", "d_efrain", "d_sonia", "d_lucia", "d_hugo"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("the small ones, under 50 soles", rows("d_wilber", "d_lucia"),
-    ref=[ans(kind="debt", within="@prev", where="amount < 50 PEN")]),
-  T("what's the biggest i owe", val((350, "PEN")),
-    ref=[ans(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("and total", val((645, "PEN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
-
 S("T07-022", "list where edit empty result recovery",
   T("could you rename the church list to Coro San Blas", diff(upd("choir_l", name="Coro San Blas")),
     ref=[find(kind="list", name="church"),
@@ -174,18 +149,3 @@ S("T07-023", "event overlap repair reschedule",
          askc("next wednesday 7pm clashes with choir rehearsal. another time?")]),
   T("ok thursday at 4", diff(new("event", name="Call with Hugo", date="2026-03-19T16:00")),
     ref=[act("create", args=lines(kind="event", name="Call with Hugo", date=U("week", 1, weekday=4, time="16:00")))]))
-
-S("T07-024", "group person count delete empty group",
-  T("which groups have two people or fewer", rows("family_g", "quito_g", "pisac_g", "raffle_g"),
-    ref=[ans(kind="group", where="person count <= 3")]),
-  T("delete the raffle fund one, we never used it", diff(gone("raffle_g"), unlink("raffle_g", "carmen"), unlink("raffle_g", "jaime"),
-                                                         unlink("raffle_g", "me")),
-    ref=[act("delete", rows="$raffle_g")]),
-  T("and the coop group while you're at it", decline("unbounded_destruction", "not_found"),
-    ref=[bad(act("delete", rows="$coop_g")), dec("unbounded_destruction")]))
-
-S("T07-025", "people group count task count",
-  T("who's in two or more of my groups", rows("teodoro", "nilda", "fortunata", "carmen", "jaime"),
-    ref=[find(kind="person", where="group count >= 2"), ans(within="@prev", exclude="$me")]),
-  T("and who has at least two tasks tied to them", rows("valeria", "hugo", "teodoro", "efrain"),
-    ref=[ans(kind="person", where="task count >= 2")]))

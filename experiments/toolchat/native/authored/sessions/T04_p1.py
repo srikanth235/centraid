@@ -55,20 +55,6 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 
-S("T04-028-P", "group ambiguous find delete multi linked_to all para",
-  T("we're on splitwise, so the house group is redundant: wipe it", ask("house", "house_party"),
-    ref=[find(kind="group", name="House"),
-         act("delete", kind="group", within="@prev"),
-         askc("house bills or house party?", options="$house, $house_party")]),
-  T("the house party one, plus secret santa",
-    diff(gone("house_party"), gone("santa"),
-         unlink("house_party", "chloe"), unlink("house_party", "tom"), unlink("house_party", "leah"),
-         unlink("house_party", "ravi"), unlink("house_party", "me"),
-         unlink("santa", "chloe"), unlink("santa", "tom"), unlink("santa", "leah"), unlink("santa", "me")),
-    ref=[act("delete", rows="$house_party, $santa")]),
-  T("groups containing chloe and tom both", rows("house"),
-    ref=[ans(kind="group", linked_to="$chloe, $tom")]))
-
 S("T04-034-P", "folders document count delete prev undo create add_to para",
   T("folders holding more than three documents", rows("wed_f", "work_f"),
     ref=[ans(kind="folder", where="document count > 3")]),
@@ -169,17 +155,6 @@ S("T04-078-P", "find trashed task restore prev reschedule para",
   T("make the asos parcel return due this saturday", diff(upd("return_parcel", date="2026-10-17")),
     ref=[act("reschedule", rows="$return_parcel", args=lines(to=U("week", 0, weekday=6)))]))
 
-S("T04-084-P", "person time point named month span group count edit prev para",
-  T("last night at half 9, who was i messaging", rows("zainab"),
-    ref=[ans(kind="person", when=W(U("day", -1, time="21:30")))]),
-  T("talked to from september up to the fifth of october, who",
-    rows("dad", "imran", "fatima_k", "sana", "hughes", "leah", "owen"),
-    ref=[ans(kind="person", when=W({"from": U("month", 0, name=9), "to": D("2026-10-05")}))]),
-  T("those not belonging to any group", rows("dad", "fatima_k", "hughes"),
-    ref=[ans(kind="person", within="@prev", where="group count < 1")]),
-  T("set a three week catch up for all three of them", diff(upd("dad", cadence=21), upd("fatima_k", cadence=21), upd("hughes", cadence=21)),
-    ref=[act("edit", rows="@prev", args=lines(cadence=21))]))
-
 S("T04-088-P", "events count date time span description in edit where para",
   T("count of events between 7pm tomorrow and the end of next week", val(14),
     ref=[ans(op="count", kind="event", when=W({"from": U("day", 1, time="19:00"), "to": U("week", 1)}))]),
@@ -230,8 +205,6 @@ def W(expr):
 
 OPEN = 'status = "open"'
 
-OWED = 'direction = "owes_me" and status = "open"'
-
 S("T04-B003-P", "c3b superlative task effort latest due count para",
   T("which open task needs the most effort", rows("als_prep"),
     ref=[ans(kind="task", where=OPEN, order="effort desc", limit=1)]),
@@ -261,14 +234,6 @@ S("T04-103-P", "ask options star certificate documents unstar para",
   T("deposit's paid, so oakwood hall contract loses its star", diff(upd("venue_contract", starred=False)),
     ref=[act("unstar", kind="document", name="Oakwood Hall contract")]))
 
-S("T04-107-P", "balance negative james owen abbu nickname search para",
-  T("is there anything i owe james", val((-15.5, "GBP")),
-    ref=[ans(op="balance", rows="$james")]),
-  T("what about owen", val((-9, "GBP")),
-    ref=[ans(op="balance", rows="$owen")]),
-  T("and abbu, how do i stand there", val((-500, "GBP")),
-    ref=[search("abbu"), ans(op="balance", rows="$dad")]))
-
 S("T04-112-P", "ask options reveal card number then cvv para",
   T("tell me my card number", ask("monzo", "amex"),
     ref=[act("reveal", kind="locker item", name="card", args=lines(field="card_number")),
@@ -296,13 +261,3 @@ S("T04-118-P", "decline oos email fabricated pin then log para",
   T("ammi rang while i was in the shower, count that as a call too", diff(upd("mum", date=ANY)),
     ref=[act("log", kind="person", name="Ammi", args=lines(kind="call")), search("ammi"),
          act("log", rows="$mum", args=lines(kind="call"))]))
-
-S("T04-122-P", "balance positive hamza imran leah compute para",
-  T("hamza's debt to me?", val((575, "GBP")),
-    ref=[ans(op="balance", rows="$hamza")]),
-  T("imran?", val((275, "GBP")),
-    ref=[ans(op="balance", rows="$imran")]),
-  T("leah's balance with me", val((32, "GBP")),
-    ref=[comp(op="balance", rows="$leah"), ans(value="@prev")]),
-  T("leah always pays me back, so she gets a star", diff(upd("leah", starred=True)),
-    ref=[act("star", kind="person", name="Leah")]))

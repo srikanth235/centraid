@@ -22,19 +22,6 @@ S("T05-051", "temple meeting next attendees ambiguous pick edit complete",
   T("tick off hand over receipts to revathi, gave them yesterday", diff(upd("receipts", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Hand over receipts to Revathi")]))
 
-S("T05-052", "person ambiguity balance settle undo ledger",
-  T("how much does divya owe me", ask("divya_s", "divya_k"),
-    ref=[bad(ans(op="balance", kind="person", name="Divya")),
-         askc("divya srinivasan or divya krishnan?", options="$divya_s, $divya_k")]),
-  T("krishnan", val((433.32, "INR")),
-    ref=[ans(op="balance", rows="$divya_k")]),
-  T("she paid for the movie tickets", diff(upd("d_divya_k", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Movie tickets")]),
-  T("how much is owed to me in total", val((5400, "INR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("when's our next movie", rows("movie"),
-    ref=[ans(kind="event", name="Movie with Divya")]))
-
 S("T05-053", "surgery list tasks multi create reschedule",
   T("what's left on amma's surgery list", rows("reports", "insurance_claim", "eye_drops", "ride", "fasting"),
     ref=[ans(kind="task", linked_to="$surgerylist", where='status = "open"')]),
@@ -67,27 +54,6 @@ S("T05-055", "photos album linked all star prev delete multi",
     ref=[search("paati", kind="person"), ans(kind="photo", linked_to="$pongal_al, $paati", where="starred = no")]),
   T("star that one then", diff(upd("kolam_pic", starred=True)),
     ref=[act("star", rows="@prev")]))
-
-S("T05-056", "compute max min debts",
-  T("what's the most i owe any one person", val((15000, "INR")),
-    ref=[comp(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"'), ans(value="@prev")]),
-  T("smallest one i owe?", val((250, "INR")),
-    ref=[comp(op="min", field="amount", kind="debt", where='direction = "i_owe" and status = "open"'), ans(value="@prev")]),
-  T("which one is that", rows("d_jaya"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"', order="amount asc", limit=1)]))
-
-S("T05-057", "delete group refused members balance delete empty group",
-  T("delete the dubai trip group, trip's postponed", ask(),
-    ref=[bad(act("delete", kind="group", name="Dubai trip")),
-         askc("the dubai trip group still has expenses in it, so it can't be deleted. settle up first or keep it?")]),
-  T("keep it. who's in it", rows("karthik", "harish", "anand", "me"),
-    ref=[ans(kind="person", linked_to="$dubai_g")]),
-  T("where do i stand in it", val((450, "AED")),
-    ref=[comp(op="balance", kind="group", name="Dubai trip", linked_to="$me"), ans(value="@prev")]),
-  T("delete the farhan farewell gift group though, we're doing cash", diff(gone("farewell_g"), unlink("farewell_g", "me")),
-    ref=[act("delete", kind="group", name="Farhan farewell gift")]),
-  T("how many groups have i got", val(5),
-    ref=[ans(op="count", kind="group")]))
 
 S("T05-058", "delete folder refused move docs delete",
   T("delete the insurance folder", ask(),
@@ -133,20 +99,6 @@ S("T05-062", "note restore multi undo restore",
   T("what's in recipes then", rows("vathal", "pongal_r", "rasam"),
     ref=[ans(kind="note", linked_to="$recipes_nb")]))
 
-S("T05-063", "cricket next attendees debt settle prev",
-  T("next cricket night?", rows("cric_0125"),
-    ref=[ans(kind="event", name="Cricket night at Vicky's", when=W({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("who's coming to the cricket night at vicky's", rows("vignesh", "suresh", "divya_k"),
-    ref=[ans(kind="person", linked_to="$cric_0125")]),
-  T("does suri owe me for the bet", rows("d_suresh"),
-    ref=[find(kind="debt", linked_to="$suresh", where='status = "open"'), ans(rows="@prev")]),
-  T("he paid up, mark it", diff(upd("d_suresh", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]),
-  T("tmrw's tasks?", rows("water_can", "projector", "reports"),
-    ref=[ans(kind="task", when=W(U("day", 1)))]),
-  T("push the projector one to saturday, vicky's out of town", diff(upd("projector", date="2026-01-24")),
-    ref=[act("reschedule", kind="task", name="Return the projector", args=lines(to=U("week", 0, weekday=6)))]))
-
 S("T05-064", "star document named",
   T("star the property tax receipt 2025", diff(upd("tax_receipt", starred=True)),
     ref=[act("star", kind="document", name="Property tax receipt 2025")]),
@@ -186,23 +138,6 @@ S("T05-068", "person create edit new",
     ref=[ans(kind="person", where='met contains "Sankara"', exclude="$c1")]),
   T("and who's amma's ophthalmologist", rows("rao_doc"),
     ref=[find(kind="person", where='role contains "ophthalmologist"'), ans(rows="@prev")]))
-
-S("T05-069", "add_to person multi group count",
-  T("add karthik raman and venkatesh raman to the temple committee fund", diff(link("temple_g", "karthik"), link("temple_g", "appa")),
-    ref=[act("add_to", rows="$karthik, $appa", args=lines(to="$temple_g"))]),
-  T("how many in that group", val(5),
-    ref=[ans(op="count", kind="person", linked_to="$temple_g")]))
-
-S("T05-070", "remove_from where refused remove group balance",
-  T("who's in the dubai trip group", rows("karthik", "harish", "anand", "me"),
-    ref=[ans(kind="person", linked_to="$dubai_g")]),
-  T("take out the bengaluru cousin, he's not coming", diff(unlink("dubai_g", "anand")),
-    ref=[act("remove_from", kind="person", where='role contains "Bengaluru"', args=lines(from_="$dubai_g"))]),
-  T("harish as well", ask(),
-    ref=[bad(act("remove_from", rows="$harish", args=lines(from_="$dubai_g"))),
-         askc("harish still has an unsettled balance in the dubai trip group, so he can't be removed yet. settle up with him first?")]),
-  T("leave him then. what's his balance there", val((-300, "AED")),
-    ref=[ans(op="balance", kind="group", name="Dubai trip", linked_to="$harish")]))
 
 S("T05-071", "tasks today empty tomorrow edit named add_to prev",
   T("anything on my plate today", rows(),

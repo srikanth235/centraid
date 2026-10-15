@@ -17,12 +17,6 @@ S("T33-091", "container-link whats-left theme-word-is-list-name within effort co
   T("tick off the hallway bulbs, got them yesterday", diff(upd("h_bulbs", status="completed", completed=ANY)),
     ref=[act("complete", rows="$h_bulbs")]))
 
-S("T33-092", "container-link owner-row groups-im-in person-groups",
-  T("how many groups am i in", val(6),
-    ref=[ans(op="count", kind="group", linked_to="$me")]),
-  T("and which of them is mei in", rows("penang", "household", "okaasan_gift"),
-    ref=[ans(kind="group", linked_to="$mei")]))
-
 S("T33-093", "container-link person-appointments within-person",
   T("what's on for kenji next week", rows("ped_a", "vaccine", "swim_1219", "sprouts_concert"),
     ref=[ans(kind="event", linked_to="$kenji", when=J(U("week", 1)))]),
@@ -67,15 +61,6 @@ S("T33-097", "stray-conditions by-name-writes inert-purpose-clause complete resc
   T("and unstar the home wifi, it's in the book now", diff(upd("home_wifi", starred=ANY)),
     ref=[act("unstar", kind="locker item", name="home wifi")]))
 
-S("T33-098", "stray-conditions noun-looks-like-direction noun-looks-like-role repair-field",
-  T("any open tasks about the refund", rows("pay_david"),
-    ref=[bad(ans(kind="task", name="refund", where="direction = owes_me and status = open")),
-         ans(kind="task", name="refund", where="status = open")]),
-  T("which debts are for the teacher gift", rows("d_sarah"),
-    ref=[ans(kind="debt", name="teacher gift")]),
-  T("and who's the helper", rows("rina"),
-    ref=[ans(kind="person", where='role = "helper"')]))
-
 S("T33-099", "stray-conditions description-contains photo-name notebook-via-note",
   T("which swim classes this month say to bring the blue towel", rows("swim_1212"),
     ref=[ans(kind="event", name="toddler swim", where='description contains "blue towel"', when=J(U("month", 0)))]),
@@ -84,12 +69,6 @@ S("T33-099", "stray-conditions description-contains photo-name notebook-via-note
   T("which notebook has the note about the roof", rows("condo_nb"),
     ref=[find(kind="note", where='body contains "roof"'),
          ans(kind="notebook", linked_to="@prev")]))
-
-S("T33-100", "stray-conditions count sum inert-purpose-clause",
-  T("how many open tasks are left on the money list, i want to clear them before we fly", val(6),
-    ref=[ans(op="count", kind="task", linked_to="$money_l", where="status = open")]),
-  T("and what's the total i still owe, so i know what to put aside", val((779, "SGD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]))
 
 # --- date-window-reads: spans and counts with a date phrase ------------------------------------------------------------------
 
@@ -162,11 +141,6 @@ S("T33-107", "mixed note-body-append open-then-edit",
     ref=[opn("$penang_ideas"),
          act("edit", rows="$penang_ideas",
              args="body: char kway teow at Lorong Selamat, cendol on Penang Road, Ma's nasi kandar, ABC at Kek Seng, laksa at the market")]))
-
-S("T33-108", "mixed settle_up amount person group",
-  T("kim sent me 40 for the hotpot, settle that in the dinner club",
-    diff(upd("kim", balance=ANY), settle=[("Kim", "40.00")]),
-    ref=[act("settle_up", rows="$kim", args="group: $dinner\namount: 40")]))
 
 S("T33-109", "mixed kind-word-decides photos documents tasks same-topic",
   T("any nursery photos", rows("p_form"),

@@ -24,31 +24,6 @@ S("T32-023", "bulk reschedule filter list date within write-then-count",
     ref=[act("complete", rows="$yeast, $mu_sugar", more=True),
          ans(op="count", kind="task", linked_to="$bakery_l", where="status = open", when=W(U("week", 0, weekday=5)))]))
 
-S("T32-024", "superlative order-limit debts settle_debt effort-sum",
-  T("longest open job on the wedding list", rows("w_cake"),
-    ref=[ans(kind="task", linked_to="$wedding_l", where="status = open", order="effort desc", limit=1)]),
-  T("and the biggest debt i still owe", rows("d_teodoro"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1)]),
-  T("and the oldest one i owe", rows("d_maria_roof"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="date asc", limit=1)]),
-  T("paid maria for the roof, settle it", diff(upd("d_maria_roof", status="settled")),
-    ref=[act("settle_debt", rows="$d_maria_roof")]),
-  T("how many minutes of work are left on the bakery list this week", val(285),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$bakery_l", where="status = open", when=W(U("week", 0)))]),
-  T("bump the longest open wedding job to 200 minutes", diff(upd("w_cake", effort=200)),
-    ref=[act("edit", kind="task", linked_to="$wedding_l", where="status = open", order="effort desc", limit=1,
-             args="effort: 200")]))
-
-S("T32-025", "balance person-role group-narrow settle_up-and-remove",
-  T("where am i with my sister maria", val((-2477.5, "MXN")),
-    ref=[ans(op="balance", kind="person", name="Maria", where='role = "sister"')]),
-  T("just the familia group", val((1237.5, "MXN")),
-    ref=[ans(op="balance", kind="group", name="Familia Delgado Ortiz", linked_to="$maria_o")]),
-  T("settle up with her there and then take her out of the group",
-    diff(upd("maria_o", balance=ANY), unlink("familia", "maria_o"), settle=[("Maria Ortiz", "1237.50")]),
-    ref=[act("settle_up", rows="$maria_o", args="group: $familia", more=True),
-         act("remove_from", rows="$maria_o", args="from: $familia")]))
-
 S("T32-026", "events linked status when week cancel",
   T("what's on with dani between now and sunday, not cancelled", rows("dani_arrives", "calldani_1101"),
     ref=[ans(kind="event", linked_to="$dani", where="status != cancelled", when=W(span(U("day", 0), U("week", 0, weekday=7))))]),
@@ -88,18 +63,6 @@ S("T32-029", "ambiguous star ask pick role find-then-star",
   T("and the other hernandez from the choir", diff(upd("lupita", starred=True)),
     ref=[find(kind="person", name="Hernandez", where='role contains "choir"'),
          act("star", rows="@prev")]))
-
-S("T32-030", "remove_from refused balance ask then debt settle write-then-read",
-  T("take emi out of the familia group", ask("emi", "familia"),
-    ref=[act("remove_from", kind="person", name="Emi", args="from: $familia")]),
-  T("where am i with him", val((562.5, "MXN")),
-    ref=[ans(op="balance", rows="$emi")]),
-  T("does he owe me anything still open", rows("d_emi"),
-    ref=[ans(kind="debt", linked_to="$emi", where="direction = owes_me and status = open")]),
-  T("he paid me in cash this morning, so settle it and show me what's still owed to me",
-    rows("d_maria_med", "d_dani", "d_rodrigo", "d_flor", "d_omar", also=diff(upd("d_emi", status="settled"))),
-    ref=[act("settle_debt", kind="debt", linked_to="$emi", where="status = open", more=True),
-         ans(kind="debt", where="direction = owes_me and status = open")]))
 
 S("T32-031", "create clash ask then create empty-search",
   T("add dinner with maria thursday at 8", ask("coro_1029"),
@@ -155,17 +118,6 @@ S("T32-036", "person create-and-star cadence",
          act("star", rows="$new")]),
   T("talk to him every 30 days", diff(upd("+1", cadence=30)),
     ref=[act("edit", rows="$c1", args="cadence: 30")]))
-
-S("T32-037", "misspelled two-logs balance usd-group where-when",
-  T("rang gabriella just now and had coffee with don memo this morning, log them",
-    diff(upd("gaby", date=ANY), upd("memo", date=ANY)),
-    ref=[act("log", kind="person", name="Gabriella", args="kind: call", more=True),
-         act("log", rows="$memo", args="kind: coffee")]),
-  T("where am i with her", val((-30, "USD")),
-    ref=[ans(op="balance", rows="$gaby")]),
-  T("starred people i spoke to this week with cadence under 4 days",
-    rows("emi", "dani", "carmen", "beto"),
-    ref=[ans(kind="person", where="starred = yes and cadence <= 3", when=W(U("week", 0)))]))
 
 S("T32-038", "note create notebook move delete-notebook write-then-read",
   T("new note in the ideas notebook, try a pan de elote for the posadas",

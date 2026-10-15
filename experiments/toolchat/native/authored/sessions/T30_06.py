@@ -8,23 +8,6 @@ def J(d):
     return json.dumps(d, separators=(",", ":"))
 
 
-S("T30-114", "ask-content debt create balance documents find-act star unstar name when count where",
-  T("i owe mat for the movie", ask(),
-    ref=[askc("How much did you owe Mat for the movie?")]),
-  T("eighteen dollars", diff(new("debt", name=has("movie"), amount=18, direction="i_owe"), link("new", "mathieu")),
-    ref=[act("create", args="kind: debt\nname: movie\namount: 18\ndirection: i_owe\nperson: $mathieu")]),
-  T("so what's my overall balance with mat after the movie", val((115.33, "CAD"), (635, "EUR"), (-292.5, "USD")),
-    ref=[ans(op="balance", kind="person", name="Mat")]),
-  T("star every report card from 2025 and 2026", diff(upd("doc_35", starred=True), upd("doc_33", starred=True), upd("doc_59", starred=True),
-                                                     upd("doc_34", starred=True), upd("doc_60", starred=True)),
-    ref=[find(kind="document", name="report card", when=J(span(D("2025-01-01"), D("2026-12-31")))),
-         act("star", rows="@prev")]),
-  T("unstar the ones for émile", diff(upd("doc_34", starred=False), upd("doc_60", starred=False)),
-    ref=[find(kind="document", name="report card Émile", where="starred = yes"),
-         act("unstar", rows="@prev")]),
-  T("how many report cards are starred now", val(3),
-    ref=[ans(op="count", kind="document", name="report card", where="starred = yes")]))
-
 S("T30-115", "repair cadence-unit where edit log person tasks count where when complete within",
   T("which people am i supposed to see every two weeks", rows("mamie", "papa"),
     ref=[bad(ans(kind="person", where="cadence = 2 weeks")),
@@ -66,16 +49,6 @@ S("T30-118", "ask-referent star ambiguous-ask date-select document",
     ref=[act("star", kind="document", name="notice of assessment")]),
   T("the one from last year", diff(upd("doc_54", starred=True)),
     ref=[act("star", kind="document", name="notice of assessment", when=J(U("year", -1)))]))
-
-S("T30-119", "find-act settle_debt linked where when span balance",
-  T("lucie's debts from 2024 and 2025 are all paid, the ones she owes me",
-    diff(upd("debt_10", status="settled"), upd("debt_04", status="settled"), upd("debt_16", status="settled")),
-    ref=[find(kind="debt", linked_to="$lucie_boucher", where="direction = owes_me and status = open", when=J(span(D("2024-01-01"), D("2025-12-31")))),
-         act("settle_debt", rows="@prev")]),
-  T("which debts does she still owe me after that", rows("debt_28", "debt_34", "debt_40"),
-    ref=[ans(kind="debt", linked_to="$lucie_boucher", where="direction = owes_me and status = open")]),
-  T("and where do we stand overall, lucie and me", val((258, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Lucie Boucher")]))
 
 S("T30-120", "tasks repair effort-unit where when complete name",
   T("open tasks this month that take under an hour", rows("t_078", "wat_270220", "t_099", "t_106", "opus_270228"),

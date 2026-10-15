@@ -10,8 +10,6 @@ def W(expr):
 
 
 OPEN = 'status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-
 S("T22-B001", "c3b superlative event next three padel matches count",
   T("next 3 padel matches", rows("padel_0714", "padel_0721", "padel_0728", order=True),
     ref=[ans(kind="event", name="Padel league match", when=W({"from": U("day", 0)}), order="date asc", limit=3)]),
@@ -31,12 +29,6 @@ S("T22-B005", "c4b state-change cancel event restore trashed task",
     ref=[act("cancel", kind="event", name="Plumber")]),
   T("bring back the old bike one", diff(restore("bike")),
     ref=[act("restore", kind="task", name="old bike", trashed=True)]))
-
-S("T22-B006", "c4b state-change settle_debt log nickname",
-  T("erik paid me the court share", diff(upd("d_erik", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Court share")]),
-  T("rang pappa", diff(upd("lennart", date=ANY)),
-    ref=[search("pappa", kind="person"), act("log", rows="$lennart", args=lines(kind="call"))]))
 
 S("T22-B007", "c4b state-change complete catch up create contrast",
   T("booked the court", diff(upd("court_1", status="completed", completed=ANY)),

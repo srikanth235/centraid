@@ -85,7 +85,7 @@ class Ids:
         return self.by_id.get(vid, vid[:8])
 
 
-def diff_match(want: dict, got: dict, ids: Ids, settle: list | None = None) -> tuple[list[str], list[str]]:
+def diff_match(want: dict, got: dict, ids: Ids) -> tuple[list[str], list[str]]:
     """Compare a gold diff with a turn's net diff.
 
     Returns (problems, unwanted): problems fail the turn; unwanted are vault changes gold did
@@ -144,15 +144,6 @@ def diff_match(want: dict, got: dict, ids: Ids, settle: list | None = None) -> t
             for field in want_fields:
                 if field not in row["fields"]:
                     problems.append(f"{spec['key']}: field {field} unchanged")
-    # settle_up zeroes the pairwise balance: a person row whose only change is `balance` -> 0 is the
-    # settlement itself when gold settles with that person (the settle check below judges it)
-    settle_names = {s["name"] for s in settle or []}
-    for rid, row in got_rows.items():
-        if (rid not in matched and row["kind"] == "person" and set(row["fields"]) == {"balance"}
-                and ids.person_names.get(rid) in settle_names):
-            new = row["fields"]["balance"][1]
-            if isinstance(new, dict) and abs(float(new.get("amount") or 0)) < 0.005:
-                matched.add(rid)
     for rid, row in got_rows.items():
         if rid not in matched:
             label = ids.name(rid)
@@ -208,7 +199,7 @@ def value_list_match(want: list, got: list) -> bool:
 
 def judge_accept(accept: dict, eff: dict, ids: Ids) -> tuple[bool, list[str], list[str]]:
     """One acceptable gold effect against the turn effect -> (pass, problems, unwanted)."""
-    problems, unwanted = diff_match(accept.get("diff", {}), eff["diff"], ids, accept.get("settle"))
+    problems, unwanted = diff_match(accept.get("diff", {}), eff["diff"], ids)
     kind = accept["type"]
     got = eff["kind"]
     if kind == "rows":
@@ -240,11 +231,6 @@ def judge_accept(accept: dict, eff: dict, ids: Ids) -> tuple[bool, list[str], li
         for rev in accept.get("reveal", []):
             if not any(rev["contains"] in text for text in eff["revealed"]):
                 problems.append(f"secret of {rev['key']} not revealed")
-        for settle in accept.get("settle", []):
-            if not any(settle["name"] in text for text in eff["settle_texts"]):
-                problems.append(f"no settle_up for {settle['name']}")
-            elif settle.get("amount") and not any(settle["amount"] in t for t in eff["settle_texts"]):
-                problems.append(f"settle_up amount differs from {settle['amount']}")
     elif kind == "ask":
         if got != "ask":
             problems.append(f"ended in {got}, want ask")

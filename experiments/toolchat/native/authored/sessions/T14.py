@@ -27,37 +27,11 @@ S("T14-002", "single reschedule event named",
     ref=[act("reschedule", rows="$oil", args=lines(to=U("week", 1, weekday=4, time="10:30")), more=True),
          ans(kind="event", when=W(U("week", 1, weekday=4)))]))
 
-S("T14-003", "ambiguous person log ask",
-  T("log a call with rafael", ask("rafa_s", "rafa_m"),
-    ref=[act("log", kind="person", name="Rafael", args=lines(kind="call")),
-         askc("rafael souza from the car pool or rafael mendes the sound guy?", options="$rafa_s, $rafa_m")]),
-  T("car pool", diff(upd("rafa_s", date=ANY)),
-    ref=[act("log", rows="$rafa_s", args=lines(kind="call"))]),
-  T("how's the tab between me and him", val((115, "BRL")),
-    ref=[ans(op="balance", rows="$rafa_s")]))
-
 S("T14-004", "restore person where trashed events",
   T("put the wedding planner back in my contacts, she sent a gig lead", diff(restore("renata")),
     ref=[act("restore", kind="person", where='role contains "wedding"', trashed=True)]),
   T("what's her role say exactly", rows("renata"),
     ref=[ans(rows="$renata")]))
-
-S("T14-005", "refused group delete ask empty group delete",
-  T("delete the car pool rodízio group", ask(),
-    ref=[bad(act("delete", rows="$carpool")),
-         askc("it still has expenses in it, so the vault won't delete it. settle everyone up first?")]),
-  T("nah leave it. kill futebol de quinta instead, nobody pays in there",
-    diff(gone("futebol"), unlink("futebol", "thiago"), unlink("futebol", "wesley"), unlink("futebol", "me")),
-    ref=[act("delete", rows="$futebol")]),
-  T("how many groups have i got", val(5),
-    ref=[ans(op="count", kind="group")]))
-
-S("T14-006", "compute min debts group direction",
-  T("smallest open debt each way, what i owe vs what's owed to me",
-    vgroups({"owes_me": (40, "BRL"), "i_owe": (35, "BRL")}),
-    ref=[comp(op="min", field="amount", kind="debt", where='status = "open"', group="direction"), ans(value="@prev")]),
-  T("who's the 35 with", rows("d_wesley"),
-    ref=[ans(kind="debt", where='status = "open" and direction = "i_owe" and amount = 35 BRL')]))
 
 S("T14-008", "role contains cadence literal",
   T("who's in the car pool again, by role", rows("rafa_s", "junior"),
@@ -77,13 +51,6 @@ S("T14-010", "log person new create",
     ref=[act("create", args=lines(kind="person", name="Vitor Hugo", role="vinyl seller, Galeria do Rock"))]),
   T("and log a visit, i was at his stall today", diff(upd("+1", date=ANY)),
     ref=[act("log", rows="$c1", args=lines(kind="visit"))]))
-
-S("T14-011", "settle_up named balance",
-  T("where's juninho at in the car pool, up or down", val((510, "BRL")),
-    ref=[search("juninho", kind="person"),
-         ans(op="balance", kind="group", name="Car pool rodízio", linked_to="$junior")]),
-  T("settle up with edson lima júnior for the car pool", diff(settle=[("Edson Lima Júnior", "240.00")]),
-    ref=[act("settle_up", rows="$junior", args=lines(group="$carpool"))]))
 
 S("T14-012", "event create reschedule new overlap",
   T("book a b2b rehearsal with guga next friday at 3pm", diff(new("event", name=has("rehearsal"), date="2026-10-30T15:00")),

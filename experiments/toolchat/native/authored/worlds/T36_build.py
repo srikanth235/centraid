@@ -8,16 +8,15 @@ Persona: Dev Mehra, 33, a software engineer in Pune (the vault is his phone; his
 product designer, is in it as a person with a nickname and shares most of it). They married on Sunday
 2026-11-22 in Pune and are settling into a rented flat in Baner. Two sets of parents: his in Chandigarh
 (Papa and Mummy) and hers in Kothrud (Baba and Aai). The wedding was paid for by a handful of relatives
-and friends, so the group "Wedding Settle-Up" still carries unsettled balances. They share one Honda
-Activa scooter. The vault is in INR; the one foreign-currency position is the AED group "Dubai Trip"
-(a vault debt can only be in the vault's own currency).
+and friends. They share one Honda
+Activa scooter. The vault is in INR.
 
 Built-in ambiguity: two Rohans (Rohan Kulkarni, a friend; Rohan Mehra, "Bunty", his cousin) and two
 Priyas (Priya Deshpande, a colleague; Priya Sharma, Anjali's cousin), look-alike events (Dinner at Aai's
 vs Dinner at Mummy's, Doctor - Papa vs Doctor - Baba, Scooter service vs Scooter PUC), near-duplicate
 tasks (four Pay society maintenance, two thank-you tasks, address changes on Aadhaar and PAN),
 nicknames (Papa, Mummy, Aai, Baba, Anju, Bunty), hard-to-spell names (Vaishnavi Ghaisas, Chinmay
-Phadnis), cancelled events, completed and cancelled tasks, an empty group and an empty folder, and
+Phadnis), cancelled events, completed and cancelled tasks, an empty folder, and
 trashed rows of every trashable kind (one inside the 30-day restore window, one past it).
 """
 from __future__ import annotations
@@ -79,49 +78,6 @@ people = [
     {"key": "old_vendor", "name": "Rutuja Bhide", "role": "old wedding vendor", "trashed": "2026-11-27T10:00"},
 ]
 
-groups = [
-    {"key": "wedding", "name": "Wedding Settle-Up", "currency": "INR",
-     "members": ["vikram", "rohan_m", "sneha", "kunal", "baba"], "created": "2026-10-05T20:00"},
-    {"key": "flat", "name": "Baner Flat Bills", "currency": "INR", "members": ["anjali"],
-     "created": "2026-08-01T10:00"},
-    {"key": "mehra_fund", "name": "Mehra Parents Fund", "currency": "INR", "members": ["papa", "mummy", "rohan_m"],
-     "created": "2026-03-10T20:00"},
-    {"key": "joshi_fund", "name": "Joshi Parents Fund", "currency": "INR", "members": ["baba", "aai", "sneha"],
-     "created": "2026-11-10T20:00"},
-    {"key": "dubai", "name": "Dubai Trip", "currency": "AED", "members": ["arjun", "tarun", "rohan_k"],
-     "created": "2026-09-20T20:00"},
-    {"key": "honeymoon", "name": "Honeymoon Fund", "currency": "INR", "members": ["anjali", "shreya"],
-     "created": "2026-12-02T20:00"},  # empty on purpose: no expenses yet
-]
-
-expenses = [
-    {"group": "wedding", "name": "Venue advance", "amount": 150000, "paid_by": "baba",
-     "split": ["me", "baba", "vikram", "sneha"], "date": "2026-10-10"},
-    {"group": "wedding", "name": "Caterer advance", "amount": 120000, "paid_by": "vikram",
-     "split": ["me", "baba", "vikram", "rohan_m"], "date": "2026-10-18"},
-    {"group": "wedding", "name": "Decorator balance", "amount": 64000, "paid_by": "me",
-     "split": ["me", "baba", "vikram", "sneha", "rohan_m"], "date": "2026-11-20"},
-    {"group": "wedding", "name": "Photographer package", "amount": 90000, "paid_by": "rohan_m",
-     "split": ["me", "baba", "rohan_m"], "date": "2026-11-12"},
-    {"group": "wedding", "name": "Sangeet DJ and sound", "amount": 36000, "paid_by": "kunal",
-     "split": ["me", "kunal", "rohan_m", "sneha"], "date": "2026-11-21"},
-    {"group": "wedding", "name": "Return gifts", "amount": 18000, "paid_by": "sneha",
-     "split": ["me", "sneha", "vikram"], "date": "2026-11-18"},
-    {"group": "flat", "name": "Wifi December", "amount": 1180, "paid_by": "anjali", "split": ["me", "anjali"],
-     "date": "2026-12-02"},
-    {"group": "flat", "name": "Cooking gas", "amount": 1100, "paid_by": "me", "split": ["me", "anjali"],
-     "date": "2026-11-30"},
-    {"group": "mehra_fund", "name": "Papa's cataract surgery", "amount": 60000, "paid_by": "me",
-     "split": ["me", "papa", "rohan_m"], "date": "2026-07-14"},
-    {"group": "mehra_fund", "name": "Mummy's physio", "amount": 8400, "paid_by": "papa", "split": ["me", "papa"],
-     "date": "2026-10-02"},
-    {"group": "joshi_fund", "name": "Aai's fridge", "amount": 32000, "paid_by": "baba", "split": ["me", "baba", "sneha"],
-     "date": "2026-11-28"},
-    {"group": "dubai", "name": "Desert safari", "amount": 840, "paid_by": "arjun",
-     "split": ["me", "arjun", "tarun", "rohan_k"], "date": "2026-10-09"},
-    {"group": "dubai", "name": "Hotel two nights", "amount": 1560, "paid_by": "me",
-     "split": ["me", "arjun", "tarun", "rohan_k"], "date": "2026-10-08"},
-]
 
 lists = [
     {"key": "wedding_list", "name": "Wedding wrap-up", "area": "social"},
@@ -463,38 +419,6 @@ photos = [
      "trashed": "2026-10-20T09:00"},
 ]
 
-# ----------------------------------------------------------------------------------------------
-# debts
-# ----------------------------------------------------------------------------------------------
-
-debts = [
-    {"key": "d_vikram", "person": "vikram", "direction": "i_owe", "amount": 30000, "name": "caterer advance share",
-     "date": "2026-10-18"},
-    {"key": "d_baba", "person": "baba", "direction": "i_owe", "amount": 37500, "name": "venue advance share",
-     "date": "2026-10-10"},
-    {"key": "d_rohan_m", "person": "rohan_m", "direction": "i_owe", "amount": 30000, "name": "photographer share",
-     "date": "2026-11-12"},
-    {"key": "d_kunal", "person": "kunal", "direction": "i_owe", "amount": 9000, "name": "sangeet DJ share",
-     "date": "2026-11-21"},
-    {"key": "d_sneha", "person": "sneha", "direction": "owes_me", "amount": 6000, "name": "return gifts share",
-     "date": "2026-11-18"},
-    {"key": "d_papa", "person": "papa", "direction": "owes_me", "amount": 20000, "name": "cataract surgery share",
-     "date": "2026-07-14"},
-    {"key": "d_anjali", "person": "anjali", "direction": "i_owe", "amount": 590, "name": "wifi half",
-     "date": "2026-12-02"},
-    {"key": "d_rohan_k", "person": "rohan_k", "direction": "owes_me", "amount": 12000, "name": "Dubai hotel in rupees",
-     "date": "2026-10-08"},
-    {"key": "d_priya_d", "person": "priya_d", "direction": "owes_me", "amount": 850, "name": "team lunch",
-     "date": "2026-11-12"},
-    {"key": "d_siddharth", "person": "siddharth", "direction": "i_owe", "amount": 400, "name": "shuttlecocks",
-     "date": "2026-11-28"},
-    {"key": "d_ganesh", "person": "ganesh", "direction": "i_owe", "amount": 2350, "name": "scooter chain and tyre",
-     "date": "2026-09-07", "settled": "2026-09-09T10:00"},
-    {"key": "d_neha", "person": "neha", "direction": "owes_me", "amount": 1500, "name": "yoga workshop",
-     "date": "2026-08-22", "settled": "2026-09-01T10:00"},
-    {"key": "d_arjun", "person": "arjun", "direction": "owes_me", "amount": 3200, "name": "airport cab",
-     "date": "2026-10-08", "settled": "2026-10-20T10:00"},
-]
 
 # ----------------------------------------------------------------------------------------------
 # locker
@@ -565,9 +489,9 @@ links = [
 
 world = {
     "me": ME, "today": TODAY, "epoch": "2026-01-05T09:00", "seed": "T36", "currency": "INR",
-    "people": people, "groups": groups, "expenses": expenses, "lists": lists, "events": events,
+    "people": people, "lists": lists, "events": events,
     "tasks": tasks, "notebooks": notebooks, "notes": notes, "folders": folders, "documents": documents,
-    "albums": albums, "photos": photos, "debts": debts, "locker": locker, "links": links,
+    "albums": albums, "photos": photos, "locker": locker, "links": links,
 }
 
 
@@ -589,15 +513,6 @@ def check(w):
     def need(key, kind):
         assert keys.get(key) == kind, f"{key} is not a {kind}"
 
-    for g in w["groups"]:
-        [need(m, "people") for m in g["members"]]
-        assert len(set(g["members"])) == len(g["members"]), g["key"]
-    for e in w["expenses"]:
-        need(e["group"], "groups")
-        [need(m, "people") for m in e["split"]]
-        need(e["paid_by"], "people")
-        members = set(next(g["members"] for g in w["groups"] if g["key"] == e["group"])) | {"me"}
-        assert set(e["split"]) | {e["paid_by"]} <= members, f"expense outside its group: {e['name']}"
     for t in w["tasks"]:
         if "parent" in t:
             need(t["parent"], "tasks")
@@ -613,14 +528,12 @@ def check(w):
         [need(a, "albums") for a in p.get("albums", [])]
         [need(q, "people") for q in p.get("people", [])]
         assert len(set(p.get("albums", []))) == len(p.get("albums", [])), p["key"]
-    for d in w["debts"]:
-        need(d["person"], "people")
     for e in w["events"]:
         [need(a, "people") for a in e.get("attendees", [])]
     for ln in w["links"]:
         assert ln["from"] in keys and ln["to"] in keys, ln
-    names = [g["name"] for g in w["groups"]] + [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
-    assert len(names) == len(set(names)), "group/notebook/album names must be unique"
+    names = [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
+    assert len(names) == len(set(names)), "notebook/album names must be unique"
     assert len({p["name"] for p in w["people"]}) == len(w["people"]), "duplicate person names"
     spans = sorted((e["start"], e["end"], e["key"]) for e in w["events"])
     for (s1, e1, k1), (s2, e2, k2) in zip(spans, spans[1:]):
@@ -629,8 +542,8 @@ def check(w):
     assert w["me"] and w["today"]
     # size, per the brief's ordinary ranges
     n = {k: len(v) for k, v in w.items() if isinstance(v, list)}
-    for kind, lo, hi in [("people", 25, 35), ("groups", 4, 6), ("events", 50, 70), ("tasks", 50, 70), ("notes", 20, 30),
-                         ("documents", 15, 20), ("photos", 30, 40), ("debts", 10, 15), ("locker", 15, 20)]:
+    for kind, lo, hi in [("people", 25, 35), ("events", 50, 70), ("tasks", 50, 70), ("notes", 20, 30),
+                         ("documents", 15, 20), ("photos", 30, 40), ("locker", 15, 20)]:
         assert lo <= n[kind] <= hi, f"{kind}: {n[kind]} not in {lo}-{hi}"
     # trashed rows of every trashable kind, one inside the restore window and one past it
     for kind in ("people", "events", "tasks", "notes", "documents", "photos", "locker"):
@@ -643,7 +556,6 @@ def check(w):
     assert sum(1 for f in set(firsts) if firsts.count(f) >= 2) >= 2, "need two same-first-name pairs"
     assert any(e.get("cancelled") for e in w["events"])
     assert any(t.get("completed") for t in w["tasks"]) and any(t.get("status") == "cancelled" for t in w["tasks"])
-    assert any(not g["members"] or not [e for e in w["expenses"] if e["group"] == g["key"]] for g in w["groups"])
     assert any(f["key"] not in {d.get("folder") for d in w["documents"]} for f in w["folders"])
 
 

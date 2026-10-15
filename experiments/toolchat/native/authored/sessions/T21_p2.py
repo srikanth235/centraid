@@ -9,9 +9,6 @@ NOW = W({"from": U("day", 0)})
 TOMORROW = W({"from": U("day", 1)})
 THIS_WEEK = W(U("week", 0))
 THIS_MONTH = W(U("month", 0))
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-BIG2 = find(kind="debt", where=IOWE, order="amount desc", limit=2)
 NEXT3 = find(kind="event", when=NOW, order="date asc", limit=3)
 
 S("T21-119-P", "kevin naomi visit prev reschedule star para",

@@ -16,14 +16,6 @@ S("T07-001-P", "events tomorrow edit description span count para",
   T("rehearsals remaining from 7 tonight, count", val(7),
     ref=[ans(op="count", kind="event", name="Choir rehearsal", when=W({"from": U("day", 0, time="19:00")}))]))
 
-S("T07-008-P", "choir remove_from where soprano balance para",
-  T("remove carmen from the choir group, she's leaving", diff(unlink("choir_g", "carmen")),
-    ref=[act("remove_from", kind="person", name="carmen", linked_to="$choir_g", args=lines(from_="$choir_g"))]),
-  T("remaining members?", rows("rosa_c", "lucia", "jaime", "alfredo", "me"),
-    ref=[ans(kind="person", linked_to="$choir_g")]),
-  T("lucia's balance in the choir group?", val((-10, "PEN")),
-    ref=[ans(op="balance", kind="group", name="San Blas choir", linked_to="$lucia")]))
-
 S("T07-013-P", "task where reschedule linked para",
   T("tasks involving hugo?", rows("hugo_email", "trial_data"),
     ref=[ans(kind="task", linked_to="$hugo")]),
@@ -140,16 +132,6 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 
-S("T07-076-P", "people met within group count log task count para",
-  T("which contacts did i first meet at the coop assembly", rows("teodoro", "rosa_m", "efrain", "wilber"),
-    ref=[ans(kind="person", where='met = "Coop assembly"')]),
-  T("among them, those in at least two groups", rows("teodoro"),
-    ref=[ans(kind="person", within="@prev", where="group count >= 2")]),
-  T("teodoro apaza and i spoke, put that in the log as a call", diff(upd("teodoro", date=ANY)),
-    ref=[act("log", kind="person", name="Teodoro Apaza", args=lines(kind="call"))]),
-  T("people with at least two tasks tied to them", rows("valeria", "hugo", "teodoro", "efrain"),
-    ref=[ans(kind="person", where="task count >= 2")]))
-
 S("T07-081-P", "note remove_from where notebook count add_to named write read para",
   T("pinned note leaves the choir notebook", diff(unlink("choir_nb", "repertoire")),
     ref=[act("remove_from", kind="note", linked_to="$choir_nb", where="pinned = yes", args=lines(from_="$choir_nb"))]),
@@ -213,8 +195,6 @@ def W(expr):
 
 OPEN = 'status = "open"'
 
-OWED = 'direction = "owes_me" and status = "open"'
-
 S("T07-B004-P", "c4b state-change complete task create contrast para",
   T("water bill is paid", diff(upd("water_bill", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="water bill")]),
@@ -228,14 +208,6 @@ import json
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
-
-S("T07-102-P", "star treasurer where unstar balance prev para",
-  T("coop treasurer gets a star", diff(upd("rosa_m", starred=True)),
-    ref=[act("star", kind="person", where='role contains "treasurer"')]),
-  T("teodoro isn't really a favourite anymore, remove his star", diff(upd("teodoro", starred=False)),
-    ref=[act("unstar", kind="person", name="Teodoro")]),
-  T("her debt to me?", val((20, "PEN")),
-    ref=[ans(op="balance", rows="$rosa_m")]))
 
 S("T07-107-P", "bill task complete ask pick reopen long para",
   T("bill task is done", diff(upd("water_bill", status="completed", completed=ANY)),
@@ -278,11 +250,3 @@ S("T07-121-P", "gmail agrobanco reveal named not_found task para",
     ref=[find(kind="task", name="tractor rental"), search("tractor rental", kind="task"), dec("not_found")]),
   T("also need a task about looking for a tractor rental, friday", diff(new("task", name=has("tractor"), date="2026-03-13")),
     ref=[act("create", args=lines(kind="task", name="Look for a tractor rental", date=U("week", 0, weekday=5)))]))
-
-S("T07-126-P", "group balance coop efrain wilber para",
-  T("efrain's balance in the coop?", val((-200, "PEN")),
-    ref=[ans(op="balance", kind="group", name="coop", linked_to="$efrain")]),
-  T("wilber?", val((-400, "PEN")),
-    ref=[ans(op="balance", kind="group", name="coop", linked_to="$wilber")]),
-  T("efrain visited the plots this morning, log it as a visit", diff(upd("efrain", date=ANY)),
-    ref=[act("log", rows="$efrain", args=lines(kind="visit"))]))

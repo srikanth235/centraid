@@ -39,14 +39,6 @@ S("T37-068", "same-word read both two-events linked-to-all dinner-lookalikes glo
   T("and who's at both that and the parade", rows("aoife"),
     ref=[ans(kind="person", linked_to="$stpat_dinner, $stpat")]))
 
-S("T37-069", "same-word settle_debt complete debt-vs-task-vs-person possessor verb-decides",
-  T("paid padraig for the minibus, settle it", diff(upd("d_padraig", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="minibus", linked_to="$padraig")]),
-  T("and tick off the minibus booking, then what's left on the gaa list before the agm",
-    rows("gaa_sliotars", "gaa_report", also=diff(upd("gaa_minibus", status="completed", completed=ANY))),
-    ref=[act("complete", kind="task", name="minibus", more=True),
-         ans(kind="task", linked_to="$gaa_list", where="status = open", when=W({"to": D("2027-03-18")}))]))
-
 S("T37-070", "same-word star person mary sean nothing-decides-ask gloss topic role-lookup",
   T("star mary", ask("mary_k", "mary_o"),
     ref=[act("star", kind="person", name="mary")]),
@@ -110,17 +102,6 @@ S("T37-074", "create task-in-list note-in-notebook jot-down album then add_to-ne
     ref=[act("create", args="kind: album\nname: Silver Strand")]),
   T("put saoirse at silver strand in it", diff(link("+3", "p_saoirse_beach")),
     ref=[act("add_to", rows="$p_saoirse_beach", args="to: $new")]))
-
-S("T37-075", "create person role-nickname-label debt-purpose group-currency-purpose created-link",
-  T("add dermot shaw, role roofer, goes by dermy, he's quoting for the shed",
-    diff(new("person", name="Dermot Shaw", role="roofer", nickname="Dermy")),
-    ref=[act("create", args="kind: person\nname: Dermot Shaw\nrole: roofer\nnickname: Dermy")]),
-  T("dermy owes me 30 for the lift to the airport, he'll sort it friday",
-    diff(new("debt", name=has("airport"), amount=30, direction="owes_me"), link("new", "+1")),
-    ref=[act("create", args="kind: debt\nname: airport lift\namount: 30\ndirection: owes_me\nperson: $new")]),
-  T("could you start a group for the cheltenham trip in euro, the lads are going in march",
-    diff(new("group", name=has("cheltenham"), currency="EUR"), link("new", "me")),
-    ref=[act("create", args="kind: group\nname: Cheltenham Trip\ncurrency: EUR")]))
 
 # ---- verb-choice: a short idiom after a write or a read, whose verb is not the surface verb -------------------------
 
@@ -235,14 +216,6 @@ S("T37-085", "stop unbounded everything-except then write-miss trashed-only then
 
 # ---- set-answers: the answer is a subset of what a search, the vault line or the last list shows -------------------
 
-S("T37-086", "set-answers role-noun plumber live-vs-trashed namesake where-role then debts empty then kinship role",
-  T("who's my plumber", rows("plumber"),
-    ref=[ans(kind="person", where='role = "plumber"')]),
-  T("do i owe him anything", rows(),
-    ref=[ans(kind="debt", linked_to="$plumber", where="status = open")]),
-  T("and who's my brother", rows("declan"),
-    ref=[ans(kind="person", where='role = "brother"')]))
-
 S("T37-087", "set-answers role-noun dentist events-lookalikes then next appointment person-link",
   T("who's my dentist", rows("dentist"),
     ref=[ans(kind="person", where='role = "dentist"')]),
@@ -260,10 +233,3 @@ S("T37-089", "set-answers parent-task vs subtasks project then in-progress read"
     ref=[ans(rows="$easter_proj")]),
   T("and which jobs are in progress right now", rows("easter_proj", "camino_proj", "garden_proj"),
     ref=[ans(kind="task", where="status = in_progress")]))
-
-S("T37-090", "set-answers superlative oldest find-order-limit-then-act star settle_debt",
-  T("star the oldest photo in the garden album", diff(upd("p_gd_veg", starred=True)),
-    ref=[find(kind="photo", linked_to="$garden_album", order="date asc", limit=1), act("star", rows="@prev")]),
-  T("and settle the oldest debt i owe", diff(upd("d_mary_k", status="settled")),
-    ref=[find(kind="debt", where="direction = i_owe and status = open", order="date asc", limit=1),
-         act("settle_debt", rows="@prev")]))

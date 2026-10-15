@@ -38,23 +38,6 @@ S("T19-029", "nickname != edit person prev",
   T("lina goes by Loulou now, not lilou", diff(upd("lina", nickname="Loulou")),
     ref=[act("edit", rows="$lina", args=lines(nickname="Loulou"))]))
 
-S("T19-030", "group count person count groups",
-  T("which of my contacts are in a group at all", rows("simo", "driss", "kenza", "samira_a", "omar", "salma", "rachid",
-                                                       "samira_b", "nadia", "youssef_a", "me", "imane"),
-    ref=[ans(kind="person", where="group count != 0")]),
-  T("which groups don't have exactly three people", rows("ifrane", "madrid", "coffee", "school_run"),
-    ref=[find(kind="group", where="person count != 3"), ans(rows="@prev")]),
-  T("how many are in the coffee fund", val(5),
-    ref=[ans(op="count", kind="person", linked_to="$coffee")]))
-
-S("T19-031", "group count role contains group person count",
-  T("anyone from the pharmacy side in a group", rows("nadia", "kenza", "rachid"),
-    ref=[ans(kind="person", where='group count != 0 and role contains "pharmac"')]),
-  T("which groups have more than me and one other", rows("coffee", "baba_care", "school_run", "ifrane", "eid_sheep"),
-    ref=[ans(kind="group", where="person count != 2")]),
-  T("and who's in no group but i see weekly", rows("baba", "dada", "zineb", "aicha"),
-    ref=[ans(kind="person", where="group count = 0 and cadence < 8 days")]))
-
 S("T19-032", "four turns task count photo count linked",
   T("who's got more than two tasks tied to them", rows("baba", "adam"),
     ref=[ans(kind="person", where="task count > 2")]),

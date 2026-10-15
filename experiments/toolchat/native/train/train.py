@@ -29,7 +29,7 @@
   (sum of the weights), so the step's gradient scale stays that of a mean. At every eval (step 0 and
   each checkpoint) a fixed sample of --train-eval-n train records and the val file are scored for
   loss and accuracy on all label tokens AND on decision tokens only AND on the narrow HARD tier (fmt.py
-  `HardConfig`: row refs and @k handles, row selectors, date expressions, verb / direction / op, the think
+  `HardConfig`: row refs and @k handles, row selectors, date expressions, verb / op, the think
   slots stating them (the closed words of `intent`, `scope`, `refer`, `when`; the row numbers of `refer` and `pick`; the index of a `dates[i]`);
   a subset of the decision tokens, weighted by the same W,
   never by a second weight, and reported separately).

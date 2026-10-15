@@ -8,46 +8,6 @@ def W(expr):
 
 WEEKEND = span(U("week", 0, weekday=6), U("week", 0, weekday=7))
 
-S("T15-116", "balance negative people settle",
-  T("how much do i owe mamma", val((-2000, "NOK")),
-    ref=[search("Mamma", kind="person"), ans(op="balance", rows="$mum")]),
-  T("hallvard?", val((105, "NOK")),
-    ref=[ans(op="balance", rows="$hallvard")]),
-  T("and torstein", val((10, "NOK")),
-    ref=[ans(op="balance", rows="$torstein")]),
-  T("paid mamma back for the flights this morning, transferred it from the dnb account", diff(upd("d_mum", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Flights")]))
-
-S("T15-117", "balance group cabin share",
-  T("where am i on the cabin share", val((1890, "NOK")),
-    ref=[search("Ingrid", kind="person"), ans(op="balance", kind="group", name="Lyngen cabin share", linked_to="$me")]),
-  T("and torstein", val((170, "NOK")),
-    ref=[ans(op="balance", kind="group", name="Lyngen cabin share", linked_to="$torstein")]),
-  T("hanne?", val((-750, "NOK")),
-    ref=[ans(op="balance", kind="group", name="Lyngen cabin share", linked_to="$hanne")]))
-
-S("T15-118", "balance group crew mess fund",
-  T("crew mess fund, what's rune down", val((-360, "NOK")),
-    ref=[ans(op="balance", kind="group", name="Crew mess fund", linked_to="$rune")]),
-  T("and tor", val((-200, "NOK")),
-    ref=[ans(op="balance", kind="group", name="Crew mess fund", linked_to="$tor")]),
-  T("am i owed anything on it", val((2250, "NOK")),
-    ref=[search("Ingrid", kind="person"), ans(op="balance", kind="group", name="Crew mess fund", linked_to="$me")]),
-  T("log that i rang erik nilsen about the mess bill", diff(upd("erik_n", date=ANY)),
-    ref=[act("log", kind="person", name="Erik Nilsen", args="kind: call")]))
-
-S("T15-119", "balance people repair where-name",
-  T("what does anders owe me", val((1200, "NOK")),
-    ref=[ans(op="balance", rows="$anders")]),
-  T("silje?", val((380, "NOK")),
-    ref=[ans(op="balance", rows="$silje")]),
-  T("which tasks have formalin in the name", rows("formalin"),
-    ref=[bad(ans(kind="task", where='name contains "formalin"')),
-         ans(kind="task", name="formalin")]),
-  T("silje's sent the sauna money, settle it", diff(upd("d_silje", status="settled")),
-    ref=[search("sauna", kind="debt"),
-         act("settle_debt", kind="debt", name="Sauna tickets")]))
-
 S("T15-120", "decline out-of-scope weekend multi-write weekday",
   T("will the northern lights be out tonight", decline("out_of_scope"),
     ref=[dec("out_of_scope")]),

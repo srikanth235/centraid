@@ -30,26 +30,6 @@ S("T38-077", "same-word yazan-studies list-vs-album identical-name count two-row
     rows("ph_grad_a_01", "ph_grad_a_07", "ph_grad_a_10", "ph_grad_a_11", "ph_grad_a_14", "ph_grad_a_15"),
     ref=[ans(kind="photo", linked_to="$grad_a, $yazan")]))
 
-S("T38-078", "same-word teta person-album-list-group-folder photos star document year read album-decides-photo",
-  T("star teta's pension statement from 2026", diff(upd("doc_084", starred=True)),
-    ref=[act("star", kind="document", name="Teta's pension statement", when=J(U("year", -1)))]),
-  T("who's in teta's care", rows("layla_h", "ammo_fadi", "khalto_rima", "omar_k", "me"),
-    ref=[ans(kind="person", linked_to="$teta_care")]),
-  T("star the at teta's 2 photo from eid 2026", diff(upd("ph_eid26_09", starred=True)),
-    ref=[act("star", kind="photo", name="At Teta's 2", linked_to="$eid26")]))
-
-S("T38-079", "same-word school-photos debt-vs-task settle_debt person-possessor read complete",
-  T("yazan paid me back for the school photos, mark it settled", diff(upd("debt_39", status="settled")),
-    ref=[search("Yazan", kind="person"),
-         act("settle_debt", kind="debt", name="school photos", linked_to="$yazan")]),
-  T("is samar's school photos one still open", rows("debt_24"),
-    ref=[search("Samar", kind="person"),
-         ans(kind="debt", name="school photos", linked_to="$samar_shraideh", where="status = open")]),
-  T("and tick off ordering dana's school photos, did it today", diff(upd("t_068", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Order Dana's school photos")]),
-  T("and star the card i use for the clinic", diff(upd("clinic_card", starred=True)),
-    ref=[act("star", kind="locker item", name="clinic", where="type = card")]))
-
 S("T38-080", "same-word both-events cancel car-service eye-test empty-read then two-yousefs star ask gloss",
   T("mama's eye test and the car service are both off, cancel them",
     diff(upd("oo_065", status="cancelled"), upd("oo_034", status="cancelled")),
@@ -99,17 +79,6 @@ S("T38-084", "create-args container-link task-list note-notebook album purpose-c
   T("make an album for yazan's graduation, i'll add the photos after the ceremony",
     diff(new("album", name=has("graduation"))),
     ref=[act("create", args=lines(kind="album", name="Yazan's Graduation"))]))
-
-S("T38-085", "create-args debt direction person group currency purpose-clause two-creates-one-turn",
-  T("dana owes me 3 dinars for the stickers, i'll remind her friday, and i owe mahmoud 8 for the parking",
-    diff(new("debt", name=has("stickers"), amount=3, direction="owes_me"), link("new", "dana"),
-         new("debt", name=has("parking"), amount=8, direction="i_owe"), link("new", "mahmoud")),
-    ref=[search("Dana", kind="person"), search("Mahmoud", kind="person"),
-         act("create", args=lines(kind="debt", name="stickers", amount=3, direction="owes_me", person="$dana"), more=True),
-         act("create", args=lines(kind="debt", name="parking", amount=8, direction="i_owe", person="$mahmoud"))]),
-  T("start a group for the eid sweets, we'll split it in dinars",
-    diff(new("group", name=has("sweets"), currency="JOD"), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Eid Sweets", currency="JOD"))]))
 
 S("T38-086", "verb-choice put-it-back after remove_from document folder add_to then after a task move to a list add_to back",
   T("take the 2025 internet contract out of the rent and utilities folder", diff(unlink("rentf", "doc_033")),
@@ -213,17 +182,6 @@ S("T38-096", "set-answers role-noun dentist exact-role decoys log then stationer
     ref=[ans(kind="person", where='role = "stationery supplier"')]),
   T("and the one i deleted", rows("zahra_haddad"),
     ref=[ans(kind="person", where='role = "stationery supplier"', trashed=True)]))
-
-S("T38-097", "set-answers debts both-directions accountant i_owe owes_me settle_debt balance",
-  T("do i still owe the accountant anything", rows("debt_41"),
-    ref=[search("accountant", kind="person"),
-         ans(kind="debt", linked_to="$accountant", where="direction = i_owe and status = open")]),
-  T("and going the other way", rows("debt_10"),
-    ref=[ans(kind="debt", linked_to="$accountant", where="direction = owes_me and status = open")]),
-  T("he's paid me that one, tick it off and tell me what the net is between us now",
-    val((-155.5, "JOD"), also=diff(upd("debt_10", status="settled"))),
-    ref=[act("settle_debt", kind="debt", linked_to="$accountant", where="direction = owes_me and status = open", more=True),
-         ans(op="balance", kind="person", rows="$accountant")]))
 
 S("T38-098", "set-answers two-same-word-events weekday decides lunch sunday friday reschedule attendees",
   T("what time's lunch on sunday", rows("eid_a27"),

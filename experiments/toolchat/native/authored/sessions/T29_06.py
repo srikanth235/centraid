@@ -35,16 +35,6 @@ S("T29-092", "r2 container-link-read notebook riders-notes collision body-contai
   T("star the club secretary", diff(upd("nyambura", starred=True)),
     ref=[find(kind="person", where='role = "club secretary"'), act("star", rows="@prev")]))
 
-S("T29-093", "r2 container-link-read owner-row groups-i-am-in count members person-groups",
-  T("how many groups am i in", val(5),
-    ref=[ans(op="count", kind="group", linked_to="$me")]),
-  T("which ones", rows("riders", "flat", "diani", "berlin", "kisumu_fund"),
-    ref=[ans(kind="group", linked_to="$me")]),
-  T("who's in diani weekend", rows("me", "brenda", "ian", "naomi", "amina"),
-    ref=[ans(kind="person", linked_to="$diani")]),
-  T("and how many groups is kip in", val(1),
-    ref=[ans(op="count", kind="group", linked_to="$kip")]))
-
 S("T29-094", "r2 container-link-read person-appointments through-link within-narrow substitution dennis moses",
   T("what's on this week",
     rows("karen_site_0922", "print_drawings", "runda_site_0924", "yoga", "client_faith", "dinner_wambs", "ride_0926",
@@ -117,16 +107,6 @@ S("T29-099", "r2 stray purpose-clause reason-clause by-name-write star complete 
   T("and log a call with the mechanic", diff(upd("collins", date=ANY)),
     ref=[find(kind="person", where='role = "mechanic"'), act("log", rows="@prev", args="kind: call")]))
 
-S("T29-100", "r2 stray role-like-noun not-a-role kin-possessive printer brother balance exact-role",
-  T("where's dad's insurance card", rows("baba_nhif"),
-    ref=[ans(kind="document", name="insurance card")]),
-  T("and mum's pilau recipe", rows("pilau"),
-    ref=[ans(kind="note", name="pilau")]),
-  T("how much do i owe the printer", val((-4500, "KES")),
-    ref=[ans(op="balance", kind="person", where='role = "printer"')]),
-  T("and how much does my brother owe me", val((-26333.34, "KES")),
-    ref=[ans(op="balance", kind="person", where='role = "brother"')]))
-
 # ---- date-window reads (T29-101 .. T29-105) ---------------------------------------------------------------
 
 S("T29-101", "r2 date-window before-X through-X by-X closed-from-today events tasks past-before-month both-tenses",
@@ -139,17 +119,6 @@ S("T29-101", "r2 date-window before-X through-X by-X closed-from-today events ta
   T("and what's due by friday",
     rows("karen_mockup", "mpesa_float", "chai_pay", "print_fee", "mama_meds", "karen_tiles", "inv_faith_sep"),
     ref=[ans(kind="task", where="status = open", when=J(span(U("day", 0), U("week", 0, weekday=5))))]))
-
-S("T29-102", "r2 date-window or-older from-on open-span debts named-month substitution count both-tenses",
-  T("which debts did i take on in july or older", rows("d_lena", "d_otieno", "d_collins", "d_amina", "d_naomi"),
-    ref=[ans(kind="debt", when=J({"to": U("month", 0, name=7)}))]),
-  T("and which are still open from august on",
-    rows("d_brenda", "d_kip", "d_wambui_wifi", "d_kevin_m", "d_wambui_tokens", "d_juma_chai", "d_moses"),
-    ref=[ans(kind="debt", where="status = open", when=J({"from": U("month", 0, name=8)}))]),
-  T("how many is that", val(7),
-    ref=[ans(op="count", kind="debt", where="status = open", when=J({"from": U("month", 0, name=8)}))]),
-  T("and which tasks are still open from august or older", rows(),
-    ref=[ans(kind="task", where="status = open", when=J({"to": U("month", 0, name=8)}))]))
 
 S("T29-103", "r2 date-window ordinal-past-reading count-have-done year-arithmetic last-year two-years-ago",
   T("did i ride on the 12th", rows("ride_0912"),
@@ -213,11 +182,6 @@ S("T29-107", "r2 mixed note-body-append add-to-the-note short-body open-first jo
   T("jot down that peter wants the roof truss revised before the pour",
     diff(new("note", name=has("roof", "truss"), body=has("peter", "revised"))),
     ref=[act("create", args=lines(kind="note", name="Roof truss", body="peter wants the roof truss revised before the pour"))]))
-
-S("T29-108", "r2 mixed settle-up amount person group partial",
-  T("i paid brenda 5000 towards the villa, settle that in the diani group",
-    diff(upd("brenda", balance=ANY), settle=[("Brenda", "5000")]),
-    ref=[act("settle_up", rows="$brenda", args=lines(group="$diani", amount="5000"))]))
 
 S("T29-109", "r2 mixed kind-word-decides documents notes photos jersey",
   T("any jersey documents", rows("jersey_quote"),

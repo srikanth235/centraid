@@ -12,7 +12,7 @@ Ivan Todorov, building manager Ivan Dimov), nicknames (Mitko, Desi, Vesi, Niki, 
 misspelled-looking name (Tsvetan), two dentist appointments, two "Choir concert" events, two
 "Buy sheet music" tasks, monthly electricity bills, two recital albums, cancelled events,
 completed tasks, people and events trashed inside and past the 30-day restore window, an empty
-group, an empty folder, and groups with and without a currency.
+folder.
 """
 from __future__ import annotations
 
@@ -87,42 +87,6 @@ def people():
         {"key": "ognyan", "name": "Ognyan Kirilov", "role": "old piano tuner", "trashed": "2025-11-10T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "viktor_costs", "name": "Viktor's costs", "currency": "BGN", "members": ["stefan"],
-     "created": "2025-09-01T10:00"},
-    {"key": "vienna", "name": "Choir tour Vienna", "currency": "EUR", "members": ["petar", "desi", "ani", "hristo"],
-     "created": "2025-11-15T20:00"},
-    {"key": "choir_fund", "name": "Chamber choir fund", "members": ["petar", "desi", "tsvetan", "ani", "hristo"],
-     "created": "2025-09-10T20:00"},
-    {"key": "studio", "name": "Studio rent", "members": ["vesi"], "created": "2025-10-01T10:00"},
-    {"key": "bathroom_g", "name": "Bathroom works", "currency": "BGN", "members": ["mila", "radka"],
-     "created": "2026-01-05T10:00"},
-    {"key": "bansko", "name": "Bansko ski weekend", "members": ["mila", "viktor"], "created": "2026-01-10T10:00"},
-]
-
-EXPENSES = [
-    {"group": "viktor_costs", "name": "Basketball fee January", "amount": 80, "paid_by": "me",
-     "split": ["me", "stefan"], "date": "2026-01-05"},
-    {"group": "viktor_costs", "name": "School trip to Rila", "amount": 120, "paid_by": "stefan",
-     "split": ["me", "stefan"], "date": "2026-01-18"},
-    {"group": "viktor_costs", "name": "Winter jacket", "amount": 160, "paid_by": "me",
-     "split": ["me", "stefan"], "date": "2025-12-06"},
-    {"group": "vienna", "name": "Bus deposit", "amount": 200, "paid_by": "petar",
-     "split": ["me", "petar", "desi", "ani"], "date": "2026-01-14"},
-    {"group": "vienna", "name": "Hostel booking", "amount": 360, "paid_by": "me",
-     "split": ["me", "desi", "ani", "hristo"], "date": "2026-01-20"},
-    {"group": "choir_fund", "name": "Sheet music copies", "amount": 45, "paid_by": "me",
-     "split": ["me", "petar", "desi"], "date": "2026-01-08"},
-    {"group": "choir_fund", "name": "Christmas concert flowers", "amount": 60, "paid_by": "desi",
-     "split": ["me", "desi", "tsvetan"], "date": "2025-12-20"},
-    {"group": "studio", "name": "Studio rent January", "amount": 300, "paid_by": "vesi",
-     "split": ["me", "vesi"], "date": "2026-01-02"},
-    {"group": "bathroom_g", "name": "Tiles", "amount": 900, "paid_by": "me",
-     "split": ["me", "mila", "radka"], "date": "2026-01-21"},
-    {"group": "bathroom_g", "name": "Demolition deposit", "amount": 600, "paid_by": "radka",
-     "split": ["me", "radka"], "date": "2026-01-12"},
-]
 
 LISTS = [
     {"key": "teaching_l", "name": "Teaching", "area": "work"},
@@ -501,34 +465,6 @@ PHOTOS = [
     {"key": "blurry_3", "name": "Blurry bus window", "taken": "2025-11-22T09:00", "trashed": "2025-12-01T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_maria_k", "person": "maria_k", "direction": "owes_me", "amount": 100, "name": "January lessons",
-     "date": "2026-01-15"},
-    {"key": "d_kalina", "person": "kalina", "direction": "owes_me", "amount": 80, "name": "Two lessons in January",
-     "date": "2026-01-20"},
-    {"key": "d_daniela", "person": "daniela", "direction": "owes_me", "amount": 160, "name": "Boris's December lessons",
-     "date": "2025-12-18"},
-    {"key": "d_niki", "person": "niki", "direction": "owes_me", "amount": 120, "name": "Audition coaching",
-     "date": "2026-01-22"},
-    {"key": "d_ivan_t", "person": "ivan_t", "direction": "owes_me", "amount": 40, "name": "Recital fee",
-     "date": "2026-01-26", "settled": "2026-01-26T18:00"},
-    {"key": "d_mitko", "person": "mitko", "direction": "i_owe", "amount": 1500, "name": "Second installment for the bathroom",
-     "date": "2026-01-28"},
-    {"key": "d_todor", "person": "todor", "direction": "i_owe", "amount": 300, "name": "Tiler deposit",
-     "date": "2026-01-29"},
-    {"key": "d_mila", "person": "mila", "direction": "i_owe", "amount": 500, "name": "Loan for the tiles",
-     "date": "2025-12-28"},
-    {"key": "d_stefan", "person": "stefan", "direction": "owes_me", "amount": 75, "name": "Half of Viktor's glasses",
-     "date": "2025-11-12"},
-    {"key": "d_vesi", "person": "vesi", "direction": "i_owe", "amount": 25, "name": "Rosin and strings",
-     "date": "2026-01-27"},
-    {"key": "d_petar", "person": "petar", "direction": "i_owe", "amount": 30, "name": "Concert tickets",
-     "date": "2025-12-11", "settled": "2025-12-20T21:00"},
-    {"key": "d_plamen", "person": "plamen", "direction": "i_owe", "amount": 120, "name": "Socket survey",
-     "date": "2026-01-21"},
-    {"key": "d_sofia", "person": "sofia_a", "direction": "owes_me", "amount": 50, "name": "Exam accompaniment",
-     "date": "2025-11-28"},
-]
 
 LOCKER = [
     {"key": "gmail", "name": "Gmail", "type": "login", "username": "elena.petrova.piano@gmail.com",
@@ -610,8 +546,6 @@ def world():
         "seed": "T17",
         "currency": "BGN",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -621,7 +555,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

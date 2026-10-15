@@ -46,12 +46,6 @@ S("T21-Q009", "events left status not cancelled from today i2pat",
   T("how many staff briefings are left", val(8),
     ref=[ans(op="count", kind="event", name="Staff briefing", where="status != cancelled", when=J({"from": U("day", 0)}))]))
 
-S("T21-Q010", "second clause whos left open owes_me i2pat",
-  T("achieng paid me back for the lunch, who's left",
-    rows("d_rose", "d_brian", "d_peter_o", "d_alice", also=diff(upd("d_mary_a", status="settled"))),
-    ref=[act("settle_debt", kind="debt", linked_to="$mary_a", where="status = open", more=True),
-         ans(kind="debt", where="direction = owes_me and status = open")]))
-
 S("T21-Q011", "add a note content create i2pat",
   T("add a note, remember to bring the sugar for staff tea", diff(new("note", name=ANY, body=has("sugar"))),
     ref=[act("create", args="kind: note\nname: Sugar for staff tea\nbody: remember to bring the sugar for staff tea")]))

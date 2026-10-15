@@ -18,33 +18,6 @@ S("T30-001", "ambiguous-ask recurring-task complete follow-up date-pick",
   T("yesterday's", diff(upd("cmp_270215", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Take out compost", when=J(U("day", -1)))]))
 
-S("T30-002", "relation-chain event group follow-up decline log",
-  T("who from the hockey team was at last year's quebec tournament", rows("coach_pat", "marie_pier"),
-    ref=[find(kind="event", name="quebec tournament", when=J(U("year", -1))),
-         ans(kind="person", linked_to="$hockey_atome, @prev")]),
-  T("which of them are starred", rows("coach_pat"),
-    ref=[ans(within="@prev", where="starred = yes")]),
-  T("text him that i'm bringing snacks saturday", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("fine, just log that i called him instead", diff(upd("coach_pat", date=ANY)),
-    ref=[act("log", rows="$coach_pat", args="kind: call")]))
-
-S("T30-003", "same-name read description balance",
-  T("who's sam", rows("sam_b", "sam_n"),
-    ref=[ans(kind="person", name="Sam")]),
-  T("where am i with sam the colleague", val((46, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Sam", where='role = "colleague"')]),
-  T("and the neighbour one", val((-17.84, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Sam", where='role = "neighbour"')]))
-
-S("T30-004", "marie-cluster within relation balance",
-  T("who are the maries", rows("marie_claude", "marie_pier", "marie_eve"),
-    ref=[ans(kind="person", name="Marie")]),
-  T("which of them is on the hockey team", rows("marie_pier"),
-    ref=[ans(within="@prev", linked_to="$hockey_atome")]),
-  T("where am i with her", val((194.68, "CAD")),
-    ref=[ans(op="balance", rows="$marie_pier")]))
-
 S("T30-005", "list month status focus-pick decoy-name complete",
   T("budget stuff due this month that's still open", rows("impots27_1", "hq_270220", "t_106"),
     ref=[ans(kind="task", linked_to="$budget", where="status = open", when=J(U("month", 0)))]),
@@ -104,26 +77,6 @@ S("T30-010", "event relation order-limit description exclude person",
     ref=[ans(kind="event", name="game", where='description contains "away"', when=J({"to": U("day", 0)}), order="date desc", limit=1)]),
   T("who else was there besides emile", rows("coach_pat", "marie_pier"),
     ref=[ans(kind="person", linked_to="$hg_270206", exclude="$emile")]))
-
-S("T30-011", "balance role-where debts relation within settle_debt amount",
-  T("where am i with my sister isabelle", val((-599, "CAD"), (3.75, "USD")),
-    ref=[ans(op="balance", kind="person", name="Isabelle", where='role = "sister"')]),
-  T("which debts do i still owe her", rows("debt_02", "debt_08", "debt_14", "debt_20", "debt_26", "debt_32", "debt_38"),
-    ref=[ans(kind="debt", linked_to="$isabelle", where="direction = i_owe and status = open")]),
-  T("just last year's", rows("debt_26", "debt_32", "debt_38"),
-    ref=[ans(within="@prev", when=J(U("year", -1)))]),
-  T("settle the 170 one, paid her this morning", diff(upd("debt_26", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$isabelle", where="amount = 170")]))
-
-S("T30-012", "debts relation when focus-pick settle_debt open within where",
-  T("what are lucie boucher's debts from before 2026", rows("debt_04", "debt_10", "debt_16"),
-    ref=[ans(kind="debt", linked_to="$lucie_boucher", when=J({"to": D("2025-12-31")}))]),
-  T("she paid the movie tickets", diff(upd("debt_04", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="movie tickets")]),
-  T("and what does she still owe", rows("debt_10", "debt_16", "debt_28", "debt_34", "debt_40"),
-    ref=[ans(kind="debt", linked_to="$lucie_boucher", where="status = open")]),
-  T("any over a hundred", rows("debt_10", "debt_16", "debt_40"),
-    ref=[ans(within="@prev", where="amount > 100")]))
 
 S("T30-013", "event order-limit create edit reschedule focus date-earlier",
   T("when was my most recent optometrist appointment", rows("oo_042"),

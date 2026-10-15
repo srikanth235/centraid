@@ -65,16 +65,6 @@ S("T05-105", "ask document star receipt unstar",
     ref=[act("star", kind="document", name="Property tax receipt 2025", more=True),
          act("unstar", kind="document", name="EB bill receipt December")]))
 
-S("T05-106", "carpool driver star pronoun balance",
-  T("who's the carpool driver", rows("ramesh_d"),
-    ref=[ans(kind="person", linked_to="$carpool", where='role contains "driver"')]),
-  T("star him", diff(upd("ramesh_d", starred=True)),
-    ref=[act("star", rows="@prev")]),
-  T("what do i owe ramesh babu, i think i paid the last fuel share in cash", val((-100, "INR")),
-    ref=[ans(op="balance", kind="person", name="Ramesh Babu")]),
-  T("and unstar karthik, he's not a priority", diff(upd("karthik", starred=False)),
-    ref=[act("unstar", kind="person", name="Karthik")]))
-
 S("T05-107", "ask people star rao out_of_scope",
   T("star rao", ask("rao_doc", "nandini"),
     ref=[act("star", kind="person", name="Rao"),

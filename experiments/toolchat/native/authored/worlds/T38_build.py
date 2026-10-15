@@ -9,9 +9,7 @@ paperwork. Her father Dr Khalid Al-Sayed ("Baba") runs a family-medicine clinic 
 receptionist and a lab technician; her mother Hanan ("Mama"), brother Yazan (21, in his last term at
 university), sister Dana (14) and grandmother Samira ("Teta", who lives in Salt) complete the household. The
 clinic's patients are people in the vault with roles ("patient - diabetes"). The vault is three years old
-(epoch 2024-05-01): about ten times the rows of an ordinary world, most of them history. Currency JOD; the
-foreign-currency positions are the AED group "Dubai Medical Expo 2026", the EUR group "Istanbul Trip 2025" and
-the USD group "Cairo Visit 2025" (a vault debt can only be in the vault's own currency).
+(epoch 2024-05-01): about ten times the rows of an ordinary world, most of them history. Currency JOD.
 
 Same-name clusters by design: events "Friday lunch" (weekly), "Clinic staff meeting" (weekly), "Call Teta"
 (weekly), "Dana's swim class", "Yazan's football", "Clinic accounts review" (monthly), "Family dinner at
@@ -238,113 +236,6 @@ for key, when in [(S["patient"][3], "2027-05-03T10:00"), (S["supplier"][5], "202
                   (S["service"][4], "2025-10-10T10:00")]:
     P[key]["trashed"] = when
 
-# ----------------------------------------------------------------------------------------------
-# groups and expenses
-# ----------------------------------------------------------------------------------------------
-
-groups = []
-expenses = []
-
-
-def group(key, name, currency, members, created, spend=()):
-    groups.append({"key": key, "name": name, "currency": currency, "members": members, "created": created})
-    for ename, amount, payer, split, date in spend:
-        expenses.append({"group": key, "name": ename, "amount": amount, "paid_by": payer, "split": split,
-                         "date": date})
-
-
-group("family_fund", "Al-Sayed Family Fund", "JOD", ["baba", "mama", "yazan", "dana", "ammo_fadi", "khalto_rima"],
-      "2024-05-10T20:00", [
-          ("Teta's birthday gift", 120, "me", ["me", "baba", "ammo_fadi", "khalto_rima"], "2024-09-14"),
-          ("Eid presents for the cousins", 210, "mama", ["me", "baba", "mama", "ammo_fadi"], "2025-03-27"),
-          ("Wedding gift for the Habash family", 150, "ammo_fadi", ["me", "baba", "ammo_fadi", "khalto_rima"],
-           "2025-08-02"),
-          ("Water tank for the Salt house", 480, "baba", ["me", "baba", "ammo_fadi", "khalto_rima"], "2025-11-20"),
-          ("Teta's birthday gift", 140, "khalto_rima", ["me", "baba", "ammo_fadi", "khalto_rima"], "2026-09-14"),
-          ("Eid sacrifice share", 260, "me", ["me", "baba", "ammo_fadi"], "2027-05-09"),
-      ])
-group("friday_kitty", "Friday Lunch Kitty", "JOD", ["baba", "mama", "yazan", "ammo_fadi", "khalto_rima", "layla_h",
-                                                      "omar_k"], "2024-05-12T20:00", [
-          ("Mansaf for twelve", 96, "khalto_rima", ["me", "baba", "mama", "ammo_fadi", "khalto_rima", "layla_h"],
-           "2024-11-01"),
-          ("Knafeh from Habiba", 28, "me", ["me", "yazan", "omar_k", "layla_h"], "2025-02-14"),
-          ("Maqluba ingredients", 41, "mama", ["me", "baba", "mama", "khalto_rima"], "2025-09-19"),
-          ("Drinks and ice", 18, "omar_k", ["me", "omar_k", "yazan", "layla_h"], "2026-06-12"),
-          ("Lamb for the big Friday", 120, "ammo_fadi", ["me", "baba", "ammo_fadi", "khalto_rima", "mama"],
-           "2027-01-08"),
-      ])
-group("clinic_supplies", "Clinic Supplies Pool", "JOD", ["rasha", "ahmad", "mahmoud", "dr_tala"] + S["supplier"][:3],
-      "2024-06-01T09:00", [
-          ("Gloves and masks", 220, "rasha", ["me", "rasha", "ahmad", "mahmoud"], "2024-08-20"),
-          ("Printer toner", 85, "ahmad", ["me", "ahmad", "rasha"], "2025-02-11"),
-          ("Sterilisation pouches", 140, "me", ["me", "rasha", "mahmoud", "dr_tala"], "2025-10-06"),
-          ("New examination lamp", 310, "me", ["me", "rasha", "dr_tala"], "2026-03-04"),
-          ("Blood test tubes", 175, "mahmoud", ["me", "mahmoud", "rasha", "ahmad"], "2026-11-17"),
-      ])
-group("clinic_lunch", "Clinic Staff Lunch", "JOD", ["rasha", "ahmad", "mahmoud", "um_ali", "dr_sami"],
-      "2024-06-20T12:00", [
-          ("Shawarma Thursday", 32, "ahmad", ["me", "rasha", "ahmad", "mahmoud", "um_ali"], "2025-01-16"),
-          ("Cake for Rasha's birthday", 24, "me", ["me", "rasha", "ahmad", "mahmoud", "um_ali", "dr_sami"],
-           "2025-07-03"),
-          ("Ramadan iftar box", 60, "dr_sami", ["me", "rasha", "ahmad", "dr_sami"], "2026-03-02"),
-          ("Falafel run", 14, "rasha", ["me", "rasha", "mahmoud"], "2027-04-22"),
-      ])
-group("teta_care", "Teta's Care", "JOD", ["ammo_fadi", "khalto_rima", "layla_h", "omar_k"], "2024-07-02T20:00", [
-    ("Hospital bill", 560, "ammo_fadi", ["me", "ammo_fadi", "khalto_rima", "layla_h"], "2025-05-14"),
-    ("Medicines for the winter", 85, "khalto_rima", ["me", "khalto_rima", "omar_k"], "2025-12-02"),
-    ("Hearing aid", 340, "me", ["me", "ammo_fadi", "khalto_rima", "layla_h", "omar_k"], "2026-08-21"),
-])
-group("building", "Abdoun Building Fund", "JOD", S["neighbour"][:10] + ["yousef_a", "hussam"], "2024-06-14T19:00", [
-    ("Lift repair", 380, S["neighbour"][0], ["me", S["neighbour"][0], S["neighbour"][1], "yousef_a", "hussam"],
-     "2024-10-09"),
-    ("Stairwell paint", 260, "me", ["me", S["neighbour"][2], S["neighbour"][3], "hussam"], "2025-04-15"),
-    ("Generator diesel", 110, "yousef_a", ["me", "yousef_a", S["neighbour"][4]], "2025-12-18"),
-    ("Cleaner's Eid bonus", 90, "hussam", ["me", "hussam", S["neighbour"][5], S["neighbour"][6]], "2026-05-26"),
-])
-group("dana_parents", "Dana's Class Parents", "JOD", S["school"][:9] + ["dina_f"], "2024-09-05T18:00", [
-    ("Teacher's gift", 65, S["school"][0], ["me", S["school"][0], S["school"][1], "dina_f"], "2024-12-19"),
-    ("Class trip bus", 180, "me", ["me", S["school"][1], S["school"][2], S["school"][3], "dina_f"], "2025-04-03"),
-    ("Science fair materials", 48, "dina_f", ["me", "dina_f", S["school"][4]], "2026-02-12"),
-    ("End of year party", 95, S["school"][2], ["me", S["school"][2], S["school"][5], "dina_f"], "2026-06-10"),
-])
-group("study_group", "Yazan's Study Group", "JOD", S["uni"][:6] + ["omar_k"], "2025-02-10T20:00", [
-    ("Printing the past exams", 22, S["uni"][0], ["me", S["uni"][0], S["uni"][1]], "2025-06-02"),
-    ("Pizza night before the final", 36, "omar_k", ["me", "omar_k", S["uni"][2], S["uni"][3]], "2026-12-15"),
-])
-group("football", "Saturday Football", "JOD", S["club"][:6] + ["omar_k", "yazan"], "2024-09-05T19:00", [
-    ("Pitch rental", 90, S["club"][0], ["me", S["club"][0], S["club"][1], "omar_k"], "2025-10-04"),
-    ("New ball", 35, "yazan", ["me", "yazan", S["club"][2]], "2026-01-17"),
-    ("Water crates", 20, "omar_k", ["me", "omar_k", S["club"][3], S["club"][4]], "2026-09-12"),
-])
-group("friends_dinner", "Amman Friends Dinner", "JOD", S["friend"][:8], "2024-07-20T20:00", [
-    ("Dinner at Hashem", 64, S["friend"][0], ["me", S["friend"][0], S["friend"][1], S["friend"][2]], "2025-01-24"),
-    ("Birthday cake for Lina", 30, "me", ["me", S["friend"][1], S["friend"][3]], "2025-09-06"),
-    ("Rooftop dinner", 120, S["friend"][2], ["me", S["friend"][2], S["friend"][4], S["friend"][5]], "2026-07-18"),
-])
-group("dubai", "Dubai Medical Expo 2026", "AED", ["baba", "dr_tala", "layla_q"], "2026-02-02T12:00", [
-    ("Hotel for three nights", 2400, "baba", ["me", "baba", "dr_tala"], "2026-03-08"),
-    ("Expo passes", 900, "me", ["me", "baba", "dr_tala", "layla_q"], "2026-03-09"),
-    ("Taxi to the expo", 180, "dr_tala", ["me", "baba", "dr_tala"], "2026-03-10"),
-    ("Dinner at the Marina", 520, "layla_q", ["me", "baba", "layla_q"], "2026-03-10"),
-])
-group("istanbul", "Istanbul Trip 2025", "EUR", ["mama", "dana", "yazan", "khalto_rima", "layla_h"],
-      "2025-04-02T20:00", [
-          ("Apartment in Taksim", 780, "khalto_rima", ["me", "mama", "dana", "yazan", "khalto_rima", "layla_h"],
-           "2025-07-05"),
-          ("Bosphorus cruise", 120, "me", ["me", "mama", "dana", "yazan"], "2025-07-08"),
-          ("Grand Bazaar shopping", 240, "mama", ["me", "mama", "dana", "layla_h"], "2025-07-09"),
-          ("Airport transfers", 90, "yazan", ["me", "yazan", "dana"], "2025-07-12"),
-      ])
-group("cairo", "Cairo Visit 2025", "USD", ["ammo_fadi", "omar_k"], "2025-10-01T20:00", [
-    ("Hotel by the Nile", 640, "ammo_fadi", ["me", "ammo_fadi", "omar_k"], "2025-11-14"),
-    ("Pyramids guide", 150, "me", ["me", "ammo_fadi", "omar_k"], "2025-11-15"),
-    ("Khan el-Khalili lunch", 85, "omar_k", ["me", "omar_k", "ammo_fadi"], "2025-11-16"),
-])
-group("aqaba", "Aqaba Weekend 2026", "JOD", ["yazan", "omar_k"] + S["uni"][:3], "2026-04-10T20:00", [
-    ("Chalet for two nights", 220, "omar_k", ["me", "yazan", "omar_k", S["uni"][0]], "2026-05-08"),
-    ("Diving trip", 130, "yazan", ["me", "yazan", S["uni"][1]], "2026-05-09"),
-])
-group("umrah", "Umrah Fund 2028", "JOD", ["baba", "mama", "teta"], "2027-04-01T20:00")  # empty: no expenses yet
 
 # ----------------------------------------------------------------------------------------------
 # events
@@ -916,33 +807,6 @@ for i, when in [(1, "2027-05-09T10:00"), (4, "2027-04-30T10:00"), (7, "2027-04-1
                 (14, "2026-09-15T10:00"), (18, "2026-04-02T10:00"), (22, "2025-10-02T10:00"), (27, "2025-04-02T10:00")]:
     _p[i]["trashed"] = when
 
-# ----------------------------------------------------------------------------------------------
-# debts
-# ----------------------------------------------------------------------------------------------
-
-DEBT_NAMES = ["lunch", "pharmacy items", "taxi", "movie tickets", "knafeh", "concert tickets", "petrol for the trip",
-              "birthday gift share", "school photos", "coffee run", "chalet share", "lab supplies",
-              "bike repair", "groceries", "parking"]
-DEBT_PEOPLE = (["omar_k", "layla_h", "ammo_fadi", "khalto_rima", "yazan", "dr_sami", "rasha", "ahmad", "mahmoud",
-                "yousef_a", "hussam", "husam", "layla_q", "moh_az2", "accountant", "landlord"]
-               + S["friend"][:6] + S["neighbour"][:3] + S["uni"][:3] + S["supplier"][:3])
-debts = []
-for i in range(45):
-    d = dt.date(2024, 6, 1) + dt.timedelta(days=(i * 23) % 1080)
-    row = {"key": f"debt_{i + 1:02d}", "person": DEBT_PEOPLE[(i * 5) % len(DEBT_PEOPLE)],
-           "direction": "owes_me" if i % 3 != 1 else "i_owe",
-           "amount": float(5 + (i * 37) % 190) + (0.5 if i % 4 == 0 else 0), "name": DEBT_NAMES[i % len(DEBT_NAMES)],
-           "date": iso(d)}
-    if d < dt.date(2026, 7, 1) and i % 2 == 0:
-        row["settled"] = f"{iso(d + dt.timedelta(days=14))}T12:00"
-    debts.append(row)
-# one pair on the same person, one open and one settled; the confusable names carry debts
-debts[4]["person"] = "omar_k"
-debts[5]["person"] = "omar_k"
-debts[20]["person"] = "layla_h"
-debts[21]["person"] = "layla_q"
-debts[26]["person"] = "yousef_a"
-debts[27]["person"] = "husam"
 
 # ----------------------------------------------------------------------------------------------
 # locker
@@ -1051,9 +915,9 @@ for d in documents[:40]:
 
 world = {
     "me": ME, "today": TODAY, "epoch": "2024-05-01T09:00", "seed": "T38", "currency": "JOD",
-    "people": people, "groups": groups, "expenses": expenses, "lists": lists, "events": events,
+    "people": people, "lists": lists, "events": events,
     "tasks": tasks, "notebooks": notebooks, "notes": notes, "folders": folders, "documents": documents,
-    "albums": albums, "photos": photos, "debts": debts, "locker": locker, "links": links,
+    "albums": albums, "photos": photos, "locker": locker, "links": links,
 }
 
 
@@ -1075,15 +939,6 @@ def check(w):
     def need(key, kind):
         assert keys.get(key) == kind, f"{key} is not a {kind}"
 
-    for g in w["groups"]:
-        [need(m, "people") for m in g["members"]]
-        assert len(set(g["members"])) == len(g["members"]), g["key"]
-    for e in w["expenses"]:
-        need(e["group"], "groups")
-        [need(m, "people") for m in e["split"]]
-        need(e["paid_by"], "people")
-        members = set(next(g["members"] for g in w["groups"] if g["key"] == e["group"])) | {"me"}
-        assert set(e["split"]) | {e["paid_by"]} <= members, f"expense outside its group: {e['name']}"
     for t in w["tasks"]:
         if "parent" in t:
             need(t["parent"], "tasks")
@@ -1099,14 +954,12 @@ def check(w):
         [need(a, "albums") for a in p.get("albums", [])]
         [need(q, "people") for q in p.get("people", [])]
         assert len(set(p.get("albums", []))) == len(p.get("albums", [])), p["key"]
-    for d in w["debts"]:
-        need(d["person"], "people")
     for e in w["events"]:
         [need(a, "people") for a in e.get("attendees", [])]
     for ln in w["links"]:
         assert ln["from"] in keys and ln["to"] in keys, ln
-    names = [g["name"] for g in w["groups"]] + [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
-    assert len(names) == len(set(names)), "group/notebook/album names must be unique"
+    names = [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
+    assert len(names) == len(set(names)), "notebook/album names must be unique"
     spans = sorted((e["start"], e.get("end", e["start"]), e["key"]) for e in w["events"])
     for (s1, e1, k1), (s2, e2, k2) in zip(spans, spans[1:]):
         assert e1 <= s2, f"events overlap: {k1} and {k2}"
@@ -1119,7 +972,6 @@ def check(w):
     assert 600 <= n["events"] <= 900, n["events"]
     assert 700 <= n["tasks"] <= 900, n["tasks"]
     assert n["photos"] == 300 and n["albums"] == 12, (n["photos"], n["albums"])
-    assert 40 <= n["debts"] <= 50 and 40 <= n["expenses"] <= 60
     done = sum(1 for t in w["tasks"] if t.get("completed"))
     assert done / n["tasks"] >= 0.7, "tasks should be mostly completed"
     # long recurring history: some names carry 20 to 150 copies
@@ -1140,7 +992,6 @@ def check(w):
         assert any(a <= 30 for a in age) and any(a > 30 for a in age), f"trashed {kind} window mix: {age}"
     assert any(e.get("cancelled") for e in w["events"])
     assert any(t.get("status") == "cancelled" for t in w["tasks"])
-    assert any(not [e for e in w["expenses"] if e["group"] == g["key"]] for g in w["groups"]), "an empty group"
     assert any(f["key"] not in {d.get("folder") for d in w["documents"]} for f in w["folders"]), "an empty folder"
     assert sum(1 for d in w["documents"] if any(y in d["name"] for y in ("2024", "2025", "2026", "2027"))) >= 90
 

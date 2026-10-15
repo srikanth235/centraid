@@ -10,7 +10,7 @@ Salazar), two Garzas (Rudy, Marisol), nicknames (Amá, Rudy, Patty, Tío Beto), 
 name (Micheal Duran), two "Dentist" appointments, two "Sofia volleyball game" events, two "Football
 game duty" nights, near-duplicate tasks ("Mow Mrs. Whitfield's lawn", monthly water bill), cancelled
 events, completed and cancelled tasks, rows trashed inside and past the 30-day restore window, an
-empty group, an empty folder, an empty notebook, an empty album, and two groups in MXN.
+empty folder, an empty notebook and an empty album.
 """
 from __future__ import annotations
 
@@ -86,38 +86,6 @@ def people():
         {"key": "tony", "name": "Tony Baca", "role": "old AAU coach", "trashed": "2026-07-20T09:00"},
     ]
 
-
-GROUPS = [
-    {"key": "booster_g", "name": "Booster club concessions", "members": ["david_r", "yvonne", "patty", "gilbert"],
-     "created": "2025-11-01T10:00"},
-    {"key": "yard_g", "name": "Rudy's landscaping crew", "members": ["rudy", "hector"],
-     "created": "2026-04-01T10:00"},
-    {"key": "reunion_g", "name": "Juárez family reunion", "currency": "MXN", "members": ["beto", "rudy", "marisol", "rosa"],
-     "created": "2026-07-01T10:00"},
-    {"key": "quince_g", "name": "Cousin Ana's quince gift", "currency": "MXN", "members": ["beto", "rosa"],
-     "created": "2026-08-10T10:00"},
-    {"key": "union_g", "name": "Union pizza fund", "members": ["david_s", "kim", "tom"],
-     "created": "2026-08-15T10:00"},
-    {"key": "banquet_g", "name": "Team banquet 2026", "members": ["patty", "yvonne"],
-     "created": "2026-09-14T10:00"},
-]
-
-EXPENSES = [
-    {"group": "booster_g", "name": "Concession candy", "amount": 180, "paid_by": "me",
-     "split": ["me", "david_r", "yvonne", "patty"], "date": "2026-09-04"},
-    {"group": "booster_g", "name": "Hot dog buns", "amount": 60, "paid_by": "yvonne",
-     "split": ["me", "yvonne", "gilbert"], "date": "2026-09-11"},
-    {"group": "yard_g", "name": "Trimmer line and gas", "amount": 90, "paid_by": "me",
-     "split": ["me", "rudy", "hector"], "date": "2026-09-12"},
-    {"group": "yard_g", "name": "Mulch delivery", "amount": 240, "paid_by": "rudy",
-     "split": ["me", "rudy"], "date": "2026-09-05"},
-    {"group": "reunion_g", "name": "Salon rental deposit", "amount": 4000, "paid_by": "beto",
-     "split": ["me", "beto", "rudy", "rosa"], "date": "2026-08-20", "currency": "MXN"},
-    {"group": "quince_g", "name": "Gift envelope", "amount": 3000, "paid_by": "me",
-     "split": ["me", "beto", "rosa"], "date": "2026-08-12", "currency": "MXN"},
-    {"group": "union_g", "name": "Pizza for September meeting", "amount": 75, "paid_by": "david_s",
-     "split": ["me", "david_s", "kim", "tom"], "date": "2026-09-16"},
-]
 
 LISTS = [
     {"key": "home_l", "name": "Home", "area": "family"},
@@ -506,34 +474,6 @@ PHOTOS = [
     {"key": "p_old", "name": "Old classroom", "taken": "2024-05-20T12:00", "trashed": "2026-07-15T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_ray", "person": "ray", "direction": "owes_me", "amount": 40, "name": "Lunch at Whataburger",
-     "date": "2026-09-11"},
-    {"key": "d_rudy", "person": "rudy", "direction": "owes_me", "amount": 320, "name": "Saturday crew pay",
-     "date": "2026-09-12"},
-    {"key": "d_hector", "person": "hector", "direction": "i_owe", "amount": 60, "name": "Gas money",
-     "date": "2026-09-05"},
-    {"key": "d_patty", "person": "patty", "direction": "owes_me", "amount": 75, "name": "Team snacks",
-     "date": "2026-09-02"},
-    {"key": "d_gilbert", "person": "gilbert", "direction": "owes_me", "amount": 40, "name": "Tournament fee share",
-     "date": "2026-08-28"},
-    {"key": "d_david_s", "person": "david_s", "direction": "i_owe", "amount": 25, "name": "Pizza for union meeting",
-     "date": "2026-09-16"},
-    {"key": "d_beto", "person": "beto", "direction": "i_owe", "amount": 150, "name": "Reunion deposit",
-     "date": "2026-08-15"},
-    {"key": "d_marisol", "person": "marisol", "direction": "owes_me", "amount": 45, "name": "Party supplies",
-     "date": "2026-09-14"},
-    {"key": "d_kim", "person": "kim", "direction": "i_owe", "amount": 18, "name": "Coffee run",
-     "date": "2026-09-09"},
-    {"key": "d_yvonne", "person": "yvonne", "direction": "owes_me", "amount": 120, "name": "Concession supplies",
-     "date": "2026-07-20", "settled": "2026-08-01T10:00"},
-    {"key": "d_jessica", "person": "jessica", "direction": "owes_me", "amount": 30, "name": "Book order",
-     "date": "2026-06-10", "settled": "2026-06-20T10:00"},
-    {"key": "d_lupe", "person": "lupe", "direction": "i_owe", "amount": 45, "name": "Tree trimming split",
-     "date": "2026-05-30"},
-    {"key": "d_veronica", "person": "veronica", "direction": "owes_me", "amount": 55, "name": "Carpool gas",
-     "date": "2026-09-17"},
-]
 
 LOCKER = [
     {"key": "district", "name": "School district portal", "type": "login", "username": "cmendoza",
@@ -617,8 +557,6 @@ def world():
         "seed": "T24",
         "currency": "USD",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -628,7 +566,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

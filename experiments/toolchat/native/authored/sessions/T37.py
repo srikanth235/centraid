@@ -9,15 +9,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T37-001", "chain relation group event find balance-group follow-up",
-  T("who's at tonight's training from the fund", rows("tadhg"),
-    ref=[find(kind="event", name="hurling training", when=W(U("day", 0))),
-         ans(kind="person", linked_to="$gaa, @prev")]),
-  T("what's tadhg's position in the fund", val((80, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Kilcorran Coaches Fund", linked_to="$tadhg")]),
-  T("same for padraig", val((-10, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Kilcorran Coaches Fund", linked_to="$padraig")]))
-
 S("T37-002", "list status date within narrow complete",
   T("what's left on the gaa list before the agm", rows("gaa_sliotars", "gaa_report"),
     ref=[ans(kind="task", linked_to="$gaa_list", where="status = open", when=W({"to": D("2027-03-18")}))]),
@@ -57,17 +48,6 @@ S("T37-005", "subtasks container narrow date-to reschedule",
     ref=[ans(within="@prev", when=W({"to": D("2027-03-25")}))]),
   T("push the flowers under easter back to the 26th", diff(upd("easter_flowers", date="2027-03-26")),
     ref=[act("reschedule", kind="task", name="flowers", linked_to="$easter_proj", args=lines(to=D("2027-03-26")))]))
-
-S("T37-006", "chain event attendees group find balance-person decoy-names",
-  T("who's coming to easter lunch", rows("aoife", "conor", "oisin", "maura"),
-    ref=[find(kind="person", linked_to="$easter"), ans(rows="@prev")]),
-  T("and who's at the april book club", rows("siobhan", "mary_k", "sean_b"),
-    ref=[find(kind="event", name="book club", when=W(U("month", 0, name=4))),
-         ans(kind="person", linked_to="@prev")]),
-  T("what do i owe mary from book club", val((-63, "EUR")),
-    ref=[ans(op="balance", kind="person", name="mary", linked_to="$bookclub")]),
-  T("cancel the book club", ask("bookclub_jan", "bookclub_feb", "bookclub_mar", "bookclub_apr"),
-    ref=[act("cancel", kind="event", name="book club")]))
 
 S("T37-007", "empty-result add_to move-container document-folder where-count",
   T("what's in the to file folder", rows(),
@@ -124,16 +104,6 @@ S("T37-011", "name+link+when documents year substitution star",
     rows("tax_2024", "tax_2025", also=diff(upd("tax_2025", starred=True))),
     ref=[act("star", rows="$tax_2025", more=True),
          ans(kind="document", name="tax", linked_to="$pension_f", where="starred = yes")]))
-
-S("T37-012", "debts link person settle_debt sum",
-  T("any debts with tadhg from this year", rows("d_tadhg"),
-    ref=[ans(kind="debt", linked_to="$tadhg", when=W(U("year", 0)))]),
-  T("and padraig", rows("d_padraig"),
-    ref=[ans(kind="debt", linked_to="$padraig", when=W(U("year", 0)))]),
-  T("settle padraig's minibus debt, paid him in cash", diff(upd("d_padraig", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="minibus", linked_to="$padraig")]),
-  T("what do i owe in total now", val((261.5, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]))
 
 
 S("T37-013", "photos link-all when narrow exclude add_to",
@@ -203,16 +173,6 @@ S("T37-018", "superlatives longest shortest order-limit week",
   T("and the biggest one next week that isn't cancelled", rows("golf_outing"),
     ref=[ans(kind="event", when=W(U("week", 1)), where="status != cancelled", order="duration desc", limit=1)]))
 
-S("T37-019", "group-balance-me person-sub group-members photos-link-all",
-  T("where do i stand in the boston group", val((-43.34, "USD")),
-    ref=[ans(op="balance", kind="group", name="Boston Trip", linked_to="$me")]),
-  T("and dec?", val((16.67, "USD")),
-    ref=[ans(op="balance", kind="group", name="Boston Trip", linked_to="$declan")]),
-  T("who's in the boston group", rows("me", "declan", "kathleen", "jack"),
-    ref=[find(kind="person", linked_to="$boston"), ans(rows="@prev")]),
-  T("photos with dec from the boston album on the 28th", rows("p_bos_dec", "p_bos_northend"),
-    ref=[ans(kind="photo", linked_to="$declan, $boston_album", when=W(D("2026-12-28")))]))
-
 
 S("T37-020", "bulk delete cap composed-ask yes-confirm read-after",
   T("delete all the finished tasks", ask(),
@@ -273,40 +233,6 @@ S("T37-024", "ambiguous-write ask never-mind then read",
     ref=[dec("never_mind")]),
   T("when's the hearing test", rows("hearing"),
     ref=[ans(kind="event", name="hearing test")]))
-
-S("T37-025", "group members value-group refused-remove ask settle_up remove_from",
-  T("who's in the golf society pot", rows("me", "gerry", "brendan", "sean_m"),
-    ref=[find(kind="person", linked_to="$golf"), ans(rows="@prev")]),
-  T("where do i stand in it", val((100, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Golf Society Pot", linked_to="$me")]),
-  T("take the gaa sean out of the golf group", ask("sean_m", "golf"),
-    ref=[act("remove_from", kind="person", name="sean", linked_to="$gaa", args="from: $golf")]),
-  T("settle up with him in the golf pot", diff(settle=[("Sean Murphy", "70.00")]),
-    ref=[act("settle_up", rows="$sean_m", args="group: $golf")]),
-  T("now take him out", diff(unlink("golf", "sean_m")),
-    ref=[act("remove_from", rows="$sean_m", args="from: $golf")]))
-
-S("T37-026", "group members remove delete-empty-group unlinks undo-not-undone",
-  T("who's on the camino group", rows("me", "gerry", "tadhg"),
-    ref=[find(kind="person", linked_to="$camino"), ans(rows="@prev")]),
-  T("take tadhg off it, his knee's not up to it", diff(unlink("camino", "tadhg")),
-    ref=[act("remove_from", rows="$tadhg", args="from: $camino")]),
-  T("and delete the group, we're paying cash", diff(gone("camino"), unlink("camino", "gerry"), unlink("camino", "me")),
-    ref=[act("delete", rows="$camino")]),
-  T("undo that", diff(),
-    ref=[act("undo")]))
-
-S("T37-027", "create group add_to-several members create-debt links",
-  T("start a salthill walkers group in euro",
-    diff(new("group", name="Salthill Walkers", currency="EUR"), link("new", "me")),
-    ref=[act("create", args="kind: group\nname: Salthill Walkers\ncurrency: EUR")]),
-  T("put nuala and gerry in it", diff(link("+1", "nuala"), link("+1", "gerry")),
-    ref=[act("add_to", rows="$nuala, $gerry", args="to: $new")]),
-  T("who's in it", rows("me", "nuala", "gerry"),
-    ref=[find(kind="person", linked_to="$c1"), ans(rows="@prev")]),
-  T("nuala owes me 12 for the lotto",
-    diff(new("debt", name=has("lotto"), amount=12, direction="owes_me"), link("new", "nuala")),
-    ref=[act("create", args="kind: debt\nname: lotto\namount: 12\ndirection: owes_me\nperson: $nuala")]))
 
 S("T37-028", "create person star log-visit created-row-followups",
   T("add frank hanley, nuala's husband",

@@ -9,36 +9,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T21-101", "samuel star ask pick balance mechanic",
-  T("star samuel", ask("githinji", "rev_kiprono"),
-    ref=[act("star", kind="person", name="Samuel"),
-         askc("samuel githinji the mechanic or rev. samuel kiprono?", options="$githinji, $rev_kiprono")]),
-  T("the reverend", diff(upd("rev_kiprono", starred=True)),
-    ref=[act("star", rows="$rev_kiprono")]),
-  T("how much do i owe the mechanic", val((-4500, "KES")),
-    ref=[ans(op="balance", rows="$githinji")]),
-  T("log a visit with the reverend, he came by for tea", diff(upd("rev_kiprono", date=ANY)),
-    ref=[act("log", rows="$rev_kiprono", args=lines(kind="visit"))]))
-
-S("T21-102", "mechanic star where unstar kevin balance pronoun",
-  T("star the mechanic", diff(upd("githinji", starred=True)),
-    ref=[act("star", kind="person", where='role contains "mechanic"')]),
-  T("unstar kevin for now, he's not calling much", diff(upd("kevin", starred=False)),
-    ref=[act("unstar", kind="person", name="Kevin")]),
-  T("what do i owe him", val((-7000, "KES")),
-    ref=[ans(op="balance", rows="$kevin")]))
-
-S("T21-103", "mwangi balance ask pick settle_debt",
-  T("how much does mwangi owe me", ask("kevin", "brian"),
-    ref=[find(kind="person", name="Mwangi"),
-         askc("kevin or brian?", options="$kevin, $brian")]),
-  T("the younger one", val((15000, "KES")),
-    ref=[ans(op="balance", rows="$brian")]),
-  T("he paid the rent deposit in cash, mark it settled", diff(upd("d_brian", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Rent deposit Eldoret")]),
-  T("log a message to him saying we're square", diff(upd("brian", date=ANY)),
-    ref=[act("log", rows="$brian", args=lines(kind="message"))]))
-
 S("T21-104", "dentist reschedule ask pick friday at 5 create monday",
   T("push the dentist to friday at 5", ask("dentist_shiru", "dentist_me"),
     ref=[act("reschedule", kind="event", name="Dentist", args=lines(to=U("week", 1, weekday=5, time="17:00"))),

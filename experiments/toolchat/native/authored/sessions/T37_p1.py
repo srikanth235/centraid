@@ -20,17 +20,6 @@ S("T37-002-P", "list status date within narrow complete para",
     ref=[ans(kind="task", linked_to="$gaa_list", where="status = open", when=W(U("month", 0)),
              exclude="$gaa_report")]))
 
-S("T37-006-P", "chain event attendees group find balance-person decoy-names para",
-  T("easter lunch guest list?", rows("aoife", "conor", "oisin", "maura"),
-    ref=[find(kind="person", linked_to="$easter"), ans(rows="@prev")]),
-  T("april book club attendees?", rows("siobhan", "mary_k", "sean_b"),
-    ref=[find(kind="event", name="book club", when=W(U("month", 0, name=4))),
-         ans(kind="person", linked_to="@prev")]),
-  T("my balance with mary from book club", val((-63, "EUR")),
-    ref=[ans(op="balance", kind="person", name="mary", linked_to="$bookclub")]),
-  T("book club is off, cancel it", ask("bookclub_jan", "bookclub_feb", "bookclub_mar", "bookclub_apr"),
-    ref=[act("cancel", kind="event", name="book club")]))
-
 S("T37-010-P", "create clash composed-ask retry wrong-container decline para",
   T("diary entry for thursday at 11, coffee with gerry", ask("coffee_brendan"),
     ref=[act("create", args="kind: event\nname: Coffee with Gerry\n" + lines(date=U("week", 0, weekday=4, time="11:00")))]),
@@ -51,16 +40,6 @@ S("T37-015-P", "events name month where-not-cancelled substitution within-when r
   T("physio session count this year, split by status", vgroups({"tentative": 9, "cancelled": 1}),
     ref=[comp(op="count", kind="event", name="physio", group="status", when=W(U("year", 0))), ans(value="@prev")]))
 
-S("T37-019-P", "group-balance-me person-sub group-members photos-link-all para",
-  T("my balance in the boston group?", val((-43.34, "USD")),
-    ref=[ans(op="balance", kind="group", name="Boston Trip", linked_to="$me")]),
-  T("dec's?", val((16.67, "USD")),
-    ref=[ans(op="balance", kind="group", name="Boston Trip", linked_to="$declan")]),
-  T("boston group members?", rows("me", "declan", "kathleen", "jack"),
-    ref=[find(kind="person", linked_to="$boston"), ans(rows="@prev")]),
-  T("boston album pictures from the 28th that show dec", rows("p_bos_dec", "p_bos_northend"),
-    ref=[ans(kind="photo", linked_to="$declan, $boston_album", when=W(D("2026-12-28")))]))
-
 S("T37-023-P", "decline out-of-scope text edit description decline weather para",
   T("let aoife know by text i'll be late for the minding", decline("out_of_scope"),
     ref=[dec("out_of_scope")]),
@@ -70,18 +49,6 @@ S("T37-023-P", "decline out-of-scope text edit description decline weather para"
              args="description: running late")]),
   T("wednesday's weather?", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
-
-S("T37-027-P", "create group add_to-several members create-debt links para",
-  T("new euro group called salthill walkers",
-    diff(new("group", name="Salthill Walkers", currency="EUR"), link("new", "me")),
-    ref=[act("create", args="kind: group\nname: Salthill Walkers\ncurrency: EUR")]),
-  T("nuala and gerry join it", diff(link("+1", "nuala"), link("+1", "gerry")),
-    ref=[act("add_to", rows="$nuala, $gerry", args="to: $new")]),
-  T("who's in there now", rows("me", "nuala", "gerry"),
-    ref=[find(kind="person", linked_to="$c1"), ans(rows="@prev")]),
-  T("lotto debt, nuala owes me 12",
-    diff(new("debt", name=has("lotto"), amount=12, direction="owes_me"), link("new", "nuala")),
-    ref=[act("create", args="kind: debt\nname: lotto\namount: 12\ndirection: owes_me\nperson: $nuala")]))
 
 S("T37-031-P", "k4 read next-three link where order-limit para",
   T("next three events with tadhg that haven't been called off",
@@ -99,12 +66,6 @@ S("T37-035-P", "already-so star order-limit then answer follow-up star para",
          ans(rows="$pension_stmt")]),
   T("last year's pension statement gets one too", diff(upd("pension_stmt25", starred=True)),
     ref=[find(kind="document", name="pension statement", when=W(U("year", -1))), act("star", rows="@prev")]))
-
-S("T37-039-P", "settle_debt by link then still-owed read para",
-  T("bin collection money is back from nuala, mark it settled", diff(upd("d_nuala", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="bin collection", linked_to="$nuala")]),
-  T("outstanding debts owed to me?", rows("d_conor", "d_aoife_cake", "d_gerry", "d_sean_b"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]))
 
 S("T37-043-P", "create event retry edit-duration para",
   T("friday at 1, lunch with maura", diff(new("event", name=has("lunch", "maura"), date="2027-03-12T13:00")),
@@ -143,23 +104,6 @@ S("T37-055-P", "create subtask container read complete-two exclude para",
   T("apart from the tablecloth, what remains", rows("easter_beds", "easter_flowers"),
     ref=[ans(kind="task", linked_to="$easter_proj", where="status = open", exclude="$c1")]))
 
-S("T37-059-P", "two-writes star-unstar then read starred ambiguous-person ask pick unstar-two where-two para",
-  T("home wifi loses its star, aoife one gains one, then starred items that aren't logins",
-    rows("joint_acct", "aoife_wifi", "gaa_member",
-         also=diff(upd("home_wifi", starred=False), upd("aoife_wifi", starred=True))),
-    ref=[act("unstar", rows="$home_wifi", more=True), act("star", rows="$aoife_wifi", more=True),
-         ans(kind="locker item", where='starred = yes and type != "login"')]),
-  T("sean gets a star", ask("sean_b", "sean_m"),
-    ref=[act("star", kind="person", name="sean")]),
-  T("gaa sean", diff(upd("sean_m", starred=True)),
-    ref=[find(kind="person", name="sean", linked_to="$gaa"), act("star", rows="@prev")]),
-  T("tadhg and cian lose their stars", diff(upd("tadhg", starred=False), upd("cian", starred=False)),
-    ref=[act("unstar", rows="$tadhg, $cian")]),
-  T("starred people with a weekly cadence", rows("declan"),
-    ref=[ans(kind="person", where="starred = yes and cadence = 7")]),
-  T("golf pot members who are starred", rows("sean_m"),
-    ref=[ans(kind="person", linked_to="$golf", where="starred = yes")]))
-
 S("T37-063-P", "repair where-date two-writes search-role star count-group delete-where undo-restore para",
   T("health list items due before the 20th", rows("knee_ex", "hearing_aid"),
     ref=[bad(ans(kind="task", linked_to="$health_list", where="status = open and due < 2027-03-20")),
@@ -191,17 +135,6 @@ S("T37-071-P", "create login username-label url one-per-line implied-type para",
   T("esb login for me, liam.obrien61 as user, site esb.ie",
     diff(new("locker item", name=has("esb"), type="login", username="liam.obrien61", url=has("esb.ie"))),
     ref=[act("create", args="kind: locker item\nname: ESB login\ntype: login\nusername: liam.obrien61\nurl: esb.ie")]))
-
-S("T37-075-P", "create person role-nickname-label debt-purpose group-currency-purpose created-link para",
-  T("dermot shaw is a roofer who goes by dermy, quoting for the shed, save him",
-    diff(new("person", name="Dermot Shaw", role="roofer", nickname="Dermy")),
-    ref=[act("create", args="kind: person\nname: Dermot Shaw\nrole: roofer\nnickname: Dermy")]),
-  T("lift to the airport, dermy owes me 30, sorting it friday",
-    diff(new("debt", name=has("airport"), amount=30, direction="owes_me"), link("new", "+1")),
-    ref=[act("create", args="kind: debt\nname: airport lift\namount: 30\ndirection: owes_me\nperson: $new")]),
-  T("cheltenham trip group in euro please, the lads are going in march",
-    diff(new("group", name=has("cheltenham"), currency="EUR"), link("new", "me")),
-    ref=[act("create", args="kind: group\nname: Cheltenham Trip\ncurrency: EUR")]))
 
 S("T37-079-P", "verb-choice add_to move-task bring-it-back add_to then edit status in-progress then create second-container-same-name para",
   T("minibus booking should live on the family list",

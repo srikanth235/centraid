@@ -10,8 +10,8 @@ medical bills with his sister Patrícia and brother Diego. Built-in ambiguity: t
 nicknames (Rafa, Juninho, Nath, Guga, Dona Neide, Seu Jorge, Vó Lurdes), a misspelled-looking
 name (Jhonatan), two cardiology appointments for Mãe, two "Pharmacy list" notes, two "Send
 invoice to Kleber" tasks, two IPVA tasks, folders that share the word "car", cancelled gigs,
-completed tasks, trashed rows inside and past the 30-day restore window, an empty group, an
-empty folder, and a group in ARS for the Buenos Aires gig.
+completed tasks, trashed rows inside and past the 30-day restore window, an
+empty folder.
 """
 from __future__ import annotations
 
@@ -77,48 +77,6 @@ def people():
         {"key": "caio", "name": "Caio Martins", "role": "old roommate", "trashed": "2026-08-01T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "carpool", "name": "Car pool rodízio", "members": ["rafa_s", "junior"], "created": "2026-03-01T08:00"},
-    {"key": "baile", "name": "Coletivo Baile Torto", "members": ["rafa_m", "nath", "guga", "marcos_o", "ana_paula"],
-     "created": "2026-02-10T20:00"},
-    {"key": "mae_g", "name": "Mãe's medical bills", "members": ["patricia", "diego"], "created": "2026-05-02T10:00"},
-    {"key": "ape", "name": "Apê Vila Madalena", "members": ["larissa"], "created": "2026-01-15T10:00"},
-    {"key": "bsas", "name": "Buenos Aires gig", "currency": "ARS", "members": ["guga", "larissa"],
-     "created": "2026-10-01T10:00"},
-    {"key": "futebol", "name": "Futebol de quinta", "members": ["thiago", "wesley"], "created": "2026-09-01T10:00"},
-]
-
-EXPENSES = [
-    {"group": "carpool", "name": "Fuel, week 42", "amount": 420, "paid_by": "me",
-     "split": ["me", "rafa_s", "junior"], "date": "2026-10-19"},
-    {"group": "carpool", "name": "Car insurance October", "amount": 390, "paid_by": "rafa_s",
-     "split": ["me", "rafa_s", "junior"], "date": "2026-10-05"},
-    {"group": "carpool", "name": "New tyres", "amount": 1200, "paid_by": "junior",
-     "split": ["me", "rafa_s", "junior"], "date": "2026-10-06"},
-    {"group": "carpool", "name": "Car wash", "amount": 60, "paid_by": "me",
-     "split": ["me", "rafa_s", "junior"], "date": "2026-10-17"},
-    {"group": "baile", "name": "Speaker rental", "amount": 800, "paid_by": "rafa_m",
-     "split": ["me", "rafa_m", "nath", "guga", "marcos_o"], "date": "2026-10-20"},
-    {"group": "baile", "name": "Flyers print", "amount": 150, "paid_by": "me",
-     "split": ["me", "nath", "guga"], "date": "2026-10-12"},
-    {"group": "baile", "name": "Smoke machine fluid", "amount": 90, "paid_by": "nath",
-     "split": ["me", "nath", "guga"], "date": "2026-10-21"},
-    {"group": "mae_g", "name": "Cardiology consult", "amount": 450, "paid_by": "me",
-     "split": ["me", "patricia", "diego"], "date": "2026-09-15"},
-    {"group": "mae_g", "name": "Echocardiogram", "amount": 600, "paid_by": "patricia",
-     "split": ["me", "patricia", "diego"], "date": "2026-09-22"},
-    {"group": "mae_g", "name": "Pharmacy October", "amount": 330, "paid_by": "diego",
-     "split": ["me", "patricia", "diego"], "date": "2026-10-09"},
-    {"group": "ape", "name": "Rent October", "amount": 2400, "paid_by": "me",
-     "split": ["me", "larissa"], "date": "2026-10-05"},
-    {"group": "ape", "name": "Internet", "amount": 120, "paid_by": "larissa",
-     "split": ["me", "larissa"], "date": "2026-10-10"},
-    {"group": "ape", "name": "Groceries Pão de Açúcar", "amount": 380, "paid_by": "larissa",
-     "split": ["me", "larissa"], "date": "2026-10-18"},
-    {"group": "bsas", "name": "Hostel deposit", "amount": 90000, "paid_by": "guga",
-     "split": ["me", "guga", "larissa"], "date": "2026-10-08"},
-]
 
 LISTS = [
     {"key": "carro_l", "name": "Carro", "area": "work"},
@@ -473,34 +431,6 @@ PHOTOS = [
     {"key": "old_car", "name": "The old Gol", "taken": "2024-05-10T10:00", "trashed": "2026-07-15T10:00"},
 ]
 
-DEBTS = [
-    {"key": "d_junior", "person": "junior", "direction": "i_owe", "amount": 400, "name": "Tyres share",
-     "date": "2026-10-06"},
-    {"key": "d_rafa_s", "person": "rafa_s", "direction": "owes_me", "amount": 85, "name": "Toll tags",
-     "date": "2026-10-16"},
-    {"key": "d_guga", "person": "guga", "direction": "owes_me", "amount": 150, "name": "Pioneer headphones",
-     "date": "2026-10-23"},
-    {"key": "d_nath", "person": "nath", "direction": "i_owe", "amount": 60, "name": "Uber to the gig",
-     "date": "2026-10-17"},
-    {"key": "d_diego", "person": "diego", "direction": "owes_me", "amount": 220, "name": "Mom's pharmacy",
-     "date": "2026-09-30"},
-    {"key": "d_patricia", "person": "patricia", "direction": "i_owe", "amount": 180, "name": "Echo share",
-     "date": "2026-09-22"},
-    {"key": "d_thiago", "person": "thiago", "direction": "owes_me", "amount": 50, "name": "Football shirt",
-     "date": "2026-10-02"},
-    {"key": "d_kleber", "person": "kleber", "direction": "owes_me", "amount": 600, "name": "Gig fee 16 Oct",
-     "date": "2026-10-16"},
-    {"key": "d_kleber_old", "person": "kleber", "direction": "owes_me", "amount": 500, "name": "Gig fee 2 Oct",
-     "date": "2026-10-02", "settled": "2026-10-09T12:00"},
-    {"key": "d_larissa", "person": "larissa", "direction": "i_owe", "amount": 95, "name": "Concert tickets",
-     "date": "2026-09-12", "settled": "2026-09-20T10:00"},
-    {"key": "d_bianca", "person": "bianca", "direction": "owes_me", "amount": 40, "name": "Pizza night",
-     "date": "2026-10-09"},
-    {"key": "d_wesley", "person": "wesley", "direction": "i_owe", "amount": 35, "name": "Haircut",
-     "date": "2026-10-23"},
-    {"key": "d_marcos_t", "person": "marcos_t", "direction": "i_owe", "amount": 250, "name": "Brake pads",
-     "date": "2026-08-25"},
-]
 
 LOCKER = [
     {"key": "uber_login", "name": "Uber Driver account", "type": "login", "username": "tomas.ferreira.sp",
@@ -577,8 +507,6 @@ def world():
         "seed": "T14",
         "currency": "BRL",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -588,7 +516,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

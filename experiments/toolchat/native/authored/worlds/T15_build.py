@@ -10,7 +10,7 @@ Nilsen, climbing partner Erik Johansen), nicknames (Halle, Tosse, Mari, Kapteine
 misspelled-looking name (Ailo Gaup), two cruise planning meetings, two vet visits for Pusur, two
 "Renew seafarer medical" tasks, monthly bills, two cruise reports and two payslips among the
 documents, two "Cruise" lists, cancelled events, completed tasks, trashed rows inside and past the
-30-day restore window, an empty group, two empty folders and an empty album.
+30-day restore window, two empty folders and an empty album.
 """
 from __future__ import annotations
 
@@ -86,51 +86,6 @@ def people():
         {"key": "lars", "name": "Lars Moen", "role": "former colleague", "trashed": "2026-06-02T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "mess", "name": "Crew mess fund", "currency": "NOK",
-     "members": ["erik_n", "hallvard", "tor", "svein", "bjorn", "ailo", "linnea", "rune", "marianne"],
-     "created": "2025-09-01T12:00"},
-    {"key": "cabin", "name": "Lyngen cabin share", "currency": "NOK", "members": ["jonas", "torstein", "hanne"],
-     "created": "2024-05-01T12:00"},
-    {"key": "climb", "name": "Tromsø climbing club", "currency": "NOK", "members": ["erik_j", "silje", "torstein", "kaja"],
-     "created": "2025-01-10T12:00"},
-    {"key": "kiel", "name": "Kiel workshop", "currency": "EUR", "members": ["jan", "sofie", "marte"],
-     "created": "2026-09-01T10:00"},
-    {"key": "abisko", "name": "Abisko ski trip", "currency": "SEK", "members": ["jonas", "erik_j", "kaja"],
-     "created": "2026-02-01T10:00"},
-    {"key": "whale", "name": "Whale safari", "currency": "NOK", "members": ["silje", "ingvild"],
-     "created": "2026-10-20T10:00"},
-]
-
-EXPENSES = [
-    {"group": "mess", "name": "Coffee and waffles", "amount": 1800, "paid_by": "me",
-     "split": ["me", "erik_n", "hallvard", "tor", "svein", "bjorn", "ailo", "linnea", "rune"], "date": "2026-10-15"},
-    {"group": "mess", "name": "Birthday cake for Bjørn", "amount": 450, "paid_by": "svein",
-     "split": ["me", "svein", "bjorn", "ailo", "linnea"], "date": "2026-10-20"},
-    {"group": "mess", "name": "Brown cheese and jam", "amount": 640, "paid_by": "linnea",
-     "split": ["me", "linnea", "marianne", "rune"], "date": "2026-10-24"},
-    {"group": "mess", "name": "Taco Friday", "amount": 1200, "paid_by": "me",
-     "split": ["me", "linnea", "ailo", "marianne"], "date": "2026-10-23"},
-    {"group": "cabin", "name": "Firewood delivery", "amount": 3200, "paid_by": "me",
-     "split": ["me", "jonas", "torstein", "hanne"], "date": "2026-10-03"},
-    {"group": "cabin", "name": "Cabin electricity September", "amount": 1480, "paid_by": "torstein",
-     "split": ["me", "jonas", "torstein", "hanne"], "date": "2026-10-01"},
-    {"group": "cabin", "name": "New gas bottle", "amount": 560, "paid_by": "hanne",
-     "split": ["me", "jonas", "torstein", "hanne"], "date": "2026-09-12"},
-    {"group": "climb", "name": "Rope for the club wall", "amount": 2400, "paid_by": "erik_j",
-     "split": ["me", "erik_j", "silje", "torstein"], "date": "2026-09-20"},
-    {"group": "climb", "name": "Chalk bulk order", "amount": 600, "paid_by": "me",
-     "split": ["me", "silje", "kaja"], "date": "2026-10-05"},
-    {"group": "kiel", "name": "Hotel in Kiel", "amount": 720, "paid_by": "me", "split": ["me", "jan", "sofie", "marte"],
-     "date": "2026-09-18"},
-    {"group": "kiel", "name": "Workshop dinner", "amount": 260, "paid_by": "jan", "split": ["me", "jan", "sofie", "marte"],
-     "date": "2026-09-19"},
-    {"group": "abisko", "name": "Cabin at Abisko", "amount": 6000, "paid_by": "jonas",
-     "split": ["me", "jonas", "erik_j", "kaja"], "date": "2026-03-10"},
-    {"group": "abisko", "name": "Train tickets", "amount": 1600, "paid_by": "me", "split": ["me", "jonas"],
-     "date": "2026-03-08"},
-]
 
 LISTS = [
     {"key": "prep_l", "name": "Cruise prep", "area": "work - ship"},
@@ -514,34 +469,6 @@ PHOTOS = [
      "trashed": "2026-10-30T20:00"},
 ]
 
-DEBTS = [
-    {"key": "d_jonas_groceries", "person": "jonas", "direction": "i_owe", "amount": 640, "name": "Groceries at Rema",
-     "date": "2026-11-06"},
-    {"key": "d_erik_j", "person": "erik_j", "direction": "owes_me", "amount": 350, "name": "Ice screws half",
-     "date": "2026-10-04"},
-    {"key": "d_silje", "person": "silje", "direction": "owes_me", "amount": 180, "name": "Sauna tickets",
-     "date": "2026-11-05"},
-    {"key": "d_torstein", "person": "torstein", "direction": "i_owe", "amount": 420, "name": "Ferry to Lyngen",
-     "date": "2026-11-07"},
-    {"key": "d_marianne", "person": "marianne", "direction": "owes_me", "amount": 250, "name": "Sample vials",
-     "date": "2026-10-28"},
-    {"key": "d_hallvard", "person": "hallvard", "direction": "i_owe", "amount": 95, "name": "Coffee beans",
-     "date": "2026-11-04"},
-    {"key": "d_anders", "person": "anders", "direction": "owes_me", "amount": 1200, "name": "Concert tickets",
-     "date": "2026-08-20"},
-    {"key": "d_ingvild", "person": "ingvild", "direction": "owes_me", "amount": 160, "name": "Lunch",
-     "date": "2026-10-21", "settled": "2026-10-28T12:00"},
-    {"key": "d_kaja", "person": "kaja", "direction": "i_owe", "amount": 300, "name": "Headtorch",
-     "date": "2026-10-02"},
-    {"key": "d_linnea", "person": "linnea", "direction": "owes_me", "amount": 75, "name": "Seasick pills",
-     "date": "2026-10-24"},
-    {"key": "d_mum", "person": "mum", "direction": "i_owe", "amount": 2000, "name": "Flights to Bodø",
-     "date": "2026-10-19"},
-    {"key": "d_tor", "person": "tor", "direction": "owes_me", "amount": 110, "name": "Pizza on the quay",
-     "date": "2026-10-30", "settled": "2026-11-02T10:00"},
-    {"key": "d_jonas_vet", "person": "jonas", "direction": "owes_me", "amount": 450, "name": "Half of the vet bill",
-     "date": "2026-03-02"},
-]
 
 LOCKER = [
     {"key": "uit_login", "name": "UiT login", "type": "login", "username": "iso004", "url": "https://uit.no",
@@ -626,8 +553,6 @@ def world():
         "seed": "T15",
         "currency": "NOK",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -637,7 +562,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }
@@ -665,8 +589,8 @@ def check_overlaps(evs):
 if __name__ == "__main__":
     w = world()
     check_overlaps(w["events"])
-    allkeys = [r["key"] for sec in ("people", "groups", "lists", "events", "tasks", "notebooks", "notes", "folders",
-                                    "documents", "albums", "photos", "debts", "locker") for r in w[sec]]
+    allkeys = [r["key"] for sec in ("people", "lists", "events", "tasks", "notebooks", "notes", "folders",
+                                    "documents", "albums", "photos", "locker") for r in w[sec]]
     dup = {k for k in allkeys if allkeys.count(k) > 1}
     assert not dup, dup
     out = HERE / "T15.json"

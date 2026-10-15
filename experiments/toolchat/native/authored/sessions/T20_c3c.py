@@ -39,12 +39,6 @@ S("T20-C101", "c3c bulk delete per kind last year find multi-kind",
          act("delete", rows="$haccp", more=True),
          act("delete", rows="$us_ring, $us_beach")]))
 
-S("T20-C901", "c3c cell7 empty recovery no_link",
-  T("what's on for the stag weekend group", rows("stag_weekend"),
-    ref=[find(kind="event", linked_to="$stag"), ans(kind="event", name="stag weekend")]),
-  T("what's due from the 29th at 9am to next friday", rows("chain", "sofia_quiz", "curtains", "chianti_1", "corkage", "invoice_fede", "rent_06", "nonna_gift", "list_whites", "enel", "boxes", "car_tax"),
-    ref=[ans(kind="task", when=W(span(D("2026-05-29", "09:00"), U("week", 1, weekday=5))))]))
-
 S("T20-C902", "c3c cell7 rejected restore past window ask",
   T('bring back the arno movers quote', ask(),
     ref=[bad(act("restore", kind="document", name="arno movers quote", trashed=True)), askc("the arno movers quote was deleted more than 30 days ago, so the vault can't bring it back. want to make a new document instead?")]))

@@ -42,20 +42,6 @@ S("T16-004", "create person delete restore new undo restore",
   T("hmm no undo that, hr says it was her cousin", diff(trash("+1")),
     ref=[act("undo")]))
 
-S("T16-005", "balance person settle_up named",
-  T("where do i stand with sohel", val((-350, "BDT")),
-    ref=[ans(op="balance", rows="$sohel")]),
-  T("settle up with him in the tigers kitty", diff(settle=["Sohel Rana"]),
-    ref=[act("settle_up", rows="$sohel", args=lines(group="$tigers"))]))
-
-S("T16-006", "settle_up prev group balance",
-  T("jahanara khatun, what's her role again", rows("jahanara"),
-    ref=[ans(kind="person", name="Jahanara Khatun")]),
-  T("settle up with her for the eid bonus pool", diff(settle=["Jahanara Khatun"]),
-    ref=[act("settle_up", rows="@prev", args=lines(group="$bonus"))]),
-  T("so we're square now, me and her?", val((0, "BDT")),
-    ref=[ans(op="balance", rows="$jahanara")]))
-
 S("T16-007", "cancel event named day read",
   T("cancel tea with topu, he's down with fever", diff(upd("tea_topu", status="cancelled")),
     ref=[act("cancel", kind="event", name="Tea with Topu")]),

@@ -3,16 +3,6 @@ import json
 def J(d):
     return json.dumps(d, separators=(",", ":"))
 
-S("T29-093-P", "r2 container-link-read owner-row groups-i-am-in count members person-groups para",
-  T("number of groups i belong to", val(5),
-    ref=[ans(op="count", kind="group", linked_to="$me")]),
-  T("which are they", rows("riders", "flat", "diani", "berlin", "kisumu_fund"),
-    ref=[ans(kind="group", linked_to="$me")]),
-  T("diani weekend members?", rows("me", "brenda", "ian", "naomi", "amina"),
-    ref=[ans(kind="person", linked_to="$diani")]),
-  T("kip belongs to how many groups", val(1),
-    ref=[ans(op="count", kind="group", linked_to="$kip")]))
-
 S("T29-097-P", "r2 stray met-contains person-field university riders within-starred role-contains-inexact para",
   T("contacts i met at university, which", rows("brenda", "ian"),
     ref=[ans(kind="person", where='met contains "university"')]),

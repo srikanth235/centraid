@@ -6,36 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T17-051", "seven turns today debts sum max min direction log",
-  T("what's on today", rows("lunch_petar", "sofia_run"),
-    ref=[ans(kind="event", when=W(U("day", 0)))]),
-  T("who's coming to the run-through", rows("sofia_a"),
-    ref=[ans(kind="person", linked_to="$sofia_run")]),
-  T("does she owe me anything", val((50, "BGN")),
-    ref=[ans(op="balance", rows="$sofia_a")]),
-  T("how much am i owed", val((585, "BGN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("what's the biggest of those", rows("d_daniela"),
-    ref=[ans(kind="debt", where='direction = "owes_me" and status = "open"', order="amount desc", limit=1)]),
-  T("and the smallest thing i owe someone", val((25, "BGN")),
-    ref=[ans(op="min", field="amount", kind="debt", where='direction != "owes_me" and status = "open"')]),
-  T("log a call with sofia angelova, talked about the exam", diff(upd("sofia_a", date=ANY)),
-    ref=[act("log", rows="$sofia_a", args=lines(kind="call"))]))
-
-S("T17-052", "six turns renovation due before monday effort balance",
-  T("what renovation stuff is due by next sunday", rows("sockets", "permit"),
-    ref=[ans(kind="task", linked_to="$reno_l", when=W({"to": U("week", 1, weekday=7)}))]),
-  T("and what's mitko got on him", rows("bathroom", "shower", "sockets", "kitchen_quote"),
-    ref=[search("mitko", kind="person"), ans(kind="task", linked_to="$mitko")]),
-  T("narrow to ones needing at least an hour", rows("bathroom", "shower"),
-    ref=[ans(kind="task", within="@prev", where="effort >= 60 minutes")]),
-  T("my debt to him in total, what is it", val((1500, "BGN")),
-    ref=[ans(op="sum", field="amount", kind="debt", linked_to="$mitko", where='status = "open"')]),
-  T("what's the net between me and him", val((-1500, "BGN")),
-    ref=[ans(op="balance", rows="$mitko")]),
-  T("when's the walkthrough with him again", rows("walkthrough"),
-    ref=[ans(kind="event", name="Walkthrough")]))
-
 S("T17-054", "four turns cadence != unit edit cadence contact before log",
   T("which students have a check-in cadence other than weekly", rows("maria_k", "kalina"),
     ref=[ans(kind="person", where='role contains "student" and cadence != 7 days')]),
@@ -55,15 +25,6 @@ S("T17-055", "four turns role is set nickname task count photo count star",
     ref=[ans(kind="person", where='role contains "choir" and photo count <= 1')]),
   T("star hristo kirov, he's got the solo in march", diff(upd("hristo", starred=True)),
     ref=[act("star", kind="person", name="Hristo Kirov")]))
-
-S("T17-056", "groups currency is set group balance substitution",
-  T("groups with a currency and more than two people in them", rows("vienna", "choir_fund", "bathroom_g", "bansko"),
-    ref=[ans(kind="group", where="currency is set and person count > 2")]),
-  T("what's hristo's position in the vienna one", val((-90, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Choir tour Vienna", linked_to="$hristo")]),
-  T("and desi's", val((-140, "EUR")),
-    ref=[search("desi", kind="person"),
-         ans(op="balance", kind="group", name="Choir tour Vienna", linked_to="$desi")]))
 
 S("T17-057", "five turns notes date since pinned != edit count",
   T("notes i wrote on the twentieth", rows("kalina_notes", "rach_notes"),
@@ -149,32 +110,6 @@ S("T17-063", "four turns photo spans count within person count star",
     ref=[ans(kind="photo", within="@prev", where="person count > 0")]),
   T("star vesi and me after rehearsal", diff(upd("vesi_duo", starred=True)),
     ref=[act("star", rows="$vesi_duo")]))
-
-S("T17-064", "debts last month named month settle_debt",
-  T("what debts are from last month", rows("d_daniela", "d_mila", "d_petar"),
-    ref=[ans(kind="debt", when=W(U("month", -1)))]),
-  T("and november?", rows("d_stefan", "d_sofia"),
-    ref=[ans(kind="debt", when=W(U("month", -1, name=11)))]),
-  T("settle sofia's, she paid me at the lesson", diff(upd("d_sofia", status="settled")),
-    ref=[act("settle_debt", rows="$d_sofia")]))
-
-S("T17-065", "four turns debts span direction != sum settle",
-  T("debts since last monday", rows("d_kalina", "d_niki", "d_ivan_t", "d_mitko", "d_todor", "d_vesi", "d_plamen"),
-    ref=[ans(kind="debt", when=W({"from": U("week", -1, weekday=1)}))]),
-  T("which of those are mine to pay", rows("d_mitko", "d_todor", "d_vesi", "d_plamen"),
-    ref=[ans(kind="debt", within="@prev", where='direction != "owes_me"')]),
-  T("total?", val((1945, "BGN")),
-    ref=[ans(op="sum", field="amount", within="@prev")]),
-  T("paid vesi back in cash, settle that one", diff(upd("d_vesi", status="settled")),
-    ref=[search("vesi", kind="person"), act("settle_debt", kind="debt", linked_to="$vesi")]))
-
-S("T17-066", "debt span person count already settled",
-  T("debts from december through jan fifteenth at noon", rows("d_daniela", "d_mila", "d_petar", "d_maria_k"),
-    ref=[ans(kind="debt", when=W(span(U("month", -1, name=12), D("2026-01-15", "12:00"))))]),
-  T("are any debts not tied to a person", rows(),
-    ref=[ans(kind="debt", where="person count = 0")]),
-  T("settle petar's concert tickets one", diff(already=["d_petar"]),
-    ref=[act("settle_debt", kind="debt", name="Concert tickets"), ans(rows="$d_petar")]))
 
 S("T17-067", "five turns locker url contains notes empty edit reveal trashed decline",
   T("which logins are on a.bg site", rows("dsk"),

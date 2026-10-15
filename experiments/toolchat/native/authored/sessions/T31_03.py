@@ -9,11 +9,6 @@ def J(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T31-053", "sum owed last month four-constraints",
-  T("how much do i still owe from last month", val((212, "PLN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open",
-             when=J(U("month", -1)))]))
-
 S("T31-054", "count flat tasks this week four-constraints compute",
   T("how many flat tasks are due this week that i haven't done", val(3),
     ref=[comp(op="count", kind="task", linked_to="$flat_l", where="status = open", when=J(U("week", 0))),
@@ -27,12 +22,6 @@ S("T31-055", "ambiguous delete pay rent pick",
   T("no wait, bring back the pay rent one", diff(restore("rent_sep")),
     ref=[find(kind="task", name="pay rent", trashed=True), act("restore", rows="@1")]))
 
-S("T31-056", "refused remove member balance settle-up",
-  T("take ola out of flat bills", ask("ola", "flat_bills"),
-    ref=[act("remove_from", rows="$ola", args=lines(from_="$flat_bills"))]),
-  T("ok settle up with her first", diff(upd("ola", balance=ANY)),
-    ref=[act("settle_up", rows="$ola", args=lines(group="$flat_bills"))]))
-
 S("T31-057", "did-you-mean delete event confirm",
   T("get rid of the haircut with wojciech", ask("barber_ev"),
     ref=[act("delete", kind="event", name="haircut wojciech")]),
@@ -40,12 +29,6 @@ S("T31-057", "did-you-mean delete event confirm",
     ref=[act("delete", rows="$barber_ev")]),
   T("actually bring the haircut back, i'll keep it", diff(restore("barber_ev")),
     ref=[find(kind="event", name="haircut", trashed=True), act("restore", rows="@1")]))
-
-S("T31-058", "group delete refused expenses rename",
-  T("get rid of the london christmas group", ask(),
-    ref=[act("delete", kind="group", name="London Christmas")]),
-  T("ok rename it to london 2026 then", diff(upd("london", name="London 2026")),
-    ref=[act("edit", rows="$london", args=lines(name="London 2026"))]))
 
 S("T31-059", "not-found event decline out-of-scope star event",
   T("cancel the vet appointment on friday", decline("not_found"),
@@ -81,32 +64,6 @@ S("T31-062", "two marcins star exclude next-event ambiguous unstar role",
   T("the nurse", diff(upd("marcin_b", starred=False)),
     ref=[act("unstar", kind="person", name="marcin", where='role contains "nurse"')]))
 
-
-S("T31-063", "money round-up group-compute biggest settle-write-read sum-within create-debt",
-  T("give me both totals, owed and owing", vgroups({"i_owe": (546, "PLN"), "owes_me": (200, "PLN")}),
-    ref=[comp(op="sum", field="amount", kind="debt", where="status = open", group="direction"),
-         ans(value="@1")]),
-  T("what's the largest amount i owe anyone", rows("d_natalia"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1)]),
-  T("settled that one this morning, and what do i still owe",
-    rows("d_kuba_gas", "d_ola_clean", "d_darek_pizza", "d_marcin_hall", "d_ewa", "d_kasia",
-         also=diff(upd("d_natalia", status="settled"))),
-    ref=[act("settle_debt", rows="$d_natalia", more=True),
-         ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("which of those are from last month", rows("d_kasia", "d_ola_clean", "d_darek_pizza"),
-    ref=[ans(within="@prev", when=J(U("month", -1)))]),
-  T("and what's the total of those", val((212, "PLN")),
-    ref=[ans(op="sum", field="amount", within="@prev")]),
-  T("ola's cleaning one is paid, mark it and tell me where i stand with her now",
-    val((62, "PLN"), also=diff(upd("d_ola_clean", status="settled"))),
-    ref=[act("settle_debt", kind="debt", linked_to="$ola", where="direction = i_owe", more=True),
-         ans(op="balance", rows="$ola")]),
-  T("kuba owes me 30 for the cinema, and what's he got open with me in total",
-    val((50, "PLN"), also=diff(new("debt", name=has("cinema")), link("new", "kuba"))),
-    ref=[act("create", kind="debt", args=lines(name="cinema", person="$kuba", amount="30", direction="owes_me"),
-             more=True),
-         comp(op="sum", field="amount", kind="debt", linked_to="$kuba", where="direction = owes_me and status = open"),
-         ans(value="@prev")]))
 
 S("T31-064", "december football cancel-find-act write-read league darek cancelled",
   T("cancel the five-a-side games in december, the hall's shut",

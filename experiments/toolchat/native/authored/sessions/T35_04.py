@@ -73,29 +73,6 @@ S("T35-072", "create-args task-vs-event call-tradesperson appointment list-link 
     diff(new("task", name=has("boots"), date="2026-11-14")),
     ref=[act("create", args=lines(kind="task", name="Pick up Jonas's boots from the shop", date=U("week", 0, weekday=6)))]))
 
-S("T35-073", "create-args person label-words one-attribute-per-line debt inert-date-clause",
-  T("add berit moe, the new neighbour, goes by bit, she takes my parcels",
-    diff(new("person", name="Berit Moe", role="neighbour", nickname="Bit")),
-    ref=[act("create", args=lines(kind="person", name="Berit Moe", role="neighbour", nickname="Bit"))]),
-  T("kjersti owes me 300 for the cinema, we went wednesday",
-    diff(new("debt", name=has("cinema"), amount=300, direction="owes_me"), link("new", "kjersti")),
-    ref=[act("create", args=lines(kind="debt", name="Cinema", person="$kjersti", amount="300", direction="owes_me"))]),
-  T("and put a note in the house notebook, nils does the drive on thursdays",
-    diff(new("note", name=ANY, body=has("nils", "drive")), link("house_nb", "new")),
-    ref=[act("create", args="kind: note\nname: Nils and the drive\nbody: nils does the drive on thursdays\nnotebook: $house_nb")]))
-
-S("T35-074", "create-args album group inert-purpose add_to-new",
-  T("make an album called polar night, for the aurora pics",
-    diff(new("album", name="Polar night")),
-    ref=[act("create", args=lines(kind="album", name="Polar night"))]),
-  T("put the aurora photo in it",
-    diff(link("+1", "p_aurora")),
-    ref=[act("add_to", rows="$p_aurora", args=lines(to="$c1"))]),
-  T("and a group called lofoten, to split the trip costs with kjersti and siv",
-    diff(new("group", name="Lofoten", currency="NOK"), link("new", "me"), link("new", "kjersti"), link("new", "siv")),
-    ref=[act("create", args="kind: group\nname: Lofoten\ncurrency: NOK", more=True),
-         act("add_to", rows="$kjersti, $siv", args="to: $new")]))
-
 S("T35-075", "create-args task one-attribute-per-line list-link subtask-parent repair-plain-date",
   T("add a task, order two spare winch cables, due the 30th, 20 min, priority 2, lab list",
     diff(new("task", name=has("winch", "cables"), date="2026-11-30", effort=20, priority=2), link("lab_list", "new")),
@@ -223,12 +200,6 @@ S("T35-086", "set-answers role-noun lookup dentist neighbour-ingrid exact-role",
   T("and anyone in the trash", rows("old_broker", "old_builder"),
     ref=[ans(kind="person", trashed=True)]))
 
-S("T35-087", "set-answers debts directional out back henrik",
-  T("what does henrik still owe me", rows("d_henrik_boots"),
-    ref=[ans(kind="debt", linked_to="$henrik", where="direction = owes_me and status = open")]),
-  T("and what do i still owe him", rows("d_henrik_jacket"),
-    ref=[ans(kind="debt", linked_to="$henrik", where="direction = i_owe and status = open")]))
-
 S("T35-088", "set-answers same-word events meeting dentist weekday-decides",
   T("what time is the meeting next thursday", rows("parent_teacher"),
     ref=[ans(kind="event", name="meeting", when=J(U("week", 1, weekday=4)))]),
@@ -246,10 +217,3 @@ S("T35-089", "set-answers parent-task vs subtasks winter-boat-work complete writ
     rows("winter_winch", also=diff(upd("winter_antifoul", status="completed", completed=ANY))),
     ref=[act("complete", kind="task", name="antifouling paint", more=True),
          ans(kind="task", linked_to="$winter_work", where="status = open")]))
-
-S("T35-090", "set-answers superlative oldest find-then-act settle_debt biggest",
-  T("i've paid the oldest thing i owe, settle it", diff(upd("d_tuva", status="settled")),
-    ref=[find(kind="debt", where="direction = i_owe and status = open", order="date asc", limit=1),
-         act("settle_debt", rows="@prev")]),
-  T("and what's the biggest i still owe", rows("d_trond"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1)]))

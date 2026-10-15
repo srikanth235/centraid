@@ -8,17 +8,6 @@ def J(d):
     return json.dumps(d, separators=(",", ":"))
 
 
-S("T36-066", "same-word-pick both-events link-target photo-album person-group two-row-linked_to",
-  T("move both the lunch with rohan and the bunty call to monday",
-    diff(upd("lunch_rohan_k", date="2026-12-14T13:00"), upd("catchup_bunty", date="2026-12-14T21:00")),
-    ref=[act("reschedule", rows="$catchup_bunty, $lunch_rohan_k", args=lines(to=U("week", 1, weekday=1)))]),
-  T("put the bunty sangeet photo in the wedding one", diff(link("wedding_album", "p_bunty")),
-    ref=[act("add_to", rows="$p_bunty", args="to: $wedding_album")]),
-  T("and aai too, add her to wedding", diff(link("wedding", "aai")),
-    ref=[act("add_to", rows="$aai", args="to: $wedding")]),
-  T("which of anju's photos are in the wedding one now", rows("p_haldi", "p_mehendi", "p_phere", "p_varmala"),
-    ref=[ans(kind="photo", linked_to="$anjali, $wedding_album")]))
-
 S("T36-067", "same-word-pick topic-decides gloss star person",
   T("who's coming to the office party", rows("priya_d", "chinmay", "vaishnavi"),
     ref=[ans(kind="person", linked_to="$office_party")]),
@@ -26,14 +15,6 @@ S("T36-067", "same-word-pick topic-decides gloss star person",
     ref=[act("star", rows="$priya_d")]),
   T("and anju's cousin priya too", diff(upd("priya_s", starred=True)),
     ref=[find(kind="person", name="priya", where='role contains "cousin"'), act("star", rows="@prev")]))
-
-S("T36-068", "same-word-pick possessor-vs-relation debt-vs-task star-wifi",
-  T("paid kunal his dj share", diff(upd("d_kunal", status="settled")),
-    ref=[act("settle_debt", rows="$d_kunal")]),
-  T("and tick off the pay kunal task", diff(upd("pay_kunal", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$pay_kunal")]),
-  T("star aai's wifi", diff(upd("aai_wifi", starred=True)),
-    ref=[act("star", rows="$aai_wifi")]))
 
 S("T36-069", "same-word-pick verb-decides gloss ask star person",
   T("star rohan", diff(upd("rohan_m", starred=True)),
@@ -81,27 +62,6 @@ S("T36-073", "create-args task-vs-event chore errand appointment",
     ref=[act("create", kind="task", args=lines(name="Call the caterer about the final bill", date=U("week", 1, weekday=1)))]),
   T("call papa saturday at 5", diff(new("event", name=has("papa"), date="2026-12-12T17:00")),
     ref=[act("create", kind="event", args=lines(name="Call Papa", date=U("week", 0, weekday=6, time="17:00")))]))
-
-S("T36-074", "create-args person label-strip debt purpose-name",
-  T("add a person, pooja kulkarni, role yoga teacher, nickname pooji",
-    diff(new("person", name="Pooja Kulkarni", role="yoga teacher", nickname="Pooji")),
-    ref=[act("create", kind="person", args=lines(name="Pooja Kulkarni", role="yoga teacher", nickname="Pooji"))]),
-  T("neha owes me 800 for the yoga mat",
-    diff(new("debt", name=has("yoga mat"), amount=800, direction="owes_me"), link("new", "neha")),
-    ref=[act("create", kind="debt", args=lines(name="Yoga mat", person="$neha", amount="800", direction="owes_me"))]),
-  T("and i owe siddharth 300 for the court booking, we play saturday",
-    diff(new("debt", name=has("court"), amount=300, direction="i_owe"), link("new", "siddharth")),
-    ref=[act("create", kind="debt", args=lines(name="Court booking", person="$siddharth", amount="300", direction="i_owe"))]))
-
-S("T36-075", "create-args album group add_to-new currency",
-  T("make an album called coep reunion for the old college photos and put the coep one in it",
-    diff(new("album", name=has("coep")), link("new", "p_coep")),
-    ref=[act("create", kind="album", args="name: COEP reunion", more=True),
-         act("add_to", rows="$p_coep", args="to: $new")]),
-  T("and a group called badminton fund in rupees for the court fees, with siddharth",
-    diff(new("group", name=has("badminton"), currency="INR"), link("new", "me"), link("new", "siddharth")),
-    ref=[act("create", kind="group", args=lines(name="Badminton fund", currency="INR"), more=True),
-         act("add_to", rows="$siddharth", args="to: $new")]))
 
 S("T36-076", "verb-choice put-it-back add_to move",
   T("take the puncture photo out of the scooter rides album", diff(unlink("rides_album", "p_ride_puncture")),
@@ -211,14 +171,6 @@ S("T36-086", "set-answers role-noun exact-role",
   T("and my wedding vendors", rows("caterer", "decorator", "photog"),
     ref=[ans(kind="person", where='role contains "wedding"')]))
 
-S("T36-087", "set-answers debts direction two-rohans",
-  T("what do i owe bunty", rows("d_rohan_m"),
-    ref=[bad(ans(kind="debt", linked_to="$rohan_m", where="direction = owed")),
-         ans(kind="debt", linked_to="$rohan_m", where="direction = i_owe")]),
-  T("and what does rohan from college owe me", rows("d_rohan_k"),
-    ref=[find(kind="person", name="rohan", where='role contains "college"'),
-         ans(kind="debt", linked_to="@prev", where="direction = owes_me")]))
-
 S("T36-088", "set-answers same-word-events weekday-decides",
   T("when's the doctor visit next wednesday", rows("doc_baba"),
     ref=[ans(kind="event", name="doctor", when=J(U("week", 1, weekday=3)))]),
@@ -236,13 +188,3 @@ S("T36-089", "set-answers parent-vs-subtasks",
     ref=[ans(kind="task", linked_to="$wrap", where="status = completed")]),
   T("and is the decor quotes task gone", rows("old_decor"),
     ref=[find(kind="task", name="decor quotes", trashed=True), ans(rows="@prev")]))
-
-S("T36-090", "set-answers superlative find-then-act",
-  T("tick off the longest one on the work list", diff(upd("perf_review", status="completed", completed=ANY)),
-    ref=[find(kind="task", linked_to="$work_list", where="status = open", order="effort desc", limit=1),
-         act("complete", rows="@prev")]),
-  T("star my oldest photo", diff(upd("p_flat_keys", starred=True)),
-    ref=[find(kind="photo", order="date asc", limit=1), act("star", rows="@prev")]),
-  T("and i paid off the biggest debt i had", diff(upd("d_baba", status="settled")),
-    ref=[find(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1),
-         act("settle_debt", rows="@prev")]))

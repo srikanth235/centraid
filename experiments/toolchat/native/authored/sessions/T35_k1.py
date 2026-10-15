@@ -46,12 +46,6 @@ S("T35-K101", "family word dad mum role i3skill S6",
   T("and mum", rows("mamma"),
     ref=[ans(kind="person", where='role = "mum"')]))
 
-S("T35-K102", "iou debt either direction i3skill S6",
-  T("any iou with trond", rows("d_trond"),
-    ref=[ans(kind="debt", linked_to="$trond")]),
-  T("and bjorn", rows("d_bjorn"),
-    ref=[ans(kind="debt", linked_to="$bjorn")]))
-
 S("T35-K103", "diary entry means note i3skill S6",
   T("show me my diary entries", rows("diary_ski", "diary_whale"),
     ref=[ans(kind="note", name="Diary entry")]),

@@ -10,8 +10,6 @@ def W(expr):
 
 
 OPEN = 'status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-
 S("T07-B004", "c4b state-change complete task create contrast",
   T("paid the water bill", diff(upd("water_bill", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="water bill")]),

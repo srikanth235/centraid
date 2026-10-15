@@ -29,33 +29,11 @@ S("T31-007-P", "wifi reveal egress logins starred para",
   T("starred logins, list them", rows("pko_login"),
     ref=[ans(kind="locker item", where="type = login and starred = yes")]))
 
-S("T31-013-P", "ward gifts members role balance settle-up para",
-  T("ward 4b gifts, who's in it", rows("me", "marcin_b", "ewa", "magda", "przemek", "anna_w"),
-    ref=[ans(kind="person", linked_to="$ward_gifts")]),
-  T("the nurses among them", rows("marcin_b", "ewa", "magda", "anna_w"),
-    ref=[ans(within="@prev", where='role contains "nurse"')]),
-  T("ewa's balance?", val((-18, "PLN")),
-    ref=[ans(op="balance", rows="$ewa")]),
-  T("magda and me need settling up in the gifts group, do that", diff(upd("magda", balance=ANY)),
-    ref=[act("settle_up", rows="$magda", args=lines(group="$ward_gifts"))]),
-  T("upcoming events for the ward gifts group", rows("hospital_party"),
-    ref=[find(kind="event", linked_to="$ward_gifts"), ans(kind="event", name="ward")]))
-
 S("T31-019-P", "ambiguous dentist reschedule pick para",
   T("dentist should be on the 26th instead", ask("dentist_ev", "dentist_ev2"),
     ref=[act("reschedule", kind="event", name="dentist", args=lines(to=D("2026-11-26", "15:45")))]),
   T("the one in november", diff(upd("dentist_ev", date="2026-11-26T15:45")),
     ref=[act("reschedule", kind="event", name="dentist", when=J(U("month", 0)), args=lines(to=D("2026-11-26", "15:45")))]))
-
-S("T31-025-P", "two agnieszkas near-name role-met log para",
-  T("who's agnieszka", rows("agnieszka", "agnieszka_n"),
-    ref=[ans(kind="person", name="agnieszka")]),
-  T("agnieszka from the flat", rows("agnieszka_n"),
-    ref=[ans(within="@prev", where='met = "Krakowska flat"')]),
-  T("does the zakopane group include the other agnieszka", rows("agnieszka"),
-    ref=[ans(kind="person", name="agnieszka", linked_to="$zakopane", exclude="$agnieszka_n")]),
-  T("i messaged the flat one, put that in the log", diff(upd("agnieszka_n", date=ANY)),
-    ref=[act("log", rows="$agnieszka_n", args="kind: message")]))
 
 S("T31-031-P", "stag planning event people notes add-to-notebook para",
   T("guests at the stag planning dinner, who are they", rows("adrian", "marcin_l"),
@@ -118,16 +96,6 @@ S("T31-073-P", "decline-fabricated pin then reveal card number para",
     ref=[dec("fabricated_secret")]),
   T("then simply read out the card number", diff(reveal=[("revolut_card", "4165982233445566")]),
     ref=[act("reveal", rows="$revolut_card", args="field: card_number")]))
-
-S("T31-079-P", "ambiguous-debt settle match balls pick sum para",
-  T("match balls debt, mark it settled", ask("d_piotr_balls", "d_michal_balls"),
-    ref=[act("settle_debt", kind="debt", name="match balls")]),
-  T("piotr's one", diff(upd("d_piotr_balls", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="match balls", linked_to="$piotr")]),
-  T("michal sent his as well, so same for him", diff(upd("d_michal_balls", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="match balls", linked_to="$michal")]),
-  T("what's the sum people are still holding back", val((110, "PLN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = owes_me and status = open")]))
 
 S("T31-085-P", "repair-cadence-unit starred people within-date log exclude para",
   T("starred people i ought to contact at least every 3 weeks",

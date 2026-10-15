@@ -63,20 +63,9 @@ S("T09-079", "create document star new",
     ref=[act("create", more=True, args=lines(kind="document", name="Seating chart v1")),
          act("star", rows="$new")]))
 
-S("T09-080", "dead end nickname balance debt count",
-  T("what's obaachan's balance with me", val((0, "CAD")),
-    ref=[find(kind="person", name="Obaachan"), search("obaachan", kind="person"),
-         ans(op="balance", rows="$nana")]),
-  T("who's got two or more ious with me", rows("ada"),
-    ref=[ans(kind="person", where="debt count > 1")]))
-
 S("T09-082", "event count bridesmaids",
   T("bridesmaids i actually have plans with", rows("priya_r", "kemi", "siobhan"),
     ref=[ans(kind="person", where='role contains "bridesmaid" and event count != 0')]))
-
-S("T09-083", "group person count",
-  T("groups whose member count is at least 3", rows("wparty", "barprep", "condo", "stag"),
-    ref=[ans(kind="group", where="person count >= 3")]))
 
 S("T09-084", "documents month folder count find miss date+time focus delete",
   T("docs i saved this month", rows("noa", "guest_sheet", "mockup", "invite_proof", "brightline_factum", "agm_draft"),
@@ -117,20 +106,6 @@ S("T09-086", "photo spans person count delete count",
     ref=[ans(op="count", kind="photo", when=W({"from": U("month", 0, name=4)}))]),
   T("spring 2026 pics up to last sunday", rows("blossom_hp", "blossom_dan", "kemi_brunch_pic", "tulips"),
     ref=[ans(kind="photo", linked_to="$spring_album", when=W({"to": U("week", -1, weekday=7)}))]))
-
-S("T09-087", "debt span amount settle min max balance",
-  T("ious from the start of last month up to april twentieth", rows("d_ada", "d_marcus", "d_priya_s", "d_aiden", "d_mom"),
-    ref=[ans(kind="debt", when=W(span(U("month", -1), D("2026-04-20"))))]),
-  T("which are 50 bucks or under", rows("d_priya_s", "d_aiden"),
-    ref=[ans(within="@prev", where="amount <= 50 CAD")]),
-  T("barrister manual copy, aiden paid me", diff(upd("d_aiden", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Barrister manual copy")]),
-  T("what's the smallest iou open", val((10, "CAD")),
-    ref=[comp(op="min", field="amount", kind="debt", where='status = "open"'), ans(value="@prev")]),
-  T("and the biggest debt someone owes me", val((300, "CAD")),
-    ref=[comp(op="max", field="amount", kind="debt", where='direction = "owes_me" and status = "open"'), ans(value="@prev")]),
-  T("what's my balance with mom", val((300, "CAD")),
-    ref=[search("mom", kind="person"), comp(op="balance", rows="$mom"), ans(value="@prev")]))
 
 S("T09-088", "locker username edit star reveal create reveal new",
   T("which login is under unit1207", rows("condo_portal"),
@@ -186,19 +161,6 @@ S("T09-091", "create list edit new edit folder list multi ask",
     ref=[ans(kind="task", linked_to="$hm_list")]),
   T("and add the stuff we talked about to the thank-you one", ask(),
     ref=[askc("which tasks should go on the thank-you notes list?")]))
-
-S("T09-092", "person date spans recovery log balance ask",
-  T("who've i spoken to between the first and wed the sixth at 10am", rows("dad", "jordan_p", "gord"),
-    ref=[ans(kind="person", when=W(span(D("2026-05-01"), D("2026-05-06", "10:00"))))]),
-  T("since april, who in the wedding party have i talked to", rows("dan", "ada", "priya_r", "kemi", "siobhan", "marcus"),
-    ref=[ans(kind="person", linked_to="$wparty", when=W({"from": U("month", 0, name=4)}))]),
-  T("log a call with shivon", diff(upd("siobhan", date=ANY)),
-    ref=[act("log", kind="person", name="Shivon", args=lines(kind="call")), search("shivon", kind="person"),
-         act("log", rows="$siobhan", args=lines(kind="call"))]),
-  T("what's she owe me", val((120, "CAD")),
-    ref=[ans(op="balance", rows="$siobhan")]),
-  T("set a reminder for her", ask(),
-    ref=[askc("what should the reminder say, and when is it due?")]))
 
 S("T09-093", "task spans list count write+read complete count",
   T("what's due between may twenty-fifth and june fifth",
@@ -260,24 +222,6 @@ S("T09-096", "search miss twice dentist log",
   T("and book the next cleaning for november", ask(),
     ref=[askc("what day and time in november?")]))
 
-S("T09-097", "dead end kemi balance settle star sunday ambiguous",
-  T("what's kemi's balance", val((102.5, "CAD")),
-    ref=[find(kind="person", name="Kemi"), search("kemi", kind="person"), ans(op="balance", rows="$kemi")]),
-  T("she paid for brunch, settle that one", diff(upd("d_kemi", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Brunch at Mildred's")]),
-  T("star the brunch at mildred's pic", diff(upd("kemi_brunch_pic", starred=True)),
-    ref=[act("star", kind="photo", name="Brunch at Mildred's")]),
-  T("what's on sunday", rows("yoga", "siobhan_coffee"),
-    ref=[ans(kind="event", when=W(U("week", 0, weekday=7)))]),
-  T("move the coffee to 2", diff(upd("siobhan_coffee", date="2026-05-17T14:00")),
-    ref=[act("reschedule", rows="$siobhan_coffee", args=lines(to=U("day", 0, anchor="row", time="14:00")))]),
-  T("and the dress fitting to 1", ask("fitting_1", "fitting_2"),
-    ref=[act("reschedule", kind="event", name="Dress fitting", args=lines(to=U("day", 0, anchor="row", time="13:00"))),
-         find(kind="event", name="Dress fitting"),
-         askc("this saturday's fitting or the june one?", options="$fitting_1, $fitting_2")]),
-  T("this saturday's", diff(upd("fitting_1", date="2026-05-16T13:00")),
-    ref=[act("reschedule", rows="$fitting_1", args=lines(to=U("day", 0, anchor="row", time="13:00")))]))
-
 S("T09-098", "find-only ambiguous resolved by context",
   T("find the thank-you cards tasks", rows("thanks_new", "thanks_old"),
     ref=[find(kind="task", name="thank-you cards"), ans(rows="@prev")]),
@@ -305,10 +249,6 @@ S("T09-099", "ambiguous photo delete undo write+read",
     ref=[act("star", rows="$arbor1", more=True), ans(kind="photo", linked_to="$venue_album", where="starred = yes")]),
   T("who's in the evergreen brick works pic", rows("dan", "colette"),
     ref=[ans(kind="person", linked_to="$evergreen")]))
-
-S("T09-102", "single debt person count",
-  T("of all my debts, how many are linked to somebody", val(14),
-    ref=[ans(op="count", kind="debt", where="person count >= 1")]))
 
 S("T09-103", "single document span rel named-month",
   T("which docs have come in since april",

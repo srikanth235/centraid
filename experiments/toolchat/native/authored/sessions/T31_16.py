@@ -22,18 +22,6 @@ S("T31-210", "repair-create-field task charger admin-list due open-short",
   T("which open tasks take under 10 minutes", rows("pay_ola", "bin_rota", "pay_pizza", "pay_marta", "physio_book", "pay_kuba", "match_balls"),
     ref=[ans(kind="task", where="status = open and effort < 10")]))
 
-S("T31-211", "repair-settle-up-group kasia balance james open-trip",
-  T("settle up with kasia", diff(upd("kasia", balance=ANY)),
-    ref=[bad(act("settle_up", rows="$kasia")),
-         act("settle_up", rows="$kasia", args=lines(group="$london"))]),
-  T("where do i stand in the london group now", val((0, "GBP")),
-    ref=[search("Tomasz", kind="person"),
-         ans(op="balance", kind="group", name="London Christmas", linked_to="$me")]),
-  T("and where does james stand", val((-16, "GBP")),
-    ref=[ans(op="balance", kind="group", name="London Christmas", linked_to="$james")]),
-  T("which of the trip tasks are still open", rows("london_gifts", "london_pounds", "london_pack"),
-    ref=[ans(kind="task", linked_to="$london_trip", where="status = open")]))
-
 S("T31-212", "repair-clock-format call kasia twenty-second league-push count",
   T("move the call with kasia on the 22nd to 9 in the morning", diff(upd("kasia_call2", date="2026-11-22T09:00")),
     ref=[bad(act("reschedule", kind="event", name="call kasia", when=J(D("2026-11-22")), args=lines(to=D("2026-11-22", "9")))),

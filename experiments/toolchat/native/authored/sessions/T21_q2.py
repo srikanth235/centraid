@@ -3,10 +3,6 @@ from gold import *
 def J(d):
     return json.dumps(d, separators=(",", ":"))
 
-S("T21-Q026", "tab word debt kind i2pat",
-  T("what's my tab with githinji", rows("d_githinji"),
-    ref=[ans(kind="debt", linked_to="$githinji")]))
-
 S("T21-Q027", "elliptical past-tense did complete i2pat",
   T("did the gas cylinder", diff(upd("gas", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="gas cylinder")]))
@@ -16,12 +12,6 @@ S("T21-Q028", "ordinal of series third row reschedule i2pat",
     ref=[ans(kind="event", name="Staff briefing", when=J({"from": U("day", 0)}), order="date asc", limit=4)]),
   T("push the 3rd one to 8", diff(upd("brief_0622", date="2026-06-22T08:00")),
     ref=[act("reschedule", rows="$brief_0622", args=lines(to=U("day", 0, anchor="row", time="08:00")))]))
-
-S("T21-Q029", "settle phrase on read debt row i2pat",
-  T("what do i owe beatrice", rows("d_beatrice"),
-    ref=[ans(kind="debt", linked_to="$beatrice", where="status = open")]),
-  T("ok i paid her just now", diff(upd("d_beatrice", status="settled")),
-    ref=[act("settle_debt", rows="$d_beatrice")]))
 
 S("T21-Q030", "possessive field phrase edit focus row i2pat",
   T("who's moses", rows("moses"),
@@ -59,10 +49,6 @@ S("T21-Q035", "multi-field edit unit conversion i2pat",
 S("T21-Q036", "rename quoted target verbatim i2pat",
   T('rename the diary notebook to "Journal 2019"', diff(upd("diary_nb", name="Journal 2019")),
     ref=[act("edit", rows="$diary_nb", args="name: Journal 2019")]))
-
-S("T21-Q037", "whos in X event and group membership i2pat",
-  T("who's in chama", rows("me", "alice", "mary_a", "beatrice", "rose", "susan"),
-    ref=[ans(kind="person", linked_to="$chama")]))
 
 S("T21-Q038", "pick row containing all words among carried i2pat",
   T("what's open on the school list", rows("mock_tt", "term_report", "arrears", "ribbons", "obs_g4", "appraisals", "gutter", "tsc", "feeding"),

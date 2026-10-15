@@ -22,13 +22,6 @@ S("T21-A004", "ask-options document delete never_mind c3a",
   T("wait, i don't know what they are yet. leave them", decline("never_mind"),
     ref=[dec("never_mind")]))
 
-S("T21-A005", "ask-options debt settle_debt c3a",
-  T("settle the deposit", ask("d_brian", "d_susan"),
-    ref=[act("settle_debt", kind="debt", name="deposit"),
-         askc("Brian's rent deposit in Eldoret (he owes you 15000) or Susan's choir robe deposit (you owe 500)?", options="$d_brian, $d_susan")]),
-  T("brian's, he sent it by mpesa", diff(upd("d_brian", status="settled")),
-    ref=[act("settle_debt", rows="$d_brian")]))
-
 S("T21-A006", "ask-options event cancel never_mind c3a",
   T("cancel the bom thing", ask("bom_june", "bom_fin"),
     ref=[act("cancel", kind="event", name="bom"),
@@ -51,14 +44,6 @@ S("T21-A008", "follow-up c3a",
     ref=[ans(kind="event", when=J(U("week", 1)))]),
   T("anything before wednesday", rows("harambee_plan", "brief_0608", "clinic_june"),
     ref=[ans(within="@prev", when=J({"to": U("week", 1, weekday=2)}))]))
-
-S("T21-A009", "follow-up c3a",
-  T("which people owe me", rows("d_peter_o", "d_alice", "d_rose", "d_mary_a", "d_brian"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 1000", rows("d_peter_o", "d_alice", "d_brian"),
-    ref=[ans(within="@prev", where="amount > 1000 KES")]),
-  T("what about the others", rows("d_mary_a", "d_rose"),
-    ref=[ans(within="@1", exclude="@2")]))
 
 S("T21-A010", "follow-up c3a",
   T("what's in the school album", rows("prize_day2", "prize_day1", "book_fair_p", "new_tank", "staff_photo"),

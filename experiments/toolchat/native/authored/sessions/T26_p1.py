@@ -5,25 +5,8 @@ import json
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
-
-S("T26-004-P", "refused unit cadence cousins cadence empty log debt linked para",
-  T("among my cousins, whose cadence is longer than two weeks", rows("kunle_b", "ibrahim"),
-    ref=[bad(ans(kind="person", where='role contains "cousin" and cadence > 2 weeks')),
-         ans(kind="person", where='role contains "cousin" and cadence > 14')]),
-  T("cousins with no cadence at all", rows("bayo", "funmi", "sade"),
-    ref=[ans(kind="person", where='role contains "cousin" and cadence is empty')]),
-  T("i texted bayo about the loan, record it as a message in the log", diff(upd("bayo", date=ANY)),
-    ref=[act("log", rows="$bayo", args=lines(kind="message"))]),
-  T("that loan, what was the amount", val((150000, "NGN")),
-    ref=[ans(op="sum", field="amount", kind="debt", linked_to="$bayo")]))
-
-S("T26-011-P", "single delete group where person count para",
-  T("the group i'm in, whichever has me in it, wipe it", diff(gone("xmas_g"), unlink("xmas_g", "me")),
-    ref=[act("delete", kind="group", where="person count = 1")]))
 
 S("T26-016-P", "delete task where cancelled undo delete para",
   T("house build list, get rid of the cancelled one", diff(trash("bq")),
@@ -72,22 +55,6 @@ S("T26-048-P", "create person star unstar new para",
   T("stars are for family only, so unstar her", diff(upd("+1", starred=False)),
     ref=[act("unstar", rows="$c1")]))
 
-S("T26-053-P", "five turns debt span amount unit compute max settle add_to knock-on debt para",
-  T("debts for first october up to the end of this month, list them",
-    rows("d_funmi", "d_emeka", "d_victor", "d_chidi", "d_tunde", "d_segun", "d_garba", "d_aisha", "d_olumide"),
-    ref=[ans(kind="debt", when=span(D("2026-10-01"), U("month", 0)))]),
-  T("of those, the ones below 30000", rows("d_emeka", "d_tunde", "d_segun", "d_garba"),
-    ref=[ans(kind="debt", within="@prev", where="amount < 30000 NGN")]),
-  T("each direction, the largest open debt", vgroups({"owes_me": (150000, "NGN"), "i_owe": (250000, "NGN")}),
-    ref=[comp(op="max", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]),
-  T("settle the transport advance now garba paid back, then add him to the christmas party group",
-    diff(upd("d_garba", status="settled"), link("xmas_g", "garba")),
-    ref=[act("settle_debt", kind="debt", name="Transport advance", more=True),
-         act("add_to", rows="$garba", args=lines(to="$xmas_g"))]),
-  T("who hasn't settled up with me", rows("d_chidi", "d_tunde", "d_bayo", "d_funmi", "d_ibrahim", "d_segun"),
-    ref=[ans(kind="debt", where='direction = "owes_me" and status = "open"')]))
-
 S("T26-060-P", "events person count status in duration within para",
   T("this week's events involving over three people, include cancelled ones", rows("ajo_1129"),
     ref=[ans(kind="event", where='person count > 3 and status in ("tentative", "cancelled")', when=U("week", 0))]),
@@ -103,48 +70,6 @@ S("T26-067-P", "document span datetime month add_to folder read para",
     ref=[act("add_to", kind="document", name="Offshore medical form", args=lines(to="$rig_f"))]),
   T("offshore work contents?", rows("contract", "payslip_oct", "payslip_sep", "roster", "medical_form"),
     ref=[ans(kind="document", linked_to="$rig_f")]))
-
-S("T26-072-P", "debt person count empty count para",
-  T("debts with nobody attached", rows(),
-    ref=[ans(kind="debt", where="person count = 0")]),
-  T("count the ones with exactly one person attached", val(13),
-    ref=[ans(op="count", kind="debt", where="person count = 1")]),
-  T("which fall between twelfth nov 6pm and the nineteenth", rows("d_tunde", "d_segun", "d_garba", "d_aisha"),
-    ref=[ans(kind="debt", when=span(D("2026-11-12", "18:00"), D("2026-11-19")))]))
-
-S("T26-078-P", "six turns kunle ambiguous ask log ajo rota month event group balance para",
-  T("kunle, put a call in the log", ask("kunle_b", "kunle_a"),
-    ref=[act("log", kind="person", name="Kunle", args=lines(kind="call")),
-         askc("kunle bello or kunle adeyemi?", options="$kunle_b, $kunle_a")]),
-  T("the cousin", diff(upd("kunle_b", date=ANY)),
-    ref=[act("log", rows="$kunle_b", args=lines(kind="call"))]),
-  T("Ajo payout rota contents?", rows("ajo_rota"),
-    ref=[ans(kind="note", name="Ajo payout rota")]),
-  T("i'm in december, so what date is the ajo meeting in december", rows("ajo_1227"),
-    ref=[ans(kind="event", name="Ajo meeting", when=U("month", 0, name=12))]),
-  T("due date for Collect ajo payout?", rows("payout"),
-    ref=[ans(kind="task", name="Collect ajo payout")]),
-  T("kunle in the cousins ajo, where does he stand", val((400000, "NGN")),
-    ref=[ans(op="balance", kind="group", name="Cousins ajo", linked_to="$kunle_b")]))
-
-S("T26-083-P", "debt linked settle prev add_to knock-on debt min amount under settle para",
-  T("tunde's debt, what is it", rows("d_tunde"),
-    ref=[ans(kind="debt", linked_to="$tunde")]),
-  T("tunde paid cash, so settle his debt, add him to the christmas party group, log a visit with him, and list who owes me",
-    rows("d_chidi", "d_bayo", "d_funmi", "d_ibrahim", "d_segun", "d_garba",
-         also=diff(upd("d_tunde", status="settled"), link("xmas_g", "tunde"), upd("tunde", date=ANY))),
-    ref=[act("settle_debt", rows="@prev", more=True),
-         act("add_to", rows="$tunde", args=lines(to="$xmas_g"), more=True),
-         act("log", rows="$tunde", args=lines(kind="visit"), more=True),
-         ans(kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("smallest debt i still owe, how much", val((35000, "NGN")),
-    ref=[ans(op="min", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("which of my open debts are below 50000", rows("d_victor", "d_sunday"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open" and amount < 50000 NGN')]),
-  T("Brake pads is paid off, settle it, then list what i owe", rows("d_victor", "d_olumide", "d_aisha",
-                                                          also=diff(upd("d_sunday", status="settled"))),
-    ref=[act("settle_debt", rows="$d_sunday", more=True),
-         ans(kind="debt", where='direction = "i_owe" and status = "open"')]))
 
 S("T26-088-P", "locker notes set star named reveal wifi decline egress para",
   T("which locker entries carry notes", rows("gtbank", "portal", "gate_code", "nas", "passport", "savings", "office",

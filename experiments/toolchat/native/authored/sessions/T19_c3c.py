@@ -14,12 +14,6 @@ S("T19-C001", "c3c compound complete create task list",
     ref=[act("complete", kind="task", name="Call the plumber about the kitchen sink", more=True),
          act("create", args=lines(kind="task", name="Pay Khalid", date=U("week", 0, weekday=5), list="$home_l"))]))
 
-S("T19-C002", "c3c compound add_to person log referential",
-  T("add rkia to baba's care group and log a call with her",
-    diff(link("baba_care", "rkia"), upd("rkia", date=ANY)),
-    ref=[act("add_to", kind="person", name="Rkia", args=lines(to="$baba_care"), more=True),
-         act("log", rows="$rkia", args=lines(kind="call"))]))
-
 S("T19-C003", "c3c compound edit star same document referential",
   T("rename scan 0041 to Pharmacy insurance scan and star it",
     diff(upd("scan_41", name="Pharmacy insurance scan", starred=True)),

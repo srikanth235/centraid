@@ -42,12 +42,6 @@ S("T20-K005", "decline weather no field then read then book i3skill S5",
   T("book me a hotel in greve the night before", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
 
-S("T20-K006", "decline pay someone outside vault then balance read i3skill S5",
-  T("send gianni the 150 i owe him for the packing stuff", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("where am i with gianni", val((-150, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Gianni")]))
-
 # --- S6 vocabulary ------------------------------------------------------------------------------
 
 S("T20-K101", "family word mother grandmother role i3skill S6",
@@ -55,12 +49,6 @@ S("T20-K101", "family word mother grandmother role i3skill S6",
     ref=[ans(kind="person", where='role = "mother"')]),
   T("and my grandmother", rows("nonna"),
     ref=[ans(kind="person", where='role = "grandmother"')]))
-
-S("T20-K102", "iou debt either direction i3skill S6",
-  T("do i have an iou with federico", rows("d_fede"),
-    ref=[ans(kind="debt", linked_to="$federico")]),
-  T("and with giulia", rows("d_giulia"),
-    ref=[ans(kind="debt", linked_to="$giulia")]))
 
 S("T20-K103", "a note about body search pin i3skill S6",
   T("that note about saddle height", rows("bike_fit"),

@@ -9,8 +9,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-OWED = 'direction = "owes_me" and status = "open"'
-
 S("T25-B002", "c3b superlative event next three piano count note latest",
   T("next 3 piano lessons", rows("piano_1014", "piano_1021", "piano_1028", order=True),
     ref=[ans(kind="event", name="Piano lesson", when=W({"from": U("day", 0)}), order="date asc", limit=3)]),
@@ -32,12 +30,6 @@ S("T25-B005", "c4b state-change cancel event restore trashed task",
     ref=[act("cancel", kind="event", name="flight")]),
   T("bring back the couch one", diff(restore("couch")),
     ref=[act("restore", kind="task", name="couch", trashed=True)]))
-
-S("T25-B006", "c4b state-change settle_debt log nickname",
-  T("nadia paid me for the gas to orford", diff(upd("d_nadia", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Gas Orford")]),
-  T("texted zozo back", diff(upd("zoe", date=ANY)),
-    ref=[search("zozo", kind="person"), act("log", rows="$zoe", args=lines(kind="message"))]))
 
 S("T25-B007", "c4b state-change complete catch up create contrast",
   T("wrote the thank-you card to rachel", diff(upd("thank_you", status="completed", completed=ANY)),

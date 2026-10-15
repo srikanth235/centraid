@@ -8,8 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 LEFT = 'status = "open"'
 
 S("T22-201", "both reschedule swimming lessons both star johans",
@@ -33,16 +31,6 @@ S("T22-202", "ordinal first relist third home list complete reschedule",
     ref=[ans(kind="task", linked_to="$home_l", where=LEFT)]),
   T("move the third one to friday", diff(upd("el_07", date="2026-07-17")),
     ref=[act("reschedule", rows="$el_07", args=lines(to=U("week", 0, weekday=5)))]))
-
-S("T22-203", "owe direction positive balance negative balance settle mine sum owed",
-  T("what does samira owe me", val((2000, "SEK")),
-    ref=[ans(op="balance", rows="$samira")]),
-  T("and my side with gunnar", val((-800, "SEK")),
-    ref=[ans(op="balance", rows="$gunnar")]),
-  T("settle mine, paid him back for the ladder", diff(upd("d_gunnar", status="settled")),
-    ref=[act("settle_debt", kind="debt", where=IOWE, linked_to="$gunnar")]),
-  T("what do they owe me all in", val((2920, "SEK")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=OWED)]))
 
 S("T22-204", "except complete shopping list rest then reschedule the remaining one",
   T("what's on the shopping list", rows("charcoal", "mamma_gift", "sunscreen"),

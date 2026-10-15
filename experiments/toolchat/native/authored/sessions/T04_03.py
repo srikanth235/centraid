@@ -18,17 +18,6 @@ S("T04-051", "compute group status narrowing sum effort",
   T("which one was the bombay mix thing", rows("favours"),
     ref=[ans(kind="task", where='description contains "Bombay"')]))
 
-S("T04-052", "min max debts find person",
-  T("smallest amount someone owes me", val((12.8, "GBP")),
-    ref=[ans(op="min", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("and the most i owe anyone", val((500, "GBP")),
-    ref=[ans(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("who to", rows("dad"),
-    ref=[find(kind="debt", where='direction = "i_owe" and status = "open"', order="amount desc", limit=1),
-         ans(kind="person", linked_to="@prev")]),
-  T("anyone with a nickname i check in with fortnightly", rows("dad"),
-    ref=[ans(kind="person", where="nickname is set and cadence = 14")]))
-
 S("T04-055", "trashed photos album count",
   T("what photos have i deleted", rows("screenshot", "blurry"),
     ref=[ans(kind="photo", trashed=True)]),
@@ -132,19 +121,6 @@ S("T04-067", "compute name group trashed",
   T("and how many food bank shifts did i actually do from september up to the tenth", val(3),
     ref=[ans(op="count", kind="event", name="Food bank shift", where='status != "cancelled"',
              when=W({"from": U("month", 0, name=9), "to": D("2026-10-10")}))]))
-
-S("T04-068", "compute rows within exclude",
-  T("list every debt open",
-    rows("d_chloe", "d_tom", "d_zainab", "d_leah", "d_james", "d_dad", "d_fatima_k", "d_fatima_h", "d_aoife", "d_sana"),
-    ref=[ans(kind="debt", where='status = "open"')]),
-  T("split that by direction", vgroups({"owes_me": (306.3, "GBP"), "i_owe": (584, "GBP")}),
-    ref=[comp(op="sum", field="amount", group="direction", rows="@prev"), ans(value="@prev")]),
-  T("same without dad's, that's a long term thing", vgroups({"owes_me": (306.3, "GBP"), "i_owe": (84, "GBP")}),
-    ref=[search("dad"), find(kind="debt", linked_to="$dad"),
-         comp(op="sum", field="amount", group="direction", kind="debt", where='status = "open"', exclude="$d_dad"),
-         ans(value="@prev")]),
-  T("wipe all my debts, fresh start", decline("unbounded_destruction"),
-    ref=[dec("unbounded_destruction")]))
 
 S("T04-069", "search nicknames log both decline",
   T("had tea at ammi and abbu's, log a visit with both", diff(upd("mum", date=ANY), upd("dad", date=ANY)),

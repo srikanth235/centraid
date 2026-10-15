@@ -26,33 +26,6 @@ S("T05-003", "ambiguous event temple meeting ask",
   T("this sat", diff(upd("tc_0124", date="2026-01-24T16:00")),
     ref=[act("reschedule", rows="$tc_0124", args=lines(to=U("day", 0, anchor="row", time="16:00")))]))
 
-S("T05-004", "person create edit new add_to",
-  T("add a contact, Aishwarya Menon, new ICU nurse from the float pool",
-    diff(new("person", name="Aishwarya Menon", role=has("ICU"))),
-    ref=[act("create", args=lines(kind="person", name="Aishwarya Menon", role="ICU nurse, float pool"))]),
-  T("she goes by Aishu", diff(upd("+1", nickname="Aishu")),
-    ref=[act("edit", rows="$new", args=lines(nickname="Aishu"))]),
-  T("and she's joining the carpool", diff(link("carpool", "+1")),
-    ref=[act("add_to", rows="$c1", args=lines(to="$carpool"))]),
-  T("who's in the carpool", rows("divya_s", "jaya", "ramesh_d", "me", "+1"),
-    ref=[ans(kind="person", linked_to="$carpool")]))
-
-S("T05-005", "debt balance min max compute",
-  T("who owes me money right", rows("d_divya_k", "d_arjun", "d_suresh", "d_karthik", "d_vignesh"),
-    ref=[ans(kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("smallest one?", val((450, "INR")),
-    ref=[ans(op="min", field="amount", within="@prev")]),
-  T("and the biggest", val((3000, "INR")),
-    ref=[ans(op="max", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("karthi paid back the visa money", diff(upd("d_karthik", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Visa fee advance")]))
-
-S("T05-006", "debt settle prev",
-  T("what do i owe revathi subramanian for", rows("d_revathi"),
-    ref=[ans(kind="debt", linked_to="$revathi", where='direction = "i_owe"')]),
-  T("paid her by gpay, mark it", diff(upd("d_revathi", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]))
-
 S("T05-007", "locker star named reveal",
   T("star the TNNMC portal login", diff(upd("tnnmc_login", starred=True)),
     ref=[act("star", kind="locker item", name="TNNMC portal login")]),
@@ -140,17 +113,6 @@ S("T05-019", "note add_to multi notebook",
     ref=[act("add_to", rows="$carpool_n, $wifi_n", args=lines(to="$journal_nb"))]),
   T("how many notes in journal", val(5),
     ref=[ans(op="count", kind="note", linked_to="$journal_nb")]))
-
-S("T05-020", "person remove_from where group",
-  T("jayanthi pillai and sowmya raghavan are chipping in for farhan, add both to the farewell gift group",
-    diff(link("farewell_g", "jaya"), link("farewell_g", "sowmya")),
-    ref=[act("add_to", rows="$jaya, $sowmya", args=lines(to="$farewell_g"))]),
-  T("divya s too", diff(link("farewell_g", "divya_s")),
-    ref=[act("add_to", rows="$divya_s", args=lines(to="$farewell_g"))]),
-  T("take the charge nurse out, she's doing her own gift", diff(unlink("farewell_g", "sowmya")),
-    ref=[act("remove_from", kind="person", where='role contains "charge nurse"', args=lines(from_="$farewell_g"))]),
-  T("who's left in it", rows("divya_s", "jaya", "me"),
-    ref=[ans(kind="person", linked_to="$farewell_g")]))
 
 S("T05-021", "empty notebook recovery",
   T("what's in my tamil class notebook", ask("hindi_nb"),

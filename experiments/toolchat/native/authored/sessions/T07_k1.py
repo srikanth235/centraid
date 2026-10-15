@@ -73,12 +73,6 @@ S("T07-K012", "duration hours effort i3skill S2",
   T("which tasks take over 2 hours", rows("trial_data", "storehouse"),
     ref=[ans(kind="task", where="effort > 120")]))
 
-S("T07-K013", "cadence fortnightly monthly i3skill S2",
-  T("who's on a fortnightly cadence", rows("luis", "carla", "rosa_m", "marco"),
-    ref=[ans(kind="person", where="cadence = 14 days")]),
-  T("and monthly", rows("wilber", "nilda", "ana"),
-    ref=[ans(kind="person", where="cadence = 30 days")]))
-
 S("T07-K014", "relation to event dates line i3skill S2",
   T("what's left on the home list before julio's birthday dinner", rows("gas", "mama_pills", "water_bill"),
     ref=[ans(kind="task", linked_to="$home_l", where=OPEN, when=J({"to": D("2026-03-21")}))]))
@@ -86,10 +80,6 @@ S("T07-K014", "relation to event dates line i3skill S2",
 S("T07-K015", "read not write water bill i3skill S3",
   T("did i pay the water bill", rows("water_bill"),
     ref=[ans(kind="task", name="Pay the water bill")]))
-
-S("T07-K016", "read debt i owe efrain i3skill S3",
-  T("did i pay efrain for the scouting", rows("d_efrain"),
-    ref=[ans(kind="debt", name="scouting")]))
 
 S("T07-K017", "read cancelled seed fair i3skill S3",
   T("did the seed fair get cancelled", rows("pisac_fair"),
@@ -110,12 +100,6 @@ S("T07-K019", "read starred of them cards i3skill S3",
 S("T07-K020", "read trashed did i delete i3skill S3",
   T("did i delete the llama manure task", rows("manure"),
     ref=[ans(kind="task", name="llama manure", trashed=True)]))
-
-S("T07-K021", "read debt two follow i3skill S3",
-  T("has teodoro paid for the assembly lunch", rows("d_teodoro"),
-    ref=[ans(kind="debt", name="Assembly lunch")]),
-  T("and rosa for the fertilizer", rows("d_rosa"),
-    ref=[ans(kind="debt", name="Fertilizer share")]))
 
 S("T07-K022", "no invention task description search i3skill S4",
   T("mark the one with patricia's checklist as done", diff(upd("agro_docs", status="completed", completed=ANY)),

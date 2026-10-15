@@ -22,24 +22,6 @@ S("T32-001", "empty follow-up within complete write-then-read bakery-list",
     ref=[act("complete", rows="@prev", more=True),
          ans(kind="task", linked_to="$bakery_l", where="status = open", when=W(U("day", 1)))]))
 
-S("T32-002", "ambiguous-person within balance pronoun group-narrow",
-  T("last time i spoke to maria?", rows("maria_o", "marilu", "marichuy"),
-    ref=[ans(kind="person", name="Maria")]),
-  T("the sister one", rows("maria_o"),
-    ref=[ans(within="@prev", where='role = "sister"')]),
-  T("where am i with her", val((-2477.5, "MXN")),
-    ref=[ans(op="balance", rows="$maria_o")]),
-  T("just the familia group", val((1237.5, "MXN")),
-    ref=[ans(op="balance", kind="group", name="Familia Delgado Ortiz", linked_to="$maria_o")]))
-
-S("T32-003", "choir chain relation within",
-  T("who are the sopranos in the choir", rows("marilu", "lupita", "xochitl"),
-    ref=[ans(kind="person", linked_to="$coro", where='role contains "soprano"')]),
-  T("which of them sang at the mass for the dead", rows("marilu", "lupita"),
-    ref=[ans(within="@prev", linked_to="$mass_muertos")]),
-  T("and in the christmas concert", rows("marilu", "lupita"),
-    ref=[ans(within="@prev", linked_to="$concert")]))
-
 S("T32-004", "cancel ambiguous ask pick undo-not-undone",
   T("can you cancel the posada", ask("posada_bakery", "posada_street"),
     ref=[act("cancel", kind="event", name="Posada")]),
@@ -47,18 +29,6 @@ S("T32-004", "cancel ambiguous ask pick undo-not-undone",
     ref=[act("cancel", rows="$posada_bakery")]),
   T("wait undo that, we're still doing it", diff(),
     ref=[act("undo")]))
-
-S("T32-005", "balance debt settle_debt complete two-writes sum",
-  T("how much do i owe don teodoro", val((-10000, "MXN")),
-    ref=[ans(op="balance", rows="$teodoro")]),
-  T("which debts to him are still open", rows("d_teodoro"),
-    ref=[ans(kind="debt", linked_to="$teodoro", where="status = open")]),
-  T("teodoro has his money, settle the debt and tick the payment", diff(upd("d_teodoro", status="settled"),
-                                                             upd("flour_oct", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", linked_to="$teodoro", where="status = open", more=True),
-         act("complete", kind="task", name="Pay Don Teodoro for flour")]),
-  T("what do i owe everyone in total", val((6826, "MXN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]))
 
 S("T32-006", "span status within linked",
   T("what's on between friday and tuesday that isn't cancelled",
@@ -77,16 +47,6 @@ S("T32-007", "locker read reveal egress",
     ref=[act("reveal", rows="$bakery_wifi", args="field: password")]),
   T("can you text it to her", decline("sealed_egress"),
     ref=[dec("sealed_egress")]))
-
-S("T32-008", "debts name status sum within settle_debt owes_me",
-  T("which debts are for the venue and still open", rows("d_dani", "d_rodrigo"),
-    ref=[ans(kind="debt", name="venue", where="status = open")]),
-  T("so what's that in total", val((20000, "MXN")),
-    ref=[ans(op="sum", field="amount", kind="debt", within="@prev")]),
-  T("dani paid her half in cash, settle hers", diff(upd("d_dani", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$dani", where="status = open")]),
-  T("and what's still owed to me overall", val((13120, "MXN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = owes_me and status = open")]))
 
 S("T32-009", "wedding tasks k4 within linked reschedule",
   T("which open wedding jobs take over an hour and are due before the dress fitting", rows("w_menu", "w_cake"),
@@ -118,12 +78,6 @@ S("T32-011", "documents folder year star-then-within add_to-two",
     ref=[act("add_to", rows="$d_curp, $d_rfc", args="to: $family_f", more=True),
          act("star", rows="$d_curp, $d_rfc")]))
 
-S("T32-012", "relation exclude where",
-  T("who's singing at the christmas concert", rows("aurelio", "ignacio", "marilu", "marichuy", "lupita", "xochitl"),
-    ref=[ans(kind="person", linked_to="$concert")]),
-  T("and which basses from the choir aren't", rows("cuauh"),
-    ref=[ans(kind="person", linked_to="$coro", where='role contains "bass"', exclude="@prev")]))
-
 S("T32-013", "photos linked album within star add_to count-k4",
   T("pics of emi in the la espiga album", rows("p_ba_loaves", "p_ba_van"),
     ref=[ans(kind="photo", linked_to="$emi, $bakery_a")]),
@@ -138,25 +92,10 @@ S("T32-013", "photos linked album within star add_to count-k4",
     ref=[act("edit", rows="$kids_a", args="name: The kids", more=True),
          ans(op="count", kind="photo", linked_to="$kids_a")]))
 
-S("T32-014", "people when linked two-logs",
-  T("which chicago cousins haven't i spoken to this month", rows("gaby"),
-    ref=[ans(kind="person", linked_to="$chicago", when=W({"to": D("2026-09-30")}))]),
-  T("log a message to her", diff(upd("gaby", date=ANY)),
-    ref=[act("log", rows="$gaby", args="kind: message")]))
-
 S("T32-015", "two-dates reschedule when-name",
   T("move dani's call from sunday to monday", diff(upd("calldani_1101", date="2026-11-02T20:00")),
     ref=[act("reschedule", kind="event", name="Call Dani", when=W(U("week", 0, weekday=7)),
              args=lines(to=U("week", 1, weekday=1)))]))
-
-S("T32-016", "group create add_to-new members",
-  T("new group crew in pesos, add beto, yesenia and emi",
-    diff(new("group", name=has("crew"), currency="MXN"), link("new", "me"), link("new", "beto"), link("new", "yesenia"),
-         link("new", "emi")),
-    ref=[act("create", args="kind: group\nname: Crew\ncurrency: MXN", more=True),
-         act("add_to", rows="$beto, $yesenia, $emi", args="to: $new")]),
-  T("make a list for them called crew jobs", diff(new("list", name=has("crew", "jobs"))),
-    ref=[act("create", args="kind: list\nname: Crew jobs")]))
 
 S("T32-017", "locker create-and-star reveal-note delete-trashed decline-fabricated",
   T("save a new login for the mercado vendors portal, username rosa.espiga, and star it",

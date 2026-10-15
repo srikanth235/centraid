@@ -31,27 +31,6 @@ S("T01-002", "nickname search pick reschedule anchor-row",
     rows("tiles", "adhesive", "skip", "cupboards", "temp_kitchen", "handles"),
     ref=[ans(kind="task", linked_to="$reno_list", where="person count <= 0 and status = open")]))
 
-S("T01-003", "ambiguous-person ask balance compute-min",
-  T("how much does priya owe me", ask("priya_n", "priya_s"),
-    ref=[askc("Priya Nair or Priya Shah?", options="$priya_n, $priya_s")]),
-  T("nair", val((45.5, "GBP")),
-    ref=[ans(op="balance", rows="$priya_n")]),
-  T("and the other one", val((0, "GBP")),
-    ref=[ans(op="balance", rows="$priya_s")]),
-  T("what's the smallest thing anyone owes me at the mo", val((12.5, "GBP")),
-    ref=[comp(op="min", field="amount", kind="debt", where="direction = owes_me and status = open"),
-         ans(value="@prev")]))
-
-S("T01-005", "foreign-currency group balance currency-in",
-  T("lisbon trip - am i up or down", val((430, "EUR")),
-    ref=[search("Oluwaseun", kind="person"), ans(op="balance", kind="group", name="Lisbon Easter Trip", linked_to="$me")]),
-  T("what about the family one", val((-20000, "NGN")),
-    ref=[ans(op="balance", kind="group", name="Family Fund", linked_to="$me")]),
-  T("who's in that one", rows("me", "dayo", "funmi", "kunle", "tunde"),
-    ref=[ans(kind="person", linked_to="$family_fund")]),
-  T("which of my groups are in euros or naira", rows("lisbon", "family_fund"),
-    ref=[ans(kind="group", where='currency in ("EUR", "NGN")')]))
-
 S("T01-006", "list open narrowing complete",
   T("what's left to do on the kitchen", rows("plumber_quote", "tiles", "adhesive", "skip", "cupboards", "temp_kitchen", "instalment", "handles"),
     ref=[ans(kind="task", linked_to="$reno_list", where='status = "open"')]),
@@ -84,37 +63,6 @@ S("T01-008", "ambiguous-act narrow complete reschedule date+time linkcount",
     ref=[ans(kind="task", when=J(U("week", 1, weekday=3, time="19:00")))]),
   T("which life admin stuff open isn't linked to anyone", rows("car_ins", "nowtv", "travel_ins", "euros"),
     ref=[ans(kind="task", linked_to="$admin_list", where="person count <= 0 and status = open")]))
-
-S("T01-009", "multi-row complete settle log linked read reopen",
-  T("got mums card and her present today", diff(upd("card_mum", status="completed", completed=ANY),
-                                               upd("gift_mum", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$card_mum, $gift_mum")]),
-  T("can you pay her back for the uniform and ring her after, then tell me what's open for her",
-    rows("childcare", also=diff(upd("d_mum_uniform", status="settled"), upd("mum", date=ANY))),
-    ref=[search("Mum", kind="person"),
-         act("settle_debt", kind="debt", linked_to="$mum", where="status = open", more=True),
-         act("log", rows="$mum", args="kind: call", more=True),
-         ans(kind="task", linked_to="$mum", where="status = open")]),
-  T("can you reopen book mot, the garage cancelled on me", diff(upd("book_mot", status="open", completed=None)),
-    ref=[act("reopen", kind="task", name="Book MOT")]))
-
-S("T01-010", "debts who settle sum amount-cmp compute-max",
-  T("what do i owe people", rows("d_kwame_taxi", "d_siobhan", "d_mum_uniform", "d_zainab"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("paid kwame back for the taxi", diff(upd("d_kwame_taxi", status="settled")),
-    ref=[act("settle_debt", rows="$d_kwame_taxi")]),
-  T("how much do i owe all in", val((66.5, "GBP")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]),
-  T("which open ones either way are over 20",
-    rows("d_gemma_tickets", "d_mum_uniform", "d_kunle", "d_jess_w", "d_callum"),
-    ref=[ans(kind="debt", where="status = open and amount > 20")]),
-  T("biggest of those?", rows("d_kunle"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]),
-  T("that's kunle's, he sent it over this morning so settle it", diff(upd("d_kunle", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$kunle", where="status = open")]),
-  T("what's come in since the first of march",
-    rows("d_zainab", "d_kunle", "d_kwame_taxi", "d_priya_lunch", "d_callum"),
-    ref=[ans(kind="debt", when=J({"from": D("2026-03-01")}))]))
 
 S("T01-011", "repair weekday-without-unit substitution",
   T("anything on sat", rows("swim_0314", "worktop_visit"),
@@ -151,19 +99,6 @@ S("T01-014", "span list complete reschedule date",
   T("renew car insurance can wait til the thirty-first", diff(upd("car_ins", date="2026-03-31")),
     ref=[act("reschedule", rows="$car_ins", args=lines(to=D("2026-03-31")))]))
 
-S("T01-015", "create group add members undo-link re-add",
-  T("make a group for mums birthday meal, in pounds",
-    diff(new("group", name=has("birthday"), currency="GBP"), link("new", "me")),
-    ref=[act("create", args="kind: group\nname: Mum's Birthday Meal\ncurrency: GBP")]),
-  T("add bisi n kunle", diff(link("+1", "bisi"), link("+1", "kunle")),
-    ref=[search("Bisi", kind="person"), act("add_to", rows="$bisi, $kunle", args="to: $c1")]),
-  T("can you undo that, bisi's paying separately", diff(unlink("+1", "bisi"), unlink("+1", "kunle")),
-    ref=[act("undo")]),
-  T("just kunle then", diff(link("+1", "kunle")),
-    ref=[act("add_to", rows="$kunle", args="to: $c1")]),
-  T("who's in it now", rows("me", "kunle"),
-    ref=[ans(kind="person", linked_to="$c1")]))
-
 S("T01-016", "note read edit pin",
   T("what's in mums egussi soup", rows("egusi"),
     ref=[ans(kind="note", name="Egusi soup")]),
@@ -195,17 +130,6 @@ S("T01-019", "log call last-contact cadence",
     ref=[act("edit", rows="$ifeoma", args="cadence: 14")]),
   T("whose call was it at 7:05 last night", rows("mum"),
     ref=[ans(kind="person", when=J({"unit": "day", "rel": -1, "time": "19:05", "anchor": "today"}))]))
-
-S("T01-020", "add_to person where nickname",
-  T("add chi to the hen do group", diff(link("hen", "chioma")),
-    ref=[act("add_to", kind="person", where='nickname = "Chi"', args="to: $hen")]))
-
-S("T01-021", "delete groups multi",
-  T("delete secret santa 2025 and ward night out, both done with",
-    diff(gone("santa"), unlink("santa", "me"), unlink("santa", "gemma"), unlink("santa", "kwame"),
-         unlink("santa", "siobhan"), gone("night_out"), unlink("night_out", "me"), unlink("night_out", "priya_n"),
-         unlink("night_out", "priya_s"), unlink("night_out", "zainab"), unlink("night_out", "siobhan")),
-    ref=[act("delete", rows="$santa, $night_out")]))
 
 S("T01-022", "create note notebook move undo-link",
   T("new note in work notes - bring the big flask for nights",

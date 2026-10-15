@@ -55,7 +55,7 @@ period after it.
 
 THE GUARDS. After every op the result must read the same to the runtime's message predicates that a clean message does:
 `says_yes` (the plain yes that lets a write over the cap through), `is_retraction` (the turn the runtime ends itself), the
-person's own row (`me_hit`: my + balance), the container the message points at (`the folder`). They are ports of
+container the message points at (`the folder`). They are ports of
 crates/nativetools (act.rs, phrases.rs, block.rs); a candidate op that flips one is thrown away and another is tried.
 
 `world_names` is every name the world's rows answer to (`names_of_world(world)`); pass the world's own list, not a sample.
@@ -90,8 +90,8 @@ def _w(text: str) -> frozenset[str]:
 # What is never touched
 # ---------------------------------------------------------------------------------------------
 
-# the arrays of crates/assist/src/native that read a message (act.rs UNNAMING PICKED YES WITHHOLD; block.rs PRONOUNS
-# FIRST_PERSON SENSE; follow.rs; ground.rs; phrases.rs, WEEKDAYS and MONTHS included; search.rs STOPWORDS SHORT_STOP
+# the arrays of crates/assist/src/native that read a message (act.rs UNNAMING PICKED YES WITHHOLD; recover.rs PRONOUNS
+# FIRST_PERSON; follow.rs; ground.rs; phrases.rs, WEEKDAYS and MONTHS included; search.rs STOPWORDS SHORT_STOP
 # VERB_FORMS ARTICLES; dates_ctx.rs): `test_noise.RuntimeLexicon` rereads them and fails on a word this set lacks
 RUNTIME = _w("""
 a abort about absolutely actually add added adding affirmative after afternoon afternoons again ago agreed ahead all
@@ -174,10 +174,8 @@ weather news joke recipe translate stock capital flight flights directions googl
 log remind
 """)
 
-# the container words the pre-grounding block reads after a determiner ("the folder"), and the words that give a
-# person's own row (`me_hit`)
+# the container words the pre-grounding block reads after a determiner ("the folder")
 CONTAINERS = _w("album albums folder folders list lists notebook notebooks")
-SENSE = _w("balance balances owe owes owed debt debts stand standing position net tab group groups share")
 FIRST_PERSON = _w("my me i mine myself")
 PRONOUNS = _w("him her he she them they his hers their theirs")
 
@@ -198,10 +196,10 @@ done finished half couple few dozen
 """)
 # and the words beside which no function word is dropped: cues, containers, the person's own sense words, the
 # conventions, the else cues
-NEIGHBOUR_OTHER = CUES | CONTAINERS | SENSE | CONVENTIONS | _w("else besides apart aside others ones")
+NEIGHBOUR_OTHER = CUES | CONTAINERS | CONVENTIONS | _w("else besides apart aside others ones")
 # what no op alters (by token, case folded): the vocabularies above; the rest of PROTECTED is only ever dropped, whole,
 # by `drop` and `fragment`, and never given a typo
-SEMANTIC = frozenset(CONVENTIONS | DATES | NUMBERS | CURRENCY | CUES | CONTAINERS | SENSE | NEIGHBOUR_OTHER)
+SEMANTIC = frozenset(CONVENTIONS | DATES | NUMBERS | CURRENCY | CUES | CONTAINERS | NEIGHBOUR_OTHER)
 
 PROTECTED = frozenset(RUNTIME | SEMANTIC | FIRST_PERSON | PRONOUNS | YES | WITHHOLD)
 
@@ -351,11 +349,6 @@ def says_yes(message: str) -> bool:
     return bool(words) and len(words) <= _YES_WORDS and any(w in YES for w in words) and not any(w in WITHHOLD for w in words)
 
 
-def me_hit(message: str) -> bool:
-    words = fold_words(message)
-    return any(w in FIRST_PERSON for w in words) and any(w in SENSE for w in words)
-
-
 _DETERMINERS = _w("that the this same those these its")
 
 
@@ -367,7 +360,7 @@ def container_pair(message: str) -> bool:
 def signature(message: str) -> tuple:
     """What the runtime's message predicates say of `message`; an op must leave it as it was."""
     words = fold_words(message)
-    return (says_yes(message), is_retraction(message), me_hit(message), container_pair(message),
+    return (says_yes(message), is_retraction(message), container_pair(message),
             tuple(sorted(w for w in set(words) if w in PRONOUNS)))
 
 
@@ -375,13 +368,13 @@ def signature(message: str) -> tuple:
 # The world's names
 # ---------------------------------------------------------------------------------------------
 
-SECTIONS = ("people", "groups", "lists", "events", "tasks", "notebooks", "notes", "folders", "documents", "albums",
-            "photos", "debts", "locker")
+SECTIONS = ("people", "lists", "events", "tasks", "notebooks", "notes", "folders", "documents", "albums",
+            "photos", "locker")
 
 
 def names_of_world(world: dict) -> list[str]:
     """Every name a row of the world answers to: its name, a person's nickname and role, and the person's own name
-    (the model's rows; the group expenses are not rows the runtime matches a name against)."""
+    (the model's rows)."""
     out = [world.get("me") or ""]
     for section in SECTIONS:
         for row in world.get(section, []):

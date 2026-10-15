@@ -33,22 +33,6 @@ S("T20-004", "person span rel date count",
   T("how many is that", val(10),
     ref=[ans(op="count", rows="@prev")]))
 
-S("T20-006", "group count person count edit group named",
-  T("anyone i try to keep up with that isn't in any group", rows("mamma", "papa", "nonna", "francesca"),
-    ref=[ans(kind="person", where="cadence is set and group count < 1")]),
-  T("which groups have fewer than three people", rows("casa", "gift_pool"),
-    ref=[ans(kind="group", where="person count < 3")]),
-  T("rename nonna's birthday gift to Nonna's 90th", diff(upd("gift_pool", name="Nonna's 90th")),
-    ref=[act("edit", rows="$gift_pool", args=lines(name="Nonna's 90th"))]))
-
-S("T20-008", "debt count linked_to all settle_debt",
-  T("anyone with two debts on the books", rows("stefano"),
-    ref=[ans(kind="person", where="debt count = 2")]),
-  T("what are they", rows("d_stefano", "d_stefano_2"),
-    ref=[ans(kind="debt", linked_to="@prev")]),
-  T("settle the gran fondo one, he paid me back on sunday", diff(upd("d_stefano", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Gran fondo entry")]))
-
 S("T20-009", "ambiguous notebook pick edit count",
   T("rename the tasting notes notebook to Tasting notes 2026", diff(upd("tasting_nb", name="Tasting notes 2026")),
     ref=[act("edit", kind="notebook", name="Tasting notes", args=lines(name="Tasting notes 2026")),
@@ -138,27 +122,9 @@ S("T20-021", "ambiguous task reopen narrowed count",
   T("how many open on the cantina list", val(5),
     ref=[ans(op="count", kind="task", linked_to="$cantina_l", where='status = "open"')]))
 
-S("T20-022", "settle_up multi club",
-  T("stefano and luca owe me for the jerseys, settle both up in the club",
-    diff(settle=["Stefano Rinaldi", "Luca Colombo"]),
-    ref=[act("settle_up", rows="$stefano, $luca", args=lines(group="$club"))]),
-  T("and bea?", diff(settle=["Beatrice Galli"]),
-    ref=[act("settle_up", rows="$bea", args=lines(group="$club"))]))
-
-S("T20-023", "settle_up multi staff balance group",
-  T("settle up with sofia and davide in the staff dinner fund", diff(settle=["Sofia Marchetti", "Davide Russo"]),
-    ref=[act("settle_up", rows="$sofia, $davide", args=lines(group="$staff"))]),
-  T("where's elena at in that fund", val((-10, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Staff dinner fund", linked_to="$elena")]))
-
 S("T20-024", "create person star new",
   T("add a contact: Irene Santoro, sommelier at Enoteca Pinchiorri",
     diff(new("person", name="Irene Santoro", role=ANY)),
     ref=[act("create", args=lines(kind="person", name="Irene Santoro", role="sommelier, Enoteca Pinchiorri"))]),
   T("star her", diff(upd("+1", starred=True)),
     ref=[act("star", rows="$c1")]))
-
-S("T20-025", "single compute min debt",
-  T("smallest thing i owe someone?", val((45, "EUR")),
-    ref=[comp(op="min", field="amount", kind="debt", where='direction = "i_owe" and status = "open"'),
-         ans(value="@prev")]))

@@ -8,16 +8,6 @@ def J(d):
     return json.dumps(d, separators=(",", ":"))
 
 
-S("T29-045", "debt where-three order-limit settle-write-read over-five-k",
-  T("what do i owe that's over 5000", rows("d_brenda", "d_lena", "d_otieno"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open and amount > 5000")]),
-  T("oldest of those?", rows("d_lena"),
-    ref=[ans(within="@prev", order="date asc", limit=1)]),
-  T("settle it and tell me what's left over 5k",
-    rows("d_brenda", "d_otieno", also=diff(upd("d_lena", status="settled"))),
-    ref=[act("settle_debt", rows="$d_lena", more=True),
-         ans(kind="debt", where="direction = i_owe and status = open and amount > 5000")]))
-
 S("T29-046", "where-four person-count narrow-when two-writes complete",
   T("what's still open that takes 30 minutes or more, has no priority and isn't about anyone",
     rows("dog_food", "flat_fix", "kitty_report", "tax_docs", "insurance", "bike_service"),
@@ -63,16 +53,6 @@ S("T29-049", "name-order-limit exclude delete-write-read month",
          also=diff(trash("diary_good"), trash("diary_tough"))),
     ref=[act("delete", rows="$diary_good, $diary_tough", more=True),
          ans(kind="note", when=J(U("month", 0, name=9)))]))
-
-S("T29-050", "ask-missing create-group members-new two-calls",
-  T("make a group", ask(),
-    ref=[askc("What should the group be called, and which currency?")]),
-  T("weekend riders, in shillings, with kip and juma",
-    diff(new("group", name="Weekend Riders", currency="KES"), link("new", "me"), link("new", "kip"), link("new", "juma")),
-    ref=[act("create", args=lines(kind="group", name="Weekend Riders", currency="KES"), more=True),
-         act("add_to", rows="$kip, $juma", args="to: $new")]),
-  T("who's in it", rows("me", "kip", "juma"),
-    ref=[ans(kind="person", linked_to="$c1")]))
 
 S("T29-051", "create-album add-to-two-photos",
   T("start an album for the courtyard sketches", diff(new("album", name=has("sketch"))),
@@ -151,20 +131,6 @@ S("T29-057", "log-nickname ambiguous-person role-narrow name-where complete",
     ref=[ans(kind="task", name="mama", where="status = open")]),
   T("tick it off, sent it", diff(upd("mama_meds", status="completed", completed=ANY)),
     ref=[act("complete", rows="$mama_meds")]))
-
-S("T29-058", "compute-max value order-limit decline-text repair-create-field count-open",
-  T("most anyone owes me?", val((5000, "KES")),
-    ref=[comp(op="max", field="amount", kind="debt", where="direction = owes_me and status = open"),
-         ans(value="@1")]),
-  T("and who is that", rows("d_naomi"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open", order="amount desc", limit=1)]),
-  T("text her about it", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("remind me to chase her for it on friday", diff(new("task", name=has("chase"), date="2026-09-25")),
-    ref=[bad(act("create", args="kind: task\nname: Chase Naomi for the bus fare\ndue: friday")),
-         act("create", args=lines(kind="task", name="Chase Naomi for the bus fare", date=U("week", 0, weekday=5)))]),
-  T("how many open debts total", val(10),
-    ref=[ans(op="count", kind="debt", where="status = open")]))
 
 S("T29-059", "name-event cancel when-where unstar where-role-empty",
   T("when's ian's birthday thing", rows("ian_bday"),

@@ -45,21 +45,6 @@ S("T33-058", "ambiguous-star ask pick-by-month",
   T("the november one", diff(upd("d_minutes_nov", starred=ANY)),
     ref=[act("star", rows="$d_minutes_nov")]))
 
-S("T33-059", "settle_debt write-read balance second-debt-by-name",
-  T("paid wei jie back for the omakase, settle it and tell me what i owe him now",
-    val((-160, "SGD"), also=diff(upd("d_weijie", status="settled"))),
-    ref=[act("settle_debt", rows="$d_weijie", more="true"),
-         ans(op="balance", kind="person", name="wei jie")]),
-  T("and jia hui's pumpkin patch one too", diff(upd("d_jiahui", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="pumpkin patch", linked_to="$jiahui")]))
-
-S("T33-060", "two-writes log-star then group-starred",
-  T("log coffee with kim and star her", diff(upd("kim", date=ANY, starred=ANY)),
-    ref=[act("log", rows="$kim", args="kind: coffee", more="true"),
-         act("star", rows="$kim")]),
-  T("starred people in the dinner club", rows("weijie", "kim"),
-    ref=[ans(kind="person", linked_to="$dinner", where="starred = yes")]))
-
 S("T33-061", "search-empty recovery then never-mind",
   T("who's our plumber", rows(),
     ref=[search("plumber"),
@@ -83,18 +68,6 @@ S("T33-062", "search-empty-recovery repair-time two-writes three-constraints can
     diff(upd("permit_visit", status="cancelled"), upd("permit_a", status="completed", completed=ANY)),
     ref=[act("cancel", rows="$permit_visit", more="true"),
          act("complete", kind="task", name="renew rina's work permit")]))
-
-S("T33-063", "four-constraints debts ambiguous-delete-ask two-writes count-docs",
-  T("which debts i owe from before december are still open and over fifty dollars", rows("d_weijie", "d_junhao", "d_jiahui"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open and amount > 50", when=J({"to": U("month", -1)}))]),
-  T("delete the condo budget doc from the condo folder", ask("d_budget26", "d_budget27"),
-    ref=[act("delete", kind="document", name="condo budget", linked_to="$condo_f")]),
-  T("get rid of the 2026 one and unstar the 2027 one, david has his own copy",
-    diff(trash("d_budget26"), upd("d_budget27", starred=ANY)),
-    ref=[act("delete", rows="$d_budget26", more="true"),
-         act("unstar", rows="$d_budget27")]),
-  T("how many docs left in condo folder", val(5),
-    ref=[ans(op="count", kind="document", linked_to="$condo_f")]))
 
 S("T33-064", "search-empty-recovery write-read ambiguous-log-ask pick-by-group",
   T("did i note down kenji's tuition fees somewhere, i swear i wrote it", rows(),

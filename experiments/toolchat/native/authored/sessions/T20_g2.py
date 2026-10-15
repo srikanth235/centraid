@@ -91,14 +91,6 @@ S("T20-125", "out of scope knowledge and web order then create task",
   T("ok add a task to reorder chianti from fede, due monday", diff(new("task", name=has("chianti", "fede"), date="2026-06-01")),
     ref=[act("create", args=lines(kind="task", name="Reorder Chianti from Fede", date=U("week", 1, weekday=1)))]))
 
-S("T20-127", "group balances stefano bea lorenzo gallo",
-  T("where's stefano at in the club fund", val((-90, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Ciclisti del Mugnone", linked_to="$stefano")]),
-  T("and bea", val((-60, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Ciclisti del Mugnone", linked_to="$bea")]),
-  T("lorenzo gallo in the staff dinner fund", val((-50, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Staff dinner fund", linked_to="$lorenzo_g")]))
-
 S("T20-130", "recovery star search not found trashed restore",
   T("star the electricity bill", diff(upd("enel_bill", starred=True)),
     ref=[act("star", kind="document", name="electricity bill"),

@@ -33,17 +33,6 @@ S("T38-101", "container-link-reads within linked_to clinic-list-vs-clinic-financ
   T("and what's open on clinic finance this month", rows("net_270515", "t_117", "sal_270528"),
     ref=[ans(kind="task", linked_to="$finance_l", where="status = open", when=J(U("month", 0)))]))
 
-S("T38-102", "container-link-reads owner groups-i'm-in count then list then within where then within linked_to person",
-  T("how many groups do i belong to", val(15),
-    ref=[ans(op="count", kind="group", linked_to="$me")]),
-  T("which ones", rows("umrah", "aqaba", "dubai", "cairo", "istanbul", "study_group", "football", "dana_parents", "family_fund",
-                       "friday_kitty", "clinic_supplies", "clinic_lunch", "teta_care", "building", "friends_dinner"),
-    ref=[ans(kind="group", linked_to="$me")]),
-  T("which of those aren't in JOD", rows("dubai", "istanbul", "cairo"),
-    ref=[ans(within="@prev", where='currency != "JOD"')]),
-  T("and which of them has baba in it", rows("dubai"),
-    ref=[ans(within="@prev", linked_to="$baba")]))
-
 S("T38-103", "container-link-reads person events through the person link week substitution count",
   T("what's dana got on this week that's still on", rows("dsw_270511", "fl_270514"),
     ref=[ans(kind="event", linked_to="$dana", where="status != cancelled", when=J(U("week", 0)))]),
@@ -61,16 +50,6 @@ S("T38-104", "container-link-reads folder car-vs-car-insurance collision insuran
   T("just the starred ones", rows("doc_010", "doc_100"),
     ref=[ans(within="@prev", where="starred = yes")]))
 
-S("T38-105", "container-link-reads parent-task-container vs group same-word umrah members complete-subtask",
-  T("what's left on the umrah plan", rows("umrah_p_1", "umrah_p_2"),
-    ref=[ans(kind="task", linked_to="$umrah_p", where="status = open")]),
-  T("who's in the umrah fund", rows("baba", "mama", "teta", "me"),
-    ref=[ans(kind="person", linked_to="$umrah")]),
-  T("tick off the passports one, then show me what's left on the plan",
-    rows("umrah_p_1", also=diff(upd("umrah_p_2", status="completed", completed=ANY))),
-    ref=[act("complete", kind="task", name="Check the passports", more=True),
-         ans(kind="task", linked_to="$umrah_p", where="status = open")]))
-
 S("T38-106", "stray-conditions electrician role-exact inert-purpose ask two-holders then star-by-name log inert-date-clause",
   T("who's the electrician, need someone to look at the clinic wiring", rows("leen_zureiqat", "qasim_bataineh"),
     ref=[ans(kind="person", where='role = "electrician"')]),
@@ -80,16 +59,6 @@ S("T38-106", "stray-conditions electrician role-exact inert-purpose ask two-hold
     ref=[act("star", kind="person", name="Qasim")]),
   T("log a call with qasim, he's coming to look at it on tuesday", diff(upd("qasim_bataineh", date=ANY)),
     ref=[act("log", kind="person", name="Qasim", args="kind: call")]))
-
-S("T38-107", "stray-conditions member-count purpose-clause met-contains within role-contains",
-  T("how many are in the building fund, i'm splitting the lift repair between them", val(13),
-    ref=[ans(op="count", kind="person", linked_to="$building")]),
-  T("who did i meet at the university, for the graduation invites",
-    rows("raji_anabtawi", "basma_al_najjar", "sufyan_nimri", "dania_nabulsi", "talal_daoud", "dunia_bishara", "usama_yaghmour",
-         "enas_qasem", "waleed_masri", "fadwa_obeidat", "husam"),
-    ref=[ans(kind="person", where='met contains "university"')]),
-  T("which of them are classmates", rows("raji_anabtawi", "dania_nabulsi", "usama_yaghmour", "fadwa_obeidat"),
-    ref=[ans(within="@prev", where='role contains "classmate"')]))
 
 S("T38-108", "stray-conditions description-contains purpose-clause calls-teta staff-meetings month",
   T("which calls with teta this month mention yazan, i want to tell him she's asking", rows("ct_270527"),
@@ -180,14 +149,6 @@ S("T38-117", "mixed note body append add-to-the-note open-then-edit pin",
              args=lines(body="Sunday to Thursday nine to six, Saturday nine to two, closed on Friday. Ask the landlord about parking"))]),
   T("pin it too", diff(upd("loose_6", pinned=True)),
     ref=[act("edit", rows="$loose_6", args="pinned: yes")]))
-
-S("T38-118", "mixed settle_up amount person group partial then group balance",
-  T("dr tala handed me 50 dinars towards the supplies pool",
-    diff(upd("dr_tala", balance=ANY), settle=[("Tala Khoury", "50.00")]),
-    ref=[bad(act("settle_up", rows="$dr_tala", args="amount: 50")),
-         act("settle_up", rows="$dr_tala", args="group: $clinic_supplies\namount: 50")]),
-  T("so where is she at in there now", val((-88.333, "JOD")),
-    ref=[ans(op="balance", kind="group", name="Clinic Supplies Pool", linked_to="$dr_tala")]))
 
 S("T38-119", "mixed kind-word-decides notes documents same-topic school then latest within",
   T("any school notes", rows("sch_1", "sch_2", "sch_3", "sch_4", "sch_5"),

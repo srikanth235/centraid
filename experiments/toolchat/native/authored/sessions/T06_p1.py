@@ -14,16 +14,6 @@ S("T06-001-P", "event tomorrow edit linked people para",
   T("its attendees again?", rows("mira", "jonas_k"),
     ref=[ans(kind="person", linked_to="$wg_feb")]))
 
-S("T06-012-P", "compute max min debts para",
-  T("largest amount i owe to anybody", val((90, "EUR")),
-    ref=[ans(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("smallest debt owed to me?", val((9.5, "EUR")),
-    ref=[comp(op="min", field="amount", kind="debt", where='direction = "owes_me" and status = "open"'),
-         ans(value="@prev")]),
-  T("largest amount owed to me", val((60, "EUR")),
-    ref=[comp(op="max", field="amount", kind="debt", where='direction = "owes_me" and status = "open"'),
-         ans(value="@prev")]))
-
 S("T06-018-P", "unstar document prev para",
   T("starred documents in Tax 2025?", rows("ksk_letter"),
     ref=[ans(kind="document", linked_to="$tax_f", where="starred = yes")]),
@@ -65,41 +55,10 @@ S("T06-039-P", "document span weekday to date para",
   T("wrong folder, undo it", diff(unlink("contracts_f", "receipts_doc"), link("tax_f", "receipts_doc")),
     ref=[act("undo")]))
 
-S("T06-046-P", "create event edit new para",
-  T("mastering call with greta, next thursday from 11 to 12, put it in",
-    diff(new("event", name=has("mastering", "greta"), date="2026-02-12T11:00")),
-    ref=[act("create", args=lines(kind="event", name="Mastering call with Greta", date=U("week", 1, weekday=4, time="11:00"),
-                                  duration="60"))]),
-  T("describe it as 'episodes 10-12, loudness check'", diff(upd("+1", description="episodes 10-12, loudness check")),
-    ref=[act("edit", rows="$c1", args=lines(description="episodes 10-12, loudness check"))]),
-  T("thursday's lineup now?", rows("+1", "premiere"),
-    ref=[ans(kind="event", when=W(U("week", 1, weekday=4)))]))
-
-S("T06-050-P", "group person count delete empty para",
-  T("groups with under four members", rows("kitty", "mama60"),
-    ref=[ans(kind="group", where="person count < 4")]),
-  T("harz one is finished, wipe it", diff(gone("harz"), unlink("harz", "sophie"), unlink("harz", "hannah_b"),
-                                            unlink("harz", "yusuf"), unlink("harz", "me")),
-    ref=[act("delete", rows="$harz")]))
-
 import json
 
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
-
-S("T06-059-P", "remove_from person named prev crew para",
-  T("olli's out of the festival after all, remove him from Festival crew 2026", diff(unlink("crew", "olli")),
-    ref=[search("olli", kind="person"), act("remove_from", rows="$olli", args=lines(from_="$crew"))]),
-  T("emre in the crew as well?", rows("emre"),
-    ref=[find(kind="person", name="Emre", linked_to="$crew"), ans(rows="@prev")]),
-  T("remove him as well", ask(),
-    ref=[bad(act("remove_from", rows="@prev", args=lines(from_="$crew"))),
-         askc("emre still has an unsettled balance in the crew group, so he can't be removed. settle up with him first?")]),
-  T("ok settle him up then", diff(settle=[("Emre Yilmaz")]),
-    ref=[act("settle_up", rows="$emre", args=lines(group="$crew"))]),
-  T("ok remove him now", ask(),
-    ref=[bad(act("remove_from", rows="$emre", args=lines(from_="$crew"))),
-         askc("he's still got a balance with tobi and nele in there, so the vault won't remove him. leave him in?")]))
 
 S("T06-066-P", "undo after ledger log para",
   T("put tonight's call with mama in the log", diff(upd("ute", date=ANY)),
@@ -111,25 +70,6 @@ S("T06-066-P", "undo after ledger log para",
   T("people with a check-in rhythm, those longest without contact first", rows("dieter", "jonas_k", "mira", "sophie", "emre", "yusuf", "hannah_b", "hannah_s", "olli", "felix", "anke", "tobi",
                                          "nele", "greta", "jonas_w", "lena", "kalle", "ute", "ines"),
     ref=[ans(kind="person", where="cadence is set", order="date asc")]))
-
-S("T06-070-P", "harz group remove named delete refused para",
-  T("Harz weekend group members?", rows("sophie", "hannah_b", "yusuf", "me"),
-    ref=[ans(kind="person", linked_to="$harz")]),
-  T("get hannah bauer out of it", diff(unlink("harz", "hannah_b")),
-    ref=[act("remove_from", kind="person", name="Hannah Bauer", args=lines(from_="$harz"))]),
-  T("also wipe out the Mama's 60th present group", ask(),
-    ref=[bad(act("delete", rows="$mama60")),
-         askc("mama's 60th present still has the spa voucher expense in it, so it can't be deleted. settle up with sophie first?")]),
-  T("no, keep it", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
-S("T06-075-P", "group count people linked all para",
-  T("people belonging to both the band fund and the prague trip", rows("jonas_w", "lena", "kalle", "me"),
-    ref=[ans(kind="person", linked_to="$band, $prague")]),
-  T("who belongs to at least three groups", rows("me"),
-    ref=[ans(kind="person", where="group count > 2")]),
-  T("more than one group, excluding me, who", rows("jonas_w", "lena", "kalle", "sophie"),
-    ref=[find(kind="person", where="group count > 1"), ans(within="@prev", where='role is set')]))
 
 import json
 
@@ -208,8 +148,6 @@ def W(expr):
 
 OPEN = 'status = "open"'
 
-IOWE = 'direction = "i_owe" and status = "open"'
-
 S("T06-B001-P", "c3b superlative event duration next week shortest count para",
   T("event with the longest duration next week", rows("theatre_tech"),
     ref=[ans(kind="event", when=W(U("week", 1)), order="duration desc", limit=1)]),
@@ -217,12 +155,6 @@ S("T06-B001-P", "c3b superlative event duration next week shortest count para",
     ref=[ans(kind="event", when=W(U("week", 1)), order="duration asc", limit=1)]),
   T("next week's event total", val(9),
     ref=[ans(op="count", kind="event", when=W(U("week", 1)))]))
-
-S("T06-B006-P", "c4b state-change settle_debt log nickname para",
-  T("the beer crate debt is cleared by kalle", diff(upd("d_kalle_beer", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="beer crate")]),
-  T("rang mama back", diff(upd("ute", date=ANY)),
-    ref=[search("mama", kind="person"), act("log", rows="$ute", args=lines(kind="call"))]))
 
 import json
 

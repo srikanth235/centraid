@@ -27,19 +27,6 @@ S("T08-078", "photos datetime span last year months",
   T("and from june to july last year", rows("p_bass", "p_dock", "p_boat"),
     ref=[ans(kind="photo", when=W(span(U("month", -1, name=6), U("month", -1, name=7))))]))
 
-S("T08-079", "debts amount since direction settle",
-  T("any debts i owe under 40", rows("d_kevin", "d_marcus_b"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and amount <= 40')]),
-  T("what about since april first at 9am, anything not owed to me", rows("d_marcus_b", "d_tanya"),
-    ref=[ans(kind="debt", when=W({"from": D("2026-04-01", "09:00")}), where='direction != "owes_me"')]),
-  T("settle the Easter groceries one, paid tanya back sunday", diff(upd("d_tanya", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Easter groceries")]))
-
-S("T08-080", "debt sum span",
-  T("total owed to me from debts since last month thru april", val((465.5, "USD")),
-    ref=[ans(op="sum", field="amount", kind="debt", when=W(span(U("month", -1), U("month", 0, name=4))),
-             where='direction = "owes_me" and status = "open"')]))
-
 S("T08-081", "locker url type count",
   T("which locker items have a url that isn't https://parents.eastsidems.org", rows("servicetitan", "bank_login"),
     ref=[ans(kind="locker item", where='url is set and url != "https://parents.eastsidems.org"')]),
@@ -73,23 +60,6 @@ S("T08-084", "house tasks span ambiguous filter reschedule anchor",
     ref=[ans(kind="person", linked_to="$dishwasher")]),
   T("log a call with her too, talked this morning", diff(upd("gloria", date=ANY)),
     ref=[act("log", rows="$gloria", args=lines(kind="call"))]))
-
-S("T08-086", "remove_from multi refused remove",
-  T("who's in fantasy league 2025", rows("trey", "kevin", "me"),
-    ref=[ans(kind="person", linked_to="$fantasy")]),
-  T("take trey and kevin out of it", diff(unlink("fantasy", "trey"), unlink("fantasy", "kevin")),
-    ref=[act("remove_from", rows="$trey, $kevin", args=lines(from_="$fantasy"))]),
-  T("and pull Luis Ortega out of the union dinner fund", ask(),
-    ref=[bad(act("remove_from", kind="person", name="Luis Ortega", args=lines(from_="$union_fund"))),
-         askc("luis still owes his share of the retirement plaque, so he can't come out yet. settle up with him first?")]))
-
-S("T08-087", "search nickname remove_from prev",
-  T("tasha, what's her full name", rows("tasha"),
-    ref=[search("Tasha", kind="person"), ans(rows="@prev")]),
-  T("take her out of the carpool", diff(unlink("carpool", "tasha")),
-    ref=[act("remove_from", rows="@prev", args=lines(from_="$carpool"))]),
-  T("who's still in it", rows("brandon", "omar", "me"),
-    ref=[ans(kind="person", linked_to="$carpool")]))
 
 S("T08-088", "already star doc prev unstar multi",
   T("find my custody agreement", rows("custody_doc"),
@@ -218,10 +188,6 @@ X("T08-017",
 X("T08-024",
   T("where's unc in my contacts", rows("unc"),
     ref=[search("Unc", kind="person"), ans(rows="@prev")]))
-
-X("T08-042",
-  T("pull up anything with gumbo in it", rows("gumbo"),
-    ref=[search("gumbo"), ans(rows="@prev")]))
 
 X("T08-048",
   T("aunt bev, what name is she under", rows("bev"),

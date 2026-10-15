@@ -33,7 +33,7 @@ D-1044-13 (the gold rulings of the persistent-failure read) adds three kinds of 
            outcomes the runtime composes itself: `composed-ask`, `composed-decline`, `composed-refusal`)
   widen    a convention that adds an accepted alternative to the gold of a turn, derived from the gold, the reference
            calls, the world and, for `composed-answer`, the run's own reads (`superlative`, `group-or-value`,
-           `container-or-row`, `narrowed-balance`, `composed-answer`; WIDENING)
+           `container-or-row`, `composed-answer`; WIDENING)
   rewrite  a rule over the message that rewrites the reference calls and the gold before the reference run
            (`messaging`, `due-active`, `kindless`), and FIXES, a table of hand corrections keyed by (session id, turn)
            with the one-line reason of each. `prepare_session` applies both; `python3 regen.py refreeze` prepares the sets and
@@ -44,10 +44,6 @@ The blind gold audit (G1) added four more, read over the message and the session
                      (D-1044-15, B3b) a span question with no "on", no "left" and no task word ("what's the plan for next
                      week", "anything next weekend", "what does next week look like", "what've i got next monday") is the
                      calendar too, and a fragment ("and tomorrow", "and the 14th") keeps the kind of the turn before
-  `debt-or-person`   (D-1044-15, B6, widen) "who owes me", "who do i owe", "who's that to" about debts: the open debt rows
-                     and the people they link to are both answers
-  `narrowed-balance` (K2, widen) "just the household one" after a person's balance: the group's net or the person's part
-                     of the balance in the group's currency
   `broken-off`       (K3, explain) a request broken off mid-sentence runs only the last complete request
   `bare-plural`      (K4, explain) several rows fit a name given by a bare plural and nothing says all, every, each,
                      both or everyone: the ask over them, not the write to every row (the runtime's own closed list)
@@ -91,7 +87,7 @@ API (everything else is internal):
 
 A change is explained by a convention, looked at from the reference calls, the message, the old gold and the new
 effect, and never guessed (`CONVENTIONS`, in the order they are tried). A change no convention fits is UNEXPLAINED:
-the old gold stays and the row says what was derived. Checks the old accept carried (`also` diffs, `settle`,
+the old gold stays and the row says what was derived. Checks the old accept carried (`also` diffs,
 `reveal`, `already`, the matchers of a row spec) are kept when the run still satisfies them; the row lists what was
 kept and what was dropped.
 """
@@ -117,11 +113,10 @@ ROW_CAP = 12  # crates/assist/src/native/meta.rs: a write over this many rows is
 VOLATILE = {"completed"}  # fields the runtime stamps with the time of the write: any value will do
 CONVENTIONS = ("bulk-cap", "bare-plural", "series-ask", "refusal", "ask-options", "composed-refusal", "composed-ask",
                "composed-decline", "name-match", "status", "what-else", "container", "status-words", "next", "last-one",
-               "due-active", "focus-wins", "superlative", "group-or-value", "container-or-row", "debt-or-person", "messaging",
-               "kindless", "narrowed-balance", "broken-off")
+               "due-active", "focus-wins", "superlative", "group-or-value", "container-or-row", "messaging",
+               "kindless", "broken-off")
 REPORT_ONLY = ("name-match",)  # reported with the old and the derived gold, never applied
-WIDENING = ("superlative", "group-or-value", "container-or-row", "debt-or-person",
-            "narrowed-balance")  # conventions that add an alternative, never replace
+WIDENING = ("superlative", "group-or-value", "container-or-row")  # conventions that add an alternative, never replace
 REWRITES = ("messaging", "due-active", "kindless")  # conventions that also rewrite the reference calls (prepare_session)
 UNEXPLAINED = "UNEXPLAINED"
 KINDS_WITH_EFFECT = ("rows", "value", "act", "ask", "decline")
@@ -308,7 +303,6 @@ class Sess:
         self.status_turns: dict[int, dict] = {}  # turn -> what the status rule changed in its result
         self.due_turns: set[int] = set()  # turns explained by `due-active`: a follow-up that reads their result follows
         self.dated_kinds: dict[int, str | None] = {}  # turn -> the task or event it read or wrote (`kindless`, K1)
-        self.balances: dict[int, tuple[str | None, list[dict]]] = {}  # turn -> (person, values) of a person's balance (K2)
         self.series_asks: dict[int, list[str]] = {}  # turn -> the keys of the series the runtime asked over, where the
         #                                              reference's own dialog was another one (`after-series-ask`)
 
@@ -537,22 +531,13 @@ def reveal_checks(eff: dict, world: dict, ids: Ids) -> list[dict]:
 def derive_diff(eff: dict, ids: Ids, old: list[dict], steps: list[dict], notes: dict, as_diff: bool,
                 world: dict | None = None) -> dict:
     """The net vault change of the turn as a gold diff, and for an accept of type diff the checks that go with it
-    (`already`, `reveal`, `settle`): the old ones that the run still satisfies, and the settlement the run made."""
+    (`already`, `reveal`): the old ones that the run still satisfies."""
     merged = eff["diff"]
     old_specs = [r for a in old for r in a.get("diff", {}).get("rows", [])]
     created_ids = {r["id"] for r in merged["rows"] if r["change"] == "created"}
     called = _created_fields(steps)
-    settled: dict[str, str] = {}
-    if as_diff and eff["settle_texts"]:
-        for r in merged["rows"]:
-            bal = (r["fields"].get("balance") or [None, None])[1]
-            if (r["kind"] == "person" and set(r["fields"]) == {"balance"} and isinstance(bal, dict)
-                    and abs(float(bal.get("amount") or 0)) < 0.005 and r["id"] in ids.person_names):
-                settled[r["id"]] = ids.person_names[r["id"]]
     rows, used = [], set()
     for r in merged["rows"]:
-        if r["id"] in settled:
-            continue
         if r["change"] == "created":
             rows.append(_spec_created(r, old_specs, used, called, notes))
             continue
@@ -597,16 +582,6 @@ def derive_diff(eff: dict, ids: Ids, old: list[dict], steps: list[dict], notes: 
             notes["derived"].append("reveal " + ", ".join(r["key"] for r in reveal))
             out["reveal"] = reveal
     notes["dropped"] += [f"reveal {r['key']}" for r in old_reveal if r not in reveal]
-    old_settle = [s for a in old for s in a.get("settle", [])]
-    names = list(settled.values())
-    kept = [s for s in old_settle if s["name"] in names and any(s["name"] in t for t in eff["settle_texts"])
-            and (not s.get("amount") or any(s["amount"] in t for t in eff["settle_texts"]))]
-    if kept:
-        notes["carried"].append("settle " + ", ".join(s["name"] for s in kept))
-    settle = kept + [{"name": n} for n in names if n not in {s["name"] for s in kept}]
-    if settle:
-        out["settle"] = settle
-    notes["dropped"] += [f"settle {s['name']}" for s in old_settle if s not in kept]
     return out
 
 
@@ -654,7 +629,7 @@ def derive_accept(eff: dict, ids: Ids, old: list[dict], steps: list[dict],
         accept = {"type": "diff"}
     parts = derive_diff(eff, ids, old, steps, notes, as_diff=kind == "act", world=world)
     if kind == "act":
-        accept.update({k: parts[k] for k in ("diff", "already", "reveal", "settle") if k in parts})
+        accept.update({k: parts[k] for k in ("diff", "already", "reveal") if k in parts})
     elif parts["diff"]["rows"] or parts["diff"]["links"]:
         accept["diff"] = parts["diff"]
     if any("diff" in a for a in old if a["type"] != "diff") and "diff" not in accept:
@@ -691,7 +666,7 @@ def compare(old: dict, new: dict) -> dict:
         out["changed"] = [i for i in oi if i in ni and canon(oi[i]) != canon(ni[i])]
         links = [sorted(canon(x) for x in a["diff"]["links"]) for a in (old, new)]
         out["extra"] = links[0] != links[1] or any(canon(old.get(k)) != canon(new.get(k))
-                                                   for k in ("already", "settle", "reveal"))
+                                                   for k in ("already", "reveal"))
     elif t == "ask":
         out["added"] = [k for k in new["candidates"] if k not in old["candidates"]]
         out["removed"] = [k for k in old["candidates"] if k not in new["candidates"]]
@@ -1112,8 +1087,7 @@ def explain_composed_decline(old: dict, new: dict, cx: Cx) -> str | None:
 
 def explain_composed_refusal(old: dict, new: dict, cx: Cx) -> str | None:
     """D-1044-13 (M1, D-1044-10 extended): a vault refusal of any verb other than restore, delete and remove_from ends
-    in the ask or the decline the runtime composes from the refusal's own rows (a time conflict, an unsettled balance,
-    a person into an event)."""
+    in the ask or the decline the runtime composes from the refusal's own rows (a time conflict, a person into an event)."""
     refusal = cx.last.get("refusal")
     if not refusal or new["type"] not in ("ask", "decline") or not cx.composed or cx.last.get("bulk"):
         return None
@@ -1145,7 +1119,7 @@ def explain_messaging(old: dict, new: dict, cx: Cx) -> str | None:
 SUPERLATIVE = re.compile(r"\b(?:longest|shortest|biggest|smallest|largest|how long|how big"
                          r"|(?:most|least)\s+(?:amount\s+of\s+)?(?:time|effort|work))\b", re.I)  # "needs the most time" (G1)
 STILL_IN = re.compile(r"\bstill\s+(?:in|on)\b", re.I)
-CONTAINERS = ("folder", "album", "list", "notebook", "group")
+CONTAINERS = ("folder", "album", "list", "notebook")
 
 
 def _single_rows(a: dict) -> bool:
@@ -1189,46 +1163,6 @@ def explain_container_or_row(old: dict, new: dict, cx: Cx) -> str | None:
     return None
 
 
-# B6 (D-1044-15): "who owes me", "who do i owe", "who's that to" about debts
-WHO_DEBT = re.compile(r"(?:^|[,;.?!]|\b(?:and|so|ok|okay|then|now|hey)\b)\s*who\s*(?:"
-                      r"(?:\s+still)?\s+owes?\b|\s+(?:do|did|should|must|will)\s+(?:i|we)\s+owe\b|"
-                      r"(?:'s|s|\s+is)\s+(?:that|it|this|they)\s+(?:to|from)\b)", re.I)  # a clause that starts with it
-
-
-def _kinds_of(a: dict, sess: Sess) -> set[str | None]:
-    return {sess.rows.get(k, (None,))[0] for k in a["rows"]} if a["type"] == "rows" and a["rows"] else set()
-
-
-def _people_of_debts(a: dict, sess: Sess) -> list[str]:
-    """The people the debt rows of a rows accept link to, in the order of the rows, each once."""
-    out: list[str] = []
-    for key in a["rows"]:
-        person = sess.rows[key][1].get("person")
-        if person in sess.rows and person not in out:
-            out.append(person)
-    return out
-
-
-def explain_debt_or_person(old: dict, new: dict, cx: Cx) -> str | None:
-    """D-1044-15 (B6): "who owes me", "who do i owe" and "who's that to" about debts accept the open debt rows and the
-    people those debts link to; the two shapes are both the answer. Widening: the old accept stays beside the new one."""
-    if not WHO_DEBT.search(cx.user):
-        return None
-    for debts, people in ((old, new), (new, old)):
-        if (_kinds_of(debts, cx.sess) == {"debt"} and _kinds_of(people, cx.sess) == {"person"}
-                and sorted(_people_of_debts(debts, cx.sess)) == sorted(people["rows"])):
-            return "the message asks who a debt is with: the debt rows and the people they link to are both answers"
-    return None
-
-
-def widen_debt_or_person(gold: list[dict], user: str, ref: list[dict], sess: Sess, ti: int,
-                         steps: list[dict]) -> list[dict]:
-    if not WHO_DEBT.search(user):
-        return []
-    return [{**copy.deepcopy(a), "rows": _people_of_debts(a, sess)} for a in gold
-            if _kinds_of(a, sess) == {"debt"} and _people_of_debts(a, sess)]
-
-
 # ---------------------------------------------------------------------------------------------
 # K1 to K4: what the blind gold audit settled (D-1044-13, refined)
 # ---------------------------------------------------------------------------------------------
@@ -1239,8 +1173,8 @@ DATED = ("task", "event")  # the kinds a read of a span of time can mean
 # "on my plate", which is what is to do)
 KIND_NOUN = re.compile(
     r"\b(?:tasks?|to-?dos?|chores?|errands?|jobs?|reminders?|events?|appointments?|meetings?|calls?|calendar|schedule|"
-    r"agenda|diary|people|persons?|contacts?|friends?|groups?|notes?|documents?|docs?|files?|photos?|pictures?|pics?|"
-    r"albums?|debts?|loans?|owe[sd]?|lockers?|passwords?|logins?|notebooks?|folders?|lists?|items?)\b", re.I)
+    r"agenda|diary|people|persons?|contacts?|friends?|notes?|documents?|docs?|files?|photos?|pictures?|pics?|"
+    r"albums?|lockers?|passwords?|logins?|notebooks?|folders?|lists?|items?)\b", re.I)
 KIND_IMPLIED = re.compile(
     r"\b(?:due|overdue|open|done|completed?|finish(?:ed)?|progress|priority|effort|cancel(?:led)?|pinned|jotted|wrote|"
     r"written|trashed|deleted|pending|unfinished|plate)\b", re.I)
@@ -1372,7 +1306,7 @@ RETRACTION = re.compile(r"\b(?:never\s*mind|forget\s+(?:it|that)|skip\s+it|kiddi
 REQUEST = re.compile(r"^(?:(?:no|nah|nope|wait|actually|ok|okay|so|then|just|now|and|please|ugh|hm+)[, ]+)*"
                      r"(?:create|make|add|put|move|push|bump|delete|remove|trash|cancel|star|unstar|pin|unpin|tick|mark|"
                      r"set|log|file|restore|undo|edit|change|rename|reschedule|book|call|remind|show|list|find|tell|give|"
-                     r"settle|pay|do|text|email)\b", re.I)
+                     r"pay|do|text|email)\b", re.I)
 
 
 def last_request(user: str) -> str | None:
@@ -1402,7 +1336,7 @@ def explain_broken_off(old: dict, new: dict, cx: Cx) -> str | None:
     rows, links = (_spec_set(old, "rows"), _spec_set(new, "rows")), (_spec_set(old, "links"), _spec_set(new, "links"))
     if not (links[1] <= links[0] and rows[1] <= rows[0]) or (rows[1], links[1]) == (rows[0], links[0]):
         return None
-    if any(canon(old.get(name)) != canon(new.get(name)) for name in ("already", "reveal", "settle")):
+    if any(canon(old.get(name)) != canon(new.get(name)) for name in ("already", "reveal")):
         return None
     return (f"the message breaks off and goes on with '{last}': only the last complete request runs; left out: "
             + ", ".join(sorted(rows[0] - rows[1] | links[0] - links[1]))[:160])
@@ -1625,90 +1559,11 @@ def explain_series_ask(old: dict, new: dict, cx: Cx) -> str | None:
     written = [r.get("key") for r in spec.get("rows", [])]
     if series is None or len(written) != 1 or None in written:
         return None  # several written rows are `bare-plural`'s: the write to one instance is this rule's
-    if spec.get("links") or any(old.get(k) for k in ("settle", "reveal")):
+    if spec.get("links") or any(old.get(k) for k in ("reveal",)):
         return None  # a write that does more than change the one instance
     if _series_key(written[0], cx.sess) != _series_key(new["candidates"][0], cx.sess) or says_which(cx.user, series[1]):
         return None  # a row outside the series was written, or the message aims at one instance
     return SERIES_EVIDENCE.format(kind=series[0], count=len(new["candidates"]), name=series[1])
-
-
-# K2, a balance narrowed to one group ("just the household one") after a person's balance
-NARROWING = re.compile(r"\b(?:just|only|specifically|in particular)\b", re.I)
-
-
-def _ref_key(text) -> str | None:
-    m = re.fullmatch(r"\s*\$(\w+)\s*", str(text or ""))
-    return m.group(1) if m else None
-
-
-def _row_of(args: dict, sess: Sess, kind: str, handles: tuple[str, ...]) -> str | None:
-    """The world key of the row of `kind` that a reference call is about: a `$key` in one of `handles`, else the one
-    row whose name (or nickname) holds all the words of the call's `name`."""
-    for fld in handles:
-        key = _ref_key(args.get(fld))
-        if key and sess.rows.get(key, (None,))[0] == kind:
-            return key
-    name = args.get("name")
-    if not isinstance(name, str) or not words(name, True):
-        return None
-    hits = [k for k, (rk, row) in sess.rows.items() if rk == kind
-            and any(words(name, True) <= words(n, True) for n in (row.get("name"), row.get("nickname")) if n)]
-    return hits[0] if len(hits) == 1 else None
-
-
-def person_balance(turn: dict, accepts: list[dict], sess: Sess) -> tuple[str | None, list[dict]] | None:
-    """(the person, the values) of a turn that answered a person's balance, from its reference read and the first values
-    accept of its gold; None for any other turn."""
-    core = _core_call(turn.get("ref") or [])
-    values = next((a["values"] for a in accepts if a["type"] == "value" and "values" in a), None)
-    if core.get("op") != "balance" or core.get("kind") == "group" or not values:
-        return None
-    person = _row_of(core, sess, "person", ("rows", "linked_to"))
-    return (person, copy.deepcopy(values)) if person else None
-
-
-def narrowed_part(user: str, core: dict, sess: Sess, ti: int) -> tuple[str, float] | None:
-    """K2: for a balance of one group of a person right after that person's balance, with a word that narrows ("just the
-    household one", "in the climbing group specifically"): (the currency of the group, the person's part of the balance
-    in that currency, from the values the turn before answered). None when the turn is not such a narrowing."""
-    if core.get("op") != "balance" or core.get("kind") != "group" or not NARROWING.search(user):
-        return None
-    person, group = _ref_key(core.get("linked_to")), _row_of(core, sess, "group", ("rows",))
-    before = sess.balances.get(ti - 1)
-    if not person or not group or not before or before[0] != person:
-        return None
-    currency = sess.rows[group][1].get("currency") or sess.world.get("currency")
-    part = [v for v in before[1] if v.get("unit") == currency]
-    return (currency, float(part[0]["amount"])) if len(part) == 1 else None
-
-
-def widen_narrowed_balance(gold: list[dict], user: str, ref: list[dict], sess: Sess, ti: int,
-                           steps: list[dict]) -> list[dict]:
-    """D-1044-13 (K2): the balance of a group narrowed from a person's balance is the group's net of that person
-    (positive = the group owes them) or the person's own part of the balance in the group's currency (positive = they owe
-    me): both are answers. The reference read is the first; the alternative is the part in the values of the turn
-    before."""
-    part = narrowed_part(user, _core_call(ref), sess, ti)
-    if part is None or not any(_single_value(a) for a in gold):
-        return []
-    return [{"type": "value", "values": [{"amount": num(part[1]), "unit": part[0]}]}]
-
-
-def explain_narrowed_balance(old: dict, new: dict, cx: Cx) -> str | None:
-    """D-1044-13 (K2): of the two values, the group's net and the person's own part in the group's currency, one is the
-    old gold and the other the run's: both are answers (a widening)."""
-    part = narrowed_part(cx.user, _core_call(cx.ref), cx.sess, cx.turn)
-    if part is None or not (_single_value(old) and _single_value(new)):
-        return None
-
-    def own(a: dict) -> bool:
-        v = a["values"][0]
-        return v.get("unit") == part[0] and abs(float(v["amount"]) - part[1]) < 0.005
-
-    if own(old) == own(new):
-        return None
-    return (f"a balance narrowed to one group is the group's net or the person's part of the balance in {part[0]} "
-            f"({num(part[1])}): both are answers")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1790,8 +1645,7 @@ def widen_container_or_row(gold: list[dict], user: str, ref: list[dict], sess: S
 
 
 WIDENERS = {"superlative": widen_superlative, "group-or-value": widen_group_or_value,
-            "container-or-row": widen_container_or_row, "debt-or-person": widen_debt_or_person,
-            "narrowed-balance": widen_narrowed_balance}
+            "container-or-row": widen_container_or_row}
 
 
 def widen_gold(gold: list[dict], user: str, ref: list[dict], sess: Sess, ti: int,
@@ -1825,9 +1679,9 @@ RULES = {"bulk-cap": explain_bulk_cap, "refusal": explain_refusal, "ask-options"
          "what-else": explain_what_else, "container": explain_container, "status-words": explain_status_words,
          "next": explain_next, "last-one": explain_last_one, "due-active": explain_due_active,
          "focus-wins": explain_focus_wins, "superlative": explain_superlative, "group-or-value": explain_group_or_value,
-         "container-or-row": explain_container_or_row, "debt-or-person": explain_debt_or_person,
+         "container-or-row": explain_container_or_row,
          "messaging": explain_messaging, "bare-plural": explain_bare_plural,
-         "kindless": explain_kindless, "narrowed-balance": explain_narrowed_balance, "broken-off": explain_broken_off,
+         "kindless": explain_kindless, "broken-off": explain_broken_off,
          "series-ask": explain_series_ask}
 
 
@@ -1977,7 +1831,6 @@ def regen_session(session: dict, record: dict) -> tuple[dict, list[dict]]:
         final = res["gold"] if res["changed"] else gt["gold"]
         sess.gold_rows[ti] = next((a["rows"] for a in final if a["type"] == "rows"), [])
         sess.dated_kinds[ti] = dated_kind({"ref": gt.get("ref"), "gold": final}, lambda k: sess.rows.get(k, (None,))[0])
-        sess.balances[ti] = person_balance(gt, final, sess)
         if res["convention"]:
             rows.append({"id": session["id"], "turn": ti + 1, "user": gt["user"], "convention": res["convention"],
                          "was_failing": res["was_failing"], "applied": res["changed"], "held": res["held"],
@@ -2336,10 +2189,6 @@ WIDENERS["after-series-ask"] = widen_after_series_ask
 #   gold    the accepts are replaced; `add` accepts are added beside the ones on file
 #   derive  the gold stays and the reference run derives it through a convention (no pin)
 # A turn with `gold` or `add` is pinned: a run that fails it is UNEXPLAINED, never re-derived.
-# G20 was audited and needs no fix: C-E053 t1 says +872.60 USD and t2 -872.60 USD, and both are right. `balance` of a
-# person is me versus them, positive = they owe me (values.rs): Lukas owes Hana 872.60 in the Home expenses. `balance` of a
-# group with a person linked is that person's net in the group, positive = the group owes them: Lukas paid 1564.50 and his
-# share is 2437.10, so his net is -872.60. One debt, seen from the person and from the group.
 FIXES: dict[tuple[str, int], dict] = {
     ("T03-071", 3): {
         "ruling": "G5", "expect": "f7e11a9d",
@@ -2449,13 +2298,6 @@ FIXES: dict[tuple[str, int], dict] = {
                                                      "fields": {"status": "completed", "completed": {"any": True}}}],
                                            "links": []}},
                  {"type": "ask", "candidates": ["tk26", "tk132", "tk192", "tk625", "tk742"]}]},
-    ("D-E132", 1): {
-        "ruling": "M1d-next", "expect": "dfaeafc8",
-        "why": "'book club members, for the invite to the next one': the people linked to the Book club group are its "
-               "members; a 'next' or 'last one' does not touch a call linked to a row of another kind, so the call is no "
-               "longer redirected to the next Book club event (which has no people); the old empty gold was the old "
-               "runtime's artifact",
-        "gold": [{"type": "rows", "rows": ["pp40", "pp41", "liz", "me", "pp42"]}]},
     ("D-E053", 3): {
         "ruling": "G13", "expect": "fa33e469", "derive": True,
         "why": "'just the ones i already finished' is bounded by its wording: the write is a delete of the completed tasks, "
@@ -2515,50 +2357,6 @@ FIXES: dict[tuple[str, int], dict] = {
         "why": "'how long is the packing task': the row beside the value; widen_superlative cannot resolve "
                "a by-name reference",
         "add": [{"type": "rows", "rows": ["pack_gdl"]}]},
-    ("T23-050", 4): {
-        "ruling": "G3", "expect": "98a69e9d",
-        "why": "'smallest open debt each way': the smallest debt of each direction beside the grouped value",
-        "add": [{"type": "rows", "rows": ["d_nigora", "d_gulnora"]}]},
-    ("A-E004", 1): {
-        "ruling": "G25", "expect": "8d046649",
-        "why": "'who' asks for people (SPEC 8.7) and a debt row does not name the person; the people of the "
-               "debts are accepted beside the debts",
-        "add": [{"type": "rows", "rows": ["arjun", "farah", "jordan_b", "kenji"]}]},
-    ("A-E071", 1): {
-        "ruling": "G25", "expect": "b6efa5dc",
-        "why": "'who' asks for people (SPEC 8.7) and a debt row does not name the person; the people of the "
-               "debts are accepted beside the debts",
-        "add": [{"type": "rows", "rows": ["bev", "chloe", "jordan_b", "meera_i"]}]},
-    ("B-E061", 1): {
-        "ruling": "G25", "expect": "72139445",
-        "why": "'who' asks for people (SPEC 8.7) and a debt row does not name the person; the people of the "
-               "debts are accepted beside the debts",
-        "add": [{"type": "rows", "rows": ["adwoa", "dan_k", "tutor"]}]},
-    ("C-E052", 1): {
-        "ruling": "G25", "expect": "64b75463",
-        "why": "'who' asks for people (SPEC 8.7) and a debt row does not name the person; the people of the "
-               "debts are accepted beside the debts (the same settle of the shoes stays part of the accept)",
-        "add": [{"type": "rows", "rows": ["priya", "sophie"], "diff": {"rows": [{"key": "alexm_shoes", "change": "updated", "fields": {"status": "settled"}}], "links": []}}]},
-    ("C-E078", 1): {
-        "ruling": "G25", "expect": "835e3e67",
-        "why": "'who' asks for people (SPEC 8.7) and a debt row does not name the person; the people of the "
-               "debts are accepted beside the debts",
-        "add": [{"type": "rows", "rows": ["alex_m", "priya", "sophie"]}]},
-    ("T23-069", 3): {
-        "ruling": "G25", "expect": "a65e53c8",
-        "why": "'who's that to' asks for the person; the debt row the old gold listed names no one (p7, p6 "
-               "and Sonnet all answer the person)",
-        "add": [{"type": "rows", "rows": ["javlon"]}]},
-    ("T03-052", 3): {
-        "ruling": "D-1044-15", "expect": "a65e53c8",
-        "why": "B6, 'who's that to' about the biggest debt i owe: the person (Marta) or the debt row (150 EUR, Marta's "
-               "half of the glasses); the debt rows and the people they link to are both answers (debt-or-person)",
-        "add": [{"type": "rows", "rows": ["d_glasses"]}]},
-    ("D-E132", 2): {
-        "ruling": "D-1044-15", "expect": "6f77f64c",
-        "why": "B13, 'what's my number for that one' after the book club members: the balance with the group, an ask "
-               "which number is meant, or the out_of_scope decline (the vault holds no phone number); no rule is stated",
-        "add": [{"type": "ask", "candidates": []}, {"type": "decline", "reasons": ["out_of_scope"]}]},
     # B17 (D-1044-15): the ask over a series stands, and a by-#n pick of the one instance not over, made after a look, is
     # accepted beside it
     ("A-E091", 1): {
@@ -2873,7 +2671,7 @@ def show_accept(a: dict) -> str:
                 specs.append(f"{r['key']} {r['change']}")
         specs += [f"link {x['change']} {x['from']}->{x['to']}" for x in diff["links"]]
         text += (" " if t == "diff" else " + ") + "; ".join(specs)
-    for name in ("already", "settle", "reveal"):
+    for name in ("already", "reveal"):
         if a.get(name):
             text += f" [{name} {len(a[name])}]"
     return text

@@ -71,13 +71,6 @@ S("T10-035", "notebook read remove_from multi loose notes",
                                            "tourney_notes"),
     ref=[ans(kind="note", where="notebook count <= 0")]))
 
-S("T10-036", "debt count people debts i owe",
-  T("who've i got any money going with", rows("nabil", "abu_fadi", "walid", "tariq", "rami", "hani", "huda", "jamal",
-                                               "ziad", "khaled_s", "umm_khalil", "mounir"),
-    ref=[find(kind="person", where="debt count >= 1"), ans(rows="@prev")]),
-  T("the ones i owe", rows("d_nabil", "d_tariq", "d_hani", "d_ziad"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]))
-
 S("T10-037", "cancelled chess count from",
   T("did any chess nights get cancelled", rows("chess_0526"),
     ref=[find(kind="event", name="Chess club night", where='status = "cancelled"'), ans(rows="@prev")]),
@@ -134,28 +127,11 @@ S("T10-046", "photo starred person count add_to multi",
     diff(link("grand_album", "wedding_old"), link("grand_album", "umm_rami")),
     ref=[act("add_to", rows="$wedding_old, $umm_rami", args=lines(to="$grand_album"))]))
 
-S("T10-047", "edit event multi group balance",
-  T("when do i drive to aqaba and back", rows("aqaba_drive", "aqaba_back"),
-    ref=[ans(kind="event", name="Aqaba")]),
-  T("add abu ahmad driving to both",
-    diff(upd("aqaba_drive", description="Abu Ahmad driving"), upd("aqaba_back", description="Abu Ahmad driving")),
-    ref=[act("edit", rows="$aqaba_drive, $aqaba_back", args=lines(description="Abu Ahmad driving"))]),
-  T("who's in the aqaba trip group again", rows("nabil", "jamal", "abu_fadi", "me"),
-    ref=[ans(kind="person", linked_to="$aqaba")]),
-  T("and how do i stand in it", val((-90, "JOD")),
-    ref=[ans(op="balance", kind="group", name="Aqaba trip", linked_to="$me")]))
-
 S("T10-048", "photo name person count delete",
   T("mosque pics with no one tagged", rows("blur_1", "mosque_dome"),
     ref=[ans(kind="photo", name="mosque", where="person count < 1")]),
   T("delete the blurry one", diff(trash("blur_1"), unlink("blurry_album", "blur_1")),
     ref=[act("delete", rows="$blur_1")]))
-
-S("T10-049", "debt amount literal within open",
-  T("any debts over 50", rows("d_nabil", "d_rami", "d_huda", "d_jamal"),
-    ref=[find(kind="debt", where="amount > 50"), ans(rows="@prev")]),
-  T("which of those are open", rows("d_nabil", "d_huda", "d_jamal"),
-    ref=[ans(within="@prev", where='status = "open"')]))
 
 S("T10-050", "event read reschedule prev date",
   T("when's the chess simul at shoman library", rows("simul"),

@@ -29,18 +29,6 @@ S("T33-002", "events-today cancel-by-date weekend four-constraints tasks rename-
   T("rename tomorrow's swim trunks task to size 2", diff(upd("k_swim", name=has("trunks", "size 2"))),
     ref=[act("edit", kind="task", name="swim trunks", when=J(U("day", 1)), args="name: Buy Kenji swim trunks size 2")]))
 
-S("T33-003", "balance group-narrow substitution next-empty last",
-  T("how much does ravi owe me", val((142.5, "SGD")),
-    ref=[ans(op="balance", kind="person", name="ravi")]),
-  T("just the dinner club one", val((-231.25, "SGD")),
-    ref=[ans(op="balance", kind="group", name="NUS Dinner Club", linked_to="$ravi")]),
-  T("and kim?", val((-71.25, "SGD")),
-    ref=[ans(op="balance", kind="group", name="NUS Dinner Club", linked_to="$kim")]),
-  T("when's the next dinner club", rows(),
-    ref=[ans(kind="event", name="dinner club", order="date asc", limit=1, when=J({"from": U("day", 0)}))]),
-  T("and the last one", rows("dinner_club"),
-    ref=[ans(kind="event", name="dinner club", order="date desc", limit=1, when=J({"to": U("day", 0)}))]))
-
 S("T33-004", "subtasks narrow complete-more reschedule",
   T("what's still open under plan the penang christmas trip", rows("pg_gifts", "pg_ringgit", "pg_pack", "pg_pet"),
     ref=[ans(kind="task", linked_to="$penang_trip", where="status = open")]),
@@ -121,18 +109,6 @@ S("T33-009", "trash restore window decline people-trashed task-vs-person",
     ref=[find(kind="task", name="property agent", trashed="true"),
          act("restore", rows="@prev")]))
 
-S("T33-010", "debts sum biggest person settle undo-not-undone",
-  T("what's the total of everything i still owe from before december", val((689, "SGD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open", when=J({"to": U("month", -1)}))]),
-  T("which one's the biggest", rows("d_junhao"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1)]),
-  T("who's that with", rows("junhao"),
-    ref=[ans(kind="person", linked_to="$d_junhao")]),
-  T("paid him back, settle it", diff(upd("d_junhao", status="settled")),
-    ref=[act("settle_debt", rows="$d_junhao")]),
-  T("undo that", diff(),
-    ref=[act("undo")]))
-
 S("T33-011", "aircon next-query reschedule exclude ambiguous-ask",
   T("when's the next aircon servicing", rows("aircon_a"),
     ref=[ans(kind="event", name="aircon servicing", order="date asc", limit=1, when=J({"from": U("day", 0)}))]),
@@ -191,28 +167,6 @@ S("T33-016", "swim cancelled count rows-of-value refused-reschedule",
   T("fine, shift it to next saturday instead", ask("swim_1017"),
     ref=[act("reschedule", rows="$swim_1017", args=lines(to=U("week", 1, weekday=6)))]))
 
-S("T33-017", "group balance-zero delete-group unlink",
-  T("where do i stand in the birthday gift group", val((0, "SGD")),
-    ref=[ans(op="balance", kind="group", name="okaasan birthday gift", linked_to="$me")]),
-  T("get rid of that group, we're not doing it", diff(gone("okaasan_gift"), unlink("okaasan_gift", "mei"), unlink("okaasan_gift", "me")),
-    ref=[act("delete", rows="$okaasan_gift")]))
-
-S("T33-018", "pa balance narrow-group refused-remove-ask",
-  T("where am i with pa", val((-1941.68, "MYR")),
-    ref=[ans(op="balance", kind="person", name="pa")]),
-  T("just the penang fund one", val((4108.34, "MYR")),
-    ref=[ans(op="balance", kind="group", name="Penang Family Fund", linked_to="$pa")]),
-  T("take pa out of the penang fund", ask("pa", "penang"),
-    ref=[act("remove_from", rows="$pa", args="from: $penang")]))
-
-S("T33-019", "wei jie debts settle_up group-vs-debt balance-after",
-  T("how much do i owe wei jie", val((-320, "SGD")),
-    ref=[ans(op="balance", kind="person", name="wei jie")]),
-  T("settle up with him in the dinner club", diff(upd("weijie", balance=ANY), settle=[("Wei Jie", "160.00")]),
-    ref=[act("settle_up", rows="$weijie", args="group: $dinner")]),
-  T("and how much is left between us now", val((-160, "SGD")),
-    ref=[ans(op="balance", kind="person", name="wei jie")]))
-
 S("T33-020", "bulk-selector apply-all reschedule three-constraints",
   T("push both home tasks due tomorrow to monday",
     diff(upd("h_aircon", date="2026-12-14"), upd("h_groceries", date="2026-12-14")),
@@ -224,29 +178,6 @@ S("T33-021", "sunday clash create-ask",
     ref=[ans(kind="event", where="status != cancelled", when=J(U("week", 0, weekday=7)))]),
   T("put a call with grace in at 11", ask("brunch_wj"),
     ref=[act("create", kind="event", args="name: Call with Grace\ndate: " + J(U("week", 0, weekday=7, time="11:00")))]))
-
-S("T33-022", "priya decoys balance-by-group balance-by-met log",
-  T("how much do i owe priya from playgroup", val((-24, "SGD")),
-    ref=[ans(op="balance", kind="person", name="priya", linked_to="$playgroup")]),
-  T("and priya from work", val((0, "SGD")),
-    ref=[ans(op="balance", kind="person", name="priya", where='met = "work"')]),
-  T("star her and log a call with her", diff(upd("priya_nayar", date=ANY, starred=ANY)),
-    ref=[act("star", rows="$priya_nayar", more="true"),
-         act("log", rows="$priya_nayar", args="kind: call")]))
-
-S("T33-023", "david decoys committee tasks-about three-constraints rename-by-link",
-  T("which david's on the committee", rows("david_l"),
-    ref=[ans(kind="person", name="david", linked_to="$committee")]),
-  T("tasks about him that are still open and due next week", rows("budget_sheet", "pay_david"),
-    ref=[ans(kind="task", linked_to="$david_l", where="status = open", when=J(U("week", 1)))]),
-  T("rename the gift task for the david from work to team gift", diff(upd("w_gift", name="Team gift")),
-    ref=[act("edit", kind="task", name="gift", linked_to="$david_n", args="name: Team gift")]))
-
-S("T33-024", "mei-yin decoy committee balance",
-  T("who's mei from the committee", rows("fong"),
-    ref=[ans(kind="person", name="mei", linked_to="$committee")]),
-  T("so how much am i down with her", val((-180, "SGD")),
-    ref=[ans(op="balance", kind="person", name="fong")]))
 
 S("T33-025", "home list week count-four narrow-effort",
   T("home list tasks under half an hour due this week", rows("h_aircon", "h_groceries"),

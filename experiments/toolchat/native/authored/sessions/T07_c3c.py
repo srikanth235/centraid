@@ -15,12 +15,6 @@ S("T07-C001", "c3c compound create event create task list",
     ref=[act("create", args=lines(kind="event", name="Call with Sonia", date=U("week", 0, weekday=5, time="15:00")), more=True),
          act("create", args=lines(kind="task", name="Ask Sonia about the seed order", date=U("week", 0, weekday=5), list="$coop_l"))]))
 
-S("T07-C002", "c3c compound settle_debt log referential",
-  T("settled the lab fee with hugo, and log a call with him",
-    diff(upd("d_hugo", status="settled"), upd("hugo", date=ANY)),
-    ref=[act("settle_debt", kind="debt", name="Lab fee share", more=True),
-         act("log", rows="$hugo", args=lines(kind="call"))]))
-
 S("T07-C003", "c3c compound cancel complete",
   T("cancel the truck service, and mark the gas refill done",
     diff(upd("mechanic", status="cancelled"), upd("gas", status="completed", completed=ANY)),
@@ -45,7 +39,3 @@ S("T07-C901", "c3c cell7 empty recovery wrong kind then span",
     ref=[find(kind="note", name="padlock code"), ans(kind="locker item", name="padlock code")]),
   T('tasks due from the 14th at 8am through next week', rows("trial_data", "rent_mar", "scout_report", "agro_title", "hugo_email", "agro_bank", "julio_gift", "water_bill", "expo_banner", "irrigation", "vale_box", "mama_pills", "agro_docs"),
     ref=[ans(kind="task", when=W(span(D("2026-03-14", "08:00"), U("week", 1))))]))
-
-S("T07-C902", "c3c cell7 rejected delete group with expenses ask",
-  T('delete the papa andina coop group', ask(),
-    ref=[bad(act("delete", kind="group", name="Papa Andina coop")), askc("the coop group still has expenses in it, so it can't be deleted. settle up with everyone first?")]))

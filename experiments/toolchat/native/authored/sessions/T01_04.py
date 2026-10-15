@@ -9,16 +9,6 @@ S("T01-077", "folder count delete folder where",
   T("delete the one that doesn't", diff(gone("car_f")),
     ref=[act("delete", kind="folder", where="document count = 0")]))
 
-S("T01-079", "where duration cmp person count",
-  T("what's on next week that's longer than two hours",
-    rows("ld_0316", "study_day", "night_0319", "night_0320", "mum_bday"),
-    ref=[ans(kind="event", when=J(U("week", 1)), where="duration > 120")]),
-  T("any of those with other people", rows("mum_bday"),
-    ref=[ans(within="@prev", where="person count > 0")]),
-  T("cancel one of the shifts", ask("ld_0316", "night_0319", "night_0320"),
-    ref=[find(within="@1", where='description contains "Ward 7"'),
-         askc("Which one - the long day on the 16th or a night on the 19th or 20th?", options="@prev")]))
-
 S("T01-080", "where effort cmp narrow complete status-ne",
   T("anything quick i can knock off tonight, under twenty mins",
     rows("skip", "permission", "study_parking", "nowtv", "card_mum", "prescription"),
@@ -56,16 +46,6 @@ S("T01-082", "locker url contains star unstar-named",
   T("and unstar microsoft 365, it renews itself", diff(upd("office365", starred=False)),
     ref=[act("unstar", kind="locker item", name="Microsoft 365")]))
 
-S("T01-083", "create group add_to where nickname members",
-  T("new group called Kitchen Kitty, in pounds",
-    diff(new("group", name="Kitchen Kitty", currency="GBP"), link("new", "me")),
-    ref=[act("create", args="kind: group\nname: Kitchen Kitty\ncurrency: GBP")]),
-  T("add gaz and cal to it", diff(link("+1", "gary"), link("+1", "callum")),
-    ref=[act("add_to", kind="person", where='nickname = "Gaz"', args="to: $c1", more=True),
-         act("add_to", kind="person", where='nickname = "Cal"', args="to: $c1")]),
-  T("who's in it now", rows("me", "gary", "callum"),
-    ref=[ans(kind="person", linked_to="$c1")]))
-
 S("T01-084", "album count rename",
   T("which albums are empty", rows("lisbon_album"),
     ref=[ans(kind="album", where="photo count = 0")]),
@@ -82,20 +62,6 @@ S("T01-085", "folder count star doc",
   T("and move it into a folder", ask(),
     ref=[askc("Which folder - School, House, Work, Travel, Money or Old Flat?")]))
 
-S("T01-086", "month name narrow cancel from-date attendees",
-  T("what's in april", rows("mot", "flight_out", "flight_home", "ld_0413", "ld_0414", "night_0416", "night_0417",
-                           "hen_class", "hen_dinner"),
-    ref=[ans(kind="event", when=J(U("month", 0, name=4)))]),
-  T("just work", rows("ld_0413", "ld_0414", "night_0416", "night_0417"),
-    ref=[ans(within="@prev", where='description contains "Ward 7"')]),
-  T("cancel the sixteenth, swapped with siobhan. what's left?",
-    rows("ld_0413", "ld_0414", "night_0417", also=diff(upd("night_0416", status="cancelled"))),
-    ref=[act("cancel", rows="$night_0416", more=True), ans(within="@prev", where="status != cancelled")]),
-  T("what's the first thing from first may on", rows("wedding"),
-    ref=[ans(kind="event", when=J({"from": D("2026-05-01")}), order="date asc", limit=1)]),
-  T("who's going to that", rows("chioma", "callum"),
-    ref=[ans(kind="person", linked_to="$wedding")]))
-
 S("T01-087", "last-month-name album count add_to feb photo-time unstar",
   T("pics from december", rows("p_ward_xmas", "p_nativity", "p_tree", "p_xmas_morning", "p_bike", "p_xmas_dinner"),
     ref=[ans(kind="photo", when=J(U("month", -1, name=12)))]),
@@ -110,15 +76,6 @@ S("T01-087", "last-month-name album count add_to feb photo-time unstar",
   T("unstar it", diff(upd("p_sunrise", starred=False)),
     ref=[act("unstar", rows="$p_sunrise")]))
 
-S("T01-088", "met-in create group add_to prev",
-  T("who do i know from church or antenatal class", rows("ifeoma", "jess_w"),
-    ref=[ans(kind="person", where='met in ("church", "antenatal class")')]),
-  T("make a group called Sunday Lunch Club in pounds and put them both in",
-    diff(new("group", name="Sunday Lunch Club", currency="GBP"), link("new", "me"), link("new", "ifeoma"),
-         link("new", "jess_w")),
-    ref=[act("create", args="kind: group\nname: Sunday Lunch Club\ncurrency: GBP", more=True),
-         act("add_to", rows="@1", args="to: $new")]))
-
 S("T01-089", "date span count within",
   T("what's booked twenty-third to twenty-seventh", rows("fitting", "first_fix", "fiveaside_0324", "farm_trip", "training_0325",
                                      "team_meeting", "dentist", "easter_hunt"),
@@ -129,17 +86,6 @@ S("T01-089", "date span count within",
     ref=[find(kind="event", within="@1", when=J(U("week", 2, weekday=3))),
          askc("Ada's farm trip or Tobi's football training?", options="$farm_trip, $training_0325")]))
 
-S("T01-090", "group members narrow create add_to prev",
-  T("who's in the ward 7 coffee club", rows("me", "priya_n", "priya_s", "gemma", "kwame", "siobhan"),
-    ref=[ans(kind="person", linked_to="$coffee")]),
-  T("which of them did i meet on the ward", rows("priya_n", "priya_s", "gemma", "kwame", "siobhan"),
-    ref=[ans(within="@prev", where='met = "Ward 7"')]),
-  T("make a group for gemma's leaving do, pounds, and add that lot",
-    diff(new("group", name=has("Leaving"), currency="GBP"), link("new", "me"), link("new", "priya_n"),
-         link("new", "priya_s"), link("new", "gemma"), link("new", "kwame"), link("new", "siobhan")),
-    ref=[act("create", args="kind: group\nname: Gemma's Leaving Do\ncurrency: GBP", more=True),
-         act("add_to", rows="@2", args="to: $new")]))
-
 S("T01-091", "repair create-kind-in-args list",
   T("remind me to buy suncream for lisbon, put it on life admin",
     diff(new("task", name=has("suncream")), link("admin_list", "new")),
@@ -147,13 +93,6 @@ S("T01-091", "repair create-kind-in-args list",
          act("create", args="kind: task\nname: Buy suncream for Lisbon\nlist: $admin_list")]),
   T("due the first", diff(upd("+1", date="2026-04-01")),
     ref=[act("reschedule", rows="$c1", args=lines(to=D("2026-04-01")))]))
-
-S("T01-092", "repair reveal-wrong-field",
-  T("what's the security code on the barclays debit card", diff(reveal=[("barclays_card", "417")]),
-    ref=[bad(act("reveal", rows="$barclays_card", args="field: security_code")),
-         act("reveal", rows="$barclays_card", args="field: cvv")]),
-  T("and the long number", diff(reveal=[("barclays_card", "4929123456781234")]),
-    ref=[act("reveal", rows="$barclays_card", args="field: card_number")]))
 
 S("T01-094", "repair where-field-kind-lacks",
   T("which events are in liverpool", rows("hen_class"),
@@ -202,21 +141,6 @@ S("T01-098", "search pick log not-found",
   T("when's ada's piano lesson", decline("not_found"),
     ref=[search("piano"), dec("not_found")]))
 
-S("T01-099", "debt linkcount empty date spans amount",
-  T("any debts that aren't tied to a person", rows(),
-    ref=[ans(kind="debt", where="person count <= 0")]),
-  T("what's come up since the first of march",
-    rows("d_zainab", "d_kunle", "d_kwame_taxi", "d_priya_lunch", "d_callum"),
-    ref=[ans(kind="debt", when=J({"from": D("2026-03-01")}))]),
-  T("and from before this month that's open",
-    rows("d_gemma_tickets", "d_siobhan", "d_mum_uniform", "d_jess_w"),
-    ref=[ans(kind="debt", when=J({"to": U("month", -1)}), where="status = open")]),
-  T("which of those are more than 20", rows("d_gemma_tickets", "d_mum_uniform", "d_jess_w"),
-    ref=[ans(within="@prev", where="amount > 20")]),
-  T("what about between the fourth at noon and wednesday gone",
-    rows("d_kunle", "d_kwame_taxi", "d_priya_lunch", "d_callum"),
-    ref=[ans(kind="debt", when=J(span(D("2026-03-04", "12:00"), U("week", 0, weekday=3))))]))
-
 S("T01-100", "ambiguous-locker ask reveal out-of-scope",
   T("what's the nhs password", ask("nhs_login", "nhs_mail"),
     ref=[askc("Smartcard login or NHSmail?", options="$nhs_login, $nhs_mail")]),
@@ -227,13 +151,6 @@ S("T01-100", "ambiguous-locker ask reveal out-of-scope",
 
 
 # --- follow-up turns (coverage + realism rework) ---------------------------------------------
-
-X("T01-083",
-  T("scrap kitchen kitty and the ward night out group too",
-    diff(gone("+1"), unlink("+1", "me"), unlink("+1", "gary"), unlink("+1", "callum"),
-         gone("night_out"), unlink("night_out", "me"), unlink("night_out", "priya_n"),
-         unlink("night_out", "priya_s"), unlink("night_out", "zainab"), unlink("night_out", "siobhan")),
-    ref=[act("delete", rows="$c1, $night_out")]))
 
 X("T01-066",
   T("delete it, i'll ring them instead", diff(trash("+1")),
@@ -256,10 +173,6 @@ X("T01-072",
 X("T01-094",
   T("who's down for three or more events", rows("ada", "callum", "chioma", "dean", "mum", "priya_n", "sophie", "tobi"),
     ref=[ans(kind="person", where="event count >= 3")]))
-
-X("T01-005",
-  T("who's got at least two events with me", rows("ada", "callum", "chioma", "dean", "gary", "jess_o", "jess_w", "kunle", "laura", "mum", "priya_n", "sophie", "tobi", "zainab"),
-    ref=[ans(kind="person", where="event count >= 2")]))
 
 X("T01-054",
   T("which starred people have fewer than two photos", rows("gemma"),
@@ -293,21 +206,9 @@ X("T01-017",
   T("pics from last monday through end of march", rows("p_book_day", "p_reading", "p_sunrise", "p_teal", "p_tiles"),
     ref=[ans(kind="photo", when=J(span(U("week", -1, weekday=1), U("month", 0, name=3))))]))
 
-X("T01-003",
-  T("any debts from first feb 9am to last friday", rows("d_gemma_tickets", "d_jess_w", "d_kunle", "d_mum_uniform", "d_priya_s", "d_siobhan", "d_zainab"),
-    ref=[ans(kind="debt", when=J(span(D("2026-02-01", "09:00"), U("week", -1, weekday=5))))]))
-
-X("T01-092",
-  T("debts from before this month", rows("d_dev", "d_gemma_tickets", "d_jess_w", "d_kwame_old", "d_mum_uniform", "d_priya_s", "d_siobhan"),
-    ref=[ans(kind="debt", when=J({"to": U("month", -1)}))]))
-
 X("T01-068",
   T("which days are Ward 7 day ones", rows("ld_0223", "ld_0226", "ld_0302", "ld_0303", "ld_0309", "ld_0310", "ld_0316", "ld_0330", "ld_0331", "ld_0413", "ld_0414"),
     ref=[ans(kind="event", where='description = "Ward 7 day"')]))
-
-X("T01-088",
-  T("who from ward 7 has fewer than one photo", rows("hannah"),
-    ref=[ans(kind="person", where='met = "Ward 7" and photo count < 1')]))
 
 X("T01-065",
   T("could you star gaz while you're at it", diff(upd("gary", starred=True)),

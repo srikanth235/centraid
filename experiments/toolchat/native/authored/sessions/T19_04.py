@@ -6,23 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T19-076", "six turns coffee fund star where create person settle_up new already count",
-  T("who's in the pharmacy coffee fund", rows("nadia", "rachid", "imane", "kenza", "me"),
-    ref=[ans(kind="person", linked_to="$coffee")]),
-  T("star the pharmacy technician, he's been great this month", diff(upd("rachid", starred=True)),
-    ref=[act("star", kind="person", where='role = "pharmacy technician"')]),
-  T("add Loubna Rami, she starts monday on the till", diff(new("person", name="Loubna Rami", role=ANY)),
-    ref=[act("create", args=lines(kind="person", name="Loubna Rami", role="cashier"))]),
-  T("put her in the coffee fund and settle her up there so she starts at zero",
-    diff(link("coffee", "+1"), already=["+1"]),
-    ref=[act("add_to", rows="$c1", args=lines(to="$coffee"), more=True),
-         act("settle_up", rows="$c1", kind="person", args=lines(group="$coffee")),
-         ans(rows="$c1")]),
-  T("how many in the fund", val(6),
-    ref=[ans(op="count", kind="person", linked_to="$coffee")]),
-  T("and what's nadia's position in it", val((20, "MAD")),
-    ref=[ans(op="balance", kind="group", name="Pharmacy coffee fund", linked_to="$nadia")]))
-
 S("T19-077", "find role star prev event read",
   T("who's the kids' paediatrician", rows("dr_kettani"),
     ref=[find(kind="person", where='role contains "paediatrician"'), ans(rows="@prev")]),
@@ -43,26 +26,6 @@ S("T19-078", "trashed person restore edit cadence read",
   T("log a call with samira too, she rang about the rota", ask("samira_b", "samira_a"),
     ref=[act("log", kind="person", name="Samira", args=lines(kind="call")),
          askc("samira bennani or samira alaoui?", options="$samira_b, $samira_a")]))
-
-S("T19-079", "seven turns lina party subtasks complete multi create group overlap ask create event cancel new album",
-  T("what are the subtasks of plan lina's birthday party", rows("cake", "invites"),
-    ref=[ans(kind="task", linked_to="$party_plan")]),
-  T("invite the class is done, and order the cake too",
-    diff(upd("invites", status="completed", completed=ANY), upd("cake", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$invites, $cake")]),
-  T("make a group Lina's birthday so youssef and i can split the costs",
-    diff(new("group", name="Lina's birthday"), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Lina's birthday"))]),
-  T("put Clown rehearsal on saturday the twenty-fifth at 3pm", ask(),
-    ref=[bad(act("create", args=lines(kind="event", name="Clown rehearsal", date=D("2026-04-25", "15:00"),
-                                      duration=60))),
-         askc("omar is visiting 12 to 6 that saturday. another time?")]),
-  T("sunday twenty-sixth at 11", diff(new("event", name="Clown rehearsal", date="2026-04-26T11:00")),
-    ref=[act("create", args=lines(kind="event", name="Clown rehearsal", date=D("2026-04-26", "11:00"), duration=60))]),
-  T("the clown cancelled on us. cancel it", diff(upd("+2", status="cancelled")),
-    ref=[act("cancel", rows="$c2")]),
-  T("make an album Lina turns 5 for the party pics", diff(new("album", name="Lina turns 5")),
-    ref=[act("create", args=lines(kind="album", name="Lina turns 5"))]))
 
 S("T19-080", "delete note named trashed notes restore restore window ask",
   T("delete books to read, i never open it", diff(trash("books")),
@@ -182,30 +145,6 @@ S("T19-091", "person open spans search nickname log",
   T("log a visit with hajja, went over after work", diff(upd("zineb", date=ANY)),
     ref=[act("log", kind="person", name="Hajja", args=lines(kind="visit")), search("hajja", kind="person"),
          act("log", rows="$zineb", args=lines(kind="visit"))]))
-
-S("T19-092", "five turns compute sum debts max settle named sum",
-  T("how much do i owe vs how much am i owed, open debts only", vgroups({"i_owe": (1800, "MAD"), "owes_me": (3150, "MAD")}),
-    ref=[comp(op="sum", field="amount", group="direction", kind="debt", where='status = "open"'), ans(value="@prev")]),
-  T("biggest one i owe", val((1000, "MAD")),
-    ref=[ans(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("that's the cash for the pharmacy till, i paid youssef back. settle it", diff(upd("d_youssef", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Cash for the pharmacy till")]),
-  T("total i owe after that?", val((800, "MAD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("and who's that to", rows("d_nadia", "d_samira", "d_aicha", "d_khalid"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]))
-
-S("T19-093", "five turns debt span direction empty person count ask settle_up",
-  T("open debts from march up to last thursday", rows("d_driss", "d_hamza", "d_omar", "d_kenza", "d_samira", "d_khalid"),
-    ref=[ans(kind="debt", where='status = "open"', when=W(span(U("month", 0, name=3), U("week", -1, weekday=4))))]),
-  T("any debts with no direction on them", rows(),
-    ref=[ans(kind="debt", where="direction is empty")]),
-  T("or with nobody attached", rows(),
-    ref=[ans(kind="debt", where="person count < 1")]),
-  T("ok settle up with omar", ask("baba_care", "ifrane"),
-    ref=[askc("in baba's care or the ifrane weekend?", options="$baba_care, $ifrane")]),
-  T("baba's care", diff(settle=["Omar Al-Sayed"]),
-    ref=[act("settle_up", rows="$omar", args=lines(group="$baba_care"))]))
 
 S("T19-094", "six turns trashed task recovery restore restore window ask create read",
   T("is the balcony door task around", rows("balcony"),

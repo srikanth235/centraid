@@ -29,7 +29,6 @@ WORLD = {
     "people": [{"key": "neha", "name": "Neha Rao", "role": "sister", "nickname": "Nee", "starred": True, "cadence": 14, "last_contacted": "2026-09-20T10:00"},
                {"key": "raj", "name": "Raj Patel", "role": "plumber"}, {"key": "priya_a", "name": "Priya Nair", "role": "nurse"},
                {"key": "priya_b", "name": "Priya Shah", "role": "teacher"}],
-    "groups": [{"key": "tahoe", "name": "Tahoe Trip", "currency": "EUR", "members": ["neha", "raj"]}],
     "lists": [{"key": "home", "name": "Home"}, {"key": "work", "name": "Work"}],
     "events": [{"key": "dentist", "name": "Dentist", "start": "2026-10-02T09:00", "end": "2026-10-02T10:00", "attendees": ["neha"]},
                {"key": "dentist2", "name": "Dentist", "start": "2026-10-09T09:00", "end": "2026-10-09T09:30"},
@@ -42,8 +41,6 @@ WORLD = {
     "notebooks": [{"key": "ideas", "name": "Ideas"}], "notes": [{"key": "dal", "name": "Dal", "body": "lentils and rice", "notebook": "ideas", "pinned": True}],
     "folders": [{"key": "taxes", "name": "Taxes"}], "documents": [{"key": "w2", "name": "W2 2025", "folder": "taxes", "starred": True}],
     "albums": [{"key": "summer", "name": "Summer"}], "photos": [{"key": "beach", "name": "Beach", "taken": "2026-07-01T10:00", "albums": ["summer"], "people": ["neha"]}],
-    "debts": [{"key": "d1", "person": "neha", "direction": "owes_me", "amount": 25.5, "name": "tickets", "date": "2026-09-01"},
-              {"key": "d2", "person": "raj", "direction": "i_owe", "amount": 100, "name": "fix", "date": "2026-09-10", "settled": "2026-09-12"}],
     "locker": [{"key": "wifi", "name": "Home wifi", "type": "wifi", "password": "x"}], "links": [{"from": "milk", "to": "raj"}],
 }
 TODAY = "2026-09-30T10:00"  # a Wednesday
@@ -117,7 +114,6 @@ class Evaluator(unittest.TestCase):
         self.assertEqual(sorted(v.select("task", linked_to="home")), ["cabin", "milk", "sub"])
         self.assertEqual(sorted(v.select("task", linked_to="cabin")), ["sub"])  # subtasks
         self.assertEqual(v.select("event", linked_to="neha"), ["dentist"])
-        self.assertEqual(sorted(v.select("person", linked_to="tahoe")), ["me", "neha", "raj"])  # you are a member
         self.assertEqual(v.select("photo", linked_to="summer"), ["beach"])
         self.assertEqual(v.select("task", linked_to="raj"), ["milk"])
 
@@ -130,8 +126,7 @@ class Evaluator(unittest.TestCase):
         self.assertEqual(v.select("person", where=[("role", "contains", "plum")]), ["raj"])
         self.assertEqual(sorted(v.select("person", where=[("role", "in", ["nurse", "teacher"])])), ["priya_a", "priya_b"])
         self.assertEqual(v.select("person", where=[("starred", "=", "yes")]), ["neha"])
-        self.assertEqual(v.select("debt", where=[("amount", ">", 30)]), ["d2"])
-        self.assertEqual(v.select("debt", where=[("amount", ">=", "25.5 USD")]), ["d1", "d2"])
+        self.assertEqual(v.select("task", where=[("effort", ">=", "10 minutes")]), ["milk"])
         self.assertEqual(v.select("event", where=[("duration", ">", 60)]), ["gym"])
         self.assertEqual(v.select("album", where=[("photo count", ">=", 1)]), ["summer"])
         self.assertEqual(v.select("folder", where=[("document count", "=", 0)]), [])
@@ -187,7 +182,7 @@ class Evaluator(unittest.TestCase):
         self.assertEqual(sorted(v.select("task", when=U("week", 0), where=[("status", "=", "open")])), ["cabin", "milk", "sub"])
         self.assertEqual(v.select("task", where=[("status", "=", "open")], order=("date", "asc"), limit=1), ["milk"])
         self.assertEqual(v.select("task", where=[("status", "=", "open")], order=("date", "desc"), limit=1), ["cabin"])
-        self.assertEqual(v.select("debt", order=("amount", "desc"), limit=1), ["d2"])
+        self.assertEqual(v.select("task", order=("effort", "desc"), limit=1), ["milk"])
         self.assertEqual(v.select("event", order=("duration", "asc"), limit=1), ["dentist2"])
         self.assertEqual(v.select("task", where=[("status", "=", "open")], when={"to": U("day", -1)}), [])  # overdue: nothing before today
 
@@ -241,7 +236,7 @@ class Banks(unittest.TestCase):
         self.assertGreater(checked, 25)
 
     def test_frames_span_the_three_moods(self):
-        for name, frames in (("read", drills.READ_FRAMES), ("count", drills.COUNT_FRAMES), ("sum", drills.SUM_FRAMES), ("super", drills.SUPER_FRAMES)):
+        for name, frames in (("read", drills.READ_FRAMES), ("count", drills.COUNT_FRAMES), ("super", drills.SUPER_FRAMES)):
             self.assertEqual({m for m, _ in frames}, {"command", "question", "indirect"}, name)
             self.assertGreaterEqual(len(frames), 8, name)
         for verb, frames in drills.VERB_FRAMES.items():
@@ -253,7 +248,7 @@ class Banks(unittest.TestCase):
         phs = drills.phrase_bank(today) + drills.span_phrases(today) + [drills.abs_phrase(today + dt.timedelta(days=k)) for k in (3, 9)]
         bad = re.compile(r"\bon (today|tomorrow|yesterday)\b|\bfor in\b|\bon from\b|\bfrom from\b|\bsince\b|\bthe the\b|\bon on\b")
         for p in phs:
-            for kind in ("event", "task", "person", "note", "document", "photo", "debt"):
+            for kind in ("event", "task", "person", "note", "document", "photo"):
                 for form in drills.when_forms(kind, p):
                     self.assertFalse(bad.search(form.format(t=p.text)), (kind, form, p.text))
             for vi in (0, 1):
@@ -263,7 +258,7 @@ class Banks(unittest.TestCase):
         self.assertEqual(drills.date_connect("task", next(p for p in phs if p.text == "today"), 1), "due today")
 
     def test_tidy_drops_the_words_a_frame_and_a_name_both_bring(self):
-        self.assertEqual(drills.tidy("move lee to the bar prep study group group ?"), "move lee to the bar prep study group?")
+        self.assertEqual(drills.tidy("move lee to the family photos album album ?"), "move lee to the family photos album?")
         self.assertEqual(drills.tidy("in the the garden album"), "in the garden album")
         self.assertEqual(drills.tidy("what notebook is puff puff in"), "what notebook is puff puff in")  # a name may repeat a word
 
@@ -499,7 +494,7 @@ class PreGrounding(unittest.TestCase):
     def test_the_block_shows_what_the_words_reach(self):
         v = vault()
         shown = drills.block_keys(v, "tick off buy milk", slack=0)
-        self.assertEqual(shown[0], "milk")  # "tick" is no verb of the list: it also reaches the debt "tickets" by its start
+        self.assertEqual(shown[0], "milk")  # "tick" is no verb of the list
         self.assertNotIn("cabin", shown)
         self.assertIn("neha", drills.block_keys(v, "star nee", slack=0))  # a nickname is a name, a prefix counts
         self.assertEqual(drills.block_keys(v, "please star it", slack=0), [])  # fillers and the verb name nothing
@@ -533,7 +528,6 @@ class NewTemplates(unittest.TestCase):
         v = vault()
         keys = v.select("task")
         self.assertEqual(drills.group_values(v, keys, "status", "count", None), {"open": 2, "in_progress": 1, "completed": 1, "cancelled": 1})
-        self.assertEqual(drills.group_values(v, v.select("debt"), "direction", "sum", "amount"), {"owes_me": (25.5, "USD"), "i_owe": (100.0, "USD")})
         self.assertEqual(drills.group_values(v, v.select("person"), "role", "count", None)["none"], 1)  # an unset field (my own row has no role) is the label "none"
         self.assertEqual(drills.gold_groups({"a": 2, "b": (3.5, "USD")}),
                          {"type": "value", "groups": {"a": [{"amount": 2, "unit": None}], "b": [{"amount": 3.5, "unit": "USD"}]}})

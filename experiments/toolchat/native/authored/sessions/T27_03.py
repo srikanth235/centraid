@@ -6,33 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T27-051", "five turns person date met in camille ambiguous resolved log balance",
-  T("who did i talk to on first december", rows("nadia", "hugo"),
-    ref=[ans(kind="person", when=W(D("2026-12-01")))]),
-  T("and on the twenty-fourth of november", rows("camille_p", "margaux", "olivier"),
-    ref=[ans(kind="person", when=W(D("2026-11-24")))]),
-  T("which of those did i meet in lyon or at the prenatal class", rows("camille_p", "margaux"),
-    ref=[ans(within="@prev", where='met in ("Lyon", "prenatal class")')]),
-  T("log a coffee with camille, saw her at the market", diff(upd("camille_p", date=ANY)),
-    ref=[act("log", kind="person", name="Camille", args=lines(kind="coffee")),
-         act("log", rows="$camille_p", args=lines(kind="coffee"))]),
-  T("does she owe me anything", val((10, "EUR")),
-    ref=[comp(op="balance", rows="$camille_p"), ans(value="@prev")]))
-
-S("T27-052", "five turns person named month span cadence log",
-  T("who did i last talk to back in october", rows("claire", "karim"),
-    ref=[ans(kind="person", when=W(U("month", 0, name=10)))]),
-  T("claire's meant to be every month isn't she", rows("claire"),
-    ref=[ans(kind="person", name="Claire Moreau", where="cadence = 30")]),
-  T("note it, i rang her", diff(upd("claire", date=ANY)),
-    ref=[act("log", rows="$claire", args=lines(kind="call"))]),
-  T("who else from october up to tenth november", rows("karim", "odette", "matthieu"),
-    ref=[ans(kind="person", when=W(span(U("month", 0, name=10), D("2026-11-10"))))]),
-  T("any of them with a check-in rhythm", rows("odette"),
-    ref=[ans(within="@prev", where="cadence is set")]),
-  T("when was the cake tasting with karim", decline("not_found"),
-    ref=[find(kind="event", name="Cake tasting"), dec("not_found")]))
-
 S("T27-053", "person span weekday datetime role empty open edit",
   T("who have i been in touch with from last friday up to tuesday lunchtime",
     rows("antoine", "ines", "lea", "aurelie", "helene", "thomas_g", "nadia", "hugo"),
@@ -53,23 +26,6 @@ S("T27-054", "person span this week thomas ambiguous resolved star document",
   T("and star his flour contract doc too", diff(upd("flour_contract", starred=True)),
     ref=[act("star", kind="document", name="Flour contract"), search("contract", kind="document"),
          act("star", rows="$flour_contract")]))
-
-S("T27-055", "seven turns person month span cadence debts sum settle undo ledger",
-  T("who did i catch up with between november first and the twentieth that i'm meant to keep up with",
-    rows("odette", "sandrine", "sarah", "chloe"),
-    ref=[ans(kind="person", when=W(span(U("month", 0, name=11), D("2026-11-20"))), where="cadence is set")]),
-  T("out of them, who's got a debt with me", rows("sarah", "chloe"),
-    ref=[ans(within="@prev", where="debt count > 0")]),
-  T("chloé's open ones", rows("d_chloe", "d_chloe2"),
-    ref=[ans(kind="debt", linked_to="$chloe", where='status = "open"')]),
-  T("how much is that together", val((70, "EUR")),
-    ref=[comp(op="sum", field="amount", rows="@prev"), ans(value="@prev")]),
-  T("settle Concert tickets, she paid me back", diff(upd("d_chloe", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Concert tickets")]),
-  T("wait no undo, it was the flowers she paid", diff(),
-    ref=[act("undo")]),
-  T("then settle Flowers for Mamie", diff(upd("d_chloe2", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Flowers for Mamie")]))
 
 S("T27-056", "person month cadence weekly log nickname search undo ledger",
   T("anyone i talked to in november that i'm supposed to call weekly", rows("helene", "lea"),
@@ -93,23 +49,6 @@ S("T27-057", "five turns met in photo count thomas ambiguous ask log",
          askc("thomas moreau or thomas girard?", options="$thomas_m, $thomas_g")]),
   T("the miller", diff(upd("thomas_g", date=ANY)),
     ref=[act("log", rows="$thomas_g", args=lines(kind="call"))]))
-
-S("T27-058", "prenatal photo count linked_to all star photo",
-  T("who from the prenatal group is only in one photo", rows("camille_p", "margaux", "sarah", "yasmine"),
-    ref=[ans(kind="person", linked_to="$prenatal_g", where="photo count = 1")]),
-  T("is that the same photo for all of them", rows("p_class"),
-    ref=[ans(kind="photo", linked_to="@prev")]),
-  T("star it", diff(upd("p_class", starred=True)),
-    ref=[act("star", rows="@prev")]))
-
-S("T27-059", "prenatal event count add_to event refused ask never mind",
-  T("who in the prenatal group isn't down for any events", rows("sarah", "yasmine", "me"),
-    ref=[ans(kind="person", linked_to="$prenatal_g", where="event count <= 0")]),
-  T("put sarah on the birth preparation workshop", ask(),
-    ref=[bad(act("add_to", rows="$sarah", args=lines(to="$workshop"))),
-         askc("people only go into groups here, i can't add her to the workshop itself. add her to the workshop description instead?")]),
-  T("no worries i'll tell her", decline("never_mind"),
-    ref=[dec("never_mind")]))
 
 
 S("T27-060", "five turns event count cadence log create task reschedule new",

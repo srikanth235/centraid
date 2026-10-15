@@ -18,14 +18,6 @@ S("T22-078", "single note notebook count linked person",
   T("notes linked to Birgitta Lindqvist that are filed in a notebook", rows("meatballs"),
     ref=[ans(kind="note", linked_to="$birgitta", where="notebook count > 0")]))
 
-S("T22-080", "single debt amount unit",
-  T("is there a debt of exactly 1200 kronor", rows("d_karin"),
-    ref=[ans(kind="debt", where="amount = 1200 SEK")]))
-
-S("T22-081", "single debt settled person count",
-  T("settled debts that have a person on them", rows("d_johan_b", "d_lena"),
-    ref=[ans(kind="debt", where='status = "settled" and person count > 0')]))
-
 S("T22-084", "five turns person span weekday ambiguous johan ask log search miss reschedule",
   T("who did i speak to between last wednesday and yesterday", rows("birgitta", "lennart", "johan_n", "mikael", "erik_s"),
     ref=[ans(kind="person", when=W(span(U("week", -1, weekday=3), U("day", -1))))]),
@@ -103,22 +95,6 @@ S("T22-089", "five turns photo span person count weekday date trashed recovery r
   T("undo, it really is a dupe", diff(trash("p_dup")),
     ref=[act("undo")]))
 
-S("T22-090", "six turns debt spans compute max open to date settle debt undo ledger",
-  T("debts from first july to last week that i owe", rows("d_gunnar", "d_fatima"),
-    ref=[ans(kind="debt", when=W(span(D("2026-07-01"), U("week", -1))), where='direction = "i_owe"')]),
-  T("and between june and 6pm yesterday",
-    rows("d_karin", "d_david", "d_erik", "d_tobias", "d_hanna", "d_micke", "d_gunnar", "d_johan_b", "d_fatima"),
-    ref=[ans(kind="debt", when=W(span(U("month", 0, name=6), U("day", -1, time="18:00"))))]),
-  T("biggest one i owe", val((1200, "SEK")),
-    ref=[comp(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"'),
-         ans(value="@prev")]),
-  T("anything from before june", rows("d_samira", "d_lena"),
-    ref=[ans(kind="debt", when=W({"to": D("2026-05-31")}))]),
-  T("settle Ladder and paint, paid gunnar today", diff(upd("d_gunnar", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Ladder and paint")]),
-  T("undo that, the swish didn't go through", diff(),
-    ref=[act("undo")]))
-
 S("T22-091", "seven turns picnic ambiguous ask cancel create people restore window ask never mind",
   T("when's the picnic", rows("picnic_jun", "picnic_aug"),
     ref=[ans(kind="event", name="picnic")]),
@@ -138,29 +114,6 @@ S("T22-091", "seven turns picnic ambiguous ask cancel create people restore wind
          askc("the padel trial session was deleted on 1 may, past the 30 days, so it can't be restored. add it again?")]),
   T("nah forget it", decline("never_mind"),
     ref=[dec("never_mind")]))
-
-S("T22-092", "seven turns overlap ask erik ambiguous resolved four calls ambiguous search balance settle undo",
-  T("add Padel with Erik on thursday at 6pm", ask(),
-    ref=[bad(act("create", args=lines(kind="event", name="Padel with Erik", date=U("week", 0, weekday=4, time="18:00")))),
-         askc("you already have doubles practice with erik thursday 6 to 7. is that the same thing?")]),
-  T("oh yes that's it. which erik is that with", rows("erik_s"),
-    ref=[ans(kind="person", linked_to="$padel_doubles")]),
-  T("log a message to erik", diff(upd("erik_s", date=ANY)),
-    ref=[act("log", kind="person", name="Erik", args=lines(kind="message")),
-         act("log", rows="$erik_s", args=lines(kind="message"))]),
-  T("Book padel court is done and Buy new padel balls too. what's left on padel",
-    rows(also=diff(upd("court_1", status="completed", completed=ANY), upd("balls", status="completed", completed=ANY))),
-    ref=[act("complete", kind="task", name="Book padel court", more=True),
-         act("complete", kind="task", name="Book padel court", where='status = "open"', more=True),
-         act("complete", kind="task", name="Buy new padel balls", more=True),
-         ans(kind="task", linked_to="$padel_l", where='status = "open"')]),
-  T("how much does tobbe owe me all in", val((550, "SEK")),
-    ref=[find(kind="person", name="Tobbe"), search("tobbe", kind="person"),
-         ans(op="balance", rows="$tobias")]),
-  T("settle up with him in the Padel league kitty", diff(settle=["Tobias Wallin"]),
-    ref=[act("settle_up", rows="$tobias", args=lines(group="$padel_g"))]),
-  T("undo, he wants to pay cash next week", diff(),
-    ref=[act("undo")]))
 
 S("T22-093", "six turns party subtasks reschedule create subtask swim ambiguous narrowed samira",
   T("what's under Mamma's 70th", rows("cake", "speech"),
@@ -208,16 +161,6 @@ S("T22-098", "electricity bill ambiguous narrowed home list month complete count
     ref=[act("complete", kind="task", name="Pay parking fine")]),
   T("how many open on home", val(3),
     ref=[ans(op="count", kind="task", linked_to="$home_l", where='status = "open"')]))
-
-S("T22-099", "five turns erik ambiguous ask star debt empty group balance ask",
-  T("star erik", diff(upd("erik_l", starred=True)),
-    ref=[act("star", kind="person", name="Erik")]),
-  T("does he owe me anything", val((0, "SEK")),
-    ref=[ans(op="balance", rows="$erik_l")]),
-  T("and where's he at in the Padel league kitty", val((-120, "SEK")),
-    ref=[comp(op="balance", kind="group", name="Padel league kitty", linked_to="$erik_l"), ans(value="@prev")]),
-  T("remind me to ask him about the final", ask(),
-    ref=[askc("when should i remind you? i'll add it as a task with that due date.")]))
 
 S("T22-100", "samira reschedule day overlap refused ask never mind",
   T("Samira and Nour visiting, move it to the thirty-first", diff(upd("samira_visit", date="2026-07-31T12:00")),

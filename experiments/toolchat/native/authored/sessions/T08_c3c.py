@@ -33,10 +33,6 @@ S("T08-C101", "c3c bulk delete per kind before year where starred keep",
          find(kind="photo", when=W({"to": D("2024-12-31")}), where="starred = no"),
          act("delete", rows="@prev")]))
 
-S("T08-C901", "c3c cell7 empty recovery no_link",
-  T("what's on for the boosters", rows("boost_0413", "car_wash", "boost_0511"),
-    ref=[find(kind="event", linked_to="$boosters"), ans(kind="event", name="boosters", when=W({"from": U("day", 0)}))]))
-
 S("T08-C902", "c3c cell7 rejected edit date event",
   T('put the tax appointment on thursday at 2', diff(upd("tax_appt", date="2026-04-09T14:00")),
     ref=[bad(act("edit", kind="event", name="Tax appointment", args=lines(date="thursday 2pm"))), act("reschedule", kind="event", name="Tax appointment", args=lines(to=U("week", 0, weekday=4, time="14:00")))]))

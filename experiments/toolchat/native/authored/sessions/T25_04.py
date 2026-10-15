@@ -21,21 +21,6 @@ S("T25-076", "seven turns task write read cadence refused weeks role contains lo
   T("log a visit, she dropped off a pie", diff(upd("sylvie", date=ANY)),
     ref=[act("log", rows="@prev", args=lines(kind="visit"))]))
 
-S("T25-077", "five turns person met note count debt count balance",
-  T("people whose 'met' is filled in but not book club",
-    rows("sylvie", "sarah_n", "priya", "olivier", "jess", "marc_g", "nadia", "tom", "elise", "luca", "hannah"),
-    ref=[ans(kind="person", where='met != "book club" and met is set')]),
-  T("which of them have notes about them", rows("sarah_n", "priya", "olivier", "nadia", "elise"),
-    ref=[ans(kind="person", within="@prev", where="note count > 0")]),
-  T("and at least one debt", rows("priya", "nadia", "elise"),
-    ref=[ans(kind="person", within="@prev", where="debt count >= 1")]),
-  T("balance with Nadia Haddad", val((76, "CAD"), (-130, "USD")),
-    ref=[ans(op="balance", rows="$nadia")]),
-  T("who has diary stuff with me but isn't in any group",
-    rows("mika", "hiroko", "kenji", "sylvie", "sarah_n", "josee", "mehta", "fortin", "caron", "luca", "nadeau",
-         "amelie", "benoit", "hannah", "marc_t"),
-    ref=[ans(kind="person", where="event count != 0 and group count = 0")]))
-
 S("T25-078", "five turns event status duration person count empty month recovery cancel",
   T("what got cancelled in october", rows("handoff_1002", "hike_sutton", "offsite"),
     ref=[ans(kind="event", when=U("month", 0, name=10), where="status = cancelled")]),
@@ -84,21 +69,6 @@ S("T25-081", "four turns locker type notes empty reveal decline sealed_egress",
     ref=[act("reveal", kind="locker item", name="Home wifi", args=lines(field="password"))]),
   T("send it to rachel downstairs", decline("sealed_egress"),
     ref=[dec("sealed_egress")]))
-
-S("T25-082", "six turns debt amount spans status set ask",
-  T("open debts under 50", rows("d_nadia", "d_jess", "d_elise", "d_priya", "d_matthieu"),
-    ref=[ans(kind="debt", where='amount < 50 and status = "open"')]),
-  T("from aug thirtieth onwards", rows("d_nadia", "d_jess", "d_elise", "d_priya"),
-    ref=[ans(kind="debt", when={"from": D("2026-08-30")}, where='amount < 50 and status = "open"')]),
-  T("june to july, settled or not", rows("d_daniel_camp", "d_gab", "d_matthieu"),
-    ref=[ans(kind="debt", when=span(U("month", 0, name=6), U("month", 0, name=7)), where="status is set")]),
-  T("what i owe from before last saturday", rows("d_daniel_piano", "d_tom", "d_sarah_c", "d_kenji", "d_zoe"),
-    ref=[ans(kind="debt", when={"to": U("week", -1, weekday=6)}, where='direction = "i_owe"')]),
-  T("sept ninth through oct fourth at 3pm, all of them",
-    rows("d_daniel_piano", "d_sarah_c", "d_tom", "d_nadia", "d_zoe", "d_priya", "d_elise"),
-    ref=[ans(kind="debt", when=span(D("2026-09-09"), D("2026-10-04", "15:00")))]),
-  T("add a debt, tom owes me for the trail snacks", ask(),
-    ref=[askc("how much does tom owe you for the snacks?")]))
 
 S("T25-083", "six turns person time weekday spans log ambiguous ask",
   T("who did i talk to tuesday at noon", rows("sarah_n", "rachel", "matthieu"),
@@ -210,19 +180,6 @@ S("T25-092", "four turns same name read ambiguous ask star log",
   T("and log a call with the landlord, he rang about the radiator", diff(upd("marc_t", date=ANY)),
     ref=[act("log", rows="$marc_t", args=lines(kind="call"))]))
 
-S("T25-093", "five turns nickname recovery search balance settle_debt empty create ask",
-  T("what do i owe Zozo", val((-90, "CAD")),
-    ref=[find(kind="person", name="Zozo"), search("Zozo", kind="person"), ans(op="balance", rows="$zoe")]),
-  T("settle it, paid her cash", diff(upd("d_zoe", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$zoe")]),
-  T("do i have her booked for anything", rows(),
-    ref=[ans(kind="event", linked_to="$zoe")]),
-  T("put Babysitting in for friday 7pm, 240 min", diff(new("event", name="Babysitting", date="2026-10-16T19:00")),
-    ref=[act("create", args=lines(kind="event", name="Babysitting", date=U("week", 1, weekday=5, time="19:00"),
-                                  duration=240))]),
-  T("and book her again next saturday", ask(),
-    ref=[askc("what time next saturday, and for how long?")]))
-
 S("T25-094", "four turns ambiguous ask cancel empty event search decline create",
   T("cancel book club", ask(),
     ref=[act("cancel", kind="event", name="Book club"),
@@ -271,16 +228,6 @@ S("T25-097", "five turns photo empty recovery search people linked add_to count"
     ref=[act("add_to", rows="@prev", args=lines(to="$mika_album"))]),
   T("how many pics does it have", val(7),
     ref=[ans(op="count", kind="photo", linked_to="$mika_album")]))
-
-S("T25-098", "three turns find miss search decline overlap ask never_mind",
-  T("is there a vet appointment coming up", decline("not_found"),
-    ref=[find(kind="event", name="vet"), search("vet", kind="event"), dec("not_found")]),
-  T("ok add Flu shot clinic on oct fourteenth at 9", ask(),
-    ref=[bad(act("create", args=lines(kind="event", name="Flu shot clinic", date=D("2026-10-14", "09:00"),
-                                      duration=30))),
-         askc("mika's pediatrician checkup is 9 to 9:40 that morning and covers the flu shot. still add it?")]),
-  T("oh right, skip it", decline("never_mind"),
-    ref=[dec("never_mind")]))
 
 S("T25-099", "seven turns week count recovery search linked max min sum group ambiguous ask",
   T("how many events next week", val(12),

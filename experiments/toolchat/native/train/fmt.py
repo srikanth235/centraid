@@ -41,13 +41,13 @@ label list, not new code (see `DecisionConfig`, `decision_char_spans`):
 A token is a decision when it is a trained token and overlaps a decision character span.
 
 Hard tier (`HardConfig`, `DecisionConfig.hard`): a NARROW subset of the decision tokens, the ones
-where a failed session usually went wrong: which rows, which date, which verb, direction or op, and the
+where a failed session usually went wrong: which rows, which date, which verb or op, and the
 closed words of the think slots that state them. In the think only CLOSED words count, never the quoted
 phrase copied from the message: the first word of `intent` / `scope` / `refer` (the verb word is counted in the call's `verb`), `when` only if
 it is `now` or `earlier`, the row numbers of `refer` (`-> @1` counts `1`), the row numbers and
 `ok` / `no` of `pick` (not its parenthesised reasons); `target` is a quote and counts nothing. In the call:
 `rows`, `row`, `where`, `within`, `exclude`, `linked_to`, `limit`, `order`, the date expression (`when`, its
-leaves; its keys only with `json_keys`), `verb`, `direction`, `op`, and of `args` only the row refs and date
+leaves; its keys only with `json_keys`), `verb`, `op`, and of `args` only the row refs and date
 leaves. Kind names, free text (`name`, `text`, `field`, `question`, ...) and names copied from the context
 are left out. Every choice is a named constant (HARD_*) or a HardConfig flag. A hard token
 is a decision token that also overlaps a hard character span, so the tier is always inside the decision
@@ -200,11 +200,11 @@ HARD_PICK_LABELS = ("pick",)
 """Think slots of per-row verdicts (`#37 ok · #44 no (name)`): the row numbers and the `ok` / `no` word
 count; the reason in parentheses (`(name)`, `(other)`) does not, unless `HardConfig.pick_reasons`."""
 HARD_PARAMS = ("rows", "row", "where", "within", "exclude", "linked_to", "limit", "order", "when",
-               "verb", "direction", "op")
+               "verb", "op")
 """Call parameters whose value (and, with `param_names`, whose presence) is hard: the row refs and `@k`
 handles (`rows`, `row`, `within`, `exclude`, `linked_to`), the selector that picks rows (`where`, `limit`,
 `order`), the date expression (`when`: its leaves, the unit / rel / weekday / time / anchor keys only with `json_keys`) and the
-closed-set choices `verb`, `direction`, `op`. Not hard: `kind` names, free text (`name`, `text`, `field`,
+closed-set choices `verb`, `op`. Not hard: `kind` names, free text (`name`, `text`, `field`,
 `group`, `question`, `options`, `reason`) and names copied from the context."""
 HARD_REF_PARAMS = ("args",)
 """Call parameters that mix free text with row refs and dates (`args` = `field: value` lines, `to: #36`,

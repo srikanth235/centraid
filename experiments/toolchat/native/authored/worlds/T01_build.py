@@ -55,48 +55,6 @@ people = [
     {"key": "martin", "name": "Martin Hughes", "role": "old landlord", "trashed": "2026-01-15T10:00"},
 ]
 
-groups = [
-    {"key": "lisbon", "name": "Lisbon Easter Trip", "currency": "EUR",
-     "members": ["callum", "mum", "kunle", "bisi"], "created": "2026-01-10T20:00"},
-    {"key": "hen", "name": "Chi's Hen Do", "currency": "GBP",
-     "members": ["laura", "jess_w", "jess_o", "zainab", "priya_n"], "created": "2026-01-20T21:00"},
-    {"key": "family_fund", "name": "Adebayo Family Fund", "currency": "NGN",
-     "members": ["dayo", "funmi", "kunle", "tunde"], "created": "2025-12-01T19:00"},
-    {"key": "coffee", "name": "Ward 7 Coffee Club", "currency": "GBP",
-     "members": ["priya_n", "priya_s", "gemma", "kwame", "siobhan"], "created": "2025-10-05T08:00"},
-    {"key": "house", "name": "House Bills", "currency": "GBP", "members": ["callum"], "created": "2025-09-02T09:00"},
-    {"key": "night_out", "name": "Ward Night Out", "currency": "GBP",
-     "members": ["priya_n", "priya_s", "zainab", "siobhan"], "created": "2026-03-08T12:00"},
-    {"key": "santa", "name": "Secret Santa 2025", "currency": "GBP",
-     "members": ["gemma", "kwame", "siobhan"], "created": "2025-11-20T12:00"},
-]
-
-expenses = [
-    {"group": "lisbon", "name": "Apartment in Alfama", "amount": 900, "paid_by": "me",
-     "split": ["me", "callum", "mum", "kunle", "bisi"], "date": "2026-01-12"},
-    {"group": "lisbon", "name": "Flights", "amount": 1250, "paid_by": "kunle",
-     "split": ["me", "callum", "mum", "kunle", "bisi"], "date": "2026-01-15"},
-    {"group": "lisbon", "name": "Airport parking", "amount": 80, "paid_by": "callum",
-     "split": ["me", "callum"], "date": "2026-02-02"},
-    {"group": "hen", "name": "Cocktail class deposit", "amount": 180, "paid_by": "me",
-     "split": ["me", "laura", "jess_w", "jess_o", "zainab", "priya_n"], "date": "2026-02-01"},
-    {"group": "hen", "name": "Liverpool Airbnb", "amount": 540, "paid_by": "laura",
-     "split": ["me", "laura", "jess_w", "jess_o", "zainab", "priya_n"], "date": "2026-02-03"},
-    {"group": "hen", "name": "Sashes and badges", "amount": 36, "paid_by": "zainab",
-     "split": ["me", "laura", "jess_w", "jess_o", "zainab", "priya_n"], "date": "2026-03-02"},
-    {"group": "family_fund", "name": "Grandma's 80th party", "amount": 600000, "paid_by": "dayo",
-     "split": ["me", "dayo", "funmi", "kunle", "tunde"], "date": "2026-02-20"},
-    {"group": "family_fund", "name": "Church roof appeal", "amount": 150000, "paid_by": "me",
-     "split": ["me", "dayo", "funmi"], "date": "2026-01-05"},
-    {"group": "coffee", "name": "Coffee pods", "amount": 24, "paid_by": "gemma",
-     "split": ["me", "priya_n", "priya_s", "gemma", "kwame", "siobhan"], "date": "2026-02-26"},
-    {"group": "coffee", "name": "Milk and biscuits", "amount": 9, "paid_by": "me",
-     "split": ["me", "priya_n", "kwame"], "date": "2026-03-06"},
-    {"group": "house", "name": "Council tax March", "amount": 168, "paid_by": "me",
-     "split": ["me", "callum"], "date": "2026-03-01"},
-    {"group": "house", "name": "Octopus energy", "amount": 142, "paid_by": "callum",
-     "split": ["me", "callum"], "date": "2026-03-03"},
-]
 
 lists = [
     {"key": "reno_list", "name": "Kitchen Reno", "area": "home"},
@@ -436,32 +394,6 @@ photos = [
     {"key": "p_receipt", "name": "Screenshot of receipt", "taken": "2026-03-02T12:00", "trashed": "2026-03-03T09:00"},
 ]
 
-debts = [
-    {"key": "d_priya_lunch", "person": "priya_n", "direction": "owes_me", "amount": 12.5, "name": "canteen lunch",
-     "date": "2026-03-10"},
-    {"key": "d_kwame_taxi", "person": "kwame", "direction": "i_owe", "amount": 20, "name": "taxi after nights",
-     "date": "2026-03-08"},
-    {"key": "d_gemma_tickets", "person": "gemma", "direction": "owes_me", "amount": 35, "name": "Beyonce ticket share",
-     "date": "2026-02-10"},
-    {"key": "d_siobhan", "person": "siobhan", "direction": "i_owe", "amount": 8.5, "name": "leaving collection",
-     "date": "2026-02-27"},
-    {"key": "d_mum_uniform", "person": "mum", "direction": "i_owe", "amount": 40, "name": "school uniform",
-     "date": "2026-02-28"},
-    {"key": "d_kunle", "person": "kunle", "direction": "owes_me", "amount": 60, "name": "Mum's birthday cake share",
-     "date": "2026-03-04"},
-    {"key": "d_priya_s", "person": "priya_s", "direction": "owes_me", "amount": 5, "name": "coffee",
-     "date": "2026-02-12", "settled": "2026-02-14T10:00"},
-    {"key": "d_dev", "person": "dev", "direction": "i_owe", "amount": 15, "name": "parcel he paid for",
-     "date": "2026-01-20", "settled": "2026-01-22T18:00"},
-    {"key": "d_jess_w", "person": "jess_w", "direction": "owes_me", "amount": 25, "name": "cinema and food",
-     "date": "2026-02-21"},
-    {"key": "d_callum", "person": "callum", "direction": "owes_me", "amount": 45, "name": "his half of the skip",
-     "date": "2026-03-11"},
-    {"key": "d_zainab", "person": "zainab", "direction": "i_owe", "amount": 18, "name": "nail appointment",
-     "date": "2026-03-01"},
-    {"key": "d_kwame_old", "person": "kwame", "direction": "owes_me", "amount": 10, "name": "pizza",
-     "date": "2025-12-12", "settled": "2025-12-20T10:00"},
-]
 
 locker = [
     {"key": "nhs_login", "name": "NHS Smartcard login", "type": "login", "username": "sadebayoclarke",
@@ -528,9 +460,9 @@ links = [
 
 world = {
     "me": ME, "epoch": "2025-09-01T09:00", "seed": "T01", "currency": "GBP",
-    "people": people, "groups": groups, "expenses": expenses, "lists": lists, "events": events,
+    "people": people, "lists": lists, "events": events,
     "tasks": tasks, "notebooks": notebooks, "notes": notes, "folders": folders, "documents": documents,
-    "albums": albums, "photos": photos, "debts": debts, "locker": locker, "links": links,
+    "albums": albums, "photos": photos, "locker": locker, "links": links,
 }
 
 if __name__ == "__main__":

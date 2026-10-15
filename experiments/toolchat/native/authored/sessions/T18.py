@@ -8,16 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T18-001", "star person named add_to group knock-on person read",
-  T("star Priya Raman", diff(upd("priya", starred=True)),
-    ref=[act("star", rows="$priya")]),
-  T("sam okafor's coming to the gdc trip thing too, add him to that group and star him",
-    diff(link("gdc", "sam_o"), upd("sam_o", starred=True)),
-    ref=[act("add_to", rows="$sam_o", args=lines(to="$gdc"), more=True),
-         act("star", rows="$sam_o")]),
-  T("who's in GDC 2025 trip", rows("priya", "mei", "sam_o", "me"),
-    ref=[ans(kind="person", linked_to="$gdc")]))
-
 S("T18-002", "star person where nickname starred read",
   T("star the person i've got down as jules", diff(upd("jules", starred=True)),
     ref=[act("star", kind="person", where='nickname = "Jules"')]),
@@ -40,35 +30,6 @@ S("T18-004", "star person where role event linked",
     ref=[act("star", kind="person", where='role contains "accountant"')]),
   T("when am i seeing Kieran Doyle", rows("tax_meet"),
     ref=[ans(kind="event", linked_to="$kieran")]))
-
-S("T18-005", "settle_up prev balance",
-  T("pull up marcus", rows("marcus"),
-    ref=[ans(kind="person", name="Marcus")]),
-  T("settle up with him for thursday d&d", diff(settle=["Marcus Webb"]),
-    ref=[act("settle_up", rows="@prev", args=lines(group="$dnd"))]),
-  T("so what's left between me and him", val((24, "AUD")),
-    ref=[ans(op="balance", rows="$marcus")]))
-
-S("T18-006", "settle_up prev chloe shower",
-  T("chloe nguyen", rows("chloe"),
-    ref=[ans(kind="person", name="Chloe Nguyen")]),
-  T("can you square up with her in the shower group", diff(settle=["Chloe Nguyen"]),
-    ref=[act("settle_up", rows="@prev", args=lines(group="$shower"))]))
-
-S("T18-007", "settle_up multi dnd",
-  T("settle up marcus and juliette in thursday d&d", diff(settle=["Marcus Webb", "Juliette Park"]),
-    ref=[act("settle_up", rows="$marcus, $jules", args=lines(group="$dnd"))]),
-  T("and tomás", diff(settle=["Tomás Herrera"]),
-    ref=[act("settle_up", rows="$tomas", args=lines(group="$dnd"))]))
-
-S("T18-008", "settle_up multi coop undo ledger",
-  T("settle priya and sam okafor in the co-op", diff(settle=["Priya Raman", "Sam Okafor"]),
-    ref=[act("settle_up", rows="$priya, $sam_o", args=lines(group="$coop"))]),
-  T("undo that, haven't actually transferred yet", diff(),
-    ref=[act("undo")]),
-  T("and cancel the d&d session, bex is away", ask(),
-    ref=[act("cancel", kind="event", name="D&D session"),
-         askc("there's one every thursday. which week?")]))
 
 S("T18-009", "event weekday cancel prev",
   T("what's on tuesday", rows("shower_call"),

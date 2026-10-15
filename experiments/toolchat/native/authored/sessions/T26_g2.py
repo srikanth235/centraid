@@ -22,15 +22,6 @@ S("T26-116", "gap ask task reschedule fix repair effort unit",
   T("push the c of o one to monday", diff(upd("c_of_o", date="2026-11-30")),
     ref=[act("reschedule", rows="$c_of_o", args=lines(to=U("week", 1, weekday=1)))]))
 
-S("T26-117", "gap ask person add_to group adeyemi never mind",
-  T("add adeyemi to the christmas party group", ask("segun", "kunle_a"),
-    ref=[act("add_to", kind="person", name="Adeyemi", args=lines(to="$xmas_g")),
-         askc("segun the back-to-back electrician or kunle the hse officer?", options="$segun, $kunle_a")]),
-  T("scratch that, i'll ask them first", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("segun's confirmed, add segun adeyemi to it", diff(link("xmas_g", "segun")),
-    ref=[act("add_to", kind="person", name="Segun Adeyemi", args=lines(to="$xmas_g"))]))
-
 S("T26-118", "gap ask note pin ajo already",
   T("pin the ajo note", ask("ajo_rota", "ajo_oct", "ajo_rules"),
     ref=[act("edit", kind="note", name="ajo", args=lines(pinned="yes")),
@@ -48,54 +39,6 @@ S("T26-119", "gap ask note delete mama contrast",
     ref=[act("delete", rows="$guest_list")]),
   T("and delete the party menu note", diff(trash("party_menu")),
     ref=[act("delete", kind="note", name="Party menu")]))
-
-S("T26-120", "gap ask person delete kunle count",
-  T("delete kunle, he changed his number", ask("kunle_b", "kunle_a"),
-    ref=[act("delete", kind="person", name="Kunle"),
-         askc("kunle bello the cousin or kunle adeyemi the hse officer?", options="$kunle_b, $kunle_a")]),
-  T("adeyemi, the hse guy", diff(trash("kunle_a")),
-    ref=[act("delete", rows="$kunle_a")]),
-  T("how many people are in the bonga crew kitty", val(7),
-    ref=[ans(op="count", kind="person", linked_to="$rig_g")]))
-
-S("T26-121", "gap balance positive negative ngozi aisha log",
-  T("where do i stand with ngozi", val((1165000, "NGN")),
-    ref=[ans(op="balance", kind="person", name="Ngozi")]),
-  T("and aisha", val((-5000, "NGN")),
-    ref=[ans(op="balance", kind="person", name="Aisha")]),
-  T("log a call with aisha, we sorted out the cake money", diff(upd("aisha", date=ANY)),
-    ref=[act("log", kind="person", name="Aisha Okon", args=lines(kind="call"))]),
-  T("and move the tiles task to friday", diff(upd("tiles", date="2026-11-27")),
-    ref=[act("reschedule", kind="task", name="Choose tiles with Ngozi", args=lines(to=U("week", 0, weekday=5)))]))
-
-S("T26-122", "gap balance negative positive sunday tunde star already",
-  T("what do i owe sunday", val((-40000, "NGN")),
-    ref=[ans(op="balance", kind="person", name="Sunday")]),
-  T("and what does tunde owe me", val((20000, "NGN")),
-    ref=[ans(op="balance", kind="person", name="Tunde")]),
-  T("star mama", diff(already=["mama"]),
-    ref=[search("mama", kind="person"), act("star", rows="$mama"), ans(rows="$mama")]),
-  T("log a visit with tunde, he brought the taxi money", diff(upd("tunde", date=ANY)),
-    ref=[act("log", kind="person", name="Tunde Bakare", args=lines(kind="visit"))]))
-
-S("T26-123", "gap balance positive funmi emeka log",
-  T("how much has funmi got to pay me", val((60000, "NGN")),
-    ref=[ans(op="balance", kind="person", name="Funmi")]),
-  T("and emeka nwosu", val((10500, "NGN")),
-    ref=[ans(op="balance", kind="person", name="Emeka Nwosu")]),
-  T("log a message from funmi, she's sending the ajo money tonight", diff(upd("funmi", date=ANY)),
-    ref=[act("log", kind="person", name="Funmi Ajayi", args=lines(kind="message"))]),
-  T("tick off the handover notes to segun, sent them last night", diff(upd("handover_t", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Send handover notes to Segun")]))
-
-S("T26-124", "gap balance group position ngozi decline exchange complete",
-  T("where does ngozi stand in the house build group", val((-1165000, "NGN")),
-    ref=[ans(op="balance", kind="group", name="Rumuokoro house build", linked_to="$ngozi")]),
-  T("what's the naira rate against the dollar today", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("tick off pay builder second instalment, transferred it this morning",
-    diff(upd("instalment", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Pay builder second instalment")]))
 
 S("T26-125", "gap wifi read reveal sealed egress star locker",
   T("wifi password", rows("wifi", "wifi_site"),

@@ -9,16 +9,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T25-101", "ask three review tasks reschedule pick balance positive",
-  T("push the review to friday", ask("review_lawyer", "research_plan", "deck"),
-    ref=[act("reschedule", kind="task", name="review", args=lines(to=U("week", 1, weekday=5))),
-         askc("review plan with lawyer, review priya's research plan or the portfolio review deck?",
-              options="$review_lawyer, $research_plan, $deck")]),
-  T("priya's, she's out thursday", diff(upd("research_plan", date="2026-10-16")),
-    ref=[act("reschedule", rows="$research_plan", args=lines(to=U("week", 1, weekday=5)))]),
-  T("how much does priya owe me", val((12, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Priya Raman")]))
-
 S("T25-102", "ask scans star pick add_to folder",
   T("star the scan", ask("scan_a", "scan_b"),
     ref=[act("star", kind="document", name="Scan"),
@@ -34,31 +24,6 @@ S("T25-103", "ask licence locker star never_mind",
          askc("your driver's licence or the font licence?", options="$dl, $fonts")]),
   T("never mind", decline("never_mind"),
     ref=[dec("never_mind")]))
-
-S("T25-104", "ask receipts documents delete pick balance negative",
-  T("delete the receipt", ask("camp_receipt", "boots_receipt"),
-    ref=[act("delete", kind="document", name="receipt"),
-         askc("summer camp receipt or winter boots receipt?", options="$camp_receipt, $boots_receipt")]),
-  T("camp one", diff(trash("camp_receipt")),
-    ref=[act("delete", rows="$camp_receipt")]),
-  T("what do i owe kenji", val((-300, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Kenji Tanaka")]))
-
-S("T25-105", "ask roy log message pick balance pronoun",
-  T("log a message to roy", ask("daniel", "sylvie", "mika"),
-    ref=[act("log", kind="person", name="Roy", args=lines(kind="message")),
-         askc("daniel roy, sylvie roy or mika?", options="$daniel, $sylvie, $mika")]),
-  T("daniel, about saturday", diff(upd("daniel", date=ANY)),
-    ref=[act("log", rows="$daniel", args=lines(kind="message"))]),
-  T("what's his balance", val((444, "CAD")),
-    ref=[ans(op="balance", rows="$daniel")]))
-
-S("T25-106", "ask vermont event or group edit search pick",
-  T("rename vermont weekend to Burlington weekend", ask("vermont_trip", "vermont"),
-    ref=[search("vermont weekend"),
-         askc("the vermont weekend trip on the calendar or the vermont weekend group?", options="$vermont_trip, $vermont")]),
-  T("the group", diff(upd("vermont", name="Burlington weekend")),
-    ref=[act("edit", rows="$vermont", args=lines(name="Burlington weekend"))]))
 
 S("T25-107", "ask onboarding cross-kind delete never_mind",
   T("delete the onboarding one", ask("onboarding", "onboarding_ideas"),
@@ -91,22 +56,6 @@ S("T25-110", "ask orford photos star pick already-so star",
     ref=[act("star", kind="photo", name="Orford")]),
   T("and the group shot", diff(already=["orford_group"]),
     ref=[act("star", rows="$orford_group"), ans(rows="$orford_group")]))
-
-S("T25-111", "ask daniel half debts settle_debt pick balance",
-  T("mark daniel's half paid", ask("d_daniel_camp", "d_daniel_boots"),
-    ref=[act("settle_debt", kind="debt", name="Half"),
-         askc("half of summer camp (180) or half of winter boots (64.50)?", options="$d_daniel_camp, $d_daniel_boots")]),
-  T("the camp, he e-transferred it", diff(upd("d_daniel_camp", status="settled")),
-    ref=[act("settle_debt", rows="$d_daniel_camp")]),
-  T("so what's daniel's balance now", val((264, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Daniel Roy")]))
-
-S("T25-112", "ask tanaka add_to group never_mind",
-  T("add tanaka to the halloween party fund", ask("mika", "hiroko", "kenji"),
-    ref=[act("add_to", kind="person", name="Tanaka", args=lines(to="$halloween")),
-         askc("mika, hiroko or kenji?", options="$mika, $hiroko, $kenji")]),
-  T("forget it", decline("never_mind"),
-    ref=[dec("never_mind")]))
 
 S("T25-113", "ask mom pickup event or task reschedule pick already-so star",
   T("push pick up mom to tuesday", ask("mom_arrives", "pharmacy"),

@@ -45,24 +45,6 @@ S("T04-105", "ask options star login then wifi read reveal",
   T("show me the wifi password", diff(reveal=[("wifi", "headingley-hotpot-9")]),
     ref=[act("reveal", rows="$wifi", args=lines(field="password"))]))
 
-S("T04-106", "balance chloe tom positive group house",
-  T("how much does chloe owe me", val((58.7, "GBP")),
-    ref=[ans(op="balance", rows="$chloe")]),
-  T("and tom", val((15.8, "GBP")),
-    ref=[ans(op="balance", rows="$tom")]),
-  T("who's in house bills", rows("chloe", "tom", "me"),
-    ref=[ans(kind="person", linked_to="$house")]),
-  T("am i up or down on that one", val((100, "GBP")),
-    ref=[ans(op="balance", kind="group", name="House bills", linked_to="$me")]))
-
-S("T04-107", "balance negative james owen abbu nickname search",
-  T("do i owe james anything", val((-15.5, "GBP")),
-    ref=[ans(op="balance", rows="$james")]),
-  T("and owen", val((-9, "GBP")),
-    ref=[ans(op="balance", rows="$owen")]),
-  T("what about abbu", val((-500, "GBP")),
-    ref=[search("abbu"), ans(op="balance", rows="$dad")]))
-
 S("T04-108", "reschedule bare weekday at n dentist car service undo never mind",
   T("can you move the dentist to monday at 5", diff(upd("dentist", date="2026-10-19T17:00")),
     ref=[act("reschedule", kind="event", name="Dentist", args=lines(to=U("week", 1, weekday=1, time="17:00")))]),

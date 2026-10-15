@@ -50,18 +50,6 @@ S("T31-258", "ask-move-dinner reschedule saturday-friday count-november latest",
 
 # --- things the assistant cannot do, then what it can ------------------------------------------------------------
 
-S("T31-259", "decline-out-of-scope pay kuba settle-gas count-owed-over smallest-owed",
-  T("pay kuba back for me", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("ok mark my gas share as paid then", diff(upd("d_kuba_gas", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$kuba", where="direction = i_owe")]),
-  T("how many debts do i still owe over 30", val(4),
-    ref=[ans(op="count", kind="debt", where="direction = i_owe and status = open and amount > 30")]),
-  T("the smallest amount i owe", rows("d_ewa"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount asc", limit=1)]),
-  T("settle the cleaning supplies one i owe ola from october", diff(upd("d_ola_clean", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="cleaning supplies", linked_to="$ola", when=J(U("month", -1, name=10)))]))
-
 S("T31-260", "decline-out-of-scope heating task tomorrow count-tomorrow",
   T("turn the heating down", decline("out_of_scope"),
     ref=[dec("out_of_scope")]),

@@ -8,10 +8,10 @@ mart co-op board, secretary-ish on the GAA club committee, in the school parents
 (Fergal Moloney), the silage contractor (Sean Mahon) and the creamery milk rep (Liam O'Dea) run
 through the calendar. Built-in ambiguity: two Seans (Sean Mahon the contractor, Sean Hehir the
 club chairman), two Marys (Mary Lynch from the parents group, Mary Considine next door), nicknames
-(Mam, PJ, Tadhgie, the vet), a misspelled-looking name (Deirdre Quinlivan), two GAA groups, two
-"Silage bales" debts, the TB test and its reading, two "Ring the vet" tasks, monthly dairy-nut
+(Mam, PJ, Tadhgie, the vet), a misspelled-looking name (Deirdre Quinlivan), two
+"Silage bales" tasks, the TB test and its reading, two "Ring the vet" tasks, monthly dairy-nut
 orders and ESB bills, cancelled events, completed tasks, trashed rows inside and past the 30-day
-restore window, an empty group, an empty folder and an empty notebook.
+restore window, an empty folder and an empty notebook.
 """
 from __future__ import annotations
 
@@ -79,38 +79,6 @@ def people():
         {"key": "frank", "name": "Frank Mescall", "role": "old milk tester", "trashed": "2026-05-02T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "lotto", "name": "GAA club lotto", "members": ["sean_h", "eileen", "tadhg"], "created": "2025-09-01T20:00"},
-    {"key": "juvenile", "name": "GAA juvenile fundraiser", "members": ["tadhg", "eileen", "mary_l"],
-     "created": "2026-05-01T20:00"},
-    {"key": "tour", "name": "School tour bus", "members": ["mary_l", "clodagh", "niamh"], "created": "2026-05-10T09:00"},
-    {"key": "tanker", "name": "Slurry tanker share", "members": ["mick", "mary_c", "pj"], "created": "2025-03-01T10:00"},
-    {"key": "chelt", "name": "Cheltenham 2026", "currency": "GBP", "members": ["declan", "noreen", "pj"],
-     "created": "2026-02-20T20:00"},
-    {"key": "silage_coop", "name": "Silage co-op 2025", "members": ["mick", "sean_m"], "created": "2025-06-01T10:00"},
-]
-
-EXPENSES = [
-    {"group": "lotto", "name": "Lotto ticket printing", "amount": 90, "paid_by": "me",
-     "split": ["me", "sean_h", "eileen"], "date": "2026-07-01"},
-    {"group": "lotto", "name": "Jackpot top-up", "amount": 200, "paid_by": "sean_h",
-     "split": ["me", "sean_h", "eileen", "tadhg"], "date": "2026-07-19"},
-    {"group": "juvenile", "name": "Cones and bibs", "amount": 64, "paid_by": "tadhg",
-     "split": ["me", "tadhg"], "date": "2026-06-10"},
-    {"group": "juvenile", "name": "Bag pack at SuperValu float", "amount": 40, "paid_by": "me",
-     "split": ["me", "tadhg", "eileen", "mary_l"], "date": "2026-07-11"},
-    {"group": "tour", "name": "Bus deposit", "amount": 300, "paid_by": "mary_l",
-     "split": ["me", "mary_l", "clodagh"], "date": "2026-05-20"},
-    {"group": "tanker", "name": "Tanker tyre", "amount": 420, "paid_by": "mick",
-     "split": ["me", "mick", "pj"], "date": "2026-06-02"},
-    {"group": "tanker", "name": "Tanker service", "amount": 180, "paid_by": "me",
-     "split": ["me", "mick"], "date": "2026-07-03"},
-    {"group": "chelt", "name": "Hotel in Cheltenham", "amount": 640, "paid_by": "declan",
-     "split": ["me", "declan", "noreen", "pj"], "date": "2026-03-10"},
-    {"group": "chelt", "name": "Gold Cup tickets", "amount": 360, "paid_by": "me",
-     "split": ["me", "declan", "noreen"], "date": "2026-03-13"},
-]
 
 LISTS = [
     {"key": "farm_l", "name": "Farm", "area": "farm"},
@@ -463,34 +431,6 @@ PHOTOS = [
     {"key": "p_selfie", "name": "Selfie at the mart", "taken": "2026-07-16T13:00", "trashed": "2026-07-17T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_sean_silage", "person": "sean_m", "direction": "i_owe", "amount": 850, "name": "Silage bales",
-     "date": "2026-07-12"},
-    {"key": "d_mick_silage", "person": "mick", "direction": "owes_me", "amount": 240, "name": "Silage bales for Mick",
-     "date": "2026-07-14"},
-    {"key": "d_fergal", "person": "fergal", "direction": "i_owe", "amount": 310, "name": "Vet bill balance",
-     "date": "2026-07-10"},
-    {"key": "d_eileen", "person": "eileen", "direction": "i_owe", "amount": 50, "name": "Lotto float",
-     "date": "2026-07-19"},
-    {"key": "d_clodagh", "person": "clodagh", "direction": "owes_me", "amount": 25, "name": "Bus share for the tour",
-     "date": "2026-06-20"},
-    {"key": "d_tadhg", "person": "tadhg", "direction": "owes_me", "amount": 150, "name": "Jersey deposit",
-     "date": "2026-07-22"},
-    {"key": "d_ger", "person": "ger", "direction": "i_owe", "amount": 180, "name": "Relief milking weekend",
-     "date": "2026-07-20"},
-    {"key": "d_mary_c", "person": "mary_c", "direction": "i_owe", "amount": 12, "name": "Eggs and brown bread",
-     "date": "2026-07-24"},
-    {"key": "d_kevin", "person": "kevin", "direction": "i_owe", "amount": 95, "name": "AI straws",
-     "date": "2026-06-05", "settled": "2026-06-30T10:00"},
-    {"key": "d_tom", "person": "tom", "direction": "owes_me", "amount": 200, "name": "Weanling deposit",
-     "date": "2026-07-16"},
-    {"key": "d_noreen", "person": "noreen", "direction": "owes_me", "amount": 120, "name": "Cheltenham race cards",
-     "date": "2026-03-12", "settled": "2026-04-01T10:00"},
-    {"key": "d_pj", "person": "pj", "direction": "owes_me", "amount": 60, "name": "Diesel for the Massey",
-     "date": "2026-06-14"},
-    {"key": "d_mick_diesel", "person": "mick", "direction": "i_owe", "amount": 45, "name": "Diesel from Mick",
-     "date": "2026-07-03"},
-]
 
 LOCKER = [
     {"key": "aib", "name": "AIB online banking", "type": "login", "username": "skelly.farm",
@@ -564,8 +504,6 @@ def world():
         "seed": "T11",
         "currency": "EUR",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -575,7 +513,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }
@@ -602,8 +539,8 @@ def check_overlaps(evs):
 if __name__ == "__main__":
     w = world()
     check_overlaps(w["events"])
-    allkeys = [r["key"] for sec in ("people", "groups", "lists", "notebooks", "folders", "albums", "events", "tasks",
-                                    "notes", "documents", "photos", "debts", "locker") for r in w[sec]]
+    allkeys = [r["key"] for sec in ("people", "lists", "notebooks", "folders", "albums", "events", "tasks",
+                                    "notes", "documents", "photos", "locker") for r in w[sec]]
     assert len(allkeys) == len(set(allkeys)), [k for k in allkeys if allkeys.count(k) > 1]
     out = HERE / "T11.json"
     out.write_text(json.dumps(w, indent=1, ensure_ascii=False) + "\n")

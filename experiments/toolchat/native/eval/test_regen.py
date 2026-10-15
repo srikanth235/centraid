@@ -221,7 +221,7 @@ class Derive(unittest.TestCase):
         self.assertEqual(accept, {"type": "value", "values": [{"amount": 36, "unit": None}]})
 
     def test_value_money_and_groups(self):
-        accept, _ = self.derive([value_step("balance", 180.4, {"op": "balance"}, unit="USD")])
+        accept, _ = self.derive([value_step("sum", 180.4, {"op": "sum", "field": "amount"}, field="amount", unit="USD")])
         self.assertEqual(accept["values"], [{"amount": 180.4, "unit": "USD"}])
         groups = step("answer", {}, {"value": {"op": "count", "group": "status", "groups": [
             {"key": "open", "values": [{"amount": 33, "unit": None}]},
@@ -299,28 +299,6 @@ class Derive(unittest.TestCase):
         accept, notes = self.derive(only, [gold.diff(already=["en0"]), gold.diff(already=["en1"])])
         self.assertEqual(accept["already"], ["en0"])
         self.assertIn("already en1", notes["dropped"])
-
-    def test_settle_up_is_the_settlement_and_not_a_balance_change(self):
-        zeroed = {"id": vid("jordan_b"), "kind": "person", "n": 30, "change": "updated",
-                  "fields": {"balance": [{"amount": 180.4, "unit": "USD"}, {"amount": 0.0, "unit": "USD"}]}}
-        text = 'settled up: #30 person "Jordan Blake" · no field changed\nsettlement: 180.40 USD paid to you'
-        steps = [{**act_step("settle_up", [zeroed], {"kind": "person", "name": "Jordan"})}]
-        steps[0]["response"]["text"] = text
-        accept, _ = self.derive(steps)
-        self.assertEqual((accept["diff"]["rows"], accept["settle"]), ([], [{"name": "Jordan Blake"}]))
-        accept, notes = self.derive(steps, [gold.diff(settle=[("Jordan Blake", "180.40"), ("Jordan Lee", "5.00")])])
-        self.assertEqual(accept["settle"], [{"name": "Jordan Blake", "amount": "180.40"}])
-        self.assertIn("settle Jordan Lee", notes["dropped"])
-
-    def test_a_balance_that_did_not_reach_zero_is_a_change_not_a_settlement(self):
-        partly = {"id": vid("jordan_b"), "kind": "person", "n": 30, "change": "updated",
-                  "fields": {"balance": [{"amount": 180.4, "unit": "USD"}, {"amount": 80.4, "unit": "USD"}]}}
-        steps = [act_step("settle_up", [partly], {"kind": "person", "name": "Jordan"})]
-        steps[0]["response"]["text"] = 'settled up: #30 person "Jordan Blake" · balance changed\nsettlement: 100.00 USD'
-        accept, _ = self.derive(steps)
-        self.assertNotIn("settle", accept)
-        self.assertEqual(accept["diff"]["rows"], [{"key": "jordan_b", "change": "updated",
-                                                   "fields": {"balance": 80.4}}])  # money is its amount in a spec
 
     def test_reveal_is_kept_only_while_the_secret_is_still_revealed(self):
         steps = [act_step("reveal", [], {"kind": "locker item", "name": "wifi"},
@@ -667,14 +645,13 @@ class Refusal(unittest.TestCase):
         self.assertEqual(res["convention"], regen.UNEXPLAINED)
 
     def test_the_effect_names_the_refusal_and_the_verb_can_be_any(self):
-        args = {"verb": "remove_from", "kind": "person", "name": "kenji", "args": "from: $bigbend"}
-        gt = turn("take kenji out of the group", gold.diff(gold.unlink("bigbend", "kenji")),
-                  ref=[{"tool": "act", "args": args}])
-        refusal = {"verb": "remove_from", "predicate": "member_off_ledger", "outcome": "ask"}
-        res = one(gt, [composed("act", args, "ask", ask={"question": "settle up first?", "options": []},
+        args = {"verb": "delete", "kind": "folder", "name": "house"}
+        gt = turn("delete the house folder", gold.diff(gold.gone("house")), ref=[{"tool": "act", "args": args}])
+        refusal = {"verb": "delete", "predicate": "folder_is_empty", "outcome": "ask"}
+        res = one(gt, [composed("act", args, "ask", ask={"question": "take them out first, then delete the folder?", "options": []},
                                 composed=True, refusal=refusal)])
         self.assertEqual(res["convention"], "refusal")
-        self.assertIn("member_off_ledger", res["evidence"])
+        self.assertIn("folder_is_empty", res["evidence"])
 
     def test_the_decline_the_runtime_marks_as_composed_is_one_even_when_the_call_was_a_decline(self):
         gt = turn("bring craig back", rows("craig"), ref=[{"tool": "decline", "args": {}}])
@@ -772,8 +749,8 @@ class NameMatch(unittest.TestCase):
 
     def chain(self, name: str, kind: str = "person") -> tuple[dict, list[dict]]:
         ref = [{"tool": "answer", "args": {"kind": kind, "name": name}}, {"tool": "search", "args": {"text": name}},
-               {"tool": "answer", "args": {"op": "balance", "rows": ["$tomas"]}}]
-        gt = turn(f"where do i stand with {name}", gold.val((5, "USD")), ref=ref)
+               {"tool": "answer", "args": {"op": "count", "kind": "event", "linked_to": "$tomas"}}]
+        gt = turn(f"how many events do i have with {name}", gold.val(5), ref=ref)
         return gt, [rows_step(["tomas"], {"kind": kind, "name": name})]
 
     def test_a_nickname_resolves_at_the_first_call_and_the_reference_chain_ends(self):
@@ -805,7 +782,7 @@ class NameMatch(unittest.TestCase):
         self.assertIs(new, s)
         self.assertEqual([(c["turn"], c["convention"], c["applied"], c["held"]) for c in found],
                          [(1, "name-match", False, True)])
-        self.assertEqual(regen.show_gold(found[0]["old_gold"]), "value 5 USD")
+        self.assertEqual(regen.show_gold(found[0]["old_gold"]), "value 5")
         self.assertEqual(regen.show_gold(found[0]["new_gold"]), "rows tomas")
         summary = regen.summarize(found, 1, 1)
         self.assertEqual((summary["turns_changed"], summary["sessions_touched"], summary["by_convention"]), (0, 0, {}))
@@ -1104,10 +1081,10 @@ class RulingsWidening(unittest.TestCase):
         self.assertEqual([c["convention"] for c in found], ["superlative"])
 
     def test_a_money_field_has_the_currency_of_the_vault(self):
-        call = {"kind": "debt", "order": "amount desc", "limit": 1}
-        gt = turn("the biggest debt", rows("uber", order=True), ref=[{"tool": "answer", "args": call}])
+        call = {"kind": "transaction", "order": "amount asc", "limit": 1}
+        gt = turn("the biggest charge", rows("uber", order=True), ref=[{"tool": "answer", "args": call}])
         res = one(gt, [rows_step(["uber"], call, ordered=True)])
-        self.assertEqual(res["gold"][1], gold.val((32.4, "USD")))
+        self.assertEqual(res["gold"][1], gold.val((-32.4, "USD")))
 
     def test_most_and_least_time_or_effort_are_superlatives_too(self):
         """G1 (owner ruling 2026-10-06): 'which needs the most time', 'most effort', 'least time' ask for the extreme."""
@@ -1139,54 +1116,6 @@ class RulingsWidening(unittest.TestCase):
         call = {"kind": "task", "order": "effort desc", "limit": 2}
         gt = turn("the longest jobs", rows("roadmap", "slides", order=True), ref=[{"tool": "answer", "args": call}])
         self.assertFalse(one(gt, [rows_step(["roadmap", "slides"], call, ordered=True)])["changed"])
-
-    def test_who_owes_me_has_the_people_of_the_debts_beside_the_debt_rows(self):
-        """B6 (D-1044-15): 'who owes me', 'who do i owe', 'who's that to' about debts accept the debt rows and the people."""
-        call = {"kind": "debt", "where": "direction = i_owe and status = open"}
-        gt = turn("who do i owe", rows("uber", "magazine", "jordan_gas"), ref=[{"tool": "answer", "args": call}])
-        res = one(gt, [rows_step(["uber", "magazine", "jordan_gas"], call)])
-        self.assertEqual((res["convention"], res["changed"]), ("debt-or-person", True))
-        self.assertEqual(res["gold"], [rows("uber", "magazine", "jordan_gas"), rows("chloe", "meera_i", "jordan_b")])
-        self.assertFalse(res["was_failing"])
-
-    def test_two_debts_of_one_person_are_one_person(self):
-        call = {"kind": "debt", "where": "status = open"}
-        gt = turn("who owes me or who do i owe", rows("jordan_gas", "acltix"), ref=[{"tool": "answer", "args": call}])
-        got, labels, _ = regen.widen_gold(gt["gold"], gt["user"], [{"tool": "answer", "args": call}],
-                                          regen.Sess({"world": WORLD}, Ids(WORLD)), 0)
-        self.assertEqual((got, labels), ([rows("jordan_gas", "acltix"), rows("jordan_b")], ["debt-or-person"]))
-
-    def test_a_check_the_accept_carries_stays_with_the_people(self):
-        diff = gold.diff(gold.upd("uber", status="settled"))["diff"]
-        gt = turn("paid chloe, who do i owe now", {**rows("magazine"), "diff": diff}, ref=[{"tool": "answer", "args": {"kind": "debt"}}])
-        got, _, _ = regen.widen_gold(gt["gold"], gt["user"], gt["ref"], regen.Sess({"world": WORLD}, Ids(WORLD)), 0)
-        self.assertEqual(got[1], {**rows("meera_i"), "diff": diff})
-
-    def test_the_people_of_the_debts_need_the_words_and_debt_rows(self):
-        sess = regen.Sess({"world": WORLD}, Ids(WORLD))
-        for user, accept in (("which debts are open", rows("uber")), ("who is on the ballet list", rows("uber")),
-                             ("who owes me", rows("dogfood")), ("who owes me", rows("uber", "dogfood")),
-                             ("who owes me", rows()), ("who owes me", gold.val(3))):
-            got, labels, _ = regen.widen_gold([accept], user, [{"tool": "answer", "args": {"kind": "debt"}}], sess, 0)
-            self.assertEqual((got, labels), ([accept], []), (user, accept))
-
-    def test_the_cues_of_the_debt_idiom(self):
-        for user in ("who owes me money", "who do i owe", "who still owes me", "who's that to", "who is that to", "whos it to",
-                     "alex paid me for the shoes, who do i owe now", "who do i owe from last month",
-                     "ok who owes me"):
-            self.assertTrue(regen.WHO_DEBT.search(user), user)
-        for user in ("who is on the guest list", "who's coming", "which debts are open", "what do i owe", "who else is on that",
-                     "open debts where i'm the one who owes", "who's left with a star"):
-            self.assertFalse(regen.WHO_DEBT.search(user), user)
-
-    def test_the_people_when_the_run_answers_the_debts_and_the_other_way_round(self):
-        call = {"kind": "debt", "where": "direction = i_owe and status = open"}
-        gt = turn("who do i owe", rows("chloe", "meera_i"), ref=[{"tool": "answer", "args": call}])
-        res = one(gt, [rows_step(["uber", "magazine"], call)])
-        self.assertEqual((res["convention"], res["gold"]), ("debt-or-person", [rows("chloe", "meera_i"), rows("uber", "magazine")]))
-        gt = turn("who do i owe", rows("uber", "magazine"), ref=[{"tool": "answer", "args": call}])
-        res = one(gt, [rows_step(["chloe", "meera_i"], call)])
-        self.assertEqual((res["convention"], res["gold"]), ("debt-or-person", [rows("uber", "magazine"), rows("chloe", "meera_i")]))
 
     def test_every_widening_convention_has_a_widener_and_a_rule(self):
         self.assertEqual(sorted(regen.WIDENING), sorted(regen.WIDENERS))

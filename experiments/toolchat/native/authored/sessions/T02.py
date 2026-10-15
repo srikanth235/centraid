@@ -23,29 +23,6 @@ S("T02-001", "events reschedule edit follow-up",
     ref=[ans(kind="event", when=W(U("week", 0)),
              where='description is set and description != "wheel throwing, Clay Studio on Main"')]))
 
-S("T02-002", "balance substitution settle_debt",
-  T("where am i with arun rn", val((123, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Arun Pillai")]),
-  T("and priya", val((-42, "CAD"), (58200, "JPY")),
-    ref=[ans(op="balance", kind="person", name="Priya Sandhu")]),
-  T("paid her back for sushi last nite, mark that one settled",
-    diff(upd("d_priya_sushi", status="settled")),
-    ref=[search("sushi", kind="debt"), act("settle_debt", rows="$d_priya_sushi")]),
-  T("which debt is the one for exactly 95", rows("d_arun_tix"),
-    ref=[ans(kind="debt", where="amount = 95")]))
-
-S("T02-003", "group members group balance",
-  T("who's on the tokyo trip", rows("sophie_t", "priya", "me"),
-    ref=[ans(kind="person", linked_to="$tokyo")]),
-  T("where am i at in that group", val((107700, "JPY")),
-    ref=[ans(op="balance", kind="group", name="Tokyo Trip", linked_to="$me")]),
-  T("sophie?", val((-39300, "JPY")),
-    ref=[ans(op="balance", kind="group", name="Tokyo Trip", linked_to="$sophie_t")]),
-  T("do any of my groups not have a currency set", rows(),
-    ref=[ans(kind="group", where="currency is empty")]),
-  T("which ones are in yen", rows("tokyo"),
-    ref=[ans(kind="group", where='currency = "JPY"')]))
-
 S("T02-004", "date reschedule linked people",
   T("move the tidewater review to next tue at 2", diff(upd("tide_review", date="2027-06-15T14:00")),
     ref=[act("reschedule", kind="event", name="Tidewater cover review",
@@ -178,19 +155,6 @@ S("T02-016", "photos album person already add_to",
   T("anything i shot since last wednesday", rows("desk", "sunset_flat", "dad_garden", "shelves"),
     ref=[ans(kind="photo", when=W({"from": U("week", -1, weekday=3)}))]))
 
-S("T02-017", "debts where order limit sum settle",
-  T("which debts are ppl owing me", rows("d_mf", "d_tomo", "d_sophie_taxi", "d_kai_books", "d_carlos"),
-    ref=[ans(kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("biggest one?", val((850, "CAD")),
-    ref=[ans(op="max", field="amount", within="@prev")]),
-  T("how much is that all together", val((1375, "CAD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("carlos paid me for the canucks tix", diff(upd("d_carlos", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Canucks tickets")]),
-  T("which debts are from may first through the thirty-first",
-    rows("d_gl", "d_arun_tix", "d_diego_chalk", "d_priya_sushi", "d_mom_phone"),
-    ref=[ans(kind="debt", when=W({"from": D("2027-05-01", "00:00"), "to": D("2027-05-31")}))]))
-
 S("T02-018", "wifi bare read reveal star",
   T("wifi password", rows("wifi"),
     ref=[ans(kind="locker item", where='type = "wifi"')]),
@@ -200,16 +164,6 @@ S("T02-018", "wifi bare read reveal star",
     ref=[act("star", rows="$wifi")]),
   T("what's my costco membership number", decline("not_found"),
     ref=[search("costco", kind="locker item"), dec("not_found")]))
-
-S("T02-019", "person create add_to group balance",
-  T("can you add hana ito to the group, she's coming to tokyo w us",
-    diff(new("person", name="Hana Ito"), link("tokyo", "new")),
-    ref=[act("create", more=True, args=lines(kind="person", name="Hana Ito")),
-         act("add_to", rows="$new", args=lines(to="$tokyo"))]),
-  T("what's her balance in there", val((0, "JPY")),
-    ref=[ans(op="balance", kind="group", name="Tokyo Trip", linked_to="$new")]),
-  T("do any of my groups have no currency on them", rows(),
-    ref=[ans(kind="group", where="currency is empty")]))
 
 S("T02-020", "folder create document add_to",
   T("can you make a folder called Fox book", diff(new("folder", name="Fox book")),
@@ -239,20 +193,6 @@ S("T02-023", "count since month",
     ref=[ans(kind="event", name="Climbing at The Hive", when=W({"from": U("day", 0)}), order="date asc", limit=1)]),
   T("how many hive nights did i have up to the end of april", val(5),
     ref=[ans(op="count", kind="event", name="Climbing at The Hive", when=W({"to": U("month", 0, name=4)}))]))
-
-S("T02-024", "group create add_to people",
-  T("can you start a new group for arun's bday gift", diff(new("group", name=has("arun")), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Arun's birthday gift"))]),
-  T("add jess and kai to it", diff(link("+1", "jess"), link("+1", "kai")),
-    ref=[act("add_to", rows="$jess, $kai", args=lines(to="$new"))]),
-  T("add sophie too", ask("sophie_t", "sophie_d"),
-    ref=[act("add_to", kind="person", name="Sophie", args=lines(to="$c1")),
-         askc("sophie tran or sophie delacroix?", options="$sophie_t, $sophie_d")]),
-  T("tran", diff(link("+1", "sophie_t")),
-    ref=[act("add_to", rows="$sophie_t", args=lines(to="$c1"))]),
-  T("scrap the gift group, kai's got it covered",
-    diff(gone("+1"), unlink("+1", "me"), unlink("+1", "jess"), unlink("+1", "kai"), unlink("+1", "sophie_t")),
-    ref=[act("delete", rows="$c1")]))
 
 S("T02-025", "list edit area linked open",
   T("errands list should be under home not personal, and stick order celadon glaze on it",

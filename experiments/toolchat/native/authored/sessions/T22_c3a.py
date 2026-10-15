@@ -53,14 +53,6 @@ S("T22-A008", "follow-up c3a",
   T("the rest of them", rows("padel_doubles", "jonas_talk", "camp_pickup", "linnea_1on1"),
     ref=[ans(within="@1", exclude="@2")]))
 
-S("T22-A009", "follow-up c3a",
-  T("what am i owing", rows("d_david", "d_gunnar", "d_karin", "d_mats", "d_fatima"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("those but not the coffee", rows("d_gunnar", "d_karin", "d_david", "d_mats"),
-    ref=[ans(within="@prev", exclude="$d_fatima")]),
-  T("which is the biggest", rows("d_karin"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T22-A010", "follow-up c3a",
   T("what's in the elias album", rows("p_bike", "p_wreath", "p_bday7", "p_swim", "p_cinema", "p_camp", "p_gotcha"),
     ref=[ans(kind="photo", linked_to="$elias_al")]),
