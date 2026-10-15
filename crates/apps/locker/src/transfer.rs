@@ -29,6 +29,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use centraid_apps_kit::csv::csv_rows;
+
 use crate::totp;
 
 /// The JSON format's name and version, the first thing [`read`] checks.
@@ -603,44 +605,6 @@ fn normalise_seed(columns: &mut BTreeMap<String, String>) {
     {
         columns.insert("otp_seed".to_owned(), seed);
     }
-}
-
-/// RFC 4180's rows: quoted cells, doubled quotes, CRLF or LF, and a newline
-/// inside quotes kept.
-fn csv_rows(text: &str) -> Vec<Vec<String>> {
-    let mut rows = Vec::new();
-    let mut row = Vec::new();
-    let mut cell = String::new();
-    let mut quoted = false;
-    let mut chars = text.chars().peekable();
-    while let Some(character) = chars.next() {
-        if quoted {
-            match character {
-                '"' if chars.peek() == Some(&'"') => {
-                    cell.push('"');
-                    chars.next();
-                }
-                '"' => quoted = false,
-                other => cell.push(other),
-            }
-            continue;
-        }
-        match character {
-            '"' if cell.is_empty() => quoted = true,
-            ',' => row.push(std::mem::take(&mut cell)),
-            '\r' => {}
-            '\n' => {
-                row.push(std::mem::take(&mut cell));
-                rows.push(std::mem::take(&mut row));
-            }
-            other => cell.push(other),
-        }
-    }
-    if !cell.is_empty() || !row.is_empty() {
-        row.push(cell);
-        rows.push(row);
-    }
-    rows
 }
 
 /// An address's host, lower-cased, without `www.`, a port or credentials.

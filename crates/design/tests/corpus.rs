@@ -2,7 +2,7 @@
 //!
 //! `design/identity-corpus.json` is emitted by
 //! `contracts/tools/export-native-theme.ts`, which RUNS the real
-//! `partyHueKey`/`partyHueValue`/`identityInitials` and Tally's `figureTone`
+//! `partyHueKey`/`partyHueValue`/`identityInitials` and `figureTone`
 //! over a fixed, deliberately hostile corpus (non-ASCII names, an empty name, a
 //! one-emoji name, every shape of stored `avatar_color`) and writes inputs and
 //! outputs. This test is the other half: every row, no sampling, and the count
@@ -104,7 +104,7 @@ fn every_initials_row_agrees_including_the_half_surrogate() {
 }
 
 #[test]
-fn every_tone_row_agrees_with_tallys_one_sign_convention() {
+fn every_tone_row_agrees_with_the_one_sign_convention() {
     let corpus = emitted("identity-corpus.json");
     let rows = corpus["tones"].as_array().expect("tones is a list");
     assert!(rows.len() >= 25, "{} rows", rows.len());

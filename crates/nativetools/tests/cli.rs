@@ -126,7 +126,7 @@ fn seed_copy_and_a_json_lines_session_round_trip() {
             .starts_with("<|im_start|>system\n# Tools")
     );
     assert_eq!(lines[1]["turn"], 1);
-    assert_eq!(lines[1]["preground"], "vault: #9 task \"Book the cabin\"");
+    assert_eq!(lines[1]["preground"], "vault: #7 task \"Book the cabin\"");
     assert_eq!(lines[2]["ends_turn"], false);
     assert_eq!(
         lines[3],

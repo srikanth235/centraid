@@ -30,7 +30,7 @@
 //! 360 px or less on its long edge, compiled in with `include_bytes!` — so the
 //! core library, and every phone slice of it, carries them.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::commands::{Command, CommandStatus, Registry};
@@ -42,13 +42,13 @@ use crate::error::Result;
 /// The apps the scenario seeds through [`seed`], in the order it seeds them.
 /// Locker is not one of them, and never will be: see the module header.
 pub const APPS: [&str; 7] = [
-    "people", "notes", "docs", "photos", "tasks", "tally", "agenda",
+    "people", "notes", "docs", "photos", "tasks", "agenda", "money",
 ];
 
 /// What a seeding pass did not do.
 ///
 /// A refusal is LOUD and the pass continues: one app's schema drifting is not
-/// a reason to leave the other six empty, and a silent skip would be a fixture
+/// a reason to leave the other five empty, and a silent skip would be a fixture
 /// whose gaps nobody can see. The caller decides what a refusal costs — the
 /// dev binary exits non-zero, a test asserts the pass whole, and a starter row
 /// ([`crate::starters`]) is only a warning.
@@ -80,8 +80,7 @@ pub fn now_ms() -> i64 {
 /// SEED THE SCENARIO into a founded vault, one app at a time.
 ///
 /// `wanted` names the apps to seed (by [`APPS`]' names); the dev binary's
-/// `--only` is what passes anything but "all of them". Tally enrols the
-/// parties People made, so the two name one human with one party.
+/// `--only` is what passes anything but "all of them".
 ///
 /// # Errors
 ///
@@ -91,7 +90,6 @@ pub fn seed(
     vault: &Vault,
     registry: &Registry,
     principal: &Principal,
-    owner_party_id: &str,
     wanted: &dyn Fn(&str) -> bool,
     now_ms: i64,
 ) -> Result<Report> {
@@ -101,11 +99,9 @@ pub fn seed(
         principal,
         report: Report::default(),
     };
-    let people = if wanted("people") {
-        seed_people(&mut seeder)
-    } else {
-        BTreeMap::new()
-    };
+    if wanted("people") {
+        seed_people(&mut seeder);
+    }
     if wanted("notes") {
         seed_notes(&mut seeder);
     }
@@ -118,9 +114,6 @@ pub fn seed(
     if wanted("tasks") {
         seed_tasks(&mut seeder, now_ms);
     }
-    if wanted("tally") {
-        seed_tally(&mut seeder, now_ms, owner_party_id, &people);
-    }
     if wanted("agenda") {
         // THE CALENDAR IS DISCOVERED, never hard-coded: `Vault::found` mints a
         // private "Personal" one, and a vault with none cannot hold an event.
@@ -131,6 +124,9 @@ pub fn seed(
                 .refused
                 .push("agenda: this vault has no calendar".to_owned()),
         }
+    }
+    if wanted("money") {
+        seed_money(&mut seeder, now_ms);
     }
     Ok(seeder.report)
 }
@@ -263,15 +259,239 @@ impl Seeder<'_> {
 }
 
 // ---------------------------------------------------------------------------
+// Money.
+//
+// "Three accounts and about three months of statement lines, imported the way a
+// member imports them: through `money.import_transactions`, with the dedupe key
+// the app's own reader would have computed. A few rules file the regulars; a
+// handful of lines stay unfiled so Activity has something to ask, and one move
+// between checking and savings is left for the member to accept." (#1099, R-1099-9)
+//
+// Only the dev fixture seeds this; no member's vault ever gets sample rows.
+// ---------------------------------------------------------------------------
+
+/// One statement line: how many days before the anchor, the signed minor
+/// amount and the bank's words.
+struct MoneyLine {
+    days_ago: i64,
+    signed_minor: i64,
+    text: String,
+}
+
+/// A line the seed writes into `account`, at most once per (day, amount, text).
+fn money_rows(
+    now: i64,
+    lines: &[MoneyLine],
+    ordinals: &mut centraid_apps_money::import::keys::Ordinals,
+    first_id: &mut u32,
+) -> Vec<Value> {
+    lines
+        .iter()
+        .map(|line| {
+            let posted_on = day(now, -line.days_ago);
+            let external_id = centraid_apps_money::import::keys::csv_key(
+                ordinals,
+                &posted_on,
+                line.signed_minor,
+                &line.text,
+            );
+            *first_id += 1;
+            json!({
+                "txn_id": format!("demo-money-txn-{first_id}"),
+                "external_id": external_id,
+                "posted_on": posted_on,
+                "amount_minor": line.signed_minor.abs(),
+                "direction": if line.signed_minor < 0 { "debit" } else { "credit" },
+                "description": line.text,
+            })
+        })
+        .collect()
+}
+
+fn seed_money(seeder: &mut Seeder, now: i64) {
+    for (id, name, kind, reference) in [
+        (
+            "demo-money-everyday",
+            "Everyday",
+            "checking",
+            Some("000123456789"),
+        ),
+        (
+            "demo-money-rainy",
+            "Rainy day",
+            "savings",
+            Some("000987654321"),
+        ),
+        ("demo-money-visa", "Visa", "credit_card", None),
+    ] {
+        let mut input = json!({
+            "account_id": id, "name": name, "kind": kind, "currency": "USD",
+        });
+        if let Some(reference) = reference {
+            input["external_ref"] = json!(reference);
+        }
+        seeder.run("money.add_account", input);
+    }
+
+    let line = |days_ago: i64, signed_minor: i64, text: &str| MoneyLine {
+        days_ago,
+        signed_minor,
+        text: text.to_owned(),
+    };
+    let mut everyday = Vec::new();
+    let mut rainy = Vec::new();
+    let mut visa = Vec::new();
+    // Pay every other Friday, rent and a streaming charge once a month.
+    for fortnight in 0..7 {
+        everyday.push(line(
+            3 + fortnight * 14,
+            214_000,
+            "PAYROLL SIERRA DESIGN CO",
+        ));
+    }
+    for month in 0..3 {
+        let base = 4 + month * 30;
+        everyday.push(line(base, -165_000, "RENT PAYMENT ALPINE PROPERTIES"));
+        everyday.push(line(base + 2, -1_549, "NETFLIX.COM"));
+        everyday.push(line(base + 6, -7_200, "COMCAST CABLE 8001234"));
+        everyday.push(line(base + 9, -50_000, "TRANSFER TO RAINY DAY"));
+        rainy.push(line(base + 9, 50_000, "TRANSFER FROM EVERYDAY"));
+        rainy.push(line(base + 1, -100, "MONTHLY SERVICE FEE"));
+    }
+    // Groceries and coffee on the checking card; fuel and dining on the Visa.
+    for visit in 0..16 {
+        let cents = 5_100 + (visit * 977) % 6_400;
+        everyday.push(line(1 + visit * 5, -cents, "WHOLE FOODS MKT #10234"));
+    }
+    for visit in 0..28 {
+        everyday.push(line(
+            visit * 3,
+            -(575 + (visit % 4) * 25),
+            "STARBUCKS STORE 12345",
+        ));
+    }
+    for fill in 0..7 {
+        visa.push(line(
+            2 + fill * 12,
+            -(4_200 + (fill * 313) % 1_900),
+            "SHELL OIL 574441",
+        ));
+    }
+    for night in 0..12 {
+        visa.push(line(
+            5 + night * 7,
+            -(3_800 + (night * 541) % 4_700),
+            "SQ *CORNER BISTRO",
+        ));
+    }
+    // Two lines no rule files, so Activity has something to ask about.
+    visa.push(line(9, -6_480, "AMZN MKTP US*2K4LM1"));
+    visa.push(line(21, -12_999, "SQ *LOCAL SHOP"));
+
+    // Dated oldest first within each account, as a statement is; the keys carry
+    // an ordinal per (day, amount, text) triple so identical lines stay two.
+    let mut next_id = 0;
+    for (account, mut lines) in [
+        ("demo-money-everyday", everyday),
+        ("demo-money-rainy", rainy),
+        ("demo-money-visa", visa),
+    ] {
+        lines.sort_by_key(|l| std::cmp::Reverse(l.days_ago));
+        let mut ordinals = centraid_apps_money::import::keys::Ordinals::default();
+        let rows = money_rows(now, &lines, &mut ordinals, &mut next_id);
+        seeder.run(
+            "money.import_transactions",
+            json!({ "account_id": account, "source": "csv", "rows": rows }),
+        );
+    }
+
+    // The regulars are filed by rules, applied to what is already in.
+    for (rule, pattern, category, name) in [
+        (
+            "demo-money-rule-pay",
+            "PAYROLL",
+            "money:cat:income.pay",
+            "Payroll",
+        ),
+        (
+            "demo-money-rule-rent",
+            "RENT PAYMENT",
+            "money:cat:housing.rent",
+            "Rent",
+        ),
+        (
+            "demo-money-rule-netflix",
+            "NETFLIX",
+            "money:cat:fun.subscriptions",
+            "Netflix",
+        ),
+        (
+            "demo-money-rule-comcast",
+            "COMCAST",
+            "money:cat:utilities.phone",
+            "Comcast",
+        ),
+        (
+            "demo-money-rule-wf",
+            "WHOLE FOODS",
+            "money:cat:food.groceries",
+            "Whole Foods",
+        ),
+        (
+            "demo-money-rule-sbux",
+            "STARBUCKS",
+            "money:cat:food.dining",
+            "Starbucks",
+        ),
+        (
+            "demo-money-rule-shell",
+            "SHELL OIL",
+            "money:cat:transport.fuel",
+            "Shell",
+        ),
+        (
+            "demo-money-rule-bistro",
+            "CORNER BISTRO",
+            "money:cat:food.dining",
+            "Corner Bistro",
+        ),
+    ] {
+        seeder.run(
+            "money.add_rule",
+            json!({
+                "rule_id": rule, "match_kind": "contains", "pattern": pattern,
+                "set_category_concept_id": category, "set_display_name": name,
+            }),
+        );
+        seeder.run("money.apply_rule_to_history", json!({ "rule_id": rule }));
+    }
+
+    // A plan for this month, so Spending has something to be measured against.
+    let month = day(now, 0)[..7].to_owned();
+    for (category, minor) in [
+        ("money:cat:food.groceries", 55_000),
+        ("money:cat:food.dining", 30_000),
+        ("money:cat:transport.fuel", 25_000),
+    ] {
+        seeder.run(
+            "money.set_target",
+            json!({
+                "month": month, "category_concept_id": category,
+                "amount_minor": minor, "currency": "USD", "carry": true,
+            }),
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
 // People.
 //
 // "A small living circle — people with contact cadences, logged interactions,
-// birthdays, canonical gift tasks and one outstanding debt."
+// birthdays and canonical gift tasks."
 // ---------------------------------------------------------------------------
 
-/// The four people, and each one's party by first name — Tally's friends.
-fn seed_people(seeder: &mut Seeder) -> std::collections::BTreeMap<&'static str, String> {
-    let mut by_first_name = std::collections::BTreeMap::new();
+/// The four people.
+fn seed_people(seeder: &mut Seeder) {
     let mut ids = Vec::new();
     for (name, role, cadence) in [
         ("Maya Alvarez", "College friend", 30),
@@ -284,17 +504,12 @@ fn seed_people(seeder: &mut Seeder) -> std::collections::BTreeMap<&'static str, 
             json!({ "display_name": name, "role": role, "cadence_days": cadence }),
         );
         if let Some(party) = Seeder::id(output.as_ref(), "party_id") {
-            if let Some(first) = name.split(' ').next() {
-                by_first_name.insert(first, party.clone());
-            }
             ids.push(party);
         }
     }
-    let (maya, jake, grandpa, chris) = match ids.as_slice() {
-        [maya, jake, grandpa, chris] => {
-            (maya.clone(), jake.clone(), grandpa.clone(), chris.clone())
-        }
-        _ => return by_first_name,
+    let (maya, grandpa, chris) = match ids.as_slice() {
+        [maya, _, grandpa, chris] => (maya.clone(), grandpa.clone(), chris.clone()),
+        _ => return,
     };
 
     for (party, kind, text) in [
@@ -344,17 +559,6 @@ fn seed_people(seeder: &mut Seeder) -> std::collections::BTreeMap<&'static str, 
             json!({ "party_id": party, "text": text }),
         );
     }
-
-    seeder.run(
-        "people.add_debt",
-        json!({
-            "party_id": jake,
-            "direction": "owe",
-            "amount_minor": 15_000,
-            "reason": "His half of the cabin deposit",
-        }),
-    );
-    by_first_name
 }
 
 // ---------------------------------------------------------------------------
@@ -1186,126 +1390,4 @@ fn seed_agenda(seeder: &mut Seeder, now: i64, calendar_id: &str) {
         }
         seeder.run("schedule.propose_event", input);
     }
-}
-
-// ---------------------------------------------------------------------------
-// Tally.
-//
-// "Three friends, one trip group and a lived-in expense ledger — uneven payers,
-// exact splits, one settlement." Balances stay DERIVED, never stored, so the
-// seeded ledger exercises the whole projection.
-// ---------------------------------------------------------------------------
-
-/// Split `amount` across `parties` exactly — the remainder lands on the payer.
-fn even(amount: i64, parties: &[String], payer: &str) -> Vec<Value> {
-    let base = amount / parties.len() as i64;
-    let mut rest = amount - base * parties.len() as i64;
-    parties
-        .iter()
-        .map(|party| {
-            let mut share = base;
-            if party == payer {
-                share += rest;
-                rest = 0;
-            }
-            json!({ "party_id": party, "share_minor": share })
-        })
-        .collect()
-}
-
-fn seed_tally(
-    seeder: &mut Seeder,
-    now: i64,
-    me: &str,
-    people: &std::collections::BTreeMap<&'static str, String>,
-) {
-    let mut friends = Vec::new();
-    for name in ["Maya", "Jake", "Chris"] {
-        // The People party when there is one — `add_friend`'s existing-party
-        // branch — so Tally and People name one human with one party.
-        let input = match people.get(name) {
-            Some(party_id) => json!({ "name": name, "party_id": party_id }),
-            None => json!({ "name": name }),
-        };
-        let output = seeder.run("tally.add_friend", input);
-        if let Some(party) = Seeder::id(output.as_ref(), "party_id") {
-            friends.push(party);
-        }
-    }
-    if friends.len() != 3 {
-        return;
-    }
-    let (maya, jake, chris) = (friends[0].clone(), friends[1].clone(), friends[2].clone());
-
-    // The icon is rendered verbatim and must come from the emoji set, never a
-    // lucide name.
-    let group = Seeder::id(
-        seeder
-            .run(
-                "tally.create_group",
-                json!({
-                    "name": "Tahoe Trip",
-                    "icon": "🏔️",
-                    "color": "steelblue",
-                    "member_ids": friends,
-                }),
-            )
-            .as_ref(),
-        "group_id",
-    );
-    let Some(group) = group else { return };
-
-    let everyone: Vec<String> = std::iter::once(me.to_owned())
-        .chain(friends.iter().cloned())
-        .collect();
-    /// One seeded expense: description, minor units, payer, category, days
-    /// ago, and the parties it splits between (`None` is everyone).
-    type SeededExpense<'a> = (&'a str, i64, &'a String, &'a str, i64, Option<Vec<String>>);
-    let expenses: [SeededExpense<'_>; 5] = [
-        ("Cabin deposit", 30_000, &everyone[0], "travel", 6, None),
-        ("Gas for the drive up", 4_820, &jake, "transport", 6, None),
-        (
-            "Groceries for the cabin",
-            11_267,
-            &maya,
-            "groceries",
-            5,
-            None,
-        ),
-        (
-            "Ski rentals",
-            9_200,
-            &chris,
-            "fun",
-            4,
-            Some(vec![me.to_owned(), maya.clone(), chris.clone()]),
-        ),
-        ("Lift tickets", 6_000, &everyone[0], "travel", 4, None),
-    ];
-    for (description, amount, payer, category, days_ago, parties) in expenses {
-        let parties = parties.unwrap_or_else(|| everyone.clone());
-        seeder.run(
-            "tally.add_expense",
-            json!({
-                "group_id": group,
-                "description": description,
-                "amount_minor": amount,
-                "paid_by": payer,
-                "category": category,
-                "spent_on": day(now, -days_ago),
-                "splits": even(amount, &parties, payer),
-            }),
-        );
-    }
-
-    seeder.run(
-        "tally.settle_up",
-        json!({
-            "from_party": chris,
-            "to_party": me,
-            "amount_minor": 5_000,
-            "group_id": group,
-            "paid_on": day(now, -2),
-        }),
-    );
 }

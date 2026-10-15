@@ -229,10 +229,9 @@ fn app_label(app_id: &str) -> &'static str {
         "people" => "People",
         "agenda" => "Agenda",
         "tasks" => "Tasks",
-        "tally" => "Tally",
         "photos" => "Photos",
         "docs" => "Docs",
-        other => panic!("{other} is not one of the seven domains"),
+        other => panic!("{other} is not one of the six domains"),
     }
 }
 

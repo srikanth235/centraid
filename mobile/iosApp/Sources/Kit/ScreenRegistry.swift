@@ -43,13 +43,13 @@ extension AppScreens {
 /// THE ONE LIST. A port adds exactly one line here.
 enum AppRegistry {
     static let apps: [any AppScreens.Type] = [
-        TallyScreens.self,
         NotesScreens.self,
         AgendaScreens.self,
         TasksScreens.self,
         PeopleScreens.self,
         DocsScreens.self,
         LockerScreens.self,
+        MoneyScreens.self,
     ]
 
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
@@ -83,8 +83,7 @@ struct ScreenPort {
     var departed: () -> Void = {}
 
     /// A kit `ScreenBridge` subclass — `NotesBridge`, `PeopleHomeBridge`, and
-    /// every port's bridge (Tally's speak the same verbs through
-    /// `TallyScreenBridge`; see `ScreenPort.tally`).
+    /// every port's bridge.
     static func of<S: AnyObject, E: AnyObject>(_ id: String, _ bridge: ScreenBridge<S, E>) -> ScreenPort {
         ScreenPort(
             id: id,

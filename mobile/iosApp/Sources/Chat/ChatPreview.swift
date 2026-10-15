@@ -49,10 +49,10 @@ enum ChatPreview {
             c.app = app; c.entity = entity; c.id = id; c.title = title; c.subtitle = subtitle; c.meta = meta
             return c
         }
-        let spend = [
-            card("tally", "expense", "e1", "Cabin deposit", "$240.00", "2026-09-21 · Tahoe weekend"),
-            card("tally", "expense", "e2", "Groceries at Safeway", "$86.40", "2026-09-22 · Tahoe weekend"),
-            card("tally", "expense", "e3", "Gas", "$54.10", "2026-09-22 · Tahoe weekend"),
+        let due = [
+            card("tasks", "task", "t1", "Book the cabin", "Due Fri", "2026-10-02 · Tahoe weekend"),
+            card("tasks", "task", "t2", "Pack the car", "Due Sat", "2026-10-03 · Tahoe weekend"),
+            card("tasks", "task", "t3", "Buy ski passes", "Due Sat", "2026-10-03 · Tahoe weekend"),
         ]
         func row(_ id: String, _ title: String, _ ago: String, current: Bool = false) -> Centraid_Screen_V1_ChatThreadItem {
             var r = Centraid_Screen_V1_ChatThreadItem()
@@ -62,30 +62,30 @@ enum ChatPreview {
         }
         switch mode {
         case "markdown":
-            state.title = "What did we spend at Tahoe?"
+            state.title = "What is due this week?"
             state.threadID = "t1"
             state.canManageThread = true
             state.messages = [
-                message(1, .user, "What did we spend at Tahoe?"),
+                message(1, .user, "What is due this week?"),
                 message(
                     2, .assistant,
                     "You spent **$380.50** across three *expenses*:\n\n- Cabin deposit, `$240.00`\n- Groceries at Safeway, $86.40\n- Gas, $54.10\n\n1. Pay the cabin\n2. Split the rest",
-                    cards: spend
+                    cards: due
                 ),
             ]
             state.canNewChat = true
         case "drawer":
-            state.title = "What did we spend at Tahoe?"
+            state.title = "What is due this week?"
             state.threadID = "t1"
             state.canManageThread = true
             state.canNewChat = true
             state.drawerOpen = true
             state.threads = [
-                row("t1", "What did we spend at Tahoe?", "5 min ago", current: true),
+                row("t1", "What is due this week?", "5 min ago", current: true),
                 row("t2", "What is on my packing list?", "Yesterday"),
                 row("t3", "Who should I call this week?", "3 days ago"),
             ]
-            state.messages = [message(1, .user, "What did we spend at Tahoe?"), message(2, .assistant, "You spent $380.50 across three expenses.", cards: spend)]
+            state.messages = [message(1, .user, "What is due this week?"), message(2, .assistant, "You have three tasks due this week.", cards: due)]
         case "pending", "pending-destructive":
             // A PROPOSED WRITE, waiting for the tap (a delete asks twice).
             let deleting = mode == "pending-destructive"
@@ -106,25 +106,25 @@ enum ChatPreview {
             state.canNewChat = true
         case "empty":
             state.emptyLine = "Ask about anything in your vault."
-            state.suggestions = ["What did we spend at Tahoe?", "What is on my packing list?", "What is on my calendar this week?"]
-            state.scopeApp = "tally"
+            state.suggestions = ["What is due this week?", "What is on my packing list?", "What is on my calendar this week?"]
+            state.scopeApp = "tasks"
         case "streaming":
             state.messages = [
-                message(1, .user, "What did we spend at Tahoe?"),
-                message(2, .assistant, "You spent about $380 at Tah", streaming: true),
+                message(1, .user, "What is due this week?"),
+                message(2, .assistant, "You have three tasks due this we", streaming: true),
             ]
             state.streaming = true
-            state.activity = "Looking in Tally"
+            state.activity = "Looking in Tasks"
             state.canNewChat = true
         case "error":
-            state.messages = [message(1, .user, "What did we spend at Tahoe?")]
+            state.messages = [message(1, .user, "What is due this week?")]
             state.error = "The model stopped. Retry."
             state.canRetry = true
             state.canNewChat = true
         default:
             state.messages = [
-                message(1, .user, "What did we spend at Tahoe?"),
-                message(2, .assistant, "You spent $380.50 across three expenses.", cards: spend),
+                message(1, .user, "What is due this week?"),
+                message(2, .assistant, "You have three tasks due this week.", cards: due),
             ]
             state.canRetry = true
             state.canNewChat = true

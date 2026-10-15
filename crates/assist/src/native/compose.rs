@@ -18,7 +18,7 @@
 //!   row. A name that only a typo reaches (tier 4), or that reaches several rows of another
 //!   kind, is `Did you mean #n?` / `Which one?` over the candidates, never an act; the one row of
 //!   another kind the name reaches as it is said (`unmatched_target`) is the row the write goes
-//!   to, with a note that says so. For `delete`, `remove_from`, `settle_up`, `settle_debt` and
+//!   to, with a note that says so. For `delete`, `remove_from` and
 //!   `reveal` and when the person says all, the ask stays; no candidate is `decline not_found`.
 //! - AN `answer` THAT REACHES NO ROW BY NAME answers the near spellings, or answers nothing
 //!   (`compose_unmatched_read`). A name that fits several rows without fitting one exactly
@@ -120,7 +120,7 @@ impl Session {
     /// are the ask of `compose_ambiguous_write`, none is `decline not_found`. The caller takes
     /// the one row the name spells, or names under another kind, as the target first
     /// (`unmatched_target`), so this ask is for the rows it leaves: a near spelling of another
-    /// kind, a partial fit, `delete`, `remove_from`, `settle_up`, `settle_debt`, `reveal`, and a
+    /// kind, a partial fit, `delete`, `remove_from`, `reveal`, and a
     /// write the person said takes every row.
     pub(crate) fn compose_unmatched_write(
         &mut self,
@@ -267,9 +267,8 @@ impl Session {
     /// note that says so (`Decided::OtherKind`, `act.rs`).
     ///
     /// It stays an ask (`Did you mean #n?`, from `compose_unmatched_write`) when the verb is
-    /// `delete` or `remove_from` (a destructive write on a row the person did not name exactly),
-    /// `settle_up` or `settle_debt` (real money, nothing undoes it) or `reveal` (a secret), when
-    /// the write may take several rows (the trace says `scope: all`, or the message says all: one
+    /// `delete` or `remove_from` (a destructive write on a row the person did not name exactly)
+    /// or `reveal` (a secret), when the write may take several rows (the trace says `scope: all`, or the message says all: one
     /// near row is not the several the person means), and for a typo (nt11 R3: a name misspelled
     /// is asked over, never acted on).
     pub(crate) fn unmatched_target(
@@ -278,10 +277,8 @@ impl Session {
         selector: &Selector,
         into: Option<Kind>,
     ) -> Option<Key> {
-        if matches!(
-            verb,
-            Verb::Delete | Verb::RemoveFrom | Verb::SettleUp | Verb::SettleDebt | Verb::Reveal
-        ) || self.said_every_row().is_some()
+        if matches!(verb, Verb::Delete | Verb::RemoveFrom | Verb::Reveal)
+            || self.said_every_row().is_some()
         {
             return None;
         }

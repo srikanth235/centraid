@@ -42,7 +42,7 @@
 //!    to it through its listed sources, and an index column nobody listed does
 //!    not open.
 //! 3. **`locker.item` is not a domain, and not named.** The absence is
-//!    structural: the powerbox reaches seven domains, the named kinds (the
+//!    structural: the powerbox reaches six domains, the named kinds (the
 //!    containers a member files things in, and the chat history) are a second
 //!    list ([`named::NAMED`], held to the same two checks above) and
 //!    Locker is in neither, so a secret cannot become a link target or a result

@@ -145,7 +145,7 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(96))]
 
     /// Ties, both directions, every window from 1 up, over a sort column that
-    /// is never NULL — which is what every Tally statement orders by.
+    /// is never NULL — which is what every statement an app declares orders by.
     #[test]
     fn a_walk_equals_the_whole_read(
         rows in fixture(false),

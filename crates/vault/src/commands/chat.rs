@@ -73,7 +73,7 @@ const SAVE_TURN_SCHEMA: &str = r#"{
     "thread_id": { "type": "string", "minLength": 1 },
     "replace_last": { "type": "boolean" },
     "scope_app": {
-      "enum": ["agenda", "docs", "notes", "people", "photos", "tally", "tasks", null]
+      "enum": ["agenda", "docs", "money", "notes", "people", "photos", "tasks", null]
     },
     "turn": {
       "type": "object",
@@ -128,7 +128,7 @@ const SAVE_TURN_SCHEMA: &str = r#"{
                 "required": ["app", "entity", "id", "title"],
                 "additionalProperties": false,
                 "properties": {
-                  "app": { "enum": ["agenda", "docs", "notes", "people", "photos", "tally", "tasks"] },
+                  "app": { "enum": ["agenda", "docs", "money", "notes", "people", "photos", "tasks"] },
                   "entity": { "type": "string", "minLength": 1 },
                   "id": { "type": "string", "minLength": 1 },
                   "qualifier": { "type": "string" },

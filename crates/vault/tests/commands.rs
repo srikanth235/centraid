@@ -48,8 +48,6 @@ fn the_registry_carries_every_command_this_build_has() {
         ("core.", 28_usize),
         // The whole 9-command `knowledge.*` schema (wave 4 slot 4c).
         ("knowledge.", 9),
-        // The 23 `tally.*`, real since the Tally-finish lane.
-        ("tally.", 23),
         // The whole 20-command `media.*` schema (wave 4 lane Photos), plus
         // `media.derive_missing` — this build's own backfill sweep, which is
         // not one of v0's and which the gateway runs at start (#1025 S3,
@@ -70,10 +68,11 @@ fn the_registry_carries_every_command_this_build_has() {
         // (#1047 slice D1), and `watchtower` with the weak/reused scoring
         // (Q-1047-16).
         ("locker.", 20),
-        // The whole 28-command `people.*` schema and the whole 4-command
-        // `social.*` one (wave 4 lane People), plus `people.purge_person` —
-        // the destroy People's trash needed to meet #1015 D1.
-        ("people.", 29),
+        // The 26 of v0's 28-command `people.*` schema that outlived Tally (the two
+        // debt commands left with it, #1099) and the whole 4-command `social.*`
+        // one (wave 4 lane People), plus `people.purge_person` — the destroy
+        // People's trash needed to meet #1015 D1.
+        ("people.", 27),
         ("social.", 4),
         // The whole 16-command `schedule.*` schema — events, occurrences,
         // projects, sections and tasks (wave 4 lane Schedule) — plus
@@ -83,6 +82,10 @@ fn the_registry_carries_every_command_this_build_has() {
         // `rename_thread`, `delete_thread` and `clear`, and `settle_proposal`,
         // which records how a parked write's card ended (#1088, rung twelve).
         ("chat.", 5),
+        // The 20 `money.*` (#1099): accounts, the statement import, a line's
+        // category, name, void and transfer, plans, rules and their history pass,
+        // the stated balance and layout, and the member's own categories.
+        ("money.", 20),
     ];
     let total: usize = by_schema.iter().map(|(_, expected)| *expected).sum();
     assert_eq!(
@@ -114,7 +117,10 @@ fn the_registry_carries_every_command_this_build_has() {
     // not exist yet (census §A5).
     assert!(registry.get("core.merge_entity").is_none());
     assert!(registry.get("core.find_duplicate_parties").is_none());
-    assert!(registry.get("tally.add_expense").is_some());
+    // Tally is deleted from v0 (#1099): none of its commands, nor People's two debt commands.
+    assert!(registry.get("tally.add_expense").is_none());
+    assert!(registry.get("people.add_debt").is_none());
+    assert!(registry.get("people.settle_debt").is_none());
     // The three `schedule.*` names other lanes and surfaces call BY NAME:
     // Notes' `send-to-tasks`, the extension's `capture:task` frame and its
     // `agenda:add` frame.
@@ -373,41 +379,41 @@ fn a_read_only_device_is_denied_and_the_deny_is_receipted() {
 fn an_apps_declared_reach_is_a_ceiling_on_its_commands() {
     let (scratch, registry) = installed("clamp");
     let app = Principal::OwnerDevice {
-        device_id: "tally-app".to_owned(),
+        device_id: "money-app".to_owned(),
         may_act: true,
         scope_clamp: Some(ScopeClamp {
             scopes: vec![Scope {
-                schema: "tally".to_owned(),
+                schema: "money".to_owned(),
                 table: None,
                 verb: "read+act".to_owned(),
                 row_filter: vec![RowFilter {
-                    column: "group_id".to_owned(),
-                    values: vec!["g1".to_owned()],
+                    column: "account_id".to_owned(),
+                    values: vec!["a1".to_owned()],
                 }],
                 field_mask: None,
             }],
         }),
     };
-    // Tally's own commands are inside the reach, so the whole gate order runs
+    // Money's own commands are inside the reach, so the whole gate order runs
     // and the command's OWN precondition is what answers — not the authority
-    // gate. `g1` is not a group in this scratch vault, so the sentence is the
-    // group condition's and the predicate names it (#1020, D-1020-T3).
+    // gate. `a1` is not an account in this scratch vault, so the sentence is the
+    // account condition's and the predicate names it (#1020, D-1020-T3).
     let outcome = scratch
         .vault
         .execute(
             &registry,
             &app,
             &Command::new(
-                "tally.rename_group",
-                serde_json::json!({"group_id": "g1", "name": "Trip"}),
+                "money.edit_account",
+                serde_json::json!({"account_id": "a1", "name": "Trip"}),
             ),
         )
         .expect("the command runs inside the app's reach");
     assert_eq!(outcome.status, CommandStatus::Failed);
-    assert_eq!(outcome.predicate.as_deref(), Some("group_exists"));
+    assert_eq!(outcome.predicate.as_deref(), Some("account_is_money"));
     assert_eq!(
         outcome.reason.as_deref(),
-        Some("there is no group with that id")
+        Some("There is no Money account with that id.")
     );
 
     // `core.*` is outside it.
@@ -676,115 +682,6 @@ fn a_reach_scheme_is_refused_by_name_rather_than_dropped_in_silence() {
         .expect_err("a fork must be refused");
     assert!(error.to_string().contains("already identifies"), "{error}");
     assert!(error.to_string().contains("Ada"), "{error}");
-}
-
-#[test]
-fn no_tally_command_reports_success_on_an_empty_input() {
-    let (scratch, registry) = installed("stubs");
-    let owner = Principal::owner("phone");
-    let mut schema_refusals = 0;
-    let mut precondition_refusals = 0;
-    let mut plane_refusals = 0;
-    let mut bodies = 0;
-    for name in registry.names() {
-        if !name.starts_with("tally.") {
-            continue;
-        }
-        // An EMPTY input against an EMPTY vault: every one of the 23 has to
-        // refuse, and the refusal has to say which of the three kinds it is —
-        // the schema, the command's own precondition, or a plane this build
-        // does not carry. A command that reported success here would be one
-        // writing a row from nothing.
-        let outcome = scratch.vault.execute(
-            &registry,
-            &owner,
-            &Command::new(name, serde_json::json!({})),
-        );
-        match outcome {
-            Err(VaultError::NotImplemented { name: refused }) => {
-                assert!(
-                    refused.starts_with(name),
-                    "{refused} is not {name}'s refusal"
-                );
-                // The sentence names what is missing rather than saying "no".
-                assert!(
-                    refused.contains("plane") || refused.contains("lane"),
-                    "`{name}` refuses without naming what it needs: {refused}"
-                );
-                plane_refusals += 1;
-            }
-            Err(VaultError::InvalidInput { .. }) => {
-                bodies += 1;
-            }
-            Err(VaultError::Invariant { context }) => {
-                // A vault with no owner cannot write a Tally row at all, and
-                // that is an invariant rather than a member-facing refusal.
-                assert!(context.contains("owner"), "`{name}`: {context}");
-                bodies += 1;
-            }
-            Ok(done) => {
-                assert_eq!(
-                    done.status,
-                    CommandStatus::Failed,
-                    "`{name}` reported success on an empty input"
-                );
-                match done.predicate.as_deref() {
-                    Some("schema") => schema_refusals += 1,
-                    Some(_) => precondition_refusals += 1,
-                    None => panic!("`{name}` failed without naming why"),
-                }
-            }
-            Err(other) => panic!("`{name}`: {other}"),
-        }
-    }
-    // ALL 23 refuse, and every one of them refuses on its schema: after wave
-    // 4 every tally command has at least one required key, which is itself the
-    // claim — a command that took an empty input would be one whose shape says
-    // nothing.
-    assert_eq!(
-        schema_refusals + precondition_refusals + plane_refusals + bodies,
-        23
-    );
-    assert_eq!(schema_refusals, 23, "every tally command requires an input");
-
-    // And the other two refusal kinds, reached with a well-shaped input: the
-    // command's own precondition, and the plane this build does not carry.
-    let refused = scratch
-        .vault
-        .execute(
-            &registry,
-            &owner,
-            &Command::new(
-                "tally.rename_group",
-                serde_json::json!({ "group_id": "nope", "name": "Trip" }),
-            ),
-        )
-        .expect("a well-shaped rename runs");
-    assert_eq!(refused.predicate.as_deref(), Some("group_exists"));
-    let plane = scratch
-        .vault
-        .execute(
-            &registry,
-            &owner,
-            &Command::new(
-                "tally.add_receipt_expense",
-                serde_json::json!({
-                    "description": "Receipt",
-                    "amount_minor": 100,
-                    "paid_by": "p1",
-                    "category": "groceries",
-                    "splits": [{ "party_id": "p1", "share_minor": 100 }],
-                    "staged_sha": "0".repeat(64),
-                    "ocr_text": "total 1.00",
-                    "line_items": []
-                }),
-            ),
-        )
-        .expect_err("the byte plane is not in this build");
-    assert!(
-        matches!(&plane, VaultError::NotImplemented { name } if name.contains("media lane")),
-        "{plane}"
-    );
 }
 
 #[test]

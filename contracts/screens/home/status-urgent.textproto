@@ -15,7 +15,6 @@ data {
   tiles { app_id: "agenda" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Put something on the calendar" }
   tiles { app_id: "tasks" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Capture the next thing to do" }
   tiles { app_id: "people" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Add someone you know" }
-  tiles { app_id: "tally" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Log your first expense" }
   tiles { app_id: "locker" status: TILE_STATUS_EMPTY size: TILE_SIZE_SMALL empty_copy: "Unlock to see your items" body { locker { locked: true } } }
   # CAPPED: the true number is at least 500, which is why a renderer says "at
   # least" rather than printing 500 as a fact.
@@ -32,6 +31,5 @@ data {
   grid_rows { app_ids: "docs" }
   grid_rows { app_ids: "notes" }
   grid_rows { app_ids: "agenda" app_ids: "tasks" }
-  grid_rows { app_ids: "people" app_ids: "tally" }
-  grid_rows { app_ids: "locker" }
+  grid_rows { app_ids: "people" app_ids: "locker" }
 }

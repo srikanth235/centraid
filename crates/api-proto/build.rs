@@ -51,8 +51,6 @@ const PROTOS: [&str; 26] = [
     "proto/centraid/core/v1/notes.proto",
     // Docs' four answers (#1046), the same shape as Agenda's.
     "proto/centraid/core/v1/docs.proto",
-    // Tally's ten answers (#1046), the same shape as Agenda's.
-    "proto/centraid/core/v1/tally.proto",
     // Tasks' five answers (#1046), the same shape as Agenda's.
     "proto/centraid/core/v1/tasks.proto",
     // Locker's four answers and its session (#1047, D-5): the queries the
@@ -70,6 +68,8 @@ const PROTOS: [&str; 26] = [
     // Photos' own search (#1097, R-1097-25..27): the text and album legs, asked of
     // the full-text door, and the correction.
     "proto/centraid/core/v1/photos.proto",
+    // Money's ten answers, its import plan and Home's tile (#1099).
+    "proto/centraid/core/v1/money.proto",
     "proto/centraid/core/v1/app_query.proto",
     // The on-device chat: a session, a question and a stream of events, over
     // reads an app already answers. Its own file because a turn is neither a
@@ -109,11 +109,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.screen.v1.DocsDriveEvent.kind.data")
         .boxed(".centraid.screen.v1.DocsDocumentState.content.data")
         .boxed(".centraid.screen.v1.DocsDocumentEvent.kind.data")
-        .boxed(".centraid.screen.v1.TallyHomeState.content.data")
-        .boxed(".centraid.screen.v1.TallyGroupState.content.data")
-        .boxed(".centraid.screen.v1.TallyFriendState.content.data")
-        .boxed(".centraid.screen.v1.TallyExpenseState.content.data")
-        .boxed(".centraid.screen.v1.TallyEditorState.content.data")
         .boxed(".centraid.core.v1.Response.kind.app_query")
         .boxed(".centraid.core.v1.AppQueryResponse.answer.tasks_task")
         // The event detail carries its calendar row since #1047.

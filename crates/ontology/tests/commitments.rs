@@ -24,15 +24,32 @@ use centraid_ontology::Vault;
 use centraid_ontology::golden::open_golden;
 use centraid_ontology::registries::{sealed_physical_columns, v0_registries};
 
-/// `replica_change` is the retired per-app change log (#1014, R-1014-1). v0's
-/// rung ten DROPs it, so it is in the pre-migration corpus and in no registry.
-const RETIRED_IN_CORPUS: &[&str] = &["replica_change"];
+/// Tables the frozen corpus holds and no registry does. `replica_change` is the
+/// retired per-app change log (#1014, R-1014-1): v0's rung ten DROPs it. The
+/// twelve `tally_*` tables are Tally's, which rung fifteen DROPs with the app
+/// (#1099), so they are in the pre-migration corpus and in no registry.
+const RETIRED_IN_CORPUS: &[&str] = &[
+    "replica_change",
+    "tally_expense",
+    "tally_expense_line_allocation",
+    "tally_expense_line_item",
+    "tally_expense_payer",
+    "tally_expense_split",
+    "tally_friend",
+    "tally_group",
+    "tally_nudge",
+    "tally_obligation",
+    "tally_recurring_expense",
+    "tally_recurring_expense_split",
+    "tally_settlement",
+];
 
 /// Entity tables a rung ABOVE the corpus founds. The subject of this file is the
 /// frozen v0 corpus, so a table the v1 ladder added is in the registry and not
 /// in the file by construction; it is held at the ladder head instead, against a
-/// founded vault (`crates/vault/tests/chat_schema.rs`, rung eleven's chat).
-const ADDED_AFTER_THE_CORPUS: &[&str] = &["chat_thread"];
+/// founded vault (`crates/vault/tests/chat_schema.rs`, rung eleven's chat;
+/// `crates/vault/tests/money_schema.rs`, rung fourteen's `money_rule`).
+const ADDED_AFTER_THE_CORPUS: &[&str] = &["chat_thread", "money_rule"];
 
 fn golden_vault() -> (centraid_ontology::golden::InflatedGolden, Vault) {
     let golden = open_golden().expect("the corpus inflates");
@@ -191,7 +208,7 @@ fn every_ontology_entity_table_carries_its_membership_triggers() {
     }
     assert_eq!(findings.join("\n"), "");
     // Not a vacuous pass: the ontology packs are most of the model.
-    assert!(checked > 50, "only {checked} entity tables were checked");
+    assert!(checked > 40, "only {checked} entity tables were checked");
 }
 
 #[test]
@@ -337,6 +354,8 @@ fn every_replicated_mutable_entity_table_carries_row_version() {
 fn money_states_its_currency() {
     // "Money states its currency": `currency` on the three tally tables that
     // hold an amount, NOT NULL, so an amount without one is unrepresentable.
+    // The frozen corpus still holds them (rung fifteen drops them, #1099); the
+    // ladder head's money tables are held by `crates/vault/tests/money_schema.rs`.
     let (_golden, vault) = golden_vault();
     let findings: Vec<String> = ["tally_group", "tally_expense", "tally_settlement"]
         .into_iter()
@@ -401,7 +420,7 @@ fn every_trash_entity_carries_the_reversible_delete_pair() {
         })
         .collect();
     assert_eq!(findings.join("\n"), "");
-    assert_eq!(checked, 13, "the registry declares 13 trash entities");
+    assert_eq!(checked, 10, "the registry declares 10 trash entities");
 }
 
 #[test]

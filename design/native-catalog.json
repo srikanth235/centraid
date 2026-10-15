@@ -31,13 +31,6 @@
       "name": "Locker"
     },
     {
-      "colorKey": "indigo",
-      "desc": "Log expenses and see balances.",
-      "iconKey": "Receipt",
-      "id": "tally",
-      "name": "Tally"
-    },
-    {
       "colorKey": "ochre",
       "desc": "Capture the next thing to do.",
       "iconKey": "Check",
@@ -57,6 +50,13 @@
       "iconKey": "Calendar",
       "id": "agenda",
       "name": "Agenda"
+    },
+    {
+      "colorKey": "indigo",
+      "desc": "Spending, targets and cash flow.",
+      "iconKey": "Coin",
+      "id": "money",
+      "name": "Money"
     }
   ],
   "geometry": {
@@ -1125,11 +1125,6 @@
         "hue": "#8c4c61",
         "markColor": "#894a5f"
       },
-      "tally": {
-        "chipBackground": "#e9e8ee",
-        "hue": "#635a93",
-        "markColor": "#5f568d"
-      },
       "tasks": {
         "chipBackground": "#ede8e0",
         "hue": "#845922",
@@ -1144,6 +1139,11 @@
         "chipBackground": "#e4ebe4",
         "hue": "#397247",
         "markColor": "#346841"
+      },
+      "money": {
+        "chipBackground": "#e9e8ee",
+        "hue": "#635a93",
+        "markColor": "#5f568d"
       }
     },
     "dark": {
@@ -1167,11 +1167,6 @@
         "hue": "#d48da2",
         "markColor": "#d48da2"
       },
-      "tally": {
-        "chipBackground": "#2c2a37",
-        "hue": "#a39bda",
-        "markColor": "#a39bda"
-      },
       "tasks": {
         "chipBackground": "#332a1f",
         "hue": "#c99b65",
@@ -1186,6 +1181,11 @@
         "chipBackground": "#242f26",
         "hue": "#7bb587",
         "markColor": "#7bb587"
+      },
+      "money": {
+        "chipBackground": "#2c2a37",
+        "hue": "#a39bda",
+        "markColor": "#a39bda"
       }
     }
   }

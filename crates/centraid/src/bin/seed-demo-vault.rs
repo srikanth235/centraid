@@ -5,7 +5,7 @@
 //!
 //!   --file <name>   the file to write inside <dir>  (default demo-vault.sqlite3)
 //!   --name <text>   the vault's display name        (default "Demo vault")
-//!   --only <a,b,c>  seed only these apps            (default: all eight)
+//!   --only <a,b,c>  seed only these apps            (default: all seven)
 //!   --force         overwrite a file that is ALREADY a vault
 //! ```
 //!
@@ -13,13 +13,13 @@
 //! against two, and two vaults holding the same rows under the same name would
 //! prove nothing: a switch that quietly did not happen would look exactly like
 //! one that did. `--only` is what makes the difference VISIBLE on the
-//! springboard — a vault seeded `--only docs,tasks,agenda` draws People, Notes,
-//! Photos and Tally as genuinely empty, which is a state the grid already knows
+//! springboard — a vault seeded `--only docs,tasks,agenda` draws People, Notes
+//! and Photos as genuinely empty, which is a state the grid already knows
 //! how to say and does not have to invent.
 //!
-//! **One scenario across eight apps** — agenda, docs, locker, notes, people,
-//! photos, tally and tasks: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
-//! Chris, with notes, a packing list and an uneven expense ledger. A demo
+//! **One scenario across eight apps** — agenda, docs, locker, money, notes,
+//! people, photos and tasks: one weekend at Tahoe with Maya, Jake, Grandpa Ray and
+//! Chris, with notes and a packing list. A demo
 //! corpus is for reading like somebody's life rather than like
 //! `Item 1, Item 2`.
 //!
@@ -250,17 +250,10 @@ fn main() {
     let now = centraid_core::example::now_ms();
     let mut report = handle
         .with_vault(|vault| {
-            let founded = vault.found(&vault_name, "Owner")?;
+            vault.found(&vault_name, "Owner")?;
             let registry = Registry::with_system_commands()?;
             let principal = Principal::owner("demo-device");
-            centraid_core::example::seed(
-                vault,
-                &registry,
-                &principal,
-                &founded.owner_party_id,
-                &|app| wanted.has(app),
-                now,
-            )
+            centraid_core::example::seed(vault, &registry, &principal, &|app| wanted.has(app), now)
         })
         .expect("the scenario seeds");
     // LOCKER THROUGH THE SHELL'S DOOR, not `Vault::execute`: sealing is the
@@ -332,7 +325,7 @@ const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
     ("agenda", "core_event", "event_id", None),
     ("tasks", "schedule_task", "task_id", None),
     ("people", "people_profile", "profile_id", None),
-    ("tally", "tally_group", "group_id", None),
+    ("money", "core_transaction", "txn_id", None),
     (
         "locker",
         "locker_item",

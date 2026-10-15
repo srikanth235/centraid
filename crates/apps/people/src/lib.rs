@@ -11,18 +11,19 @@
 //!   (role, nickname, cadence, last-contacted, how-you-met, colour) and
 //!   everything else is somebody else's canonical row — interactions are
 //!   `core.activity`, tasks and gift ideas are `schedule.task`, relationships
-//!   are typed `core.link`s, IOUs are `tally.obligation`s, journal entries are
+//!   are typed `core.link`s, journal entries are
 //!   `knowledge.note`s, notes are `knowledge.annotation`s, lists and the
 //!   favourite star are SKOS concepts and tags. Revoke the grant and the app
 //!   goes dark.
 //! - **THE PERSON IS THE PARTY, NOT THE PROFILE.** `people_profile` is a 1:1
 //!   enrichment of a `core.party`; trashing a person trashes the profile and
 //!   **the canonical party survives** (`actions/trash-person.ts:3`).
-//! - **THREE READS DENY INDEPENDENTLY OF THE PROFILE** ([`ReadState`],
-//!   D-1020-PE1): the share plane, the linked-entity plane and Tally's
-//!   obligations each sit behind a scope over a *different schema*, and a
-//!   denial on one leaves the person on the screen. v0 catches one of the
-//!   three and blanks the sheet for the other two; see [`person`].
+//! - **THE LINKED READ DENIES INDEPENDENTLY OF THE PROFILE** ([`ReadState`],
+//!   D-1020-PE1): the linked-entity plane sits behind a scope over a *different
+//!   schema*, and a denial on it leaves the person on the screen. v0 caught
+//!   one of three reads (the share plane, the linked plane, Tally's obligations)
+//!   and blanked the sheet for the other two; the first left in rung five and
+//!   the third with Tally (#1099). See [`person`].
 //! - **MERGE IS THE ONTOLOGY PRIMITIVE, NEVER A LOCAL SOFT MERGE.**
 //!   `merge-people` invokes `core.merge_party`: every foreign key re-points,
 //!   the polymorphic pointers follow, the merged party is **deleted**, and a

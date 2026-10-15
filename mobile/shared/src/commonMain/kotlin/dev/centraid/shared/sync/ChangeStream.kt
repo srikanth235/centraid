@@ -25,8 +25,8 @@ import kotlinx.coroutines.launch
  *   tests over it, and until #1025 S5 nothing ever PUSHED a change into it.
  * * `dev.centraid.core.CentraidCore.startReader` runs the `next_event` loop and
  *   publishes [CentraidCore.events], and nothing in `mobile/shared` called it.
- * * `centraid.screen.v1.TallyListEvent.RowsChanged` has existed since #1020,
- *   and `TallyListMachine` already reduces it correctly — re-read the first
+ * * every list screen's `RowsChanged` event has existed since #1020,
+ *   and the list machines already reduce it correctly — re-read the first
  *   page, because a patched row in the wrong position is a list that disagrees
  *   with its own sort — and **no producer ever sent one.**
  *

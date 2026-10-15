@@ -15,8 +15,7 @@
 //! - the `picks:` line that says which rows an ordinal of the message counts to in the list
 //!   the block shows (`picks_line`);
 //! - the rows the `vault:` line adds to the ones the message names: the
-//!   container the message points at by its kind word (`container_hit`), the
-//!   person's own row, last and only when no one else is in play (`me_hit`),
+//!   container the message points at by its kind word (`container_hit`),
 //!   and the cut of a name more than `COPIES_SHOWN` rows share (`same_name`).
 //!
 //! The line never mints a number except in `number_containers`, which the turn
@@ -24,7 +23,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::native::meta::{Kind, LOOKUP_CAP, ROW_CAP, Via};
+use crate::native::meta::{Kind, LOOKUP_CAP, ROW_CAP};
 use crate::native::render;
 use crate::native::search::{can_name, fold, spellings_of};
 use crate::native::session::Session;
@@ -56,8 +55,6 @@ pub(crate) struct SetNote {
     pub text: String,
     /// The container the selector named, when it named one.
     pub container: Vec<Key>,
-    /// The rows are what the value is about (a balance): the line lists them.
-    pub list_rows: bool,
 }
 
 /// One result set of the focus line.
@@ -72,12 +69,12 @@ pub(crate) struct FocusSet {
 
 /// The containers each of `keys` sits in, in one pass over the edges: a list's
 /// tasks, a task's subtasks, a notebook's notes, a folder's documents, an
-/// album's photos. A group is not one (a person is in several).
+/// album's photos.
 fn containers_for(world: &World, keys: &[Key]) -> BTreeMap<Key, Vec<Key>> {
     let wanted: BTreeSet<&Key> = keys.iter().collect();
     let mut out: BTreeMap<Key, Vec<Key>> = BTreeMap::new();
     for edge in &world.edges {
-        if edge.via == Via::Membership || !wanted.contains(&edge.to) {
+        if !wanted.contains(&edge.to) {
             continue;
         }
         let Some(link) = edge.from.0.holds() else {
@@ -121,11 +118,7 @@ pub(crate) fn shared_container(world: &World, keys: &[Key]) -> Vec<Key> {
 pub(crate) fn named_containers(world: &World, linked: &[Key]) -> Vec<Key> {
     linked
         .iter()
-        .filter(|key| {
-            key.0 != Kind::Group
-                && key.0.spec().container
-                && world.row(key).is_some_and(|row| !row.trashed)
-        })
+        .filter(|key| key.0.spec().container && world.row(key).is_some_and(|row| !row.trashed))
         .cloned()
         .collect()
 }
@@ -133,7 +126,7 @@ pub(crate) fn named_containers(world: &World, linked: &[Key]) -> Vec<Key> {
 /// The value of an op, as the focus line says it inside its brackets
 /// (`SetNote::text`), the op word first so it cannot be read as a row set:
 /// `counted 10 documents`, `summed 300.00 EUR amount over 2 expenses`,
-/// `counted by status completed 1; open 4 over 5 tasks`, `balance 12.00 EUR`.
+/// `counted by status completed 1; open 4 over 5 tasks`.
 pub(crate) fn value_text(
     op: &str,
     field: Option<&str>,
@@ -153,7 +146,6 @@ pub(crate) fn value_text(
     };
     match (op, field, group) {
         ("count", _, None) => format!("{how} {over}"),
-        ("balance", ..) => format!("{how} {value}"),
         (_, Some(field), _) => format!("{how} {value} {field} over {over}"),
         _ => format!("{how} {value} over {over}"),
     }
@@ -228,7 +220,7 @@ fn container_text(session: &Session, container: &[Key]) -> Option<String> {
 /// after it under one `earlier:`, newest first: a set of rows as `@2: #30
 /// task "X"`, a count or value in brackets with its word first and its handle
 /// without a colon, so it is never read as rows: `@3 (counted 10 documents in
-/// #39 folder "Taxes")`, `@3 (balance 70.00 USD over #12 person "Ray Ochoa")`.
+/// #39 folder "Taxes")`, `@3 (counted 2 people over #12 person "Ray Ochoa")`.
 /// At most `FOCUS_ROWS` rows in all, newest sets first; a set that does not
 /// fit is cut with `+n more`.
 pub(crate) fn sets_parts(session: &Session) -> SetsParts {
@@ -250,7 +242,7 @@ pub(crate) fn sets_parts(session: &Session) -> SetsParts {
             .iter()
             .filter_map(|key| session.numbers.get(key).copied())
             .collect();
-        let lists_rows = set.note.as_ref().is_none_or(|note| note.list_rows);
+        let lists_rows = set.note.is_none();
         let take = if lists_rows {
             numbered.len().min(budget)
         } else {
@@ -284,12 +276,6 @@ pub(crate) fn sets_parts(session: &Session) -> SetsParts {
             }
             Some(note) => {
                 let mut part = format!("@{} ({}", set.handle, note.text);
-                if note.list_rows && !rows.is_empty() {
-                    part.push_str(&format!(" over {}", rows.join(", ")));
-                    if hidden > 0 {
-                        part.push_str(&format!(" +{hidden} more"));
-                    }
-                }
                 if let Some(container) = container {
                     part.push_str(&format!(" {container}"));
                 }
@@ -382,18 +368,6 @@ pub(crate) fn acted_part(session: &Session, named: &BTreeSet<usize>) -> Option<S
     Some(part)
 }
 
-/// The groups a person is in, by name.
-fn groups_of(world: &World, key: &Key) -> Vec<String> {
-    world
-        .neighbours(key)
-        .get(&Kind::Group)
-        .into_iter()
-        .flatten()
-        .filter_map(|group| world.row(group))
-        .map(|row| row.name.clone())
-        .collect()
-}
-
 fn text_field(world: &World, key: &Key, name: &str) -> Option<String> {
     match world.row(key)?.field(name)? {
         Val::Text(text) if !text.is_empty() => Some(text.clone()),
@@ -403,7 +377,7 @@ fn text_field(world: &World, key: &Key, name: &str) -> Option<String> {
 }
 
 /// What tells an option of an ask apart from the rows that share its name: a
-/// person's role, nickname and groups; an event's or task's date and
+/// person's role and nickname; an event's or task's date and
 /// container; a locker item's type and username; a note's, document's or
 /// photo's container.
 fn facets(world: &World, key: &Key) -> Vec<String> {
@@ -424,10 +398,6 @@ fn facets(world: &World, key: &Key) -> Vec<String> {
         Kind::Person => {
             out.extend(text_field(world, key, "role"));
             out.extend(text_field(world, key, "nickname"));
-            let groups = groups_of(world, key);
-            if !groups.is_empty() {
-                out.push(groups.join(", "));
-            }
         }
         Kind::Event => out.extend(row.date.map(|stamp| stamp.show())),
         Kind::Task => {
@@ -596,9 +566,9 @@ const COUNTS: [&str; 9] = [
 ];
 
 /// The nouns a pick may name its rows with: "the second task", "the last event".
-const ROW_NOUNS: [&str; 17] = [
+const ROW_NOUNS: [&str; 14] = [
     "task", "event", "person", "contact", "note", "document", "photo", "album", "folder", "list",
-    "notebook", "group", "debt", "expense", "item", "row", "entry",
+    "notebook", "item", "row", "entry",
 ];
 
 /// What follows a count that makes it a stretch of time and not rows: "the last two weeks".
@@ -711,7 +681,7 @@ fn pick_list(session: &Session) -> Option<(Vec<usize>, usize)> {
             .chain((0..sets.len()).filter(|i| Some(*i) != lead))
         {
             let set = &sets[index];
-            if set.note.as_ref().is_some_and(|note| !note.list_rows) {
+            if set.note.is_some() {
                 continue;
             }
             let numbered: Vec<usize> = set
@@ -803,85 +773,6 @@ pub(crate) fn container_hit(session: &Session, message: &str) -> Option<Key> {
         .into_iter()
         .flat_map(|set| set.container)
         .find(|key| key.0 == kind)
-}
-
-/// Whether the message says a pronoun for someone else (`with him`, `her balance`).
-pub(crate) fn says_a_pronoun_for_them(message: &str) -> bool {
-    const PRONOUNS: &[&str] = &[
-        "him", "her", "he", "she", "them", "they", "his", "hers", "their", "theirs",
-    ];
-    words_of(message)
-        .iter()
-        .any(|(folded, _)| PRONOUNS.contains(&folded.as_str()))
-}
-
-/// Whether the message or the conversation is about someone other than the
-/// person: a pronoun for them (`with him`, `her balance with me`), or a person
-/// in the focus sets, the options of the last ask or what was created.
-pub(crate) fn other_person_in_play(session: &Session, message: &str) -> bool {
-    let me = session.world.me_key();
-    let said = says_a_pronoun_for_them(message);
-    let numbered = |numbers: &[usize]| {
-        numbers
-            .iter()
-            .filter_map(|number| session.by_number.get(number.wrapping_sub(1)))
-            .any(|key| key.0 == Kind::Person && *key != me)
-    };
-    let asked = (session.last_ask.0 + 1 == session.turn) && numbered(&session.last_ask.1);
-    said || asked
-        || numbered(&session.created)
-        || focus_sets(session)
-            .iter()
-            .flat_map(|set| set.keys.iter())
-            .any(|key| key.0 == Kind::Person && *key != me)
-}
-
-/// The person's own row, when the message says my, me, I or mine with a
-/// balance, debt or group sense ("my balance", "what do i owe", "where do i
-/// stand") and no one else is in play (`other_person_in_play`; `other` is
-/// whether the message names a person): addressable as `linked_to: #n`. With a
-/// group named (`group_named`) the money words of a group alone are enough
-/// ("money-wise", "up or down", "fronted", "paid", "spent", "put in", "out of
-/// pocket"): a group's balance is the person's own. It goes last in the
-/// `vault:` line. With someone else in play it is left out, whole: "her
-/// balance with me" is about her, and the row was picked as the target.
-pub(crate) fn me_hit(
-    session: &Session,
-    message: &str,
-    other: bool,
-    group_named: bool,
-) -> Option<Key> {
-    const FIRST_PERSON: &[&str] = &["my", "me", "i", "mine", "myself"];
-    const SENSE: &[&str] = &[
-        "balance", "balances", "owe", "owes", "owed", "debt", "debts", "stand", "standing",
-        "position", "net", "tab", "group", "groups", "share",
-    ];
-    // what a group's money is called when no one says "my": single words, then word runs
-    const GROUP_MONEY: &[&str] = &["moneywise", "fronted", "front", "paid", "spent", "spend"];
-    const GROUP_MONEY_RUNS: &[&[&str]] = &[
-        &["money", "wise"],
-        &["up", "or", "down"],
-        &["put", "in"],
-        &["out", "of", "pocket"],
-    ];
-    let words: Vec<String> = words_of(message)
-        .into_iter()
-        .map(|(folded, _)| folded)
-        .collect();
-    let said = |list: &[&str]| words.iter().any(|word| list.contains(&word.as_str()));
-    let said_run = |run: &[&str]| {
-        words
-            .windows(run.len())
-            .any(|window| window.iter().zip(run).all(|(word, want)| word == want))
-    };
-    let money =
-        group_named && (said(GROUP_MONEY) || GROUP_MONEY_RUNS.iter().any(|run| said_run(run)));
-    let key = session.world.me_key();
-    (((said(FIRST_PERSON) && said(SENSE)) || money)
-        && !other
-        && !other_person_in_play(session, message)
-        && session.world.row(&key).is_some_and(|r| !r.trashed))
-    .then_some(key)
 }
 
 /// Rows the conversation has touched: the rows of the focus sets, the options

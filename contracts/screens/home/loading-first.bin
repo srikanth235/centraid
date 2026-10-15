@@ -1,17 +1,15 @@
-"¡'
+"ó'
 photos(0:Import your first photo%
 docs(0:Add your first document$
 notes(0:Write your first note+
 agenda(:Put something on the calendar)
 tasks(:Capture the next thing to do"
-people(:Add someone you know#
-tally(:Log your first expense&
+people(:Add someone you know&
 locker(:Unlock to see your items*Not backed up yet :
 photos:
 docs:
 notes:
 agenda
-tasks:
+tasks:
 people
-tally:
 locker

@@ -16,8 +16,7 @@
 //!   SERIES-LOCAL WALL CLOCK, never the resolved instant. Keying on the
 //!   instant is drift ONT-25 — a skip written by
 //!   `schedule.edit_event_occurrence` matched no occurrence at all and the
-//!   skipped day came back, on the web agenda, on the phone and on Tally's
-//!   template dashboard, silently, all three.
+//!   skipped day came back, on the web agenda and on the phone, silently.
 //! - **A BARE DATE IS A WHOLE DAY, NOT A MIDNIGHT** (#1090). A task whose
 //!   anchor is `2026-03-01` recurs on civil days: its occurrences are dates,
 //!   the same in every zone, and [`next_occurrence`] / [`collapse_missed`]

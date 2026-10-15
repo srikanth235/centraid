@@ -8,11 +8,11 @@
 //! (`contracts/tools/export-native-theme.ts`, D-1020-E6).
 //!
 //! This crate is the Rust half of that same lowering, and it exists for a
-//! blocked parity comparison: `contracts/apps/tally/queries.json` carries a
-//! party's `color` from `partyHueValue(partyHueKey(id))`, its `initials` from
-//! `identityInitials` and a figure's tone from `figureTone`, so the 29 Tally
-//! cases could be committed and not compared (wave 2 lane D3's receipt,
-//! D-1020-D3-9).
+//! blocked parity comparison: a parity fixture carries a party's `color` from
+//! `partyHueValue(partyHueKey(id))`, its `initials` from `identityInitials`
+//! and a figure's tone from `figureTone`, so the Tally cases could be committed
+//! and not compared (wave 2 lane D3's receipt, D-1020-D3-9; the Tally fixture
+//! left with the app, #1099).
 //!
 //! ## What keeps it honest (#1020, D-1020-T1)
 //!
@@ -134,7 +134,7 @@ pub fn party_hue_key(party_id: &str, avatar_color: Option<&str>) -> Option<&'sta
 
 /// The colour a party is painted, for the common call: no stored colour.
 ///
-/// This is the shape every Tally surface uses —
+/// This is the shape every surface that paints a party uses —
 /// `partyHueValue(partyHueKey(pid)!)` — spelled once so no caller repeats the
 /// non-null assertion v0 spells at each site.
 #[must_use]

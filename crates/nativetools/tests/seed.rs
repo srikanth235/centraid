@@ -55,7 +55,7 @@ fn the_same_world_seeds_the_same_vault() {
     let second = common::seeded();
     assert_eq!(first.keys, second.keys, "the same ids for the same keys");
     let (a, b) = (dump(first.path()), dump(second.path()));
-    assert!(a.lines().count() > 40, "{a}");
+    assert!(a.lines().count() > 30, "{a}");
     assert_eq!(a, b);
 }
 

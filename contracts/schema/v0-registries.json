@@ -10,10 +10,10 @@
     "knowledge",
     "locker",
     "media",
+    "money",
     "people",
     "schedule",
-    "social",
-    "tally"
+    "social"
   ],
   "machineryBands": [
     "access",
@@ -969,6 +969,54 @@
       "deletionRoles": []
     },
     {
+      "logical": "money.account",
+      "table": "money_account",
+      "label": "Money accounts",
+      "lifecycle": "mutable",
+      "projectionOf": "core.account",
+      "deletionRoles": []
+    },
+    {
+      "logical": "money.balance_checkpoint",
+      "table": "money_balance_checkpoint",
+      "label": "Stated balances",
+      "lifecycle": "mutable",
+      "projectionOf": "core.account",
+      "deletionRoles": []
+    },
+    {
+      "logical": "money.import_profile",
+      "table": "money_import_profile",
+      "label": "Statement layouts",
+      "lifecycle": "mutable",
+      "projectionOf": "core.account",
+      "deletionRoles": []
+    },
+    {
+      "logical": "money.rule",
+      "table": "money_rule",
+      "label": "Money rules",
+      "lifecycle": "mutable",
+      "projectionOf": null,
+      "deletionRoles": []
+    },
+    {
+      "logical": "money.target",
+      "table": "money_target",
+      "label": "Category plans",
+      "lifecycle": "mutable",
+      "projectionOf": "core.concept",
+      "deletionRoles": []
+    },
+    {
+      "logical": "money.transaction",
+      "table": "money_transaction",
+      "label": "Money transactions",
+      "lifecycle": "mutable",
+      "projectionOf": "core.transaction",
+      "deletionRoles": []
+    },
+    {
       "logical": "notifications.notice",
       "table": "notifications_notice",
       "label": "Notices",
@@ -1342,172 +1390,6 @@
       "lifecycle": "machinery",
       "projectionOf": null,
       "deletionRoles": []
-    },
-    {
-      "logical": "tally.expense",
-      "table": "tally_expense",
-      "label": "Expenses",
-      "lifecycle": "trash",
-      "projectionOf": null,
-      "deletionRoles": [
-        {
-          "column": "paid_by",
-          "parent": "core_party",
-          "role": "durable-record"
-        }
-      ]
-    },
-    {
-      "logical": "tally.expense_line_allocation",
-      "table": "tally_expense_line_allocation",
-      "label": "Line shares",
-      "lifecycle": "mutable",
-      "projectionOf": "tally.expense_line_item",
-      "deletionRoles": [
-        {
-          "column": "party_id",
-          "parent": "core_party",
-          "role": "durable-record"
-        }
-      ]
-    },
-    {
-      "logical": "tally.expense_line_item",
-      "table": "tally_expense_line_item",
-      "label": "Receipt lines",
-      "lifecycle": "mutable",
-      "projectionOf": null,
-      "deletionRoles": []
-    },
-    {
-      "logical": "tally.expense_payer",
-      "table": "tally_expense_payer",
-      "label": "Expense payers",
-      "lifecycle": "mutable",
-      "projectionOf": "tally.expense",
-      "deletionRoles": [
-        {
-          "column": "party_id",
-          "parent": "core_party",
-          "role": "durable-record"
-        }
-      ]
-    },
-    {
-      "logical": "tally.expense_split",
-      "table": "tally_expense_split",
-      "label": "Expense splits",
-      "lifecycle": "mutable",
-      "projectionOf": "tally.expense",
-      "deletionRoles": [
-        {
-          "column": "party_id",
-          "parent": "core_party",
-          "role": "durable-record"
-        }
-      ]
-    },
-    {
-      "logical": "tally.friend",
-      "table": "tally_friend",
-      "label": "Friends",
-      "lifecycle": "mutable",
-      "projectionOf": null,
-      "deletionRoles": [
-        {
-          "column": "party_id",
-          "parent": "core_party",
-          "role": "participation"
-        }
-      ]
-    },
-    {
-      "logical": "tally.group",
-      "table": "tally_group",
-      "label": "Groups",
-      "lifecycle": "mutable",
-      "projectionOf": null,
-      "deletionRoles": []
-    },
-    {
-      "logical": "tally.nudge",
-      "table": "tally_nudge",
-      "label": "Prepared reminders",
-      "lifecycle": "mutable",
-      "projectionOf": null,
-      "deletionRoles": [
-        {
-          "column": "party_id",
-          "parent": "core_party",
-          "role": "durable-record"
-        }
-      ]
-    },
-    {
-      "logical": "tally.obligation",
-      "table": "tally_obligation",
-      "label": "Obligations",
-      "lifecycle": "trash",
-      "projectionOf": null,
-      "deletionRoles": [
-        {
-          "column": "from_party",
-          "parent": "core_party",
-          "role": "durable-record"
-        },
-        {
-          "column": "to_party",
-          "parent": "core_party",
-          "role": "durable-record"
-        }
-      ]
-    },
-    {
-      "logical": "tally.recurring_expense",
-      "table": "tally_recurring_expense",
-      "label": "Recurring expenses",
-      "lifecycle": "mutable",
-      "projectionOf": null,
-      "deletionRoles": [
-        {
-          "column": "paid_by",
-          "parent": "core_party",
-          "role": "durable-record"
-        }
-      ]
-    },
-    {
-      "logical": "tally.recurring_expense_split",
-      "table": "tally_recurring_expense_split",
-      "label": "Recurring splits",
-      "lifecycle": "mutable",
-      "projectionOf": "tally.recurring_expense",
-      "deletionRoles": [
-        {
-          "column": "party_id",
-          "parent": "core_party",
-          "role": "durable-record"
-        }
-      ]
-    },
-    {
-      "logical": "tally.settlement",
-      "table": "tally_settlement",
-      "label": "Settlements",
-      "lifecycle": "trash",
-      "projectionOf": null,
-      "deletionRoles": [
-        {
-          "column": "from_party",
-          "parent": "core_party",
-          "role": "durable-record"
-        },
-        {
-          "column": "to_party",
-          "parent": "core_party",
-          "role": "durable-record"
-        }
-      ]
     }
   ],
   "contentReferences": [
@@ -1673,18 +1555,6 @@
     "sync_external_entity",
     "sync_import_batch",
     "sync_import_row",
-    "tally_expense",
-    "tally_expense_line_allocation",
-    "tally_expense_line_item",
-    "tally_expense_payer",
-    "tally_expense_split",
-    "tally_friend",
-    "tally_group",
-    "tally_nudge",
-    "tally_obligation",
-    "tally_recurring_expense",
-    "tally_recurring_expense_split",
-    "tally_settlement",
     "turns"
   ],
   "replicaConstants": {

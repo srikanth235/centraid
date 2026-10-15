@@ -222,7 +222,7 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
                 // A CONTAINER (#1097) IS A HIT OF ITS APP'S GROUP, drawn before that app's rows;
                 // `SearchContainers` says which hits are one and how each opens.
                 val (containers, rows) = hits
-                    .map { hit -> SearchContainers.of(hit.entity, hit.id, hit.app_id, hit.title, hit.open_id) to hit }
+                    .map { hit -> SearchContainers.of(hit.entity, hit.id, hit.app_id, hit.title) to hit }
                     .partition { (container, _) -> container != null }
                 val count = hits.size
                 HomeSearchGroup(
@@ -259,7 +259,6 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         "core.party" -> SharedCopy.SEARCH_KIND_PERSON
         "core.event" -> SharedCopy.SEARCH_KIND_EVENT
         "schedule.task" -> SharedCopy.SEARCH_KIND_TASK
-        "tally.expense" -> SharedCopy.SEARCH_KIND_EXPENSE
         "core.content_item", "media.asset" -> SharedCopy.SEARCH_KIND_PHOTO
         "core.document" -> SharedCopy.SEARCH_KIND_DOCUMENT
         CHAT_THREAD -> SharedCopy.SEARCH_KIND_CHAT
@@ -276,7 +275,6 @@ public object HomeSearchMachine : ScreenMachine<HomeSearchState, HomeSearchEvent
         "core.party" -> "person"
         "core.event" -> "event"
         "schedule.task" -> "task"
-        "tally.expense" -> "expense"
         "core.content_item", "media.asset" -> "photo"
         "core.document" -> "document"
         CHAT_THREAD -> CHAT_THREAD_NOUN

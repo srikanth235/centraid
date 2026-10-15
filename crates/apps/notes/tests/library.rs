@@ -462,7 +462,7 @@ fn a_cyclic_revision_chain_is_refused_rather_than_truncated() {
 /// note column is the one that answers — and the other six answering NOTHING is
 /// what proves each probe is isolated rather than one query over a union.
 #[test]
-fn the_powerbox_probes_seven_domains_and_a_locker_secret_is_not_among_them() {
+fn the_powerbox_probes_six_domains_and_a_locker_secret_is_not_among_them() {
     let connection = vault();
     let door = TestDoor::new(&connection);
     let search = SqliteDoor::open(&connection).expect("the FTS door opens");
@@ -479,7 +479,7 @@ fn the_powerbox_probes_seven_domains_and_a_locker_secret_is_not_among_them() {
         );
         assert!(!target.subtitle.is_empty(), "a subtitle is never empty");
     }
-    assert_eq!(centraid_search::DOMAINS.len(), 7);
+    assert_eq!(centraid_search::DOMAINS.len(), 6);
     assert!(centraid_search::domain_of("locker.item").is_none());
 
     // An empty term short-circuits before any probe runs.

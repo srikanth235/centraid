@@ -1,0 +1,4 @@
+"Account Type","Account Number","Transaction Date","Cheque Number","Description 1","Description 2","CAD$","USD$"
+Chequing,12345-1234567,1/5/2024,,"LOBLAWS #1234","TORONTO ON",-54.20,
+Chequing,12345-1234567,1/22/2024,,"PAYROLL","ACME LTD",1800.00,
+Chequing,12345-1234567,1/23/2024,101,"Cheque 101",,-300.00,

@@ -10,18 +10,16 @@
 //! media asset in Photos, so its asset is read here, by content id, and a
 //! photo whose asset is gone or trashed is dropped; a person is a `core.party`
 //! in the index and a live `people_profile` in People, so a party with no live
-//! profile (a Tally friend, a trashed person) is dropped too.
+//! profile (a bare party, a trashed person) is dropped too.
 //!
 //! **THE NAMED ARE HITS TOO** (#1097, R-1097-19..24): one more probe per named
 //! index ([`centraid_search::NAMED`]) — a notebook or an album, a project, a
-//! Tally group, a Docs folder, and a chat thread (entity `chat.thread`, app
+//! Docs folder, and a chat thread (entity `chat.thread`, app
 //! `chat`, found by its title and by what the member said) — appended after the
-//! domains' rows, each with the app it opens in and, where the app opens it by
-//! another key (a Tally group is a circle in the index and a `tally_group` in
-//! Tally), that key as `open_id`. They are not domains: the Notes powerbox above
+//! domains' rows, each with the app it opens in; every one opens by its `id`. They are not domains: the Notes powerbox above
 //! does not see them. A shell with no Chat tab draws no `chat` row.
 //!
-//! **A TYPO IS CORRECTED ACROSS THE SEVEN DOMAINS AND THE NAMED KINDS** (#1097,
+//! **A TYPO IS CORRECTED ACROSS THE SIX DOMAINS AND THE NAMED KINDS** (#1097,
 //! R4, R8), only when the whole answer, rows and containers, is empty, and the
 //! answer says so in `corrected`.
 
@@ -53,7 +51,7 @@ const OPENABLE: FanOutBound = FanOutBound::new(64, 1);
 
 /// What a Home answer is made of: the hits that open something, the media
 /// asset each photo opens by, and the containers that matched.
-type Opened = (Vec<Target>, BTreeMap<String, String>, Vec<named::Opened>);
+type Opened = (Vec<Target>, BTreeMap<String, String>, Vec<Target>);
 
 pub(super) fn search(
     vault: &Vault,
@@ -63,7 +61,7 @@ pub(super) fn search(
     // ISOLATED PER DOMAIN, as the powerbox is (`notes::link_targets`): the
     // plain FTS door, so one domain's refusal drops its rows and not the answer.
     //
-    // THE CORRECTION SPANS THE SEVEN DOMAINS AND THE NAMED KINDS (#1097, R4, R8,
+    // THE CORRECTION SPANS THE SIX DOMAINS AND THE NAMED KINDS (#1097, R4, R8,
     // R-1097-19..21) and runs only when the whole answer, after the rows that
     // cannot be opened are dropped, is empty; the vocabulary it reads is every
     // domain's and every container index's.
@@ -105,7 +103,7 @@ pub(super) fn search(
                         })
                         .collect();
                     // ISOLATED PER NAMED INDEX, like the domains above.
-                    let found = named::of_all(door, &index, term)?;
+                    let found = named::of_all(&index, term);
                     Ok(((targets, assets, found), None))
                 },
             )
@@ -135,14 +133,14 @@ pub(super) fn search(
                     }
                 })
                 .chain(found.into_iter().map(|container| wire::VaultSearchHit {
-                    subtitle_local_day: subtitle_day(zone.as_ref(), &container.target.subtitle),
-                    entity: container.target.entity,
-                    id: container.target.id,
-                    title: container.target.title,
-                    subtitle: container.target.subtitle,
-                    app_id: container.target.app_id,
-                    snippet: container.target.snippet,
-                    open_id: container.open_id,
+                    subtitle_local_day: subtitle_day(zone.as_ref(), &container.subtitle),
+                    entity: container.entity,
+                    id: container.id,
+                    title: container.title,
+                    subtitle: container.subtitle,
+                    app_id: container.app_id,
+                    snippet: container.snippet,
+                    open_id: String::new(),
                 }))
                 .collect(),
         })
@@ -183,7 +181,7 @@ fn photo_assets(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeMap<S
 
 /// The party hits that have a LIVE People profile: the ones People can show.
 ///
-/// `core.party` is every party in the vault — a Tally friend, a trashed person
+/// `core.party` is every party in the vault — a bare party, a trashed person
 /// — and only a live `people_profile` makes one a person in People, whose own
 /// search drops the rest (`people_profile.deleted_at IS NULL`). A Home row opens
 /// People at that person, so one that cannot be shown is not a hit.
@@ -360,7 +358,7 @@ mod tests {
         );
     }
 
-    /// THE CORRECTION SPANS THE SEVEN DOMAINS AND THE NAMED KINDS (#1097, R4, R8): a slip in a word
+    /// THE CORRECTION SPANS THE SIX DOMAINS AND THE NAMED KINDS (#1097, R4, R8): a slip in a word
     /// two apps hold finds both, once, and says what it searched; an exact term
     /// is untouched.
     #[test]
@@ -389,7 +387,7 @@ mod tests {
     }
 
     /// A HOME ROW OPENS A PERSON PEOPLE CAN SHOW (#1097): a `core.party` with no
-    /// live People profile — a Tally friend, a trashed person — is in the index
+    /// live People profile — a bare party, a trashed person — is in the index
     /// and is not a hit.
     #[test]
     fn a_party_with_no_live_profile_is_no_home_hit() {
@@ -413,8 +411,8 @@ mod tests {
             serde_json::json!({ "party_id": gone }),
         );
         let friend = scratch.run(
-            "tally.add_friend",
-            serde_json::json!({ "name": "Zelda Friend" }),
+            "core.add_party",
+            serde_json::json!({ "display_name": "Zelda Friend" }),
         )["party_id"]
             .as_str()
             .expect("a party id")
@@ -430,7 +428,7 @@ mod tests {
         };
         assert_eq!(parties("zelda"), std::slice::from_ref(&person));
         assert!(!parties("zelda").contains(&gone) && !parties("zelda").contains(&friend));
-        // The answer is judged after the drop: a term only a Tally friend holds
+        // The answer is judged after the drop: a term only a bare party holds
         // is an empty answer, and it is corrected like any other.
         assert!(parties("zelda friend").is_empty());
         let slipped = scratch.search("zleda");
@@ -539,8 +537,8 @@ mod tests {
     }
 
     /// EVERY CONTAINER IS A HOME HIT (#1097, R-1097-19..21), each with the app it
-    /// opens in: a notebook (Notes), an album (Photos), a project (Tasks), a
-    /// Tally group (opened by its GROUP id, not the circle's) and a Docs folder.
+    /// opens in: a notebook (Notes), an album (Photos), a project (Tasks) and a
+    /// Docs folder.
     #[test]
     fn every_container_is_a_home_hit_with_its_app_and_open_id() {
         let scratch = Scratch::founded();
@@ -568,19 +566,6 @@ mod tests {
             ),
             "project_id",
         );
-        let ana = id(
-            scratch.run("tally.add_friend", serde_json::json!({ "name": "Ana" })),
-            "party_id",
-        );
-        let group = id(
-            scratch.run(
-                "tally.create_group",
-                serde_json::json!({
-                    "name": "Heron house", "icon": "x", "currency": "GBP", "member_ids": [ana]
-                }),
-            ),
-            "group_id",
-        );
         let folder = id(
             scratch.run(
                 "core.create_folder",
@@ -599,26 +584,22 @@ mod tests {
                 )
             })
             .collect();
-        assert_eq!(hits.len(), 5, "{hits:?}");
+        assert_eq!(hits.len(), 4, "{hits:?}");
         assert_eq!(hits[&("notes", "core.collection")], (notebook.as_str(), ""));
         assert_eq!(hits[&("photos", "core.collection")], (album.as_str(), ""));
         assert_eq!(hits[&("tasks", "schedule.project")], (project.as_str(), ""));
         assert_eq!(hits[&("docs", "core.concept")], (folder.as_str(), ""));
-        let (circle, opens_by) = hits[&("tally", "social.circle")];
-        assert_ne!(circle, group, "the index row is the circle");
-        assert_eq!(opens_by, group, "Tally opens a group by its group id");
         // Titles are the names; a container's subtitle is its app.
         let titled: BTreeSet<&str> = found.hits.iter().map(|hit| hit.title.as_str()).collect();
-        assert!(titled.contains("Heron notes") && titled.contains("Heron house"));
+        assert!(titled.contains("Heron notes") && titled.contains("Heron hide"));
         assert!(found.hits.iter().all(|hit| hit.subtitle == hit.app_id));
         assert!(found.corrected.is_empty());
     }
 
     /// A CONTAINER THAT IS GONE IS NOT FOUND: a deleted notebook, a deleted album,
-    /// an archived group (and found again when un-archived), a deleted group, a
-    /// deleted folder.
+    /// a deleted folder.
     #[test]
-    fn a_deleted_or_archived_container_is_no_home_hit() {
+    fn a_deleted_container_is_no_home_hit() {
         let scratch = Scratch::founded();
         let id = |output: serde_json::Value, key: &str| -> String {
             output[key].as_str().expect("an id").to_owned()
@@ -637,19 +618,6 @@ mod tests {
             ),
             "album_id",
         );
-        let ana = id(
-            scratch.run("tally.add_friend", serde_json::json!({ "name": "Ana" })),
-            "party_id",
-        );
-        let group = id(
-            scratch.run(
-                "tally.create_group",
-                serde_json::json!({
-                    "name": "Ibis house", "icon": "x", "currency": "GBP", "member_ids": [ana]
-                }),
-            ),
-            "group_id",
-        );
         let folder = id(
             scratch.run(
                 "core.create_folder",
@@ -657,31 +625,7 @@ mod tests {
             ),
             "folder_id",
         );
-        assert_eq!(scratch.search("ibis").hits.len(), 4);
-        scratch.run(
-            "tally.archive_group",
-            serde_json::json!({ "group_id": group }),
-        );
-        let after_archive: Vec<String> = scratch
-            .search("ibis")
-            .hits
-            .into_iter()
-            .map(|hit| hit.entity)
-            .collect();
-        assert!(
-            !after_archive.contains(&"social.circle".to_owned()),
-            "{after_archive:?}"
-        );
-        assert_eq!(after_archive.len(), 3);
-        scratch.run(
-            "tally.archive_group",
-            serde_json::json!({ "group_id": group, "archived": false }),
-        );
-        assert_eq!(scratch.search("ibis").hits.len(), 4);
-        scratch.run(
-            "tally.delete_group",
-            serde_json::json!({ "group_id": group }),
-        );
+        assert_eq!(scratch.search("ibis").hits.len(), 3);
         scratch.run(
             "knowledge.delete_notebook",
             serde_json::json!({ "notebook_id": notebook }),

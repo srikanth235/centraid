@@ -1,0 +1,27 @@
+# A DENIED MONEY IS THE GATE: no band, no chips, and not a failure.
+seat {
+  availability: AVAILABILITY_READY
+  durability: DURABILITY_AUTHORITATIVE
+  connectivity: CONNECTIVITY_ONLINE_UNMETERED
+}
+destination: DESTINATION_SPENDING
+denied { title: "Money is off" body: "Money can’t read this vault." receipt: "Reading accounts and transactions" }
+sheet: SHEET_NONE
+chrome {
+  title: "Money"
+  add_label: "Import statement"
+  retry: "Try again"
+  more_title: "More"
+  more_rows { key: "accounts" label: "Accounts" meta: "Balances and statement checks" icon_key: "Table" }
+  more_rows { key: "rules" label: "Rules" meta: "Name and file rows" icon_key: "Filter" }
+  more_rows { key: "categories" label: "Categories" meta: "Groups and categories" icon_key: "Tag" }
+  more_rows { key: "import" label: "Import statement" meta: "CSV, OFX or QFX" icon_key: "Download" }
+  search_placeholder: "Search transactions"
+  previous_month_label: "Previous month"
+  next_month_label: "Next month"
+  month_sheet_title: "Month"
+  account_sheet_title: "Account"
+  category_sheet_title: "Category"
+  close_label: "Close"
+}
+activity_shown: 50

@@ -29,10 +29,10 @@
 //!   library's own trash shelf reads it. Reproduced here for parity and filed
 //!   as a finding: a link to a note a member deleted draws as if it were still
 //!   there.
-//! * An **uncurated** entity — one with no card projection, `tally.expense`
-//!   among them — answers existence and status only, with a null title. A
-//!   powerbox that offers expenses as link targets therefore draws them
-//!   titleless once linked. Also a finding, not a fix inside this lane.
+//! * An **uncurated** entity — one with no card projection — answers existence
+//!   and status only, with a null title. There is none today: `tally.expense`,
+//!   the one v0 had, left with Tally (#1099), and the machinery stays for the
+//!   next entity a powerbox offers before it has a card.
 
 use std::collections::BTreeMap;
 
@@ -238,9 +238,9 @@ pub fn carded_entities() -> Vec<&'static str> {
 /// An UNCURATED entity, by the physical table its logical name underscores.
 ///
 /// v0 asks the registry for the physical name and the pk; the port carries the
-/// two it can actually be asked for. `tally.expense` is the live one — the
-/// powerbox offers expenses as link targets and they have no card projection.
-const UNCURATED: &[(&str, &str, &str)] = &[("tally.expense", "tally_expense", "expense_id")];
+/// ones it can actually be asked for. None today: the one v0 had,
+/// `tally.expense`, left with Tally (#1099).
+const UNCURATED: &[(&str, &str, &str)] = &[];
 
 impl CardDoor for OwnerCards<'_> {
     fn resolve(&self, refs: &[Ref]) -> KitResult<Vec<RefCard>> {
@@ -717,12 +717,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_carded_entities_are_v0s_eleven_and_an_expense_is_not_one() {
+    fn the_carded_entities_are_v0s_eleven_and_none_is_uncurated() {
         assert_eq!(carded_entities().len(), 11);
-        assert!(!carded_entities().contains(&"tally.expense"));
-        // …and it is still a KNOWN type, so a missing expense is a tombstone
-        // rather than a bad type.
-        assert!(known("tally.expense"));
+        // Tally's expense was the one uncurated type; it left with Tally (#1099),
+        // so it is an unknown type now, as a secret is.
+        assert!(!known("tally.expense"));
+        assert!(known("knowledge.note"));
         assert!(!known("locker.item"));
     }
 

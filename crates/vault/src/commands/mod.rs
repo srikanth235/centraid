@@ -57,10 +57,10 @@ mod event_time;
 pub mod knowledge;
 pub mod locker;
 pub mod media;
+pub mod money;
 pub mod people;
 pub mod schedule;
 pub mod social;
-pub mod tally;
 
 use std::collections::BTreeMap;
 
@@ -301,6 +301,9 @@ impl Registry {
         for definition in media::definitions() {
             registry.register(definition)?;
         }
+        for definition in money::definitions() {
+            registry.register(definition)?;
+        }
         for definition in people::definitions() {
             registry.register(definition)?;
         }
@@ -308,9 +311,6 @@ impl Registry {
             registry.register(definition)?;
         }
         for definition in social::definitions() {
-            registry.register(definition)?;
-        }
-        for definition in tally::definitions() {
             registry.register(definition)?;
         }
         Ok(registry)

@@ -343,7 +343,7 @@ fn the_last_one_is_the_latest_past_one() {
 fn biggest_with_a_number_field_is_a_value() {
     // off by default (the train references read "biggest" as rows); on when the switch is set
     let world = seeded();
-    let args = json!({"kind": "debt", "order": "amount desc", "limit": 1});
+    let args = json!({"kind": "task", "order": "effort desc", "limit": 1});
     let off = answer_in_turn(&world, "which is the biggest", args.clone());
     assert!(off["effect"]["value"].is_null(), "{off}");
     let on = || Flags {
@@ -357,7 +357,7 @@ fn biggest_with_a_number_field_is_a_value() {
     session.user("which is the biggest");
     let reply = call(&mut session, "answer", args.clone());
     assert_eq!(reply["effect"]["value"]["op"], "max", "{reply}");
-    assert!(said(&reply).contains("25.50"), "{reply}");
+    assert!(said(&reply).contains("30"), "{reply}");
     // "most" is not named even with the switch on
     let mut session = world.session_with(common::TODAY, on());
     session.user("which is the most");
@@ -470,7 +470,7 @@ fn every_error_family_has_an_example_that_produces_it_or_says_why_not() {
             ),
         }
     }
-    assert!(with_example >= 125, "{with_example} examples");
+    assert!(with_example >= 116, "{with_example} examples");
 }
 
 #[test]
@@ -484,8 +484,6 @@ fn the_families_the_data_is_built_from_are_all_there() {
         "session.no_kind_part_kinds_x",
         "act.no_verb_verb_text_verbs_x",
         // cardinality
-        "values.balance_needs_one_x_the_selection",
-        "values.balance_is_for_one_x_the",
         "act.act_needs_rows_n_or_a",
         // applicability
         "act.x_does_not_apply_to_x",
@@ -677,7 +675,7 @@ fn ten_slot_sets_compile_to_the_calls_the_reference_run_makes() {
             json!({"tool": "ask", "args": {"question": "which Neha?", "options": people}}),
         )
     });
-    // 10. a lookup, a link by pick, and a balance
+    // 10. a lookup and a link by pick
     compiles_to(|_| {
         (
             "find the dal note".into(),
@@ -687,17 +685,10 @@ fn ten_slot_sets_compile_to_the_calls_the_reference_run_makes() {
     });
     compiles_to(|_| {
         (
-            "what does ray owe".into(),
-            json!({"intent": "count", "op": "balance", "kind": "person", "name": "Ray"}),
-            json!({"tool": "answer", "args": {"op": "balance", "kind": "person", "name": "Ray"}}),
-        )
-    });
-    compiles_to(|_| {
-        (
             "what is in the home list".into(),
-            json!({"intent": "read", "kind": "task", "linked_to": [{"pick": {"row": "#8"}}],
+            json!({"intent": "read", "kind": "task", "linked_to": [{"pick": {"row": "#6"}}],
                    "where": [{"field": "effort", "op": "<=", "value": 60}]}),
-            json!({"tool": "answer", "args": {"kind": "task", "linked_to": ["#8"], "where": "effort <= 60"}}),
+            json!({"tool": "answer", "args": {"kind": "task", "linked_to": ["#6"], "where": "effort <= 60"}}),
         )
     });
 }
@@ -754,7 +745,7 @@ fn a_slot_that_does_not_compile_is_refused_with_its_name() {
         &world,
         "tick off the rent",
         json!({"intent": "write", "verb": "complete",
-               "pick": [{"row": "#8", "verdict": "no"}, {"row": "#40", "verdict": "ok"}]}),
+               "pick": [{"row": "#6", "verdict": "no"}, {"row": "#40", "verdict": "ok"}]}),
     );
     assert_eq!(why["slot"], "pick[1]", "{why}");
     assert!(
@@ -765,7 +756,7 @@ fn a_slot_that_does_not_compile_is_refused_with_its_name() {
     let why = refused(
         &world,
         "",
-        json!({"intent": "read", "kind": "task", "linked_to": ["#8", "#77"]}),
+        json!({"intent": "read", "kind": "task", "linked_to": ["#6", "#77"]}),
     );
     assert_eq!(why["slot"], "linked_to[1]", "{why}");
     // a result that was never issued

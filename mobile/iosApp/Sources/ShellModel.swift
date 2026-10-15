@@ -48,7 +48,7 @@ final class ShellModel: ObservableObject {
     enum Route: Hashable {
         /// A REGISTERED SCREEN, by its machine's `SCREEN_ID`, with its
         /// parameter as bytes (K5). Every app registered through
-        /// `AppRegistry` routes here — Tally, Notes and Agenda today, and each
+        /// `AppRegistry` routes here — Notes and Agenda today, and each
         /// port after them — so a new app adds no case to this enum, no branch
         /// to `CentraidApp`'s destination switch and none to `opened`.
         case screen(String, Data)
@@ -103,7 +103,7 @@ final class ShellModel: ObservableObject {
 
     /// The app the member last had open and has not yet carried into Chat. The
     /// next time the tab opens on an empty thread it is the scope, so asking
-    /// "what did we spend" right after Tally is about Tally. The member clears
+    /// "what is due" right after Tasks is about Tasks. The member clears
     /// it with the chip.
     private var lastVisitedApp = ""
     /// The scope the chat is in now. Kept so a tab switch re-opens the same

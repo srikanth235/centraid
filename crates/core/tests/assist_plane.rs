@@ -127,8 +127,8 @@ fn the_model_is_absent_then_without_an_engine_then_present_then_ready() {
 fn a_chat_is_scoped_to_an_app_the_assistant_reads_and_never_to_locker() {
     let sample = common::chat::sample();
     let first = sample.start("");
-    assert_eq!(sample.start("tally"), first + 1);
-    for bad in ["locker", "nope", "TALLY"] {
+    assert_eq!(sample.start("notes"), first + 1);
+    for bad in ["locker", "nope", "NOTES"] {
         let refused = sample.assist(Ask::Start(wire::AssistStartRequest {
             app: bad.to_owned(),
             ..wire::AssistStartRequest::default()
@@ -243,7 +243,7 @@ fn a_new_chat_forgets_the_transcript_and_keeps_the_scope() {
         common::chat::decline("sealed_egress"),
     ]);
     sample.install(Arc::clone(&model) as Arc<dyn Model>);
-    let session = sample.start("tally");
+    let session = sample.start("notes");
     sample.send(session, 1, "Hi there");
     sample
         .assist(Ask::Clear(wire::AssistClearRequest {
@@ -259,7 +259,7 @@ fn a_new_chat_forgets_the_transcript_and_keeps_the_scope() {
             .all(|prompt| !prompt.contains("Hi there")),
         "the new chat is a fresh conversation"
     );
-    // The scope is the chat's own and outlives a new chat: the new thread is Tally's too.
+    // The scope is the chat's own and outlives a new chat: the new thread is Notes' too.
     let listed = match sample
         .handle
         .call(&wire::Request {
@@ -282,7 +282,7 @@ fn a_new_chat_forgets_the_transcript_and_keeps_the_scope() {
         .iter()
         .find(|row| row.thread_id == second.thread_id)
         .expect("the new chat is listed");
-    assert_eq!(row.scope_app, "tally");
+    assert_eq!(row.scope_app, "notes");
 }
 
 #[test]

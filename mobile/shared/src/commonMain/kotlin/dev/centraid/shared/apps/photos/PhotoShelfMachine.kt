@@ -149,7 +149,7 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
             }
 
             // THE PICK SURVIVES A PAGE IT HAS NOT LOADED (the state carries it,
-            // not the cell — `TallyListState.pending_expense_ids`' reason): a
+            // not the cell — the retired Tally list's reason for its pending ids): a
             // member who picked a photograph and scrolled past the page it was
             // on must still be able to act on it.
             event.selection != null -> {

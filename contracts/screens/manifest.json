@@ -143,6 +143,62 @@
       "binary": "contracts/screens/home/status-urgent.bin"
     },
     {
+      "case": "activity",
+      "screen": "money",
+      "type": "centraid.screen.v1.MoneyHomeState",
+      "textproto": "contracts/screens/money/activity.textproto",
+      "binary": "contracts/screens/money/activity.bin"
+    },
+    {
+      "case": "day-one",
+      "screen": "money",
+      "type": "centraid.screen.v1.MoneyHomeState",
+      "textproto": "contracts/screens/money/day-one.textproto",
+      "binary": "contracts/screens/money/day-one.bin"
+    },
+    {
+      "case": "denied",
+      "screen": "money",
+      "type": "centraid.screen.v1.MoneyHomeState",
+      "textproto": "contracts/screens/money/denied.textproto",
+      "binary": "contracts/screens/money/denied.bin"
+    },
+    {
+      "case": "read-refused",
+      "screen": "money",
+      "type": "centraid.screen.v1.MoneyHomeState",
+      "textproto": "contracts/screens/money/read-refused.textproto",
+      "binary": "contracts/screens/money/read-refused.bin"
+    },
+    {
+      "case": "spending",
+      "screen": "money",
+      "type": "centraid.screen.v1.MoneyHomeState",
+      "textproto": "contracts/screens/money/spending.textproto",
+      "binary": "contracts/screens/money/spending.bin"
+    },
+    {
+      "case": "planned",
+      "screen": "money-import",
+      "type": "centraid.screen.v1.MoneyImportState",
+      "textproto": "contracts/screens/money-import/planned.textproto",
+      "binary": "contracts/screens/money-import/planned.bin"
+    },
+    {
+      "case": "question",
+      "screen": "money-import",
+      "type": "centraid.screen.v1.MoneyImportState",
+      "textproto": "contracts/screens/money-import/question.textproto",
+      "binary": "contracts/screens/money-import/question.bin"
+    },
+    {
+      "case": "offers",
+      "screen": "money-transaction",
+      "type": "centraid.screen.v1.MoneyTransactionState",
+      "textproto": "contracts/screens/money-transaction/offers.textproto",
+      "binary": "contracts/screens/money-transaction/offers.bin"
+    },
+    {
       "case": "draft-dirty",
       "screen": "notes",
       "type": "centraid.screen.v1.NotesEditorState",
@@ -498,48 +554,6 @@
       "type": "centraid.screen.v1.SeatState",
       "textproto": "contracts/screens/seat/waiting-for-mount.textproto",
       "binary": "contracts/screens/seat/waiting-for-mount.bin"
-    },
-    {
-      "case": "data-page",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/data-page.textproto",
-      "binary": "contracts/screens/tally/data-page.bin"
-    },
-    {
-      "case": "empty-ledger",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/empty-ledger.textproto",
-      "binary": "contracts/screens/tally/empty-ledger.bin"
-    },
-    {
-      "case": "loading-first",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/loading-first.textproto",
-      "binary": "contracts/screens/tally/loading-first.bin"
-    },
-    {
-      "case": "low-disk-parked",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/low-disk-parked.textproto",
-      "binary": "contracts/screens/tally/low-disk-parked.bin"
-    },
-    {
-      "case": "offline-withheld",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/offline-withheld.textproto",
-      "binary": "contracts/screens/tally/offline-withheld.bin"
-    },
-    {
-      "case": "refused-denied",
-      "screen": "tally",
-      "type": "centraid.screen.v1.TallyListState",
-      "textproto": "contracts/screens/tally/refused-denied.textproto",
-      "binary": "contracts/screens/tally/refused-denied.bin"
     }
   ]
 }

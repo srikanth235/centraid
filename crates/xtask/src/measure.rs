@@ -54,8 +54,8 @@ use crate::ledger::COMPILE_TIME;
 /// edit in a root library rebuilds everything downstream and is a different
 /// measurement.
 const APP_CRATE_ENTRY: [&str; 2] = [
-    "crates/apps/tally/src/main.rs",
-    "crates/apps/tally/src/lib.rs",
+    "crates/apps/money/src/main.rs",
+    "crates/apps/money/src/lib.rs",
 ];
 
 /// The crate `singleCrateTestSeconds` is measured on: the heaviest one, because

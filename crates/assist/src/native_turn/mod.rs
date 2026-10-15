@@ -60,7 +60,7 @@ pub mod log;
 pub mod pending;
 pub mod words;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::app::App;
 use crate::attach::Notice;
@@ -104,8 +104,10 @@ pub(crate) fn civil_at(now_ms: i64, tz: &str) -> jiff::civil::DateTime {
 
 impl NativeChat {
     /// A session over `door`, for a member whose zone is `tz`. The Locker is off (R-1088-3): the
-    /// session reads no Locker row and declines a call that names one. "Today" is the day it is in
-    /// `tz` by the door's clock.
+    /// session reads no Locker row and declines a call that names one. Money is off too
+    /// (`Flags::money`, #1099, R-1099-8) until the shipped model has been measured with the
+    /// `transaction` kind in its prompt: the session reads no Money table and its kind card is
+    /// the one that model was trained on. "Today" is the day it is in `tz` by the door's clock.
     ///
     /// # Errors
     /// The door's words, when the vault would not load into a world.
@@ -113,6 +115,7 @@ impl NativeChat {
         let now = civil_at(door.now_ms(), tz);
         let flags = Flags {
             locker: false,
+            money: false,
             writes: Writes::Park,
             ..Flags::default()
         };
@@ -621,53 +624,7 @@ fn value_line(session: &Session, value: &Value, result: Option<usize>) -> String
         "sum" => say_with(Say::Total, &[("field", field), ("value", &body)]),
         "min" => say_with(Say::Lowest, &[("field", field), ("value", &body)]),
         "max" => say_with(Say::Highest, &[("field", field), ("value", &body)]),
-        "balance" => balance_line(session, value, &body),
         _ => body,
-    }
-}
-
-fn balance_line(session: &Session, value: &Value, body: &str) -> String {
-    let signs: Vec<f64> = value["values"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|v| v["amount"].as_f64())
-        .collect();
-    let person = (value["of"]["kind"] == "person")
-        .then(|| {
-            session
-                .world
-                .row(&(Kind::Person, value["of"]["id"].as_str()?.to_owned()))
-                .map(|row| row.name.clone())
-        })
-        .flatten();
-    let Some(name) = person else {
-        return say_with(Say::Balance, &[("value", body)]);
-    };
-    if signs.iter().all(|amount| *amount == 0.0) {
-        say_with(Say::BalanceEven, &[("name", &name)])
-    } else if signs.iter().all(|amount| *amount >= 0.0) {
-        say_with(Say::BalanceOwed, &[("name", &name), ("value", body)])
-    } else if signs.iter().all(|amount| *amount <= 0.0) {
-        let owed: Vec<Value> = value["values"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|v| {
-                let mut v = v.clone();
-                v["amount"] = json!(v["amount"].as_f64().unwrap_or_default().abs());
-                v
-            })
-            .collect();
-        say_with(
-            Say::BalanceOwing,
-            &[
-                ("name", &name),
-                ("value", &amounts_text(&Value::Array(owed))),
-            ],
-        )
-    } else {
-        say_with(Say::Balance, &[("value", body)])
     }
 }
 

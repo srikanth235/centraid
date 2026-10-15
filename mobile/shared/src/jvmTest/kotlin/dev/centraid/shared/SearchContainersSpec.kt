@@ -27,15 +27,14 @@ import io.kotest.matchers.shouldBe
  * of them (a chat card for a notebook opens through the same table).
  */
 class SearchContainersSpec : StringSpec({
-    fun hit(app: String, entity: String, id: String, title: String, openId: String = "") =
-        VaultSearchHit(entity = entity, id = id, title = title, app_id = app, subtitle = app, open_id = openId)
+    fun hit(app: String, entity: String, id: String, title: String) =
+        VaultSearchHit(entity = entity, id = id, title = title, app_id = app, subtitle = app)
 
-    "the five kinds are named once, each with its word, its glyph and the key it opens by" {
+    "the four kinds are named once, each with its word, its glyph and the key it opens by" {
         val hits = listOf(
             ContainerHit(entity = "core.collection", id = "nb", title = "Cabin", app_id = "notes"),
             ContainerHit(entity = "core.collection", id = "al", title = "Summer", app_id = "photos"),
             ContainerHit(entity = "schedule.project", id = "pr", title = "Garden", app_id = "tasks"),
-            ContainerHit(entity = "social.circle", id = "ci", title = "Trip", app_id = "tally", open_id = "gr"),
             ContainerHit(entity = "core.concept", id = "fo", title = "Taxes", app_id = "docs"),
         )
         val rows = SearchContainers.fold(hits)
@@ -43,14 +42,13 @@ class SearchContainersSpec : StringSpec({
             SharedCopy.SEARCH_KIND_NOTEBOOK,
             SharedCopy.SEARCH_KIND_ALBUM,
             SharedCopy.SEARCH_KIND_PROJECT,
-            SharedCopy.SEARCH_KIND_GROUP,
             SharedCopy.SEARCH_KIND_FOLDER,
         )
-        rows.map { it.icon_key } shouldContainExactly listOf("Book", "Image", "List", "Users", "Folder")
-        rows.map { it.target!!.entity } shouldContainExactly listOf("notebook", "album", "project", "group", "folder")
-        // A GROUP OPENS BY ITS GROUP ID, and every other container by its own.
-        rows.map { it.target!!.id } shouldContainExactly listOf("nb", "al", "pr", "gr", "fo")
-        rows.map { it.id } shouldContainExactly listOf("nb", "al", "pr", "ci", "fo")
+        rows.map { it.icon_key } shouldContainExactly listOf("Book", "Image", "List", "Folder")
+        rows.map { it.target!!.entity } shouldContainExactly listOf("notebook", "album", "project", "folder")
+        // EVERY CONTAINER OPENS BY ITS OWN ID.
+        rows.map { it.target!!.id } shouldContainExactly listOf("nb", "al", "pr", "fo")
+        rows.map { it.id } shouldContainExactly listOf("nb", "al", "pr", "fo")
         rows[0].accessibility_label shouldBe "Notebook, Cabin"
         // An entity this table does not name is no container.
         SearchContainers.fold(listOf(ContainerHit(entity = "core.collection", id = "x", title = "X", app_id = "agenda"))).shouldBeEmpty()
@@ -62,19 +60,20 @@ class SearchContainersSpec : StringSpec({
                 hit("notes", "knowledge.note", "n1", "Cabin packing"),
                 hit("notes", "knowledge.note", "n2", "Cabin key"),
                 hit("notes", "core.collection", "nb", "Cabin"),
-                hit("tally", "social.circle", "ci", "Cabin trip", openId = "gr"),
+                hit("docs", "core.concept", "fo", "Cabin papers"),
             ),
         )
-        data.groups.map { it.app_id } shouldContainExactly listOf("notes", "tally")
-        val notes = data.groups[0]
+        // GROUPED IN HOME'S TILE ORDER: Docs' tile comes before Notes'.
+        data.groups.map { it.app_id } shouldContainExactly listOf("docs", "notes")
+        val notes = data.groups[1]
         notes.containers.map { it.title } shouldContainExactly listOf("Cabin")
         notes.rows.map { it.title } shouldContainExactly listOf("Cabin packing", "Cabin key")
         notes.count shouldBe 3
         notes.accessibility_label shouldBe "Notes, 3 results"
-        val tally = data.groups[1]
-        tally.rows.shouldBeEmpty()
-        tally.count shouldBe 1
-        tally.containers.single().target shouldBe ChatCard(app = "tally", entity = "group", id = "gr", title = "Cabin trip")
+        val docs = data.groups[0]
+        docs.rows.shouldBeEmpty()
+        docs.count shouldBe 1
+        docs.containers.single().target shouldBe ChatCard(app = "docs", entity = "folder", id = "fo", title = "Cabin papers")
     }
 
     "a container answer for an older term is dropped, and one for the current term is drawn" {
@@ -102,7 +101,6 @@ class SearchContainersSpec : StringSpec({
         open("photos", "album", "al", "Summer") shouldBe
             Destination.PhotoShelfRoute(PhotoShelf(album = PhotoShelf.Album(collection_id = "al", name = "Summer")))
         open("tasks", "project", "pr", "Garden") shouldBe Destination.TasksProject("pr", "Garden")
-        open("tally", "group", "gr", "Trip") shouldBe Destination.TallyGroup("gr", "Trip", parent = "Search")
         open("docs", "folder", "fo", "Taxes") shouldBe Destination.DocsFolder("fo", "Taxes", parent = "Search")
         // A noun the table does not name still opens the app's home.
         open("notes", "shelf", "x", "X") shouldBe Destination.NotesLibrary()

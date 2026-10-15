@@ -20,7 +20,6 @@ import centraid.core.v1.NotesTrashRequest
 import centraid.core.v1.Page
 import centraid.core.v1.PeopleTouchRequest
 import centraid.core.v1.Response
-import centraid.core.v1.TallyDashboardRequest
 import centraid.core.v1.TasksBoardRequest
 import centraid.core.v1.TasksSearch
 import centraid.core.v1.TasksSearchRequest
@@ -371,7 +370,6 @@ class ScreenQueryRuntimeSpec : StringSpec({
             { tz -> AppQueryRequest(docs_document = DocsDocumentRequest(document_id = "doc-1", tz = tz)) },
             { tz -> AppQueryRequest(notes_trash = NotesTrashRequest(tz = tz)) },
             { tz -> AppQueryRequest(people_touch = PeopleTouchRequest(tz = tz)) },
-            { tz -> AppQueryRequest(tally_dashboard = TallyDashboardRequest(tz = tz)) },
         ).forEach { make ->
             readOnce(core, queries { now -> listOf(make(now.zone)) }, clock = blank)
                 .shouldBeInstanceOf<Probe.Refused>().failure.sentence shouldBe

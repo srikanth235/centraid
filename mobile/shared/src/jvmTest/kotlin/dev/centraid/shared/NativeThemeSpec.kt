@@ -137,7 +137,7 @@ class NativeThemeSpec : StringSpec({
         val repositoryRoot = File(
             System.getProperty("centraid.repositoryRoot") ?: error("unset"),
         )
-        listOf("notes", "photos", "shared", "tally").forEach { app ->
+        listOf("notes", "photos", "shared").forEach { app ->
             val manifest = repositoryRoot.resolve("copy/$app.json").readText()
             manifest.contains("\"functions\"").shouldBeTrue()
             manifest.contains("\"strings\"").shouldBeTrue()

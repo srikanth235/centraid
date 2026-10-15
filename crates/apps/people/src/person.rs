@@ -18,26 +18,22 @@
 //! sentence ("three sharing questions deny independently") describes an
 //! intention the code has one third of.
 //!
-//! What the manifest actually declares is **three `read` scopes over three
-//! different schemas**, each revocable on its own and each behind a read this
-//! sheet makes:
+//! What the manifest actually declares is a `read` scope over the linked-entity
+//! schemas, revocable on its own and behind the one reading this sheet makes
+//! beside the profile:
 //!
 //! | Reading | Scopes | What it carries | v0 |
 //! |---|---|---|---|
-//! | [`Person::sharing`] | `share.party_vault_binding` (+ `share.authority*`) | the vaults this person is linked to | **denies alone** |
 //! | [`Person::links`] | `core.link`, `core.activity`, `schedule.task` | relationships, tasks, gift ideas, interaction history | blanks the sheet |
-//! | [`Person::obligations`] | `tally.obligation` — **another app's table** | the open debts | blanks the sheet |
 //!
-//! The share scopes are newer than the app, so on an existing vault they wait
-//! for the owner (`person.ts:6`-`:9`). `tally.obligation` is the only cross-app
-//! domain read in the tree (census §A seam 4) and it is Tally's lane's table:
-//! a member who has not installed Tally, or who has revoked it, should see
-//! their grandfather's birthday and not an "ask the owner" wall. And the linked
-//! plane is where a person's *relationships* live — revoking `core.link` should
-//! cost the relationship rail, not the person.
+//! The linked plane is where a person's *relationships* live — revoking
+//! `core.link` should cost the relationship rail, not the person, so a member
+//! who has revoked it still sees their grandfather's birthday and not an "ask
+//! the owner" wall. (The share plane's reading and Tally's open debts were the
+//! other two; the first left in rung five, #1029, and the second with Tally,
+//! #1099.)
 //!
-//! So the port makes all three readings and the profile stands whatever they
-//! say. [`a_denied_read_leaves_the_profile_standing`] is the test, and
+//! So the port makes the reading and the profile stands whatever it says. [`a_denied_read_leaves_the_profile_standing`] is the test, and
 //! `linked` is unrepresentable on a denied sharing read because the field lives
 //! inside the reading.
 //!
@@ -61,8 +57,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use centraid_apps_kit::error::{KitError, KitResult};
-use centraid_apps_kit::money::Money;
-use centraid_apps_kit::reads::{PageDoor, read_pages, read_window};
+use centraid_apps_kit::reads::{PageDoor, read_window};
 use centraid_apps_kit::row::{Cell, Row, text_of};
 
 use crate::queries::{
@@ -70,10 +65,9 @@ use crate::queries::{
     PEOPLE_RELATION_PREFIX, PERSON_JOIN_BOUND, RELATIONS_SCHEME_URI, Reminder, TASK_TARGET_TYPE,
     Taxonomy, UNKNOWN_NAME, Walked, activities_statement, annotations_statement,
     duplicate_channels_statement, fold_party_tags, history_statement, important_dates_statement,
-    incoming_links_statement, names_by_party, obligations_statement, outgoing_links_statement,
-    parties_statement, person_channels_statement, person_notes_statement, person_profile_statement,
-    person_tags_statement, read_taxonomy, reminder_on, tasks_statement, vault_statement, walk,
-    walked,
+    incoming_links_statement, names_by_party, outgoing_links_statement, parties_statement,
+    person_channels_statement, person_notes_statement, person_profile_statement,
+    person_tags_statement, read_taxonomy, reminder_on, tasks_statement, walk, walked,
 };
 use crate::{Denial, ReadState};
 
@@ -100,7 +94,6 @@ pub const PERSON_FIELDS: &[&str] = &[
     "notes",
     "tasks",
     "gifts",
-    "debts",
     "interactions",
     "vaults",
 ];
@@ -186,36 +179,7 @@ pub struct Interaction {
     pub occurred_at: String,
 }
 
-/// Which way an open obligation points.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Direction {
-    /// The owner owes this person.
-    Owe,
-    /// This person owes the owner.
-    Owed,
-}
-
-impl Direction {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Owe => "owe",
-            Self::Owed => "owed",
-        }
-    }
-}
-
-/// One open debt. **The amount keeps its currency** ([`Money`]): a sheet that
-/// carried minor units alone would be one fold away from the ONT-23 addition.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Debt {
-    pub debt_id: String,
-    pub direction: Direction,
-    pub amount: Money,
-    pub reason: String,
-}
-
-/// THE PROFILE, which stands whatever the three readings say.
+/// THE PROFILE, which stands whatever the reading says.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
     pub party_id: String,
@@ -244,18 +208,11 @@ pub struct Links {
     pub interactions: Vec<Interaction>,
 }
 
-/// Tally's obligations, read cross-app.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Obligations {
-    pub debts: Vec<Debt>,
-}
-
 /// One person, as the sheet renders them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Person {
     pub profile: Profile,
     pub links: ReadState<Links>,
-    pub obligations: ReadState<Obligations>,
 }
 
 /// What `person` answers. `None` is "no such live person", which is not a
@@ -410,11 +367,6 @@ pub fn load_person(door: &dyn PageDoor, party_id: &str) -> KitResult<(PersonData
         PERSON_JOIN_BOUND,
         empty.clone()
     );
-    let vault_rows = walked!(door, &vault_statement(), PERSON_JOIN_BOUND, empty.clone());
-    let owner_party_id = vault_rows
-        .first()
-        .and_then(|row| text_of(row, "self_party_id"))
-        .unwrap_or_default();
 
     // The contact rail, and the collision search bounded by the values THIS
     // person holds.
@@ -463,19 +415,14 @@ pub fn load_person(door: &dyn PageDoor, party_id: &str) -> KitResult<(PersonData
             .collect(),
     };
 
-    // THE TWO READINGS. Each one's failure is its own. There was a third —
-    // the share plane, `share_party_vault_binding` — which rung five drops
-    // (#1029).
+    // THE READING beside the profile: its failure is its own. There were two
+    // more — the share plane, `share_party_vault_binding`, which rung five
+    // dropped (#1029), and Tally's open debts, which rung fifteen dropped (#1099).
     let links = read_links(door, party_id, &taxonomy)?;
-    let obligations = read_obligations(door, party_id, &owner_party_id)?;
 
     Ok((
         PersonData {
-            person: Some(Person {
-                profile,
-                links,
-                obligations,
-            }),
+            person: Some(Person { profile, links }),
         },
         None,
     ))
@@ -828,71 +775,6 @@ pub fn relation_kind(notation: &str, related_kind: Option<&str>) -> (String, Opt
     )
 }
 
-/// TALLY'S OBLIGATIONS, read cross-app. Open debts only: **a settled debt is
-/// closed, not deleted** (`actions/settle-debt.ts:3`), so it stays as history
-/// and off this rail.
-fn read_obligations(
-    door: &dyn PageDoor,
-    party_id: &str,
-    owner_party_id: &str,
-) -> KitResult<ReadState<Obligations>> {
-    let mut rows = Vec::new();
-    for (name, column) in [
-        ("people.person.debtsFrom", "from_party"),
-        ("people.person.debtsTo", "to_party"),
-    ] {
-        match read_pages(
-            door,
-            &obligations_statement(name, column, party_id),
-            PERSON_JOIN_BOUND,
-        ) {
-            Ok(found) => rows.extend(found),
-            Err(KitError::Door(message)) => {
-                return Ok(ReadState::Denied(Denial {
-                    code: None,
-                    message: Some(message),
-                    revoked_at: None,
-                }));
-            }
-            Err(other) => return Err(other),
-        }
-    }
-    // ONE OBLIGATION CAN MATCH BOTH READS — a debt from a person to themselves
-    // is refused by the DDL's CHECK, but a merge that folded the two ends
-    // together used to produce exactly that (see `core.merge_party`'s
-    // degenerate-row policy). v0 dedupes by `obligation_id` and so does this.
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    let debts = rows
-        .iter()
-        .filter_map(|row| {
-            let debt_id = text_of(row, "obligation_id")?;
-            if !seen.insert(debt_id.clone()) {
-                return None;
-            }
-            if text_of(row, "settled_at").is_some() {
-                return None;
-            }
-            let direction = if text_of(row, "from_party").as_deref() == Some(owner_party_id) {
-                Direction::Owe
-            } else {
-                Direction::Owed
-            };
-            Some(Debt {
-                debt_id,
-                direction,
-                amount: centraid_apps_kit::money::money(
-                    row.get("amount_minor")
-                        .and_then(Cell::integer)
-                        .unwrap_or_default(),
-                    &text_of(row, "currency").unwrap_or_default(),
-                ),
-                reason: text_of(row, "reason").unwrap_or_default(),
-            })
-        })
-        .collect();
-    Ok(ReadState::Ready(Obligations { debts }))
-}
-
 /// The reminders of one person's sheet, for the surfaces that draw the roster's
 /// chip on a detail screen.
 #[must_use]
@@ -975,20 +857,15 @@ mod tests {
                 dates: Vec::new(),
                 notes: Vec::new(),
             },
-            links: ReadState::Ready(Links::default()),
-            obligations: ReadState::Denied(Denial::default()),
+            links: ReadState::Denied(Denial::default()),
         };
         // THE PROFILE IS INTACT.
         assert_eq!(person.profile.name, "Grandpa Ray");
         assert_eq!(person.profile.cadence_days, 7);
-        // AND THE DENIED READS CARRY NO DATA. There is no `vaults: []` to
-        // mistake for "linked to nothing" and no `debts: []` to mistake for
-        // "owes nothing".
-        assert!(person.obligations.ready().is_none());
-        assert!(person.obligations.denied());
-        // The one that DID answer says so, and its empty list is a fact.
-        assert!(person.links.known());
-        assert_eq!(person.links.ready().map(|links| links.tasks.len()), Some(0));
+        // AND THE DENIED READ CARRIES NO DATA. There is no `relationships: []`
+        // to mistake for "linked to nothing".
+        assert!(person.links.ready().is_none());
+        assert!(person.links.denied());
     }
 
     #[test]
@@ -1028,11 +905,5 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["d1"]
         );
-    }
-
-    #[test]
-    fn a_direction_is_the_owners_own_side_of_the_debt() {
-        assert_eq!(Direction::Owe.as_str(), "owe");
-        assert_eq!(Direction::Owed.as_str(), "owed");
     }
 }

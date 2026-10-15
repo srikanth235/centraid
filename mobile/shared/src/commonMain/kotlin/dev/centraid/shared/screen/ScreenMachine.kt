@@ -145,9 +145,8 @@ public sealed interface ScreenEffect {
     /**
      * Tell the member a verb is WITHHELD rather than queued.
      *
-     * Tally's `materialize-recurring-expense` is the case: its occurrence id is
-     * minted by the canonical engine, so a seat withholds it offline rather
-     * than queueing a copy (`docs/mobile-offline.md:257`).
+     * A verb whose occurrence id is minted by the canonical engine is the case,
+     * so a seat withholds it offline rather than queueing a copy (`docs/mobile-offline.md:257`).
      */
     public data class WithheldOffline(
         public val verb: String,

@@ -68,7 +68,7 @@ impl Opened {
             content: wire::FoundContent::Unspecified as i32,
             tz: String::new(),
         }));
-        let Some(wire::response::Kind::Found(founded)) = found.kind else {
+        let Some(wire::response::Kind::Found(_)) = found.kind else {
             panic!("a found answered {:?}", found.kind);
         };
         let core = opened.core();
@@ -78,7 +78,6 @@ impl Opened {
                     vault,
                     core.registry(),
                     &core.owner(),
-                    &founded.owner_party_id,
                     &|_| true,
                     centraid_core::example::now_ms(),
                 )

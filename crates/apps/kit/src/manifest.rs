@@ -542,7 +542,7 @@ mod tests {
 
     fn minimal(extra: &str) -> String {
         format!(
-            r#"{{"manifestVersion": 1, "id": "tally", "name": "Tally", "version": "0.3.0"{extra}}}"#
+            r#"{{"manifestVersion": 1, "id": "sample", "name": "Sample", "version": "0.3.0"{extra}}}"#
         )
     }
 

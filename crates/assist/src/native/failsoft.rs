@@ -12,7 +12,7 @@
 //!   that result; `note: ignored where "met < …" (met is text)` says what was
 //!   left out. When nothing selective remains the answer would be the whole
 //!   kind, so the turn declines `not_found` instead. A few families end in an
-//!   ask (balance of nobody) or in the rows the reply already named.
+//!   ask or in the rows the reply already named.
 //! - A WRITE never falls back silently to a row the model did not name. Rows
 //!   plus a selector run on the rows; a reveal of a field that is not secret
 //!   answers the row; any other refused write declines, `out_of_scope` when the
@@ -27,7 +27,7 @@ use std::collections::BTreeSet;
 
 use serde_json::{Map, Value, json};
 
-use crate::native::meta::{self, Kind, ROW_CAP};
+use crate::native::meta::{self, Kind};
 use crate::native::session::{Outcome, Rejected, ResultSet, Session, arg_str, handle_list};
 use crate::native::whr;
 use crate::native::world::Key;
@@ -300,81 +300,6 @@ impl Session {
             let note = format!("note: read value {value} as rows {value}");
             return rerun("not_a_result", "answer_rows", note);
         }
-        // A BALANCE OF NOBODY: ask which, among the rows still in reach.
-        if let Some(rest) = error.strip_prefix("error: balance needs one ") {
-            let kind = rest.split(';').next().unwrap_or_default().trim().to_owned();
-            let options: Vec<Key> = self
-                .usable_rows()
-                .into_iter()
-                .map(|number| self.by_number[number - 1].clone())
-                .filter(|key| key.0.name() == kind)
-                .take(ROW_CAP)
-                .collect();
-            if options.is_empty() {
-                return self.nothing_left(
-                    "balance_none",
-                    &format!("no {kind} in reach for the balance"),
-                );
-            }
-            let question = format!("balance needs one {kind}; which {kind} did you mean?");
-            let outcome = self.ends_in_ask(
-                None,
-                &question,
-                &options,
-                "the runtime ended the turn: nothing in the call named the one",
-            );
-            return Next::End {
-                fix: Fix {
-                    family: "balance_none",
-                    action: "ask_options",
-                },
-                outcome,
-            };
-        }
-        // A BALANCE OF THE USER'S OWN ROW ("that is you"): the one other person in reach is
-        // meant; with several, ask which; with none, nothing to say it of.
-        if error.contains("that is you; balance is you versus someone else") {
-            let me = self.world.me_key();
-            let you = self.number(&me);
-            let others: Vec<Key> = self
-                .usable_rows()
-                .into_iter()
-                .map(|number| self.by_number[number - 1].clone())
-                .filter(|key| key.0 == Kind::Person && *key != me)
-                .collect();
-            match others.as_slice() {
-                [] => {
-                    return self
-                        .nothing_left("balance_you", "no other person in reach for the balance");
-                }
-                [only] => {
-                    let number = self.number(only);
-                    let named = crate::native::render::named(&self.world, number, only);
-                    let op = args.get("op").cloned().unwrap_or_else(|| json!("balance"));
-                    args.clear();
-                    args.insert("op".to_owned(), op);
-                    args.insert("rows".to_owned(), json!(format!("#{number}")));
-                    let note = format!("note: balance: #{you} is you; used {named}");
-                    return rerun("balance_you", "use_other_person", note);
-                }
-                _ => {
-                    let options: Vec<Key> = others.into_iter().take(ROW_CAP).collect();
-                    let outcome = self.ends_in_ask(
-                        None,
-                        "balance is you versus someone else; which person did you mean?",
-                        &options,
-                        "the runtime ended the turn: the call named you",
-                    );
-                    return Next::End {
-                        fix: Fix {
-                            family: "balance_you",
-                            action: "ask_options",
-                        },
-                        outcome,
-                    };
-                }
-            }
-        }
         // A SELECTOR WITHOUT A KIND: the rows in reach, when they are all one kind.
         if error.contains("a selector needs kind") {
             let reach: Vec<usize> = self.usable_rows().into_iter().take(5).collect();
@@ -454,8 +379,6 @@ impl Session {
         // A PART OF A COMPUTE OR A READOUT that does not fit: leave it out.
         let loose: Option<&'static str> = if error.contains("count takes no field") {
             Some("field")
-        } else if error.contains("balance takes no group") {
-            Some("group")
         } else if error.contains("cannot order") {
             Some("order")
         } else if error.starts_with("error: limit is") {

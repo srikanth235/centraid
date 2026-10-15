@@ -1,0 +1,8 @@
+Date,Description,Amount
+2024-01-03,"GOOD ONE",-4.50
+not a date,"BAD DATE",-1.00
+2024-01-05,"BAD AMOUNT",twelve
+2024-01-06,"ZERO",0.00
+
+2024-01-07,"GOOD TWO",-2.00
+2024-01-08,"GOOD THREE",-3.00

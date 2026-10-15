@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use centraid_apps_kit::reads::{FanOutBound, read_pages};
 use centraid_apps_kit::row::Row;
-use centraid_apps_kit::statement::{PageOrder, PageQuery};
+use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_assist::native::{Flags, Session, world::World};
 use centraid_vault::access::Principal;
@@ -235,15 +235,34 @@ impl Handle {
             .map_err(|error| format!("reading {table}: {error}"))
     }
 
-    /// The Tally ledger, folded by the Tally app's own read.
-    pub fn tally(&self) -> Result<centraid_apps_tally::queries::TallyData, String> {
+    /// The rows of one table that satisfy `predicate` (`?` placeholders, text `binds`), through
+    /// the kit's paged read.
+    pub fn table_where(
+        &self,
+        table: &str,
+        columns: &str,
+        sort: &str,
+        pk: &str,
+        predicate: &str,
+        binds: &[String],
+    ) -> Result<Vec<Row>, String> {
         self.vault
             .read(|connection| {
                 let door = TestDoor::new(connection);
-                Ok(centraid_apps_tally::queries::load_tally(&door))
+                let query = PageQuery::new(
+                    &format!("nativetools.{table}"),
+                    columns,
+                    table,
+                    PageOrder::asc(sort, pk),
+                )
+                .filter(
+                    predicate,
+                    binds.iter().cloned().map(PageBindValue::Text).collect(),
+                );
+                Ok(read_pages(&door, &query, FanOutBound::new(500, 200)))
             })
             .map_err(|error| error.to_string())?
-            .map_err(|error| format!("reading the ledger: {error}"))
+            .map_err(|error| format!("reading {table}: {error}"))
     }
 
     /// The occurrences of the days `from_day..=to_day` in the zone `tz`: Agenda's own read
@@ -346,8 +365,16 @@ impl Door for Handle {
         Self::table(self, table, columns, sort, pk)
     }
 
-    fn tally(&self) -> Result<centraid_apps_tally::queries::TallyData, String> {
-        Self::tally(self)
+    fn table_where(
+        &self,
+        table: &str,
+        columns: &str,
+        sort: &str,
+        pk: &str,
+        predicate: &str,
+        binds: &[String],
+    ) -> Result<Vec<Row>, String> {
+        Self::table_where(self, table, columns, sort, pk, predicate, binds)
     }
 
     fn events(

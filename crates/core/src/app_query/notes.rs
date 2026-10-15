@@ -201,7 +201,7 @@ pub(super) fn search(
             search,
             &entities,
             &asked.term,
-            |(data, found): &(queries::SearchData, Vec<named::Opened>)| {
+            |(data, found): &(queries::SearchData, Vec<centraid_search::Target>)| {
                 data.notes.is_empty() && found.is_empty()
             },
             |term| {
@@ -209,8 +209,7 @@ pub(super) fn search(
                 if denial.is_some() {
                     return Ok(((data, Vec::new()), denial));
                 }
-                let (found, denial) =
-                    named::of_app(door, search, "notes", term, named::CONTAINER_ROWS)?;
+                let (found, denial) = named::of_app(search, "notes", term, named::CONTAINER_ROWS);
                 Ok(((data, found), denial))
             },
         )
@@ -1070,21 +1069,14 @@ mod tests {
         );
         let note = scratch.create("Quokka sighting", "saw one");
         let found = search("quokka");
-        let containers: Vec<(&str, &str, &str, &str)> = found
+        let containers: Vec<(&str, &str, &str)> = found
             .containers
             .iter()
-            .map(|hit| {
-                (
-                    hit.entity.as_str(),
-                    hit.id.as_str(),
-                    hit.app_id.as_str(),
-                    hit.open_id.as_str(),
-                )
-            })
+            .map(|hit| (hit.entity.as_str(), hit.id.as_str(), hit.app_id.as_str()))
             .collect();
         assert_eq!(
             containers,
-            [("core.collection", notebook.as_str(), "notes", "")],
+            [("core.collection", notebook.as_str(), "notes")],
             "the notebook, and not the album, which opens in Photos"
         );
         assert_eq!(found.containers[0].title, "Quokka recipes");

@@ -40,7 +40,7 @@ staging="${CENTRAID_DEMO_DIR:-/tmp/centraid-demo}"
 # The switcher is only testable against two, and two vaults holding the same
 # rows under the same name would prove nothing — a switch that quietly did not
 # happen would look exactly like one that did. "Work" is seeded `--only` three
-# apps, so the springboard visibly changes: People, Notes, Photos and Tally are
+# apps, so the springboard visibly changes: People, Notes and Photos are
 # genuinely empty over there, which is a state the grid already knows how to
 # say and does not have to invent.
 echo "==> seeding $staging"

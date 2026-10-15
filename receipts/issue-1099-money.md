@@ -1,0 +1,747 @@
+# #1099 — Money
+
+## What changed
+
+## Verification
+
+## Decisions
+
+## Audit
+
+## Lane V — vault
+
+Rung 14 and the 20 `money.*` commands (wave 1 of [#1099](https://github.com/srikanth235/centraid/issues/1099)). Rulings are in [`docs/decisions.md#money-1099`](../docs/decisions.md#money-1099) (R-1099-1 to R-1099-32; this lane ruled R-1099-24 to R-1099-32), the schema doctrine is [`docs/decisions.md#ontology-v0-close-916`](../docs/decisions.md#ontology-v0-close-916), and the state is [`docs/vault-ontology.md`](../docs/vault-ontology.md) (ONT-40).
+
+### What changed
+
+- **Rung 14 schema.** Six `money_*` tables (five projections, one entity), the unique `core_transaction (account_id, external_id)` index, five currency and immutability triggers, the `money.rule` entity kind, the `transfer` relation and 23 category concepts. A vault holding duplicate `(account_id, external_id)` pairs keeps every row: the earliest keeps its id and later ones get `#dup-<txn_id>` (R-1099-25).
+- **Seeds are one statement.** The categories scheme and (for a vault that already has the relations scheme) the `transfer` relation are inserted by the rung under fixed ids; `bootstrap.rs` seeds `transfer` under the same id for a new vault, so a vault founded at the head and one climbed from rung 13 hold identical rows (R-1099-28).
+- **Twenty commands** in `crates/vault/src/commands/money.rs`: `add_account` (once), `edit_account`, `set_opening_balance`, `import_transactions`, `categorize`, `void_transaction`, `set_display_name`, `link_transfer`, `unlink_transfer`, `set_target`, `set_carry`, `add_rule` (once), `edit_rule`, `delete_rule`, `apply_rule_to_history`, `save_import_profile`, `record_checkpoint`, `add_category` (once), `merge_category`, `archive_category`. Every refusal is a precondition's sentence with a stable predicate; an import's per-line refusals are in its output.
+- **Docs.** `docs/decisions.md` (new section `Money (#1099)`, the ONT-dormant narrowing, the R-1047-Q1 row's later ranges), `docs/vault-ontology.md` (the pack row, counts, four commitments, ONT-40), `docs/glossary.md` (Money, statement line), `contracts/README.md`, `crates/vault/README.md`, `CHANGELOG.md`.
+
+Files changed or added (full paths):
+
+- `contracts/migrations/014_money.sql` (new), `contracts/schema/vault-ddl.sql` (regenerated), `contracts/schema/v0-registries.json`, `contracts/README.md`
+- `crates/vault/src/migrations.rs`, `crates/vault/src/bootstrap.rs`, `crates/vault/src/commands/mod.rs`, `crates/vault/src/commands/core.rs` (`find_or_create_scheme` is `pub(crate)`, nothing else), `crates/vault/src/commands/money.rs` (new), `crates/vault/README.md`
+- `crates/vault/tests/baseline.rs`, `crates/vault/tests/commands.rs`, `crates/vault/tests/common/mod.rs`, `crates/vault/tests/money_schema.rs` (new), `crates/vault/tests/money_commands.rs` (new), `crates/ontology/tests/commitments.rs`
+- `docs/decisions.md`, `docs/vault-ontology.md`, `docs/glossary.md`, `CHANGELOG.md`, `receipts/issue-1099-money.md`
+
+Nothing was deleted.
+
+### Verification
+
+See the lane report; the table is filled from the runs below.
+
+### Falsification
+
+1. **A vault holding duplicate `external_id`s still climbs and loses nothing.** Throwaway check: deleted the rewriting `UPDATE` from `014_money.sql` and ran `money_schema.rs::a_vault_holding_duplicate_external_ids_climbs_and_loses_nothing`. Result: red (`UNIQUE constraint failed: core_transaction.account_id, core_transaction.external_id` when the file opened); green with the `UPDATE` restored.
+2. **Importing the same file twice writes nothing.** Throwaway check: made the `already_in` lookup in `import_transactions` never match and ran `money_commands.rs::importing_twice_writes_nothing_and_an_overlap_writes_only_the_new_lines`. Result: red; green with the lookup restored.
+
+## Lane P — the Money app crate: import parsers, plan pipeline, rules, adversarial corpus (wave 2)
+
+Branch `money/p`. Doctrine: [docs/decisions.md#money-1099](../docs/decisions.md#money-1099); the schema half is [#ontology-v0-close-916](../docs/decisions.md#ontology-v0-close-916) and is lane V's.
+
+**What this slice is.** `crates/apps/money` (package `centraid-apps-money`) with its import half: `import::{text, csv, ofx, amount, date, keys, plan}` and `rules`, plus the kit's shared CSV reader (`centraid_apps_kit::csv`, lifted out of Locker, which now calls it) and a deterministic year-3 generator. Nothing here touches a vault, a database or a clock: the plan is a function of parsed rows, the account's existing rows, the rules and `today`.
+
+**Red first.** The implementation was written before the corpus files (this section does not pretend otherwise); the corpus was then run against a stub reader (`read_csv` and `read_ofx` returning a refusal at their first line) and recorded red, then the stub was removed:
+
+- stubbed: `cargo test -p centraid-apps-money --test import_corpus` → `41 FAILED` of 41 (e.g. `chase_checking.csv: This does not look like a bank statement.`, `td_canada.csv: This does not look like a bank statement.`; even `a_file_that_is_not_ofx_is_refused` fails, `NotAStatement` where `UnreadableOfx` is pinned);
+- real: `test result: ok. 41 passed` (and 19 unit tests).
+- The plan and the rules have unit tests written with them; their corpus cases were red only through the stubbed readers.
+- Two defects the corpus found in the first implementation and that are fixed with their cases kept: `ROW 0`/`ATM 100` parsed as an amount through a "currency code" prefix (a description column read as numeric; now only a symbol or an ISO code is a currency mark), and a quoted newline kept its `\r` (CRLF and LF exports of one statement hashed differently; now normalised before tokenising).
+
+**Corpus cases (each pins the exact `(day, signed minor, description)` of every row and the line and reason of every rejected one):** Chase checking · Amex (positive charges flipped, `SignGuessed` declared, member override) · Capital One (debit/credit columns, posted date over transaction date) · Bank of America (preamble, header at record 6, the "Beginning balance" line is one rejected row at line 8) · Wells Fargo (no header, read by content) · TD Canada (no header, debit/credit/balance, modelled `MM/DD/YYYY` as TD prints it) · RBC (`CAD$`/`USD$`, `Description 1/2`, cheque number) · Tangerine · windows-1252 · UTF-8 BOM · CRLF + quoted newline + doubled quotes (and CRLF/LF hash alike) · parentheses, `$-`, `CR` · `;` with decimal commas and dotted dates · day-first with an ambiguous first row (decided by a `21/04` three rows down) · wholly ambiguous (the question, then both answers) · an answer cannot overrule a proven day · bad rows (lines 3, 4, 5 rejected, the blank line skipped, the file not blocked) · QFX 1.x SGML (zone suffixes ignored, `CHECKNUM`, `LEDGERBAL` not `AVAILBAL`, line numbers) · OFX 2.x XML with `&amp;` and `&#201;` · multi-account (bank, bank, card; matched by last four and by stored id; NoAccount; Ambiguous refused) · `CURDEF` mismatch · one bad `TRNAMT` (one rejected, two new) · no `FITID` (`ofx-nofitid:`, an identical pair stays two) · not OFX · same file twice (CSV and QFX: every row `AlreadyIn`) · overlap by a week (only the new rows `New`) · weekly same-amount charge (never proposed against last week, including the seven-day case) · identical same-day pair (two rows; one held, the other is new) · fuzzy proposal across a CSV-era copy, never across two different FITIDs · one-to-one claiming · in-file repeat collapse and the counts add up · future-dated flagged · rules applied on plan rows (raw description untouched) · profile re-applied on a matching fingerprint, re-detected with `ProfileChanged` on a changed one, JSON round trip · 20,000 rows read and 20,001 refused with the limit · 8 MiB + 1 byte refused by both readers · not a statement · year-3 (4 accounts, 18,000 rows read, planned, and re-planned to all `AlreadyIn`).
+
+### Seam notes
+
+- `ImportRow` is seam S1 field for field; `RowVerdict::Rejected` carries the reason and the 1-based line is on `PlanRow.line` (and `ParsedRow.line`). There is no "dropped by rule" verdict (R-1099-43); there is a fifth verdict `RepeatInFile`, so that the verdict counts add up to the file's data rows.
+- The dedupe hash is **BLAKE3**, not SHA-256 (R-1099-40): the workspace manifest confines `sha2` to two other crates. The shape `csv:<64 hex>` is unchanged.
+- Rules agree with the plan's seam S2 text verbatim; wave 3's test against the real vault is the proof.
+
+### Every file this section touches
+
+- `receipts/issue-1099-money.md`
+- `CHANGELOG.md`
+- `ARCHITECTURE.md`
+- `docs/decisions.md`
+- `Cargo.toml`
+- `Cargo.lock`
+- `crates/apps/kit/README.md`
+- `crates/apps/kit/src/lib.rs`
+- `crates/apps/kit/src/csv.rs`
+- `crates/apps/locker/src/transfer.rs`
+- `crates/apps/money/Cargo.toml`
+- `crates/apps/money/README.md`
+- `crates/apps/money/src/lib.rs`
+- `crates/apps/money/src/civil.rs`
+- `crates/apps/money/src/rules.rs`
+- `crates/apps/money/src/year3.rs`
+- `crates/apps/money/src/import/mod.rs`
+- `crates/apps/money/src/import/amount.rs`
+- `crates/apps/money/src/import/csv.rs`
+- `crates/apps/money/src/import/date.rs`
+- `crates/apps/money/src/import/keys.rs`
+- `crates/apps/money/src/import/ofx.rs`
+- `crates/apps/money/src/import/plan.rs`
+- `crates/apps/money/src/import/text.rs`
+- `crates/apps/money/tests/import_corpus.rs`
+- `crates/apps/money/tests/corpus/amex.csv`
+- `crates/apps/money/tests/corpus/bad_rows.csv`
+- `crates/apps/money/tests/corpus/bank_of_america.csv`
+- `crates/apps/money/tests/corpus/capital_one.csv`
+- `crates/apps/money/tests/corpus/chase_checking.csv`
+- `crates/apps/money/tests/corpus/crlf_quoted_newline.csv`
+- `crates/apps/money/tests/corpus/curdef_mismatch.ofx`
+- `crates/apps/money/tests/corpus/dmy_first_ambiguous.csv`
+- `crates/apps/money/tests/corpus/dmy_wholly_ambiguous.csv`
+- `crates/apps/money/tests/corpus/identical_pair.csv`
+- `crates/apps/money/tests/corpus/multi_account.ofx`
+- `crates/apps/money/tests/corpus/ofx2.ofx`
+- `crates/apps/money/tests/corpus/ofx_bad_trnamt.ofx`
+- `crates/apps/money/tests/corpus/ofx_no_fitid.ofx`
+- `crates/apps/money/tests/corpus/overlap_a.csv`
+- `crates/apps/money/tests/corpus/overlap_b.csv`
+- `crates/apps/money/tests/corpus/parentheses.csv`
+- `crates/apps/money/tests/corpus/qfx_sgml.qfx`
+- `crates/apps/money/tests/corpus/rbc.csv`
+- `crates/apps/money/tests/corpus/semicolon_decimal_comma.csv`
+- `crates/apps/money/tests/corpus/tangerine.csv`
+- `crates/apps/money/tests/corpus/td_canada.csv`
+- `crates/apps/money/tests/corpus/utf8_bom.csv`
+- `crates/apps/money/tests/corpus/weekly_charge.csv`
+- `crates/apps/money/tests/corpus/wells_fargo.csv`
+- `crates/apps/money/tests/corpus/windows1252.csv`
+
+**Falsification.** (1) *The date order is decided over the whole column, not the first row.* Throwaway: `date::decide` mutated to read only the first cell. `a_day_first_file_whose_first_row_is_ambiguous_is_decided_by_the_whole_column` went red (`FAILED`); restored, green. (2) *A weekly same-amount charge is never proposed against last week's.* Throwaway: `FUZZY_DAYS` 3 → 7. The first version of the case stayed green (one-to-one claiming hid it: the Jan 1 row claimed the existing row first); I added the next-week-alone assertion, and with `FUZZY_DAYS = 7` the case went red; restored, green.
+
+## Lane P, part 2 — Money's reads, folds, recurring charges, phone answers, manifest and door (waves 3 and 7)
+
+Doctrine: [docs/decisions.md#money-1099](../docs/decisions.md#money-1099). Rulings R-1099-45..49 are recorded there; the schema half is [#ontology-v0-close-916](../docs/decisions.md#ontology-v0-close-916) and lane V's.
+
+**What changed.** `queries.rs` (every read a `PageQuery` with a stated ceiling), `engine.rs` (spending, in/out/net, cash flow, balances, net worth, the target reducer with carry, transfer proposals moved from Tally), `recurring.rs` (detection, RRULE through the vault's one engine, statuses, forecast), `phone.rs` (the typed answers), `manifest.json` + `manifest.rs`, `commands.rs` (20 actions), `door.rs` (behind `vault-door`), `import::csv::SavedProfile`, and the hand-computed fixtures under `contracts/apps/money/`.
+
+**Verification.** `cargo test -p centraid-apps-money --all-features`: 47 unit, 4 door, 14 folds, 41 corpus, 7 phone and the year-3 suite green; `cargo clippy -p centraid-apps-money --all-targets --all-features -- -D warnings` green; `cargo xtask rules` green. The year-3 suite imports 18,000 rows through the real `money.import_transactions`, re-imports one account (all `already_in`), reads six screens through the kit's `TestDoor` and through the vault's own `keyset_page` (equal answers), and reconciles the screens with arithmetic from the parsed rows.
+
+**Findings.** (1) `Vault::keyset_page` probes `limit + 1` through `page_raw`, which clamps to 500 again: a page asked for at exactly 500 returns no `next`, so every 500-row walk stops silently (R-1099-48). `PAGE_ROWS = 499` is the crate's defence; the fix belongs in `crates/vault/src/page.rs`. (2) The paged door takes one table in `from`; no join. (3) `money.add_account` / `edit_account` cannot set `core_account.external_ref`, so an OFX statement can be matched to an account only by a value the member has no command to enter (`import::resolve_account` needs `external_ref` or a mask). (4) The vault's RRULE subset has no positional `BYDAY` (R-1099-47).
+
+### Every file this section touches
+
+- `receipts/issue-1099-money.md`, `CHANGELOG.md`, `docs/decisions.md`, `Cargo.lock`
+- `crates/apps/money/Cargo.toml`, `crates/apps/money/README.md`, `crates/apps/money/manifest.json`
+- `crates/apps/money/src/lib.rs`, `civil.rs`, `queries.rs`, `engine.rs`, `recurring.rs`, `phone.rs`, `manifest.rs`, `commands.rs`, `door.rs`, `import/mod.rs`, `import/csv.rs`, `import/plan.rs`
+- `crates/apps/money/tests/common/mod.rs`, `door.rs`, `folds.rs`, `phone.rs`, `year3.rs`, `import_corpus.rs`
+- `contracts/apps/money/rows.json`, `spending.json`, `cashflow.json`, `balances.json`, `targets.json`, `transfers.json`, `recurring.json`, `rules.json`
+
+**Falsification.** (1) *Overspending never carries in Tracking mode.* Throwaway: the tracking branch changed to carry the unfloored leftover; `overspending_does_not_carry_in_tracking_and_does_in_the_dormant_envelope_branch` went red; restored, green. (2) *A walk over a month longer than 500 rows is whole through the vault's own assembler.* Throwaway: `PAGE_ROWS` set to 500; the year-3 suite went red at "cash flow month 2024-01" (the keyset door returned 500 of 512 rows); restored, green. That check is also what found finding (1).
+
+## Lane T — Tally removed
+
+Doctrine: [docs/decisions.md#money-1099](../docs/decisions.md#money-1099) (R-1099-19..23, 33..39 and this lane's R-1099-50..59), [#ontology-v0-close-916](../docs/decisions.md#ontology-v0-close-916) (ONT-dormant, narrowed), and [#typography-and-design-contracts](../docs/decisions.md#typography-and-design-contracts) for the catalogue and hue-table edits in `packages/design`.
+
+**What changed.** The owner deleted Tally from v0. Rung 15 (`contracts/migrations/015_drop_tally.sql`) drops the twelve `tally_*` tables, the expense and circle indexes and the rows Tally wrote in the spine, and moves the chat's two app lists to `money` in one rebuild. The Tally crate, its vault commands, People's two debt commands, its core queries and proto, the assistant's Debt and Group kinds and settle verbs, both phones' Tally screens, its copy and fixtures are gone. 361 files added, changed or deleted (listed below).
+
+**Climb evidence** (`crates/vault/tests/drop_tally.rs`). A rung-14 file holding every kind of row Tally wrote, climbed to 15, loses exactly: `core_entity` 17, `core_entity_kind` 8, and one row each of `core_link`, `core_attachment`, `knowledge_annotation`, `schedule_recurrence_exception`, `schedule_recurrence_exception_attendee`, `social_circle`, `social_circle_member`, `core_transaction`, `core_account`, `access_seed_row`, `chat_message_card`. Every other table's count, including the FTS and shadow tables, is equal before and after. A founded vault holds no Tally and the rung runs over its own result; the chat's guards and search triggers survive the rebuild under the rowids they had. Every `core_party` stays: a friend was a person first.
+
+**Verification.**
+
+- `cargo test --workspace --no-fail-fast` (under `flock /home/user/.heavy.lock`): pass, 2,959 tests, 0 failed (nine targets were rerun alone after a disk prune removed their binaries before they ran; all pass).
+- `cargo xtask rules`: pass, every rule ok. `cargo test -p centraid-nativetools -p centraid-assist` with the regenerated `contracts/assist/export`: pass. `bun run check:push:static`: pass (4/4 gates).
+- `cargo xtask measure --only incrementalCheckSeconds`: 2.1 s and 2.3 s on `crates/apps/money/src/lib.rs` (ceiling 10 s, unchanged; the ledger's headroom prose quotes both).
+- `cargo xtask gate --profile mobile-jvm`: **could not run here** — exit 1 at Gradle configuration, `Plugin [id: 'com.squareup.wire', version: '7.0.1'] was not found` (the sandbox's proxy answers 303 for the Gradle plugin portal). No Kotlin compiled or ran, so the Kotlin and Swift edits are statically checked only (`rg` for every removed symbol). `cargo xtask gate --profile pr` was skipped by the owner's scope cut of 2026-10-14.
+- `node .governance/law/run.mjs --brief-digest b4ce8d9df2f4`: the window door reports two receipt-per-issue findings on the umbrella receipt itself (its top-level `## Verification` and `## Audit` sections are the root's) and, before this section, the doctrine citation above.
+
+**Iterations the owner should know about.** (1) Lowered once, each by the exact amount the removed code owned: the ontology's entity floor (50 -> 40), trash count (13 -> 10) and replicated-table count (109 -> 97); the nativetools error-example floor (125 -> 116). No ledger or budget was raised. (2) `experiments/toolchat/native` was not rewritten: its worlds hold debts and groups, so the `native-python` CI job is expected red until wave 8 regenerates them (R-1099-59). (3) The Swift files could not be compiled; see the iOS hand-off list in `HANDOFF-t.md`.
+
+**Falsification.** (1) *The pool sweep deletes only the settlement account's mirror rows.* Throwaway: the rung's `DELETE FROM core_transaction` lost its `AND account_id IN (SELECT ... 'Tally settlements')` guard. `a_rung_fourteen_vault_climbs_losing_exactly_the_tally_rows` failed: `core_entity: 57 before, 39 after` against 40 expected (a bank-account row whose `external_id` begins `tally:settlement:` was swept, with its entity). Restored; the file is unchanged. (2) *A rebuilt chat thread keeps its rowid, so a search answers the right thread.* Throwaway: the thread re-insert dropped `rowid` and read the carry in reverse. The same test failed at its search assertion: `[(1, "th-aaa"), (2, "th-bbb"), (3, "th-ccc")]` against `[(1, "th-ccc"), (2, "th-bbb"), (3, "th-aaa")]`. Restored.
+
+### Every file this section touches
+
+- `receipts/issue-1099-money.md`, `HANDOFF-t.md` (scratchpad, not in the tree)
+**Added** (2):
+- `contracts/migrations/015_drop_tally.sql`
+- `crates/vault/tests/drop_tally.rs`
+
+**Deleted** (68):
+- `contracts/apps/tally/balances.json`
+- `contracts/apps/tally/commands.json`
+- `contracts/apps/tally/queries.json`
+- `contracts/apps/tally/rows.json`
+- `contracts/apps/tally/scenarios.json`
+- `contracts/apps/tally/year3-ceiling.md`
+- `contracts/screens/tally/data-page.bin`
+- `contracts/screens/tally/data-page.textproto`
+- `contracts/screens/tally/empty-ledger.bin`
+- `contracts/screens/tally/empty-ledger.textproto`
+- `contracts/screens/tally/loading-first.bin`
+- `contracts/screens/tally/loading-first.textproto`
+- `contracts/screens/tally/low-disk-parked.bin`
+- `contracts/screens/tally/low-disk-parked.textproto`
+- `contracts/screens/tally/offline-withheld.bin`
+- `contracts/screens/tally/offline-withheld.textproto`
+- `contracts/screens/tally/refused-denied.bin`
+- `contracts/screens/tally/refused-denied.textproto`
+- `contracts/tools/tally-parity-ledger.ts`
+- `copy/tally.json`
+- `crates/api-proto/proto/centraid/core/v1/tally.proto`
+- `crates/apps/tally/Cargo.toml`
+- `crates/apps/tally/README.md`
+- `crates/apps/tally/manifest.json`
+- `crates/apps/tally/src/balance.rs`
+- `crates/apps/tally/src/commands.rs`
+- `crates/apps/tally/src/door.rs`
+- `crates/apps/tally/src/export_file.rs`
+- `crates/apps/tally/src/lib.rs`
+- `crates/apps/tally/src/manifest.rs`
+- `crates/apps/tally/src/phone.rs`
+- `crates/apps/tally/src/queries.rs`
+- `crates/apps/tally/src/views.rs`
+- `crates/apps/tally/tests/door.rs`
+- `crates/apps/tally/tests/parity.rs`
+- `crates/apps/tally/tests/queries_parity.rs`
+- `crates/apps/tally/tests/year3.rs`
+- `crates/core/src/app_query/tally.rs`
+- `crates/core/src/app_query/tally_tests.rs`
+- `crates/nativetools/tests/phase9_nt14.rs`
+- `crates/vault/src/commands/tally.rs`
+- `crates/vault/tests/tally_commands.rs`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/tally/TallyParts.kt`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/tally/TallyRoutes.kt`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/tally/TallyScreens.kt`
+- `mobile/core/src/jvmTest/kotlin/dev/centraid/core/TallyQueryRoundTripSpec.kt`
+- `mobile/iosApp/Sources/Tally/TallyDetailViews.swift`
+- `mobile/iosApp/Sources/Tally/TallyEditorView.swift`
+- `mobile/iosApp/Sources/Tally/TallyExportView.swift`
+- `mobile/iosApp/Sources/Tally/TallyHomeView.swift`
+- `mobile/iosApp/Sources/Tally/TallyLensViews.swift`
+- `mobile/iosApp/Sources/Tally/TallyParts.swift`
+- `mobile/iosApp/Sources/Tally/TallyScreens.swift`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/TallyCopy.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallyBridges.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallyEditorMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallyExpenseMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallyExport.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallyFold.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallyFriendMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallyGroupMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallyHomeMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallyLenses.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallyQuery.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallySettleUpMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/tally/TallySplit.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/TallyExportSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/TallyScreensSpec.kt`
+
+**Modified** (291):
+- `ARCHITECTURE.md`
+- `CHANGELOG.md`
+- `Cargo.lock`
+- `Cargo.toml`
+- `DESIGN.md`
+- `README.md`
+- `contracts/README.md`
+- `contracts/apps/people/README.md`
+- `contracts/assist/export/errors.json`
+- `contracts/assist/export/kind_card.txt`
+- `contracts/assist/export/metadata.json`
+- `contracts/assist/export/prompt.compact.txt`
+- `contracts/assist/export/prompt.full.txt`
+- `contracts/assist/export/prompt.sig.txt`
+- `contracts/assist/export/tools.full.json`
+- `contracts/assist/export/tools.json`
+- `contracts/ledgers/compile-time.json`
+- `contracts/schema/v0-registries.json`
+- `contracts/schema/vault-ddl.sql`
+- `contracts/screens/home/content.bin`
+- `contracts/screens/home/content.textproto`
+- `contracts/screens/home/every-tile-unreadable.bin`
+- `contracts/screens/home/every-tile-unreadable.textproto`
+- `contracts/screens/home/first-run.bin`
+- `contracts/screens/home/first-run.textproto`
+- `contracts/screens/home/loading-first.bin`
+- `contracts/screens/home/loading-first.textproto`
+- `contracts/screens/home/status-urgent.bin`
+- `contracts/screens/home/status-urgent.textproto`
+- `contracts/screens/manifest.json`
+- `contracts/screens/photos-shelf/album-selecting.textproto`
+- `contracts/time/occurrence-cases.json`
+- `contracts/tools/build-screen-fixtures.ts`
+- `contracts/tools/export-design-corpus.ts`
+- `contracts/tools/export-native-catalog.ts`
+- `contracts/tools/time-corpus-cases.ts`
+- `copy/chat.json`
+- `copy/notes.json`
+- `copy/shared.json`
+- `crates/api-proto/build.rs`
+- `crates/api-proto/proto/centraid/core/v1/app_query.proto`
+- `crates/api-proto/proto/centraid/core/v1/assist.proto`
+- `crates/api-proto/proto/centraid/core/v1/container.proto`
+- `crates/api-proto/proto/centraid/core/v1/query.proto`
+- `crates/api-proto/proto/centraid/core/v1/vault_search.proto`
+- `crates/api-proto/proto/centraid/screen/v1/screen.proto`
+- `crates/api-proto/tests/roundtrip.rs`
+- `crates/apps/kit/README.md`
+- `crates/apps/kit/src/changes.rs`
+- `crates/apps/kit/src/fixtures.rs`
+- `crates/apps/kit/src/grammar.rs`
+- `crates/apps/kit/src/manifest.rs`
+- `crates/apps/kit/src/money.rs`
+- `crates/apps/kit/src/reads.rs`
+- `crates/apps/kit/src/spelling.rs`
+- `crates/apps/kit/src/statement.rs`
+- `crates/apps/kit/src/testdoor.rs`
+- `crates/apps/kit/tests/keyset_properties.rs`
+- `crates/apps/notes/manifest.json`
+- `crates/apps/notes/src/cards.rs`
+- `crates/apps/notes/src/lib.rs`
+- `crates/apps/notes/src/manifest.rs`
+- `crates/apps/notes/src/queries.rs`
+- `crates/apps/notes/tests/library.rs`
+- `crates/apps/notes/tests/parity.rs`
+- `crates/apps/people/README.md`
+- `crates/apps/people/manifest.json`
+- `crates/apps/people/src/commands.rs`
+- `crates/apps/people/src/lib.rs`
+- `crates/apps/people/src/manifest.rs`
+- `crates/apps/people/src/person.rs`
+- `crates/apps/people/src/queries.rs`
+- `crates/apps/people/tests/copy.rs`
+- `crates/apps/people/tests/parity.rs`
+- `crates/apps/people/tests/three_state.rs`
+- `crates/apps/people/tests/year3.rs`
+- `crates/assist/Cargo.toml`
+- `crates/assist/src/app.rs`
+- `crates/assist/src/native/act.rs`
+- `crates/assist/src/native/block.rs`
+- `crates/assist/src/native/compile.rs`
+- `crates/assist/src/native/compose.rs`
+- `crates/assist/src/native/door.rs`
+- `crates/assist/src/native/failsoft.rs`
+- `crates/assist/src/native/ground.rs`
+- `crates/assist/src/native/meta.rs`
+- `crates/assist/src/native/park.rs`
+- `crates/assist/src/native/prompt.rs`
+- `crates/assist/src/native/recover.rs`
+- `crates/assist/src/native/render.rs`
+- `crates/assist/src/native/search.rs`
+- `crates/assist/src/native/session.rs`
+- `crates/assist/src/native/think.rs`
+- `crates/assist/src/native/values.rs`
+- `crates/assist/src/native/whr.rs`
+- `crates/assist/src/native/world.rs`
+- `crates/assist/src/native_turn/cards.rs`
+- `crates/assist/src/native_turn/mod.rs`
+- `crates/assist/src/native_turn/pending.rs`
+- `crates/assist/src/native_turn/words.rs`
+- `crates/assist/src/suggest.rs`
+- `crates/assist/src/turn.rs`
+- `crates/centraid/src/bin/seed-demo-vault.rs`
+- `crates/core-ffi/CONTRACT.md`
+- `crates/core-ffi/tests/assist.rs`
+- `crates/core/Cargo.toml`
+- `crates/core/README.md`
+- `crates/core/src/api.rs`
+- `crates/core/src/app_query.rs`
+- `crates/core/src/app_query/docs.rs`
+- `crates/core/src/app_query/docs_tests.rs`
+- `crates/core/src/app_query/locker.rs`
+- `crates/core/src/app_query/named.rs`
+- `crates/core/src/app_query/notes.rs`
+- `crates/core/src/app_query/people.rs`
+- `crates/core/src/app_query/photos.rs`
+- `crates/core/src/app_query/tasks.rs`
+- `crates/core/src/app_query/tasks_tests.rs`
+- `crates/core/src/app_query/vault.rs`
+- `crates/core/src/assist/door.rs`
+- `crates/core/src/example.rs`
+- `crates/core/src/starters.rs`
+- `crates/core/tests/assist_door.rs`
+- `crates/core/tests/assist_native.rs`
+- `crates/core/tests/assist_plane.rs`
+- `crates/core/tests/common/chat.rs`
+- `crates/core/tests/records_backup.rs`
+- `crates/design/README.md`
+- `crates/design/src/copy.rs`
+- `crates/design/src/lib.rs`
+- `crates/design/tests/copy_routes.rs`
+- `crates/design/tests/corpus.rs`
+- `crates/nativetools/Cargo.toml`
+- `crates/nativetools/src/error_examples.json`
+- `crates/nativetools/src/seed.rs`
+- `crates/nativetools/src/vaultio.rs`
+- `crates/nativetools/tests/cli.rs`
+- `crates/nativetools/tests/common/drive.rs`
+- `crates/nativetools/tests/fixes.rs`
+- `crates/nativetools/tests/fixtures/world.json`
+- `crates/nativetools/tests/locker_off.rs`
+- `crates/nativetools/tests/meta.rs`
+- `crates/nativetools/tests/observations.rs`
+- `crates/nativetools/tests/park_card.rs`
+- `crates/nativetools/tests/park_confirm.rs`
+- `crates/nativetools/tests/phase2_grounding.rs`
+- `crates/nativetools/tests/phase2_session.rs`
+- `crates/nativetools/tests/phase2_status.rs`
+- `crates/nativetools/tests/phase2_writes.rs`
+- `crates/nativetools/tests/phase5_runtime.rs`
+- `crates/nativetools/tests/phase6_block.rs`
+- `crates/nativetools/tests/phase6_failsoft.rs`
+- `crates/nativetools/tests/phase7_compose.rs`
+- `crates/nativetools/tests/phase7_v4.rs`
+- `crates/nativetools/tests/phase9_nt10.rs`
+- `crates/nativetools/tests/phase9_nt12.rs`
+- `crates/nativetools/tests/phase9_nt13.rs`
+- `crates/nativetools/tests/phase9_nt15.rs`
+- `crates/nativetools/tests/phase9_nt9b.rs`
+- `crates/nativetools/tests/reanchor.rs`
+- `crates/nativetools/tests/rulings.rs`
+- `crates/nativetools/tests/seed.rs`
+- `crates/nativetools/tests/tools.rs`
+- `crates/nativetools/tests/verbs.rs`
+- `crates/nativetools/tests/where_lang.rs`
+- `crates/ontology/src/registries.rs`
+- `crates/ontology/tests/commitments.rs`
+- `crates/search/README.md`
+- `crates/search/src/domains.rs`
+- `crates/search/src/lib.rs`
+- `crates/search/src/named.rs`
+- `crates/search/src/sqlite.rs`
+- `crates/search/tests/door.rs`
+- `crates/vault/src/access.rs`
+- `crates/vault/src/chat.rs`
+- `crates/vault/src/commands/chat.rs`
+- `crates/vault/src/commands/core.rs`
+- `crates/vault/src/commands/core_links.rs`
+- `crates/vault/src/commands/locker.rs`
+- `crates/vault/src/commands/mod.rs`
+- `crates/vault/src/commands/people.rs`
+- `crates/vault/src/commands/schedule.rs`
+- `crates/vault/src/custody/locker_key.rs`
+- `crates/vault/src/lib.rs`
+- `crates/vault/src/migrations.rs`
+- `crates/vault/src/time/occurrence.rs`
+- `crates/vault/src/time/recurrence.rs`
+- `crates/vault/tests/backup_v2_rung.rs`
+- `crates/vault/tests/baseline.rs`
+- `crates/vault/tests/chat_proposals.rs`
+- `crates/vault/tests/chat_schema.rs`
+- `crates/vault/tests/collection_kind.rs`
+- `crates/vault/tests/commands.rs`
+- `crates/vault/tests/common/mod.rs`
+- `crates/vault/tests/docs_commands.rs`
+- `crates/vault/tests/money_schema.rs`
+- `crates/vault/tests/one_hash.rs`
+- `crates/vault/tests/people_commands.rs`
+- `crates/vault/tests/search_coverage.rs`
+- `crates/xtask/src/gate.rs`
+- `crates/xtask/src/measure.rs`
+- `crates/xtask/src/rules.rs`
+- `design/identity-corpus.json`
+- `design/native-catalog.json`
+- `docs/decisions.md`
+- `docs/glossary.md`
+- `docs/vault-ontology.md`
+- `mobile/README.md`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/MainActivity.kt`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/kit/Rooms.kt`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/kit/Rows.kt`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/kit/SearchField.kt`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/HomeScreen.kt`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/theme/Theme.kt`
+- `mobile/core/src/jvmTest/kotlin/dev/centraid/core/AbiRoundTripSpec.kt`
+- `mobile/iosApp/Design/Catalog.swift`
+- `mobile/iosApp/Sources/CentraidApp.swift`
+- `mobile/iosApp/Sources/Chat/ChatPreview.swift`
+- `mobile/iosApp/Sources/Chat/ChatRouting.swift`
+- `mobile/iosApp/Sources/Chat/ChatView.swift`
+- `mobile/iosApp/Sources/FirstLaunchView.swift`
+- `mobile/iosApp/Sources/HomeView.swift`
+- `mobile/iosApp/Sources/Icon.swift`
+- `mobile/iosApp/Sources/Kit/CentraidSearchField.swift`
+- `mobile/iosApp/Sources/Kit/Money.swift`
+- `mobile/iosApp/Sources/Kit/Rooms.swift`
+- `mobile/iosApp/Sources/Kit/ScreenRegistry.swift`
+- `mobile/iosApp/Sources/ShellModel.swift`
+- `mobile/iosApp/Sources/VaultHeader.swift`
+- `mobile/iosApp/Tests/ScreenFixtureTests.swift`
+- `mobile/maestro/flows/home.yaml`
+- `mobile/maestro/flows/selectors.md`
+- `mobile/scripts/demo-vault.sh`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/design/Catalog.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/ChatCopy.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/NotesCopy.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/SharedCopy.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/agenda/AgendaBridge.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/locker/LockerQuery.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/notes/NotesLinkPicker.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/photos/PhotoShelfMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/photos/PhotosMemoriesMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/photos/PhotosPeopleReads.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/photos/PhotosReads.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/photos/PlacesMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/chat/ChatMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/kit/ScreenBridge.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/kit/SearchContainers.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/nav/Navigation.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/nav/RowRoutes.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/screen/ScreenHost.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/screen/ScreenMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeMachine.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeReads.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeSearch.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeSession.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/SpringboardPolicy.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/ChangeStream.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/ScreenQueries.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/ScreenRuntime.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/AgendaHomeSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/AppReadsSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/CatalogSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ChatMachineSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/HomeMachineSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/HomeNoVaultSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/HomeReadsSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/HomeSearchSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/KitLawsSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/KitTimeMoneyCopySpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/NativeThemeSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/NavigationAndMountSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/NotesAppSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/PeopleSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/PerAppLayoutSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/PhotoShelfSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ScreenFixtureSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ScreenQueryRuntimeSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/SearchContainersSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ShellCommandsExistSpec.kt`
+- `packages/design/src/apps.ts`
+- `packages/design/src/format.ts`
+- `scripts/docs-site/src/content/apps.html`
+- `scripts/docs-site/src/content/data.html`
+- `scripts/docs-site/src/content/ontology-body.html`
+- `scripts/docs-site/src/content/start.html`
+- `scripts/docs-site/src/content/understand.html`
+- `scripts/docs-site/src/pages/apps.astro`
+- `scripts/home-site/public/index.html`
+- `scripts/lint-copy.mjs`
+- `scripts/security/rust-unsafe-ledger.json`
+
+## Lane W4 — Money through the core (wave 4)
+
+Doctrine: [`docs/decisions.md#money-1099`](../docs/decisions.md#money-1099) (rulings R-1099-60 to R-1099-63; R-1099-12 is the arm range) and, for the vault half, [`docs/decisions.md#ontology-v0-close-916`](../docs/decisions.md#ontology-v0-close-916). Branch `money/w4`. Owner scope (2026-10-14): no docs prose, no full `pr` gate, no verifier.
+
+### What changed
+
+- **W4-a, `Vault::keyset_page` keeps its cursor at the ceiling.** The `limit + 1` probe was re-clamped to 500 by `page_raw`; it now has its own ceiling (`MAX_PAGE_ROWS + 1`). Money's `PAGE_ROWS` is 500.
+- **W4-b, `external_ref`.** `money.add_account` and `money.edit_account` take it (unique per vault, null clears on edit); the manifest's two action schemas follow, `edit-account` now lists `core.account` in its writes. `import::resolve_account` already matched by full ACCTID; the core now feeds it the stored numbers.
+- **Protos.** `core/v1/money.proto` (new): `MoneySpending`, `MoneyActivity`, `MoneyTransaction`, `MoneyCashflow`, `MoneyAccounts`, `MoneyRules`, `MoneyCategories`, `MoneyTargetSheet`, `MoneyRecurring`, `MoneySearch`, `MoneyHomeTile`, `MoneyImportPlan`. `AppQuery` arms 100-109 in both oneofs (110-119 reserved by comment); `Request.money` / `Response.money` = 32 carry the import plan and the tile. Amounts are `MoneyAmount` in `core.v1`, not `screen.v1.Money` (the core package imports nothing from the shell-internal one).
+- **Core dispatch.** `crates/core/src/app_query/money.rs` converts each phone answer; the plan flow is read, resolve account, load existing/rules/categories/saved layouts, plan, convert, and mint ids for `publish_input`. The statement is read once and dropped.
+- **Demo ledger.** `example::seed_money` (APPS gains `money`; three accounts, about three months of lines, eight rules, three targets); `seed-demo-vault` lists it.
+
+### Files changed or added
+
+- `crates/vault/src/page.rs`, `crates/vault/src/commands/money.rs`, `crates/vault/tests/money_commands.rs`
+- `crates/apps/money/src/queries.rs`, `crates/apps/money/README.md`, `crates/apps/money/manifest.json`
+- `crates/api-proto/proto/centraid/core/v1/money.proto` (new), `crates/api-proto/proto/centraid/core/v1/app_query.proto`, `crates/api-proto/proto/centraid/core/v1/envelope.proto`, `crates/api-proto/build.rs`, `crates/api-proto/tests/roundtrip.rs`
+- `crates/core/Cargo.toml`, `crates/core/src/app_query.rs`, `crates/core/src/app_query/money.rs` (new), `crates/core/src/app_query/money_tests.rs` (new), `crates/core/src/handle.rs`, `crates/core/src/example.rs`
+- `crates/centraid/src/bin/seed-demo-vault.rs`, `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/sync/ScreenQueries.kt` (the zone pre-check lists Money's eight `tz` arms; not Gradle-run), `scripts/security/rust-unsafe-ledger.json`, `docs/decisions.md`, `CHANGELOG.md`, `receipts/issue-1099-money.md`
+
+### Verification
+
+`cargo test -p centraid-vault -p centraid-apps-money -p centraid-core --all-features`, `cargo xtask rules`, clippy on core and the money crate with `-D warnings`, and `bun run check:push:static`: see the lane report. One run of the `centraid-core` integration tests failed `phone_backup::a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time` while the disk had 3 GB free (the spool is sized from free space); it passes alone with 8 GB free.
+
+### Falsification
+
+1. **A page asked at the ceiling keeps its cursor.** Red on base: with the fix reverted to `MAX_PAGE_ROWS` the new `page.rs` test panics at "one row remains, so a cursor is present"; green with `MAX_PAGE_ROWS + 1`.
+2. **The core's door serves all 17 declared statements.** Throwaway: dropped the `load_saved_profiles` call from `every_statement_the_crate_declares_is_served_by_the_cores_door`; it went red naming `money.import.profile` as never asked. A second throwaway let `publish_input` keep `AlreadyIn` rows; `a_plan_publishes_through_the_command_and_a_replan_offers_nothing` went red at the empty-publish assertion. Both restored.
+## Lane W8 — Money in the assistant
+
+Doctrine: [docs/decisions.md#money-1099](../docs/decisions.md#money-1099) (R-1099-8, -21, -22, -33, -34 and this lane's R-1099-80..84) and [#ontology-v0-close-916](../docs/decisions.md#ontology-v0-close-916) (the chat CHECKs already accept `money`; no schema change).
+
+**What changed.** The assistant reads Money. `Kind::Transaction` is a twelfth model-facing kind, read-only: the posted day as its date, `amount` (signed, money out negative, in the account's currency), `account`, `category`, `status` (`posted` or `void`) and Money's display name as its name. The world loads the transactions of this month and the two before it (`TRANSACTION_MONTHS = 3`) through a new `Door::table_where` (a `?`-placeholder predicate over the same paged read a screen uses; the harness's `Handle` and the phone's `CoreDoor` both answer it), fetching the display names for those ids in chunks of 200. `App::Money` is the assistant's seventh app; a transaction's chat card names `(money, transaction)` and opens Money's home (`Opens::AppHome`) until the shell has a row route. A Money-scoped chat offers three questions. A money field's `where` value may be negative (`amount < -50`).
+
+**The one write, `categorize`: not offered (R-1099-80).** The `edit` path maps one field to one scalar parameter of one command. `money.categorize` takes a list of ids and a concept id where the model would say a label, so it needs a label-to-concept step, an array input and a park simulator. That is a slice of its own.
+
+**`Flags::money` (R-1099-82).** Default on (the harness, a retrain); `NativeChat::open` sets it off on the phone. Off, no Money table is read, the world holds no transaction and the kind card is the eleven-line one the shipped model was trained on. `nativetools session --no-money` runs a harness session with that card.
+
+**Measurement, stated exactly.** The shipped model could not be run here: no Qwen3.5-0.8B GGUF exists in this environment (the only `model.gguf` files are one-byte test stubs under `/tmp`), `transformers` is not installed and the Hub is not reachable, so `eval/run.py --model gguf` could not score the frozen val or test sets before or after. **Not measured:** the model's session pass rate with the `transaction` line in its prompt, and with the `debt` and `group` lines gone (Lane T's cut, R-1099-21). **Run instead:** the deterministic suites below, including the transcript goldens (`crates/assist/tests/transcript_golden.rs`) and the committed export. The phone's flag therefore ships off, and the owner turns it on after scoring both cards.
+
+**Transcript goldens: unchanged.** No golden file changed. The goldens render prompts over worlds that hold no transaction, and the one line this wave adds to a prompt, `transaction: name, date (posted), amount (USD), account, category, status (posted|void)`, is in the regenerated export, not in a golden.
+
+**`contracts/assist/export` regenerated** with `nativetools export`: `kind_card.txt`, `prompt.{sig,compact,full}.txt` gain that one line, and `metadata.json` gains the `transaction` kind (its table, columns, the four fields and the three new mapped columns). Nothing else in the export moved.
+
+**Python estate.** `experiments/toolchat/native` could not be run here (no `transformers`, no HF cache, the public worlds are Hub artifacts). Its three kind tables (`authored/coverage.py` `SECTION_KIND`, `authored/gen/drills.py` `SECTIONS`/`NOUN`/`NOUN1`/`DATE_KINDS`, `authored/gen/recover.py` `KIND_FIELDS`) now name `transaction`. The worlds and the ~450 authored sessions still hold `debts` and `groups`, and `drills.py` still generates debt and group drills: regenerating them is a data-version rewrite (R-1099-59), and the `native-python` CI job stays red until it is done.
+
+**Verification.**
+
+- `cargo test -p centraid-assist --all-features`: pass (181 unit tests, the 3 transcript goldens). `cargo test -p centraid-nativetools --all-features`: pass, every target, including the new `money_kind` (7 tests), `meta` (the enum count is now 4: a transaction's status), `export_fixture` against the regenerated export, and `locker_off`. One run lost 29 targets to a full disk shared with another lane's build (`No space left on device` in every failure); those 29 targets were rerun alone and passed. `cargo test -p centraid-core --all-features`: pass, including `assist_door` with its new test that the phone's door reads signed, windowed transactions and `assist_native`.
+- `cargo xtask rules`: pass, every rule ok (`sql-confinement` clean: the loader states predicates as `?`-placeholder fragments through the door and writes no SQL).
+- `bun run check:push:static`: pass (4/4 gates).
+
+**Falsification.** (1) *The world holds three months and no more.* Throwaway: `TRANSACTION_MONTHS` raised to 4 -> `the_world_holds_this_month_and_the_two_before_it_and_no_older_row` red (the 30 June row came in); restored -> green. (2) *With `Flags::money` off the card is the trained one and no Money table is read.* Throwaway: `kind_card_in` made to ignore the flag -> `with_money_off_the_world_holds_no_transaction_and_the_card_is_the_trained_one` red; the loader made to read regardless -> `money_off_reads_no_money_table_and_money_on_reads_only_the_window` red; both restored -> green.
+
+### Every file this section touches
+
+- `receipts/issue-1099-money.md`, `CHANGELOG.md`, `docs/decisions.md`
+**Added** (1):
+- `crates/nativetools/tests/money_kind.rs`
+
+**Changed** (28):
+- `crates/assist/README.md`
+- `contracts/assist/export/kind_card.txt`
+- `contracts/assist/export/metadata.json`
+- `contracts/assist/export/prompt.compact.txt`
+- `contracts/assist/export/prompt.full.txt`
+- `contracts/assist/export/prompt.sig.txt`
+- `crates/assist/src/app.rs`
+- `crates/assist/src/native/act.rs`
+- `crates/assist/src/native/door.rs`
+- `crates/assist/src/native/meta.rs`
+- `crates/assist/src/native/prompt.rs`
+- `crates/assist/src/native/session.rs`
+- `crates/assist/src/native/whr.rs`
+- `crates/assist/src/native/world.rs`
+- `crates/assist/src/native_turn/cards.rs`
+- `crates/assist/src/native_turn/mod.rs`
+- `crates/assist/src/suggest.rs`
+- `crates/core/src/assist/door.rs`
+- `crates/core/tests/assist_door.rs`
+- `crates/nativetools/src/bin/nativetools.rs`
+- `crates/nativetools/src/seed.rs`
+- `crates/nativetools/src/vaultio.rs`
+- `crates/nativetools/tests/common/drive.rs`
+- `crates/nativetools/tests/locker_off.rs`
+- `crates/nativetools/tests/meta.rs`
+- `experiments/toolchat/native/authored/coverage.py`
+- `experiments/toolchat/native/authored/gen/drills.py`
+- `experiments/toolchat/native/authored/gen/recover.py`
+
+## Lane W5 — Money on the phone: the shared screens, the Home tile and Android (wave 5a)
+
+Doctrine: [`docs/decisions.md#money-1099`](../docs/decisions.md#money-1099) (rulings R-1099-64 to R-1099-69; R-1099-12, 13, 23 and 62 are the arms, the chrome, the hue and the plan/tile envelope arm they build on) and, for the design contracts, [`docs/decisions.md#typography-and-design-contracts`](../docs/decisions.md#typography-and-design-contracts) (the catalogue edit in `packages/design/src`).
+
+### What changed
+
+- **Catalogue.** `packages/design/src/apps.ts` gains Money (`money`, `Coin`, `indigo`, the hue Tally freed, R-1099-23); the emitter regenerated `design/native-catalog.json`, `Catalog.kt` and `Catalog.swift` (eight apps).
+- **Protos.** `screen.proto` gains `// --- Money ---`: nine screen states with their events, the shared parts (`MoneyRow`, `MoneyChoice`, `MoneyChip`, `MoneyFigure`, `MoneyPageChrome`...) and `TileBody.Spent` (arm 9).
+- **Machines (shared).** `apps/money/`: the base (`MoneyQuery.kt`: held state, inputs, the read loop, `MoneyQueries`), the folds (`MoneyFold.kt`), and one machine per screen (Home with its three tabs and chip sheets, transaction, target, recurring, import, accounts, rules, categories, search) with nine bridges. A view event re-folds the held answers; a search with no term asks nothing on a change.
+- **Wiring.** Navigation destinations, `RowRoutes` (a `money`/`transaction` reference opens the page), `HomeMoneyTile` + `HomeRuntime.readMoney` (the tile rides `Request.money`), the springboard (order, size, empty copy), `HomeReads.TABLES`, and `copy/money.json` with its `MoneyCopy.kt` twin (312 strings, `lint:copy` at its budget).
+- **Specs and fixtures.** `MoneyScreensSpec` (24 tests), eight fixtures under `contracts/screens/money*`, the Money arms in `AppReadsSpec`, and the counts that moved: eleven copy twins, eight catalogue apps, the packed grid, `HomeReads.TABLES`.
+- **Android.** `screens/money/` (`MoneyRoutes`, `MoneyScreens`, `MoneyPages`, `MoneyParts`), one line in `MainActivity.routes`, and the tile body in `HomeScreen`. Written to its siblings' patterns and compiled by nothing here (no Android SDK on the box): an Android hand-off beside the iOS one.
+
+### Hand-offs
+
+- **iOS**: every screen id, bridge, route and copy key is in `HANDOFF-w5.md` (scratchpad); the views mirror `MoneyRoutes.kt`; the fixtures need Swift decode tests; the tile body needs a `HomeView` branch; the Xcode project is regenerated.
+- **Android**: the four files above have never met a compiler. The first machine with an SDK builds `:androidApp -Pcentraid.android=true` and fixes what it finds.
+
+### Every file this section touches
+
+- `CHANGELOG.md`
+- `contracts/screens/manifest.json`
+- `contracts/screens/money-import/planned.bin` (new)
+- `contracts/screens/money-import/planned.textproto` (new)
+- `contracts/screens/money-import/question.bin` (new)
+- `contracts/screens/money-import/question.textproto` (new)
+- `contracts/screens/money-transaction/offers.bin` (new)
+- `contracts/screens/money-transaction/offers.textproto` (new)
+- `contracts/screens/money/activity.bin` (new)
+- `contracts/screens/money/activity.textproto` (new)
+- `contracts/screens/money/day-one.bin` (new)
+- `contracts/screens/money/day-one.textproto` (new)
+- `contracts/screens/money/denied.bin` (new)
+- `contracts/screens/money/denied.textproto` (new)
+- `contracts/screens/money/read-refused.bin` (new)
+- `contracts/screens/money/read-refused.textproto` (new)
+- `contracts/screens/money/spending.bin` (new)
+- `contracts/screens/money/spending.textproto` (new)
+- `contracts/tools/build-screen-fixtures.ts`
+- `contracts/tools/export-native-catalog.ts`
+- `copy/money.json` (new)
+- `crates/api-proto/proto/centraid/screen/v1/screen.proto`
+- `design/native-catalog.json`
+- `docs/decisions.md`
+- `mobile/README.md`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/MainActivity.kt`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/HomeScreen.kt`
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/money/MoneyPages.kt` (new)
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/money/MoneyParts.kt` (new)
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/money/MoneyRoutes.kt` (new)
+- `mobile/androidApp/src/main/kotlin/dev/centraid/android/screens/money/MoneyScreens.kt` (new)
+- `mobile/iosApp/Design/Catalog.swift`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/design/Catalog.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/MoneyCopy.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyAccounts.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyBridges.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyCategories.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyFold.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyHome.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyImport.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyLists.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyQuery.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyRules.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyTarget.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/apps/money/MoneyTransaction.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/nav/Navigation.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/nav/RowRoutes.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeMoneyTile.kt` (new)
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeReads.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/HomeRuntime.kt`
+- `mobile/shared/src/commonMain/kotlin/dev/centraid/shared/shell/SpringboardPolicy.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/AppReadsSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/CatalogSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ChangeStreamSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/HomeMachineSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/HomeNoVaultSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/KitTimeMoneyCopySpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/MoneyScreensSpec.kt` (new)
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/ScreenFixtureSpec.kt`
+- `mobile/shared/src/jvmTest/kotlin/dev/centraid/shared/SearchContainersSpec.kt`
+- `packages/design/src/apps.ts`
+- `receipts/issue-1099-money.md` (this section)
+
+### Verification
+
+- `./gradlew :shared:jvmTest`: 1350 tests green (after the two fixes below).
+- `cargo xtask gate --profile mobile-jvm` (under flock): PASS, 134 s of 420 s, including `git diff --exit-code -- design copy mobile contracts/screens`.
+- `cargo xtask rules`: every rule ok (`commonmain-no-platform-import` over 223 files). `bun run check:push:static`: 4/4. `cargo test -p centraid-api-proto`: 2 passed. `buf lint` clean and `buf breaking` against the umbrella clean. `bun run lint:copy` at its budget (no new offender).
+- An inherited red, corrected rather than loosened: `SearchContainersSpec` expected Home's search groups as notes then docs; lane T's Tally edit left that order wrong (Docs' tile is before Notes'), so the spec was red on the base and now states the machine's order.
+
+### Falsification
+
+1. **Import sends the plan's input unchanged.** Throwaway: appended a space to each statement's `publish_input` in `MoneyImportMachine.inputs`. `MoneyScreensSpec` went red in two tests (the publish input and the proposed-duplicates input) at the `inputJson shouldBe` lines; reverted.
+2. **The Home tile never drops or sums a currency.** Throwaway: took only the first amount in `HomeMoneyTile.arrived`. The tile test went red at the two-currency assertion; reverted. Red-first on a real defect: the first run of the new spec failed two tests, a search that read on a change with no term and a categories sheet whose data did not follow its state; both were fixed in the base machine (`idle`, and the view-event re-fold) and are green.
+
+## Lane W5b — Money on iOS (wave 5b)
+
+Doctrine: the same rulings as W5 ([`docs/decisions.md#money-1099`](../docs/decisions.md#money-1099)); no new ruling. The views mirror `screens/money/*.kt` screen for screen and decide nothing: every label, sign, tone and enabled flag is the state's, an amount is the kit's one `Money.render`, and nothing sums across currencies.
+
+### What changed
+
+- **`Sources/Money/MoneyScreens.swift`** conforms to `AppScreens`: nine `ScreenPort`s (one bridge each, held for the app's life), nine routes, `tileRoute` and the intent router (the Plus and a More row push the import, accounts, rules or categories; the search bar is a door that pushes `money.search`; a transaction, a category line and Recurring push theirs). A route's parameter is a small JSON `MoneyParameter` (the transaction, the month and category of a plan, the pushing page's title, and a nonce unique to the push); `open` turns it into the screen's own `Opened` with a fresh draft token. The home and the search open once per push, because `CentraidApp` re-sends `open` on every appearance and a pop back onto the home would reset its tab, month and filters.
+- **Views** (all new, `Sources/Money/`): `MoneyHomeView` (Spending, Activity, Cash flow; month stepper; chip and More sheets), `MoneyTransactionView` (with `MoneyTargetView` and `MoneyRecurringView`), `MoneyImportView` (the `.fileImporter` over CSV, OFX, QFX and plain text, read in place and handed to the bridge as `(name, bytes)`), `MoneyManageViews` (accounts, rules, categories: forms are sheets, a confirm over an open sheet is presented by that sheet) and `MoneySearchView`; `MoneyParts` holds the shared drawing.
+- **Wiring**: one line in `AppRegistry.apps`; `HomeView`'s `ContentBody` draws `TileBody.Spent` (each amount, then the caption); `ChatRouting` routes a `money`/`transaction` reference to the page and a bare `money` to the home; `ScreenFixtureTests` counts 79 fixtures and gains eight Money laws, the Swift half of `ScreenFixtureSpec`'s "money: ..." claims.
+- `project.yml` lists `Sources` by folder, so no project edit is needed beyond `xcodegen generate`.
+
+### Hand-offs
+
+The iOS build of Money is an **owner hand-off**: no Xcode here, and the Swift has met no compiler. Names were checked against `screen.proto` by hand (including SwiftProtobuf's `_p` suffix on fields that begin `has_`) and against the Kotlin bridges in `commonMain`. [Row 1.8 of the hand-off list](../docs/release/v1-handoffs.md) names the macOS command that compiles the iOS and the Android Money views (`-Pcentraid.android=true :androidApp:compileDebugKotlin`).
+
+### Every file this section touches
+
+- `CHANGELOG.md`
+- `docs/release/v1-handoffs.md`
+- `mobile/iosApp/Sources/Chat/ChatRouting.swift`
+- `mobile/iosApp/Sources/HomeView.swift`
+- `mobile/iosApp/Sources/Kit/ScreenRegistry.swift`
+- `mobile/iosApp/Sources/Money/MoneyHomeView.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneyImportView.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneyManageViews.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneyParts.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneyScreens.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneySearchView.swift` (new)
+- `mobile/iosApp/Sources/Money/MoneyTransactionView.swift` (new)
+- `mobile/iosApp/Tests/ScreenFixtureTests.swift`
+- `receipts/issue-1099-money.md` (this section)
+
+### Verification
+
+- `cargo xtask rules`: every rule ok. `bun run check:push:static`: 4/4. `cd mobile && ./gradlew :shared:jvmTest`: BUILD SUCCESSFUL (no shared code changed).
+- Not run, and why: `xcodebuild` and the Swift tests (no macOS). The Swift is checked by reading only.

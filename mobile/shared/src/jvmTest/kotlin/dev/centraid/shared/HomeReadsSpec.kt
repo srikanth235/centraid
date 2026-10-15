@@ -313,21 +313,9 @@ class HomeReadsSpec : StringSpec({
         cells.all { it.thumbnail_path == null } shouldBe true
     }
 
-    "the tally tile states its count with the noun and no balance it cannot stand behind" {
-        fun group(id: String) = centraid.core.v1.Row(
-            values = listOf(centraid.core.v1.Value(text = id), centraid.core.v1.Value(text = "USD")),
-        )
-        fun caption(rows: Int, capped: Boolean = false) =
-            HomeReads.arrived("tally", (1..rows).map { group("g$it") }, capped).tile.shouldNotBeNull()
-                .body.shouldNotBeNull().tally.shouldNotBeNull().also { it.figure.shouldBeNull() }.caption
-        caption(1) shouldBe "1 group"
-        caption(3) shouldBe "3 groups"
-        caption(200, capped = true) shouldBe "200+ groups"
-    }
-
     // --- the count's noun agrees with the number (#1047) --------------------
 
-    "every tile's count noun is singular at one row and plural otherwise — \"1 group\", never \"1 groups\"" {
+    "every tile's count noun is singular at one row and plural otherwise — \"1 note\", never \"1 notes\"" {
         fun row() = centraid.core.v1.Row(values = listOf(centraid.core.v1.Value(text = "id")))
         val singular = mapOf(
             "photos" to "photo",
@@ -335,7 +323,6 @@ class HomeReadsSpec : StringSpec({
             "notes" to "note",
             "tasks" to "task",
             "people" to "person",
-            "tally" to "group",
             "locker" to "item",
         )
         val plural = mapOf(
@@ -344,7 +331,6 @@ class HomeReadsSpec : StringSpec({
             "notes" to "notes",
             "tasks" to "tasks",
             "people" to "people",
-            "tally" to "groups",
             "locker" to "items",
         )
         HomeReads.READS.map { it.appId }.toSet() shouldBe singular.keys

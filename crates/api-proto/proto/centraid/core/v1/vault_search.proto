@@ -3,10 +3,10 @@
 // Home's search bar asks the vault once and draws the answer grouped by the app
 // each row opens in. It is the SAME search Notes' powerbox runs
 // (`notes.link_targets`, D-1020-N1): one isolated FTS probe per
-// `centraid_search::DOMAINS` domain — notes, people, agenda, tasks, tally,
+// `centraid_search::DOMAINS` domain — notes, people, agenda, tasks,
 // photos and docs — at most eight rows each, under the owner, with People's
 // journal notes left out — and one more probe per named index (notebooks
-// and albums, projects, Tally groups, Docs folders; #1097, R-1097-19..21; and
+// and albums, projects, Docs folders; #1097, R-1097-19..21; and
 // chat threads, found by their title and by what the member said, R-1097-22),
 // also at most eight. There is no second search engine behind it
 // (R-1046-1, D-1020-S1); this arm is that loader asked from Home.
@@ -56,9 +56,9 @@ message VaultSearch {
 // the core adds, never a column the index does not carry.
 message VaultSearchHit {
   // The logical entity: `knowledge.note`, `core.party`, `core.event`,
-  // `schedule.task`, `tally.expense`, `core.content_item`, `core.document`, or a
+  // `schedule.task`, `core.content_item`, `core.document`, or a
   // CONTAINER's (#1097, R-1097-19): `core.collection` (a notebook, app `notes`, or
-  // an album, app `photos`), `schedule.project`, `social.circle` (a Tally group)
+  // an album, app `photos`), `schedule.project`
   // or `core.concept` (a Docs folder); or a chat thread's (R-1097-22): `chat.thread`,
   // app `chat`, `id` the thread's id, `title` its title, `snippet` the match in
   // the member's own words.
@@ -77,9 +77,7 @@ message VaultSearchHit {
   string subtitle_local_day = 7;
   // WHAT THE ROW OPENS BY in its app, when that is not `id`. A photo is a
   // content item in the index and a media asset in Photos, so its hit carries
-  // the asset's id here; a Tally group is a circle in the index and a
-  // `tally_group` in Tally, so its hit carries the group's id; every other hit
-  // leaves it empty. A photo whose asset is gone or in the trash, and a circle
-  // with no live group, is not a hit at all.
+  // the asset's id here; every other hit leaves it empty. A photo whose asset
+  // is gone or in the trash is not a hit at all.
   string open_id = 8;
 }

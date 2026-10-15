@@ -586,7 +586,11 @@ fn folder_scheme_id(ctx: &CommandCtx<'_, '_>) -> Result<String> {
 }
 
 /// A concept scheme's id, created on first use.
-fn find_or_create_scheme(ctx: &CommandCtx<'_, '_>, uri: &str, title: &str) -> Result<String> {
+pub(crate) fn find_or_create_scheme(
+    ctx: &CommandCtx<'_, '_>,
+    uri: &str,
+    title: &str,
+) -> Result<String> {
     let existing: Option<String> = ctx
         .connection()
         .query_row(
@@ -3813,26 +3817,16 @@ pub const NOT_A_PARTY_POINTER: &[(&str, &str)] = &[];
 ///
 /// The default is "drop the duplicate" — machinery saying nothing the
 /// survivor's copy does not already say. These are the exceptions, and every
-/// one of them is a number or a primacy flag.
+/// one of them is a primacy flag. (A number that ADDS on a collision, a share of an
+/// expense, had its tables in Tally's split and payer rows; they left the vault in
+/// rung fifteen, #1099, and the policy left with them.)
 const MERGE_COLLISIONS: &[(&str, Collision)] = &[
-    ("tally_expense_split", Collision::Sum("share_minor")),
-    ("tally_expense_payer", Collision::Sum("paid_minor")),
-    (
-        "tally_expense_line_allocation",
-        Collision::Sum("share_minor"),
-    ),
-    (
-        "tally_recurring_expense_split",
-        Collision::Sum("share_minor"),
-    ),
     ("core_party_identifier", Collision::Demote("is_primary")),
     ("social_contact_channel", Collision::Demote("is_preferred")),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Collision {
-    /// Both rows are real and their amounts ADD: fold onto the survivor's row.
-    Sum(&'static str),
     /// A second row of a kind only one may be primary: keep it, demote it.
     Demote(&'static str),
     /// Duplicate machinery. The default.
@@ -3868,11 +3862,11 @@ pub struct PartyRef {
 ///
 /// This was once `cols.find(|c| c.pk == 1)`, read as "the primary key column".
 /// **`PRAGMA table_info.pk` is not a boolean**: it is the column's POSITION in
-/// the key, 1-based. On `tally_expense_split (expense_id, party_id)` that
-/// returned `expense_id` alone, so a merge's "re-point this one row" ran
-/// `UPDATE … WHERE expense_id = ?` and rewrote — or, on the collision path,
-/// DELETED — every split of the expense. A shared 900 became an expense with no
-/// splits and no payers, silently.
+/// the key, 1-based. On a table keyed `(parent_id, party_id)` — an expense's
+/// split in the app this rung once served — that returned `parent_id` alone, so a
+/// merge's "re-point this one row" ran `UPDATE … WHERE parent_id = ?` and rewrote
+/// — or, on the collision path, DELETED — every row of the parent. A shared 900
+/// became an expense with no splits and no payers, silently.
 fn primary_key_of(connection: &rusqlite::Connection, table: &str) -> Result<Vec<String>> {
     let mut prepared = connection
         .prepare("SELECT name, pk FROM pragma_table_info(?1) WHERE pk > 0 ORDER BY pk")?;
@@ -3994,7 +3988,6 @@ pub fn merge_party_sweep(connection: &rusqlite::Connection) -> Result<Vec<PartyR
 pub struct FoldTally {
     pub repointed: usize,
     pub deduped: usize,
-    pub summed: usize,
     /// Rows whose two ends became one party. A payment to oneself is not a
     /// payment.
     pub degenerate: usize,
@@ -4077,47 +4070,6 @@ fn repoint_row(
     }
 
     match collision_for(&reference.table) {
-        Collision::Sum(amount_column) if reference.key.contains(&reference.column) => {
-            // The survivor's row carries the same key with this column swapped.
-            let survivor_key: Vec<rusqlite::types::Value> = reference
-                .key
-                .iter()
-                .zip(key_values)
-                .map(|(column, value)| {
-                    if column == &reference.column {
-                        rusqlite::types::Value::Text(survivor.to_owned())
-                    } else {
-                        value.clone()
-                    }
-                })
-                .collect();
-            let amount: i64 = connection
-                .query_row(
-                    &format!(
-                        "SELECT \"{amount_column}\" FROM \"{}\" WHERE {where_key}",
-                        reference.table
-                    ),
-                    rusqlite::params_from_iter(key_values.iter()),
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
-            let mut binds: Vec<rusqlite::types::Value> =
-                vec![rusqlite::types::Value::Integer(amount)];
-            binds.extend(survivor_key);
-            connection.execute(
-                &format!(
-                    "UPDATE \"{}\" SET \"{amount_column}\" = \"{amount_column}\" + ? WHERE {where_key}",
-                    reference.table
-                ),
-                rusqlite::params_from_iter(binds.iter()),
-            )?;
-            connection.execute(
-                &format!("DELETE FROM \"{}\" WHERE {where_key}", reference.table),
-                rusqlite::params_from_iter(key_values.iter()),
-            )?;
-            tally.summed += 1;
-            return Ok(());
-        }
         Collision::Demote(flag_column) => {
             let mut binds: Vec<rusqlite::types::Value> =
                 vec![rusqlite::types::Value::Text(survivor.to_owned())];
@@ -4136,7 +4088,7 @@ fn repoint_row(
                 Err(error) => return Err(error.into()),
             }
         }
-        Collision::Sum(_) | Collision::DropDuplicate => {}
+        Collision::DropDuplicate => {}
     }
 
     // A pointer with a policy of its own — a standing answer dated shut and
@@ -4386,7 +4338,6 @@ fn merge_party() -> CommandDefinition {
                 "survivor_party_id": survivor,
                 "repointed": tally.repointed,
                 "deduped": tally.deduped,
-                "summed": tally.summed,
                 "degenerate": tally.degenerate,
                 "revoked": tally.revoked,
             }))

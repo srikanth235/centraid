@@ -692,7 +692,7 @@ private fun SpringboardGrid(data: HomeData, onEvent: (HomeEvent) -> Unit) {
 
 /**
  * EVERY APP IS A TILE (R-ONBOARD-11), in the rows the machine packed: an app
- * with nothing in it draws what to do, so Docs, Agenda, People and Tally are
+ * with nothing in it draws what to do, so Docs, Agenda and People are
  * always here to open. Shared by the springboard and day one.
  */
 @Composable
@@ -809,8 +809,8 @@ private fun ColumnScope.FilledBody(body: TileBody) {
     val agenda = body.agenda
     val people = body.people
     val tasks = body.tasks
-    val tally = body.tally
     val locker = body.locker
+    val spent = body.money
     when {
         photos != null -> {
             val cells = photos.cells
@@ -1065,36 +1065,26 @@ private fun ColumnScope.FilledBody(body: TileBody) {
             }
         }
 
-        tally != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // NO FIGURE IS A REAL STATE: Home does not project a balance yet,
-            // so the body is the count's own sentence alone.
-            val figure = tally.figure
-            if (figure != null) {
+        // THIS MONTH'S SPENDING, one figure per currency and never a sum across them.
+        // The amounts are the core's and the caption is the machine's.
+        spent != null -> Column(column, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            spent.amounts.forEach { amount ->
                 Text(
-                    formatMoney(figure),
-                    style = centraidType("display"),
+                    formatMoney(amount),
+                    style = centraidType("mono"),
                     color = centraidColor("text"),
-                    maxLines = 1,
-                )
-            }
-            Text(
-                tally.caption,
-                style = centraidType(if (figure != null) "small" else "smallStrong"),
-                color = centraidColor(if (figure != null) "textSoft" else "text"),
-            )
-            // Rendered only when the caller has something true to say — the
-            // rolling comparison is an optional field, and absent is silence.
-            val after = tally.after
-            if (!after.isNullOrEmpty()) {
-                Spacer(Modifier.weight(1f))
-                Text(
-                    after,
-                    style = centraidType("small"),
-                    color = centraidColor("textFaint"),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            Spacer(Modifier.weight(1f))
+            Text(
+                spent.caption,
+                style = centraidType("small"),
+                color = centraidColor("textSoft"),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
 
         locker != null -> Column(column, verticalArrangement = Arrangement.spacedBy(4.dp)) {

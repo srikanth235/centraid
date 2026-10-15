@@ -1,22 +1,22 @@
-//! THREE INDEPENDENT DENIALS, ONE TYPE (D-1020-PE1).
+//! ONE INDEPENDENT DENIAL, ONE TYPE (D-1020-PE1).
 //!
-//! The census says People's sheet makes "three sharing questions deny
-//! independently of the profile". v0 makes ONE of them independent: the share
-//! plane is caught and answered `null`, and everything else sits in one
-//! `Promise.all` under one `try`, so revoking `tally.obligation` — a scope over
-//! ANOTHER APP's table — answers `{person: null}` and the member loses their
-//! grandfather's birthday because they uninstalled Tally.
+//! v0 made one of People's sharing questions independent: the share plane was
+//! caught and answered `null`, and everything else sat in one `Promise.all` under
+//! one `try`, so revoking a scope over ANOTHER APP's table answered
+//! `{person: null}` and the member lost their grandfather's birthday because they
+//! uninstalled the other app. (That app and the share plane are both gone, #1099
+//! and #1029; the claim stands for the one reading that is left.)
 //!
 //! This suite is the proof that the port does not. It runs the real queries
 //! through a door that refuses one plane at a time, and asserts:
 //!
 //! 1. the profile stands, with its name, cadence and dates intact;
 //! 2. the refused reading carries the door's own sentence;
-//! 3. **`linked` is unrepresentable on a denied sharing read** — the field
-//!    lives inside `ReadState::Ready`, so there is no `null` for a chip to be
-//!    drawn on and no `vault_count: 0` to be mistaken for "linked to nothing".
+//! 3. **a denied linked read is unrepresentable as empty** — the data lives
+//!    inside `ReadState::Ready`, so there is no `null` for a rail to be drawn on
+//!    and no `relationships: []` to be mistaken for "linked to nothing".
 //!
-//! The fourth candidate, `social.contact_channel`, is deliberately NOT a
+//! The other candidate, `social.contact_channel`, is deliberately NOT a
 //! reading: how to reach a person is part of who the sheet is about, and the
 //! question goes to the owner in this lane's receipt. `a_denied_contact_plane_is_a_denied_sheet`
 //! is what states that choice, so changing it means changing a test.
@@ -52,9 +52,10 @@ fn fixture_vault() -> rusqlite::Connection {
         &ddl,
         &rows,
         // THE MAPPING, stated: the frozen bundle still carries v0's
-        // `share_party_vault_binding` rows, which rung five drops (#1029).
+        // `share_party_vault_binding` rows, which rung five drops (#1029), and
+        // `tally_obligation` rows, which rung fifteen drops (#1099).
         &FrozenRowMapping {
-            tables_gone: &["share_party_vault_binding"],
+            tables_gone: &["share_party_vault_binding", "tally_obligation"],
             columns_gone: &[],
             columns_added: &[],
         },
@@ -112,24 +113,6 @@ fn a_person_with_everything(connection: &rusqlite::Connection) -> String {
         .expect("the corpus carries Maya Alvarez")
 }
 
-/// TALLY'S TABLE IS ANOTHER APP'S, and revoking it must not blank the person.
-/// v0 answers `{person: null, vaultDenied}` here.
-#[test]
-fn a_denied_obligations_read_costs_the_debts_rail_and_nothing_else() {
-    let connection = fixture_vault();
-    let party_id = a_person_with_everything(&connection);
-    let door = door(&connection, &["tally_obligation"]);
-
-    let (data, denial) = load_person(&door, &party_id).expect("the sheet reads");
-    assert!(denial.is_none(), "revoking Tally must not blank the person");
-    let person = data.person.expect("the person is still there");
-    assert_eq!(person.profile.name, "Maya Alvarez");
-    assert!(person.obligations.denied());
-    assert!(person.obligations.ready().is_none());
-    // The linked plane is untouched.
-    assert!(person.links.known());
-}
-
 /// THE LINKED PLANE: relationships, tasks, gift ideas and the interaction rail
 /// all hang off `core_link`, and revoking it costs those rails — not the person.
 #[test]
@@ -144,7 +127,6 @@ fn a_denied_linked_plane_costs_the_relationship_rail_and_nothing_else() {
     assert_eq!(person.profile.name, "Maya Alvarez");
     assert!(person.links.denied());
     assert!(person.links.ready().is_none());
-    assert!(person.obligations.known());
 }
 
 /// THE FOURTH CANDIDATE, STATED RATHER THAN MODELLED. Revoking

@@ -1563,20 +1563,12 @@ fn nt15_n1b_a_day_with_a_time_is_one_day_and_off_under_no_normalize() {
 fn nt15_r4_a_kind_noun_is_no_content_word_of_the_name() {
     let world = world_with(|world| {
         for (key, name) in [("acl", "ACL ticket"), ("concert", "Concert ticket")] {
-            push(
-                world,
-                "debts",
-                json!({"key": key, "person": "ray", "direction": "i_owe", "amount": 30, "name": name, "date": "2026-08-01"}),
-            );
+            push(world, "tasks", json!({"key": key, "name": name}));
         }
     });
     let mut session = world.session();
-    session.user("settle the ticket IOU");
-    let reply = call(
-        &mut session,
-        "act",
-        json!({"verb": "settle_debt", "kind": "debt", "name": "ticket IOU"}),
-    );
+    session.user("tick off the ticket task");
+    let reply = call(&mut session, "act", complete("ticket task"));
     assert_eq!(reply["effect"]["tool"], "ask", "{reply}");
     let mut got = ids(&reply["effect"]["ask"]["options"]);
     got.sort();

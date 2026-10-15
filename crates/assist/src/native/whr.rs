@@ -11,7 +11,7 @@
 //! `in_progress`; `status != open` leaves out both, and `status in (…)` reads
 //! each member the same way. `in_progress`, `completed` and `cancelled` select
 //! only themselves, and so does `open` on a status without `in_progress` (a
-//! debt's). The rule is `selects`; `edit` and `create` write the value they
+//! debt's, until Tally left, #1099). The rule is `selects`; `edit` and `create` write the value they
 //! are given and never go through it.
 
 use crate::native::meta::{self, FieldType, Kind};
@@ -223,26 +223,31 @@ pub fn field_fix(kind: Kind, field: &str, using: FieldUse) -> String {
     }
 }
 
-/// THE CALL TO SEND INSTEAD OF A LINK THE KINDS LACK, when it is decidable: a group's money is
-/// `op balance` on the group (debts are the person's, a group's money is its balance; only a
-/// debt is asked of a group that way, so no other kind gets the sentence), and the photos of a person or of an album are the photos `linked_to` that row. A
-/// sentence with a leading space, or nothing.
+/// THE CALL TO SEND INSTEAD OF A LINK THE KINDS LACK, when it is decidable: the photos of a
+/// person or of an album are the photos `linked_to` that row. A sentence with a leading space,
+/// or nothing.
 #[must_use]
 pub fn link_fix(kind: Kind, target: Kind) -> String {
     match (kind, target) {
-        (Kind::Debt, Kind::Group) => " A group's money is compute op balance, kind group, linked_to the person (none means you)."
-            .to_owned(),
         (Kind::Person, Kind::Album) | (Kind::Album, Kind::Person) => {
             " The photos of a person or an album: find kind photo, linked_to that row.".to_owned()
         }
         // nt15 R1a: a task's or an event's notes are its description, not rows
         (Kind::Task | Kind::Event, Kind::Note) => format!(
             " {} notes are its description: where description is empty (or is set, or contains \"…\").",
-            if kind == Kind::Task { "A task's" } else { "An event's" }
+            if kind == Kind::Task {
+                "A task's"
+            } else {
+                "An event's"
+            }
         ),
         (Kind::Note, Kind::Task | Kind::Event) => format!(
             " {} notes are its description, not linked rows: where description is set (or contains \"…\") on the {}.",
-            if target == Kind::Task { "A task's" } else { "An event's" },
+            if target == Kind::Task {
+                "A task's"
+            } else {
+                "An event's"
+            },
             target.name()
         ),
         _ => String::new(),
@@ -1038,12 +1043,20 @@ pub(crate) fn parse_cond(kind: Kind, part: &str) -> Result<Cond, String> {
         FieldType::Number | FieldType::Money => {
             let mut words = value.split_whitespace();
             let written = words.next().unwrap_or_default();
+            // A MONEY FIELD MAY BE SIGNED (a transaction's `amount`: money out is negative), so a
+            // leading minus is read before the symbol (`-50`, `-$50`) and applied after.
+            let (negative, written) = match field.ty {
+                FieldType::Money => written
+                    .strip_prefix(['-', '\u{2212}'])
+                    .map_or((false, written), |rest| (true, rest)),
+                _ => (false, written),
+            };
             let number = written.trim_start_matches(['$', '\u{20ac}', '\u{a3}', '\u{a5}']);
             let symbol = (field.ty == FieldType::Money)
                 .then(|| symbol_of(written))
                 .flatten();
             let parsed = if field.ty == FieldType::Money {
-                parse_amount(number)
+                parse_amount(number).map(|amount| if negative { -amount } else { amount })
             } else {
                 number.parse::<f64>().ok()
             }

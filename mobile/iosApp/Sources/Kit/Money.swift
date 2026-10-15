@@ -8,7 +8,7 @@ import Foundation
 // the JVM `MoneyRenderSpec` asserts Android's `formatMoney`, so the two cannot
 // drift. An EMPTY locale means the device's, which no fixture can pin.
 
-/// THE ONE SWIFT FORMATTER, for the Home tile and the Tally list alike, and the
+/// THE ONE SWIFT FORMATTER, for every surface that draws an amount, and the
 /// twin of Android's `formatMoney`: two spellings of one amount inside one app
 /// would be two answers to "how much".
 enum Money {

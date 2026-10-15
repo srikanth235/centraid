@@ -1487,7 +1487,7 @@ fn journal_body(door: &dyn PageDoor, window: usize) -> KitResult<JournalData> {
 // `link-targets` — the powerbox
 // ---------------------------------------------------------------------------
 
-/// THE POWERBOX: one bounded probe per domain, over seven domains, secret-free.
+/// THE POWERBOX: one bounded probe per domain, over six domains, secret-free.
 ///
 /// Each probe is **isolated**, so a denied scope leaves its column absent
 /// rather than emptying the sheet (`queries/link-targets.ts:1`-`:4`) — v0 runs

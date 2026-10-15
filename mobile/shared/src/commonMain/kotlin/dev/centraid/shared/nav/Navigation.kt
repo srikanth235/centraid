@@ -7,8 +7,6 @@ import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.PlacesState
-import centraid.screen.v1.TallyHomeState
-import centraid.screen.v1.TallyListState
 import centraid.screen.v1.TasksHomeState
 import centraid.screen.v1.TasksListState
 
@@ -61,11 +59,6 @@ public sealed interface Destination {
 
     /** Copies. v0's `Devices` alias. */
     public data object Copies : Destination
-
-    public data class TallyHome(
-        val destination: TallyListState.Destination =
-            TallyListState.Destination.DESTINATION_ACTIVITY,
-    ) : Destination
 
     /**
      * AGENDA'S HOME (#1046). Day, Schedule or Waiting, as a parameter; Search
@@ -296,57 +289,6 @@ public sealed interface Destination {
 
     /** Tasks' trash: restore, and delete forever behind a confirm. */
     public data object TasksTrash : Destination
-    // --- Tally (#1046 port) ---
-
-    /**
-     * TALLY'S HOME: Balances, Activity or Groups, as a parameter; More is a
-     * sheet. A shell calls `TallyHomeBridge.open(destination)`. The legacy
-     * [TallyHome] stays until the native list moves here.
-     */
-    public data class TallyApp(
-        val destination: TallyHomeState.Destination = TallyHomeState.Destination.DESTINATION_BALANCES,
-    ) : Destination
-
-    // `parent` on a pushed Tally page is the pushing page's title: the back
-    // control's word (#1047). Empty: "Tally".
-
-    /** One group's ledger; the name rides along for the head. */
-    public data class TallyGroup(val groupId: String, val name: String = "", val parent: String = "") : Destination
-
-    /** One friend; the name rides along for the head. */
-    public data class TallyFriend(val partyId: String, val name: String = "", val parent: String = "") : Destination
-
-    public data class TallyExpense(val expenseId: String, val parent: String = "") : Destination
-
-    /**
-     * Add (no `expenseId`, preset with a group or a friend) or edit. No band:
-     * explicit Save, and leaving with changes asks first.
-     */
-    public data class TallyEditor(
-        val expenseId: String = "",
-        val groupId: String = "",
-        val partyId: String = "",
-    ) : Destination
-
-    /** Empty `groupId` is every group plus the group-less positions. */
-    public data class TallySettleUp(val groupId: String = "", val parent: String = "") : Destination
-
-    public data object TallyRecurring : Destination
-
-    public data object TallySpending : Destination
-
-    public data object TallySearch : Destination
-
-    /** Restore only: the sweep purges, and there is no destroy path. */
-    public data object TallyTrash : Destination
-
-    /**
-     * A group's ledger as a file (#1047), from the home's More sheet (`export`)
-     * or a group page. Empty [groupId] asks the member to pick one. A shell
-     * calls `TallyExportBridge.open(groupId, parent)`.
-     */
-    public data class TallyExport(val groupId: String = "", val parent: String = "") : Destination
-
     // --- Locker (#1047, D-5) ---
     //
     // EVERY LOCKER DESTINATION IS DRAWN UNDER THE LOCK WALL while
@@ -387,6 +329,39 @@ public sealed interface Destination {
 
     /** A password-manager file, reviewed and sealed in (#1047 T2): `LockerImportBridge.open(parent)`. */
     public data object LockerImport : Destination
+
+    // --- Money (#1099, R-1099-13) ---
+    // `parent` on a pushed Money page is the pushing page's title: the back
+    // control's word. Empty: "Money".
+
+    /**
+     * MONEY'S HOME: Spending, Activity or Cash flow, as a parameter; More is a
+     * sheet. A shell calls `MoneyHomeBridge.open(destination)`.
+     */
+    public data class MoneyHome(
+        val destination: centraid.screen.v1.MoneyHomeState.Destination =
+            centraid.screen.v1.MoneyHomeState.Destination.DESTINATION_SPENDING,
+    ) : Destination
+
+    /** One transaction: `MoneyTransactionBridge.open(txnId, parent)`. */
+    public data class MoneyTransaction(val txnId: String, val parent: String = "") : Destination
+
+    /** A category's plan for a month, a sheet: `MoneyTargetBridge.open(month, categoryId, currency)`. */
+    public data class MoneyTarget(val month: String, val categoryId: String, val currency: String) : Destination
+
+    public data class MoneyRecurring(val parent: String = "") : Destination
+
+    /** A statement, reviewed and imported: `MoneyImportBridge.open(parent)`. */
+    public data class MoneyImport(val parent: String = "") : Destination
+
+    public data class MoneyAccounts(val parent: String = "") : Destination
+
+    public data class MoneyRules(val parent: String = "") : Destination
+
+    public data class MoneyCategories(val parent: String = "") : Destination
+
+    /** The search bar's page (R-CHROME-2): `MoneySearchBridge.open()`. */
+    public data object MoneySearch : Destination
 }
 
 /**
@@ -455,15 +430,6 @@ public data class NavStack(val entries: List<Destination> = listOf(Destination.H
             NavStack(entries.dropLast(1) + top.copy(destination = destination))
         } else {
             push(Destination.DocsHome(destination))
-        }
-    }
-
-    public fun withTallyDestination(destination: TallyListState.Destination): NavStack {
-        val top = current
-        return if (top is Destination.TallyHome) {
-            NavStack(entries.dropLast(1) + top.copy(destination = destination))
-        } else {
-            push(Destination.TallyHome(destination))
         }
     }
 }

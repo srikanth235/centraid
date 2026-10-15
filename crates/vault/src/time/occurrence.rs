@@ -5,8 +5,8 @@
 //! `recurrence_semantics` recording which reading that wall clock is under.
 //! **Three readers spelled the column `original_start` and one spelled the
 //! zone `time_zone`**, so every one of them read `undefined`: a skipped
-//! occurrence came back on the phone, on the web agenda and on Tally's
-//! template dashboard, silently, because a missing key matches nothing.
+//! occurrence came back on the phone and on the web agenda, silently, because a
+//! missing key matches nothing.
 //!
 //! This module is the ONE place the stored spelling appears
 //! ([`OCCURRENCE_LOCAL_START_COLUMN`]). Readers take an [`OccurrenceKey`];
@@ -28,14 +28,14 @@ pub const OCCURRENCE_LOCAL_START_COLUMN: &str = "original_start_local";
 /// The same word as the column on purpose: one spelling, end to end.
 pub const OCCURRENCE_LOCAL_START_KEY: &str = "original_start_local";
 
-/// The two series kinds `schedule_recurrence_exception.target_type` allows.
-/// A CLOSED set, and the schema's own CHECK.
+/// The series kinds this build reads from `schedule_recurrence_exception.target_type`.
+/// A CLOSED set. The schema's CHECK still allows a second value, `tally.recurring_expense`,
+/// which the immutable baseline keeps (#1099, R-1099-37): no row carries it since rung
+/// fifteen, and a row that did would read as no series.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SeriesType {
     /// An `core_event` row — Agenda's.
     Event,
-    /// A `tally_recurring_expense` row — Tally's template dashboard.
-    RecurringExpense,
 }
 
 impl SeriesType {
@@ -43,7 +43,6 @@ impl SeriesType {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Event => "core.event",
-            Self::RecurringExpense => "tally.recurring_expense",
         }
     }
 
@@ -51,7 +50,6 @@ impl SeriesType {
     pub fn from_stored(value: &str) -> Option<Self> {
         match value {
             "core.event" => Some(Self::Event),
-            "tally.recurring_expense" => Some(Self::RecurringExpense),
             _ => None,
         }
     }

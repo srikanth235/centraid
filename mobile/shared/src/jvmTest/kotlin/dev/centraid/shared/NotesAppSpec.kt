@@ -31,7 +31,6 @@ import centraid.screen.v1.NotesLibraryState
 import centraid.screen.v1.NotesLinkPickerEvent
 import centraid.screen.v1.NotesLinkTargetRow
 import centraid.screen.v1.NotesNotebooksEvent
-import centraid.screen.v1.NotesNotebooksState
 import centraid.screen.v1.TileBody
 import centraid.screen.v1.TileStatus
 import centraid.screen.v1.TrashListEvent
@@ -418,7 +417,7 @@ class NotesAppSpec : StringSpec({
 
     "library: rows_changed re-reads on its tables only, keeping the rows drawn" {
         val state = loadedLibrary(row("n-1", "A"))
-        NotesLibraryMachine.rowsChanged("tally_expense", emptyList()).shouldBeNull()
+        NotesLibraryMachine.rowsChanged("locker_item", emptyList()).shouldBeNull()
         val step = NotesLibraryMachine.reduce(state, NotesLibraryMachine.rowsChanged("core_collection_entry", listOf("k"))!!)
         step.effects.single().shouldBeInstanceOf<ScreenEffect.ReadPage>()
         step.state.data_.shouldNotBeNull()
@@ -567,14 +566,12 @@ class NotesAppSpec : StringSpec({
             listOf(
                 NotesLinkTarget(entity = "core.document", id = "d-1", title = "Lease", subtitle = "docs", app_id = "docs"),
                 NotesLinkTarget(entity = "core.content_item", id = "p-1", title = "Beach", subtitle = "photos", app_id = "photos"),
-                NotesLinkTarget(entity = "tally.expense", id = "x-1", title = "Dinner", subtitle = "tally", app_id = "tally"),
                 NotesLinkTarget(entity = "some.thing", id = "o-1", title = "Odd", subtitle = "elsewhere", app_id = "elsewhere"),
             ),
         )
         folded.domains.map { it.head!!.title to it.rows.single().subtitle } shouldBe listOf(
             NotesCopy.DOMAIN_DOCS to NotesCopy.LINK_KIND_DOCUMENT,
             NotesCopy.DOMAIN_PHOTOS to NotesCopy.LINK_KIND_PHOTOGRAPH,
-            NotesCopy.DOMAIN_TALLY to NotesCopy.LINK_KIND_EXPENSE,
             NotesCopy.DOMAIN_OTHER to "",
         )
         // A REAL subtitle that is not the app key still reads as itself.

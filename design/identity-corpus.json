@@ -1,6 +1,6 @@
 {
   "$generatedBy": "contracts/tools/export-design-corpus.ts",
-  "$note": "Inputs and outputs of packages/design's partyHueKey/partyHueValue and identityInitials, and of Tally's figureTone, run over a fixed corpus so crates/design is asserted against the functions rather than against a reading of them (#1020, D-1020-T1). `initials.units` are UTF-16 code units: identityInitials can answer half a surrogate pair, and a port has to reproduce that exactly.",
+  "$note": "Inputs and outputs of packages/design's partyHueKey/partyHueValue and identityInitials, and of figureTone, run over a fixed corpus so crates/design is asserted against the functions rather than against a reading of them (#1020, D-1020-T1). `initials.units` are UTF-16 code units: identityInitials can answer half a surrogate pair, and a port has to reproduce that exactly.",
   "brand": "#141414",
   "hues": [
     {

@@ -675,6 +675,7 @@ fn a_vault_below_rung_eleven_climbs_through_twelve_with_the_widened_list() {
     vault.close().expect("closes");
     {
         let raw = rusqlite::Connection::open(&path).unwrap();
+        common::undo_rung_fifteen(&raw);
         raw.execute_batch(&format!(
             "BEGIN; {} PRAGMA user_version = 10; COMMIT;",
             common::UNDO_RUNG_ELEVEN

@@ -1,11 +1,12 @@
 // THE IDENTITY CORPUS — packages/design's three presentation answers, as data
 // (#1020, D-1020-T1).
 //
-// `contracts/apps/tally/queries.json` carries a party's `color` from
+// An app's parity fixture carries a party's `color` from
 // `partyHueValue(partyHueKey(id))`, its `initials` from `identityInitials`, and
 // a figure's tone from `figureTone` — three functions with no Rust home, which
-// is why wave 2 committed the 29 Tally cases and could not compare them (lane
-// D3's receipt, D-1020-D3-9). The answer is not to retype them in Rust: it is
+// is why wave 2 committed the Tally cases and could not compare them (lane
+// D3's receipt, D-1020-D3-9; the Tally fixture left with the app, #1099). The
+// answer is not to retype them in Rust: it is
 // to run THEM over a fixed input corpus and commit inputs and outputs, so
 // `crates/design` is checked against the functions rather than against a
 // reading of them.
@@ -19,10 +20,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-// `figureTone` lived with Tally's formatters until wave 6 retired that tree; it
-// is now `packages/design/src/format.ts`, beside the rungs it chooses between.
-// It is emitted here with the two identity functions for one reason: it is the
-// third PRESENTATION field the Tally parity fixture carries, and
+// `figureTone` is `packages/design/src/format.ts`, beside the rungs it chooses
+// between. It is emitted here with the two identity functions for one reason: it
+// is the third PRESENTATION field a parity fixture carries, and
 // `crates/design` is the one place a presentation rule is lowered into Rust.
 import {
   figureTone,
@@ -35,10 +35,10 @@ import { BRAND } from "../../packages/design/src/themes/shared.ts";
 //
 // THE THREE PRESENTATION FIELDS THE PARITY FIXTURES CARRY (#1020, D-1020-T1).
 //
-// `contracts/apps/tally/queries.json` carries a party's `color` from
+// A parity fixture carries a party's `color` from
 // `partyHueValue(partyHueKey(id))`, its `initials` from `identityInitials`, and
 // a figure's tone from `figureTone` — three functions with no Rust home, which
-// is why the 29 cases were committed and not compared (wave 2 lane D3's
+// is why the cases were committed and not compared (wave 2 lane D3's
 // receipt, D-1020-D3-9). The answer is not to retype them: it is to run THEM
 // over a fixed input corpus and commit inputs and outputs, so `crates/design`
 // is checked against the functions rather than against a reading of them.
@@ -188,7 +188,7 @@ export function emitIdentityCorpus(repositoryRoot: string): {
         $generatedBy: "contracts/tools/export-design-corpus.ts",
         $note:
           "Inputs and outputs of packages/design's partyHueKey/partyHueValue " +
-          "and identityInitials, and of Tally's figureTone, run over a fixed " +
+          "and identityInitials, and of figureTone, run over a fixed " +
           "corpus so crates/design is asserted against the functions rather " +
           "than against a reading of them (#1020, D-1020-T1). `initials.units` " +
           "are UTF-16 code units: identityInitials can answer half a surrogate " +

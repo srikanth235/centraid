@@ -773,49 +773,13 @@ fn an_empty_folder_deletes_as_before() {
 }
 
 #[test]
-fn a_group_with_expenses_ends_in_an_ask_that_does_not_promise_a_way_out() {
-    let world = seeded_with(&fixture());
-    let mut session = world.session();
-    session.user("delete the tahoe group");
-    let group = call(
-        &mut session,
-        "act",
-        json!({"verb": "delete", "kind": "group", "name": "Tahoe Trip"}),
-    );
-    assert_eq!(tool_of(&group), "ask", "{group}");
-    assert_eq!(group["ends_turn"], true);
-    // settling up does not lift the vault's refusal, so the question does not offer it
-    assert_eq!(
-        group["effect"]["ask"]["question"],
-        "the Tahoe Trip group still has expenses, so it cannot be deleted; keep it, or rename it instead?"
-    );
-    assert_eq!(group["effect"]["refusal"]["predicate"], "group_empty");
-    assert_eq!(group["effect"]["refusal"]["outcome"], "ask");
-    assert!(diff_rows(&group).is_empty(), "{group}");
-    // the other group has no expenses: it deletes
-    session.user("and the flat one");
-    let flat = call(
-        &mut session,
-        "act",
-        json!({"verb": "delete", "kind": "group", "name": "Flat 4B"}),
-    );
-    assert_eq!(tool_of(&flat), "act", "{flat}");
-    assert_eq!(diff_rows(&flat)[0]["change"], "removed");
-}
-
-#[test]
 fn the_refusals_of_other_verbs_stay_errors_for_the_model() {
-    // D-1044-10 reads the refusals of `restore` and `delete`; the others (a member with a
-    // balance, an event that clashes, a cancelled event, a name in use) are the model's
+    // D-1044-10 reads the refusals of `restore` and `delete`; the others (an event that
+    // clashes, a cancelled event, a name in use) are the model's
     let world = seeded_with(&fixture());
     let mut session = world.session_uncomposed();
     session.user("do these");
-    let tahoe = common::find_in_turn(&mut session, "group", "Tahoe Trip");
     let refused = [
-        (
-            "remove_from",
-            json!({"verb": "remove_from", "kind": "person", "name": "Ray Ochoa", "args": format!("from: {tahoe}")}),
-        ),
         (
             "create event",
             json!({"verb": "create", "kind": "event", "args": "name: Call\ndate: {\"date\":\"2026-10-02\",\"time\":\"09:15\"}"}),

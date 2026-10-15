@@ -568,211 +568,6 @@ fn the_recurring_rollover_is_the_schedule_slots_and_the_refusal_names_it() {
 }
 
 #[test]
-fn a_debt_makes_a_tally_friend_and_settling_closes_rather_than_deletes() {
-    let circle = Circle::open("people-debt");
-    let jake = circle.person("Jake Bennett", 45);
-    let owner = circle.owner_party_id();
-    let debt = circle.run(
-        "people.add_debt",
-        json!({
-            "party_id": jake,
-            "direction": "owe",
-            "amount_minor": 15_000,
-            "reason": "His half of the cabin deposit"
-        }),
-    )["debt_id"]
-        .as_str()
-        .expect("a debt id")
-        .to_owned();
-    // THE DIRECTION IS THE OWNER'S OWN SIDE.
-    assert_eq!(
-        circle.text(&format!(
-            "SELECT from_party FROM tally_obligation WHERE obligation_id = '{debt}'"
-        )),
-        Some(owner.clone())
-    );
-    assert_eq!(
-        circle.count(&format!(
-            "SELECT COUNT(*) FROM tally_friend WHERE party_id = '{jake}'"
-        )),
-        1,
-        "a debt makes them a Tally friend, once"
-    );
-    circle.run(
-        "people.add_debt",
-        json!({ "party_id": jake, "direction": "owed", "amount_minor": 500 }),
-    );
-    assert_eq!(
-        circle.count(&format!(
-            "SELECT COUNT(*) FROM tally_friend WHERE party_id = '{jake}'"
-        )),
-        1,
-        "and the friend row is unique per party"
-    );
-    circle.run("people.settle_debt", json!({ "debt_id": debt }));
-    assert_eq!(
-        circle.count(&format!(
-            "SELECT COUNT(*) FROM tally_obligation WHERE obligation_id = '{debt}'"
-        )),
-        1,
-        "closed, not deleted: a settled debt stays as history"
-    );
-    // Settling twice is refused, because the debt is no longer open.
-    let again = circle.try_run("people.settle_debt", json!({ "debt_id": debt }));
-    assert_eq!(again.status, CommandStatus::Failed);
-    assert_eq!(again.predicate.as_deref(), Some("debt_open"));
-    // AND THE OWNER CANNOT OWE THEMSELVES.
-    let self_debt = circle.try_run(
-        "people.add_debt",
-        json!({ "party_id": owner, "direction": "owe", "amount_minor": 100 }),
-    );
-    assert_eq!(self_debt.status, CommandStatus::Failed);
-}
-
-/// A CALLER-MINTED DEBT ID IS HONOURED (#1088, after #922 G2). The chat's confirm card names the
-/// debt before the member taps, so the id on the card must be the id the row gets.
-#[test]
-fn a_debt_takes_the_id_its_caller_minted() {
-    let circle = Circle::open("people-debt-minted");
-    let jake = circle.person("Jake Bennett", 45);
-    let minted = "debt-pre-minted-1";
-    let output = circle.run(
-        "people.add_debt",
-        json!({
-            "debt_id": minted,
-            "party_id": jake,
-            "direction": "owed",
-            "amount_minor": 4_250,
-            "reason": "Print framing"
-        }),
-    );
-    assert_eq!(
-        output["debt_id"], minted,
-        "the output names the caller's id"
-    );
-    assert_eq!(
-        circle.count(&format!(
-            "SELECT COUNT(*) FROM tally_obligation WHERE obligation_id = '{minted}'
-                AND amount_minor = 4250"
-        )),
-        1,
-        "the row is the caller's id and nothing else"
-    );
-    assert_eq!(
-        circle.count(&format!(
-            "SELECT COUNT(*) FROM core_entity WHERE entity_id = '{minted}'
-                AND entity_type = 'tally.obligation'"
-        )),
-        1,
-        "and it is an entity under that id (#916)"
-    );
-    assert_eq!(
-        circle.count(&format!(
-            "SELECT COUNT(*) FROM tally_friend WHERE party_id = '{jake}'"
-        )),
-        1,
-        "a debt still makes them a Tally friend, once, under an id the vault minted"
-    );
-    // THE DEBT IS A DEBT LIKE ANY OTHER: settling it by the same id closes it.
-    circle.run("people.settle_debt", json!({ "debt_id": minted }));
-    assert_eq!(
-        circle.count(&format!(
-            "SELECT COUNT(*) FROM tally_obligation
-              WHERE obligation_id = '{minted}' AND settled_at IS NOT NULL"
-        )),
-        1
-    );
-}
-
-#[test]
-fn a_debt_with_no_id_of_its_own_is_minted_by_the_vault_as_before() {
-    let circle = Circle::open("people-debt-unminted");
-    let jake = circle.person("Jake Bennett", 45);
-    let debt = circle.run(
-        "people.add_debt",
-        json!({ "party_id": jake, "direction": "owe", "amount_minor": 900 }),
-    )["debt_id"]
-        .as_str()
-        .expect("a debt id")
-        .to_owned();
-    assert!(!debt.is_empty());
-    assert_eq!(
-        circle.count(&format!(
-            "SELECT COUNT(*) FROM tally_obligation WHERE obligation_id = '{debt}'"
-        )),
-        1,
-        "an absent id is the vault's own, and the debt lands under it"
-    );
-}
-
-#[test]
-fn a_debt_id_a_row_already_holds_is_refused_and_writes_nothing() {
-    let circle = Circle::open("people-debt-taken");
-    let jake = circle.person("Jake Bennett", 45);
-    let taken = circle.run(
-        "people.add_debt",
-        json!({ "debt_id": "debt-dup", "party_id": jake, "direction": "owe", "amount_minor": 100 }),
-    )["debt_id"]
-        .as_str()
-        .expect("a debt id")
-        .to_owned();
-    let before = circle.count("SELECT COUNT(*) FROM tally_obligation");
-    let refuse = |debt_id: &str| {
-        circle
-            .vault()
-            .execute(
-                &circle.registry,
-                &circle.principal,
-                &Command::new(
-                    "people.add_debt",
-                    json!({ "debt_id": debt_id, "party_id": jake, "direction": "owed", "amount_minor": 700 }),
-                ),
-            )
-            .expect_err("a taken id is refused")
-            .to_string()
-    };
-    // A DUPLICATE debt id.
-    let duplicate = refuse(&taken);
-    assert!(duplicate.contains("already holds the id"), "{duplicate}");
-    // AN ID ANOTHER KIND HOLDS is no more free: an id names one thing (#916).
-    let held_by_a_person = refuse(&jake);
-    assert!(
-        held_by_a_person.contains("already holds the id"),
-        "{held_by_a_person}"
-    );
-    assert_eq!(
-        circle.count("SELECT COUNT(*) FROM tally_obligation"),
-        before,
-        "neither refusal wrote a row"
-    );
-    assert_eq!(
-        circle.count(&format!(
-            "SELECT COUNT(*) FROM tally_obligation WHERE obligation_id = '{taken}'
-                AND amount_minor = 100"
-        )),
-        1,
-        "and the first debt is as it was"
-    );
-}
-
-/// THE IDS A VAULT MINTS DO NOT MOVE for a debt with no id of its own (#1088). The gate writes a
-/// check row per condition and each takes an id, so a condition added to `people.add_debt` would
-/// shift every id after it; the assistant's harness orders rows by id.
-#[test]
-fn adding_a_debt_leaves_the_id_sequence_exactly_where_it_was() {
-    let circle = Circle::open("people-debt-sequence");
-    let jake = circle.person("Jake Bennett", 45);
-    let checks = |circle: &Circle| circle.count("SELECT COUNT(*) FROM agent_invocation_check");
-    let before = checks(&circle);
-    circle.run(
-        "people.add_debt",
-        json!({ "party_id": jake, "direction": "owe", "amount_minor": 900 }),
-    );
-    // person_exists and not_the_owner_themselves before, debt_added after: three checks, no more
-    assert_eq!(checks(&circle) - before, 3);
-}
-
-#[test]
 fn a_journal_entry_is_a_marked_note_with_its_own_day() {
     let circle = Circle::open("people-journal");
     let entry = circle.run(
@@ -1012,10 +807,11 @@ fn the_sweep_is_generated_from_the_live_schema_and_covers_three_kinds_of_pointer
         .filter(|reference| reference.predicate.is_some())
         .count();
 
-    // Forty engine foreign keys onto `core_party` in the committed DDL
+    // Twenty-eight engine foreign keys onto `core_party` in the committed DDL
     // (`grep -c 'REFERENCES core_party' contracts/schema/vault-ddl.sql`). It was
-    // 44 before rung five dropped the sharing and connector planes (#1029).
-    assert_eq!(engine, 40, "the engine FK walk found a different set");
+    // 44 before rung five dropped the sharing and connector planes (#1029) and 40
+    // before rung fifteen dropped Tally's twelve (#1099).
+    assert_eq!(engine, 28, "the engine FK walk found a different set");
     // TWELVE `(type, id)` pairs — `core_link` carries two, its from- and to-
     // endpoints. It was fifteen before rung five dropped `outbox_item`,
     // `sync_external_entity` and `share_subscription_lineage` (#1029).
@@ -1031,7 +827,7 @@ fn the_sweep_is_generated_from_the_live_schema_and_covers_three_kinds_of_pointer
     // `share_authority.principal_id` — and rung five drops its table (#1029),
     // so the two mechanical walks are now the whole sweep.
     assert_eq!(hand_kept, 0);
-    assert_eq!(sweep.len(), 52);
+    assert_eq!(sweep.len(), 40);
     assert!(
         sweep
             .iter()
@@ -1040,18 +836,19 @@ fn the_sweep_is_generated_from_the_live_schema_and_covers_three_kinds_of_pointer
         "the pointer v0's registry omits has to be in the generated sweep"
     );
 
-    // The composite key is read WHOLE (#916 review 2.1): `tally_expense_split`
-    // is keyed on two columns and a one-column key there is how a merge
-    // rewrote every split of an expense.
-    let split = sweep
+    // The composite key is read WHOLE (#916 review 2.1): an occurrence's attendee row
+    // is keyed on two columns and a one-column key there is how a merge rewrote every
+    // attendee of an occurrence.
+    let attendee = sweep
         .iter()
         .find(|reference| {
-            reference.table == "tally_expense_split" && reference.column == "party_id"
+            reference.table == "schedule_recurrence_exception_attendee"
+                && reference.column == "party_id"
         })
-        .expect("the split's party column is in the sweep");
+        .expect("the attendee's party column is in the sweep");
     assert_eq!(
-        split.key,
-        vec!["expense_id".to_owned(), "party_id".to_owned()]
+        attendee.key,
+        vec!["exception_id".to_owned(), "party_id".to_owned()]
     );
 }
 
@@ -1117,13 +914,13 @@ fn no_column_that_names_a_party_is_outside_the_sweep() {
         "these columns name a party and no walk re-points them: {missing:?}"
     );
     // A floor, so a scan that suddenly matches nothing fails rather than
-    // passing vacuously. It is BELOW the sweep's 40 engine columns on purpose:
-    // the audit matches on NAME and four of those columns are called `paid_by`,
-    // `granted_by`, `from_party` and `to_party` — which is itself the reason a
-    // name-shaped audit cannot be the only check, and why the sweep is
-    // generated from foreign keys rather than from names.
+    // passing vacuously. It is BELOW the sweep's 28 engine columns on purpose:
+    // the audit matches on NAME, which is itself the reason a name-shaped audit
+    // cannot be the only check, and why the sweep is generated from foreign keys
+    // rather than from names. (It was 36 before rung fifteen dropped Tally's
+    // columns, #1099.)
     assert!(
-        candidates.len() >= 36,
+        candidates.len() >= 28,
         "the audit found only {} candidate columns",
         candidates.len()
     );
@@ -1145,7 +942,7 @@ fn the_merge_leaves_no_row_naming_the_folded_in_party() {
 
     // A CORPUS THROUGH THE REAL COMMANDS, so the rows are the ones a member's
     // vault actually holds: notes, a task, a gift, a birthday, an interaction,
-    // two debts, a list, a star and two channels on each side.
+    // a star and two channels on each side.
     for party in [&survivor, &merged] {
         circle.run(
             "people.log_interaction",
@@ -1166,10 +963,6 @@ fn the_merge_leaves_no_row_naming_the_folded_in_party() {
         circle.run(
             "people.add_important_date",
             json!({ "party_id": party, "label": "Birthday", "month_day": "08-14" }),
-        );
-        circle.run(
-            "people.add_debt",
-            json!({ "party_id": party, "direction": "owe", "amount_minor": 900 }),
         );
         circle.run("people.star_person", json!({ "party_id": party }));
         circle.run(
@@ -1201,10 +994,8 @@ fn the_merge_leaves_no_row_naming_the_folded_in_party() {
     // **The plant runs with `foreign_keys` and CHECK enforcement OFF, and the
     // MERGE runs with both back on.** A fabricated row exists to prove the
     // sweep's REACH, and it cannot satisfy an enum CHECK or a parent row it has
-    // no business inventing; the behaviour under real enforcement is what
-    // `folding_two_sharers_of_one_expense_adds_their_shares_rather_than_dropping_one`
-    // and `folding_both_ends_of_a_debt_drops_it_as_degenerate_rather_than_failing`
-    // prove, on rows the schema accepted.
+    // no business inventing; the behaviour under real enforcement is what the
+    // colliding-phone case above proves, on rows the schema accepted.
     let sweep = circle
         .vault()
         .read(merge_party_sweep)
@@ -1277,8 +1068,8 @@ fn the_merge_leaves_no_row_naming_the_folded_in_party() {
                         "BLOB" => "x''".to_owned(),
                         // A TEXT value distinct per (table, filled column,
                         // PLANTED column), so two plants into one table — and
-                        // there are five such tables, `core_account` and
-                        // `tally_settlement` among them — cannot collide on a
+                        // there are several such tables, `core_account` among
+                        // them — cannot collide on a
                         // primary key or on a UNIQUE.
                         _ => format!("'plant-{table}-{name}-{column}'"),
                     }
@@ -1335,7 +1126,7 @@ fn the_merge_leaves_no_row_naming_the_folded_in_party() {
         "exactly one referencing column is excluded, and the reason is in the loop"
     );
     assert_eq!(planted.len() + refused_by_the_merge.len(), sweep.len());
-    assert_eq!(planted.len(), 51);
+    assert_eq!(planted.len(), 39);
 
     // THE MERGE.
     let output = circle.run(
@@ -1390,118 +1181,6 @@ fn the_merge_leaves_no_row_naming_the_folded_in_party() {
                 AND normalized_value = '+14155550100'"
         )),
         1
-    );
-}
-
-/// A SHARE IS A NUMBER AND IT ADDS (#916, review 2.1). This is the case that
-/// used to destroy money: two people on one bill, folded together.
-#[test]
-fn folding_two_sharers_of_one_expense_adds_their_shares_rather_than_dropping_one() {
-    let circle = Circle::open("merge-money");
-    let survivor = circle.person("Maya Alvarez", 30);
-    let merged = circle.person("M. Alvarez", 30);
-    let owner = circle.owner_party_id();
-
-    // One expense, three splits: the owner's and both sides' — written directly
-    // because `tally.*` is another lane's command surface and this test is
-    // about the FOLD, not about how the expense got there.
-    circle
-        .vault()
-        .commit(|tx| {
-            tx.set_producer("test.expense");
-            let connection = tx.connection();
-            connection.execute(
-                "INSERT INTO social_circle (circle_id, owner_party_id, name, kind, created_at)
-                 VALUES ('c1', ?1, 'Trip', 'friends', '2099-01-01T00:00:00.000Z')",
-                [&owner],
-            )?;
-            connection.execute(
-                "INSERT INTO tally_group (group_id, circle_id, icon, color, currency, created_at)
-                 VALUES ('g1', 'c1', '🏔', 'violet', 'GBP', '2099-01-01T00:00:00.000Z')",
-                [],
-            )?;
-            connection.execute(
-                "INSERT INTO tally_expense (expense_id, group_id, description, amount_minor,
-                   currency, paid_by, split_method, spent_on, category, created_at)
-                 VALUES ('e1', 'g1', 'Cabin', 90000, 'GBP', ?1, 'equally', '2099-01-02',
-                         'travel', '2099-01-02T00:00:00.000Z')",
-                [&owner],
-            )?;
-            for (party, share) in [(&owner, 30000), (&survivor, 30000), (&merged, 30000)] {
-                connection.execute(
-                    "INSERT INTO tally_expense_split (expense_id, party_id, share_minor)
-                     VALUES ('e1', ?1, ?2)",
-                    rusqlite::params![party, share],
-                )?;
-            }
-            Ok(())
-        })
-        .expect("the expense lands");
-
-    let total_before: i64 = circle.count("SELECT SUM(share_minor) FROM tally_expense_split");
-    assert_eq!(total_before, 90_000);
-
-    let output = circle.run(
-        "core.merge_party",
-        json!({ "survivor_party_id": survivor, "merged_party_id": merged }),
-    );
-    assert_eq!(
-        output["summed"].as_u64().unwrap_or_default(),
-        1,
-        "the colliding split had to be SUMMED, not dropped"
-    );
-    // THE TOTAL STILL RECONCILES, which is the whole claim.
-    assert_eq!(
-        circle.count("SELECT SUM(share_minor) FROM tally_expense_split"),
-        90_000
-    );
-    assert_eq!(
-        circle.count(&format!(
-            "SELECT share_minor FROM tally_expense_split
-              WHERE expense_id = 'e1' AND party_id = '{survivor}'"
-        )),
-        60_000
-    );
-    assert_eq!(
-        circle.count("SELECT COUNT(*) FROM tally_expense_split WHERE expense_id = 'e1'"),
-        2
-    );
-}
-
-/// A ROW WHOSE TWO ENDS BECAME ONE PARTY IS DROPPED AND COUNTED. A debt to
-/// oneself is not a debt.
-#[test]
-fn folding_both_ends_of_a_debt_drops_it_as_degenerate_rather_than_failing() {
-    let circle = Circle::open("merge-degenerate");
-    let survivor = circle.person("Jake Bennett", 45);
-    let merged = circle.person("J. Bennett", 45);
-    circle
-        .vault()
-        .commit(|tx| {
-            tx.set_producer("test.debt");
-            tx.connection().execute(
-                "INSERT INTO tally_obligation (obligation_id, from_party, to_party, amount_minor,
-                   currency, reason, incurred_on, settled_at, created_at, updated_at)
-                 VALUES ('o1', ?1, ?2, 5000, 'GBP', 'the cabin', '2099-01-02', NULL,
-                         '2099-01-02T00:00:00.000Z', '2099-01-02T00:00:00.000Z')",
-                rusqlite::params![survivor, merged],
-            )?;
-            Ok(())
-        })
-        .expect("the obligation lands");
-
-    let output = circle.run(
-        "core.merge_party",
-        json!({ "survivor_party_id": survivor, "merged_party_id": merged }),
-    );
-    assert_eq!(
-        output["degenerate"].as_u64().unwrap_or_default(),
-        1,
-        "the CHECK failure has one honest reading and the fold has to count it"
-    );
-    assert_eq!(
-        circle.count("SELECT COUNT(*) FROM tally_obligation WHERE obligation_id = 'o1'"),
-        0
     );
 }
 
@@ -1794,16 +1473,33 @@ fn purging_a_trashed_person_destroys_the_party_and_everything_people_owns_of_the
 }
 
 /// MONEY REFUSES THE PURGE (vault-ontology "a person can be purged … and money
-/// and authority refuse it while they still name them"): a debt is a durable
-/// record, so the person stays in the trash with a sentence saying why.
+/// and authority refuse it while they still name them"): a transaction naming them
+/// as its counterparty is a durable record, so the person stays in the trash with a
+/// sentence saying why.
 #[test]
 fn a_person_money_still_names_is_refused_the_purge() {
     let circle = Circle::open("people-purge-money");
     let ray = circle.person("Ray", 0);
-    circle.run(
-        "people.add_debt",
-        json!({ "party_id": ray, "direction": "owe", "amount_minor": 900 }),
-    );
+    let owner = circle.owner_party_id();
+    circle
+        .vault()
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO core_account (account_id, owner_party_id, name, kind, currency, is_asset)
+                 VALUES ('acct-cash', ?1, 'Cash', 'cash', 'USD', 1)",
+                [&owner],
+            )?;
+            tx.connection().execute(
+                "INSERT INTO core_transaction
+                   (txn_id, account_id, posted_at, amount_minor, currency, direction, status,
+                    counterparty_party_id, description)
+                 VALUES ('txn-ray', 'acct-cash', '2026-01-01T00:00:00Z', 900, 'USD', 'debit',
+                         'posted', ?1, 'Lent to Ray')",
+                [&ray],
+            )?;
+            Ok(())
+        })
+        .expect("a transaction naming Ray is written");
     circle.run("people.trash_person", json!({ "party_id": ray }));
     let refused = circle.try_run("people.purge_person", json!({ "party_id": ray }));
     assert_eq!(
@@ -1815,7 +1511,7 @@ fn a_person_money_still_names_is_refused_the_purge() {
             .reason
             .as_deref()
             .unwrap_or_default()
-            .contains("tally_obligation"),
+            .contains("core_transaction"),
         "{:?}",
         refused.reason
     );

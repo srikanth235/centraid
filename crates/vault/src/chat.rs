@@ -107,7 +107,7 @@ pub struct StoredTurn {
 /// The apps a card may name: the ones the assistant reads, Locker never among
 /// them.
 const CARD_APPS: [&str; 7] = [
-    "agenda", "docs", "notes", "people", "photos", "tally", "tasks",
+    "agenda", "docs", "money", "notes", "people", "photos", "tasks",
 ];
 
 impl Vault {
@@ -405,10 +405,6 @@ impl Vault {
             ("photos", "photo") => {
                 "SELECT COUNT(*) FROM media_asset WHERE asset_id = ?1 AND deleted_at IS NULL"
             }
-            ("tally", "expense") => {
-                "SELECT COUNT(*) FROM tally_expense WHERE expense_id = ?1 AND deleted_at IS NULL"
-            }
-            ("tally", "friend") => "SELECT COUNT(*) FROM tally_friend WHERE party_id = ?1",
             _ => return Ok(true),
         };
         self.read(|connection| {

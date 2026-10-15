@@ -103,30 +103,6 @@ fn issue_6_a_note_item_keeps_its_notes_sealed_and_reveals_them() {
 }
 
 #[test]
-fn issue_12_settle_up_carries_the_balance_it_moved() {
-    let world = seeded();
-    let mut session = world.session();
-    let ray = number(&mut session, "person", "ray");
-    // Tahoe Trip is #2 in the directory: Ray owes 100.00 for the cabin, and
-    // I owe him 30.00 of the groceries.
-    let settled = call(
-        &mut session,
-        "act",
-        json!({"verb": "settle_up", "rows": ray, "args": "group: #2"}),
-    );
-    let rows = diff_rows(&settled);
-    let person = rows
-        .iter()
-        .find(|row| row["kind"] == "person")
-        .unwrap_or_else(|| panic!("{settled}"));
-    assert_eq!(
-        person["fields"]["balance"],
-        json!([{"amount": 70.0, "unit": "USD"}, {"amount": 0.0, "unit": "USD"}]),
-        "{settled}"
-    );
-}
-
-#[test]
 fn issue_16_a_refused_create_leaves_no_row_behind() {
     let world = seeded();
     let mut session = world.session_uncomposed();
@@ -231,23 +207,10 @@ fn issue_5_a_seeded_vault_leaves_no_write_ahead_log() {
 }
 
 #[test]
-fn issue_4_a_world_sets_the_vault_default_currency() {
+fn issue_4_a_world_names_the_vault_default_currency_in_three_letters() {
     let mut world = fixture();
     world["currency"] = json!("eur");
-    let seeded = seeded_with(&world);
-    let mut session = seeded.session();
-    let system = session.prompt()["system"].as_str().unwrap().to_owned();
-    assert!(system.contains("amount (EUR)"), "{system}");
-    session.user("");
-    let debt = call(
-        &mut session,
-        "find",
-        json!({"kind": "debt", "name": "concert"}),
-    );
-    assert!(
-        debt["text"].as_str().unwrap().contains("25.50 EUR"),
-        "{debt}"
-    );
+    let _seeded = seeded_with(&world);
     let mut bad = fixture();
     bad["currency"] = json!("euro");
     let dir = tempfile::tempdir().unwrap();

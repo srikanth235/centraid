@@ -26,7 +26,7 @@ This is the most important table in this file. **Nothing in the right-hand colum
 | the emitted app catalogue, identity marks and band places (`CatalogSpec`) | every emitted silhouette PARSING in the Swift path reader (`IconSilhouetteTests`) — **run: 3 tests, green** |
 | `commonMain` is platform-free (Konsist), icon-only controls carry labels (a source scan over both surfaces) | Roborazzi and swift-snapshot-testing snapshots |
 | the emitted token table matches `packages/design` in both schemes, in Kotlin, in Swift and in JSON | the iOS framework linking, and the XCFramework — **both done** |
-| the `call` budget for the three screens' reads, measured | the device numbers that promote `tests/journeys.json`'s parked ceilings |
+| the `call` budget for the two screens' reads, measured | the device numbers that promote `tests/journeys.json`'s parked ceilings |
 | the backup plane's shared half (#1080): the pass's inputs and triggers, the one launch registration, the windows' constraints, the backup line and Backup screen, the upload loop's order, the walker's streaming and the need-bytes feed over a scripted core, free up space — and source scans of what the native halves must say | the windows firing, the background `URLSession` carrying parts with the app suspended, the Photos and MediaStore walkers, the derivatives, the deletions — `maestro/backup-measurement.md` |
 
 ## The one command the gate runs
@@ -234,7 +234,7 @@ dev/centraid/shared/
 ├── screen/     THE CONTRACT, and nothing else: ScreenMachine + ScreenHost
 ├── kit/        the laws every app screen is built from — no app type in it
 │   └── time/   civil-day arithmetic and words over the core's answers
-├── apps/       agenda/ docs/ notes/ people/ photos/ tally/ tasks/ — each
+├── apps/       agenda/ docs/ locker/ money/ notes/ people/ photos/ tasks/ — each
 │               app's machines, reads, writes and bridges
 ├── custody/    the 24 words, pairing and restore
 ├── nav/        the navigation model
@@ -255,14 +255,14 @@ A third assertion says `screen` holds exactly two files, because a screen that m
 
 ## The kit, the app queries, and adding an app screen
 
-Every first-party app but Locker is on the phone: Agenda ([#1046](https://github.com/srikanth235/centraid/issues/1046)), Tasks, People, Docs, Notes and Tally ([#1047](https://github.com/srikanth235/centraid/issues/1047)), beside Photos. They are built from one kit on three layers, so a port supplies an app's content and copy and none of the plumbing. The rulings behind it are [R-1047-K1…K6](../docs/decisions.md#the-app-ports-and-the-shell-kit-1047).
+Every first-party app but Locker is on the phone: Agenda ([#1046](https://github.com/srikanth235/centraid/issues/1046)), Tasks, People, Docs and Notes ([#1047](https://github.com/srikanth235/centraid/issues/1047)), beside Photos. They are built from one kit on three layers, so a port supplies an app's content and copy and none of the plumbing. The rulings behind it are [R-1047-K1…K6](../docs/decisions.md#the-app-ports-and-the-shell-kit-1047).
 
 ### Reads: a page, or an app query
 
 A screen reads one of two ways, and never joins tables itself:
 
 - **A page read** (`ScreenReads`, `sync/ScreenRuntime.kt`) — one `PageRequest` over one table, for a screen that is one table (Photos' shelves, the kit's trash where an app has no trash query).
-- **An app query** (`ScreenQueries`, `sync/ScreenQueries.kt`) — `Request::AppQuery` runs a registered query from the app's crate in the core and answers a typed message (`crates/api-proto/proto/centraid/core/v1/app_query.proto`, one `<app>.proto` per app). Everything that joins, expands a repeating series or folds a ledger goes here: Agenda's `upcoming`, the Tasks board, the People roster, the Docs drive, the Notes library, the Tally dashboard. `requests(state, now)` answers the queries for the state's destination, run in order; `arrived(answers, requests)` folds them into one event; one refused or denied query fails the whole read. `tables` is every table the queries read, and `AppReadsSpec` checks it against the machine's `rowsChanged` over the vault DDL. `HomeSession.attachQueries(host, queries, writes, left)` attaches one.
+- **An app query** (`ScreenQueries`, `sync/ScreenQueries.kt`) — `Request::AppQuery` runs a registered query from the app's crate in the core and answers a typed message (`crates/api-proto/proto/centraid/core/v1/app_query.proto`, one `<app>.proto` per app). Everything that joins, expands a repeating series or folds a ledger goes here: Agenda's `upcoming`, the Tasks board, the People roster, the Docs drive, the Notes library. `requests(state, now)` answers the queries for the state's destination, run in order; `arrived(answers, requests)` folds them into one event; one refused or denied query fails the whole read. `tables` is every table the queries read, and `AppReadsSpec` checks it against the machine's `rowsChanged` over the vault DDL. `HomeSession.attachQueries(host, queries, writes, left)` attaches one.
 
 There is one query engine: no Kotlin or Swift code joins tables or expands an rrule. A read the phone needs and no arm answers is a new arm in the core, in its app's field range ([R-1047-Q1](../docs/decisions.md#the-app-ports-and-the-shell-kit-1047)).
 

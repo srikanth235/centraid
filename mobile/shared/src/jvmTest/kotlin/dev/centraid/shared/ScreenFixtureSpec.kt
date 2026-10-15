@@ -13,6 +13,9 @@ import centraid.screen.v1.DuplicateReviewState
 import centraid.screen.v1.DuplicatesState
 import centraid.screen.v1.FaceReviewState
 import centraid.screen.v1.HomeState
+import centraid.screen.v1.MoneyHomeState
+import centraid.screen.v1.MoneyImportState
+import centraid.screen.v1.MoneyTransactionState
 import centraid.screen.v1.Springboard
 import centraid.screen.v1.TileStatus
 import centraid.screen.v1.MediaPermission
@@ -33,10 +36,10 @@ import centraid.screen.v1.PlacesState
 import centraid.screen.v1.ReadFailureKind
 import centraid.screen.v1.SearchMatch
 import centraid.screen.v1.SeatState
-import centraid.screen.v1.TallyListState
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -92,73 +95,6 @@ class ScreenFixtureSpec : StringSpec({
         onDisk.forEach { path ->
             contracts.resolve(path.replace(".bin", ".textproto")).exists().shouldBeTrue()
         }
-    }
-
-    // --- Tally ------------------------------------------------------------
-
-    "tally/loading-first is the first load, and carries no rows and no failure" {
-        val state = TallyListState.ADAPTER.decode(screens.bytes("tally/loading-first"))
-        state.loading.shouldNotBeNull().first_load.shouldBeTrue()
-        state.data_.shouldBeNull()
-        state.failure.shouldBeNull()
-        state.destination shouldBe TallyListState.Destination.DESTINATION_ACTIVITY
-    }
-
-    "tally/empty-ledger and tally/refused-denied are DIFFERENT screens" {
-        // THE LAW. v0 pins it in `tally-store.test.ts`: a failed read never
-        // reads as an empty ledger. Asserting the two fixtures separately would
-        // not catch a decoder that collapsed them, so they are asserted
-        // against each other.
-        val empty = TallyListState.ADAPTER.decode(screens.bytes("tally/empty-ledger"))
-        val refused = TallyListState.ADAPTER.decode(screens.bytes("tally/refused-denied"))
-
-        empty.data_.shouldNotBeNull().rows.shouldContainExactly()
-        empty.failure.shouldBeNull()
-
-        refused.data_.shouldBeNull()
-        refused.failure.shouldNotBeNull().kind shouldBe ReadFailureKind.READ_FAILURE_KIND_REFUSED
-
-        // The sentence is the access plane's, not its predicate.
-        refused.failure.sentence shouldBe "This is not shared with you."
-        (empty == refused).shouldBeFalse()
-    }
-
-    "tally/data-page carries money with its own exponent and locale" {
-        // v0's formatter divides minor units by 100 unconditionally and reads
-        // the HOST's locale (`packages/design/src/format.ts:38`, `:49`), so the
-        // same vault renders differently on two devices. The fixture carries a
-        // JPY row precisely because an exponent of 0 is what breaks that code.
-        val state = TallyListState.ADAPTER.decode(screens.bytes("tally/data-page"))
-        val rows = state.data_.shouldNotBeNull().rows
-        rows.size shouldBe 2
-        val yen = rows.single { it.amount?.currency == "JPY" }
-        yen.amount.shouldNotBeNull().exponent shouldBe 0
-        yen.amount.locale shouldBe "ja-JP"
-        val dollars = rows.single { it.amount?.currency == "USD" }
-        dollars.amount!!.exponent shouldBe 2
-        // A keyset cursor, and it is the SORT KEY plus the primary key.
-        state.data_.next_cursor.shouldNotBeNull().contains('|').shouldBeTrue()
-        // The pending-write overlay is on the STATE, not on the row.
-        state.pending_expense_ids shouldContainExactly listOf("exp-0001")
-    }
-
-    "tally/low-disk-parked is a state with a remedy, never an eviction" {
-        val state = TallyListState.ADAPTER.decode(screens.bytes("tally/low-disk-parked"))
-        state.failure.shouldNotBeNull().kind shouldBe
-            ReadFailureKind.READ_FAILURE_KIND_LOW_DISK_PARKED
-        state.failure.remedy.isNotBlank().shouldBeTrue()
-        state.seat.shouldNotBeNull().durability shouldBe
-            SeatState.Durability.DURABILITY_PARKED_LOW_DISK
-    }
-
-    "tally/offline-withheld says the verb is withheld rather than offering it" {
-        val state = TallyListState.ADAPTER.decode(screens.bytes("tally/offline-withheld"))
-        state.recurring_materialisation_withheld.shouldBeTrue()
-        state.seat.shouldNotBeNull().durability shouldBe
-            SeatState.Durability.DURABILITY_LOCAL_ONLY
-        state.seat.pending.shouldNotBeNull().queued_writes shouldBe 3
-        // Rows are still there: offline is not a failed read.
-        state.data_.shouldNotBeNull().rows.size shouldBe 1
     }
 
     // --- Photos -----------------------------------------------------------
@@ -257,6 +193,8 @@ class ScreenFixtureSpec : StringSpec({
         album.selected_asset_ids shouldContainExactly listOf("ast-0201", "ast-0204")
         val loaded = album.data_.shouldNotBeNull().cells.map { it.asset_id }
         loaded.contains("ast-0204").shouldBeFalse()
+        // A keyset cursor, and it is the SORT KEY plus the primary key.
+        album.data_.next_cursor.shouldNotBeNull().contains('|').shouldBeTrue()
     }
 
     "photos-shelf: an empty shelf is data, and its head still has a title" {
@@ -804,10 +742,6 @@ class ScreenFixtureSpec : StringSpec({
         // The three-state law as a sweep rather than a claim: no fixture may
         // carry both a failure and data, which is the shape a decoder that
         // collapsed the two would produce.
-        screens.resolve("tally").binFiles().forEach { file ->
-            val state = TallyListState.ADAPTER.decode(file.readBytes())
-            contentCount(state.loading, state.failure, state.data_) shouldBe 1
-        }
         screens.resolve("photos").binFiles().forEach { file ->
             val state = PhotosGridState.ADAPTER.decode(file.readBytes())
             contentCount(state.loading, state.failure, state.data_) shouldBe 1
@@ -1020,6 +954,86 @@ class ScreenFixtureSpec : StringSpec({
         screens.resolve("agenda-editor").binFiles().forEach { file ->
             val state = AgendaEditorState.ADAPTER.decode(file.readBytes())
             contentCount(state.loading, state.failure, state.denied, state.data_, state.gone) shouldBe 1
+        }
+    }
+
+    // --- Money (#1099) ----------------------------------------------------
+
+    fun money(case: String): MoneyHomeState =
+        MoneyHomeState.ADAPTER.decode(screens.bytes("money/$case"))
+
+    "money: day one is one sentence and one action, with the same verb in the header" {
+        val state = money("day-one")
+        val empty = state.data_.shouldNotBeNull().spending.shouldNotBeNull().empty.shouldNotBeNull()
+        empty.headline shouldBe "Import a bank statement to see this month."
+        empty.action_label shouldBe state.chrome.shouldNotBeNull().add_label
+        state.band.map { it.key } shouldBe listOf("spending", "activity", "cashflow", "more")
+        state.data_.spending.shouldNotBeNull().heroes.shouldBeEmpty()
+    }
+
+    "money: two currencies are two heroes, and a figure never spans them" {
+        val spending = money("spending").data_.shouldNotBeNull().spending.shouldNotBeNull()
+        spending.heroes.map { it.spent?.currency } shouldBe listOf("USD", "CAD")
+        spending.tables.single().currency shouldBe "USD"
+        // Over plan is a minus sign and a tone, never a colour alone.
+        val over = spending.tables.single().rows.single()
+        over.over.shouldBeTrue()
+        over.left?.minor shouldBe -2_827L
+        spending.in_out_net.single().figures.map { it.label } shouldBe listOf("In", "Out", "Net")
+    }
+
+    "money: a transfer keeps its row, greyed, and the chip row has no sort chip" {
+        val state = money("activity")
+        state.chips.map { it.key } shouldBe listOf("month", "account", "category")
+        val transfer = state.data_.shouldNotBeNull().activity.shouldNotBeNull().sections[1].rows.single()
+        transfer.dimmed.shouldBeTrue()
+        transfer.chips.single().label shouldBe "Transfer"
+    }
+
+    "money: a denied Money is the gate and a failed read keeps its band" {
+        val denied = money("denied")
+        val refused = money("read-refused")
+        denied.denied.shouldNotBeNull().title shouldBe "Money is off"
+        denied.band.shouldContainExactly()
+        denied.failure.shouldBeNull()
+        refused.failure.shouldNotBeNull().kind shouldBe ReadFailureKind.READ_FAILURE_KIND_UNAVAILABLE
+        refused.band.size shouldBe 4
+    }
+
+    "money: the import review counts every verdict, and the date-order question has no rows and no default" {
+        val review = MoneyImportState.ADAPTER.decode(screens.bytes("money-import/planned"))
+        val statement = review.data_.shouldNotBeNull().statements.single()
+        statement.counts.map { it.label } shouldBe listOf("New", "Already in", "Check these", "Can’t read")
+        statement.rows.first { it.line_label == "Row 88" }.reason shouldBe "Amount has a letter O."
+        review.data_.publish_label shouldBe "Import 186 rows"
+        val question = MoneyImportState.ADAPTER.decode(screens.bytes("money-import/question"))
+        val asked = question.data_.shouldNotBeNull().statements.single()
+        asked.question.shouldNotBeNull().options.none { it.selected }.shouldBeTrue()
+        asked.rows.shouldBeEmpty()
+        question.data_.publish_label shouldBe ""
+    }
+
+    "money: a transaction offers a transfer and a rule and carries no write" {
+        val state = MoneyTransactionState.ADAPTER.decode(screens.bytes("money-transaction/offers"))
+        val data = state.data_.shouldNotBeNull()
+        data.transfer_offer.shouldNotBeNull().key shouldBe "transfer"
+        data.rule_offer.shouldNotBeNull().key shouldBe "rule"
+        state.write.shouldNotBeNull().phase shouldBe WriteState.Phase.PHASE_IDLE
+        data.actions.single { it.destructive }.key shouldBe "void"
+    }
+
+    "money: every fixture sets exactly one content state" {
+        screens.resolve("money").binFiles().forEach { file ->
+            val state = MoneyHomeState.ADAPTER.decode(file.readBytes())
+            contentCount(state.loading, state.failure, state.denied, state.data_) shouldBe 1
+        }
+        screens.resolve("money-import").binFiles().forEach { file ->
+            val state = MoneyImportState.ADAPTER.decode(file.readBytes())
+            contentCount(state.loading, state.failure, state.denied, state.data_) shouldBe 1
+        }
+        screens.resolve("money-transaction").binFiles().forEach { file ->
+            val state = MoneyTransactionState.ADAPTER.decode(file.readBytes())
+            contentCount(state.loading, state.failure, state.denied, state.data_) shouldBe 1
         }
     }
 

@@ -254,7 +254,7 @@ pub(super) fn search(
         .min(people::queries::SEARCH_LIMIT);
     // THE CORRECTION RUNS ON THE ANSWER THE MEMBER SEES (#1097, R4, R8): the
     // live People profiles among the hits, not the raw hits — a party that is
-    // only a Tally friend is a hit of the index and no person here.
+    // only a bare party is a hit of the index and no person here.
     let loaded = vault.read(|connection| {
         let index = match centraid_search::SqliteDoor::open(connection) {
             Ok(index) => index,

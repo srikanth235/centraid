@@ -19,7 +19,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 
 ## What it does
 
-- **First-party apps** — Docs, Photos, Notes, People, Locker, Tally, Agenda and Tasks, one crate each under [`crates/apps`](crates/apps). They ship in the release and update with it; an app holds no database of its own and reads and writes the vault through typed commands.
+- **First-party apps** — Docs, Photos, Notes, People, Locker, Agenda and Tasks, one crate each under [`crates/apps`](crates/apps). They ship in the release and update with it; an app holds no database of its own and reads and writes the vault through typed commands.
 - **The phone is the vault** — the Rust core on your phone holds `vault.db` and is its only writer. It works fully offline because there is nothing to be offline _from_.
 - **Backed up to hardware you own** — every gateway you pair holds a sealed copy of the vault and of every photograph, video and file in it, and can open none of it: no key, no plaintext, no schema. The phone reaches it over HTTPS straight to the machine, pinning the certificate the gateway's QR names; on an iPhone the system keeps uploading while Centraid is closed. Pair by scanning a QR the gateway prints.
 - **Recoverable from 24 words** — every key derives from one BIP39 phrase. A fresh install plus the phrase brings the vault back. There is no kit file, no password and no escrow.
@@ -33,7 +33,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
  ┌───────────────────────── the vault, and its only writer ─────────────────────┐
  │  vault: vault.db, the one writable connection, typed commands, receipts,     │
  │         custody, and the backup plane — snapshot, ranges, ledger, spool      │
- │  apps: tally · photos · notes · docs · people · locker · agenda · tasks      │
+ │  apps: photos · notes · docs · people · locker · agenda · tasks              │
  │  blobs: the content store       identity: 24 words → every key               │
  └──────────────────────────────────────────────────────────────────────────────┘
         │  uploads sealed parts: it DIALS, and accepts nothing

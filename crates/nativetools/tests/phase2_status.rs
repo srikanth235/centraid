@@ -186,21 +186,9 @@ fn the_rule_composes_with_the_other_conditions() {
 
 #[test]
 fn a_status_without_in_progress_keeps_open_to_itself() {
-    // A debt is open or settled; an event is confirmed, tentative or
-    // cancelled. Neither has a started state, so nothing widens.
+    // An event is confirmed, tentative or cancelled. It has no started state, so
+    // nothing widens.
     let world = world_in_progress();
-    assert_eq!(
-        selected(&world, "debt", "status = open"),
-        keys(&world, &[&["tickets"]])
-    );
-    assert_eq!(
-        selected(&world, "debt", "status != open"),
-        keys(&world, &[&["lunch"]])
-    );
-    assert_eq!(
-        selected(&world, "debt", "status in (\"open\")"),
-        keys(&world, &[&["tickets"]])
-    );
     assert_eq!(
         selected(&world, "event", "status = cancelled"),
         keys(&world, &[&["party"]])

@@ -228,7 +228,7 @@ public fun formatMoney(money: Money): String {
     if (money.currency.isEmpty()) return ""
     val exponent = money.exponent
     // AN EMPTY LOCALE IS THE DEVICE'S, as on iOS (`Money.render`) and as
-    // `TallyReads` says: "und" was the ROOT locale — no grouping a member
+    // the retired Tally reads said: "und" was the ROOT locale — no grouping a member
     // recognises and a bare currency sign — so the two shells drew one amount
     // two ways (`contracts/screens/money-render.json`).
     val locale = if (money.locale.isEmpty()) Locale.getDefault() else Locale.forLanguageTag(money.locale)

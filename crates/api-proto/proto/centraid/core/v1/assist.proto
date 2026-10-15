@@ -452,7 +452,7 @@ enum AssistReadingKind {
   ASSIST_READING_KIND_DOCUMENT = 2;
 }
 
-// The read is starting: "Looking in Tally".
+// The read is starting: "Looking in Notes".
 message AssistActivity {
   string app = 1;
   string tool = 2;

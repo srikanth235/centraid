@@ -297,7 +297,7 @@ class PeopleSpec : StringSpec({
         PeopleHomeMachine.TABLES.forEach { table ->
             withClue(table) { PeopleHomeMachine.rowsChanged(table, listOf("k")).shouldNotBeNull() }
         }
-        PeopleHomeMachine.rowsChanged("tally_expense", listOf("k")).shouldBeNull()
+        PeopleHomeMachine.rowsChanged("locker_item", listOf("k")).shouldBeNull()
         val landed = home(opened(), roster(person("p1", "Dana"))).state
         val moved = PeopleHomeMachine.reduce(landed, PeopleHomeMachine.rowsChanged("core_tag", listOf("t"))!!)
         moved.effects shouldBe listOf(ScreenEffect.ReadPage("people.home", null))

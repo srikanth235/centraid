@@ -107,7 +107,7 @@
         "tool": "act",
         "args": {
           "verb": "undo",
-          "rows": "#8"
+          "rows": "#6"
         }
       }
     ]
@@ -121,7 +121,7 @@
         "args": {
           "verb": "create",
           "kind": "note",
-          "rows": "#8",
+          "rows": "#6",
           "args": "name: x"
         }
       }
@@ -212,6 +212,11 @@
     "why_none": "defensive: rows are re-read after every write, so a numbered row is always there"
   },
   "act.x_does_not_apply_to_x": {
+    "tool": "act",
+    "argument": "verb",
+    "why_none": "defensive: add_to and remove_from apply only to kinds that have a container, and the verb table already refuses the other kinds with the family below"
+  },
+  "act.x_does_not_apply_to_x_2": {
     "tool": "act",
     "argument": "verb",
     "calls": [
@@ -333,7 +338,7 @@
           "verb": "add_to",
           "kind": "task",
           "name": "Book the cabin",
-          "args": "to: #8, #6"
+          "args": "to: #6, #4"
         }
       }
     ]
@@ -348,116 +353,7 @@
           "verb": "add_to",
           "kind": "task",
           "name": "Book the cabin",
-          "args": "to: #6"
-        }
-      }
-    ]
-  },
-  "act.settle_up_takes_group_n_and_amount": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "foo: bar"
-        }
-      }
-    ]
-  },
-  "act.settle_up_is_with_someone_else_not": {
-    "tool": "act",
-    "argument": "name",
-    "calls": [
-      {
-        "tool": "find",
-        "args": {
-          "kind": "person"
-        }
-      },
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "rows": "#13",
-          "args": "group: #2"
-        }
-      }
-    ]
-  },
-  "act.settle_up_needs_group_n": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Benedikt"
-        }
-      }
-    ]
-  },
-  "act.group_is_exactly_one_n": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "group: #1, #2"
-        }
-      }
-    ]
-  },
-  "act.group_names_a_group_and_name": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "group: #8"
-        }
-      }
-    ]
-  },
-  "act.amount_is_a_number_in_currency": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "group: #2\namount: lots"
-        }
-      }
-    ]
-  },
-  "act.amount_is_more_than_zero": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "group: #2\namount: 0"
+          "args": "to: #4"
         }
       }
     ]
@@ -801,7 +697,7 @@
         "args": {
           "verb": "create",
           "kind": "task",
-          "args": "name: x\nlist: #8, #6"
+          "args": "name: x\nlist: #6, #4"
         }
       }
     ]
@@ -834,60 +730,6 @@
       }
     ]
   },
-  "act.create_debt_needs_person_n": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "act",
-        "args": {
-          "verb": "create",
-          "kind": "debt",
-          "args": "name: x"
-        }
-      }
-    ]
-  },
-  "act.create_debt_needs_amount_n_currency": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "find",
-        "args": {
-          "kind": "person"
-        }
-      },
-      {
-        "tool": "act",
-        "args": {
-          "verb": "create",
-          "kind": "debt",
-          "args": "name: x\nperson: #12"
-        }
-      }
-    ]
-  },
-  "act.create_debt_needs_direction_owes_me_or": {
-    "tool": "act",
-    "argument": "args",
-    "calls": [
-      {
-        "tool": "find",
-        "args": {
-          "kind": "person"
-        }
-      },
-      {
-        "tool": "act",
-        "args": {
-          "verb": "create",
-          "kind": "debt",
-          "args": "name: x\nperson: #12\namount: 5"
-        }
-      }
-    ]
-  },
   "act.a_kind_value_item_keeps_no_field": {
     "tool": "act",
     "argument": "args",
@@ -910,8 +752,8 @@
         "tool": "act",
         "args": {
           "verb": "delete",
-          "kind": "group",
-          "name": "Tahoe Trip"
+          "kind": "folder",
+          "name": "Taxes"
         }
       }
     ]
@@ -1132,7 +974,7 @@
       {
         "tool": "answer",
         "args": {
-          "rows": "#8",
+          "rows": "#6",
           "kind": "task"
         }
       }
@@ -1277,7 +1119,7 @@
       {
         "tool": "find",
         "args": {
-          "kind": "debt"
+          "kind": "album"
         }
       },
       {
@@ -1289,7 +1131,7 @@
       {
         "tool": "find",
         "args": {
-          "kind": "group"
+          "kind": "notebook"
         }
       }
     ]
@@ -1398,7 +1240,7 @@
       {
         "tool": "open",
         "args": {
-          "row": "#8, #7"
+          "row": "#6, #5"
         }
       }
     ]
@@ -1483,7 +1325,7 @@
       {
         "tool": "answer",
         "args": {
-          "rows": "#8",
+          "rows": "#6",
           "name": "x"
         }
       }
@@ -1522,7 +1364,7 @@
         "tool": "compute",
         "args": {
           "op": "count",
-          "rows": "#8",
+          "rows": "#6",
           "name": "x"
         }
       }
@@ -1538,21 +1380,6 @@
           "op": "sum",
           "field": "effort",
           "kind": "task,event"
-        }
-      }
-    ]
-  },
-  "session.balance_takes_no_group": {
-    "tool": "compute",
-    "argument": "group",
-    "calls": [
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "person",
-          "name": "Ray",
-          "group": "effort"
         }
       }
     ]
@@ -1631,8 +1458,8 @@
       {
         "tool": "find",
         "args": {
-          "kind": "debt",
-          "where": "task count > 1"
+          "kind": "event",
+          "where": "album count > 1"
         }
       }
     ]
@@ -1850,89 +1677,6 @@
       }
     ]
   },
-  "values.balance_needs_one_x_the_selection": {
-    "tool": "compute",
-    "argument": "name",
-    "calls": [
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "person",
-          "name": "Zed"
-        }
-      }
-    ]
-  },
-  "values.balance_is_for_one_x_the": {
-    "tool": "compute",
-    "argument": "kind",
-    "calls": [
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "person"
-        }
-      }
-    ]
-  },
-  "values.that_is_you_balance_is_you": {
-    "tool": "compute",
-    "argument": "name",
-    "calls": [
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "person",
-          "name": "Sam Park"
-        }
-      }
-    ]
-  },
-  "values.a_group_s_balance_is_one": {
-    "tool": "compute",
-    "argument": "linked_to",
-    "calls": [
-      {
-        "tool": "find",
-        "args": {
-          "kind": "person",
-          "name": "Neha Rao"
-        }
-      },
-      {
-        "tool": "find",
-        "args": {
-          "kind": "person",
-          "name": "Ray Ochoa"
-        }
-      },
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "group",
-          "name": "Tahoe Trip",
-          "linked_to": "#9, #10"
-        }
-      }
-    ]
-  },
-  "values.balance_is_defined_for_person_and": {
-    "tool": "compute",
-    "argument": "kind",
-    "calls": [
-      {
-        "tool": "compute",
-        "args": {
-          "op": "balance",
-          "kind": "task"
-        }
-      }
-    ]
-  },
   "search.search_needs_text": {
     "tool": "search",
     "argument": "text",
@@ -2060,24 +1804,7 @@
   "whr.amounts_are_in_currency_here_x": {
     "tool": "act",
     "argument": "args",
-    "calls": [
-      {
-        "tool": "find",
-        "args": {
-          "kind": "group",
-          "name": "Tahoe Trip"
-        }
-      },
-      {
-        "tool": "act",
-        "args": {
-          "verb": "settle_up",
-          "kind": "person",
-          "name": "Ray",
-          "args": "group: #1\namount: €5"
-        }
-      }
-    ]
+    "why_none": "defensive: a currency symbol is checked only against an amount field, and no kind the assistant reads has one until Money is read again (symbol_conflict has no caller)"
   },
   "act.name_is_one_occurrence_of_a": {
     "tool": "act",

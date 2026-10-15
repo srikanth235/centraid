@@ -18,7 +18,13 @@ use serde_json::{Value, json};
 fn world_with(extra: &Value) -> common::World {
     let mut world: Value = serde_json::from_str(common::FIXTURE).unwrap();
     for (section, rows) in extra.as_object().unwrap() {
-        let list = world[section.as_str()].as_array_mut().unwrap();
+        let list = world
+            .as_object_mut()
+            .unwrap()
+            .entry(section.as_str())
+            .or_insert_with(|| json!([]))
+            .as_array_mut()
+            .unwrap();
         list.extend(rows.as_array().unwrap().iter().cloned());
     }
     common::seeded_with(&world)
@@ -595,7 +601,6 @@ fn the_kinds_that_hold_rows_are_the_containers_and_the_parent_task() {
     assert_eq!(
         holds,
         vec![
-            (Kind::Group, "members"),
             (Kind::Task, "subtasks"),
             (Kind::Album, "photos"),
             (Kind::Notebook, "notes"),
@@ -723,7 +728,6 @@ fn a_container_shows_what_it_holds_after_its_name() {
         "notes": [{"key": "kn", "name": "Kids reading", "notebook": "kidsnb", "body": "x"}],
         "folders": [{"key": "kidsf", "name": "Kids papers"}],
         "documents": [{"key": "kd", "name": "Kids passport", "folder": "kidsf", "created": "2026-03-01T10:00"}],
-        "groups": [{"key": "kidsg", "name": "Kids club", "members": ["neha_r", "ray"], "created": "2026-02-03T09:00"}],
     }));
     let mut session = world.session();
     let shown = block(&mut session, "kids");
@@ -743,8 +747,6 @@ fn a_container_shows_what_it_holds_after_its_name() {
         holds("folder", "Kids papers").as_deref(),
         Some("1 document")
     );
-    // The two people named and the owner, who is in every group.
-    assert_eq!(holds("group", "Kids club").as_deref(), Some("3 members"));
     // A leaf shows nothing after its name.
     assert_eq!(holds("note", "Kids reading"), None);
     assert_eq!(holds("document", "Kids passport"), None);
@@ -840,15 +842,15 @@ fn a_two_letter_word_never_outranks_a_name_the_message_says() {
             {"key": "sam_o", "name": "Sam Okafor"},
             {"key": "sam_t", "name": "Sam Tran"},
         ],
-        "groups": [{"key": "coop", "name": "Tinfoil Owl co-op", "members": ["priya"], "created": "2026-02-01T09:00"}],
+        "lists": [{"key": "coop", "name": "Tinfoil Owl co-op"}],
         "events": shifts,
     }));
     let mut session = world.session();
-    let shown = block(&mut session, "settle priya and sam okafor in the co-op");
+    let shown = block(&mut session, "invite priya and sam okafor to the co-op");
     let names: Vec<&str> = shown.iter().map(|row| row.name.as_str()).collect();
     assert!(names.contains(&"Priya Raman"), "{names:?}");
     assert_eq!(names[0], "Sam Okafor", "{names:?}");
-    // The group is not named in full by "co-op": it is not in the block.
+    // The list is not named in full by "co-op": it is not in the block.
     assert!(!names.contains(&"Tinfoil Owl co-op"), "{names:?}");
 }
 

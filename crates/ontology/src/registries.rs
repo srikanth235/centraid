@@ -269,7 +269,7 @@ mod tests {
         // failure `export-v0-registries.ts` can have, and a seat missing a
         // table is not visible until a row does not arrive.
         let registries = v0_registries();
-        assert_eq!(registries.replicated_tables.len(), 109);
+        assert_eq!(registries.replicated_tables.len(), 97);
         // THE ONE PROPERTY THE PRIVATE LIST EXISTS FOR, from the other side: a
         // table is never both. A table with replicated references is SPLIT
         // (`access_device` / `access_device_secret`), never listed twice.

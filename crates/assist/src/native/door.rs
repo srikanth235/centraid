@@ -1,8 +1,8 @@
 //! THE DOOR: the one way the runtime reaches a live vault (#1088, R-1088-10).
 //!
 //! The runtime holds no `Vault`, no connection and no file path. It reads the world
-//! through [`Door::table`] (every row of one table, in the kit's paged shape), [`Door::tally`]
-//! and [`Door::search`]; it writes through [`Door::run`], one typed command at a time; and it
+//! through [`Door::table`] (every row of one table, in the kit's paged shape) and
+//! [`Door::search`]; it writes through [`Door::run`], one typed command at a time; and it
 //! asks the door for the three things only a vault can say: the next id ([`Door::mint_id`]),
 //! the clock ([`Door::now_ms`], [`Door::advance`]) and a sealed Locker cell ([`Door::seal`],
 //! [`Door::unseal`]).
@@ -43,7 +43,7 @@
 //! * A step the vault refuses comes back as a [`Ran`] with `ok` false (the check id in `predicate`,
 //!   the owner-facing sentence in `reason`), never an `Err`: `confirm` types it (`Confirmed::Refused`)
 //!   and names how many steps landed before it. A batch is not atomic across commands.
-//! * The reads (`table`, `tally`, `events`) see the vault as it is NOW, through the query path a
+//! * The reads (`table`, `events`) see the vault as it is NOW, through the query path a
 //!   screen uses: `confirm` reads the rows its steps address again before it runs anything, and a
 //!   row that changed since the turn planned is a typed `Confirmed::Stale`, nothing written. A door
 //!   that served a cached world would make a stale card look fresh.
@@ -58,7 +58,6 @@
 
 pub use centraid_apps_agenda::Occurrence;
 use centraid_apps_kit::row::{Cell, Row};
-use centraid_apps_tally::queries::TallyData;
 use centraid_search::Target;
 use serde_json::Value;
 
@@ -66,7 +65,7 @@ use serde_json::Value;
 ///
 /// A refusal is a value: `reason` is the vault's owner-facing sentence and
 /// `predicate` the id of the check that failed (`folder_is_empty`,
-/// `group_empty`, `no_busy_conflict`, ...), or `schema` for an input the
+/// `list_not_empty`, `no_busy_conflict`, ...), or `schema` for an input the
 /// command's schema rejects and `authority` for a caller it does not allow.
 /// The runtime classifies a refusal by that id, never by the sentence
 /// (`act.rs`, `Session::refusal`).
@@ -87,8 +86,23 @@ pub trait Door: Send {
     /// runtime never names is never read.
     fn table(&self, table: &str, columns: &str, sort: &str, pk: &str) -> Result<Vec<Row>, String>;
 
-    /// The Tally ledger, folded by the Tally app's own read.
-    fn tally(&self) -> Result<TallyData, String>;
+    /// The rows of one table that satisfy `predicate`, through the same paged read as
+    /// [`table`](Self::table). `predicate` is a `?`-placeholder fragment of the kit's statement
+    /// grammar and `binds` are its text values, in order. Money's transactions are read this way,
+    /// a window of recent months and a chunk of ids at a time, so the runtime never walks a
+    /// ledger (#1099, R-1099-8). A door that cannot answer says so.
+    fn table_where(
+        &self,
+        table: &str,
+        columns: &str,
+        sort: &str,
+        pk: &str,
+        predicate: &str,
+        binds: &[String],
+    ) -> Result<Vec<Row>, String> {
+        let _ = (table, columns, sort, pk, predicate, binds);
+        Err("this door reads no filtered table".to_owned())
+    }
 
     /// Every occurrence of an event that occupies a civil day of `from_day..=to_day`
     /// (`YYYY-MM-DD`, days of the IANA zone `tz`): repeating series expanded, the cancelled and

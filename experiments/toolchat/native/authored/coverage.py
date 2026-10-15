@@ -45,7 +45,8 @@ INDIRECT = re.compile(r"\b(can you|could you|can u|could u|would you|will you|pl
 HANDLE = re.compile(r"[$@#+][A-Za-z0-9_]+")
 SECTION_KIND = {"people": "person", "groups": "group", "lists": "list", "events": "event", "tasks": "task",
                 "notebooks": "notebook", "notes": "note", "folders": "folder", "documents": "document",
-                "albums": "album", "photos": "photo", "debts": "debt", "locker": "locker item"}
+                "albums": "album", "photos": "photo", "debts": "debt", "locker": "locker item",
+                "transactions": "transaction"}
 LOCKER_TYPES_KEY = "locker item.type"
 
 # BOUNDS3: runtime behaviour observed in the replay; BOUNDS4: corpus shape. (lo, hi) as fractions, None = open

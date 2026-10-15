@@ -64,19 +64,6 @@ fn every_operator_on_every_field_type() {
         keys(&world, &["journal"])
     );
     assert_eq!(
-        rows(&world, "debt", "amount > 20"),
-        keys(&world, &["tickets"])
-    );
-    assert_eq!(
-        rows(&world, "debt", "amount > 20 EUR"),
-        Vec::<String>::new(),
-        "per currency"
-    );
-    assert_eq!(
-        rows(&world, "debt", "direction = i_owe and status = settled"),
-        keys(&world, &["lunch"])
-    );
-    assert_eq!(
         rows(&world, "person", "role = \"Designer\""),
         keys(&world, &["neha_r"])
     );
@@ -196,41 +183,6 @@ proptest! {
         let clause = vec![format!("effort > {bound}"); n].join(" and ");
         prop_assert_eq!(whr::parse(Kind::Task, &clause).unwrap().len(), n);
     }
-}
-
-/// The fixture plus three debts whose amounts a person writes with a suffix.
-fn big_debts_world() -> common::World {
-    let mut world: serde_json::Value = serde_json::from_str(common::FIXTURE).unwrap();
-    let debts = world["debts"].as_array_mut().unwrap();
-    for (key, amount) in [("k500", 500_000), ("k25", 2_500), ("m1", 1_000_000)] {
-        debts.push(json!({
-            "key": key, "person": "neha_r", "direction": "owes_me",
-            "amount": amount, "name": key, "date": "2026-06-02"
-        }));
-    }
-    common::seeded_with(&world)
-}
-
-#[test]
-fn k_and_m_suffixes_are_amounts_in_a_where() {
-    // (clause, the debts it selects): the model may write what the person said.
-    let world = big_debts_world();
-    let cases: [(&str, &[&str]); 7] = [
-        ("amount = 500k", &["k500"]),
-        ("amount = 500K", &["k500"]),
-        ("amount = 2.5k", &["k25"]),
-        ("amount >= 1m", &["m1"]),
-        ("amount = 1M", &["m1"]),
-        ("amount > 1k and amount < 1m", &["k25", "k500"]),
-        ("amount = 500000", &["k500"]),
-    ];
-    for (clause, want) in cases {
-        assert_eq!(rows(&world, "debt", clause), keys(&world, want), "{clause}");
-    }
-    // `!=` reads the suffix too, so "everything that isn't 500k" drops that one debt.
-    let not = rows(&world, "debt", "amount != 500k");
-    assert_eq!(not.len(), 4, "{not:?}");
-    assert!(!not.contains(&world.id("k500")));
 }
 
 #[test]

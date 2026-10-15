@@ -78,7 +78,7 @@ public data class RoomAction(
  * SEARCH IS ALWAYS IN THE SAME PLACE (R-CHROME-2): closed, the slot is a
  * field-shaped bar reading [placeholder], and a tap sends [onOpen]; open, it
  * is the field. Never a More row, a header glyph or a band tab. An app whose
- * search is a page of its own (Photos, Tally) pushes it from [onOpen] and
+ * search is a page of its own (Photos) pushes it from [onOpen] and
  * never sets `field.open_`.
  */
 public data class RoomSearch(

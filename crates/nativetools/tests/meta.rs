@@ -52,17 +52,12 @@ fn check_values(table: &str, column: &str) -> Vec<String> {
 }
 
 /// Every enum field with a CHECK list: the vault values the model can say
-/// plus the ones `meta::UNEXPOSED` declares are exactly that list. A debt's
-/// `direction` and `status` are derived from `from_party` and `settled_at`,
-/// not a CHECK, and are out of this test's reach.
+/// plus the ones `meta::UNEXPOSED` declares are exactly that list.
 #[test]
 fn every_enum_is_exactly_what_the_table_states() {
     let mut seen = Vec::new();
     for spec in KINDS {
         for field in spec.fields.iter().filter(|field| !field.values.is_empty()) {
-            if matches!(field.name, "direction" | "status") && spec.kind == Kind::Debt {
-                continue;
-            }
             let (table, column) = (field.source.table, field.source.column);
             seen.push((table, column));
             let stated = check_values(table, column);
@@ -112,10 +107,11 @@ fn every_enum_is_exactly_what_the_table_states() {
             gap.column
         );
     }
-    // The three CHECK-backed enums the model speaks today.
+    // The four CHECK-backed enums the model speaks today (a transaction's status is the fourth,
+    // #1099).
     assert_eq!(
         seen.len(),
-        3,
+        4,
         "an enum field was added or removed: {seen:?}"
     );
 }
@@ -191,14 +187,12 @@ fn the_constants_and_the_card_come_from_the_table() {
     let names: Vec<&str> = Kind::ALL.iter().map(|kind| kind.name()).collect();
     for name in [
         "person",
-        "group",
         "event",
         "task",
         "note",
         "document",
         "photo",
         "album",
-        "debt",
         "locker item",
     ] {
         assert!(names.contains(&name), "{name}");
@@ -222,11 +216,6 @@ fn the_constants_and_the_card_come_from_the_table() {
             );
         }
     }
-    let balances: Vec<Kind> = Kind::ALL
-        .into_iter()
-        .filter(|kind| kind.spec().balance.is_some())
-        .collect();
-    assert_eq!(balances, vec![Kind::Person, Kind::Group]);
 }
 
 #[test]

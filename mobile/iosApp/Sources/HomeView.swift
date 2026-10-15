@@ -143,7 +143,7 @@ struct HomeView: View {
 
             // THREE BRANCHES, NEVER TWO. A Home that could not load renders its
             // sentence; it does NOT render an empty springboard, which would be
-            // eight empty apps invented out of one failure.
+            // seven empty apps invented out of one failure.
             switch home.content {
             case .loading, .none:
                 Springboard(data: home.data, shell: shell)
@@ -316,7 +316,7 @@ private struct StatusRibbon: View {
 ///
 /// Distinct from every tile being unreadable: that Home loaded and could not
 /// read its apps, and still shows them. This one has no grid, because inventing
-/// eight empty apps out of one failure is the defect the read law forbids.
+/// seven empty apps out of one failure is the defect the read law forbids.
 private struct FailureBody: View {
     let failure: Centraid_Screen_V1_ReadFailure
     @Environment(\.colorScheme) private var scheme
@@ -353,7 +353,7 @@ private struct Springboard: View {
 }
 
 /// EVERY APP IS A TILE (R-ONBOARD-11), in the rows the machine packed: an app
-/// with nothing in it draws what to do, so Docs, Agenda, People and Tally are
+/// with nothing in it draws what to do, so Docs, Agenda and People are
 /// always here to open. Shared by the springboard and day one.
 private struct TileGrid: View {
     let data: Centraid_Screen_V1_HomeData
@@ -402,7 +402,7 @@ private struct TileGrid: View {
 
 /// One tile: THE HEADER IS INVARIANT — icon chip, name, count, in that order.
 ///
-/// It is what makes eight unlike bodies read as one grid. Home itself takes no
+/// It is what makes seven unlike bodies read as one grid. Home itself takes no
 /// identity hue; the hue belongs to the app a tile previews, and it appears on
 /// the chip alone.
 private struct TileCard: View {
@@ -705,31 +705,6 @@ private struct ContentBody: View {
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
-        case let .tally(tally):
-            VStack(alignment: .leading, spacing: 4) {
-                // NO FIGURE IS A REAL STATE: Home does not project a balance
-                // yet, so the body is the count's own sentence alone.
-                if tally.hasFigure {
-                    Text(Money.render(tally.figure))
-                        .centraidType("display")
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .lineLimit(1)
-                }
-                Text(tally.caption)
-                    .centraidType(tally.hasFigure ? "small" : "smallStrong")
-                    .foregroundStyle(Theme.color(tally.hasFigure ? "textSoft" : "text", scheme))
-                // Rendered only when the caller has something true to say.
-                if !tally.after.isEmpty {
-                    Spacer(minLength: 0)
-                    Text(tally.after)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-
         case let .locker(locker):
             VStack(alignment: .leading, spacing: 4) {
                 // No lock glyph beside "Locked" — that says it twice. A STATE
@@ -753,6 +728,26 @@ private struct ContentBody: View {
                     .centraidType("small")
                     .foregroundStyle(Theme.color("text", scheme))
                     .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+
+        case let .money(spent):
+            // THIS MONTH'S SPENDING, one figure per currency and never a sum
+            // across them. The amounts are the core's (rendered by the kit's one
+            // formatter) and the caption is the machine's.
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(spent.amounts.enumerated()), id: \.offset) { _, amount in
+                    Text(Money.render(amount))
+                        .centraidType("mono")
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Text(spent.caption)
+                    .centraidType("small")
+                    .foregroundStyle(Theme.color("textSoft", scheme))
+                    .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 

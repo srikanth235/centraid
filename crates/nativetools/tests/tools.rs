@@ -106,10 +106,10 @@ fn when_filters_the_kinds_date_and_echoes_the_range() {
     assert_eq!(got, want);
     let undated = text_of(
         &mut session,
-        json!({"kind": "group", "when": {"unit": "day", "rel": 0}}),
+        json!({"kind": "notebook", "when": {"unit": "day", "rel": 0}}),
     );
     assert!(
-        undated.starts_with("error: groups have no date"),
+        undated.starts_with("error: notebooks have no date"),
         "{undated}"
     );
     let anchored = text_of(
@@ -175,43 +175,34 @@ fn linked_to_reads_the_metadata_links() {
     let found = numbers(
         &mut session,
         &[
-            ("group", "Tahoe"),
             ("task", "Write report"),
             ("person", "Neha Rao"),
+            ("album", "Summer"),
         ],
     );
-    let members = call(
+    let in_summer = call(
         &mut session,
         "find",
-        json!({"kind": "person", "linked_to": found[0]}),
+        json!({"kind": "photo", "linked_to": found[2]}),
     );
-    let mut got = ids(&members["effect"]["rows"]);
-    got.sort();
-    let founded = centraid_nativetools::world::World::load(
-        &centraid_nativetools::vaultio::Handle::open(
-            world.path(),
-            centraid_nativetools::vaultio::SetClock::at(0),
-            "probe",
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    let mut want = vec![world.id("neha_r"), world.id("ray"), founded.me.clone()];
+    let mut summer = ids(&in_summer["effect"]["rows"]);
+    summer.sort();
+    let mut want = vec![world.id("beach"), world.id("hike")];
     want.sort();
     assert_eq!(
-        got, want,
-        "members are people linked to the group, me included"
+        summer, want,
+        "an album's photos are the photos linked to it"
     );
     let subtasks = call(
         &mut session,
         "find",
-        json!({"kind": "task", "linked_to": found[1]}),
+        json!({"kind": "task", "linked_to": found[0]}),
     );
     assert_eq!(ids(&subtasks["effect"]["rows"]), vec![world.id("outline")]);
     let photos = call(
         &mut session,
         "find",
-        json!({"kind": "photo", "linked_to": found[2]}),
+        json!({"kind": "photo", "linked_to": found[1]}),
     );
     assert_eq!(ids(&photos["effect"]["rows"]), vec![world.id("beach")]);
 }
@@ -270,9 +261,7 @@ fn open_shows_every_fact_and_its_links_with_counts() {
     let mut session = world.session();
     let neha = number(&mut session, "person", "Neha Rao");
     let opened = text(&mut session, "open", json!({"row": neha}));
-    assert!(opened.contains("groups (1): #"), "{opened}");
     assert!(opened.contains("photos (1): #"), "{opened}");
-    assert!(opened.contains("debts (1): #"), "{opened}");
     let many = text(&mut session, "open", json!({"row": "#1, #2"}));
     assert!(
         many.starts_with("error: open takes exactly one row, #n.\nrows you can still use: #"),
@@ -281,7 +270,7 @@ fn open_shows_every_fact_and_its_links_with_counts() {
 }
 
 #[test]
-fn values_count_sum_group_and_balance() {
+fn values_count_sum_and_group() {
     let world = seeded();
     let mut session = world.session();
     session.user("");
@@ -295,23 +284,23 @@ fn values_count_sum_group_and_balance() {
     let sum = call(
         &mut session,
         "compute",
-        json!({"op": "sum", "field": "amount", "kind": "debt", "where": "status = open"}),
+        json!({"op": "sum", "field": "effort", "kind": "task", "where": "status = open"}),
     );
     assert_eq!(
         sum["effect"]["value"]["values"],
-        json!([{"amount": 25.5, "unit": "USD"}])
+        json!([{"amount": 50, "unit": null}])
     );
     let handle = sum["effect"]["result"].as_str().unwrap().to_owned();
     assert!(
         sum["text"]
             .as_str()
             .unwrap()
-            .starts_with(&format!("{handle} = 25.50 USD (sum of amount over")),
+            .starts_with(&format!("{handle} = 50 (sum of effort over")),
         "{}",
         sum["text"]
     );
     let value = call(&mut session, "answer", json!({"value": handle}));
-    assert_eq!(value["effect"]["value"]["values"][0]["amount"], 25.5);
+    assert_eq!(value["effect"]["value"]["values"][0]["amount"], 50);
     session.user("");
     let grouped = call(
         &mut session,
@@ -322,43 +311,7 @@ fn values_count_sum_group_and_balance() {
         grouped["effect"]["value"]["groups"],
         json!([{"key": "completed", "values": [{"amount": 1, "unit": null}]}, {"key": "open", "values": [{"amount": 4, "unit": null}]}])
     );
-    let balance = call(
-        &mut session,
-        "answer",
-        json!({"op": "balance", "kind": "person", "name": "Neha Rao"}),
-    );
-    assert_eq!(balance["effect"]["value"]["values"][0]["amount"], 125.5);
-    let found = numbers(&mut session, &[("person", "Ray")]);
-    let net = call(
-        &mut session,
-        "answer",
-        json!({"op": "balance", "kind": "group", "name": "Tahoe", "linked_to": found[0]}),
-    );
-    // Ray paid 60, owes 100 + 30: the group owes him -70.
-    assert_eq!(
-        net["effect"]["value"]["values"][0]["amount"], -70.0,
-        "{}",
-        net["text"]
-    );
     session.user("");
-    let two = text(
-        &mut session,
-        "answer",
-        json!({"op": "balance", "kind": "person", "name": "Neha"}),
-    );
-    assert!(
-        two.starts_with("error: balance is for one person; the selection holds 2:"),
-        "{two}"
-    );
-    let wrong = text(
-        &mut session,
-        "answer",
-        json!({"op": "balance", "kind": "task"}),
-    );
-    assert!(
-        wrong.contains("balance is defined for person and for group"),
-        "{wrong}"
-    );
     let field = text(
         &mut session,
         "answer",

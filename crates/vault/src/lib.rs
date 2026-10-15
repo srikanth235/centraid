@@ -31,7 +31,7 @@
 //! | Consumer | What it uses |
 //! |---|---|
 //! | `crates/seat` (D2) | [`log::apply_log_page`], [`log::LogRow`], [`log::Cursor`], [`log::read_log_page`] |
-//! | `crates/apps/kit` (D3) | [`Vault::page_raw`], [`page::and_row_filters`], [`page::apply_field_mask`], [`commands::Registry`], the `tally.*` stubs |
+//! | `crates/apps/kit` (D3) | [`Vault::page_raw`], [`page::and_row_filters`], [`page::apply_field_mask`], [`commands::Registry`] |
 //! | recovery (R) | [`snapshot::build_snapshot`], [`snapshot::SnapshotHead`], [`Vault::found`], [`Vault::enrol_device`] |
 //!
 //! `crates/api-proto` is deliberately **not** a dependency: lane C defines the

@@ -119,7 +119,7 @@ public open class ScreenBridge<S : Message<S, *>, E : Message<E, *>>(
 
     /**
      * THE SCREEN CLOSED, THE BRIDGE STAYS: [leave] for a bridge the shell
-     * keeps for the app's lifetime (both shells hold Tally's and Notes' that
+     * keeps for the app's lifetime (both shells hold Notes' that
      * way today). The flush is the same; the scope is not released, and the
      * next event forwarded marks the screen as on screen again.
      */

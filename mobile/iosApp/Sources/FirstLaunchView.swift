@@ -10,7 +10,7 @@ import SwiftUI
 ///
 /// ## Three paper slips, because the model is the unfamiliar part
 ///
-/// Eight apps on the phone, an assistant that runs there too, and encrypted
+/// Seven apps on the phone, an assistant that runs there too, and encrypted
 /// backups to systems the member owns: three claims, none of which needs the
 /// 24 words to be understood (the words screen explains itself when it comes).
 /// So the gate is a small deck of three slips — the apps, the assistant, the
@@ -199,9 +199,9 @@ private struct FirstLaunchSlip<Scene: View>: View {
     }
 }
 
-/// THE EIGHT APP MARKS AS ONE HOUSE: rooms in one place, not eight products.
+/// THE SEVEN APP MARKS AS ONE HOUSE: rooms in one place, not seven products.
 private struct HouseScene: View {
-    private static let apps = ["photos", "docs", "notes", "agenda", "tasks", "people", "tally", "locker"]
+    private static let apps = ["photos", "docs", "notes", "agenda", "tasks", "people", "locker"]
 
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.fixed(52), spacing: 8), count: 4),

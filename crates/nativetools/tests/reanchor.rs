@@ -28,7 +28,7 @@ fn an_empty_find_restates_the_rows_the_turn_has_shown() {
     let last = empty.lines().last().unwrap();
     assert_eq!(
         last,
-        format!("{HANDLES}#9 task \"Pay rent\", #10 task \"Book the cabin\""),
+        format!("{HANDLES}#7 task \"Pay rent\", #8 task \"Book the cabin\""),
         "{empty}"
     );
 }
@@ -47,7 +47,7 @@ fn an_error_restates_them_too_and_a_turn_ending_call_does_not() {
     let bad = text(
         &mut session,
         "act",
-        json!({"verb": "reschedulee", "rows": "#9"}),
+        json!({"verb": "reschedulee", "rows": "#7"}),
     );
     assert!(
         bad.starts_with("error: no verb") && !bad.contains(HANDLES),
@@ -57,7 +57,7 @@ fn an_error_restates_them_too_and_a_turn_ending_call_does_not() {
     let named = text(
         &mut session,
         "act",
-        json!({"verb": "cancel", "kind": "event", "rows": "#9"}),
+        json!({"verb": "cancel", "kind": "event", "rows": "#7"}),
     );
     assert!(
         named.starts_with("error:") && !named.contains(HANDLES),
@@ -65,7 +65,7 @@ fn an_error_restates_them_too_and_a_turn_ending_call_does_not() {
     );
     // A handle that was never shown gets the rows that can be used.
     let never = text(&mut session, "open", json!({"row": "#99"}));
-    assert!(never.contains(&format!("\n{HANDLES}#9 task")), "{never}");
+    assert!(never.contains(&format!("\n{HANDLES}#7 task")), "{never}");
     let done = call(&mut session, "ask", json!({"question": "which friday?"}));
     assert_eq!(done["ends_turn"], true);
     assert!(!done["text"].as_str().unwrap().contains(HANDLES));
@@ -113,7 +113,7 @@ fn rows_from_the_previous_turn_are_restated_after_this_turns() {
     let empty = text(&mut session, "find", json!({"kind": "task", "name": "zzz"}));
     assert!(
         empty.contains(&format!(
-            "\n{HANDLES}#9 task \"Pay rent\", #10 task \"Book the cabin\""
+            "\n{HANDLES}#7 task \"Pay rent\", #8 task \"Book the cabin\""
         )),
         "{empty}"
     );

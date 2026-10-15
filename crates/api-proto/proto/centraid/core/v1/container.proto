@@ -1,9 +1,9 @@
-// A CONTAINER AS A SEARCH RESULT (#1097, R-1097-19..21): the notebook, project,
-// Tally group or Docs folder a member typed the name of.
+// A CONTAINER AS A SEARCH RESULT (#1097, R-1097-19..21): the notebook, project
+// or Docs folder a member typed the name of.
 //
-// One message shared by the four owning apps' own search answers
-// (`NotesSearch.containers`, `TasksSearch.containers`, `DocsSearch.containers`,
-// `TallySearch.containers`), so a shell draws a container the same way wherever it
+// One message shared by the three owning apps' own search answers
+// (`NotesSearch.containers`, `TasksSearch.containers`, `DocsSearch.containers`),
+// so a shell draws a container the same way wherever it
 // is found. Home carries the same fact as a `VaultSearchHit` (`vault_search.proto`),
 // which has its own subtitle and day and so does not use this.
 //
@@ -17,21 +17,21 @@ package centraid.core.v1;
 
 message ContainerHit {
   // The logical entity of the index row: `core.collection` (a notebook or an
-  // album, which `app_id` tells apart), `schedule.project`, `social.circle` (a
-  // Tally group) or `core.concept` (a Docs folder).
+  // album, which `app_id` tells apart), `schedule.project` or `core.concept` (a
+  // Docs folder).
   string entity = 1;
   // The row's own primary key in that index.
   string id = 2;
   // What the container is called.
   string title = 3;
-  // The app the container opens in: `notes`, `photos`, `tasks`, `tally`, `docs`.
+  // The app the container opens in: `notes`, `photos`, `tasks`, `docs`.
   string app_id = 4;
   // The index's highlight of the match, or empty.
   string snippet = 5;
-  // WHAT THE CONTAINER OPENS BY in its app, when that is not `id`. A Tally group
-  // is a circle in the index and a `tally_group` in Tally, so its hit carries the
-  // group's id here; every other container leaves it empty and opens by `id`
-  // (a notebook or album by its collection id, a project by its project id, a
-  // folder by its concept id).
-  string open_id = 6;
+  // 6 was `open_id`, the Tally group's id (a group was a circle in the index and
+  // a `tally_group` in Tally). The circle index left with Tally (#1099); every
+  // container opens by `id` (a notebook or album by its collection id, a project
+  // by its project id, a folder by its concept id).
+  reserved 6;
+  reserved "open_id";
 }

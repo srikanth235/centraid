@@ -149,7 +149,7 @@ export function localDayKey(
 export type FigureTone = "net" | "owed" | "settled";
 
 /**
- * A net's tone, on Tally's one sign convention: **positive is owed to you,
+ * A net's tone, on the one sign convention: **positive is owed to you,
  * negative is owed by you**, so a figure never needs a legend.
  *
  * The dead band is a single minor unit — a balance that rounds to nothing IS
@@ -157,9 +157,8 @@ export type FigureTone = "net" | "owed" | "settled";
  * nothing.
  *
  * IT LIVES HERE, IN THE TOKEN PACKAGE, BECAUSE IT IS A TOKEN DECISION. It was
- * written in `packages/blueprints/apps/tally/format.ts` beside Tally's other
- * formatters, and wave 6 retired that tree (#1020); the rule itself did not
- * retire, because `crates/design`'s `figure_tone` is its port and
+ * written beside Tally's formatters, which wave 6 retired (#1020) and #1099
+ * removed with the app; the rule itself stays, because `crates/design`'s `figure_tone` is its port and
  * `contracts/tools/export-design-corpus.ts` runs THIS function over 252 rows to
  * produce the corpus `crates/design/tests/corpus.rs` asserts against. Choosing
  * which of three prominence rungs a number takes is the same kind of decision

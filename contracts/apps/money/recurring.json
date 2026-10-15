@@ -1,0 +1,38 @@
+{
+  "_": "Over rows.json, today 2024-03-20. NETFLIX.COM is 1599 on the 15th of January, February and March from checking: a monthly series with three matches, all exact, anchored on the first. Whole Foods debits (8000, 9000, 7000) differ by more than 7.5% so they cluster apart and none has three; Chipotle varies too; the payroll is a credit. March's charge is paid, April's is due on the 15th. Nothing expected is left in March after the 20th, so the month-end forecast is what was spent.",
+  "today": "2024-03-20",
+  "month": "2024-03",
+  "series": [
+    {
+      "merchant_key": "NETFLIX.COM",
+      "account": "A1",
+      "cadence": "monthly",
+      "rrule": "FREQ=MONTHLY;INTERVAL=1",
+      "anchor": "2024-01-15",
+      "median": 1599,
+      "category": "money:cat:fun.subscriptions",
+      "occurrences": ["2024-01-15", "2024-02-15", "2024-03-15"],
+      "rank_milli": 3000,
+      "next_due": "2024-04-15",
+      "projection": [
+        {
+          "from": "2024-03-01",
+          "to": "2024-05-01",
+          "expected": [
+            ["2024-03-15", "paid"],
+            ["2024-04-15", "due"]
+          ]
+        }
+      ]
+    }
+  ],
+  "seen_times": {
+    "NETFLIX.COM": 3,
+    "CHIPOTLE": 3,
+    "WHOLE FOODS #9": 3,
+    "NO SUCH MERCHANT": 0
+  },
+  "forecast": {
+    "USD": { "spent_so_far": 16599, "expected": 0, "month_end": 16599 }
+  }
+}

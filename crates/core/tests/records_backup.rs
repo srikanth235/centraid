@@ -1,7 +1,7 @@
 //! THE VAULT'S RECORDS — WHAT THE APPS KEEP — THROUGH THE BACKUP PLANE
 //! (#1080, the adversarial sweep's S rows).
 //!
-//! Photographs are files; notes, tasks, documents, the tally and the people
+//! Photographs are files; notes, tasks, documents and the people
 //! a member keeps are rows, and a snapshot is how rows are backed up: the
 //! vault copied page for page, its ranges named by their bytes, the head set
 //! once every range is acknowledged. These cases write through the apps' own
@@ -63,7 +63,7 @@ fn head_manifest(path: &Path) -> (Name, Manifest) {
 }
 
 /// **EVERY APP'S RECORDS COME BACK ROW FOR ROW** (#1080, S1). Notes, tasks,
-/// documents, the tally, people, an event and a photograph, each written,
+/// documents, people, an event and a photograph, each written,
 /// edited and deleted through its app's own commands before the pass; a
 /// restore onto a new phone holds every table exactly as the phone did.
 #[test]
@@ -73,7 +73,7 @@ fn every_apps_records_come_back_row_for_row() {
     let path = dir.path().join("vault.db");
     let phone = phone(dir.path());
     pair(&phone, &gateway);
-    let (calendar, me) = calendar_and_owner(&phone);
+    let (calendar, _owner) = calendar_and_owner(&phone);
 
     // NOTES: three written, one edited, one deleted.
     let notes: Vec<String> = (0..3)
@@ -169,62 +169,6 @@ fn every_apps_records_come_back_row_for_row() {
         &json!({ "document_id": documents[1] }),
         "trash-doc-1",
     );
-    // THE TALLY: two friends, a group, two expenses, one deleted.
-    let ana = id_of(
-        &run(
-            &phone,
-            "tally.add_friend",
-            &json!({ "name": "Ana" }),
-            "friend-ana",
-        ),
-        "party_id",
-    );
-    let bo = id_of(
-        &run(
-            &phone,
-            "tally.add_friend",
-            &json!({ "name": "Bo" }),
-            "friend-bo",
-        ),
-        "party_id",
-    );
-    let group = id_of(
-        &run(
-            &phone,
-            "tally.create_group",
-            &json!({ "name": "Flat", "icon": "🏠", "currency": "EUR", "member_ids": [ana, bo] }),
-            "group-flat",
-        ),
-        "group_id",
-    );
-    let expenses: Vec<String> = (0..2)
-        .map(|index| {
-            id_of(
-                &run(
-                    &phone,
-                    "tally.add_expense",
-                    &json!({
-                        "group_id": group, "description": format!("Groceries {index}"),
-                        "amount_minor": 3_000, "paid_by": me, "category": "food",
-                        "spent_on": "2026-10-01",
-                        "splits": [
-                            { "party_id": me, "share_minor": 1_000 },
-                            { "party_id": ana, "share_minor": 1_000 },
-                            { "party_id": bo, "share_minor": 1_000 },
-                        ],
-                    }),
-                    &format!("expense-{index}"),
-                ),
-                "expense_id",
-            )
-        })
-        .collect();
-    run(
-        &phone,
-        "tally.delete_expense",
-        &json!({ "expense_id": expenses[1] }),
-        "delete-expense-1",
-    );
     // PEOPLE: two added, one edited.
     let ray = id_of(
         &run(
@@ -271,7 +215,6 @@ fn every_apps_records_come_back_row_for_row() {
         "schedule_task",
         "core_event",
         "core_document",
-        "tally_expense",
         "people_profile",
         "media_asset",
     ] {

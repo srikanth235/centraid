@@ -504,8 +504,10 @@ mod tests {
         Vault::create(&vault_file).unwrap().close().unwrap();
         {
             let raw = rusqlite::Connection::open(&vault_file).unwrap();
-            // Rungs three and four's tables come back for rung ten to drop,
-            // because the climb runs every rung above six.
+            // Tally's objects come back for rung thirteen to fold into and rung
+            // fifteen to drop, and rungs three and four's tables for rung ten to
+            // drop, because the climb runs every rung above six.
+            crate::migrations::tests::undo_rung_fifteen(&raw);
             raw.execute_batch(crate::migrations::BACKUP_INDEX_SQL)
                 .unwrap();
             raw.execute_batch(crate::migrations::BLOB_CUSTODY_SQL)

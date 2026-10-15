@@ -11,11 +11,11 @@ members = [
   "crates/apps/docs",
   "crates/apps/kit",
   "crates/apps/locker",
+  "crates/apps/money",
   "crates/apps/notes",
   "crates/apps/people",
   "crates/apps/photos",
   "crates/apps/tasks",
-  "crates/apps/tally",
 ]
 exclude = ["crates/apps"]
 

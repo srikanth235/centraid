@@ -49,7 +49,7 @@ const PARTY_ENTITY: &str = "core.party";
 const APP: &str = "photos";
 
 /// What the core's legs answer for one term.
-type Found = (photos::queries::SearchData, Vec<named::Opened>);
+type Found = (photos::queries::SearchData, Vec<centraid_search::Target>);
 
 pub(super) fn search(
     vault: &Vault,
@@ -132,8 +132,7 @@ fn run(
     if denial.is_some() {
         return Ok(((data, Vec::new()), denial));
     }
-    let (albums, denial) =
-        named::of_app(door, search, APP, term, limit.min(named::CONTAINER_ROWS))?;
+    let (albums, denial) = named::of_app(search, APP, term, limit.min(named::CONTAINER_ROWS));
     Ok(((data, albums), denial))
 }
 

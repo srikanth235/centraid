@@ -1,8 +1,8 @@
 package dev.centraid.shared
 
+import centraid.screen.v1.DocsDriveState
 import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosGridState
-import centraid.screen.v1.TallyListState
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.Mount
@@ -45,10 +45,10 @@ class NavigationAndMountSpec : StringSpec({
 
     "a band destination from somewhere else IS a push" {
         val stack = NavStack()
-            .withTallyDestination(TallyListState.Destination.DESTINATION_BALANCES)
+            .withDocsDestination(DocsDriveState.Destination.DESTINATION_STARRED)
         stack.entries.size shouldBe 2
-        (stack.current as Destination.TallyHome).destination shouldBe
-            TallyListState.Destination.DESTINATION_BALANCES
+        (stack.current as Destination.DocsHome).destination shouldBe
+            DocsDriveState.Destination.DESTINATION_STARRED
     }
 
     "iOS tells a route swapped in place that it opened, not only a pushed one" {

@@ -34,8 +34,8 @@ public object SpringboardPolicy {
         "notes",
         "agenda",
         "tasks",
+        "money",
         "people",
-        "tally",
         "locker",
     )
 
@@ -49,9 +49,9 @@ public object SpringboardPolicy {
         // Notes' body IS the Docs preview body, and the class follows the body.
         "notes" to TileSize.TILE_SIZE_MEDIUM,
         "locker" to TileSize.TILE_SIZE_SMALL,
+        "money" to TileSize.TILE_SIZE_SMALL,
         "people" to TileSize.TILE_SIZE_SMALL,
         "photos" to TileSize.TILE_SIZE_LARGE,
-        "tally" to TileSize.TILE_SIZE_SMALL,
         "tasks" to TileSize.TILE_SIZE_SMALL,
     )
 
@@ -138,10 +138,10 @@ public object SpringboardPolicy {
         "agenda" to "Put something on the calendar",
         "docs" to "Add your first document",
         "locker" to "Unlock to see your items",
+        "money" to "Import your first statement",
         "notes" to "Write your first note",
         "people" to "Add someone you know",
         "photos" to "Import your first photo",
-        "tally" to "Log your first expense",
         "tasks" to "Capture the next thing to do",
     )
 

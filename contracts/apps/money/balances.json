@@ -1,0 +1,30 @@
+{
+  "_": "Balance = opening + signed posted non-void rows after opening_on and on or before the day. A1: 100000 + 902500 credits - 50797 debits. A2: -4500 -3000 -5000 -2500. A3: 500000 + 20000 + 100 - 12000. A4 has no opening date, so it counts every row. The A3 checkpoint dated after today is not the latest at or before today.",
+  "today": "2024-03-20",
+  "accounts": {
+    "A1": {
+      "currency": "USD",
+      "balance": 951703,
+      "checkpoint": {
+        "as_of": "2024-02-29",
+        "stated": 679802,
+        "delta": 0,
+        "agrees": true
+      }
+    },
+    "A2": {
+      "currency": "USD",
+      "balance": -15000,
+      "checkpoint": {
+        "as_of": "2024-03-10",
+        "stated": -14000,
+        "delta": -1000,
+        "agrees": false
+      }
+    },
+    "A3": { "currency": "USD", "balance": 508100, "checkpoint": null },
+    "A4": { "currency": "CAD", "balance": 7000, "checkpoint": null },
+    "A5": { "currency": "USD", "balance": 12000, "checkpoint": null }
+  },
+  "net_worth": { "USD": 1456803, "CAD": 7000 }
+}

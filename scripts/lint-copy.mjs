@@ -163,11 +163,7 @@ export function measure(root = ROOT) {
 // Shrink-only. Each entry is a debt taken on knowingly, with the reason beside
 // it; a new one needs the same.
 const BUDGET = {
-  "copy-banned-word": {
-    // RECEIPT_NONE, RECEIPT_SHOT_ALT: an expense's paper receipt, a real thing
-    // the member photographs — not Locker's access log.
-    "copy/tally.json": 2,
-  },
+  "copy-banned-word": {},
   "copy-dot-join": {
     // IN_TRASH_LAPSED, IMPORT_COUNTS, STATUS_ROSTER_SHOWN: short metadata
     // facts and counts, the one sanctioned use of " · ".

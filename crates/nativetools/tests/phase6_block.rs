@@ -231,15 +231,15 @@ fn a_row_picked_off_the_vault_line_is_named_in_the_next_turns_focus_line() {
     let world = seeded();
     let mut session = world.session();
     let vault = line(&session.user("pay the rent"), "preground").expect("a vault line");
-    assert_eq!(vault, "vault: #9 task \"Pay rent\"");
+    assert_eq!(vault, "vault: #7 task \"Pay rent\"");
     call(
         &mut session,
         "act",
-        json!({"verb": "complete", "rows": "#9"}),
+        json!({"verb": "complete", "rows": "#7"}),
     );
     assert_eq!(
         line(&session.user("hm"), "focus"),
-        Some("focus: acted #9 task \"Pay rent\"".to_owned())
+        Some("focus: acted #7 task \"Pay rent\"".to_owned())
     );
 }
 
@@ -272,23 +272,23 @@ fn a_row_a_write_took_from_a_shown_set_is_named_once_in_the_set() {
     let vault = line(&session.user("the rent and the cabin"), "preground").expect("a vault line");
     assert_eq!(
         vault,
-        "vault: #9 task \"Book the cabin\" · #10 task \"Pay rent\""
+        "vault: #7 task \"Book the cabin\" · #8 task \"Pay rent\""
     );
     let found = call(
         &mut session,
         "find",
         json!({"kind": "task", "name": "pay rent"}),
     );
-    assert_eq!(ns(&found), vec![10], "{found}");
+    assert_eq!(ns(&found), vec![8], "{found}");
     let done = text(
         &mut session,
         "act",
-        json!({"verb": "complete", "rows": "#10, #9"}),
+        json!({"verb": "complete", "rows": "#8, #7"}),
     );
-    assert!(done.starts_with("completed: #10 "), "{done}");
+    assert!(done.starts_with("completed: #8 "), "{done}");
     assert_eq!(
         line(&session.user("hm"), "focus"),
-        Some("focus: @1: #10 task \"Pay rent\" · acted #9 task \"Book the cabin\"".to_owned())
+        Some("focus: @1: #8 task \"Pay rent\" · acted #7 task \"Book the cabin\"".to_owned())
     );
 }
 
@@ -341,21 +341,21 @@ fn an_already_so_answer_names_its_row() {
     // the fixture's "Write report" is completed already; no set, only the `vault:` line, has it
     let vault = line(&session.user("the write report task"), "preground").expect("a vault line");
     assert!(
-        vault.starts_with("vault: #9 task \"Write report\""),
+        vault.starts_with("vault: #7 task \"Write report\""),
         "{vault}"
     );
     let already = text(
         &mut session,
         "act",
-        json!({"verb": "complete", "rows": "#9"}),
+        json!({"verb": "complete", "rows": "#7"}),
     );
     assert!(
-        already.starts_with("already: #9 task \"Write report\" is completed"),
+        already.starts_with("already: #7 task \"Write report\" is completed"),
         "{already}"
     );
     assert_eq!(
         line(&session.user("hm"), "focus"),
-        Some("focus: acted #9 task \"Write report\"".to_owned())
+        Some("focus: acted #7 task \"Write report\"".to_owned())
     );
 }
 
@@ -421,22 +421,22 @@ fn a_row_touched_again_keeps_the_place_of_its_first_touch() {
         line(&session.user("delete the rent and the cabin"), "preground").expect("a vault line");
     assert_eq!(
         vault,
-        "vault: #9 task \"Book the cabin\" · #10 task \"Pay rent\""
+        "vault: #7 task \"Book the cabin\" · #8 task \"Pay rent\""
     );
     // one write, its rows in the order the call names them
     let done = text(
         &mut session,
         "act",
-        json!({"verb": "delete", "rows": "#10, #9"}),
+        json!({"verb": "delete", "rows": "#8, #7"}),
     );
-    assert!(done.starts_with("deleted: #10 "), "{done}");
+    assert!(done.starts_with("deleted: #8 "), "{done}");
     // the undo touches them in the reverse order and does not move them
     session.user("no wait, undo");
     let undone = text(&mut session, "act", json!({"verb": "undo"}));
     assert!(undone.starts_with("undone: #"), "{undone}");
     assert_eq!(
         line(&session.user("hm"), "focus"),
-        Some("focus: acted #10 task \"Pay rent\", #9 task \"Book the cabin\"".to_owned())
+        Some("focus: acted #8 task \"Pay rent\", #7 task \"Book the cabin\"".to_owned())
     );
 }
 
@@ -468,16 +468,16 @@ fn a_session_that_wrote_nothing_has_no_acted_part_and_an_ask_option_is_not_an_ac
         session.user("hm");
     }
     let vault = line(&session.user("the cabin"), "preground").expect("a vault line");
-    assert_eq!(vault, "vault: #10 task \"Book the cabin\"");
+    assert_eq!(vault, "vault: #8 task \"Book the cabin\"");
     let asked = call(
         &mut session,
         "ask",
-        json!({"question": "which one?", "options": "#9, #10"}),
+        json!({"question": "which one?", "options": "#7, #8"}),
     );
     assert_eq!(asked["ends_turn"], true, "{asked}");
     let focus = line(&session.user("the first"), "focus").expect("a focus line");
     assert!(
-        focus.starts_with("focus: asked: #9 task \"Pay rent\"") && !focus.contains("acted"),
+        focus.starts_with("focus: asked: #7 task \"Pay rent\"") && !focus.contains("acted"),
         "{focus}"
     );
 }
@@ -737,58 +737,6 @@ fn a_sum_and_a_grouped_count_say_what_they_were_over_and_keep_every_row() {
     );
 }
 
-#[test]
-fn a_balance_keeps_the_person_and_the_group_it_was_over() {
-    let world = seeded();
-    let mut session = world.session();
-    session.user("do i owe neha");
-    let neha = number(&mut session, "person", "Neha Rao");
-    let tahoe = number(&mut session, "group", "Tahoe Trip");
-    let net = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "group", "name": "Tahoe Trip", "linked_to": neha}),
-    );
-    assert!(
-        !net["text"].as_str().unwrap_or_default().contains("error"),
-        "{net}"
-    );
-    let focus = line(&session.user("and ray"), "focus").expect("a focus line");
-    let expected = format!(
-        "@3 (balance -100.00 USD over {tahoe} group \"Tahoe Trip\", {neha} person \"Neha Rao\")"
-    );
-    assert!(focus.contains(&expected), "{focus}");
-    assert!(
-        focus.contains(" · earlier: ") && !focus.contains("@3:"),
-        "{focus}"
-    );
-    // both rows are reachable through the handle
-    assert_eq!(
-        found(&mut session, json!({"kind": "person", "within": "@3"})),
-        1
-    );
-    assert_eq!(
-        found(&mut session, json!({"kind": "group", "within": "@3"})),
-        1
-    );
-    let ray = call(
-        &mut session,
-        "compute",
-        json!({"op": "balance", "kind": "person", "name": "Ray Ochoa"}),
-    );
-    let focus = line(&session.user("and now"), "focus").expect("a focus line");
-    assert!(
-        focus.contains("@6 (balance ")
-            && focus.contains(" over #")
-            && focus.contains("person \"Ray Ochoa\")"),
-        "{ray} {focus}"
-    );
-    assert_eq!(
-        found(&mut session, json!({"kind": "person", "within": "@6"})),
-        1
-    );
-}
-
 // ---------------------------------------------------------------------------
 // P1.3 containers are named
 // ---------------------------------------------------------------------------
@@ -946,94 +894,6 @@ fn the_list_of_the_focus_tasks_is_grounded_by_the_word_list() {
 }
 
 // ---------------------------------------------------------------------------
-// P1.4 me
-// ---------------------------------------------------------------------------
-
-/// The `#n` of the `(you)` part of a vault line.
-fn me_in(vault: &str) -> u64 {
-    let part = vault
-        .trim_start_matches("vault: ")
-        .split(" · ")
-        .find(|part| part.ends_with("(you)"))
-        .expect("a (you) part");
-    number_after(part, "#")
-}
-
-#[test]
-fn my_balance_puts_my_own_row_last_in_the_vault_line() {
-    let world = seeded();
-    for message in [
-        "what's my balance",
-        "what do i owe",
-        "where do i stand in the tahoe trip",
-    ] {
-        let mut session = world.session();
-        let reply = session.user(message);
-        let vault = line(&reply, "preground").expect("a vault line");
-        // never first, always last
-        assert!(
-            vault.ends_with(" person \"Sam Park\" (you)"),
-            "{message}: {vault}"
-        );
-        // the row is selectable
-        let me = me_in(&vault);
-        let net = call(
-            &mut session,
-            "compute",
-            json!({"op": "balance", "kind": "group", "name": "Tahoe Trip", "linked_to": format!("#{me}")}),
-        );
-        let text = net["text"].as_str().unwrap_or_default();
-        assert!(
-            text.contains(&format!("#{me} person \"Sam Park\"")) && !text.starts_with("error"),
-            "{message}: {text}"
-        );
-    }
-    // after a group in the message, not before it
-    let mut session = world.session();
-    let vault = line(
-        &session.user("where do i stand in the tahoe trip"),
-        "preground",
-    )
-    .expect("a vault line");
-    assert!(
-        vault.starts_with("vault: #") && vault.contains(" group \"Tahoe Trip\""),
-        "{vault}"
-    );
-}
-
-#[test]
-fn my_row_is_left_out_whenever_someone_else_is_in_play() {
-    let world = seeded();
-    // a pronoun, a name, a possessive name
-    for message in [
-        "what's my balance with him",
-        "her balance with me",
-        "how much does he owe me",
-        "what do i owe ray",
-        "ray's balance with me",
-    ] {
-        let mut session = world.session();
-        let vault = line(&session.user(message), "preground");
-        assert!(
-            vault.is_none_or(|vault| !vault.contains("(you)") && !vault.contains("Sam Park")),
-            "{message}"
-        );
-    }
-    // a person in the focus line
-    let mut session = world.session();
-    session.user("who is ray");
-    call(
-        &mut session,
-        "find",
-        json!({"kind": "person", "name": "ray"}),
-    );
-    assert_eq!(line(&session.user("what's my balance"), "preground"), None);
-    // no first person, or no balance sense: no row
-    let mut session = world.session();
-    assert_eq!(line(&session.user("show my tasks"), "preground"), None);
-}
-
-// ---------------------------------------------------------------------------
 // P1.5 ask candidates
 // ---------------------------------------------------------------------------
 
@@ -1042,10 +902,6 @@ fn dans_world() -> World {
     world["people"].as_array_mut().expect("people").extend([
         json!({"key": "dan_k", "name": "Dan Kowalski", "role": "neighbor", "nickname": "Big Dan"}),
         json!({"key": "dan_o", "name": "Dan O'Brien", "role": "nurse"}),
-    ]);
-    world["groups"].as_array_mut().expect("groups").extend([
-        json!({"key": "blockparty", "name": "Block Party", "members": ["dan_k"]}),
-        json!({"key": "bookclub", "name": "Book Club", "members": ["dan_o"]}),
     ]);
     seeded_with(&world)
 }
@@ -1078,7 +934,7 @@ fn ask_options_carry_what_tells_the_people_apart() {
     let focus = line(&session.user("the neighbor"), "focus").expect("a focus line");
     assert!(
         focus.ends_with(&format!(
-            " · asked: #{kowalski} person \"Dan Kowalski\" (neighbor · Big Dan · Block Party) · #{obrien} person \"Dan O'Brien\" (nurse · Book Club)"
+            " · asked: #{kowalski} person \"Dan Kowalski\" (neighbor · Big Dan) · #{obrien} person \"Dan O'Brien\" (nurse)"
         )),
         "{focus}"
     );
@@ -1119,7 +975,6 @@ fn the_words_that_fit_one_option_say_which_row() {
         ("the neighbor", "the neighbor", 0),
         ("big dan", "big dan", 0),
         ("Big Dan please", "big dan", 0),
-        ("the book club one", "the book club one", 1),
         ("the nurse", "the nurse", 1),
     ] {
         let (mut session, kowalski, obrien) = asked_dans(&world);

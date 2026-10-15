@@ -55,7 +55,6 @@ const SHRUNKEN: Year3PeopleShape = Year3PeopleShape {
     reminders: 240,
     interactions: 800,
     notes: 160,
-    obligations: 24,
     start: "2097-01-01",
 };
 
@@ -73,7 +72,6 @@ fn a_shrunken_axis_is_readable_through_the_roster_the_shelf_and_the_dashboard() 
     // own notes are annotations too.
     assert_eq!(counts.links, SHRUNKEN.interactions);
     assert_eq!(counts.annotations, SHRUNKEN.interactions + SHRUNKEN.notes);
-    assert_eq!(counts.obligations, SHRUNKEN.obligations);
 
     let door = TestDoor::new(&connection);
     let (roster, denial) =

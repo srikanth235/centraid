@@ -36,6 +36,7 @@
 pub mod canonical;
 pub mod changes;
 pub mod contract_vault;
+pub mod csv;
 pub mod denial;
 pub mod error;
 pub mod fixtures;

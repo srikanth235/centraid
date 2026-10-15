@@ -43,16 +43,6 @@
       "override_json": null
     },
     {
-      "exception_id": "exc-5",
-      "target_type": "tally.recurring_expense",
-      "target_id": "event-1",
-      "original_start_local": "2026-03-09T09:00:00",
-      "recurrence_semantics": "zoned",
-      "scope": "occurrence",
-      "action": "skip",
-      "override_json": null
-    },
-    {
       "exception_id": "exc-6",
       "target_type": "core.event",
       "target_id": "event-1",

@@ -332,13 +332,13 @@ public class HomeSession private constructor(
     /**
      * PUT AN APP SCREEN ON THIS SESSION'S CORE (#1025 S5, lane L5).
      *
-     * The three app screens have no core of their own and must not get one:
+     * The app screens have no core of their own and must not get one:
      * R-1020-24 is one core per VAULT FILE — re-keyed from "per process" by
      * #1025 S7-13, so the shelf can hold every vault open at once — and
      * `SingleHandleGuard` refuses a second handle on the file this session is
-     * already reading. So Tally, Photos and Notes read through the handle this
+     * already reading. So Photos and Notes read through the handle this
      * session holds. Until this method existed nothing served their `ReadPage`
-     * effects at all and all three sat on their seeded `LOADING` state for ever.
+     * effects at all and both sat on their seeded `LOADING` state for ever.
      *
      * **Both halves, every time.** The runtime serves what the screen ASKS for;
      * `changes.route` delivers what arrives from sync without being asked. A

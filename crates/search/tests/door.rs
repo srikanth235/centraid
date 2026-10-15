@@ -14,7 +14,7 @@
 //!    by `crates/vault::custody` — the vault's own `lk1:` member-key cell, not
 //!    a hand-typed prefix — so the run is neither vacuous nor a claim about a
 //!    string;
-//! 2. no `Target` from any of the seven domains carries the PLAINTEXT or the
+//! 2. no `Target` from any of the six domains carries the PLAINTEXT or the
 //!    CIPHERTEXT, for a query that asks for each by name;
 //! 3. the entities that HAVE sealed columns are not domains at all, and asking
 //!    for one is a typed refusal rather than an empty page — the empty page is
@@ -64,7 +64,7 @@ fn vault() -> Connection {
 /// One row in every domain, plus a planted secret in every sealed column.
 #[expect(
     clippy::too_many_lines,
-    reason = "one fixture, one reading order: seven domains and three sealed tables"
+    reason = "one fixture, one reading order: six domains and three sealed tables"
 )]
 fn seed(connection: &Connection) {
     let body = |id: &str, text: &str, sha: &str| {
@@ -164,15 +164,6 @@ fn seed(connection: &Connection) {
             [NOW],
         )
         .expect("a task is inserted");
-
-    connection
-        .execute(
-            "INSERT INTO tally_expense
-               (expense_id, description, amount_minor, currency, paid_by, spent_on, category, created_at)
-             VALUES ('expense-1', 'Cabin deposit', 18000, 'USD', 'party-1', '2099-05-30', 'travel', ?1)",
-            [NOW],
-        )
-        .expect("an expense is inserted");
 
     body("content-5", "the lease", &"e".repeat(64));
     connection
@@ -462,7 +453,7 @@ fn an_entity_with_sealed_columns_is_not_a_domain_and_asking_is_a_refusal() {
     ] {
         let refused = door.query(&Principal::Owner, &SearchRequest::new(entity, "cabin", 8));
         assert!(
-            matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+            matches!(refused, Err(SearchError::NotADomain { count: 6, .. })),
             "{entity} answered {refused:?} rather than refusing"
         );
     }
@@ -514,7 +505,6 @@ fn every_domain_answers_its_own_row_for_one_word() {
             ("core.party", 0),
             ("core.event", 1),
             ("schedule.task", 1),
-            ("tally.expense", 1),
             ("core.content_item", 1),
             ("core.document", 1),
         ]
@@ -910,62 +900,6 @@ fn a_task_is_found_by_its_project() {
     assert_eq!(found(&door, "schedule.task", "kitchen"), ids(["task-2"]));
 }
 
-#[test]
-fn an_expense_is_found_by_category_group_line_item_and_memo() {
-    let connection = vault();
-    connection
-        .execute(
-            "INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
-             VALUES ('circle-1', 'party-1', 'Sitwell Road', 'custom')",
-            [],
-        )
-        .expect("a circle is inserted");
-    connection
-        .execute(
-            "INSERT INTO tally_group (group_id, circle_id, icon, color, currency, created_at)
-             VALUES ('group-1', 'circle-1', 'x', 'blue', 'GBP', ?1)",
-            [NOW],
-        )
-        .expect("a group is inserted");
-    connection
-        .execute(
-            "INSERT INTO tally_expense
-               (expense_id, group_id, description, amount_minor, currency, paid_by, spent_on,
-                category, created_at)
-             VALUES ('expense-2', 'group-1', 'Hardware shop', 3000, 'GBP', 'party-1',
-                     '2099-05-04', 'utilities', ?1)",
-            [NOW],
-        )
-        .expect("an expense is inserted");
-    connection
-        .execute(
-            "INSERT INTO tally_expense_line_item
-               (line_item_id, expense_id, kind, description, amount_minor, sort_order, created_at)
-             VALUES ('line-1', 'expense-2', 'item', 'Paint', 2000, 0, ?1),
-                    ('line-2', 'expense-2', 'item', 'Brushes', 1000, 1, ?1)",
-            [NOW],
-        )
-        .expect("line items are inserted");
-    connection
-        .execute(
-            "INSERT INTO knowledge_annotation
-               (annotation_id, author_party_id, target_type, target_id, body_text, created_at)
-             VALUES ('annotation-4', 'party-1', 'tally.expense', 'expense-2', 'the red folder', ?1)",
-            [NOW],
-        )
-        .expect("a memo is inserted");
-    let door = door(&connection);
-    for query in ["utilities", "sitwell", "paint", "brushes", "folder"] {
-        assert_eq!(
-            found(&door, "tally.expense", query),
-            ids(["expense-2"]),
-            "`{query}` finds the expense"
-        );
-    }
-    // The seeded expense's own category is a column of its index too.
-    assert_eq!(found(&door, "tally.expense", "travel"), ids(["expense-1"]));
-}
-
 // ---------------------------------------------------------------------------
 // The weight of a folded column, in a replayed vault and in a founded one
 // ---------------------------------------------------------------------------
@@ -1101,7 +1035,7 @@ fn owner_of(vault: &centraid_vault::Vault) -> String {
 /// The index columns rung thirteen folded in, which are the ones that weigh half.
 /// Written out here, apart from the list in `domains.rs`, so a weight that sits
 /// on the wrong column is a difference between two statements of one fact.
-const HALF_WEIGHT: [(&str, &str); 12] = [
+const HALF_WEIGHT: [(&str, &str); 8] = [
     ("core.party", "nickname"),
     ("core.party", "role"),
     ("core.party", "met"),
@@ -1109,10 +1043,6 @@ const HALF_WEIGHT: [(&str, &str); 12] = [
     ("core.party", "memo"),
     ("core.event", "location"),
     ("schedule.task", "project"),
-    ("tally.expense", "category"),
-    ("tally.expense", "group_name"),
-    ("tally.expense", "items"),
-    ("tally.expense", "memo"),
     ("chat.thread", "said"),
 ];
 
@@ -1554,7 +1484,7 @@ fn an_entity_that_is_not_a_domain_is_a_refusal_for_a_correction_too() {
         for entities in [vec![entity], vec!["schedule.task", entity]] {
             let refused = door.correct(&Principal::Owner, &entities, "budegt");
             assert!(
-                matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+                matches!(refused, Err(SearchError::NotADomain { count: 6, .. })),
                 "{entities:?} answered {refused:?} rather than refusing"
             );
         }
@@ -1807,10 +1737,10 @@ fn slipped(random: &mut Random, word: &str) -> String {
 ///     -- --ignored --nocapture
 /// ```
 ///
-/// The terms are spread over four domains (tasks, events, people, expenses) as a
+/// The terms are spread over three domains (tasks, events, people) as a
 /// Home search would read them, with English initial letters so the busiest bucket
 /// is the busiest a real vocabulary has. Each of 100 calls is one word with one
-/// slip in it (never in the first letter), asked over the four domains and over
+/// slip in it (never in the first letter), asked over the three domains and over
 /// the tasks alone; then 100 calls of a three-word query with two slips.
 #[test]
 #[ignore = "a measurement, run by hand: the command is in the doc comment"]
@@ -1829,23 +1759,20 @@ fn correction_latency_on_fifty_thousand_terms() {
     connection.execute_batch("BEGIN").expect("a transaction");
     for (index, chunk) in terms.chunks(8).enumerate() {
         let text = chunk.join(" ");
-        // Half the terms in tasks, a fifth in events, the rest in people and expenses.
+        // Half the terms in tasks, a fifth in events, the rest in people.
         match index % 20 {
-            0..=9 => add_task(&connection, "party-1", &format!("synthetic-task-{index}"), &text),
+            0..=9 => add_task(
+                &connection,
+                "party-1",
+                &format!("synthetic-task-{index}"),
+                &text,
+            ),
             10..=13 => add_event(&connection, &format!("synthetic-event-{index}"), &text),
-            14..=16 => connection
+            _ => connection
                 .execute(
                     "INSERT INTO core_party (party_id, kind, display_name, sort_name, created_at)
                      VALUES (?1, 'person', ?2, ?2, ?3)",
                     rusqlite::params![format!("synthetic-party-{index}"), text, NOW],
-                )
-                .map(|_| ()),
-            _ => connection
-                .execute(
-                    "INSERT INTO tally_expense
-                       (expense_id, description, amount_minor, currency, paid_by, spent_on, category, created_at)
-                     VALUES (?1, ?2, 100, 'USD', 'party-1', '2099-05-30', 'general', ?3)",
-                    rusqlite::params![format!("synthetic-expense-{index}"), text, NOW],
                 )
                 .map(|_| ()),
         }
@@ -1865,7 +1792,7 @@ fn correction_latency_on_fifty_thousand_terms() {
     }
     connection.execute_batch("COMMIT").expect("the rows commit");
 
-    for domain in ["schedule_task", "core_event", "core_party", "tally_expense"] {
+    for domain in ["schedule_task", "core_event", "core_party"] {
         let (distinct, busiest, letter): (i64, i64, String) = connection
             .query_row(
                 &format!(
@@ -1881,7 +1808,7 @@ fn correction_latency_on_fifty_thousand_terms() {
     }
 
     let door = door(&connection);
-    let home = ["schedule.task", "core.event", "core.party", "tally.expense"];
+    let home = ["schedule.task", "core.event", "core.party"];
     let measure = |label: &str, entities: &[&str], words: usize| {
         let mut random = Random(0xD1B5_4A32_D192_ED03);
         let mut micros: Vec<u128> = Vec::new();
@@ -1914,9 +1841,9 @@ fn correction_latency_on_fifty_thousand_terms() {
             micros[99] as f64 / 1000.0,
         );
     };
-    measure("one word, four domains ", &home, 1);
+    measure("one word, three domains", &home, 1);
     measure("one word, tasks only   ", &TASKS, 1);
-    measure("three words, four domains", &home, 3);
+    measure("three words, three domains", &home, 3);
 
     // THE BOUND ITSELF: a typo of the first term the scan does not read, so it
     // reads all `MAX_VOCAB_SCAN` rows of the bucket and corrects nothing.
@@ -1969,25 +1896,6 @@ fn seed_containers(connection: &Connection, owner: &str) -> rusqlite::Result<()>
             rusqlite::params![id, owner, name, archived, NOW],
         )?;
     }
-    for (circle, group, name, archived) in [
-        ("ci-1", Some("gr-1"), "Kitchen flat", None),
-        ("ci-2", Some("gr-2"), "Kitchen old flat", Some(NOW)),
-        ("ci-3", None, "Kitchen cousins", None),
-    ] {
-        connection.execute(
-            "INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
-             VALUES (?1, ?2, ?3, 'custom')",
-            rusqlite::params![circle, owner, name],
-        )?;
-        if let Some(group) = group {
-            connection.execute(
-                "INSERT INTO tally_group
-                   (group_id, circle_id, icon, color, currency, archived_at, created_at)
-                 VALUES (?1, ?2, 'x', 'blue', 'GBP', ?3, ?4)",
-                rusqlite::params![group, circle, archived, NOW],
-            )?;
-        }
-    }
     connection.execute(
         "INSERT INTO core_concept_scheme (scheme_id, uri, title, version)
          VALUES ('sch-f', ?1, 'Folders', '1'), ('sch-t', 'https://centraid.dev/schemes/tags', 'Tags', '1')",
@@ -2037,11 +1945,6 @@ fn each_container_is_found_by_name_with_the_app_it_opens_in_and_only_while_live(
             app_of_each(&door, "schedule.project", "kitchen"),
             pairs([("pr-1", "tasks")]),
             "an archived project is not found"
-        );
-        assert_eq!(
-            app_of_each(&door, "social.circle", "kitchen"),
-            pairs([("ci-1", "tally")]),
-            "a circle with an archived group, and a circle no group stands on, are not found"
         );
         assert_eq!(
             app_of_each(&door, "core.concept", "kitchen"),
@@ -2094,7 +1997,7 @@ fn a_query_narrowed_to_an_app_answers_that_apps_containers_only() {
             narrowed("core.collection", "reading", "photos"),
             pairs([("al-1", "photos")])
         );
-        assert_eq!(narrowed("core.collection", "reading", "tally"), Vec::new());
+        assert_eq!(narrowed("core.collection", "reading", "agenda"), Vec::new());
         assert_eq!(
             narrowed("schedule.project", "kitchen", "tasks"),
             pairs([("pr-1", "tasks")])
@@ -2115,7 +2018,6 @@ fn a_typo_in_a_container_name_is_corrected_from_its_vocabulary() {
         for (entity, typo, word) in [
             ("core.collection", "raeding", "reading"),
             ("schedule.project", "kithcen", "kitchen"),
-            ("social.circle", "kithcen", "kitchen"),
             ("core.concept", "documnets", "documents"),
         ] {
             assert_eq!(
@@ -2138,14 +2040,14 @@ fn a_typo_in_a_container_name_is_corrected_from_its_vocabulary() {
 }
 
 /// LOCKER IS NEVER NAMED, for a query or a correction, alone or beside a
-/// container or the chat history; and the domains stay seven.
+/// container or the chat history; and the domains stay six.
 #[test]
-fn locker_is_refused_beside_the_named_kinds_and_the_domains_stay_seven() {
+fn locker_is_refused_beside_the_named_kinds_and_the_domains_stay_six() {
     let connection = vault();
     with_a_locker_index(&connection);
     let door = door(&connection);
-    assert_eq!(DOMAINS.len(), 7);
-    assert_eq!(NAMED.len(), 5);
+    assert_eq!(DOMAINS.len(), 6);
+    assert_eq!(NAMED.len(), 4);
     for entity in [
         "locker.item",
         "locker.item_field",
@@ -2154,7 +2056,7 @@ fn locker_is_refused_beside_the_named_kinds_and_the_domains_stay_seven() {
     ] {
         let refused = door.query(&Principal::Owner, &SearchRequest::new(entity, "cabin", 8));
         assert!(
-            matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+            matches!(refused, Err(SearchError::NotADomain { count: 6, .. })),
             "{entity} answered {refused:?}"
         );
         for entities in [
@@ -2164,7 +2066,7 @@ fn locker_is_refused_beside_the_named_kinds_and_the_domains_stay_seven() {
         ] {
             let refused = door.correct(&Principal::Owner, &entities, "raeding");
             assert!(
-                matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+                matches!(refused, Err(SearchError::NotADomain { count: 6, .. })),
                 "{entities:?} answered {refused:?}"
             );
         }
@@ -2253,19 +2155,13 @@ fn the_door_does_not_find_a_dead_container_that_got_into_an_index() {
         .execute_batch(
             "INSERT INTO fts_schedule_project(rowid, project_id, name)
                SELECT rowid, project_id, name FROM schedule_project WHERE project_id = 'pr-2';
-             INSERT INTO fts_social_circle(rowid, circle_id, name)
-               SELECT rowid, circle_id, name FROM social_circle WHERE circle_id IN ('ci-2', 'ci-3');
              INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
                SELECT rowid, concept_id, pref_label FROM core_concept
                 WHERE concept_id IN ('cn-root', 'cn-tag');",
         )
         .expect("the dead rows are written into the indexes");
     // The control: the index really does hold them now.
-    for (fts, expected) in [
-        ("fts_schedule_project", 2_i64),
-        ("fts_social_circle", 3),
-        ("fts_core_concept", 3),
-    ] {
+    for (fts, expected) in [("fts_schedule_project", 2_i64), ("fts_core_concept", 3)] {
         let held: i64 = connection
             .query_row(
                 &format!("SELECT COUNT(*) FROM {fts} WHERE {fts} MATCH 'kitchen'"),
@@ -2279,10 +2175,6 @@ fn the_door_does_not_find_a_dead_container_that_got_into_an_index() {
     assert_eq!(
         app_of_each(&door, "schedule.project", "kitchen"),
         pairs([("pr-1", "tasks")])
-    );
-    assert_eq!(
-        app_of_each(&door, "social.circle", "kitchen"),
-        pairs([("ci-1", "tally")])
     );
     assert_eq!(
         app_of_each(&door, "core.concept", "kitchen"),
@@ -2672,12 +2564,12 @@ fn a_typo_in_a_thread_is_corrected_from_the_chat_vocabulary() {
         .expect("the vault reads");
 }
 
-/// The chat is a registry entry and not a domain: the domains stay seven, the
+/// The chat is a registry entry and not a domain: the domains stay six, the
 /// chat's entity is refused as a domain by name, and Locker is still refused
 /// beside it.
 #[test]
 fn the_chat_is_named_not_a_domain_and_locker_is_still_refused() {
-    assert_eq!(DOMAINS.len(), 7);
+    assert_eq!(DOMAINS.len(), 6);
     assert!(centraid_search::domain_of("chat.thread").is_none());
     assert!(centraid_search::named_of("chat.thread").is_some());
     assert!(DOMAINS.iter().all(|domain| domain.app_id != "chat"));
@@ -2690,7 +2582,7 @@ fn the_chat_is_named_not_a_domain_and_locker_is_still_refused() {
                 let refused =
                     door.query(&Principal::Owner, &SearchRequest::new(entity, "cabin", 8));
                 assert!(
-                    matches!(refused, Err(SearchError::NotADomain { count: 7, .. })),
+                    matches!(refused, Err(SearchError::NotADomain { count: 6, .. })),
                     "{entity} answered {refused:?}"
                 );
             }

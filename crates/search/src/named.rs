@@ -1,12 +1,12 @@
 //! THE NAMED: what a member goes looking for by a name or by what they said, and
 //! is no link target (#1097, R-1097-19..23).
 //!
-//! A notebook, an album, a Tasks project, a Tally group and a Docs folder are
+//! A notebook, an album, a Tasks project and a Docs folder are
 //! things a member names and goes looking for by that name; a chat thread is a
 //! conversation a member goes looking for by the word they remember asking. None
 //! is in [`crate::domains::DOMAINS`]: the Notes `[[` powerbox loops the domains, a
-//! named thing is no link target, and a domain that grew an eighth member would
-//! grow the sheet with it. So the door has a second list, held to the same checks
+//! named thing is no link target, and a domain that grew a member would grow the
+//! sheet with it. So the door has a second list, held to the same checks
 //! at [`crate::SqliteDoor::open`]: no sealed column projected, folded or indexed,
 //! every index column a base column or a listed [`Fold`], one weight per column;
 //! and each index has a persistent `<index>_vocab`, so a typo in a name is
@@ -14,21 +14,20 @@
 //!
 //! **Why `NAMED` and not `CONTAINERS`.** The list was the containers' until the
 //! chat history joined it (R-1097-23), and a thread is not a container: nothing is
-//! filed in it. What the six kinds share is the registry's whole job, to be found
+//! filed in it. What the five kinds share is the registry's whole job, to be found
 //! by the words a member gave them (a name, a title, what they said) without being
 //! a domain, and "named" says that and nothing about what a row holds. A thread
 //! is the one entry with a [`Fold`] (the member's own messages) and the one whose
 //! app, `chat`, is not in the apps' catalogue: it opens in a Chat tab that only
 //! the iOS shell has.
 //!
-//! **Five indexes serve six kinds**, because `core_collection` holds notebooks and
+//! **Four indexes serve five kinds**, because `core_collection` holds notebooks and
 //! albums and its immutable `kind` says which app a row opens in
 //! ([`Opens::ByKind`]). The door reads the kind off the base row it already joins,
 //! so the index carries no column the table lacks.
 //!
-//! **A hit is live.** A project is found while `archived_at` is NULL; a Tally
-//! group is the `social_circle` a live `tally_group` stands on; a Docs folder is a
-//! concept of the folders scheme that is not the `root`. The rung's triggers keep
+//! **A hit is live.** A project is found while `archived_at` is NULL; a Docs
+//! folder is a concept of the folders scheme that is not the `root`. The rung's triggers keep
 //! the indexes to exactly those rows, and each of these is checked again at the
 //! door ([`Named::deleted_column`], [`Named::guards`]), as the domains'
 //! soft-delete predicate is.
@@ -42,7 +41,7 @@
 //!
 //! **Out, and why.** Calendars: one is seeded, no command makes another and the
 //! Agenda has no calendar destination. People circles: the People app has no
-//! circles screen. A circle with no live Tally group is not a result.
+//! circles screen, and the circle index left with Tally (#1099, R-1099-35).
 //!
 //! Locker is never named; neither is anything with a sealed column.
 
@@ -214,28 +213,6 @@ pub const NAMED: &[Named] = &[
         weights: &[1.0, 1.0],
     },
     Named {
-        entity: "social.circle",
-        opens: Opens::App("tally"),
-        table: "social_circle",
-        fts: "fts_social_circle",
-        id_column: "circle_id",
-        labels: &["name"],
-        deleted_column: None,
-        // A circle is a Tally group only while a live `tally_group` stands on it.
-        guards: &[Guard {
-            sql: "EXISTS (SELECT 1 FROM tally_group g \
-                   WHERE g.circle_id = b.circle_id AND g.archived_at IS NULL)",
-            reads: &[
-                ("social_circle", "circle_id"),
-                ("tally_group", "circle_id"),
-                ("tally_group", "archived_at"),
-            ],
-        }],
-        folds: &[],
-        // circle_id, name
-        weights: &[1.0, 1.0],
-    },
-    Named {
         entity: "core.concept",
         opens: Opens::App("docs"),
         table: "core_concept",
@@ -337,12 +314,12 @@ mod tests {
     use crate::domains::DOMAINS;
 
     #[test]
-    fn five_indexes_serve_six_kinds_and_the_domains_stay_seven() {
-        assert_eq!(NAMED.len(), 5);
-        assert_eq!(DOMAINS.len(), 7);
+    fn four_indexes_serve_five_kinds_and_the_domains_stay_six() {
+        assert_eq!(NAMED.len(), 4);
+        assert_eq!(DOMAINS.len(), 6);
         let mut apps: Vec<&str> = NAMED.iter().flat_map(Named::apps).collect();
         apps.sort_unstable();
-        assert_eq!(apps, ["chat", "docs", "notes", "photos", "tally", "tasks"]);
+        assert_eq!(apps, ["chat", "docs", "notes", "photos", "tasks"]);
     }
 
     #[test]
@@ -499,7 +476,7 @@ mod tests {
                 column: "said",
                 sources: &[("chat_message", "text"), ("locker_item", "password")],
             }],
-            ..NAMED[4]
+            ..NAMED[3]
         }];
         assert_eq!(
             assert_named_unsealed(&leaky),

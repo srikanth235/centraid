@@ -38,11 +38,11 @@ import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.agenda.AgendaRoutes
 import dev.centraid.android.screens.docs.DocsRoutes
 import dev.centraid.android.screens.locker.LockerRoutes
+import dev.centraid.android.screens.money.MoneyRoutes
 import dev.centraid.android.screens.notes.NotesRoutes
 import dev.centraid.android.screens.people.PeopleRoutes
 import dev.centraid.android.screens.mediaPermissions
 import dev.centraid.android.screens.photos.PhotosRoutes
-import dev.centraid.android.screens.tally.TallyRoutes
 import dev.centraid.android.screens.tasks.TasksRoutes
 import dev.centraid.android.screens.words.FirstLaunchScreen
 import dev.centraid.android.screens.words.WordsSheets
@@ -136,13 +136,13 @@ public class MainActivity : FragmentActivity() {
      */
     private val routes: List<AppRoutes> by lazy {
         listOf(
-            TallyRoutes(),
             AgendaRoutes(),
             PhotosRoutes(cacheDir),
             NotesRoutes(),
             DocsRoutes(),
             PeopleRoutes(),
             TasksRoutes(),
+            MoneyRoutes(),
             locker,
             homeSearch,
         )

@@ -121,6 +121,10 @@ CREATE UNIQUE INDEX core_tag_owner_assertion_idx
   ON core_tag(target_type, target_id, concept_id)
   WHERE tagged_by_party_id IS NOT NULL;
 
+-- index core_transaction_account_external_idx on core_transaction
+CREATE UNIQUE INDEX core_transaction_account_external_idx
+  ON core_transaction(account_id, external_id) WHERE external_id IS NOT NULL;
+
 -- index core_transaction_external_idx on core_transaction
 CREATE INDEX core_transaction_external_idx
   ON core_transaction(external_id) WHERE external_id IS NOT NULL;
@@ -383,6 +387,18 @@ CREATE INDEX idx_message_thread ON social_message(thread_id);
 -- index idx_message_thread_sent on social_message
 CREATE INDEX idx_message_thread_sent ON social_message(thread_id, sent_at);
 
+-- index idx_money_rule_account on money_rule
+CREATE INDEX idx_money_rule_account
+  ON money_rule(account_id) WHERE account_id IS NOT NULL;
+
+-- index idx_money_rule_category on money_rule
+CREATE INDEX idx_money_rule_category
+  ON money_rule(set_category_concept_id) WHERE set_category_concept_id IS NOT NULL;
+
+-- index idx_money_target_category on money_target
+CREATE INDEX idx_money_target_category
+  ON money_target(category_concept_id);
+
 -- index idx_note_author_party on knowledge_note
 CREATE INDEX idx_note_author_party ON knowledge_note(author_party_id);
 
@@ -526,6 +542,10 @@ CREATE INDEX media_asset_purge_idx
 CREATE INDEX media_face_region_asset_page_idx
   ON media_face_region(asset_id, region_id);
 
+-- index money_rule_order_idx on money_rule
+CREATE INDEX money_rule_order_idx
+  ON money_rule(position, rule_id);
+
 -- index people_important_date_purge_idx on people_important_date
 CREATE INDEX people_important_date_purge_idx
   ON people_important_date(purge_at) WHERE purge_at IS NOT NULL;
@@ -607,105 +627,6 @@ CREATE INDEX social_contact_channel_party_idx
 -- index social_contact_channel_preferred_idx on social_contact_channel
 CREATE UNIQUE INDEX social_contact_channel_preferred_idx
   ON social_contact_channel(party_id, kind) WHERE is_preferred = 1;
-
--- index tally_expense_deleted_page_idx on tally_expense
-CREATE INDEX tally_expense_deleted_page_idx
-  ON tally_expense(deleted_at, expense_id);
-
--- index tally_expense_group_idx on tally_expense
-CREATE INDEX tally_expense_group_idx ON tally_expense(group_id);
-
--- index tally_expense_line_allocation_party_idx on tally_expense_line_allocation
-CREATE INDEX tally_expense_line_allocation_party_idx
-  ON tally_expense_line_allocation(party_id);
-
--- index tally_expense_line_expense_idx on tally_expense_line_item
-CREATE INDEX tally_expense_line_expense_idx
-  ON tally_expense_line_item(expense_id, sort_order);
-
--- index tally_expense_line_receipt_idx on tally_expense_line_item
-CREATE INDEX tally_expense_line_receipt_idx
-  ON tally_expense_line_item(receipt_id, sort_order);
-
--- index tally_expense_paid_by_idx on tally_expense
-CREATE INDEX tally_expense_paid_by_idx ON tally_expense(paid_by);
-
--- index tally_expense_payer_party_idx on tally_expense_payer
-CREATE INDEX tally_expense_payer_party_idx ON tally_expense_payer(party_id);
-
--- index tally_expense_purge_idx on tally_expense
-CREATE INDEX tally_expense_purge_idx
-  ON tally_expense(purge_at) WHERE purge_at IS NOT NULL;
-
--- index tally_expense_recurring_instance_idx on tally_expense
-CREATE UNIQUE INDEX tally_expense_recurring_instance_idx
-  ON tally_expense(recurring_template_id, spent_on)
-  WHERE recurring_template_id IS NOT NULL;
-
--- index tally_expense_spent_page_idx on tally_expense
-CREATE INDEX tally_expense_spent_page_idx
-  ON tally_expense(deleted_at, spent_on, expense_id);
-
--- index tally_expense_split_party_idx on tally_expense_split
-CREATE INDEX tally_expense_split_party_idx ON tally_expense_split(party_id);
-
--- index tally_expense_txn_idx on tally_expense
-CREATE INDEX tally_expense_txn_idx ON tally_expense(txn_id);
-
--- index tally_group_archived_idx on tally_group
-CREATE INDEX tally_group_archived_idx ON tally_group(archived_at);
-
--- index tally_nudge_group_idx on tally_nudge
-CREATE INDEX tally_nudge_group_idx ON tally_nudge(group_id);
-
--- index tally_nudge_party_idx on tally_nudge
-CREATE INDEX tally_nudge_party_idx ON tally_nudge(party_id, prepared_at DESC);
-
--- index tally_nudge_prepared_page_idx on tally_nudge
-CREATE INDEX tally_nudge_prepared_page_idx
-  ON tally_nudge(prepared_at, nudge_id);
-
--- index tally_obligation_from_party_idx on tally_obligation
-CREATE INDEX tally_obligation_from_party_idx ON tally_obligation(from_party);
-
--- index tally_obligation_purge_idx on tally_obligation
-CREATE INDEX tally_obligation_purge_idx
-  ON tally_obligation(purge_at) WHERE purge_at IS NOT NULL;
-
--- index tally_obligation_to_party_idx on tally_obligation
-CREATE INDEX tally_obligation_to_party_idx ON tally_obligation(to_party);
-
--- index tally_recurring_expense_group_idx on tally_recurring_expense
-CREATE INDEX tally_recurring_expense_group_idx
-  ON tally_recurring_expense(group_id, status, anchor_start);
-
--- index tally_recurring_expense_paid_by_idx on tally_recurring_expense
-CREATE INDEX tally_recurring_expense_paid_by_idx
-  ON tally_recurring_expense(paid_by);
-
--- index tally_recurring_expense_split_party_idx on tally_recurring_expense_split
-CREATE INDEX tally_recurring_expense_split_party_idx
-  ON tally_recurring_expense_split(party_id);
-
--- index tally_recurring_expense_updated_page_idx on tally_recurring_expense
-CREATE INDEX tally_recurring_expense_updated_page_idx
-  ON tally_recurring_expense(updated_at, template_id);
-
--- index tally_settlement_from_party_idx on tally_settlement
-CREATE INDEX tally_settlement_from_party_idx ON tally_settlement(from_party);
-
--- index tally_settlement_group_idx on tally_settlement
-CREATE INDEX tally_settlement_group_idx ON tally_settlement(group_id);
-
--- index tally_settlement_purge_idx on tally_settlement
-CREATE INDEX tally_settlement_purge_idx
-  ON tally_settlement(purge_at) WHERE purge_at IS NOT NULL;
-
--- index tally_settlement_to_party_idx on tally_settlement
-CREATE INDEX tally_settlement_to_party_idx ON tally_settlement(to_party);
-
--- index tally_settlement_txn_idx on tally_settlement
-CREATE INDEX tally_settlement_txn_idx ON tally_settlement(txn_id);
 
 -- table access_app on access_app
 CREATE TABLE access_app (
@@ -1068,7 +989,7 @@ CREATE TABLE chat_message_card (
   message_ordinal INTEGER NOT NULL,
   position        INTEGER NOT NULL CHECK (position >= 0),
   app             TEXT NOT NULL
-                  CHECK (app IN ('agenda','docs','notes','people','photos','tally','tasks')),
+                  CHECK (app IN ('agenda','docs','money','notes','people','photos','tasks')),
   entity          TEXT NOT NULL CHECK (length(entity) > 0),
   row_id          TEXT NOT NULL CHECK (length(row_id) > 0),
   qualifier       TEXT NOT NULL DEFAULT '',
@@ -1085,7 +1006,7 @@ CREATE TABLE chat_thread (
   thread_id   TEXT PRIMARY KEY,
   title       TEXT NOT NULL CHECK (length(trim(title)) > 0),
   scope_app   TEXT CHECK (scope_app IS NULL
-                          OR scope_app IN ('agenda','docs','notes','people','photos','tally','tasks')),
+                          OR scope_app IN ('agenda','docs','money','notes','people','photos','tasks')),
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
@@ -2019,54 +1940,6 @@ CREATE TABLE 'fts_schedule_task_idx'(segid, term, pgno, PRIMARY KEY(segid, term)
 -- table fts_schedule_task_vocab on fts_schedule_task_vocab
 CREATE VIRTUAL TABLE fts_schedule_task_vocab USING fts5vocab(fts_schedule_task, 'row');
 
--- table fts_social_circle on fts_social_circle
-CREATE VIRTUAL TABLE fts_social_circle USING fts5(
-  circle_id UNINDEXED, name,
-  tokenize = "unicode61 remove_diacritics 2"
-);
-
--- table fts_social_circle_config on fts_social_circle_config
-CREATE TABLE 'fts_social_circle_config'(k PRIMARY KEY, v) WITHOUT ROWID;
-
--- table fts_social_circle_content on fts_social_circle_content
-CREATE TABLE 'fts_social_circle_content'(id INTEGER PRIMARY KEY, c0, c1);
-
--- table fts_social_circle_data on fts_social_circle_data
-CREATE TABLE 'fts_social_circle_data'(id INTEGER PRIMARY KEY, block BLOB);
-
--- table fts_social_circle_docsize on fts_social_circle_docsize
-CREATE TABLE 'fts_social_circle_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
-
--- table fts_social_circle_idx on fts_social_circle_idx
-CREATE TABLE 'fts_social_circle_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
-
--- table fts_social_circle_vocab on fts_social_circle_vocab
-CREATE VIRTUAL TABLE fts_social_circle_vocab USING fts5vocab(fts_social_circle, 'row');
-
--- table fts_tally_expense on fts_tally_expense
-CREATE VIRTUAL TABLE fts_tally_expense USING fts5(
-  expense_id UNINDEXED, description, category, group_name, items, memo,
-  tokenize = "unicode61 remove_diacritics 2"
-);
-
--- table fts_tally_expense_config on fts_tally_expense_config
-CREATE TABLE 'fts_tally_expense_config'(k PRIMARY KEY, v) WITHOUT ROWID;
-
--- table fts_tally_expense_content on fts_tally_expense_content
-CREATE TABLE 'fts_tally_expense_content'(id INTEGER PRIMARY KEY, c0, c1, c2, c3, c4, c5);
-
--- table fts_tally_expense_data on fts_tally_expense_data
-CREATE TABLE 'fts_tally_expense_data'(id INTEGER PRIMARY KEY, block BLOB);
-
--- table fts_tally_expense_docsize on fts_tally_expense_docsize
-CREATE TABLE 'fts_tally_expense_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
-
--- table fts_tally_expense_idx on fts_tally_expense_idx
-CREATE TABLE 'fts_tally_expense_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
-
--- table fts_tally_expense_vocab on fts_tally_expense_vocab
-CREATE VIRTUAL TABLE fts_tally_expense_vocab USING fts5vocab(fts_tally_expense, 'row');
-
 -- table knowledge_annotation on knowledge_annotation
 CREATE TABLE knowledge_annotation (
   annotation_id   TEXT PRIMARY KEY,
@@ -2378,6 +2251,131 @@ CREATE TABLE media_memory_member (
   ordinal   INTEGER NOT NULL CHECK (ordinal >= 0),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   PRIMARY KEY (memory_id, asset_id)
+) STRICT;
+
+-- table money_account on money_account
+CREATE TABLE money_account (
+  account_id    TEXT PRIMARY KEY REFERENCES core_account(account_id) ON DELETE CASCADE,
+  name          TEXT NOT NULL CHECK (length(trim(name)) > 0),
+  kind          TEXT NOT NULL CHECK (kind IN ('checking','savings','credit_card','cash')),
+  -- On budget: its spending counts toward the month's plan. Off budget (a loan
+  -- paid elsewhere, a shared account) it is still listed and still has a balance.
+  on_budget     INTEGER NOT NULL DEFAULT 1 CHECK (on_budget IN (0,1)),
+  -- Where the account stood on `opening_on`, SIGNED (a card owes: negative).
+  -- The balance on any day is this plus the posted rows after `opening_on`,
+  -- derived at read time; an account with no opening date counts every row.
+  opening_minor INTEGER NOT NULL DEFAULT 0,
+  opening_on    TEXT CHECK (opening_on IS NULL
+                            OR opening_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  -- A closed account keeps every row and stays readable; it leaves the lists a
+  -- member picks from. A day, not an instant: the member says which day.
+  closed_on     TEXT CHECK (closed_on IS NULL
+                            OR closed_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version   INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
+) STRICT;
+
+-- table money_balance_checkpoint on money_balance_checkpoint
+CREATE TABLE money_balance_checkpoint (
+  account_id      TEXT NOT NULL REFERENCES core_account(account_id) ON DELETE CASCADE,
+  as_of           TEXT NOT NULL CHECK (as_of GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  source          TEXT NOT NULL CHECK (source IN ('ofx','csv','member')),
+  -- SIGNED, in the account's currency.
+  balance_minor   INTEGER NOT NULL,
+  currency        TEXT NOT NULL CHECK (length(currency) = 3),
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version     INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  PRIMARY KEY (account_id, as_of, source)
+) STRICT;
+
+-- table money_import_profile on money_import_profile
+CREATE TABLE money_import_profile (
+  account_id         TEXT NOT NULL REFERENCES core_account(account_id) ON DELETE CASCADE,
+  -- A digest of the file's header row: the same bank's export finds its mapping.
+  header_fingerprint TEXT NOT NULL CHECK (length(header_fingerprint) > 0),
+  delimiter          TEXT NOT NULL CHECK (length(delimiter) = 1),
+  skip_lines         INTEGER NOT NULL DEFAULT 0 CHECK (skip_lines >= 0),
+  date_order         TEXT NOT NULL CHECK (date_order IN ('mdy','dmy','ymd')),
+  -- How the amount's sign is read: one signed column; a debit and a credit
+  -- column; an amount plus an indicator column naming which rows go out; or one
+  -- signed column whose sign is reversed (a card statement that lists charges as
+  -- positive).
+  sign_mode          TEXT NOT NULL CHECK (sign_mode IN ('signed','debit_credit','indicator','flip')),
+  date_col           INTEGER NOT NULL CHECK (date_col >= 0),
+  amount_col         INTEGER CHECK (amount_col IS NULL OR amount_col >= 0),
+  debit_col          INTEGER CHECK (debit_col IS NULL OR debit_col >= 0),
+  credit_col         INTEGER CHECK (credit_col IS NULL OR credit_col >= 0),
+  desc_col           INTEGER NOT NULL CHECK (desc_col >= 0),
+  memo_col           INTEGER CHECK (memo_col IS NULL OR memo_col >= 0),
+  indicator_col      INTEGER CHECK (indicator_col IS NULL OR indicator_col >= 0),
+  -- The indicator word that means money going OUT ("DR", "Debit", "D").
+  indicator_out_value TEXT,
+  created_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version        INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  PRIMARY KEY (account_id, header_fingerprint),
+  CHECK (sign_mode <> 'debit_credit' OR (debit_col IS NOT NULL AND credit_col IS NOT NULL)),
+  CHECK (sign_mode = 'debit_credit' OR amount_col IS NOT NULL),
+  CHECK (sign_mode <> 'indicator'
+         OR (indicator_col IS NOT NULL AND indicator_out_value IS NOT NULL))
+) STRICT;
+
+-- table money_rule on money_rule
+CREATE TABLE money_rule (
+  rule_id                 TEXT PRIMARY KEY,
+  match_kind              TEXT NOT NULL CHECK (match_kind IN ('is','contains','matches')),
+  pattern                 TEXT NOT NULL CHECK (length(trim(pattern)) > 0),
+  -- Inclusive bounds on the MAGNITUDE (`core_transaction.amount_minor`, > 0);
+  -- either may be absent.
+  amount_min_minor        INTEGER CHECK (amount_min_minor IS NULL OR amount_min_minor >= 0),
+  amount_max_minor        INTEGER CHECK (amount_max_minor IS NULL OR amount_max_minor >= 0),
+  account_id              TEXT REFERENCES core_account(account_id) ON DELETE CASCADE,
+  set_category_concept_id TEXT REFERENCES core_concept(concept_id),
+  set_display_name        TEXT CHECK (set_display_name IS NULL OR length(trim(set_display_name)) > 0),
+  position                INTEGER NOT NULL DEFAULT 0 CHECK (position >= 0),
+  created_at              TEXT NOT NULL,
+  updated_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version             INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  CHECK (amount_min_minor IS NULL OR amount_max_minor IS NULL
+         OR amount_min_minor <= amount_max_minor),
+  -- A rule that does nothing is not a rule.
+  CHECK (set_category_concept_id IS NOT NULL OR set_display_name IS NOT NULL),
+  FOREIGN KEY (rule_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
+) STRICT;
+
+-- table money_target on money_target
+CREATE TABLE money_target (
+  -- `YYYY-MM`: the civil month the plan is for (R-1099-2).
+  month               TEXT NOT NULL CHECK (month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),
+  category_concept_id TEXT NOT NULL REFERENCES core_concept(concept_id) ON DELETE CASCADE,
+  amount_minor        INTEGER NOT NULL CHECK (amount_minor >= 0),
+  currency            TEXT NOT NULL CHECK (length(currency) = 3),
+  -- Roll the month's unspent (or overspent) amount into the next month's.
+  carry               INTEGER NOT NULL DEFAULT 0 CHECK (carry IN (0,1)),
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version         INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  PRIMARY KEY (month, category_concept_id)
+) STRICT;
+
+-- table money_transaction on money_transaction
+CREATE TABLE money_transaction (
+  txn_id              TEXT PRIMARY KEY REFERENCES core_transaction(txn_id) ON DELETE CASCADE,
+  -- What the member (or a rule, for them) calls this line. The bank's words stay
+  -- in `core_transaction.description`, exactly as written. Both or neither.
+  display_name        TEXT CHECK (display_name IS NULL OR length(trim(display_name)) > 0),
+  display_name_source TEXT CHECK (display_name_source IN ('rule','member')),
+  memo                TEXT,
+  check_number        TEXT,
+  -- OFX `TRNTYPE` or the CSV's own Type column, as the bank wrote it.
+  bank_type           TEXT,
+  imported_from       TEXT NOT NULL CHECK (imported_from IN ('csv','ofx')),
+  imported_at         TEXT NOT NULL,
+  updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version         INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  CHECK ((display_name IS NULL) = (display_name_source IS NULL))
 ) STRICT;
 
 -- table people_important_date on people_important_date
@@ -2702,248 +2700,6 @@ CREATE TABLE social_thread_participant (
 
 -- table sqlite_sequence on sqlite_sequence
 CREATE TABLE sqlite_sequence(name,seq);
-
--- table tally_expense on tally_expense
-CREATE TABLE tally_expense (
-  expense_id   TEXT PRIMARY KEY,
-  -- NULL for a group-less 1:1 expense (GAPS #4), mirroring how a settlement
-  -- has always been free-standing. Participants on a group-less expense are
-  -- validated against the friend roster instead of a circle.
-  group_id     TEXT REFERENCES tally_group(group_id) ON DELETE CASCADE,
-  description  TEXT NOT NULL,
-  amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
-  -- The currency `amount_minor` IS (#916, R1). Splits, payers and line items
-  -- inherit it BY CONSTRUCTION — they are shares of this amount and cannot be
-  -- denominated in anything else, so none of them carries a column. A trigger
-  -- (`tally_expense_currency_matches_group`, below) holds a grouped expense
-  -- to its group's currency; a group-less 1:1 expense is free to be in any.
-  currency     TEXT NOT NULL CHECK (length(currency) = 3),
-  -- The PRINCIPAL payer, always populated and always one of the payer rows.
-  -- Every expense also writes its full payer set to tally_expense_payer (one
-  -- degenerate row in the single-payer case), so a reader that only knows this
-  -- column stays right for the single-payer case and the folds read one shape.
-  paid_by      TEXT NOT NULL REFERENCES core_party(party_id),
-  -- How the shares were arrived at, so an edit re-opens the way it was
-  -- entered. The vault still stores RESOLVED shares — the method and its
-  -- parameters are provenance, never a second arithmetic path.
-  split_method TEXT NOT NULL DEFAULT 'exact' CHECK (split_method IN
-    ('equally','exact','percentages','shares','adjusted','by_line')),
-  split_params_json TEXT
-    CHECK (split_params_json IS NULL OR json_valid(split_params_json)),
-  spent_on     TEXT NOT NULL,
-  category     TEXT NOT NULL CHECK (category IN
-    ('food','groceries','rent','utilities','transport','fun','travel','shopping','general')),
-  txn_id       TEXT REFERENCES core_transaction(txn_id),
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  -- Trash pair + guard (issue #441 A4). tally_expense_split cascades on purge.
-  deleted_at   TEXT,
-  purge_at     TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL), original_amount_minor INTEGER
-  CHECK (original_amount_minor IS NULL OR original_amount_minor > 0), original_currency TEXT
-  CHECK (original_currency IS NULL OR length(original_currency) = 3), settlement_currency TEXT
-  CHECK (settlement_currency IS NULL OR length(settlement_currency) = 3), rate_scaled INTEGER
-  CHECK (rate_scaled IS NULL OR rate_scaled > 0), rate_scale INTEGER
-  CHECK (rate_scale IS NULL OR rate_scale BETWEEN 0 AND 12), rate_source TEXT, rate_date TEXT, recurring_template_id TEXT
-  REFERENCES tally_recurring_expense(template_id) ON DELETE SET NULL,
-  FOREIGN KEY (expense_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_expense_line_allocation on tally_expense_line_allocation
-CREATE TABLE tally_expense_line_allocation (
-  line_item_id TEXT NOT NULL REFERENCES tally_expense_line_item(line_item_id) ON DELETE CASCADE,
-  party_id     TEXT NOT NULL REFERENCES core_party(party_id),
-  share_minor  INTEGER NOT NULL CHECK (share_minor >= 0),
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  PRIMARY KEY (line_item_id, party_id)
-) STRICT;
-
--- table tally_expense_line_item on tally_expense_line_item
-CREATE TABLE tally_expense_line_item (
-  line_item_id TEXT PRIMARY KEY,
-  expense_id   TEXT NOT NULL REFERENCES tally_expense(expense_id) ON DELETE CASCADE,
-  -- The role='receipt' attachment this line was read off, or NULL for the
-  -- "By line" division that never had a photo (#883).
-  receipt_id   TEXT REFERENCES core_attachment(attachment_id) ON DELETE SET NULL,
-  kind         TEXT NOT NULL CHECK (kind IN ('item','tax','tip')),
-  description  TEXT NOT NULL,
-  amount_minor INTEGER NOT NULL CHECK (amount_minor >= 0),
-  sort_order   INTEGER NOT NULL CHECK (sort_order >= 0),
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  FOREIGN KEY (line_item_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_expense_payer on tally_expense_payer
-CREATE TABLE tally_expense_payer (
-  expense_id  TEXT NOT NULL REFERENCES tally_expense(expense_id) ON DELETE CASCADE,
-  party_id    TEXT NOT NULL REFERENCES core_party(party_id),
-  paid_minor  INTEGER NOT NULL CHECK (paid_minor >= 0),
-  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  PRIMARY KEY (expense_id, party_id)
-) STRICT;
-
--- table tally_expense_split on tally_expense_split
-CREATE TABLE tally_expense_split (
-  expense_id  TEXT NOT NULL REFERENCES tally_expense(expense_id) ON DELETE CASCADE,
-  party_id    TEXT NOT NULL REFERENCES core_party(party_id),
-  share_minor INTEGER NOT NULL CHECK (share_minor >= 0),
-  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  PRIMARY KEY (expense_id, party_id)
-) STRICT;
-
--- table tally_friend on tally_friend
-CREATE TABLE tally_friend (
-  friend_id    TEXT PRIMARY KEY,
-  party_id     TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  FOREIGN KEY (friend_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_group on tally_group
-CREATE TABLE tally_group (
-  group_id   TEXT PRIMARY KEY,
-  circle_id  TEXT NOT NULL UNIQUE REFERENCES social_circle(circle_id),
-  icon       TEXT NOT NULL,
-  color      TEXT NOT NULL,
-  -- Debt simplification rewires who owes whom, so it is OFF unless this group
-  -- turns it on. The flag is the ONLY thing stored: the proposal itself is
-  -- derived at read time and never written, and an accepted proposal is
-  -- recorded as ordinary settlements.
-  simplify_opt_in INTEGER NOT NULL DEFAULT 0
-    CHECK (simplify_opt_in IN (0,1)),
-  -- Archive is not delete: an archived group drops out of the default lists
-  -- and keeps every row. It needs no settled balance.
-  archived_at TEXT,
-  -- THE GROUP'S CURRENCY (#916, R1 / review 4.1). Splitwise's own model puts
-  -- the currency on the group and every expense in it agrees; the vault stored
-  -- amounts in minor units with no currency at all outside
-  -- `tally_obligation` and the cross-currency columns, so two expenses in
-  -- different currencies summed as if they were the same money. The group is
-  -- where it belongs, because a group is the ledger everyone in it reads.
-  currency   TEXT NOT NULL CHECK (length(currency) = 3),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  FOREIGN KEY (group_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_nudge on tally_nudge
-CREATE TABLE tally_nudge (
-  nudge_id     TEXT PRIMARY KEY,
-  party_id     TEXT NOT NULL REFERENCES core_party(party_id),
-  group_id     TEXT REFERENCES tally_group(group_id) ON DELETE CASCADE,
-  -- The net the owner saw when they prepared it, in minor units. Provenance
-  -- for the reminder's wording — never read back as a balance.
-  as_of_minor  INTEGER NOT NULL,
-  note         TEXT,
-  prepared_at  TEXT NOT NULL,
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  FOREIGN KEY (nudge_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_obligation on tally_obligation
-CREATE TABLE tally_obligation (
-  obligation_id TEXT PRIMARY KEY,
-  from_party    TEXT NOT NULL REFERENCES core_party(party_id),
-  to_party      TEXT NOT NULL REFERENCES core_party(party_id),
-  amount_minor  INTEGER NOT NULL CHECK (amount_minor > 0),
-  currency      TEXT NOT NULL CHECK (length(currency) = 3),
-  reason        TEXT,
-  incurred_on   TEXT NOT NULL,
-  settled_at    TEXT,
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  deleted_at    TEXT,
-  purge_at      TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
-  CHECK (from_party <> to_party),
-  FOREIGN KEY (obligation_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_recurring_expense on tally_recurring_expense
-CREATE TABLE tally_recurring_expense (
-  template_id           TEXT PRIMARY KEY,
-  group_id              TEXT NOT NULL
-    REFERENCES tally_group(group_id) ON DELETE CASCADE,
-  description           TEXT NOT NULL,
-  original_amount_minor INTEGER NOT NULL CHECK (original_amount_minor > 0),
-  original_currency     TEXT NOT NULL CHECK (length(original_currency) = 3),
-  settlement_currency   TEXT NOT NULL CHECK (length(settlement_currency) = 3),
-  paid_by               TEXT NOT NULL REFERENCES core_party(party_id),
-  category              TEXT NOT NULL,
-  -- The split is ROWS (#916, owner decision D3), in
-  -- `tally_recurring_expense_split` below. It used to be a JSON array of
-  -- {party_id, share} objects, which put party ids somewhere identity merge
-  -- could not see them, the purge cascade could not reach them, and no CHECK
-  -- could hold their shares to the template's amount.
-  rrule                 TEXT NOT NULL,
-  anchor_start          TEXT NOT NULL,
-  -- `tz`, not `time_zone` (#916, R4): one name for a zone column.
-  tz                    TEXT NOT NULL,
-  rate_scaled           INTEGER CHECK (rate_scaled IS NULL OR rate_scaled > 0),
-  rate_scale            INTEGER CHECK (rate_scale IS NULL OR rate_scale BETWEEN 0 AND 12),
-  rate_source           TEXT,
-  rate_date             TEXT,
-  status                TEXT NOT NULL DEFAULT 'active'
-    CHECK (status IN ('active','paused','ended')),
-  last_materialized_start TEXT,
-  created_at             TEXT NOT NULL,
-  updated_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  FOREIGN KEY (template_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_recurring_expense_split on tally_recurring_expense_split
-CREATE TABLE tally_recurring_expense_split (
-  template_id  TEXT NOT NULL
-    REFERENCES tally_recurring_expense(template_id) ON DELETE CASCADE,
-  party_id     TEXT NOT NULL REFERENCES core_party(party_id),
-  share_minor  INTEGER NOT NULL CHECK (share_minor >= 0),
-  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  PRIMARY KEY (template_id, party_id)
-) STRICT;
-
--- table tally_settlement on tally_settlement
-CREATE TABLE tally_settlement (
-  settlement_id TEXT PRIMARY KEY,
-  -- NULL for a free-standing friend-to-friend payment (not scoped to a group).
-  group_id      TEXT REFERENCES tally_group(group_id) ON DELETE CASCADE,
-  from_party    TEXT NOT NULL REFERENCES core_party(party_id),
-  to_party      TEXT NOT NULL REFERENCES core_party(party_id),
-  amount_minor  INTEGER NOT NULL CHECK (amount_minor > 0),
-  -- What was PAID, in the currency it was paid in (#916, R1). The trigger
-  -- below holds a grouped settlement to its group's currency.
-  currency      TEXT NOT NULL CHECK (length(currency) = 3),
-  paid_on       TEXT NOT NULL,
-  txn_id        TEXT REFERENCES core_transaction(txn_id),
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  -- Trash pair + guard (issue #441 A4).
-  deleted_at    TEXT,
-  purge_at      TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
-  -- A payment from someone to themselves is not a payment (#916, R2 / review
-  -- 10.2). `tally_obligation` has carried this CHECK since #450; the
-  -- settlement did not, which is how `core.merge_party` could fold two
-  -- parties into one and leave a self-payment behind that every balance then
-  -- counted twice.
-  CHECK (from_party <> to_party),
-  FOREIGN KEY (settlement_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
 
 -- trigger access_app_ext_touch_updated_at on access_app_ext
 CREATE TRIGGER access_app_ext_touch_updated_at
@@ -3750,6 +3506,24 @@ BEGIN
    WHERE tag_id = NEW.tag_id;
 END;
 
+-- trigger core_transaction_currency_matches_money_account_ai on core_transaction
+CREATE TRIGGER core_transaction_currency_matches_money_account_ai
+BEFORE INSERT ON core_transaction
+WHEN EXISTS (SELECT 1 FROM money_account WHERE account_id = NEW.account_id)
+BEGIN
+  SELECT RAISE(ABORT, 'transaction currency must match its Money account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
+-- trigger core_transaction_currency_matches_money_account_au on core_transaction
+CREATE TRIGGER core_transaction_currency_matches_money_account_au
+BEFORE UPDATE OF account_id, currency ON core_transaction
+WHEN EXISTS (SELECT 1 FROM money_account WHERE account_id = NEW.account_id)
+BEGIN
+  SELECT RAISE(ABORT, 'transaction currency must match its Money account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
 -- trigger core_transaction_entity_delete on core_transaction
 CREATE TRIGGER core_transaction_entity_delete
 AFTER DELETE ON core_transaction
@@ -3767,6 +3541,27 @@ BEGIN
       WHERE entity_id = NEW.txn_id AND entity_type <> 'core.transaction');
   INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
   VALUES (NEW.txn_id, 'core.transaction', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger core_transaction_money_rows_are_fixed on core_transaction
+CREATE TRIGGER core_transaction_money_rows_are_fixed
+BEFORE UPDATE ON core_transaction
+WHEN EXISTS (SELECT 1 FROM money_account WHERE account_id = OLD.account_id)
+BEGIN
+  SELECT RAISE(ABORT, 'a Money transaction is never edited after import: only its category and its void status move (#1099)')
+   WHERE NEW.txn_id IS NOT OLD.txn_id
+      OR NEW.account_id IS NOT OLD.account_id
+      OR NEW.posted_at IS NOT OLD.posted_at
+      OR NEW.amount_minor IS NOT OLD.amount_minor
+      OR NEW.currency IS NOT OLD.currency
+      OR NEW.direction IS NOT OLD.direction
+      OR NEW.transfer_group_id IS NOT OLD.transfer_group_id
+      OR NEW.counterparty_party_id IS NOT OLD.counterparty_party_id
+      OR NEW.description IS NOT OLD.description
+      OR NEW.external_id IS NOT OLD.external_id
+      OR NEW.created_at IS NOT OLD.created_at
+      OR (NEW.status IS NOT OLD.status AND NEW.status <> 'void')
+      OR (OLD.status = 'void' AND NEW.status <> 'void');
 END;
 
 -- trigger core_transaction_touch_updated_at on core_transaction
@@ -4853,359 +4648,6 @@ BEGIN
        AND p.deleted_at IS NULL;
 END;
 
--- trigger fts_social_circle_ad on social_circle
-CREATE TRIGGER fts_social_circle_ad
-  AFTER DELETE ON social_circle
-BEGIN
-  DELETE FROM fts_social_circle WHERE rowid = old.rowid;
-END;
-
--- trigger fts_social_circle_ai on social_circle
-CREATE TRIGGER fts_social_circle_ai
-  AFTER INSERT ON social_circle
-BEGIN
-  INSERT INTO fts_social_circle(rowid, circle_id, name)
-    SELECT new.rowid, new.circle_id, new.name
-     WHERE EXISTS (SELECT 1 FROM tally_group g
-                    WHERE g.circle_id = new.circle_id AND g.archived_at IS NULL);
-END;
-
--- trigger fts_social_circle_au on social_circle
-CREATE TRIGGER fts_social_circle_au
-  AFTER UPDATE ON social_circle
-BEGIN
-  DELETE FROM fts_social_circle WHERE rowid = old.rowid;
-  INSERT INTO fts_social_circle(rowid, circle_id, name)
-    SELECT new.rowid, new.circle_id, new.name
-     WHERE EXISTS (SELECT 1 FROM tally_group g
-                    WHERE g.circle_id = new.circle_id AND g.archived_at IS NULL);
-END;
-
--- trigger fts_social_circle_from_tally_group_ad on tally_group
-CREATE TRIGGER fts_social_circle_from_tally_group_ad
-  AFTER DELETE ON tally_group
-BEGIN
-  DELETE FROM fts_social_circle WHERE rowid IN (
-    SELECT c.rowid FROM social_circle c WHERE c.circle_id = old.circle_id);
-  INSERT INTO fts_social_circle(rowid, circle_id, name)
-    SELECT c.rowid, c.circle_id, c.name
-      FROM social_circle c
-     WHERE c.circle_id = old.circle_id
-       AND EXISTS (SELECT 1 FROM tally_group g
-                    WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL);
-END;
-
--- trigger fts_social_circle_from_tally_group_ai on tally_group
-CREATE TRIGGER fts_social_circle_from_tally_group_ai
-  AFTER INSERT ON tally_group
-BEGIN
-  DELETE FROM fts_social_circle WHERE rowid IN (
-    SELECT c.rowid FROM social_circle c WHERE c.circle_id = new.circle_id);
-  INSERT INTO fts_social_circle(rowid, circle_id, name)
-    SELECT c.rowid, c.circle_id, c.name
-      FROM social_circle c
-     WHERE c.circle_id = new.circle_id
-       AND EXISTS (SELECT 1 FROM tally_group g
-                    WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL);
-END;
-
--- trigger fts_social_circle_from_tally_group_au on tally_group
-CREATE TRIGGER fts_social_circle_from_tally_group_au
-  AFTER UPDATE OF circle_id, archived_at ON tally_group
-BEGIN
-  DELETE FROM fts_social_circle WHERE rowid IN (
-    SELECT c.rowid FROM social_circle c
-     WHERE c.circle_id IN (old.circle_id, new.circle_id));
-  INSERT INTO fts_social_circle(rowid, circle_id, name)
-    SELECT c.rowid, c.circle_id, c.name
-      FROM social_circle c
-     WHERE c.circle_id IN (old.circle_id, new.circle_id)
-       AND EXISTS (SELECT 1 FROM tally_group g
-                    WHERE g.circle_id = c.circle_id AND g.archived_at IS NULL);
-END;
-
--- trigger fts_tally_expense_ad on tally_expense
-CREATE TRIGGER fts_tally_expense_ad
-  AFTER DELETE ON tally_expense
-BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid = old.rowid;
-END;
-
--- trigger fts_tally_expense_ai on tally_expense
-CREATE TRIGGER fts_tally_expense_ai
-  AFTER INSERT ON tally_expense
-BEGIN
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.rowid = new.rowid
-       AND p.deleted_at IS NULL;
-END;
-
--- trigger fts_tally_expense_au on tally_expense
-CREATE TRIGGER fts_tally_expense_au
-  AFTER UPDATE ON tally_expense
-BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid = old.rowid;
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.rowid = new.rowid
-       AND p.deleted_at IS NULL;
-END;
-
--- trigger fts_tally_expense_from_knowledge_annotation_ad on knowledge_annotation
-CREATE TRIGGER fts_tally_expense_from_knowledge_annotation_ad
-  AFTER DELETE ON knowledge_annotation
-  WHEN old.target_type = 'tally.expense'
-BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid IN (
-    SELECT p.rowid FROM tally_expense p WHERE p.expense_id = old.target_id
-         AND old.target_type = 'tally.expense');
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.expense_id = old.target_id
-       AND old.target_type = 'tally.expense'
-       AND p.deleted_at IS NULL;
-END;
-
--- trigger fts_tally_expense_from_knowledge_annotation_ai on knowledge_annotation
-CREATE TRIGGER fts_tally_expense_from_knowledge_annotation_ai
-  AFTER INSERT ON knowledge_annotation
-  WHEN new.target_type = 'tally.expense'
-BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid IN (
-    SELECT p.rowid FROM tally_expense p WHERE p.expense_id = new.target_id
-         AND new.target_type = 'tally.expense');
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.expense_id = new.target_id
-       AND new.target_type = 'tally.expense'
-       AND p.deleted_at IS NULL;
-END;
-
--- trigger fts_tally_expense_from_knowledge_annotation_au on knowledge_annotation
-CREATE TRIGGER fts_tally_expense_from_knowledge_annotation_au
-  AFTER UPDATE OF target_type, target_id, body_text ON knowledge_annotation
-BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid IN (
-    SELECT p.rowid FROM tally_expense p WHERE p.expense_id = new.target_id
-         AND new.target_type = 'tally.expense');
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.expense_id = new.target_id
-       AND new.target_type = 'tally.expense'
-       AND p.deleted_at IS NULL;
-  DELETE FROM fts_tally_expense WHERE rowid IN (
-    SELECT p.rowid FROM tally_expense p WHERE p.expense_id = old.target_id
-         AND old.target_type = 'tally.expense'
-         AND (old.target_type IS NOT new.target_type OR old.target_id IS NOT new.target_id));
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.expense_id = old.target_id
-       AND old.target_type = 'tally.expense'
-       AND (old.target_type IS NOT new.target_type OR old.target_id IS NOT new.target_id)
-       AND p.deleted_at IS NULL;
-END;
-
--- trigger fts_tally_expense_from_social_circle_au on social_circle
-CREATE TRIGGER fts_tally_expense_from_social_circle_au
-  AFTER UPDATE OF name ON social_circle
-BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid IN (
-    SELECT p.rowid FROM tally_expense p WHERE p.group_id IN (SELECT g.group_id FROM tally_group g WHERE g.circle_id = new.circle_id));
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.group_id IN (SELECT g.group_id FROM tally_group g WHERE g.circle_id = new.circle_id)
-       AND p.deleted_at IS NULL;
-END;
-
--- trigger fts_tally_expense_from_tally_expense_line_item_ad on tally_expense_line_item
-CREATE TRIGGER fts_tally_expense_from_tally_expense_line_item_ad
-  AFTER DELETE ON tally_expense_line_item
-BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid IN (
-    SELECT p.rowid FROM tally_expense p WHERE p.expense_id = old.expense_id);
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.expense_id = old.expense_id
-       AND p.deleted_at IS NULL;
-END;
-
--- trigger fts_tally_expense_from_tally_expense_line_item_ai on tally_expense_line_item
-CREATE TRIGGER fts_tally_expense_from_tally_expense_line_item_ai
-  AFTER INSERT ON tally_expense_line_item
-BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid IN (
-    SELECT p.rowid FROM tally_expense p WHERE p.expense_id = new.expense_id);
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.expense_id = new.expense_id
-       AND p.deleted_at IS NULL;
-END;
-
--- trigger fts_tally_expense_from_tally_expense_line_item_au on tally_expense_line_item
-CREATE TRIGGER fts_tally_expense_from_tally_expense_line_item_au
-  AFTER UPDATE OF expense_id, description ON tally_expense_line_item
-BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid IN (
-    SELECT p.rowid FROM tally_expense p WHERE p.expense_id = new.expense_id);
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.expense_id = new.expense_id
-       AND p.deleted_at IS NULL;
-  DELETE FROM fts_tally_expense WHERE rowid IN (
-    SELECT p.rowid FROM tally_expense p WHERE p.expense_id = old.expense_id
-         AND old.expense_id IS NOT new.expense_id);
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.expense_id = old.expense_id
-       AND old.expense_id IS NOT new.expense_id
-       AND p.deleted_at IS NULL;
-END;
-
--- trigger fts_tally_expense_from_tally_group_au on tally_group
-CREATE TRIGGER fts_tally_expense_from_tally_group_au
-  AFTER UPDATE OF circle_id ON tally_group
-BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid IN (
-    SELECT p.rowid FROM tally_expense p WHERE p.group_id = new.group_id);
-  INSERT INTO fts_tally_expense(rowid, expense_id, description, category, group_name, items, memo)
-    SELECT p.rowid,
-           p.expense_id,
-           p.description,
-           CASE WHEN p.category = 'general' THEN NULL ELSE p.category END,
-           c.name,
-           (SELECT group_concat(li.description, ' ')
-              FROM tally_expense_line_item li WHERE li.expense_id = p.expense_id),
-           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
-             WHERE an.target_type = 'tally.expense' AND an.target_id = p.expense_id)
-      FROM tally_expense p
-      LEFT JOIN tally_group g ON g.group_id = p.group_id
-      LEFT JOIN social_circle c ON c.circle_id = g.circle_id
-     WHERE p.group_id = new.group_id
-       AND p.deleted_at IS NULL;
-END;
-
 -- trigger knowledge_annotation_entity_delete on knowledge_annotation
 CREATE TRIGGER knowledge_annotation_entity_delete
 AFTER DELETE ON knowledge_annotation
@@ -5473,6 +4915,119 @@ BEGIN
       WHERE entity_id = NEW.memory_id AND entity_type <> 'media.memory');
   INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
   VALUES (NEW.memory_id, 'media.memory', COALESCE(NEW.computed_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger money_account_touch_updated_at on money_account
+CREATE TRIGGER money_account_touch_updated_at
+AFTER UPDATE ON money_account
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_account
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE account_id = NEW.account_id;
+END;
+
+-- trigger money_balance_checkpoint_currency_matches_account_ai on money_balance_checkpoint
+CREATE TRIGGER money_balance_checkpoint_currency_matches_account_ai
+BEFORE INSERT ON money_balance_checkpoint
+BEGIN
+  SELECT RAISE(ABORT, 'checkpoint currency must match its account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
+-- trigger money_balance_checkpoint_currency_matches_account_au on money_balance_checkpoint
+CREATE TRIGGER money_balance_checkpoint_currency_matches_account_au
+BEFORE UPDATE OF account_id, currency ON money_balance_checkpoint
+BEGIN
+  SELECT RAISE(ABORT, 'checkpoint currency must match its account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
+-- trigger money_balance_checkpoint_touch_updated_at on money_balance_checkpoint
+CREATE TRIGGER money_balance_checkpoint_touch_updated_at
+AFTER UPDATE ON money_balance_checkpoint
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_balance_checkpoint
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE account_id = NEW.account_id AND as_of = NEW.as_of AND source = NEW.source;
+END;
+
+-- trigger money_import_profile_touch_updated_at on money_import_profile
+CREATE TRIGGER money_import_profile_touch_updated_at
+AFTER UPDATE ON money_import_profile
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_import_profile
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE account_id = NEW.account_id AND header_fingerprint = NEW.header_fingerprint;
+END;
+
+-- trigger money_rule_entity_delete on money_rule
+CREATE TRIGGER money_rule_entity_delete
+AFTER DELETE ON money_rule
+BEGIN
+  DELETE FROM core_entity WHERE entity_id = OLD.rule_id;
+END;
+
+-- trigger money_rule_entity_insert on money_rule
+CREATE TRIGGER money_rule_entity_insert
+BEFORE INSERT ON money_rule
+BEGIN
+  SELECT RAISE(ABORT, 'entity id is already held by another kind: money_rule (#916)')
+   WHERE EXISTS (
+     SELECT 1 FROM core_entity
+      WHERE entity_id = NEW.rule_id AND entity_type <> 'money.rule');
+  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
+  VALUES (NEW.rule_id, 'money.rule', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger money_rule_touch_updated_at on money_rule
+CREATE TRIGGER money_rule_touch_updated_at
+AFTER UPDATE ON money_rule
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_rule
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE rule_id = NEW.rule_id;
+END;
+
+-- trigger money_target_touch_updated_at on money_target
+CREATE TRIGGER money_target_touch_updated_at
+AFTER UPDATE ON money_target
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_target
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE month = NEW.month AND category_concept_id = NEW.category_concept_id;
+END;
+
+-- trigger money_transaction_touch_updated_at on money_transaction
+CREATE TRIGGER money_transaction_touch_updated_at
+AFTER UPDATE ON money_transaction
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_transaction
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE txn_id = NEW.txn_id;
 END;
 
 -- trigger people_important_date_entity_delete on people_important_date
@@ -6029,350 +5584,6 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE thread_id = NEW.thread_id;
-END;
-
--- trigger tally_expense_currency_matches_group_ai on tally_expense
-CREATE TRIGGER tally_expense_currency_matches_group_ai
-BEFORE INSERT ON tally_expense
-WHEN NEW.group_id IS NOT NULL
- AND NEW.currency <> (SELECT g.currency FROM tally_group g WHERE g.group_id = NEW.group_id)
-BEGIN
-  SELECT RAISE(ABORT, 'tally.expense: an expense in a group is in that group''s currency');
-END;
-
--- trigger tally_expense_currency_matches_group_au on tally_expense
-CREATE TRIGGER tally_expense_currency_matches_group_au
-BEFORE UPDATE OF currency, group_id ON tally_expense
-WHEN NEW.group_id IS NOT NULL
- AND NEW.currency <> (SELECT g.currency FROM tally_group g WHERE g.group_id = NEW.group_id)
-BEGIN
-  SELECT RAISE(ABORT, 'tally.expense: an expense in a group is in that group''s currency');
-END;
-
--- trigger tally_expense_entity_delete on tally_expense
-CREATE TRIGGER tally_expense_entity_delete
-AFTER DELETE ON tally_expense
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.expense_id;
-END;
-
--- trigger tally_expense_entity_insert on tally_expense
-CREATE TRIGGER tally_expense_entity_insert
-BEFORE INSERT ON tally_expense
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_expense (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.expense_id AND entity_type <> 'tally.expense');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.expense_id, 'tally.expense', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_expense_line_allocation_touch_updated_at on tally_expense_line_allocation
-CREATE TRIGGER tally_expense_line_allocation_touch_updated_at
-AFTER UPDATE ON tally_expense_line_allocation
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_expense_line_allocation
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE line_item_id = NEW.line_item_id AND party_id = NEW.party_id;
-END;
-
--- trigger tally_expense_line_item_entity_delete on tally_expense_line_item
-CREATE TRIGGER tally_expense_line_item_entity_delete
-AFTER DELETE ON tally_expense_line_item
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.line_item_id;
-END;
-
--- trigger tally_expense_line_item_entity_insert on tally_expense_line_item
-CREATE TRIGGER tally_expense_line_item_entity_insert
-BEFORE INSERT ON tally_expense_line_item
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_expense_line_item (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.line_item_id AND entity_type <> 'tally.expense_line_item');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.line_item_id, 'tally.expense_line_item', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_expense_line_item_touch_updated_at on tally_expense_line_item
-CREATE TRIGGER tally_expense_line_item_touch_updated_at
-AFTER UPDATE ON tally_expense_line_item
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_expense_line_item
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE line_item_id = NEW.line_item_id;
-END;
-
--- trigger tally_expense_payer_touch_updated_at on tally_expense_payer
-CREATE TRIGGER tally_expense_payer_touch_updated_at
-AFTER UPDATE ON tally_expense_payer
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_expense_payer
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE expense_id = NEW.expense_id AND party_id = NEW.party_id;
-END;
-
--- trigger tally_expense_split_touch_updated_at on tally_expense_split
-CREATE TRIGGER tally_expense_split_touch_updated_at
-AFTER UPDATE ON tally_expense_split
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_expense_split
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE expense_id = NEW.expense_id AND party_id = NEW.party_id;
-END;
-
--- trigger tally_expense_touch_updated_at on tally_expense
-CREATE TRIGGER tally_expense_touch_updated_at
-AFTER UPDATE ON tally_expense
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_expense
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE expense_id = NEW.expense_id;
-END;
-
--- trigger tally_friend_entity_delete on tally_friend
-CREATE TRIGGER tally_friend_entity_delete
-AFTER DELETE ON tally_friend
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.friend_id;
-END;
-
--- trigger tally_friend_entity_insert on tally_friend
-CREATE TRIGGER tally_friend_entity_insert
-BEFORE INSERT ON tally_friend
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_friend (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.friend_id AND entity_type <> 'tally.friend');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.friend_id, 'tally.friend', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_friend_touch_updated_at on tally_friend
-CREATE TRIGGER tally_friend_touch_updated_at
-AFTER UPDATE ON tally_friend
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_friend
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE friend_id = NEW.friend_id;
-END;
-
--- trigger tally_group_entity_delete on tally_group
-CREATE TRIGGER tally_group_entity_delete
-AFTER DELETE ON tally_group
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.group_id;
-END;
-
--- trigger tally_group_entity_insert on tally_group
-CREATE TRIGGER tally_group_entity_insert
-BEFORE INSERT ON tally_group
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_group (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.group_id AND entity_type <> 'tally.group');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.group_id, 'tally.group', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_group_touch_updated_at on tally_group
-CREATE TRIGGER tally_group_touch_updated_at
-AFTER UPDATE ON tally_group
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_group
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE group_id = NEW.group_id;
-END;
-
--- trigger tally_nudge_entity_delete on tally_nudge
-CREATE TRIGGER tally_nudge_entity_delete
-AFTER DELETE ON tally_nudge
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.nudge_id;
-END;
-
--- trigger tally_nudge_entity_insert on tally_nudge
-CREATE TRIGGER tally_nudge_entity_insert
-BEFORE INSERT ON tally_nudge
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_nudge (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.nudge_id AND entity_type <> 'tally.nudge');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.nudge_id, 'tally.nudge', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_nudge_touch_updated_at on tally_nudge
-CREATE TRIGGER tally_nudge_touch_updated_at
-AFTER UPDATE ON tally_nudge
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_nudge
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE nudge_id = NEW.nudge_id;
-END;
-
--- trigger tally_obligation_entity_delete on tally_obligation
-CREATE TRIGGER tally_obligation_entity_delete
-AFTER DELETE ON tally_obligation
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.obligation_id;
-END;
-
--- trigger tally_obligation_entity_insert on tally_obligation
-CREATE TRIGGER tally_obligation_entity_insert
-BEFORE INSERT ON tally_obligation
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_obligation (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.obligation_id AND entity_type <> 'tally.obligation');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.obligation_id, 'tally.obligation', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_obligation_touch_updated_at on tally_obligation
-CREATE TRIGGER tally_obligation_touch_updated_at
-AFTER UPDATE ON tally_obligation
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_obligation
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE obligation_id = NEW.obligation_id;
-END;
-
--- trigger tally_recurring_expense_entity_delete on tally_recurring_expense
-CREATE TRIGGER tally_recurring_expense_entity_delete
-AFTER DELETE ON tally_recurring_expense
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.template_id;
-END;
-
--- trigger tally_recurring_expense_entity_insert on tally_recurring_expense
-CREATE TRIGGER tally_recurring_expense_entity_insert
-BEFORE INSERT ON tally_recurring_expense
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_recurring_expense (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.template_id AND entity_type <> 'tally.recurring_expense');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.template_id, 'tally.recurring_expense', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_recurring_expense_split_touch_updated_at on tally_recurring_expense_split
-CREATE TRIGGER tally_recurring_expense_split_touch_updated_at
-AFTER UPDATE ON tally_recurring_expense_split
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_recurring_expense_split
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE template_id = NEW.template_id AND party_id = NEW.party_id;
-END;
-
--- trigger tally_recurring_expense_touch_updated_at on tally_recurring_expense
-CREATE TRIGGER tally_recurring_expense_touch_updated_at
-AFTER UPDATE ON tally_recurring_expense
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_recurring_expense
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE template_id = NEW.template_id;
-END;
-
--- trigger tally_settlement_currency_matches_group_ai on tally_settlement
-CREATE TRIGGER tally_settlement_currency_matches_group_ai
-BEFORE INSERT ON tally_settlement
-WHEN NEW.group_id IS NOT NULL
- AND NEW.currency <> (SELECT g.currency FROM tally_group g WHERE g.group_id = NEW.group_id)
-BEGIN
-  SELECT RAISE(ABORT, 'tally.settlement: a settlement in a group is in that group''s currency');
-END;
-
--- trigger tally_settlement_currency_matches_group_au on tally_settlement
-CREATE TRIGGER tally_settlement_currency_matches_group_au
-BEFORE UPDATE OF currency, group_id ON tally_settlement
-WHEN NEW.group_id IS NOT NULL
- AND NEW.currency <> (SELECT g.currency FROM tally_group g WHERE g.group_id = NEW.group_id)
-BEGIN
-  SELECT RAISE(ABORT, 'tally.settlement: a settlement in a group is in that group''s currency');
-END;
-
--- trigger tally_settlement_entity_delete on tally_settlement
-CREATE TRIGGER tally_settlement_entity_delete
-AFTER DELETE ON tally_settlement
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.settlement_id;
-END;
-
--- trigger tally_settlement_entity_insert on tally_settlement
-CREATE TRIGGER tally_settlement_entity_insert
-BEFORE INSERT ON tally_settlement
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_settlement (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.settlement_id AND entity_type <> 'tally.settlement');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.settlement_id, 'tally.settlement', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_settlement_touch_updated_at on tally_settlement
-CREATE TRIGGER tally_settlement_touch_updated_at
-AFTER UPDATE ON tally_settlement
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_settlement
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE settlement_id = NEW.settlement_id;
 END;
 
 -- trigger trg_fts_content_item_asset_ad on media_asset

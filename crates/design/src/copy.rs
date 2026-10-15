@@ -128,8 +128,7 @@ impl RouteGaps {
 /// variants a caller knows about.
 ///
 /// `allowed_variants` is for ids that are a SECOND sentence for one route
-/// rather than a route of their own — Tally's `groupOwn` is the group ledger's
-/// other sentence (`route-copy.ts:34`) — and for the states a route can be in
+/// rather than a route of their own, and for the states a route can be in
 /// (`denied`). Naming them at the call site keeps the exception in the test
 /// that knows why, instead of in this function.
 #[must_use]

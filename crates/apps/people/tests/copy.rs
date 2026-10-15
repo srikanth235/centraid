@@ -1,14 +1,13 @@
-//! PEOPLE'S COPY LEAF, and the shape it has rather than the one Tally has
-//! (#1020, D-1020-T5).
+//! PEOPLE'S COPY LEAF, and the shape it has (#1020, D-1020-T5).
 //!
 //! `copy/people.json` holds People's sentences plus the app's shelf table.
 //! **Copy leaves move with their screens** (census §A0): a route id in one and
 //! not the other is a silent empty string, which is the one failure in copy that
 //! no surface reports and no snapshot catches.
 //!
-//! ## Why this is not the route-gap test Tally has
+//! ## Why this is not a route-gap test
 //!
-//! Tally keys its ambient sentences on a route id (`ROUTE_STATUS`), so
+//! An app that keys its ambient sentences on a route id has `routes`, so
 //! `centraid_design::copy::route_gaps` can compare the two sets. **People does
 //! not**: its status line is a family of `STATUS` FUNCTIONS of counts — "3
 //! people · 1 to reconnect · 2 starred" — so `routes` is empty by design and a
@@ -28,10 +27,10 @@
 //!
 //! ## Finding PE-F7, as a test
 //!
-//! The emitter used to spell every app's ROOT shelf `balances` — Tally's route
-//! id — because the shelf table writes it `null` and the id lives in the band.
-//! Docs' drive was emitted with Tally's name for a wave. `ROOT_SHELF_IDS` names
-//! it per app now, and `the_root_shelf_carries_this_apps_own_route_id` is what
+//! The emitter used to spell every app's ROOT shelf `balances` — the route id of
+//! the app that was first — because the shelf table writes it `null` and the id
+//! lives in the band. Docs' drive was emitted with that name for a wave.
+//! `ROOT_SHELF_IDS` names it per app now, and `the_root_shelf_carries_this_apps_own_route_id` is what
 //! holds it.
 
 use std::fs;
@@ -163,7 +162,7 @@ fn the_shelf_table_carries_eight_routed_shelves_each_once() {
     assert_eq!(people.shelves.len(), 8);
 }
 
-/// FINDING PE-F7: the root shelf is this app's own route id, not Tally's.
+/// FINDING PE-F7: the root shelf is this app's own route id, not another app's.
 #[test]
 fn the_root_shelf_carries_this_apps_own_route_id() {
     let people = leaf("people");
@@ -182,11 +181,10 @@ fn the_root_shelf_carries_this_apps_own_route_id() {
             .find(|shelf| shelf.segment.is_empty())
             .map(|shelf| shelf.id)
     };
-    assert_eq!(root_of("tally").as_deref(), Some("balances"));
     assert_eq!(
         root_of("docs").as_deref(),
         Some("list"),
-        "Docs' drive was emitted with Tally's route id before this fix"
+        "Docs' drive was emitted with another app's route id before this fix"
     );
     // LOCKER CARRIES NO SHELF TABLE: its leaf was rewritten for the phone port
     // (#1047, D-5) as sentences only — the phone routes Locker through its
@@ -195,8 +193,8 @@ fn the_root_shelf_carries_this_apps_own_route_id() {
     // table would be a record of routes nothing draws. With no table there is
     // no root id to mis-name; one that comes back is held by the sweep below.
     assert_eq!(root_of("locker"), None);
-    // THE SWEEP, over every leaf in `copy/`: no app but Tally roots at
-    // `balances`, which is the exact shape PE-F7 was.
+    // THE SWEEP, over every leaf in `copy/`: no app roots at `balances`, the id
+    // of the app that is gone (#1099) and the exact shape PE-F7 was.
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../copy");
     let mut swept = 0;
     for entry in fs::read_dir(&root).expect("copy/ is readable") {
@@ -209,13 +207,11 @@ fn the_root_shelf_carries_this_apps_own_route_id() {
             continue;
         };
         swept += 1;
-        if app != "tally" {
-            assert_ne!(
-                root_of(app).as_deref(),
-                Some("balances"),
-                "{app}'s root shelf carries Tally's route id"
-            );
-        }
+        assert_ne!(
+            root_of(app).as_deref(),
+            Some("balances"),
+            "{app}'s root shelf carries a route id that is no app's"
+        );
     }
     assert!(swept >= 9, "the sweep read {swept} leaves");
 }

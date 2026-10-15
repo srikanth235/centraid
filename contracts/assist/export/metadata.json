@@ -70,8 +70,7 @@
   ],
   "kinds": [
     {
-      "balance": "me versus that person; positive = they owe me",
-      "card": "person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: groups, events, tasks, notes, photos, debts · verbs: create edit delete restore star unstar add_to remove_from log settle_up · balance: me versus that person; positive = they owe me",
+      "card": "person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes, photos · verbs: create edit delete restore star unstar log",
       "container": false,
       "date": {
         "label": "last contacted",
@@ -146,11 +145,6 @@
       "kind": "person",
       "links": [
         {
-          "kind": "group",
-          "label": "groups",
-          "via": "membership"
-        },
-        {
           "kind": "event",
           "label": "events",
           "via": "attendee"
@@ -169,11 +163,6 @@
           "kind": "photo",
           "label": "photos",
           "via": "about"
-        },
-        {
-          "kind": "debt",
-          "label": "debts",
-          "via": "counterparty"
         }
       ],
       "name": "person",
@@ -192,10 +181,7 @@
         "restore",
         "star",
         "unstar",
-        "add_to",
-        "remove_from",
-        "log",
-        "settle_up"
+        "log"
       ],
       "where_fields": [
         "role",
@@ -206,53 +192,6 @@
       ]
     },
     {
-      "balance": "with linked_to a person: that person's net position in the group; positive = the group owes them",
-      "card": "group: name, currency · links: members · verbs: create edit delete · balance: with linked_to a person: that person's net position in the group; positive = the group owes them",
-      "container": true,
-      "date": null,
-      "entity": "tally.group",
-      "fields": [
-        {
-          "create": true,
-          "edit": null,
-          "name": "currency",
-          "source": {
-            "column": "currency",
-            "table": "tally_group"
-          },
-          "type": "text",
-          "unit": null,
-          "values": []
-        }
-      ],
-      "kind": "group",
-      "links": [
-        {
-          "kind": "person",
-          "label": "members",
-          "via": "membership"
-        }
-      ],
-      "name": "group",
-      "name_source": {
-        "column": "name",
-        "table": "social_circle"
-      },
-      "pk": "group_id",
-      "plural": "groups",
-      "table": "tally_group",
-      "trash": false,
-      "verbs": [
-        "create",
-        "edit",
-        "delete"
-      ],
-      "where_fields": [
-        "currency"
-      ]
-    },
-    {
-      "balance": null,
       "card": "event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore",
       "container": false,
       "date": {
@@ -346,7 +285,6 @@
       ]
     },
     {
-      "balance": null,
       "card": "task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (1 highest..9 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from",
       "container": false,
       "date": {
@@ -483,7 +421,6 @@
       ]
     },
     {
-      "balance": null,
       "card": "note: name, date (created), body, pinned (yes|no) · links: notebook, people · verbs: create edit delete restore add_to remove_from",
       "container": false,
       "date": {
@@ -556,7 +493,6 @@
       ]
     },
     {
-      "balance": null,
       "card": "document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from",
       "container": false,
       "date": {
@@ -613,7 +549,6 @@
       ]
     },
     {
-      "balance": null,
       "card": "photo: name, date (taken), starred (yes|no) · links: albums, people · verbs: edit delete restore star unstar add_to remove_from",
       "container": false,
       "date": {
@@ -674,7 +609,6 @@
       ]
     },
     {
-      "balance": null,
       "card": "album: name · links: photos · verbs: create edit delete",
       "container": true,
       "date": null,
@@ -705,102 +639,6 @@
       "where_fields": []
     },
     {
-      "balance": null,
-      "card": "debt: name, date (incurred), amount (USD), direction (owes_me|i_owe), status (open|settled) · links: person · verbs: create settle_debt",
-      "container": false,
-      "date": {
-        "label": "incurred",
-        "source": {
-          "column": "incurred_on",
-          "table": "tally_obligation"
-        }
-      },
-      "entity": "tally.obligation",
-      "fields": [
-        {
-          "create": true,
-          "edit": null,
-          "name": "amount",
-          "source": {
-            "column": "amount_minor",
-            "table": "tally_obligation"
-          },
-          "type": "money",
-          "unit": null,
-          "values": []
-        },
-        {
-          "create": true,
-          "edit": null,
-          "name": "direction",
-          "source": {
-            "column": "from_party",
-            "table": "tally_obligation"
-          },
-          "type": "enum",
-          "unit": null,
-          "values": [
-            [
-              "owes_me",
-              "owed"
-            ],
-            [
-              "i_owe",
-              "owe"
-            ]
-          ]
-        },
-        {
-          "create": false,
-          "edit": null,
-          "name": "status",
-          "source": {
-            "column": "settled_at",
-            "table": "tally_obligation"
-          },
-          "type": "enum",
-          "unit": null,
-          "values": [
-            [
-              "open",
-              "open"
-            ],
-            [
-              "settled",
-              "settled"
-            ]
-          ]
-        }
-      ],
-      "kind": "debt",
-      "links": [
-        {
-          "kind": "person",
-          "label": "person",
-          "via": "counterparty"
-        }
-      ],
-      "name": "debt",
-      "name_source": {
-        "column": "reason",
-        "table": "tally_obligation"
-      },
-      "pk": "obligation_id",
-      "plural": "debts",
-      "table": "tally_obligation",
-      "trash": false,
-      "verbs": [
-        "create",
-        "settle_debt"
-      ],
-      "where_fields": [
-        "amount",
-        "direction",
-        "status"
-      ]
-    },
-    {
-      "balance": null,
       "card": "locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal",
       "container": false,
       "date": null,
@@ -957,7 +795,6 @@
       ]
     },
     {
-      "balance": null,
       "card": "notebook: name · links: notes · verbs: create edit delete",
       "container": true,
       "date": null,
@@ -988,7 +825,6 @@
       "where_fields": []
     },
     {
-      "balance": null,
       "card": "folder: name · links: documents · verbs: create edit delete",
       "container": true,
       "date": null,
@@ -1019,7 +855,6 @@
       "where_fields": []
     },
     {
-      "balance": null,
       "card": "list: name, area · links: tasks · verbs: create edit",
       "container": true,
       "date": null,
@@ -1062,6 +897,95 @@
       "where_fields": [
         "area"
       ]
+    },
+    {
+      "card": "transaction: name, date (posted), amount (USD), account, category, status (posted|void)",
+      "container": false,
+      "date": {
+        "label": "posted",
+        "source": {
+          "column": "posted_at",
+          "table": "core_transaction"
+        }
+      },
+      "entity": "core.transaction",
+      "fields": [
+        {
+          "create": false,
+          "edit": null,
+          "name": "amount",
+          "source": {
+            "column": "amount_minor",
+            "table": "core_transaction"
+          },
+          "type": "money",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "account",
+          "source": {
+            "column": "name",
+            "table": "core_account"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "category",
+          "source": {
+            "column": "pref_label",
+            "table": "core_concept"
+          },
+          "type": "text",
+          "unit": null,
+          "values": []
+        },
+        {
+          "create": false,
+          "edit": null,
+          "name": "status",
+          "source": {
+            "column": "status",
+            "table": "core_transaction"
+          },
+          "type": "enum",
+          "unit": null,
+          "values": [
+            [
+              "posted",
+              "posted"
+            ],
+            [
+              "void",
+              "void"
+            ]
+          ]
+        }
+      ],
+      "kind": "transaction",
+      "links": [],
+      "name": "transaction",
+      "name_source": {
+        "column": "display_name",
+        "table": "money_transaction"
+      },
+      "pk": "txn_id",
+      "plural": "transactions",
+      "table": "core_transaction",
+      "trash": false,
+      "verbs": [],
+      "where_fields": [
+        "amount",
+        "account",
+        "category",
+        "status"
+      ]
     }
   ],
   "log_kinds": [
@@ -1071,6 +995,7 @@
     "coffee"
   ],
   "mapped_columns": [
+    "core_account.name",
     "core_collection.collection_id",
     "core_collection.name",
     "core_concept.concept_id",
@@ -1088,6 +1013,10 @@
     "core_party.display_name",
     "core_party.party_id",
     "core_tag.concept_id",
+    "core_transaction.amount_minor",
+    "core_transaction.posted_at",
+    "core_transaction.status",
+    "core_transaction.txn_id",
     "knowledge_note.created_at",
     "knowledge_note.note_id",
     "knowledge_note.pinned",
@@ -1101,6 +1030,7 @@
     "media_asset.asset_id",
     "media_asset.captured_at",
     "media_asset.title",
+    "money_transaction.display_name",
     "people_profile.cadence_days",
     "people_profile.last_contacted_at",
     "people_profile.met",
@@ -1116,16 +1046,7 @@
     "schedule_task.priority",
     "schedule_task.status",
     "schedule_task.task_id",
-    "schedule_task.title",
-    "social_circle.name",
-    "tally_group.currency",
-    "tally_group.group_id",
-    "tally_obligation.amount_minor",
-    "tally_obligation.from_party",
-    "tally_obligation.incurred_on",
-    "tally_obligation.obligation_id",
-    "tally_obligation.reason",
-    "tally_obligation.settled_at"
+    "schedule_task.title"
   ],
   "mapped_commands": [
     "core.add_document",
@@ -1165,13 +1086,11 @@
     "media.restore_asset",
     "media.set_favorite",
     "media.update_asset",
-    "people.add_debt",
     "people.add_person",
     "people.edit_person",
     "people.log_interaction",
     "people.restore_person",
     "people.set_cadence",
-    "people.settle_debt",
     "people.star_person",
     "people.trash_person",
     "people.unstar_person",
@@ -1187,14 +1106,7 @@
     "schedule.restore_event",
     "schedule.restore_task",
     "schedule.save_project",
-    "schedule.set_task_status",
-    "tally.add_expense",
-    "tally.add_group_member",
-    "tally.create_group",
-    "tally.delete_group",
-    "tally.remove_group_member",
-    "tally.rename_group",
-    "tally.settle_up"
+    "schedule.set_task_status"
   ],
   "multi_kind_params": [
     "kind",
@@ -1210,8 +1122,7 @@
     "count",
     "sum",
     "min",
-    "max",
-    "balance"
+    "max"
   ],
   "reveal_fields": [
     {
@@ -1266,10 +1177,6 @@
           "people.add_person"
         ],
         [
-          "group",
-          "tally.create_group"
-        ],
-        [
           "event",
           "schedule.propose_event"
         ],
@@ -1288,10 +1195,6 @@
         [
           "album",
           "media.create_album"
-        ],
-        [
-          "debt",
-          "people.add_debt"
         ],
         [
           "locker_item",
@@ -1320,10 +1223,6 @@
         [
           "person",
           "people.edit_person"
-        ],
-        [
-          "group",
-          "tally.rename_group"
         ],
         [
           "event",
@@ -1428,10 +1327,6 @@
         [
           "person",
           "people.trash_person"
-        ],
-        [
-          "group",
-          "tally.delete_group"
         ],
         [
           "event",
@@ -1559,12 +1454,8 @@
       "verb": "unstar"
     },
     {
-      "args": "to: #n (the group, album, notebook, folder or list)",
+      "args": "to: #n (the album, notebook, folder or list)",
       "commands": [
-        [
-          "person",
-          "tally.add_group_member"
-        ],
         [
           "photo",
           "media.add_to_album"
@@ -1589,10 +1480,6 @@
     {
       "args": "from: #n",
       "commands": [
-        [
-          "person",
-          "tally.remove_group_member"
-        ],
         [
           "photo",
           "media.remove_from_album"
@@ -1625,30 +1512,6 @@
       "done": "logged",
       "name": "log",
       "verb": "log"
-    },
-    {
-      "args": "group: #n (amount = their balance unless given as amount: N)",
-      "commands": [
-        [
-          "person",
-          "tally.settle_up"
-        ]
-      ],
-      "done": "settled up",
-      "name": "settle_up",
-      "verb": "settle_up"
-    },
-    {
-      "args": "",
-      "commands": [
-        [
-          "debt",
-          "people.settle_debt"
-        ]
-      ],
-      "done": "settled",
-      "name": "settle_debt",
-      "verb": "settle_debt"
     },
     {
       "args": "field: password|code|card_number|cvv|content",

@@ -774,10 +774,6 @@ const ENUM_WORDS: &[&str] = &[
     "in_progress",
     "completed",
     "cancelled",
-    "settled",
-    "owes_me",
-    "i_owe",
-    "owed_to_me",
     "yes",
     "no",
     "confirmed",
@@ -909,7 +905,7 @@ fn parse_cond(part: &str) -> Result<Cond, String> {
     };
     if !name.is_empty() && rest.starts_with(' ') {
         let rest = &rest[1..];
-        // `debt count >= 2`
+        // `project count >= 2`
         if let Some(tail) = rest.strip_prefix("count ")
             && let Some(op) = COMPARISONS
                 .iter()

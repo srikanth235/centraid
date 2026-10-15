@@ -42,7 +42,7 @@ import dev.centraid.shared.screen.Step
  * neither has to know which of them arrived first.
  *
  * The alternative was to project one pass and leave the other half at zero, the
- * way `TallyReads` leaves `group_name` empty — but a place shelf whose every
+ * way the retired Tally reads left `group_name` empty — but a place shelf whose every
  * card reads "0" is not "a name this read cannot see", it is a number that is
  * wrong. So the count is read, and its ceiling is stated rather than hidden:
  * see [PlacesAssetReads].

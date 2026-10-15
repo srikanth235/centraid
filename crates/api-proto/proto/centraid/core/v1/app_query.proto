@@ -40,14 +40,20 @@ import "centraid/core/v1/agenda.proto";
 import "centraid/core/v1/chat.proto";
 import "centraid/core/v1/docs.proto";
 import "centraid/core/v1/locker.proto";
+import "centraid/core/v1/money.proto";
 import "centraid/core/v1/notes.proto";
 import "centraid/core/v1/people.proto";
 import "centraid/core/v1/photos.proto";
-import "centraid/core/v1/tally.proto";
 import "centraid/core/v1/tasks.proto";
 import "centraid/core/v1/vault_search.proto";
 
 message AppQueryRequest {
+  // 50-59 were Tally's ten queries; the app was deleted from v0 (#1099), so the
+  // numbers and names are never reused.
+  reserved 50 to 59;
+  reserved "tally_dashboard", "tally_group", "tally_friend", "tally_expense",
+           "tally_settle_up", "tally_recurring", "tally_spending", "tally_search",
+           "tally_trash", "tally_export";
   oneof query {
     AgendaUpcomingRequest agenda_upcoming = 1;
     AgendaDayContextRequest agenda_day_context = 2;
@@ -77,16 +83,6 @@ message AppQueryRequest {
     PeoplePersonRequest people_person = 22;
     PeopleSearchRequest people_search = 23;
     PeopleTrashRequest people_trash = 24;
-    TallyDashboardRequest tally_dashboard = 50;
-    TallyGroupRequest tally_group = 51;
-    TallyFriendRequest tally_friend = 52;
-    TallyExpenseRequest tally_expense = 53;
-    TallySettleUpRequest tally_settle_up = 54;
-    TallyRecurringRequest tally_recurring = 55;
-    TallySpendingRequest tally_spending = 56;
-    TallySearchRequest tally_search = 57;
-    TallyTrashRequest tally_trash = 58;
-    TallyExportRequest tally_export = 59;
     // Locker (#1047): 60-69. Metadata only; a secret is the session's.
     LockerItemsRequest locker_items = 60;
     LockerItemRequest locker_item = 61;
@@ -101,12 +97,31 @@ message AppQueryRequest {
     VaultSearchRequest vault_search = 80;
     // Photos' own search (#1097, R-1097-25..27): 90.
     PhotosSearchRequest photos_search = 90;
+    // Money (#1099, R-1099-12): 100-109. 110-119 stay reserved for Money. The
+    // import plan and Home's tile are not app queries: they ride
+    // `Request.money` (`money.proto`).
+    MoneySpendingRequest money_spending = 100;
+    MoneyActivityRequest money_activity = 101;
+    MoneyTransactionRequest money_transaction = 102;
+    MoneyCashflowRequest money_cashflow = 103;
+    MoneyAccountsRequest money_accounts = 104;
+    MoneyRulesRequest money_rules = 105;
+    MoneyCategoriesRequest money_categories = 106;
+    MoneyTargetSheetRequest money_target_sheet = 107;
+    MoneyRecurringRequest money_recurring = 108;
+    MoneySearchRequest money_search = 109;
   }
 }
 
 // The answer to the query that was asked — its arm at the query's own number —
 // or the refusal.
 message AppQueryResponse {
+  // 50-59 were Tally's ten queries; the app was deleted from v0 (#1099), so the
+  // numbers and names are never reused.
+  reserved 50 to 59;
+  reserved "tally_dashboard", "tally_group", "tally_friend", "tally_expense",
+           "tally_settle_up", "tally_recurring", "tally_spending", "tally_search",
+           "tally_trash", "tally_export";
   oneof answer {
     AgendaUpcoming agenda_upcoming = 1;
     AgendaDayContext agenda_day_context = 2;
@@ -135,16 +150,6 @@ message AppQueryResponse {
     PeoplePerson people_person = 22;
     PeopleSearch people_search = 23;
     PeopleTrash people_trash = 24;
-    TallyDashboard tally_dashboard = 50;
-    TallyGroupLedger tally_group = 51;
-    TallyFriendLedger tally_friend = 52;
-    TallyExpense tally_expense = 53;
-    TallySettleUp tally_settle_up = 54;
-    TallyRecurring tally_recurring = 55;
-    TallySpending tally_spending = 56;
-    TallySearch tally_search = 57;
-    TallyTrash tally_trash = 58;
-    TallyExport tally_export = 59;
     LockerItems locker_items = 60;
     LockerItemDetail locker_item = 61;
     LockerSearch locker_search = 62;
@@ -155,6 +160,16 @@ message AppQueryResponse {
     ChatCardLive chat_card = 72;
     VaultSearch vault_search = 80;
     PhotosSearch photos_search = 90;
+    MoneySpending money_spending = 100;
+    MoneyActivity money_activity = 101;
+    MoneyTransaction money_transaction = 102;
+    MoneyCashflow money_cashflow = 103;
+    MoneyAccounts money_accounts = 104;
+    MoneyRules money_rules = 105;
+    MoneyCategories money_categories = 106;
+    MoneyTargetSheet money_target_sheet = 107;
+    MoneyRecurring money_recurring = 108;
+    MoneySearch money_search = 109;
     // The vault would not let this app read. At a number no query will take.
     AppQueryDenial denied = 15;
   }
