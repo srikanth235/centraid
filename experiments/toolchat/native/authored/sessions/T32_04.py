@@ -9,16 +9,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T32-066", "same-word-pick person-relations debts notes tasks photos possessor",
-  T("any open debts with don teodoro", rows("d_teodoro"),
-    ref=[ans(kind="debt", linked_to="$teodoro", where="status = open")]),
-  T("and notes about him", rows("b_suppliers"),
-    ref=[ans(kind="note", linked_to="$teodoro")]),
-  T("tasks for him that are still open", rows("flour_oct", "order_flour"),
-    ref=[ans(kind="task", linked_to="$teodoro", where="status = open")]),
-  T("and dani's photos", rows("p_ki_dani", "p_ki_both", "p_ki_ring", "p_ki_hike", "p_wedding_dress"),
-    ref=[ans(kind="photo", linked_to="$dani")]))
-
 S("T32-067", "same-word-pick star document topic two-row-linked_to ask-person",
   T("star the health inspection one", diff(upd("d_health", starred=True)),
     ref=[act("star", kind="document", name="health inspection")]),
@@ -36,21 +26,6 @@ S("T32-068", "same-word-pick album usage-described link-target two-row-linked_to
     ref=[act("add_to", kind="photo", name="oven plate", args="to: $bakery_a")]),
   T("which of emi's pics are in there now", rows("p_ba_loaves", "p_ba_van"),
     ref=[ans(kind="photo", linked_to="$emi, $bakery_a")]))
-
-S("T32-069", "same-word-pick group translated family folder list decoys link-target",
-  T("put pepe in the family group", diff(link("familia", "pepe")),
-    ref=[act("add_to", kind="person", name="Pepe", args="to: $familia")]),
-  T("and my niece gabriela", diff(link("familia", "gaby")),
-    ref=[act("add_to", kind="person", name="Gabriela", args="to: $familia")]))
-
-S("T32-070", "same-word-pick both second-event posada group-decoy event-vs-group",
-  T("move both posadas a day earlier, the bakery one and the vecinal one",
-    diff(upd("posada_bakery", date="2026-12-15T18:00"), upd("posada_street", date="2026-12-22T19:00")),
-    ref=[act("reschedule", rows="$posada_bakery, $posada_street", args=lines(to=U("day", -1, anchor="row")))]),
-  T("who's coming to the vecinal one", rows("chela", "lupe_r"),
-    ref=[ans(kind="person", linked_to="$posada_street")]),
-  T("and who's in the group", rows("me", "chela", "lupe_r"),
-    ref=[ans(kind="person", linked_to="$posada")]))
 
 S("T32-071", "create-args task-vs-event remind-me call-tradesperson inert-clause chore errand appointment",
   T("remind me to call the electrician monday, the stall lights keep tripping",
@@ -76,30 +51,6 @@ S("T32-072", "create-args locker login-label wifi-implied card inert-clause",
   T("save my santander debit card, the one i use for the flour payments",
     diff(new("locker item", name="Santander debit card", type="card")),
     ref=[act("create", args=lines(kind="locker item", name="Santander debit card", type="card"))]))
-
-S("T32-073", "create-args person label-words one-attribute-per-line inert-met repair create-then-add_to-group",
-  T("new contact alma torres, the florist i met at the mercado, call her every 10 days",
-    diff(new("person", name="Alma Torres", role="florist", cadence=10)),
-    ref=[bad(act("create", args=lines(kind="person", name="Alma Torres", role="florist", met="Mercado", cadence=10))),
-         act("create", args=lines(kind="person", name="Alma Torres", role="florist", cadence=10))]),
-  T("add a contact called vicente flores, role egg seller, nickname vicho",
-    diff(new("person", name="Vicente Flores", role="egg seller", nickname="Vicho")),
-    ref=[act("create", args=lines(kind="person", name="Vicente Flores", role="egg seller", nickname="Vicho"))]),
-  T("add jorge mendez, the new neighbour, to the posada group",
-    diff(new("person", name="Jorge Mendez", role="neighbour"), link("posada", "new")),
-    ref=[act("create", args=lines(kind="person", name="Jorge Mendez", role="neighbour"), more=True),
-         act("add_to", rows="$new", args="to: $posada")]))
-
-S("T32-074", "create-args debt group album inert-purpose-clause",
-  T("i owe reyna 1200 for the eggs, i'll pay her friday",
-    diff(new("debt", name="eggs", amount=1200, direction="i_owe"), link("new", "reyna")),
-    ref=[act("create", args=lines(kind="debt", name="eggs", amount=1200, direction="i_owe", person="$reyna"))]),
-  T("new group called gas money, for splitting the van fuel",
-    diff(new("group", name="Gas money", currency="MXN"), link("new", "me")),
-    ref=[act("create", args="kind: group\nname: Gas money")]),
-  T("and an album called baptism, for the old pictures",
-    diff(new("album", name="Baptism")),
-    ref=[act("create", args="kind: album\nname: Baptism")]))
 
 S("T32-075", "create-args container-links task-list note-notebook document-folder",
   T("remind me to call the plumber about the roof thursday, put it on the home list",
@@ -237,12 +188,6 @@ S("T32-086", "set-answers role-noun lookup exact-role-not-contains person-link a
     ref=[ans(kind="person", where='role = "doctor"')]),
   T("when do i see him", rows("doctor"),
     ref=[ans(kind="event", linked_to="$pablo")]))
-
-S("T32-087", "set-answers debt direction one-of-two",
-  T("what does maria ortiz owe me", rows("d_maria_med"),
-    ref=[ans(kind="debt", linked_to="$maria_o", where="direction = owes_me")]),
-  T("and what do i have to pay her", rows("d_maria_roof"),
-    ref=[ans(kind="debt", linked_to="$maria_o", where="direction = i_owe")]))
 
 S("T32-088", "set-answers same-word events weekday decides stall pickup ask-then-weekday",
   T("what time does the sunday market stall open", rows("stall_nov01"),

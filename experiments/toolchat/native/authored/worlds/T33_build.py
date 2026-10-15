@@ -8,9 +8,8 @@ off on Saturdays this month, the condo year-end rush has started).
 Persona: Hiro Tanaka-Lim, 38, a software engineer at a logistics company, with his wife Mei Tanaka-Lim, 38,
 a hospital pharmacist (both use the vault; the vault owner is Hiro and Mei is a person row). Their toddler
 Kenji is two. Rina Santos is their live-in helper (a Sunday off most weeks). They live in a condo, Parc
-Vista in Bishan, where Hiro sits on the management committee (the "Parc Vista Committee" group). Mei's
-parents Pa and Ma live in Penang (the one foreign-currency position is the MYR group "Penang Family Fund",
-a vault debt can only be in the vault's own currency); Hiro's parents Okaasan and Otousan are in Osaka.
+Vista in Bishan, where Hiro sits on the management committee. Mei's
+parents Pa and Ma live in Penang; Hiro's parents Okaasan and Otousan are in Osaka.
 
 Built-in ambiguity: two Davids (David Lee, committee treasurer; David Ng, a colleague), two look-alike
 Priyas (Priya Nair from the playgroup, Priya Nayar from work), hard-to-spell names (Kuldeep Singh Dhillon,
@@ -82,49 +81,6 @@ people = [
      "trashed": "2026-11-26T10:00"},
 ]
 
-groups = [
-    {"key": "committee", "name": "Parc Vista Committee", "currency": "SGD",
-     "members": ["chua", "david_l", "fong", "rosnah", "kuldeep"], "created": "2025-03-10T19:00"},
-    {"key": "playgroup", "name": "Little Sprouts Playgroup", "currency": "SGD",
-     "members": ["amanda", "priya_nair", "sarah", "jiahui"], "created": "2026-01-12T09:00"},
-    {"key": "penang", "name": "Penang Family Fund", "currency": "MYR",
-     "members": ["pa", "ma", "junhao", "mei"], "created": "2025-12-01T20:00"},
-    {"key": "household", "name": "Household with Mei", "currency": "SGD", "members": ["mei"],
-     "created": "2025-06-01T10:00"},
-    {"key": "dinner", "name": "NUS Dinner Club", "currency": "SGD", "members": ["weijie", "ravi", "celine", "kim"],
-     "created": "2026-02-03T20:00"},
-    {"key": "okaasan_gift", "name": "Okaasan Birthday Gift", "currency": "SGD", "members": ["mei"],
-     "created": "2026-12-01T21:00"},
-]
-
-expenses = [
-    {"group": "committee", "name": "Fireworks for National Day", "amount": 2400, "paid_by": "chua",
-     "split": ["me", "chua", "david_l", "fong", "rosnah", "kuldeep"], "date": "2026-08-09"},
-    {"group": "committee", "name": "AGM printing", "amount": 180, "paid_by": "me",
-     "split": ["me", "rosnah", "david_l"], "date": "2026-11-18"},
-    {"group": "committee", "name": "Christmas lights for the lobby", "amount": 360, "paid_by": "fong",
-     "split": ["me", "fong", "chua", "kuldeep"], "date": "2026-12-02"},
-    {"group": "playgroup", "name": "Art supplies", "amount": 96, "paid_by": "priya_nair",
-     "split": ["me", "priya_nair", "sarah", "jiahui"], "date": "2026-10-14"},
-    {"group": "playgroup", "name": "Teacher's appreciation gift", "amount": 120, "paid_by": "me",
-     "split": ["me", "priya_nair", "sarah", "jiahui", "amanda"], "date": "2026-11-27"},
-    {"group": "playgroup", "name": "Pumpkin patch outing", "amount": 210, "paid_by": "jiahui",
-     "split": ["me", "jiahui", "sarah"], "date": "2026-10-31"},
-    {"group": "penang", "name": "Ma's cataract surgery", "amount": 4800, "paid_by": "junhao",
-     "split": ["me", "junhao", "mei"], "date": "2026-09-15"},
-    {"group": "penang", "name": "Chinese New Year hampers", "amount": 900, "paid_by": "me",
-     "split": ["me", "pa", "ma", "junhao"], "date": "2026-11-10"},
-    {"group": "penang", "name": "Penang house roof", "amount": 6500, "paid_by": "pa",
-     "split": ["me", "pa", "junhao"], "date": "2026-07-04"},
-    {"group": "household", "name": "Kenji's stroller", "amount": 420, "paid_by": "mei",
-     "split": ["me", "mei"], "date": "2026-10-03"},
-    {"group": "household", "name": "Fairprice shop", "amount": 168, "paid_by": "me",
-     "split": ["me", "mei"], "date": "2026-12-05"},
-    {"group": "dinner", "name": "Omakase night", "amount": 640, "paid_by": "weijie",
-     "split": ["me", "weijie", "ravi", "celine"], "date": "2026-11-14"},
-    {"group": "dinner", "name": "Hotpot at Haidilao", "amount": 285, "paid_by": "me",
-     "split": ["me", "ravi", "kim", "celine"], "date": "2026-10-10"},
-]
 
 lists = [
     {"key": "home_l", "name": "Home", "area": "home"},
@@ -520,40 +476,6 @@ photos = [
     {"key": "p_screen", "name": "Screenshot of the booking", "taken": "2026-07-03T12:00", "trashed": "2026-08-05T09:00"},
 ]
 
-# ------------------------------------------------------------------------------------------------
-# debts (in SGD, the vault currency)
-# ------------------------------------------------------------------------------------------------
-
-debts = [
-    {"key": "d_david_print", "person": "david_l", "direction": "owes_me", "amount": 60, "name": "AGM printing share",
-     "date": "2026-11-18"},
-    {"key": "d_fong_lights", "person": "fong", "direction": "i_owe", "amount": 90, "name": "my share of the lobby lights",
-     "date": "2026-12-02"},
-    {"key": "d_priya_art", "person": "priya_nair", "direction": "i_owe", "amount": 24, "name": "art supplies",
-     "date": "2026-10-14"},
-    {"key": "d_jiahui", "person": "jiahui", "direction": "i_owe", "amount": 70, "name": "pumpkin patch outing",
-     "date": "2026-10-31"},
-    {"key": "d_sarah", "person": "sarah", "direction": "owes_me", "amount": 40, "name": "teacher gift share",
-     "date": "2026-11-27"},
-    {"key": "d_weijie", "person": "weijie", "direction": "i_owe", "amount": 160, "name": "my part of the omakase",
-     "date": "2026-11-14"},
-    {"key": "d_ravi", "person": "ravi", "direction": "owes_me", "amount": 71.25, "name": "hotpot share",
-     "date": "2026-10-10"},
-    {"key": "d_kim", "person": "kim", "direction": "owes_me", "amount": 71.25, "name": "hotpot other share",
-     "date": "2026-10-10"},
-    {"key": "d_junhao", "person": "junhao", "direction": "i_owe", "amount": 400, "name": "Ma's surgery share in dollars",
-     "date": "2026-09-15"},
-    {"key": "d_mei", "person": "mei", "direction": "owes_me", "amount": 210, "name": "stroller half",
-     "date": "2026-10-03", "settled": "2026-10-05T10:00"},
-    {"key": "d_david_n", "person": "david_n", "direction": "owes_me", "amount": 18, "name": "team lunch",
-     "date": "2026-11-09", "settled": "2026-11-12T10:00"},
-    {"key": "d_stella", "person": "stella", "direction": "i_owe", "amount": 35, "name": "visitor carpark coupons",
-     "date": "2026-11-22"},
-    {"key": "d_ahseng", "person": "ahseng", "direction": "i_owe", "amount": 120, "name": "aircon gas top-up",
-     "date": "2026-06-22", "settled": "2026-06-23T10:00"},
-    {"key": "d_celine", "person": "celine", "direction": "owes_me", "amount": 55, "name": "concert tickets",
-     "date": "2026-09-05"},
-]
 
 # ------------------------------------------------------------------------------------------------
 # locker
@@ -644,13 +566,13 @@ links = [
 
 world = {
     "me": ME, "today": TODAY, "epoch": "2025-06-01T09:00", "seed": "T33", "currency": "SGD",
-    "people": people, "groups": groups, "expenses": expenses, "lists": lists, "events": events,
+    "people": people, "lists": lists, "events": events,
     "tasks": tasks, "notebooks": notebooks, "notes": notes, "folders": folders, "documents": documents,
-    "albums": albums, "photos": photos, "debts": debts, "locker": locker, "links": links,
+    "albums": albums, "photos": photos, "locker": locker, "links": links,
 }
 
-SIZES = {"people": (25, 35), "groups": (4, 6), "events": (50, 70), "tasks": (50, 70), "notes": (20, 30),
-         "documents": (15, 20), "photos": (30, 40), "debts": (10, 15), "locker": (15, 22)}
+SIZES = {"people": (25, 35), "events": (50, 70), "tasks": (50, 70), "notes": (20, 30),
+         "documents": (15, 20), "photos": (30, 40), "locker": (15, 22)}
 
 
 def check(w):
@@ -670,15 +592,6 @@ def check(w):
     def need(key, kind):
         assert keys.get(key) == kind, f"{key} is not a {kind}"
 
-    for g in w["groups"]:
-        [need(m, "people") for m in g["members"]]
-        assert len(set(g["members"])) == len(g["members"]), g["key"]
-    for e in w["expenses"]:
-        need(e["group"], "groups")
-        [need(m, "people") for m in e["split"]]
-        need(e["paid_by"], "people")
-        members = set(next(g["members"] for g in w["groups"] if g["key"] == e["group"])) | {"me"}
-        assert set(e["split"]) | {e["paid_by"]} <= members, f"expense outside its group: {e['name']}"
     for t in w["tasks"]:
         if "parent" in t:
             need(t["parent"], "tasks")
@@ -693,14 +606,12 @@ def check(w):
     for p in w["photos"]:
         [need(a, "albums") for a in p.get("albums", [])]
         [need(q, "people") for q in p.get("people", [])]
-    for d in w["debts"]:
-        need(d["person"], "people")
     for e in w["events"]:
         [need(a, "people") for a in e.get("attendees", [])]
     for ln in w["links"]:
         assert ln["from"] in keys and ln["to"] in keys, ln
-    names = [g["name"] for g in w["groups"]] + [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
-    assert len(names) == len(set(names)), "group/notebook/album names must be unique"
+    names = [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
+    assert len(names) == len(set(names)), "notebook/album names must be unique"
     spans = sorted((e["start"], e.get("end", e["start"]), e["key"]) for e in w["events"])
     for (s1, e1, k1), (s2, e2, k2) in zip(spans, spans[1:]):
         assert e1 <= s2, f"events overlap: {k1} and {k2}"
@@ -714,7 +625,6 @@ def check(w):
     assert any(t.get("completed") for t in w["tasks"])
     assert any(not [x for x in w["documents"] if x.get("folder") == f["key"]] for f in w["folders"])
     assert any(not [x for x in w["notes"] if x.get("notebook") == n["key"]] for n in w["notebooks"])
-    assert any(not [x for x in w["expenses"] if x["group"] == g["key"]] for g in w["groups"])
 
 
 if __name__ == "__main__":

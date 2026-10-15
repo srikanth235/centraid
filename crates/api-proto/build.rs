@@ -124,6 +124,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .boxed(".centraid.core.v1.LockerSessionResponse.import_plan")
         .boxed(".centraid.screen.v1.LockerExportState.content.data")
         .boxed(".centraid.screen.v1.LockerImportState.content.data")
+        // Money's screens (#1099): the five whose data arm dwarfs its siblings.
+        .boxed(".centraid.screen.v1.MoneyHomeState.content.data")
+        .boxed(".centraid.screen.v1.MoneyTransactionState.content.data")
+        .boxed(".centraid.screen.v1.MoneyTargetState.content.data")
+        .boxed(".centraid.screen.v1.MoneyImportState.content.data")
+        .boxed(".centraid.screen.v1.MoneyCategoriesState.content.data")
         .compile_fds(descriptors)?;
     Ok(())
 }

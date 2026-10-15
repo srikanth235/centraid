@@ -4,22 +4,14 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 OPEN = 'status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 LIVE = 'status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
 LIVE_EV = 'status != "cancelled"'
 def next_vet():
     return find(kind="event", name="Vet", when=W({"from": U("day", 0)}), order="date asc", limit=1)
 def boulder():
     return find(kind="event", name="Bouldering night", when=W({"from": U("day", 0)}))
-def settled(gold, d):
-    """a read gold after a settle_up in the same turn: gold.py's `also=` keeps only the row/link
-    diff, so the settlement check is carried over by hand"""
-    gold = dict(gold, diff=d["diff"])
-    gold["settle"] = d["settle"]
-    return gold
 def J(d):
     return json.dumps(d, separators=(",", ":"))
 WEEKEND = span(U("week", 0, weekday=6), U("week", 0, weekday=7))
@@ -94,12 +86,6 @@ S("T15-042-P", "list area contains task count para",
   T("lists holding five tasks or less", rows("climb_l", "gear_l", "shop_l"),
     ref=[ans(kind="list", where="task count <= 5")]))
 
-S("T15-047-P", "debt open span weekday para",
-  T("debts from last monday onwards", rows("d_hallvard", "d_silje", "d_jonas_groceries", "d_torstein"),
-    ref=[ans(kind="debt", when=W({"from": U("week", -1, weekday=1)}))]),
-  T("cut it off at the fifth", rows("d_hallvard", "d_silje"),
-    ref=[ans(kind="debt", when=W(span(U("week", -1, weekday=1), D("2026-11-05"))))]))
-
 S("T15-052-P", "create person delete restore new para",
   T("add Oda Lie to contacts, she's a vet nurse at the clinic", diff(new("person", name="Oda Lie", role=ANY)),
     ref=[act("create", args=lines(kind="person", name="Oda Lie", role="vet nurse"))]),
@@ -133,15 +119,6 @@ S("T15-068-P", "delete folder multi refused folder ask para",
 S("T15-074-P", "single note body set notebook para",
   T("cabin book notes with some text in them", rows("woodstove", "cabin_rules"),
     ref=[ans(kind="note", linked_to="$cabin_nb", where="body is set")]))
-
-S("T15-080-P", "group currency in substitution refused remove_from ask para",
-  T("groups using kroner or euro", rows("mess", "cabin", "climb", "kiel", "whale"),
-    ref=[find(kind="group", where='currency in ("NOK", "EUR")'), ans(rows="@prev")]),
-  T("swedish ones?", rows("abisko"),
-    ref=[ans(kind="group", where='currency = "SEK"')]),
-  T("ailo gaup leaves the crew mess fund, remove him", ask(),
-    ref=[bad(act("remove_from", rows="$ailo", args=lines(from_="$mess"))),
-         askc("ailo still has an unsettled balance in the crew mess fund, so he can't be taken out yet. settle up with him first?")]))
 
 S("T15-085-P", "ambiguous vet cancel ask note overlap repair create para",
   T("pusur's vet appointment is off", ask("vet_1112", "vet_1215"),
@@ -187,14 +164,6 @@ S("T15-A001-P", "ask-options event reschedule never_mind c3a para",
   T("leave it be, captain's moved it already", decline("never_mind"),
     ref=[dec("never_mind")]))
 
-S("T15-A009-P", "follow-up c3a para",
-  T("money people owe me", rows("d_jonas_vet", "d_linnea", "d_erik_j", "d_silje", "d_anders", "d_marianne"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("over 300 from those", rows("d_jonas_vet", "d_erik_j", "d_anders"),
-    ref=[ans(within="@prev", where="amount > 300 NOK")]),
-  T("largest?", rows("d_anders"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T15-B005-P", "c4b state-change cancel event restore trashed task para",
   T("vet check got cancelled, ane rang", diff(upd("vet_1112", status="cancelled")),
     ref=[act("cancel", kind="event", name="Vet check")]),
@@ -227,15 +196,3 @@ S("T15-114-P", "ask-options task complete order para",
     ref=[act("complete", rows="$formalin")]),
   T("this weekend's plans?", rows("aurora", "whale_trip", "mum_call"),
     ref=[ans(kind="event", when=W(span(U("week", 0, weekday=6), U("week", 0, weekday=7))))]))
-
-S("T15-119-P", "balance people repair where-name para",
-  T("anders, what's he owe me", val((1200, "NOK")),
-    ref=[ans(op="balance", rows="$anders")]),
-  T("and silje", val((380, "NOK")),
-    ref=[ans(op="balance", rows="$silje")]),
-  T("tasks with formalin in their name", rows("formalin"),
-    ref=[bad(ans(kind="task", where='name contains "formalin"')),
-         ans(kind="task", name="formalin")]),
-  T("sauna money came from silje, mark it settled", diff(upd("d_silje", status="settled")),
-    ref=[search("sauna", kind="debt"),
-         act("settle_debt", kind="debt", name="Sauna tickets")]))

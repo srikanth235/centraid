@@ -14,16 +14,6 @@ S("T38-103-P", "container-link-reads person events through the person link week 
   T("her swim class count this month", val(4),
     ref=[ans(op="count", kind="event", name="swim class", linked_to="$dana", when=J(U("month", 0)))]))
 
-S("T38-107-P", "stray-conditions member-count purpose-clause met-contains within role-contains para",
-  T("building fund headcount, i'm splitting the lift repair between them", val(13),
-    ref=[ans(op="count", kind="person", linked_to="$building")]),
-  T("graduation invites, so who did i meet at the university",
-    rows("raji_anabtawi", "basma_al_najjar", "sufyan_nimri", "dania_nabulsi", "talal_daoud", "dunia_bishara", "usama_yaghmour",
-         "enas_qasem", "waleed_masri", "fadwa_obeidat", "husam"),
-    ref=[ans(kind="person", where='met contains "university"')]),
-  T("classmates among them?", rows("raji_anabtawi", "dania_nabulsi", "usama_yaghmour", "fadwa_obeidat"),
-    ref=[ans(within="@prev", where='role contains "classmate"')]))
-
 S("T38-111-P", "date-window before-weekday closed-from-today future then past-tense open count cancelled calls para",
   T("my events before sunday", rows("ct_270513", "fl_270514"),
     ref=[bad(ans(kind="event", when=J({"from": U("day", 0), "to": {"weekday": 6}}))),

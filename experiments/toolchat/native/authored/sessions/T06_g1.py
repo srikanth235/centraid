@@ -58,26 +58,6 @@ S("T06-109", "contrast log person by role description",
   T("star the drummer, he saved the show last night", diff(upd("jonas_w", starred=True)),
     ref=[act("star", kind="person", where='role contains "drummer"')]))
 
-S("T06-110", "balance negative olli ines positive paul",
-  T("what do i owe olli", val((-90, "EUR")),
-    ref=[search("olli", kind="person"), ans(op="balance", rows="$olli")]),
-  T("and ines", val((-45, "EUR")),
-    ref=[ans(op="balance", rows="$ines")]),
-  T("paul?", val((60, "EUR")),
-    ref=[ans(op="balance", rows="$paul")]),
-  T("and nele", val((11.5, "EUR")),
-    ref=[ans(op="balance", rows="$nele")]))
-
-S("T06-111", "balance sophie hannah bauer star person",
-  T("how do i stand with sophie", val((-42.2, "EUR")),
-    ref=[ans(op="balance", rows="$sophie")]),
-  T("and hannah bauer", val((9.5, "EUR")),
-    ref=[ans(op="balance", rows="$hannah_b")]),
-  T("star her, she keeps paying me back", diff(upd("hannah_b", starred=True)),
-    ref=[act("star", rows="$hannah_b")]),
-  T("what about tobias", val((-21.5, "EUR")),
-    ref=[ans(op="balance", rows="$tobi")]))
-
 S("T06-112", "weekend read then cancel next weekend",
   T("what have i got this weekend", rows("wg_feb"),
     ref=[ans(kind="event", when=W(span(U("week", 0, weekday=6), U("week", 0, weekday=7))))]),

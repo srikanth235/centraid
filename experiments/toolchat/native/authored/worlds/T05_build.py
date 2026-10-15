@@ -9,8 +9,8 @@ Built-in ambiguity: two Divyas (Divya Srinivasan, Divya Krishnan), two Ramesh (u
 driver), nicknames (Amma, Appa, Karthi, Paati, Suri), a hard-to-spell name (Sowmya), two temple
 committee meetings, several cricket nights, two cataract visits, look-alike tasks (two EB bill
 tasks, a year of LIC premium payments, two "Buy flowers for pooja"), cancelled events, completed
-tasks, trashed rows (some inside the 30-day restore window, some past it), an empty group, an
-empty folder and an empty notebook.
+tasks, trashed rows (some inside the 30-day restore window, some past it), an empty
+folder and an empty notebook.
 """
 from __future__ import annotations
 
@@ -76,32 +76,6 @@ def people():
         {"key": "old_agent", "name": "Mohan LIC agent", "role": "insurance agent", "trashed": "2025-11-20T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "home_g", "name": "Home expenses", "members": ["karthik", "appa"], "created": "2025-04-01T10:00"},
-    {"key": "carpool", "name": "Night shift carpool", "members": ["divya_s", "jaya", "ramesh_d"], "created": "2025-08-01T10:00"},
-    {"key": "cricket_g", "name": "Cricket gang", "members": ["vignesh", "arjun", "suresh", "divya_k"], "created": "2025-10-05T20:00"},
-    {"key": "temple_g", "name": "Temple committee fund", "members": ["gopal", "revathi"], "created": "2025-06-15T18:00"},
-    {"key": "dubai_g", "name": "Dubai trip", "currency": "AED", "members": ["karthik", "harish", "anand"], "created": "2025-12-01T21:00"},
-    {"key": "farewell_g", "name": "Farhan farewell gift", "members": [], "created": "2026-01-16T20:00"},
-]
-
-EXPENSES = [
-    {"group": "home_g", "name": "EB bill December", "amount": 4200, "paid_by": "me", "split": ["me", "karthik", "appa"], "date": "2025-12-10"},
-    {"group": "home_g", "name": "Groceries Pongal", "amount": 6300, "paid_by": "appa", "split": ["me", "karthik", "appa"], "date": "2026-01-12"},
-    {"group": "home_g", "name": "Water can refill", "amount": 900, "paid_by": "karthik", "split": ["me", "karthik", "appa"], "date": "2026-01-05"},
-    {"group": "home_g", "name": "Broadband January", "amount": 1180, "paid_by": "me", "split": ["me", "karthik"], "date": "2026-01-03"},
-    {"group": "carpool", "name": "Fuel week 1", "amount": 2400, "paid_by": "ramesh_d", "split": ["me", "divya_s", "jaya", "ramesh_d"], "date": "2026-01-07"},
-    {"group": "carpool", "name": "Fuel week 2", "amount": 2000, "paid_by": "me", "split": ["me", "divya_s", "jaya", "ramesh_d"], "date": "2026-01-14"},
-    {"group": "carpool", "name": "Toll and parking", "amount": 480, "paid_by": "jaya", "split": ["me", "divya_s", "jaya"], "date": "2026-01-16"},
-    {"group": "cricket_g", "name": "Biryani for the final", "amount": 2800, "paid_by": "vignesh", "split": ["me", "vignesh", "arjun", "suresh"], "date": "2025-11-23"},
-    {"group": "cricket_g", "name": "Projector rental", "amount": 1500, "paid_by": "me", "split": ["me", "vignesh", "arjun", "suresh", "divya_k"], "date": "2026-01-11"},
-    {"group": "cricket_g", "name": "Snacks and cool drinks", "amount": 950, "paid_by": "divya_k", "split": ["me", "vignesh", "divya_k"], "date": "2026-01-11"},
-    {"group": "temple_g", "name": "Flowers for Thai Poosam", "amount": 3500, "paid_by": "revathi", "split": ["me", "gopal", "revathi"], "date": "2026-01-18"},
-    {"group": "temple_g", "name": "Annadhanam rice", "amount": 7200, "paid_by": "me", "split": ["me", "gopal", "revathi"], "date": "2026-01-10"},
-    {"group": "dubai_g", "name": "Desert safari booking", "amount": 900, "paid_by": "karthik", "split": ["me", "karthik", "harish"], "date": "2025-12-20"},
-    {"group": "dubai_g", "name": "Hotel deposit", "amount": 1500, "paid_by": "me", "split": ["me", "karthik"], "date": "2025-12-22"},
-]
 
 LISTS = [
     {"key": "homelist", "name": "Home", "area": "family"},
@@ -443,25 +417,6 @@ PHOTOS = [
     {"key": "old_meme", "name": "Exam meme", "taken": "2024-02-02T10:00", "trashed": "2025-10-01T10:00"},
 ]
 
-DEBTS = [
-    {"key": "d_divya_k", "person": "divya_k", "direction": "owes_me", "amount": 450, "name": "Movie tickets", "date": "2026-01-04"},
-    {"key": "d_arjun", "person": "arjun", "direction": "owes_me", "amount": 1200, "name": "Chepauk ticket", "date": "2026-01-15"},
-    {"key": "d_suresh", "person": "suresh", "direction": "owes_me", "amount": 500, "name": "Biryani bet", "date": "2026-01-11"},
-    {"key": "d_karthik", "person": "karthik", "direction": "owes_me", "amount": 3000, "name": "Visa fee advance", "date": "2026-01-08"},
-    {"key": "d_jaya", "person": "jaya", "direction": "i_owe", "amount": 250, "name": "Canteen dinner", "date": "2026-01-10"},
-    {"key": "d_divya_s", "person": "divya_s", "direction": "i_owe", "amount": 500, "name": "Farhan gift share", "date": "2026-01-16"},
-    {"key": "d_ramesh_mama", "person": "ramesh_mama", "direction": "i_owe", "amount": 2000, "name": "Train tickets to Thanjavur",
-     "date": "2026-01-12"},
-    {"key": "d_kavya", "person": "kavya", "direction": "owes_me", "amount": 350, "name": "Coffee and cake", "date": "2025-12-06",
-     "settled": "2025-12-20T10:00"},
-    {"key": "d_farhan", "person": "farhan", "direction": "i_owe", "amount": 180, "name": "Chai and samosa", "date": "2025-12-30",
-     "settled": "2026-01-02T08:00"},
-    {"key": "d_appa", "person": "appa", "direction": "i_owe", "amount": 15000, "name": "Scooty down payment", "date": "2025-06-01"},
-    {"key": "d_vignesh", "person": "vignesh", "direction": "owes_me", "amount": 700, "name": "Jersey advance", "date": "2025-12-15"},
-    {"key": "d_sowmya", "person": "sowmya", "direction": "owes_me", "amount": 500, "name": "Uniform stitching", "date": "2026-01-07",
-     "settled": "2026-01-17T08:00"},
-    {"key": "d_revathi", "person": "revathi", "direction": "i_owe", "amount": 820, "name": "Pooja items", "date": "2026-01-18"},
-]
 
 LOCKER = [
     {"key": "his", "name": "Hospital HIS login", "type": "login", "username": "priya.r.icu", "url": "https://his.kauvery.local",
@@ -525,8 +480,6 @@ def world():
         "seed": "T05",
         "currency": "INR",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -536,7 +489,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

@@ -25,52 +25,6 @@ S("T27-002", "unstar person multi cadence set",
     rows("helene", "bernard", "odette", "lea", "claire", "camille_r", "antoine", "sandrine", "thomas_g", "sarah", "chloe"),
     ref=[ans(kind="person", where="cadence is set")]))
 
-S("T27-003", "add_to person named group count knock-on",
-  T("who's in the Opening party kitty", rows("nadia", "hugo", "ines", "me"),
-    ref=[ans(kind="person", linked_to="$party_g")]),
-  T("add Zoé Lemaire, she's helping with the balloons", diff(link("party_g", "zoe")),
-    ref=[act("add_to", rows="$zoe", args=lines(to="$party_g"))]),
-  T("how many is that", val(5),
-    ref=[ans(op="count", kind="person", linked_to="$party_g")]))
-
-S("T27-004", "add_to person named shower group",
-  T("can you add maxime to baby shower gifts", diff(link("shower_g", "maxime")),
-    ref=[act("add_to", rows="$maxime", args=lines(to="$shower_g"))]))
-
-S("T27-005", "delete group named knock-on undo not undone",
-  T("delete the Opening party kitty, we're using the till money",
-    diff(gone("party_g"), unlink("party_g", "nadia"), unlink("party_g", "hugo"), unlink("party_g", "ines"),
-         unlink("party_g", "me")),
-    ref=[act("delete", kind="group", name="Opening party kitty")]),
-  T("undo that", diff(),
-    ref=[act("undo")]))
-
-S("T27-006", "delete group named refused non-empty ask",
-  T("which groups are in something other than euros", rows("geneva_g", "london_g"),
-    ref=[ans(kind="group", where='currency != "EUR"')]),
-  T("delete the geneva one, the fair got cancelled", ask(),
-    ref=[bad(act("delete", kind="group", name="Geneva pastry fair")),
-         askc("the geneva group still has the stand fee in it, so it can't be deleted. rename it instead?")]),
-  T("ok then delete Baby shower gifts, léa is doing it herself",
-    diff(gone("shower_g"), unlink("shower_g", "lea"), unlink("shower_g", "chloe"), unlink("shower_g", "me")),
-    ref=[act("delete", kind="group", name="Baby shower gifts")]))
-
-S("T27-007", "delete group prev find-only person count",
-  T("the group with four of us in it, what's that called", rows("party_g"),
-    ref=[find(kind="group", where="person count = 4"), ans(rows="@prev")]),
-  T("get rid of it", diff(gone("party_g"), unlink("party_g", "nadia"), unlink("party_g", "hugo"),
-                          unlink("party_g", "ines"), unlink("party_g", "me")),
-    ref=[act("delete", rows="@prev")]))
-
-S("T27-008", "delete group prev search",
-  T("the shower group", rows("shower_g"),
-    ref=[find(kind="group", name="shower"), ans(rows="@prev")]),
-  T("who's in it", rows("lea", "chloe", "me"),
-    ref=[ans(kind="person", linked_to="@prev")]),
-  T("delete that group, i'll sort gifts with léa directly",
-    diff(gone("shower_g"), unlink("shower_g", "lea"), unlink("shower_g", "chloe"), unlink("shower_g", "me")),
-    ref=[act("delete", rows="@1")]))
-
 S("T27-009", "restore event where trashed week",
   T("i deleted something for next monday by mistake, put it back", diff(restore("sign_maker")),
     ref=[act("restore", kind="event", trashed=True, when=W(U("week", 1, weekday=1)))]),

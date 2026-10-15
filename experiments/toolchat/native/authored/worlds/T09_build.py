@@ -74,39 +74,6 @@ def people():
     ]
 
 
-GROUPS = [
-    {"key": "wparty", "name": "Wedding party", "members": ["dan", "ada", "priya_r", "kemi", "siobhan", "marcus", "jordan_l"],
-     "created": "2026-01-20T20:00"},
-    {"key": "barprep", "name": "Bar prep study group", "members": ["aiden", "fatou", "mateo", "jordan_p"],
-     "created": "2026-03-30T18:00"},
-    {"key": "condo", "name": "Condo board", "members": ["priya_s", "gord", "linh"], "created": "2025-11-02T10:00"},
-    {"key": "lisbon", "name": "Lisbon honeymoon", "currency": "EUR", "members": ["dan"], "created": "2026-02-14T21:00"},
-    {"key": "stag", "name": "Stag and doe", "members": ["marcus", "jordan_l"], "created": "2026-05-04T21:00"},
-]
-
-EXPENSES = [
-    {"group": "wparty", "name": "Bridesmaid dress deposits", "amount": 600, "paid_by": "me",
-     "split": ["me", "ada", "priya_r", "kemi", "siobhan"], "date": "2026-03-05"},
-    {"group": "wparty", "name": "Bachelorette Airbnb", "amount": 1400, "paid_by": "ada",
-     "split": ["me", "ada", "priya_r", "kemi", "siobhan"], "date": "2026-04-12"},
-    {"group": "wparty", "name": "Engagement party drinks", "amount": 420, "paid_by": "marcus",
-     "split": ["me", "dan", "marcus", "jordan_l"], "date": "2026-02-28"},
-    {"group": "wparty", "name": "Welcome bags", "amount": 180, "paid_by": "kemi",
-     "split": ["me", "ada", "kemi"], "date": "2026-05-02"},
-    {"group": "barprep", "name": "Practice exam booklets", "amount": 160, "paid_by": "me",
-     "split": ["me", "aiden", "fatou", "mateo", "jordan_p"], "date": "2026-04-07"},
-    {"group": "barprep", "name": "Pizza night", "amount": 75, "paid_by": "aiden",
-     "split": ["me", "aiden", "fatou", "mateo", "jordan_p"], "date": "2026-04-28"},
-    {"group": "barprep", "name": "Highlighters and tabs", "amount": 30, "paid_by": "fatou",
-     "split": ["me", "fatou", "jordan_p"], "date": "2026-05-05"},
-    {"group": "condo", "name": "AGM room booking", "amount": 90, "paid_by": "priya_s",
-     "split": ["me", "priya_s", "gord", "linh"], "date": "2026-04-09"},
-    {"group": "condo", "name": "Lobby plant refresh", "amount": 120, "paid_by": "me",
-     "split": ["me", "priya_s", "gord", "linh"], "date": "2026-04-22"},
-    {"group": "lisbon", "name": "Alfama apartment", "amount": 980, "paid_by": "me", "split": ["me", "dan"], "date": "2026-02-20"},
-    {"group": "lisbon", "name": "Sintra tour deposit", "amount": 140, "paid_by": "dan", "split": ["me", "dan"], "date": "2026-04-03"},
-]
-
 LISTS = [
     {"key": "wed_list", "name": "Wedding", "area": "wedding"},
     {"key": "home_list", "name": "Home", "area": "home"},
@@ -456,24 +423,6 @@ PHOTOS = [
     {"key": "screenshot", "name": "Parking receipt screenshot", "taken": "2026-03-02T10:00", "trashed": "2026-03-05T10:00"},
 ]
 
-DEBTS = [
-    {"key": "d_ada", "person": "ada", "direction": "owes_me", "amount": 85, "name": "Dress alterations share", "date": "2026-04-11"},
-    {"key": "d_ada2", "person": "ada", "direction": "owes_me", "amount": 25, "name": "Bachelorette decorations", "date": "2026-05-02"},
-    {"key": "d_kemi", "person": "kemi", "direction": "owes_me", "amount": 42.5, "name": "Brunch at Mildred's", "date": "2026-05-10"},
-    {"key": "d_marcus", "person": "marcus", "direction": "i_owe", "amount": 60, "name": "Raptors tickets", "date": "2026-04-20"},
-    {"key": "d_priya_r", "person": "priya_r", "direction": "owes_me", "amount": 18, "name": "Coffee and pastries", "date": "2026-05-08"},
-    {"key": "d_priya_s", "person": "priya_s", "direction": "i_owe", "amount": 22.5, "name": "AGM room share", "date": "2026-04-09"},
-    {"key": "d_ethan", "person": "ethan", "direction": "i_owe", "amount": 14, "name": "Late night sushi", "date": "2026-05-11"},
-    {"key": "d_dad", "person": "dad", "direction": "i_owe", "amount": 2000, "name": "Wedding deposit help", "date": "2026-01-22"},
-    {"key": "d_siobhan", "person": "siobhan", "direction": "owes_me", "amount": 120, "name": "Concert tickets", "date": "2026-03-15",
-     "settled": "2026-04-01T10:00"},
-    {"key": "d_aiden", "person": "aiden", "direction": "owes_me", "amount": 32, "name": "Barrister manual copy", "date": "2026-04-07"},
-    {"key": "d_hugo", "person": "hugo", "direction": "i_owe", "amount": 75, "name": "Ski lift ticket", "date": "2026-01-30",
-     "settled": "2026-02-15T10:00"},
-    {"key": "d_jordan_l", "person": "jordan_l", "direction": "owes_me", "amount": 25, "name": "Uber home", "date": "2026-04-30"},
-    {"key": "d_mom", "person": "mom", "direction": "owes_me", "amount": 300, "name": "Veil deposit", "date": "2026-04-11"},
-    {"key": "d_fatou", "person": "fatou", "direction": "i_owe", "amount": 10, "name": "Tabs for my binder", "date": "2026-05-05"},
-]
 
 LOCKER = [
     {"key": "firm_login", "name": "Whitlock Brennan VPN", "type": "login", "username": "hokafor", "url": "https://vpn.whitlockbrennan.ca",
@@ -544,8 +493,6 @@ def world():
         "seed": "T09",
         "currency": "CAD",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -555,7 +502,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

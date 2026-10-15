@@ -24,27 +24,11 @@ S("T22-027", "person span cadence log",
   T("messaged samira, log that", diff(upd("samira", date=ANY)),
     ref=[act("log", rows="$samira", args=lines(kind="message"))]))
 
-S("T22-028", "person group count debt count",
-  T("who's in more than one of my groups", rows("ahmed", "karin", "david", "lena", "me"),
-    ref=[ans(kind="person", where="group count > 1")]),
-  T("any padel people with no debts either way", rows("erik_l"),
-    ref=[ans(kind="person", where='debt count < 1 and role contains "padel"')]),
-  T("is he the organiser one?", rows("erik_l"),
-    ref=[ans(rows="$erik_l")]))
-
 S("T22-029", "person note count open note",
   T("which forklift drivers show up in my notes", rows("fatima", "dragan"),
     ref=[ans(kind="person", where='note count != 0 and role contains "forklift"')]),
   T("open the Late shift rota note", rows("late_rota"),
     ref=[find(kind="note", name="Late shift rota"), ans(rows="@prev")]))
-
-S("T22-030", "person note count star multi group count exclude",
-  T("padel lot i've written notes about", rows("erik_s", "hanna", "tobias", "mats"),
-    ref=[ans(kind="person", where='note count != 0 and role contains "padel"')]),
-  T("star hanna and mats", diff(upd("hanna", starred=True), upd("mats", starred=True)),
-    ref=[act("star", rows="$hanna, $mats")]),
-  T("who's in more than one group apart from ahmed", rows("karin", "david", "lena", "me"),
-    ref=[ans(kind="person", where="group count > 1", exclude="$ahmed")]))
 
 S("T22-031", "event anchor tomorrow within duration",
   T("what's on tomorrow", rows("safety_walk", "swim_1", "padel_0714", "samira_call"),

@@ -7,7 +7,7 @@
 Measures four densities on a world (see `measure`):
 
   first_name     share of people whose first name another person also has
-  container      share of containers (group, list, notebook, folder, album) whose name another kind of container has
+  container      share of containers (list, notebook, folder, album) whose name another kind of container has
   same_name      share of rows whose whole name a row of another kind has
   shared_word    share of rows with a word (first significant word counts) that a row of another kind also has
 
@@ -46,10 +46,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common  # noqa: E402
 from common import AUTHORED, NATIVE, rng  # noqa: E402
 
-SECTIONS = {"people": "person", "groups": "group", "lists": "list", "events": "event", "tasks": "task",
+SECTIONS = {"people": "person", "lists": "list", "events": "event", "tasks": "task",
             "notebooks": "notebook", "notes": "note", "folders": "folder", "documents": "document", "albums": "album",
-            "photos": "photo", "debts": "debt", "locker": "locker item"}
-CONTAINERS = {"group", "list", "notebook", "folder", "album"}
+            "photos": "photo", "locker": "locker item"}
+CONTAINERS = {"list", "notebook", "folder", "album"}
 STOP = set("the and for with from your our into about this that new old day week trip".split())
 SURNAMES = ["Hartley", "Whitcombe", "Okonkwo", "Delacroix", "Brannigan", "Seo", "Kowalczyk", "Abernathy", "Lindqvist",
             "Marchetti", "Osei", "Fairweather", "Tanaka", "Quigley", "Vasquez", "Holloway", "Nakamura", "Ferreira"]

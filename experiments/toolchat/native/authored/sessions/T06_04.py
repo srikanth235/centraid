@@ -108,25 +108,6 @@ S("T06-082", "photos anchor spans album count star",
   T("star them both", diff(upd("p_desk", starred=True), upd("p_stands_sale", starred=True)),
     ref=[act("star", rows="$p_desk, $p_stands_sale")]))
 
-S("T06-083", "debts spans amount knock-on settle",
-  T("how many debts from dec first up to last sunday", val(10),
-    ref=[ans(op="count", kind="debt", when=W({"from": D("2025-12-01", "00:00"), "to": U("week", -1, weekday=7)}))]),
-  T("list the ones from december and january", rows("d_olli_mic", "d_yusuf_parts", "d_tobi_van", "d_kalle_beer",
-                                                    "d_ines_prints", "d_lena_cables", "d_sophie_train", "d_mira_pizza",
-                                                    "d_greta_dinner"),
-    ref=[ans(kind="debt", when=W({"from": U("month", -2), "to": U("month", -1)}))]),
-  T("which of those are under 15 euros", rows("d_yusuf_parts", "d_mira_pizza"),
-    ref=[ans(within="@prev", where="amount < 15")]),
-  T("show all the open ones with an amount on them", rows("d_mira_pizza", "d_jonask_bvg", "d_lena_cables", "d_kalle_beer",
-                                                          "d_kalle_strings", "d_olli_mic", "d_sophie_train", "d_ines_prints",
-                                                          "d_paul_session", "d_hannah_b", "d_greta_dinner"),
-    ref=[ans(kind="debt", where='amount is set and status = "open"')]),
-  T("paid olli the mic money, and i did the xlr cables and the in-ear tips",
-    diff(upd("d_olli_mic", status="settled"), upd("xlr", status="completed", completed=ANY),
-         upd("in_ears", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="Borrowed mic money", more=True),
-         act("complete", rows="$xlr, $in_ears")]))
-
 S("T06-084", "folder dead end documents move",
   T("open the bank statements folder", rows("heating_letter"),
     ref=[find(kind="folder", name="Bank statements"),
@@ -137,16 +118,6 @@ S("T06-084", "folder dead end documents move",
     ref=[ans(op="count", kind="document", linked_to="$tax_f")]),
   T("folders with fewer than three docs", rows("flat_f", "old_f"),
     ref=[ans(kind="folder", where="document count < 3")]))
-
-S("T06-085", "remove_from prev olli crew group count",
-  T("is Oliver Krause in the festival crew group", rows("olli"),
-    ref=[find(kind="person", name="Oliver Krause", linked_to="$crew"), ans(rows="@prev")]),
-  T("take him out", diff(unlink("crew", "olli")),
-    ref=[act("remove_from", rows="@prev", args=lines(from_="$crew"))]),
-  T("show me the groups with a headcount below five", rows("kitty", "crew", "harz", "mama60"),
-    ref=[ans(kind="group", where="person count < 5")]),
-  T("who's left in the crew", rows("tobi", "nele", "emre", "me"),
-    ref=[ans(kind="person", linked_to="$crew")]))
 
 S("T06-086", "ambiguous soundcheck resolve by date",
   T("when's Soundcheck Tonkeller", rows("sc_0213", "sc_0306"),
@@ -190,19 +161,6 @@ S("T06-090", "edit task where linked rico",
     ref=[ans(kind="task", linked_to="$praguelist", exclude="$van_ins")]),
   T("what's the weather gonna be in prague on the twenty-seventh", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
-
-S("T06-091", "hannah ambiguous log ask",
-  T("log a coffee with hannah this afternoon", ask("hannah_s", "hannah_b"),
-    ref=[act("log", kind="person", name="Hannah", args=lines(kind="coffee")),
-         askc("hannah seidel from the studio or hannah bauer?", options="$hannah_s, $hannah_b")]),
-  T("bauer", diff(upd("hannah_b", date=ANY)),
-    ref=[act("log", rows="$hannah_b", args=lines(kind="coffee"))]),
-  T("does she owe me for the day pass", rows("d_hannah_b"),
-    ref=[ans(kind="debt", linked_to="$hannah_b", where='status = "open"')]),
-  T("she paid, settle it", diff(upd("d_hannah_b", status="settled")),
-    ref=[act("settle_debt", rows="$d_hannah_b")]),
-  T("people i've got debts with who aren't in any of my groups", rows("ines", "greta"),
-    ref=[ans(kind="person", where="debt count != 0 and group count < 1")]))
 
 S("T06-092", "locker username empty result",
   T("what's the tonkeller wifi", rows("wifi", "studio_wifi"),
@@ -307,33 +265,9 @@ X("T06-045",
   T("and add her to the group", ask(),
     ref=[askc("which group, Festival crew 2026 or one of the others?")]))
 
-X("T06-028",
-  T("move band rehearsal", ask(),
-    ref=[askc("which rehearsal, and to when?")]))
-
-X("T06-085",
-  T("and add the new lighting guy to it", ask(),
-    ref=[askc("what's the lighting guy's name? he's not in your contacts yet")]))
-
-X("T06-052",
-  T("and kalle, where's he at with me", val((-600, "CZK"), (78, "EUR")),
-    ref=[search("kalle", kind="person"), comp(op="balance", rows="$kalle"), ans(value="@prev")]))
-
-X("T06-091",
-  T("ok then a note called Fresh start: sort the notebooks on sunday",
-    diff(new("note", name="Fresh start", body=has("notebooks"))),
-    ref=[act("create", args=lines(kind="note", name="Fresh start", body="sort the notebooks on sunday"))]),
-  T("meh, undo that", diff(trash("+1")),
-    ref=[act("undo")]))
-
 X("T06-097",
   T("open his card, what did he want again", rows("frank"),
     ref=[opn("$frank"), ans(rows="$frank")]))
-
-S("T06-103", "single group currency is set",
-  T("which of my groups actually have a currency set on them",
-    rows("kitty", "band", "crew", "prague", "harz", "mama60"),
-    ref=[ans(kind="group", where="currency is set")]))
 
 S("T06-104", "single note span date named-month",
   T("notes from feb first to end of february",

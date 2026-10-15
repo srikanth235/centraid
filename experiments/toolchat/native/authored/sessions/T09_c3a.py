@@ -37,13 +37,6 @@ S("T09-A004", "ask-options event cancel never_mind c3a",
   T("hang on, leave them, i'll call the shop first", decline("never_mind"),
     ref=[dec("never_mind")]))
 
-S("T09-A005", "ask-options debt settle_debt c3a",
-  T("mark the share as settled", ask("d_ada", "d_priya_s"),
-    ref=[act("settle_debt", kind="debt", name="share"),
-         askc("Ada's dress alterations share (she owes you 85) or Priya Sandhu's AGM room share (you owe 22.50)?", options="$d_ada, $d_priya_s")]),
-  T("ada's, she etransferred last night", diff(upd("d_ada", status="settled")),
-    ref=[act("settle_debt", rows="$d_ada")]))
-
 S("T09-A101", "ask-options task complete c3a",
   T("mark the prep as done", ask("ethics_hypo", "disc_outline"),
     ref=[act("complete", kind="task", name="prep"),
@@ -64,14 +57,6 @@ S("T09-A007", "follow-up c3a",
     ref=[ans(within="@prev", when=J(U("week", 0, weekday=4)))]),
   T("and friday?", rows("movie", "team_lunch"),
     ref=[ans(within="@1", when=J(U("week", 0, weekday=5)))]))
-
-S("T09-A008", "follow-up c3a",
-  T("who still owes me money", rows("d_ada", "d_priya_r", "d_mom", "d_jordan_l", "d_ada2", "d_kemi", "d_aiden"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("those but not the veil deposit", rows("d_ada", "d_kemi", "d_jordan_l", "d_aiden", "d_priya_r", "d_ada2"),
-    ref=[ans(within="@prev", exclude="$d_mom")]),
-  T("the biggest of those?", rows("d_ada"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
 
 S("T09-A009", "follow-up c3a",
   T("what's in the wedding folder", rows("photo_contract", "invite_proof", "petrov_quote", "guest_sheet", "arbor_contract"),

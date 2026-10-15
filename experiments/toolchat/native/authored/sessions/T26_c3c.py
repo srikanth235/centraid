@@ -14,13 +14,6 @@ S("T26-C001", "c3c compound restore delete photos",
     ref=[act("restore", kind="photo", name="Duplicate goal shot", trashed=True, more=True),
          act("delete", kind="photo", name="Under-11 team photo")]))
 
-S("T26-C002", "c3c compound three writes create person add_to group log",
-  T("add Kelechi Anyanwu, the new electrician, to the bonga crew kitty and log a call with him",
-    diff(new("person", name="Kelechi Anyanwu", role=ANY, date=ANY), link("rig_g", "new")),
-    ref=[act("create", args=lines(kind="person", name="Kelechi Anyanwu", role="electrician"), more=True),
-         act("add_to", rows="$new", args=lines(to="$rig_g"), more=True),
-         act("log", rows="$new", args=lines(kind="call"))]))
-
 S("T26-C003", "c3c compound reschedule edit events at N",
   T("move the dentist for femi to friday at 10 and rename the car service to Brake check",
     diff(upd("dentist_femi", date="2026-11-27T10:00"), upd("car_service", name="Brake check")),

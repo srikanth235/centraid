@@ -20,19 +20,6 @@ S("T14-C002", "c3c compound complete reschedule next weekday",
     ref=[act("complete", kind="task", name="Buy Mom's heart meds", more=True),
          act("reschedule", kind="task", name="Install grab rail in Mom's bathroom", args=lines(to=U("week", 1, weekday=6)))]))
 
-S("T14-C003", "c3c compound settle_debt star referential",
-  T("kleber paid the 16 oct gig fee, settle it and star him",
-    diff(upd("d_kleber", status="settled"), upd("kleber", starred=True)),
-    ref=[act("settle_debt", kind="debt", name="Gig fee 16 Oct", more=True),
-         act("star", rows="$kleber")]))
-
-S("T14-C004", "c3c compound three writes settle_debt log star referential",
-  T("paid patricia the echo share, settle it, log a message with her and star her",
-    diff(upd("d_patricia", status="settled"), upd("patricia", date=ANY, starred=True)),
-    ref=[act("settle_debt", kind="debt", name="Echo share", more=True),
-         act("log", kind="person", name="Patrícia", args=lines(kind="message"), more=True),
-         act("star", rows="$patricia")]))
-
 S("T14-C101", "c3c bulk delete per kind last year find multi-kind empty read",
   T('delete everything from last year', diff(trash("ipva_25"), trash("old_contacts"), trash("cnh_doc"), trash("mei_cert")),
     ref=[find(kind="event,task,note,document,photo", when=W(U("year", -1))),

@@ -12,14 +12,6 @@ S("T08-103-P", "star ask document insurance card unstar locker contrast para",
   T("union card, remove its star", diff(upd("union_card", starred=False)),
     ref=[act("unstar", kind="locker item", name="union card")]))
 
-S("T08-107-P", "star person contrast balance negative substitution para",
-  T("marcus bell gets a star", diff(upd("marcus_b", starred=True)),
-    ref=[act("star", kind="person", name="Marcus Bell")]),
-  T("what am i down to darnell", val((-8, "USD")),
-    ref=[ans(op="balance", kind="person", name="Darnell")]),
-  T("kevin?", val((-12.34, "USD")),
-    ref=[ans(op="balance", kind="person", name="Kevin")]))
-
 S("T08-110-P", "cancel event ask on-call reschedule bare weekday at N decline para",
   T("luis is covering one of my on-call shifts since we swapped, cancel that shift", ask("oncall_0410", "oncall_0424", "oncall_0508"),
     ref=[act("cancel", kind="event", name="On-call shift"),

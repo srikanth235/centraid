@@ -46,12 +46,6 @@ S("T27-K101", "family word grandmother father role i3skill S6",
   T("and my father", rows("bernard"),
     ref=[ans(kind="person", where='role contains "father"')]))
 
-S("T27-K102", "iou debt either direction i3skill S6",
-  T("any ious with chloe", rows("d_chloe", "d_chloe2"),
-    ref=[ans(kind="debt", linked_to="$chloe")]),
-  T("and with lea", rows("d_lea"),
-    ref=[ans(kind="debt", linked_to="$lea")]))
-
 S("T27-K103", "a note about body search pin i3skill S6",
   T("that note about the steam", rows("oven_manual"),
     ref=[ans(kind="note", where='body contains "steam"')]),
@@ -85,9 +79,3 @@ S("T27-K204", "other two subtasks complete i3skill S7",
     ref=[act("complete", rows="$display")]),
   T("tick the other two as well", diff(upd("bake_night", status="completed", completed=ANY), upd("brief", status="completed", completed=ANY)),
     ref=[find(within="@1", exclude="$display"), act("complete", rows="@prev")]))
-
-S("T27-K205", "pick by description debt settle i3skill S7",
-  T("what does chloe owe me", rows("d_chloe", "d_chloe2"),
-    ref=[ans(kind="debt", linked_to="$chloe")]),
-  T("settle the flowers one", diff(upd("d_chloe2", status="settled")),
-    ref=[act("settle_debt", rows="$d_chloe2")]))

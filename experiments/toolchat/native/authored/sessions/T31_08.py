@@ -61,12 +61,6 @@ S("T31-133", "ask-no-referent move cpr course date",
   T("the cpr recertification on the 20th", diff(upd("cpr_course", date="2026-11-21T09:00")),
     ref=[act("reschedule", kind="event", name="cpr recertification", when=J(D("2026-11-20")), args=lines(to=D("2026-11-21")))]))
 
-S("T31-134", "ask-no-referent mark paid hall debt",
-  T("mark it as paid", ask(),
-    ref=[askc("Which one did you pay?")]),
-  T("the hall from november, marcin's", diff(upd("d_marcin_hall", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="hall", linked_to="$marcin_l", where="status = open")]))
-
 S("T31-135", "ask-no-referent cancel physio twelfth",
   T("cancel it", ask(),
     ref=[askc("Which one should I cancel?")]),

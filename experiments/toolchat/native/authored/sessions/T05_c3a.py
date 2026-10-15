@@ -42,14 +42,6 @@ S("T05-A007", "follow-up c3a",
   T("what about the rest of the week", rows("tc_0124", "night_0123", "movie", "cric_0125", "night_0124"),
     ref=[ans(within="@1", exclude="@2")]))
 
-S("T05-A008", "follow-up c3a",
-  T("who do i owe", rows("d_jaya", "d_divya_s", "d_revathi", "d_ramesh_mama", "d_appa"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("those but not the scooty one", rows("d_ramesh_mama", "d_divya_s", "d_revathi", "d_jaya"),
-    ref=[ans(within="@prev", exclude="$d_appa")]),
-  T("which is the biggest", rows("d_ramesh_mama"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T05-A009", "follow-up c3a",
   T("what's in the icu notebook", rows("noradr", "sedation", "vap", "abg", "handover"),
     ref=[ans(kind="note", linked_to="$icu_nb")]),

@@ -8,8 +8,6 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 OPEN = 'status = "open"'
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 WEEKEND = span(U("week", 0, weekday=6), U("week", 0, weekday=7))
 NEXT_WEEKEND = span(U("week", 1, weekday=6), U("week", 1, weekday=7))
 X("T28-129",
@@ -18,22 +16,6 @@ X("T28-129",
   T("ok add a task, check flight prices for brisbane, due monday",
     diff(new("task", name=has("brisbane"), date="2026-02-23")),
     ref=[act("create", args=lines(kind="task", name="Check flight prices for Brisbane", date=U("week", 1, weekday=1)))]))
-
-S("T28-003-P", "add_to person where secretary tangi group para",
-  T("the marae secretary is doing the koha list, so she joins Uncle Hohepa's tangi group",
-    diff(link("tangi_g", "huia")),
-    ref=[act("add_to", kind="person", where='role contains "secretary"', args=lines(to="$tangi_g"))]),
-  T("where do she and i stand", val((-30, "NZD")),
-    ref=[ans(op="balance", rows="$huia")]))
-
-S("T28-007-P", "create group add_to person new delete group new para",
-  T("set up a Brisbane footy tickets group", diff(new("group", name="Brisbane footy tickets"), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Brisbane footy tickets"))]),
-  T("rawiri goes in it", diff(link("+1", "rawiri")),
-    ref=[act("add_to", rows="$rawiri", args=lines(to="$c1"))]),
-  T("he's sorting the tickets himself, so get rid of it",
-    diff(gone("+1"), unlink("+1", "me"), unlink("+1", "rawiri")),
-    ref=[act("delete", rows="$c1")]))
 
 S("T28-012-P", "create task delete task new undo delete para",
   T("on thursday i must ring Kevin about the lunch, add it to my tasks",
@@ -215,15 +197,6 @@ S("T28-113-P", "reveal portal reveal wifi verb wifi read star para",
     ref=[ans(kind="locker item", name="Marae wifi")]),
   T("i'm in the trust portal weekly, give it a star", diff(upd("trust_portal", starred=True)),
     ref=[act("star", kind="locker item", name="Marae trust portal")]))
-
-S("T28-120-P", "ask options ngata log group balance positive para",
-  T("i dropped off the koha, put a visit with ngata in the log", ask("pita", "tui"),
-    ref=[act("log", kind="person", name="Ngata", args=lines(kind="visit")),
-         askc("pita or tui?", options="$pita, $tui")]),
-  T("pita's the one", diff(upd("pita", date=ANY)),
-    ref=[act("log", rows="$pita", args=lines(kind="visit"))]),
-  T("his standing in the tangi group?", val((675, "NZD")),
-    ref=[ans(op="balance", kind="group", name="Uncle Hohepa's tangi", linked_to="$pita")]))
 
 S("T28-124-P", "weekend duration repair reschedule at time para",
   T("this weekend, count the events lasting more than two hours", val(2),

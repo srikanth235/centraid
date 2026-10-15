@@ -43,14 +43,6 @@ S("T14-A007", "follow-up c3a",
   T("and everything else", rows("lunch_mae", "physio_1029", "fut_1029", "landlord", "kleber_1030", "accountant"),
     ref=[ans(within="@1", exclude="@2")]))
 
-S("T14-A008", "follow-up c3a",
-  T("what do i owe", rows("d_wesley", "d_junior", "d_nath", "d_marcos_t", "d_patricia"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("those but not the haircut", rows("d_marcos_t", "d_patricia", "d_junior", "d_nath"),
-    ref=[ans(within="@prev", exclude="$d_wesley")]),
-  T("and the biggest one", rows("d_junior"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T14-A009", "follow-up c3a",
   T("what's left on the mãe list", rows("plan_11", "mae_split", "mae_rail", "mae_exam", "mae_plan", "mae_meds"),
     ref=[ans(kind="task", linked_to="$mae_l", where="status = open")]),

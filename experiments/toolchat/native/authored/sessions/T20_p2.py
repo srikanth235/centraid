@@ -6,9 +6,6 @@ NOW = W({"from": U("day", 0)})
 TOMORROW = W({"from": U("day", 1)})
 THIS_WEEK = W(U("week", 0))
 NEXT_MONTH = W(U("month", 1))
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-BIG2 = find(kind="debt", where=IOWE, order="amount desc", limit=2)
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
@@ -32,25 +29,6 @@ S("T20-121-P", "wifi bare read then reveal home wifi para",
     ref=[ans(kind="locker item", name="home wifi")]),
   T("guests need the wifi, give me the home wifi password", diff(reveal=[("wifi_home", "oltrarno-2024")]),
     ref=[act("reveal", kind="locker item", name="Home wifi Via Romana", args=lines(field="password"))]))
-
-S("T20-127-P", "group balances stefano bea lorenzo gallo para",
-  T("stefano's position in the club fund", val((-90, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Ciclisti del Mugnone", linked_to="$stefano")]),
-  T("bea's?", val((-60, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Ciclisti del Mugnone", linked_to="$bea")]),
-  T("how does lorenzo gallo stand in the staff dinner fund", val((-50, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Staff dinner fund", linked_to="$lorenzo_g")]))
-
-S("T20-134-P", "sum owed hard then min effort wedding list typo then max effort then latest note para",
-  T("total of what people owe me at present, curtain fabric money from giulia included",
-    val((230, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=OWED)]),
-  T("wedding list: lowest effort estimate", val(60),
-    ref=[ans(op="min", field="effort", kind="task", linked_to="$wedding_l", where='status = "open"')]),
-  T("highest effort on that list, i think wine pairing", val(120),
-    ref=[ans(op="max", field="effort", kind="task", linked_to="$wedding_l", where='status = "open"')]),
-  T("newest note of mine", rows("boxes_count"),
-    ref=[ans(kind="note", order="date desc", limit=1)]))
 
 S("T20-140-P", "latest documents then unbounded typo then ask delete tasting notes never mind then sum tasks para",
   T("latest two documents of mine", rows("scan_2", "scan_1", order=True),

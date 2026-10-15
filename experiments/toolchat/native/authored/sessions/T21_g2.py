@@ -45,39 +45,6 @@ S("T21-119", "kevin naomi visit prev reschedule star",
   T("wifi pw in the locker?", rows("wifi"),
     ref=[ans(kind="locker item", name="wifi")]))
 
-S("T21-120", "peter balance ask pick log",
-  T("what does peter owe me", ask("peter_k", "peter_o"),
-    ref=[find(kind="person", name="Peter"),
-         askc("peter kariuki from the BOM or peter otieno from church?", options="$peter_k, $peter_o")]),
-  T("the bom chairman", val((450, "KES")),
-    ref=[ans(op="balance", rows="$peter_k")]),
-  T("log a call with him, we talked about the agenda", diff(upd("peter_k", date=ANY)),
-    ref=[act("log", rows="$peter_k", args=lines(kind="call"))]),
-  T("star the other peter too", diff(upd("peter_o", starred=True)),
-    ref=[act("star", rows="$peter_o")]))
-
-S("T21-121", "balance named kevin fundi search joseph weather weekend",
-  T("what do i owe kevin", val((-7000, "KES")),
-    ref=[ans(op="balance", kind="person", name="Kevin")]),
-  T("and fundi?", val((-4500, "KES")),
-    ref=[search("fundi", kind="person"), ans(op="balance", rows="@prev")]),
-  T("joseph?", val((-650, "KES")),
-    ref=[ans(op="balance", kind="person", name="Joseph")]),
-  T("what's the weather in nakuru this weekend", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]))
-
-S("T21-122", "balance alice mary susan family group",
-  T("how do i stand with alice", val((3000, "KES")),
-    ref=[ans(op="balance", kind="person", name="Alice")]),
-  T("and mary achieng", val((1500, "KES")),
-    ref=[ans(op="balance", kind="person", name="Mary Achieng")]),
-  T("susan?", val((-500, "KES")),
-    ref=[ans(op="balance", kind="person", name="Susan")]),
-  T("where does brian stand in the family", val((-4000, "KES")),
-    ref=[ans(op="balance", kind="group", name="Mwangi family", linked_to="$brian")]),
-  T("how many chama meetings are left this year", val(3),
-    ref=[ans(op="count", kind="event", name="Chama meeting", when=W({"from": U("day", 0)}))]))
-
 S("T21-125", "fees documents star ask pick unstar",
   T("star the fees doc", ask("fee_structure", "arrears_list", "shiru_receipt"),
     ref=[act("star", kind="document", name="fee"),

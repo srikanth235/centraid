@@ -177,13 +177,6 @@ fn the_end_of_the_day_and_the_rest_of_today_are_today_only() {
     }
 }
 
-fn vault_of(session: &mut centraid_nativetools::Session, message: &str) -> String {
-    session.user(message)["preground"]
-        .as_str()
-        .unwrap_or_default()
-        .to_owned()
-}
-
 // ---------------------------------------------------------------------------------------------
 // F7: `=` with a plain word on a free-text field reads as contains when equality finds nothing
 

@@ -3,8 +3,6 @@ import json
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 WEEKEND = {"from": U("week", 0, weekday=6), "to": U("week", 0, weekday=7)}
@@ -12,7 +10,6 @@ NEXT_WEEKEND = {"from": U("week", 1, weekday=6), "to": U("week", 1, weekday=7)}
 def J(d):
     return json.dumps(d, separators=(",", ":"))
 LIVE = 'status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
 LIVE_EV = 'status != "cancelled"'
 def next_ivan():
     return find(kind="event", name="Ivan's lesson", when=W({"from": U("day", 0)}), order="date asc", limit=1)
@@ -29,12 +26,6 @@ S("T17-001-P", "trashed people find-only restore multi restore window ask para",
     ref=[find(kind="person", name="Ognyan", trashed=True),
          bad(act("restore", rows="$ognyan")),
          askc("ognyan's been in the bin since november, past the 30 days, so he can't be restored. add him again as a new contact?")]))
-
-S("T17-006-P", "settle_up where balance after para",
-  T("viktor's costs: settle up with my ex-husband", diff(settle=[("Stefan Petrov", "60.00")]),
-    ref=[act("settle_up", kind="person", where='role contains "ex-husband"', args=lines(group="$viktor_costs"))]),
-  T("where does he stand in that group", val((0, "BGN")),
-    ref=[ans(op="balance", kind="group", name="Viktor's costs", linked_to="$stefan")]))
 
 S("T17-011-P", "events next week cancel multi para",
   T("next week, anything lined up", rows("walkthrough", "vesi_reh", "ivan_0202", "ptm", "choir_0203", "dentist_v", "maria_0204",
@@ -144,15 +135,6 @@ S("T17-080-P", "single photos week to time para",
   T("this week's photos until 1pm today", rows("piano_keys", "whiteboard", "vesi_duo", "lunch_p"),
     ref=[ans(kind="photo", when=W(span(U("week", 0), U("day", 0, time="13:00"))))]))
 
-S("T17-086-P", "act ambiguous koleva ask options log debt span para",
-  T("had a lesson with koleva, log it", ask("maria_k", "desi"),
-    ref=[act("log", kind="person", name="Koleva", args=lines(kind="visit")),
-         askc("maria koleva or desislava koleva?", options="$maria_k, $desi")]),
-  T("the adult student, maria", diff(upd("maria_k", date=ANY)),
-    ref=[act("log", rows="$maria_k", args=lines(kind="visit"))]),
-  T("her debts to me from december until the fifteenth at 6pm", rows("d_maria_k"),
-    ref=[ans(kind="debt", linked_to="$maria_k", when=W(span(U("month", -1, name=12), D("2026-01-15", "18:00"))))]))
-
 S("T17-091-P", "six turns photos span trashed restore window ask delete photo undo album count para",
   T("nov twenty-second 9am to end of november, photos", rows("plovdiv_old", "plovdiv_theatre", "plovdiv_mama"),
     ref=[ans(kind="photo", when=W(span(D("2025-11-22", "09:00"), U("month", -1, name=11))))]),
@@ -167,20 +149,6 @@ S("T17-091-P", "six turns photos span trashed restore window ask delete photo un
     ref=[act("undo")]),
   T("albums holding at most three photos", rows("recital24", "plovdiv_album", "vienna_album"),
     ref=[ans(kind="album", where="photo count <= 3")]))
-
-S("T17-097-P", "five turns rehearsal count span starred != group balance empty recovery nickname log para",
-  T("counting choir rehearsals, february onward, stopping at the vienna trip on apr seventeenth at 6am", val(6),
-    ref=[ans(op="count", kind="event", name="Choir rehearsal",
-             when=W(span(U("month", 0, name=2), D("2026-04-17", "06:00"))))]),
-  T("chamber choir fund members without a star", rows("ani", "desi", "me", "hristo", "tsvetan"),
-    ref=[ans(kind="person", linked_to="$choir_fund", where="starred != yes")]),
-  T("tsvetan's balance in the fund", val((-20, "BGN")),
-    ref=[ans(op="balance", kind="group", name="Chamber choir fund", linked_to="$tsvetan")]),
-  T("personally, does he owe me anything", val((0, "BGN")),
-    ref=[ans(op="balance", rows="$tsvetan")]),
-  T("desi and i grabbed a coffee after rehearsal, note it down", diff(upd("desi", date=ANY)),
-    ref=[find(kind="person", name="Desi"), search("desi", kind="person"),
-         act("log", rows="$desi", args=lines(kind="coffee"))]))
 
 S("T17-A003-P", "ask-options task complete c3a para",
   T("choosing the piece is done", ask("piece_kalina", "piece_boris"),

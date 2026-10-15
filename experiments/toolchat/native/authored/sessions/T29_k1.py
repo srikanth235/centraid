@@ -40,12 +40,6 @@ S("T29-K101", "family word dad aunt role i3skill S6",
   T("and my aunt", rows("aunt_atieno"),
     ref=[ans(kind="person", where='role = "aunt"')]))
 
-S("T29-K102", "iou debt both directions same person i3skill S6",
-  T("any ious with wambui", rows("d_wambui_wifi", "d_wambui_tokens"),
-    ref=[ans(kind="debt", linked_to="$wambui")]),
-  T("and with kip", rows("d_kip"),
-    ref=[ans(kind="debt", linked_to="$kip")]))
-
 S("T29-K103", "a note about body search then what else in notebook i3skill S6",
   T("that note about the chimney", rows("karen_site3"),
     ref=[ans(kind="note", where='body contains "chimney"')]),

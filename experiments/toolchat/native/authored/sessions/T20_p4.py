@@ -8,8 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 LEFT = 'status = "open"'
 
 S("T20-201", "both add_to folder scans both star lorenzos",
@@ -21,16 +19,6 @@ S("T20-201", "both add_to folder scans both star lorenzos",
     ref=[ans(kind="person", name="Lorenzo")]),
   T("star both", diff(upd("lorenzo_r", starred=True), upd("lorenzo_g", starred=True)),
     ref=[act("star", rows="@prev")]))
-
-S("T20-203", "owe direction positive balance negative balance settle mine sum",
-  T("what does stefano owe me", val((100, "EUR")),
-    ref=[ans(op="balance", rows="$stefano")]),
-  T("and my side with gianni", val((-150, "EUR")),
-    ref=[ans(op="balance", rows="$gianni")]),
-  T("settle mine with him, paid on the spot", diff(upd("d_gianni", status="settled")),
-    ref=[act("settle_debt", kind="debt", where=IOWE, linked_to="$gianni")]),
-  T("what do i owe now", val((345, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=IOWE)]))
 
 S("T20-204", "except cancel wine briefings then move the remaining one",
   T("wine briefings in june", rows("brief_0602", "brief_0609", "brief_0616", "brief_0623", "brief_0630"),

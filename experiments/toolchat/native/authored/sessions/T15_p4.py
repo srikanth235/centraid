@@ -8,9 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-OWED = 'direction = "owes_me" and status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
-
 S("T15-201", "both bills reschedule prev weekday read",
   T("which bills haven't i paid yet", rows("power_11", "cabin_el_11"),
     ref=[find(kind="task", name="Pay", where='status = "open"'), ans(rows="@prev")]),

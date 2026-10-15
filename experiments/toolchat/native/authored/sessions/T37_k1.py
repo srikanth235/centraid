@@ -26,12 +26,6 @@ S("T37-K003", "decline no field steps then read i3skill S5",
   T("when's the gaa agm", rows("gaa_agm"),
     ref=[ans(kind="event", name="GAA AGM")]))
 
-S("T37-K004", "decline text then debt read i3skill S5",
-  T("text declan i'm on the way", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("what's the debt with him about", rows("d_declan"),
-    ref=[ans(kind="debt", linked_to="$declan")]))
-
 S("T37-K005", "decline not_found photos find then search i3skill S5",
   T("any photos from the camino", decline("not_found"),
     ref=[find(kind="photo", name="camino"), search("camino", kind="photo"), dec("not_found")]))
@@ -49,12 +43,6 @@ S("T37-K102", "list word is a note name not the list kind i3skill S6",
     ref=[ans(kind="note", name="Medication list")]),
   T("any note about the puck-outs", rows("gaa_match1"),
     ref=[ans(kind="note", where='body contains "puck-outs"')]))
-
-S("T37-K103", "iou debt either direction i3skill S6",
-  T("any ious with gerry", rows("d_gerry"),
-    ref=[ans(kind="debt", linked_to="$gerry")]),
-  T("and tadhg", rows("d_tadhg"),
-    ref=[ans(kind="debt", linked_to="$tadhg")]))
 
 S("T37-K104", "diary entry means note i3skill S6",
   T("my diary entries", rows("diary_walk", "diary_cian"),

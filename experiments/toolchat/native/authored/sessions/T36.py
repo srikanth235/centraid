@@ -8,19 +8,6 @@ def J(d):
     return json.dumps(d, separators=(",", ":"))
 
 
-S("T36-001", "relation chain group event role exclude besides in-laws",
-  T("which in-laws from the settle-up group were at the sangeet", rows("sneha"),
-    ref=[ans(kind="person", linked_to="$wedding, $sangeet", where='role contains "in-law"')]),
-  T("and the pune wedding", rows("baba"),
-    ref=[ans(kind="person", linked_to="$wedding, $wedding_day", where='role contains "in-law"')]),
-  T("everyone at the sangeet besides sneha", rows("kunal", "rohan_m"),
-    ref=[ans(kind="person", linked_to="$sangeet", exclude="$sneha")]),
-  T("make a group called sangeet crew in rupees with those two",
-    diff(new("group", name=has("sangeet"), currency="INR"), link("new", "me"), link("new", "kunal"),
-         link("new", "rohan_m")),
-    ref=[act("create", kind="group", args="name: Sangeet crew\ncurrency: INR", more=True),
-         act("add_to", rows="$kunal, $rohan_m", args="to: $new")]))
-
 S("T36-002", "subtasks open within before sum multi-write reschedule",
   T("what's left on anju's name change", rows("nc_aadhaar", "nc_pan", "nc_bank", "nc_passport"),
     ref=[ans(kind="task", linked_to="$name_change", where="status = open")]),
@@ -37,17 +24,6 @@ S("T36-002", "subtasks open within before sum multi-write reschedule",
     ref=[act("create", kind="task", args=lines(name="Passport photos", date=D("2026-12-28"),
                                                 parent="$name_change"), more=True),
          ans(op="count", kind="task", linked_to="$name_change", where="status = open")]))
-
-S("T36-003", "debts sum within settle_debt owes_me",
-  T("add up all my open debts, the ones i owe", val((107490, "INR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open")]),
-  T("which of those debts are over 25000", rows("d_vikram", "d_baba", "d_rohan_m"),
-    ref=[ans(within="@prev", where="amount > 25000")]),
-  T("paid the photographer share, bunty's", diff(upd("d_rohan_m", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="photographer share")]),
-  T("and the largest amount owed to me", val((20000, "INR")),
-    ref=[comp(op="max", field="amount", kind="debt", where="direction = owes_me and status = open"),
-         ans(value="@prev")]))
 
 S("T36-004", "weekend events within person besides",
   T("whats on this weekend", rows("badm_1212", "office_party", "callm_1213", "catchup_bunty"),

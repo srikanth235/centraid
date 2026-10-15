@@ -23,13 +23,6 @@ S("T06-A003", "ask-options event reschedule c3a",
   T("and the setlists one's done, tick it off", diff(upd("setlists", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="setlists")]))
 
-S("T06-A005", "ask-options debt settle_debt c3a",
-  T("settle the tickets", ask("d_jonask_bvg", "d_sophie_train"),
-    ref=[act("settle_debt", kind="debt", name="tickets"),
-         askc("Jonas's tram tickets (you owe 8) or Sophie's Harz train tickets (she owes you 27.80)?", options="$d_jonask_bvg, $d_sophie_train")]),
-  T("jonas, tram tickets", diff(upd("d_jonask_bvg", status="settled")),
-    ref=[act("settle_debt", rows="$d_jonask_bvg")]))
-
 S("T06-A006", "ask-options event cancel never_mind c3a",
   T("cancel the tonkeller soundcheck", ask("sc_0213", "sc_0306"),
     ref=[act("cancel", kind="event", name="Soundcheck Tonkeller"),
@@ -55,14 +48,6 @@ S("T06-A008", "follow-up c3a",
     ref=[ans(within="@prev", where="effort > 30")]),
   T("any of those priority 1", rows("vat"),
     ref=[ans(within="@prev", where="priority = 1")]))
-
-S("T06-A009", "follow-up c3a",
-  T("which people owe me", rows("d_paul_session", "d_hannah_b", "d_mira_pizza", "d_kalle_beer", "d_kalle_strings", "d_sophie_train"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 25", rows("d_paul_session", "d_sophie_train"),
-    ref=[ans(within="@prev", where="amount > 25 EUR")]),
-  T("and the other ones", rows("d_hannah_b", "d_kalle_strings", "d_mira_pizza", "d_kalle_beer"),
-    ref=[ans(within="@1", exclude="@2")]))
 
 S("T06-A010", "follow-up c3a",
   T("what's in the contracts folder", rows("fest_contract", "theatre_contract", "rybka_contract"),

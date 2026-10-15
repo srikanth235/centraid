@@ -22,13 +22,6 @@ S("T16-A003", "ask-options event reschedule c3a",
   T("and the blankets one's done, tick it off", diff(upd("blanket", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="blankets")]))
 
-S("T16-A005", "ask-options debt settle_debt c3a",
-  T("settle the kitty one", ask("d_babu", "d_jewel"),
-    ref=[act("settle_debt", kind="debt", name="kitty"),
-         askc("Babu's kitty for November or Jewel's kitty for December?", options="$d_babu, $d_jewel")]),
-  T("babu's, he paid the cash at the factory", diff(upd("d_babu", status="settled")),
-    ref=[act("settle_debt", rows="$d_babu")]))
-
 S("T16-A006", "ask-options note delete never_mind c3a",
   T("delete the eid gifts note", ask("eid24_gifts", "eid25_gifts"),
     ref=[act("delete", kind="note", name="gifts"),
@@ -53,14 +46,6 @@ S("T16-A008", "follow-up c3a",
     ref=[ans(within="@prev", when=J({"from": U("week", 1, weekday=4)}))]),
   T("drop the first two", rows("prod_1227", "wedding"),
     ref=[ans(within="@prev", exclude="$holud, $nets_1225")]))
-
-S("T16-A009", "follow-up c3a",
-  T("what am i owing", rows("d_mizan", "d_selim", "d_masud", "d_sohel", "d_monir"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("which of those are over 1000", rows("d_masud", "d_mizan"),
-    ref=[ans(within="@prev", where="amount > 1000 BDT")]),
-  T("and the biggest one", rows("d_masud"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
 
 S("T16-A010", "follow-up c3a",
   T("show me the tigers album", rows("scoreboard", "team_2026", "rahim_wickets", "nets_rain", "trophy", "tanvir_bat", "team_2025"),

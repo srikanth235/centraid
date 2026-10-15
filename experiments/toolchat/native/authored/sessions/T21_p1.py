@@ -6,8 +6,6 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 OPEN = 'status = "open"'
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
@@ -27,20 +25,6 @@ S("T21-018-P", "create notebook add_to note para",
   T("that note on the harambee target belongs in there now", diff(unlink("church_nb", "harambee_target"), link("+1", "harambee_target")),
     ref=[act("add_to", kind="note", name="Harambee target", args=lines(to="$c1"))]))
 
-S("T21-023-P", "compute max debt direction para",
-  T("in each direction, what's the largest open debt", vgroups({"owes_me": (15000, "KES"), "i_owe": (4500, "KES")}),
-    ref=[comp(op="max", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]),
-  T("who does the 15000 belong to", rows("d_brian"),
-    ref=[ans(kind="debt", where='amount = 15000')]),
-  T("mark Rent deposit Eldoret as settled, brian paid me back", diff(upd("d_brian", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Rent deposit Eldoret")]),
-  T("of what people owe me, which is the biggest", val((2000, "KES")),
-    ref=[ans(op="max", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("either direction, what's the tiniest open amount", vgroups({"owes_me": (500, "KES"), "i_owe": (500, "KES")}),
-    ref=[comp(op="min", field="amount", kind="debt", where='status = "open"', group="direction"),
-         ans(value="@prev")]))
-
 S("T21-028-P", "event named month within duration para",
   T("what do i have in july", rows("brief_0706", "brief_0713", "brief_0720", "brief_0727", "chama_07", "parents_day",
                              "brian_grad", "shiru_halfterm", "ruracio"),
@@ -59,10 +43,6 @@ S("T21-038-P", "document to datetime folder count para",
     ref=[ans(kind="document", linked_to="$fees_f", when={"to": D("2026-06-01", "11:00")})]),
   T("what's the total number of docs in there", val(3),
     ref=[ans(op="count", kind="document", linked_to="$fees_f")]))
-
-S("T21-044-P", "single debt span month date status settled para",
-  T("settled debts only, from march up to the fifteenth of may, got any", rows("d_tabby"),
-    ref=[ans(kind="debt", when=span(U("month", 0, name=3), D("2026-05-15")), where='status = "settled"')]))
 
 S("T21-048-P", "event overlap refused ask create para",
   T("i've got choir concert on the twenty-first from 2 to 4pm, put it in", ask(),
@@ -92,16 +72,6 @@ S("T21-061-P", "locker notes type sealed_egress read para",
     ref=[dec("sealed_egress")]),
   T("alright, what username is on it", rows("nemis"),
     ref=[ans(rows="$nemis")]))
-
-S("T21-065-P", "star multi find para",
-  T("the book fair was carried by Collins Omondi and Janet Akinyi, give them stars", diff(upd("collins", starred=True), upd("janet", starred=True)),
-    ref=[act("star", rows="$collins, $janet")]),
-  T("among the starred, which are teachers", rows("mary_w", "collins", "janet"),
-    ref=[ans(kind="person", where='starred = yes and role contains "teacher"')]),
-  T("look up everyone in the Mwangi family", rows("kevin", "brian", "naomi", "me"),
-    ref=[find(kind="person", linked_to="$family"), ans(rows="@prev")]),
-  T("i sent naomi the grad plan, log it as a message with her", diff(upd("naomi", date=ANY)),
-    ref=[act("log", rows="$naomi", args=lines(kind="message"))]))
 
 S("T21-069-P", "delete task named undo delete para",
   T("get rid of Check pension statement, TSC dealt with it", diff(trash("pension")),
@@ -159,35 +129,6 @@ S("T21-088-P", "event month spans empty count para",
   T("how many events do i have from july on", val(11),
     ref=[ans(op="count", kind="event", when={"from": U("month", 0, name=7)})]))
 
-S("T21-094-P", "five turns ambiguous mary peter ask log star balance para",
-  T("put a call with mary in the log", ask("mary_w", "mary_a"),
-    ref=[act("log", kind="person", name="Mary", args=lines(kind="call")),
-         askc("mary wambui (deputy) or mary achieng (chama treasurer)?", options="$mary_w, $mary_a")]),
-  T("treasurer one", diff(upd("mary_a", date=ANY)),
-    ref=[act("log", rows="$mary_a", args=lines(kind="call"))]),
-  T("peter too, star him", ask("peter_k", "peter_o"),
-    ref=[act("star", kind="person", name="Peter"),
-         askc("peter kariuki from the BOM or peter otieno from church?", options="$peter_k, $peter_o")]),
-  T("from church", diff(upd("peter_o", starred=True)),
-    ref=[act("star", rows="$peter_o")]),
-  T("what's the position between me and Peter Otieno", val((500, "KES")),
-    ref=[ans(op="balance", rows="$peter_o")]))
-
-S("T21-A005-P", "ask-options debt settle_debt c3a para",
-  T("deposit, mark it settled", ask("d_brian", "d_susan"),
-    ref=[act("settle_debt", kind="debt", name="deposit"),
-         askc("Brian's rent deposit in Eldoret (he owes you 15000) or Susan's choir robe deposit (you owe 500)?", options="$d_brian, $d_susan")]),
-  T("the brian one, paid via mpesa", diff(upd("d_brian", status="settled")),
-    ref=[act("settle_debt", rows="$d_brian")]))
-
-S("T21-A009-P", "follow-up c3a para",
-  T("who owes me money", rows("d_peter_o", "d_alice", "d_rose", "d_mary_a", "d_brian"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("over 1000 among those", rows("d_peter_o", "d_alice", "d_brian"),
-    ref=[ans(within="@prev", where="amount > 1000 KES")]),
-  T("and the others?", rows("d_mary_a", "d_rose"),
-    ref=[ans(within="@1", exclude="@2")]))
-
 S("T21-B005-P", "c4b state-change cancel event restore trashed task para",
   T("they've called off the county meeting", diff(upd("county_meet", status="cancelled")),
     ref=[act("cancel", kind="event", name="County education meeting")]),
@@ -200,17 +141,6 @@ S("T21-C004-P", "c3c compound three writes star unstar add_to documents para",
     ref=[act("star", kind="document", name="Survey map", more=True),
          act("unstar", kind="document", name="title deed", more=True),
          act("add_to", kind="document", name="TSC payslip", args=lines(to="$receipts_f"))]))
-
-S("T21-103-P", "mwangi balance ask pick settle_debt para",
-  T("mwangi, where do we stand", ask("kevin", "brian"),
-    ref=[find(kind="person", name="Mwangi"),
-         askc("kevin or brian?", options="$kevin, $brian")]),
-  T("younger", val((15000, "KES")),
-    ref=[ans(op="balance", rows="$brian")]),
-  T("rent deposit's been paid, cash, so settle that", diff(upd("d_brian", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Rent deposit Eldoret")]),
-  T("record a message to him in the log, we're square", diff(upd("brian", date=ANY)),
-    ref=[act("log", rows="$brian", args=lines(kind="message"))]))
 
 S("T21-113-P", "equity locker star ask pick unstar fabricated pin para",
   T("equity one gets a star", diff(upd("equity_acc", starred=True)),

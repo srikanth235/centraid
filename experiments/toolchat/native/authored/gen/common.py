@@ -235,7 +235,6 @@ FAMILIES: list[tuple[str, str]] = [
     ("repeated_call", r"^error: repeated call"),
     ("undo_nothing", r"^error: nothing to undo"),
     ("rows_needed", r"^error: act needs rows=#n or a selector"),
-    ("balance_person", r"^error: (balance is for one person|a group's balance is one person's|balance is defined for)"),
     ("args_not_taken", r"^error: \w+ takes no args"),
     ("param_not_taken", r"^error: \w+ (has no parameter|takes no \w+ parameter)"),
     ("verb_unknown", r"^error: no verb"),

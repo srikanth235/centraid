@@ -10,7 +10,7 @@ studio. Built-in ambiguity: two Marcs (hiking organiser, landlord), two Sarahs (
 product manager), nicknames (Gaby, Jess, Zozo), a misspelled-looking name (Matthieu), two
 "Dentist" events, a recurring "Book club" and "Mika handoff", near-duplicate tasks ("Send Daniel
 the receipts", "Submit expense report", monthly "Pay Hydro bill"), cancelled events, completed
-tasks, rows trashed inside and past the 30-day restore window, an empty group, an empty folder, an
+tasks, rows trashed inside and past the 30-day restore window, an empty folder, an
 empty album, empty notebooks and an empty list.
 """
 from __future__ import annotations
@@ -82,39 +82,6 @@ def people():
         {"key": "brad", "name": "Brad Wilson", "role": "Daniel's friend", "trashed": "2026-08-15T09:00"},
     ]
 
-
-GROUPS = [
-    {"key": "mika_exp", "name": "Mika expenses", "currency": "CAD", "members": ["daniel"],
-     "created": "2026-06-05T20:00"},
-    {"key": "hiking", "name": "Sentiers hiking", "currency": "CAD",
-     "members": ["marc_g", "nadia", "tom", "elise"], "created": "2025-05-10T09:00"},
-    {"key": "bookclub", "name": "Book club kitty", "currency": "CAD",
-     "members": ["sarah_c", "ines", "rachel", "gab"], "created": "2025-09-18T21:00"},
-    {"key": "vermont", "name": "Vermont weekend", "currency": "USD", "members": ["nadia", "tom"],
-     "created": "2026-08-10T19:00"},
-    {"key": "lunch_club", "name": "Lumen lunch club", "currency": "CAD", "members": ["olivier", "priya", "jess"],
-     "created": "2026-03-02T12:00"},
-    {"key": "halloween", "name": "Halloween party fund", "currency": "CAD", "created": "2026-10-05T20:00"},
-]
-
-EXPENSES = [
-    {"group": "mika_exp", "name": "Summer camp", "amount": 360, "paid_by": "me", "split": ["me", "daniel"],
-     "date": "2026-07-02"},
-    {"group": "mika_exp", "name": "Piano books", "amount": 90, "paid_by": "daniel", "split": ["me", "daniel"],
-     "date": "2026-09-09"},
-    {"group": "mika_exp", "name": "Winter boots", "amount": 129, "paid_by": "me", "split": ["me", "daniel"],
-     "date": "2026-10-06"},
-    {"group": "hiking", "name": "Tremblant cabin", "amount": 480, "paid_by": "tom",
-     "split": ["me", "tom", "nadia", "marc_g"], "date": "2026-09-20"},
-    {"group": "hiking", "name": "Gas to Orford", "amount": 76, "paid_by": "me", "split": ["me", "nadia"],
-     "date": "2026-09-26"},
-    {"group": "bookclub", "name": "Wine and cheese", "amount": 60, "paid_by": "sarah_c",
-     "split": ["me", "sarah_c", "ines", "rachel", "gab"], "date": "2026-09-17"},
-    {"group": "vermont", "name": "Airbnb in Burlington", "amount": 540, "paid_by": "nadia",
-     "split": ["me", "nadia", "tom"], "date": "2026-08-21"},
-    {"group": "vermont", "name": "Dinner on Church Street", "amount": 150, "paid_by": "me",
-     "split": ["me", "nadia", "tom"], "date": "2026-08-22"},
-]
 
 LISTS = [
     {"key": "home_l", "name": "Home", "area": "home"},
@@ -498,36 +465,6 @@ PHOTOS = [
     {"key": "wedding_p", "name": "Wedding photo", "taken": "2015-06-20T16:00", "trashed": "2026-06-30T10:00"},
 ]
 
-DEBTS = [
-    {"key": "d_daniel_camp", "person": "daniel", "direction": "owes_me", "amount": 180, "name": "Half of summer camp",
-     "date": "2026-07-02"},
-    {"key": "d_daniel_boots", "person": "daniel", "direction": "owes_me", "amount": 64.5,
-     "name": "Half of winter boots", "date": "2026-10-06"},
-    {"key": "d_daniel_piano", "person": "daniel", "direction": "i_owe", "amount": 45, "name": "Half of piano books",
-     "date": "2026-09-09", "settled": "2026-09-20T10:00"},
-    {"key": "d_nadia", "person": "nadia", "direction": "owes_me", "amount": 38, "name": "Gas to Orford",
-     "date": "2026-09-26"},
-    {"key": "d_tom", "person": "tom", "direction": "i_owe", "amount": 120, "name": "Tremblant cabin share",
-     "date": "2026-09-20"},
-    {"key": "d_jess", "person": "jess", "direction": "owes_me", "amount": 22, "name": "Food court lunch",
-     "date": "2026-10-08"},
-    {"key": "d_sarah_c", "person": "sarah_c", "direction": "i_owe", "amount": 15, "name": "Wine for book club",
-     "date": "2026-09-17", "settled": "2026-09-18T09:00"},
-    {"key": "d_kenji", "person": "kenji", "direction": "i_owe", "amount": 300, "name": "Mom's plane ticket",
-     "date": "2026-08-15"},
-    {"key": "d_marc_g", "person": "marc_g", "direction": "owes_me", "amount": 60, "name": "Park passes",
-     "date": "2026-08-30"},
-    {"key": "d_elise", "person": "elise", "direction": "i_owe", "amount": 25, "name": "First aid refill",
-     "date": "2026-10-04"},
-    {"key": "d_gab", "person": "gab", "direction": "owes_me", "amount": 18, "name": "Piranesi copy",
-     "date": "2026-06-12", "settled": "2026-07-01T12:00"},
-    {"key": "d_zoe", "person": "zoe", "direction": "i_owe", "amount": 90, "name": "September babysitting",
-     "date": "2026-09-30"},
-    {"key": "d_priya", "person": "priya", "direction": "owes_me", "amount": 12, "name": "Coffee run",
-     "date": "2026-10-02"},
-    {"key": "d_matthieu", "person": "matthieu", "direction": "owes_me", "amount": 40, "name": "Moving dolly rental",
-     "date": "2026-06-02"},
-]
 
 LOCKER = [
     {"key": "banking", "name": "Online banking", "type": "login", "username": "ytanaka88",
@@ -611,8 +548,6 @@ def world():
         "seed": "T25",
         "currency": "CAD",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -622,7 +557,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

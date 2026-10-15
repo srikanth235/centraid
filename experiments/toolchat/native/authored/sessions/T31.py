@@ -19,18 +19,6 @@ S("T31-001", "shifts follow-up within exclude cancel",
   T("cancel the swap shift next friday, marcin took it", diff(upd("night_swap", status="cancelled")),
     ref=[act("cancel", kind="event", name="swap shift", when=J(U("week", 1, weekday=5)))]))
 
-S("T31-002", "debts kuba settle balance",
-  T("what debts have i got with kuba", rows("d_kuba_gas", "d_kuba_net"),
-    ref=[ans(kind="debt", linked_to="$kuba")]),
-  T("which one's from last month", rows("d_kuba_net"),
-    ref=[ans(within="@prev", when=J(U("month", -1)))]),
-  T("kuba's squared that up, so settle it", diff(upd("d_kuba_net", status="settled")),
-    ref=[act("settle_debt", rows="$d_kuba_net")]),
-  T("and settle my gas share, then tell me where i stand with him",
-    val((20, "PLN"), also=diff(upd("d_kuba_gas", status="settled"))),
-    ref=[act("settle_debt", kind="debt", linked_to="$kuba", where="direction = i_owe", more=True),
-         ans(op="balance", rows="$kuba")]))
-
 S("T31-003", "weekend exclude duration reschedule anchor",
   T("what's on this weekend",
     rows("flat_dinner", "league_1108", "brunch_adi", "mama_1108", "kasia_call"),
@@ -55,31 +43,6 @@ S("T31-004", "due tomorrow list within complete reschedule two-writes",
     diff(upd("gas_pay", status="completed", completed=ANY), upd("fix_shower", date="2026-11-20")),
     ref=[act("complete", rows="$gas_pay", more=True),
          act("reschedule", rows="$fix_shower", args=lines(to=D("2026-11-20")))]))
-
-S("T31-005", "two marcins within complete debts",
-  T("which marcins have i got", rows("marcin_l", "marcin_b"),
-    ref=[ans(kind="person", name="marcin")]),
-  T("which one's the nurse", rows("marcin_b"),
-    ref=[ans(within="@prev", where='role contains "nurse"')]),
-  T("any open tasks about him", rows("swap_shift"),
-    ref=[ans(kind="task", linked_to="$marcin_b", where="status = open")]),
-  T("ok that swap is sorted, tick it off", diff(upd("swap_shift", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$swap_shift")]),
-  T("and where do i stand with the football marcin", val((-115, "PLN")),
-    ref=[ans(op="balance", rows="$marcin_l")]))
-
-S("T31-006", "group members add remove delete undo",
-  T("who's in the stag do group", rows("me", "adrian", "marcin_l"),
-    ref=[ans(kind="person", linked_to="$stag")]),
-  T("add tomek maj to it", diff(link("stag", "tomek_m")),
-    ref=[act("add_to", rows="$tomek_m", args=lines(to="$stag"))]),
-  T("take marcin lis back out", diff(unlink("stag", "marcin_l")),
-    ref=[act("remove_from", rows="$marcin_l", args=lines(from_="$stag"))]),
-  T("actually bin the whole group, adi's doing it differently",
-    diff(gone("stag"), unlink("stag", "me"), unlink("stag", "adrian"), unlink("stag", "tomek_m")),
-    ref=[act("delete", kind="group", name="Adi's Stag Do 2027")]),
-  T("undo that", diff(),
-    ref=[act("undo")]))
 
 S("T31-007", "wifi reveal egress logins starred",
   T("wifi pw?", rows("flat_wifi", "nowysacz_wifi"),
@@ -131,28 +94,6 @@ S("T31-011", "london subtasks sum effort complete",
   T("tick off the pounds on the london trip, got them at the kantor", diff(upd("london_pounds", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="pounds", linked_to="$london_trip")]))
 
-S("T31-012", "group balance substitution person balance settle-debt",
-  T("where am i with the london christmas group", val((2, "GBP")),
-    ref=[search("Tomasz", kind="person"), ans(op="balance", kind="group", name="London Christmas", linked_to="$me")]),
-  T("and kasia?", val((14, "GBP")),
-    ref=[ans(op="balance", kind="group", name="London Christmas", linked_to="$kasia")]),
-  T("net out what me and kasia owe", val((2, "GBP"), (-150, "PLN")),
-    ref=[ans(op="balance", rows="$kasia")]),
-  T("mark what i owe kasia as paid", diff(upd("d_kasia", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$kasia", where="direction = i_owe")]))
-
-S("T31-013", "ward gifts members role balance settle-up",
-  T("who's in ward 4b gifts", rows("me", "marcin_b", "ewa", "magda", "przemek", "anna_w"),
-    ref=[ans(kind="person", linked_to="$ward_gifts")]),
-  T("which of them are nurses", rows("marcin_b", "ewa", "magda", "anna_w"),
-    ref=[ans(within="@prev", where='role contains "nurse"')]),
-  T("what's the balance with ewa", val((-18, "PLN")),
-    ref=[ans(op="balance", rows="$ewa")]),
-  T("settle up with magda in the gifts group", diff(upd("magda", balance=ANY)),
-    ref=[act("settle_up", rows="$magda", args=lines(group="$ward_gifts"))]),
-  T("what events has the ward gifts group got coming up", rows("hospital_party"),
-    ref=[find(kind="event", linked_to="$ward_gifts"), ans(kind="event", name="ward")]))
-
 S("T31-014", "trash tasks restore past-window",
   T("show me the tasks i've thrown away", rows("old_chase", "old_split", "old_book"),
     ref=[ans(kind="task", trashed=True)]),
@@ -191,16 +132,6 @@ S("T31-017", "landlord role search tasks notes documents starred",
   T("star the landlord's boiler report, he sent it over", diff(upd("d_boiler", starred=True)),
     ref=[act("star", kind="document", name="boiler report", linked_to="$landlord"),
          act("star", kind="document", name="boiler report")]))
-
-S("T31-018", "debts owed-to-me month name sum settle",
-  T("what's owed to me from october", rows("d_kuba_net", "d_piotr_balls", "d_michal_balls", "d_adi_tickets"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open", when=J(U("month", -1, name=10)))]),
-  T("just the match balls ones", rows("d_piotr_balls", "d_michal_balls"),
-    ref=[ans(within="@prev", name="match balls")]),
-  T("what do they come to together", val((90, "PLN")),
-    ref=[ans(op="sum", field="amount", within="@prev")]),
-  T("piotr's paid up, settle his", diff(upd("d_piotr_balls", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$piotr")]))
 
 S("T31-019", "ambiguous dentist reschedule pick",
   T("move the dentist to the 26th", ask("dentist_ev", "dentist_ev2"),
@@ -243,13 +174,3 @@ S("T31-024", "five-a-side hall december cancel still-on",
     ref=[act("cancel", kind="event", name="five-a-side", when=J(D("2026-12-08")))]),
   T("is the first of december one still on", rows("fas_1201"),
     ref=[ans(kind="event", name="five-a-side", where="status != cancelled", when=J(D("2026-12-01")))]))
-
-S("T31-025", "two agnieszkas near-name role-met log",
-  T("agnieszka", rows("agnieszka", "agnieszka_n"),
-    ref=[ans(kind="person", name="agnieszka")]),
-  T("the one from the flat", rows("agnieszka_n"),
-    ref=[ans(within="@prev", where='met = "Krakowska flat"')]),
-  T("is the other one in the zakopane group", rows("agnieszka"),
-    ref=[ans(kind="person", name="agnieszka", linked_to="$zakopane", exclude="$agnieszka_n")]),
-  T("log a message with the flat one", diff(upd("agnieszka_n", date=ANY)),
-    ref=[act("log", rows="$agnieszka_n", args="kind: message")]))

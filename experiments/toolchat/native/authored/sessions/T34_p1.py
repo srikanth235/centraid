@@ -9,18 +9,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T34-003-P", "group-event-chain empty members para",
-  T("of the church building fund, which people showed up to last year's harvest thanksgiving", rows("pastor", "funmi", "deacon"),
-    ref=[find(kind="event", name="harvest thanksgiving", when=W(U("year", -1))),
-         ans(kind="person", linked_to="$church_build, $harvest_2026")]),
-  T("umunna group members at the village christmas in 2025?", rows("daddy"),
-    ref=[find(kind="event", name="Christmas in the village", when=W(U("year", -2))),
-         ans(kind="person", linked_to="$village, $village_25")]),
-  T("care fund membership, mama nnukwu included?", rows(),
-    ref=[ans(kind="person", name="Mama Nnukwu", linked_to="$mama_care")]),
-  T("so who's in it", rows("me", "chidi_o", "ngozi_o", "aunty_uche", "blessing"),
-    ref=[ans(kind="person", linked_to="$mama_care")]))
-
 S("T34-007-P", "ambiguous-write ask date-pick still-on substitution para",
   T("bible study's off, cancel it", ask("bs_270623", "bs_270707", "bs_270721"),
     ref=[act("cancel", kind="event", name="Bible study")]),
@@ -124,14 +112,6 @@ S("T34-047-P", "bulk find-then-cancel month name-where para",
     ref=[find(kind="event", name="cement delivery", where="status != cancelled", when=W(U("month", 0, name=7))),
          act("cancel", rows="@1")]))
 
-S("T34-051-P", "recovery photos-group relation delete-photo para",
-  T("chidi's wedding photos with mummy in them",
-    rows("ph_wedding_a_09", "ph_wedding_a_16", "ph_wedding_a_17", "ph_wedding_a_19", "ph_wedding_a_20"),
-    ref=[find(kind="photo", linked_to="$mummy, $wedding"),
-         ans(kind="photo", linked_to="$mummy, $wedding_a")]),
-  T("cake 2 from the wedding album, get rid of that photo", diff(trash("ph_wedding_a_09"), unlink("wedding_a", "ph_wedding_a_09")),
-    ref=[act("delete", kind="photo", name="Cake 2", linked_to="$wedding_a")]))
-
 S("T34-055-P", "ambiguous-write reschedule anchor-row date-pick para",
   T("pta meeting needs to go back a day, same time", ask("pta_270708"),
     ref=[act("reschedule", kind="event", name="PTA meeting", args=lines(to=U("day", 1, anchor="row")))]),
@@ -171,14 +151,6 @@ S("T34-063-P", "delete find-then-delete event-where document-year decline-unboun
     ref=[find(kind="note", name="diary entry", when=W({"to": D("2027-05-31")})),
          act("delete", rows="@prev")]))
 
-S("T34-067-P", "same-word-pick person role-gloss possessor-vs-relation add_to group-target lookalike count para",
-  T("kemi the sunday school teacher needs adding to the church group", diff(link("church_build", "kemi_okonkwo")),
-    ref=[act("add_to", kind="person", name="Kemi", where='role contains "Sunday school"', args=lines(to="$church_build"))]),
-  T("chidi's wedding group should include adaobi", diff(link("wedding", "adaobi")),
-    ref=[act("add_to", kind="person", name="Adaobi", args=lines(to="$wedding"))]),
-  T("church group headcount now?", val(14),
-    ref=[ans(op="count", kind="person", linked_to="$church_build")]))
-
 S("T34-071-P", "create-args locker login username-label url type-implied-wifi inert-purpose star para",
   T("starlink login, user okaforhome, save it",
     diff(new("locker item", name=has("starlink"), type="login", username="okaforhome")),
@@ -191,18 +163,6 @@ S("T34-071-P", "create-args locker login username-label url type-implied-wifi in
     ref=[act("create", kind="locker item", args=lines(name="MTN", type="login", username="obinna.okafor", url="mtn.ng"))]),
   T("starlink one gets a star", diff(upd("+1", starred=True)),
     ref=[act("star", rows="$c1")]))
-
-S("T34-075-P", "create-args album group inert-purpose task container-link list para",
-  T("create an album called nkem's second birthday where the family can add pictures",
-    diff(new("album", name="Nkem's second birthday")),
-    ref=[act("create", kind="album", args=lines(name="Nkem's second birthday"))]),
-  T("anniversary expenses group too, me emeka and chinwe splitting it",
-    diff(new("group", name="Anniversary expenses"), link("new", "me")),
-    ref=[act("create", kind="group", args=lines(name="Anniversary expenses"))]),
-  T("church list needs a task, order banners for the dedication, due friday",
-    diff(new("task", name="Order banners for the dedication", date="2027-06-25"), link("church_l", "new")),
-    ref=[act("create", kind="task", args=lines(name="Order banners for the dedication", date=U("week", 1, weekday=5),
-                                               list_="$church_l"))]))
 
 S("T34-079-P", "verb-choice reschedule make-it-hour no-wait-weekday not-undo bare-attribute edit-duration para",
   T("next friday's stocktake, change it to wednesday", diff(upd("st_270625", date="2027-06-23T16:00")),
@@ -221,14 +181,6 @@ S("T34-083-P", "stop-signals never_mind start-of-message after a read then norma
     ref=[dec("never_mind")]),
   T("paid the cement supplier, mark it complete", diff(upd("cem_270620", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="cement supplier", where="status = open")]))
-
-S("T34-087-P", "set-answers role-exact in-law-namesake within group para",
-  T("cousins, list them",
-    rows("nneka_salami", "efosa_aniekwe", "abubakar_usman", "chisom_onwuka", "chukwuemeka", "lanre_madu", "onyinye_okeke",
-         "somto_ibekwe", "yetunde_ogunleye"),
-    ref=[ans(kind="person", where='role = "cousin"')]),
-  T("the cousins group members among them?", rows("chukwuemeka", "chisom_onwuka", "onyinye_okeke"),
-    ref=[ans(within="@prev", linked_to="$cousins")]))
 
 S("T34-091-P", "container-link-read list-name-collision parent-narrow within linked_to, then in-progress edit para",
   T("church list items still open", rows("church_hall_3", "tithe_270701", "church_hall_1", "church_hall_2", "church_hall"),

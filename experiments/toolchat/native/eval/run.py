@@ -161,7 +161,7 @@ class RefBackend(Backend):
         return StepOut(text=format_call(call["tool"], args), think_cut=False)
 
 
-# The SPEC §14 reading conventions (dates, at-N, diary, wifi, balance sign) are deliberately left out
+# The SPEC §14 reading conventions (dates, at-N, diary, wifi) are deliberately left out
 # of the digest: Sonnet is scored zero-shot, and score.py reports the pass rate without those turns.
 POLICY_DIGEST = """You are the assistant inside a personal vault app. You act ONLY by calling the tools
 described in the system prompt, in exactly the XML format it shows. Every reply is ONE tool call:
@@ -171,7 +171,7 @@ The runtime executes the call and replies with a <tool_response>. `answer`, `ask
 
 Policy (follow it exactly):
 1. Intent: a question about rows -> answer with rows (answer kind/name/where/when..., or answer rows=#n/@n);
-   "how much / how many / total / balance" -> answer op=count|sum|min|max|balance; a change -> act;
+   "how much / how many / total" -> answer op=count|sum|min|max; a change -> act;
    the vault cannot decide between candidates -> ask (options = the #n candidates);
    outside the vault or unsafe -> decline with a reason.
 2. One step when a selector says it all; look first (find/search) when you need to see rows (a pick,
@@ -190,8 +190,7 @@ Policy (follow it exactly):
 10. Writes on targets that exist only in the trash -> decline not_found, unless the person asked to restore.
 11. Never a destructive write from a read phrasing ("is X in the bin?" is a read).
 12. Already-so writes (complete a completed task, star a starred row...): still call act; the runtime answers `already:`.
-13. Group members = kind=person linked_to=<group #n>. `undo` reverts the whole previous turn. Bare amounts
-    are in the vault's default currency.
+13. `undo` reverts the whole previous turn. Bare amounts are in the vault's default currency.
 14. Several writes in one message: each act but the last has more=true. A write to several rows names them all
     in one act. "Do X and tell me Y": act with more=true, then answer.
 15. Surface notes: act/answer/compute name their rows EITHER with rows=#n/@n OR with a selector (kind plus
@@ -199,7 +198,7 @@ Policy (follow it exactly):
     lines, one per line: create takes the kind as the `kind` parameter and only fields in args
     (kind=task, args "name: ...\ndate: {date expr}"); edit "field: value" (rename = "name: ...");
     reschedule "to: {date expr}"; add_to "to: #n"; remove_from "from: #n"; log "kind: call";
-    settle_up "group: #n"; reveal "field: password". Date values are JSON date expressions, never plain text.
+    reveal "field: password". Date values are JSON date expressions, never plain text.
     `when` is only ever a filter on the kind's own date, never a new value. Rows shown before the previous
     turn are compacted: reach them again with find/search or within=@n before picking by #n. An answer
     that matches nothing is a valid answer ("nothing due friday"). `options` of ask and

@@ -45,10 +45,6 @@ S("T26-Q008", "elliptic and the role drops condition i2pat",
   T("and the electricians", rows("chidi", "segun"),
     ref=[ans(kind="person", where='role contains "electrician"')]))
 
-S("T26-Q009", "members of named group find group first i2pat",
-  T("who's in the bonga crew kitty", rows("me", "chidi", "emeka_n", "emeka_o", "musa", "victor", "tunde"),
-    ref=[find(kind="group", name="bonga crew"), ans(kind="person", linked_to="@prev")]))
-
 S("T26-Q010", "is there a kind none not_found ignore near hints i2pat",
   T("is there a poultry folder", decline("not_found"),
     ref=[ans(kind="folder", name="poultry"), dec("not_found")]))
@@ -96,12 +92,6 @@ S("T26-Q019", "do both after read naming action i2pat",
     ref=[ans(kind="task", when=J(D("2026-12-02")))]),
   T("do both", diff(upd("cables", status="completed", completed=ANY), upd("db_board", status="completed", completed=ANY)),
     ref=[act("complete", rows="@prev")]))
-
-S("T26-Q020", "just the descriptive word group of person i2pat",
-  T("which groups is musa in", rows("rig_g", "welfare_g"),
-    ref=[ans(kind="group", linked_to="$musa")]),
-  T("just the welfare one", rows("welfare_g"),
-    ref=[ans(kind="group", linked_to="$musa", name="welfare")]))
 
 S("T26-Q021", "last contact verb person row i2pat",
   T("when did i last speak to mama", rows("mama"),

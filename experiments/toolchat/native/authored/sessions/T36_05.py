@@ -19,12 +19,6 @@ S("T36-091", "container-link-reads list collision within linked_to exclude",
     rows("wrap_gifts_list", "wrap_return_decor", "wrap_pay_caterer", "thanks_cards_old"),
     ref=[ans(kind="task", linked_to="$wedding_list", where="status = completed")]))
 
-S("T36-092", "container-link-reads owner-count person-link groups",
-  T("how many groups am i in", val(6),
-    ref=[ans(op="count", kind="group", linked_to="$me")]),
-  T("which groups is baba in", rows("wedding", "joshi_fund"),
-    ref=[ans(kind="group", linked_to="$baba")]))
-
 S("T36-093", "container-link-reads person-appointments within when",
   T("what do i have coming up with papa", rows("dinner_mummy", "doc_papa", "lohri"),
     ref=[ans(kind="event", linked_to="$papa", when=J({"from": U("day", 0)}))]),
@@ -51,27 +45,11 @@ S("T36-095", "container-link-reads list substitution within",
   T("and anju", rows("nc_bank"),
     ref=[ans(within="@1", linked_to="$anjali")]))
 
-S("T36-096", "stray-conditions people-no-status purpose-clause met-contains",
-  T("who's still in the wedding group, need to chase them for the money",
-    rows("me", "vikram", "rohan_m", "sneha", "kunal", "baba"),
-    ref=[bad(ans(kind="person", linked_to="$wedding", where="status = open")),
-         ans(kind="person", linked_to="$wedding")]),
-  T("which of them are from delhi, for the diwali sweets", rows("vikram", "rohan_m"),
-    ref=[ans(within="@prev", where='met contains "Delhi"')]))
-
 S("T36-097", "stray-conditions by-name-star inert-clause role-noun-name",
   T("star the decorator's invoice, need it for the balance", diff(upd("decor_inv", starred=True)),
     ref=[act("star", rows="$decor_inv")]),
   T("and the photographer contract", diff(upd("photog_contract", starred=True)),
     ref=[act("star", rows="$photog_contract")]))
-
-S("T36-098", "stray-conditions role-noun-in-debt-name direction",
-  T("what do i owe for the caterer", rows("d_vikram"),
-    ref=[ans(kind="debt", name="caterer", where="direction = i_owe")]),
-  T("and for the photographer", rows("d_rohan_m"),
-    ref=[ans(kind="debt", name="photographer", where="direction = i_owe")]),
-  T("and the dj", rows("d_kunal"),
-    ref=[ans(kind="debt", name="dj", where="direction = i_owe")]))
 
 S("T36-099", "stray-conditions met-contains body-contains notebook-name",
   T("who do i know in kothrud, for the guest list", rows("baba", "aai", "sneha", "priest"),
@@ -154,13 +132,6 @@ S("T36-107", "mixed body-append note",
   T("and curtain rods too", diff(upd("flat_shop", body=has("rods", "ladder", "geyser"))),
     ref=[act("edit", rows="$flat_shop",
              args=lines(body="geyser, curtains, an ironing board, a second pressure cooker, a ladder, curtain rods"))]))
-
-S("T36-108", "mixed settle_up amount person",
-  T("settle 4000 with kunal, that's towards the dj",
-    diff(upd("kunal", balance=ANY), settle=[("Kunal", "4000.00")]),
-    ref=[opn("$kunal"), act("settle_up", rows="$kunal", args="group: $wedding\namount: 4000")]),
-  T("ok and settle the rest too", diff(upd("kunal", balance=ANY), settle=[("Kunal", "5000.00")]),
-    ref=[act("settle_up", rows="$kunal", args="group: $wedding")]))
 
 S("T36-109", "mixed kind-word documents notes photos",
   T("show me the wedding documents", rows("marriage_cert_d", "caterer_inv", "decor_inv", "photog_contract", "venue_receipt"),

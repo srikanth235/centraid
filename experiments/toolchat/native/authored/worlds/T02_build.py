@@ -71,33 +71,6 @@ def people():
     ]
 
 
-GROUPS = [
-    {"key": "tokyo", "name": "Tokyo Trip", "currency": "JPY", "members": ["sophie_t", "priya"], "created": "2027-03-10T20:00"},
-    {"key": "flat", "name": "Flat 302", "members": ["jess"], "created": "2026-09-01T10:00"},
-    {"key": "crew", "name": "Climbing Crew", "members": ["diego", "nadia", "arun"], "created": "2027-01-15T19:00"},
-    {"key": "fam", "name": "Chau Family", "members": ["kai", "mom", "dad"], "created": "2026-12-20T12:00"},
-    {"key": "hg", "name": "Haida Gwaii 2026", "members": ["arun", "mina"], "created": "2026-07-20T12:00"},
-    {"key": "bookclub", "name": "Book club", "members": ["emma", "siobhan", "mina"], "created": "2026-11-02T19:00"},
-]
-
-EXPENSES = [
-    {"group": "tokyo", "name": "Airbnb Shibuya", "amount": 186000, "paid_by": "me", "split": ["me", "sophie_t", "priya"], "date": "2027-03-12"},
-    {"group": "tokyo", "name": "teamLab tickets", "amount": 11400, "paid_by": "priya", "split": ["me", "sophie_t", "priya"], "date": "2027-04-02"},
-    {"group": "tokyo", "name": "Shinkansen to Kyoto", "amount": 42000, "paid_by": "sophie_t", "split": ["me", "sophie_t", "priya"], "date": "2027-05-15"},
-    {"group": "tokyo", "name": "Ghibli Museum", "amount": 3000, "paid_by": "me", "split": ["me", "sophie_t"], "date": "2027-05-20"},
-    {"group": "flat", "name": "Hydro bill April", "amount": 96.40, "paid_by": "me", "split": ["me", "jess"], "date": "2027-04-28"},
-    {"group": "flat", "name": "Internet May", "amount": 85, "paid_by": "jess", "split": ["me", "jess"], "date": "2027-05-03"},
-    {"group": "flat", "name": "Costco run", "amount": 142.30, "paid_by": "me", "split": ["me", "jess"], "date": "2027-05-22"},
-    {"group": "flat", "name": "Cleaning supplies", "amount": 23.50, "paid_by": "jess", "split": ["me", "jess"], "date": "2027-06-01"},
-    {"group": "crew", "name": "Gas to Squamish", "amount": 60, "paid_by": "diego", "split": ["me", "diego", "nadia", "arun"], "date": "2027-05-08"},
-    {"group": "crew", "name": "Day passes", "amount": 88, "paid_by": "me", "split": ["me", "diego", "nadia", "arun"], "date": "2027-05-29"},
-    {"group": "fam", "name": "Mom's birthday dinner", "amount": 240, "paid_by": "me", "split": ["me", "kai"], "date": "2027-05-23"},
-    {"group": "fam", "name": "Flowers for Mom", "amount": 45, "paid_by": "kai", "split": ["me", "kai"], "date": "2027-05-23"},
-    {"group": "hg", "name": "BC Ferries", "amount": 312, "paid_by": "arun", "split": ["me", "arun", "mina"], "date": "2026-08-10"},
-    {"group": "hg", "name": "Cabin in Tlell", "amount": 900, "paid_by": "me", "split": ["me", "arun", "mina"], "date": "2026-08-11"},
-    {"group": "hg", "name": "Groceries Masset", "amount": 126, "paid_by": "mina", "split": ["me", "arun", "mina"], "date": "2026-08-12"},
-]
-
 LISTS = [
     {"key": "clientwork", "name": "Client work", "area": "work"},
     {"key": "flatlist", "name": "Flat stuff", "area": "home"},
@@ -392,25 +365,6 @@ PHOTOS = [
     {"key": "shelves", "name": "Studio shelves", "taken": "2027-06-07T15:20"},
 ]
 
-DEBTS = [
-    {"key": "d_mf", "person": "sophie_d", "direction": "owes_me", "amount": 850, "name": "Maple & Fern invoice 0412", "date": "2027-06-01"},
-    {"key": "d_tomo", "person": "tom", "direction": "owes_me", "amount": 300, "name": "Tomo logo kill fee", "date": "2027-06-05"},
-    {"key": "d_gl", "person": "marcus", "direction": "owes_me", "amount": 1200, "name": "Greenleaf deposit", "date": "2027-05-19",
-     "settled": "2027-05-27T10:00"},
-    {"key": "d_tide", "person": "dana", "direction": "owes_me", "amount": 1500, "name": "Tidewater cover advance", "date": "2027-04-01",
-     "settled": "2027-04-20T10:00"},
-    {"key": "d_jess_hydro", "person": "jess", "direction": "owes_me", "amount": 48.20, "name": "Hydro March", "date": "2027-03-30",
-     "settled": "2027-04-02T10:00"},
-    {"key": "d_arun_tix", "person": "arun", "direction": "i_owe", "amount": 95, "name": "Khruangbin tickets", "date": "2027-05-14"},
-    {"key": "d_sophie_taxi", "person": "sophie_t", "direction": "owes_me", "amount": 30, "name": "Airport taxi", "date": "2027-02-20"},
-    {"key": "d_diego_chalk", "person": "diego", "direction": "i_owe", "amount": 18.50, "name": "Chalk and tape", "date": "2027-05-29"},
-    {"key": "d_kai_books", "person": "kai", "direction": "owes_me", "amount": 120, "name": "Textbook loan", "date": "2027-01-08"},
-    {"key": "d_mina_ferry", "person": "mina", "direction": "i_owe", "amount": 64, "name": "Ferry snacks and parking", "date": "2026-08-17",
-     "settled": "2026-09-01T10:00"},
-    {"key": "d_priya_sushi", "person": "priya", "direction": "i_owe", "amount": 42, "name": "Sushi dinner", "date": "2027-05-28"},
-    {"key": "d_mom_phone", "person": "mom", "direction": "i_owe", "amount": 60, "name": "Phone bill", "date": "2027-05-01"},
-    {"key": "d_carlos", "person": "carlos", "direction": "owes_me", "amount": 75, "name": "Canucks tickets", "date": "2027-03-12"},
-]
 
 LOCKER = [
     {"key": "adobe", "name": "Adobe login", "type": "login", "username": "meilin.chau@fastmail.com", "url": "https://account.adobe.com",
@@ -474,8 +428,6 @@ def world():
         "seed": "T02",
         "currency": "CAD",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -485,7 +437,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

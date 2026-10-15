@@ -84,31 +84,6 @@ S("T11-080", "five turns locker url empty username reveal create remove_from new
   T("no take it off the list, its not paperwork", diff(unlink("paper_l", "+1")),
     ref=[act("remove_from", rows="$c1", args=lines(from_="$paper_l"))]))
 
-S("T11-081", "debt span weekday datetime within sum settle",
-  T("debts from monday last week up to 6pm wednesday",
-    rows("d_mick_silage", "d_tom", "d_eileen", "d_ger", "d_tadhg"),
-    ref=[ans(kind="debt", when=W(span(U("week", -1, weekday=1), U("week", 0, weekday=3, time="18:00"))))]),
-  T("of those, which ones am i the debtor on", rows("d_eileen", "d_ger"),
-    ref=[ans(within="@prev", where='direction = "i_owe"')]),
-  T("add those up", val((230, "EUR")),
-    ref=[ans(op="sum", field="amount", within="@prev")]),
-  T("settle relief milking weekend, paid ger yesterday", diff(upd("d_ger", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Relief milking weekend")]))
-
-S("T11-082", "five turns debt date month span amount max count direction ambiguous ask",
-  T("any debts from the twentieth", rows("d_ger"),
-    ref=[ans(kind="debt", when=W(D("2026-07-20")))]),
-  T("and from last month through this month over 100 euro",
-    rows("d_sean_silage", "d_mick_silage", "d_fergal", "d_tadhg", "d_ger", "d_tom"),
-    ref=[ans(kind="debt", when=W(span(U("month", -1), U("month", 0))), where="amount > 100 EUR")]),
-  T("biggest one i owe there", val((850, "EUR")),
-    ref=[ans(op="max", field="amount", within="@prev", where='direction = "i_owe"')]),
-  T("how many open debts in total, either way", val(11),
-    ref=[ans(op="count", kind="debt", where='status = "open" and direction is set')]),
-  T("settle the diesel one", ask("d_pj", "d_mick_diesel"),
-    ref=[act("settle_debt", kind="debt", name="diesel"),
-         askc("pj's diesel for the massey or the diesel you owe mick?", options="$d_pj, $d_mick_diesel")]))
-
 S("T11-083", "single ask without options",
   T("move the accounts meeting", ask(),
     ref=[askc("to when?")]))
@@ -148,17 +123,6 @@ S("T11-088", "event status != upcoming linked met empty ambiguous ask",
          find(kind="event", name="GAA committee meeting", when=W({"from": U("day", 0)})),
          askc("the august one or september?", options="$gaa_0804, $gaa_0901")]))
 
-S("T11-089", "group currency delete group dead end other kind",
-  T("which groups are in euro", rows("lotto", "juvenile", "tour", "silage_coop", "tanker"),
-    ref=[ans(kind="group", where='currency = "EUR"')]),
-  T("delete the silage co-op one, never used it",
-    diff(gone("silage_coop"), unlink("silage_coop", "mick"), unlink("silage_coop", "sean_m"),
-         unlink("silage_coop", "me")),
-    ref=[act("delete", kind="group", name="Silage co-op 2025")]),
-  T("when's the NCT", rows("nct"),
-    ref=[find(kind="event", name="NCT"),
-         ans(rows="$nct")]))
-
 S("T11-090", "six turns knock-on list edit add_to create undo count priority",
   T("rename the school list to Kids and put collect aoife from camogie camp on it",
     diff(upd("school_l", name="Kids"), link("school_l", "camogie")),
@@ -176,19 +140,6 @@ S("T11-090", "six turns knock-on list edit add_to create undo count priority",
   T("which of the open ones have a priority", rows("books"),
     ref=[ans(kind="task", linked_to="$school_l", where='status = "open" and priority is set')]))
 
-S("T11-091", "five turns find-only person span datetime event count note count log balance",
-  T("who did i talk to from 6am monday to thursday", rows("ger", "deirdre", "tadhg", "orla", "mam"),
-    ref=[find(kind="person", when=W(span(U("week", 0, weekday=1, time="06:00"), U("week", 0, weekday=4)))),
-         ans(rows="@prev")]),
-  T("which of them have 1 event or less with me", rows("ger", "deirdre", "mam"),
-    ref=[ans(within="@prev", where="event count <= 1")]),
-  T("and which have one note or fewer", rows("ger", "deirdre", "tadhg", "orla", "mam"),
-    ref=[ans(within="@1", where="note count <= 1")]),
-  T("log a visit from ger, he's here for the evening milking", diff(upd("ger", date=ANY)),
-    ref=[act("log", kind="person", name="Ger Hogan", args=lines(kind="visit"))]),
-  T("what do i owe him", val((-180, "EUR")),
-    ref=[ans(op="balance", rows="$ger")]))
-
 S("T11-092", "ambiguous person ask log dead end search",
   T("log coffee with mary", ask("mary_l", "mary_c"),
     ref=[act("log", kind="person", name="Mary", args=lines(kind="coffee")),
@@ -199,21 +150,6 @@ S("T11-092", "ambiguous person ask log dead end search",
     ref=[ans(kind="event", name="hurling blitz"),
          search("hurling blitz"),
          ans(rows="$blitz")]))
-
-S("T11-093", "ambiguous task resolve open search nickname log count balance",
-  T("move the ring the vet task to tuesday", diff(upd("vet_calves", date="2026-07-28")),
-    ref=[act("reschedule", kind="task", name="Ring the vet", args=lines(to=U("week", 1, weekday=2))),
-         act("reschedule", rows="$vet_calves", args=lines(to=U("week", 1, weekday=2)))]),
-  T("and log a call with the vet, when's he next out", rows("tb_test", also=diff(upd("fergal", date=ANY))),
-    ref=[search("the vet", kind="person"),
-         act("log", rows="$fergal", more=True, args=lines(kind="call")),
-         find(kind="event", linked_to="$fergal", when=W({"from": U("day", 0)}), order="date asc", limit=1),
-         ans(rows="@prev")]),
-  T("how many times is he coming next week", val(2),
-    ref=[ans(op="count", kind="event", linked_to="$fergal", when=W(U("week", 1)))]),
-  T("what's his bill at", val((-310, "EUR")),
-    ref=[comp(op="balance", rows="$fergal"),
-         ans(value="@prev")]))
 
 S("T11-094", "five turns find-only date reschedule where month span effort complete",
   T("anything due on the first of august", rows("raffle", "swim", "nuts_08"),
@@ -269,41 +205,9 @@ S("T11-097", "five turns documents find-only weekday time spans dead end search"
          search("loan letter", kind="document"),
          ans(rows="$loan_offer")]))
 
-S("T11-098", "six turns group members balance settle_up dead end search people note",
-  T("who's in the school tour group", rows("mary_l", "clodagh", "niamh", "me"),
-    ref=[ans(kind="person", linked_to="$tour")]),
-  T("where am i in it", val((-100, "EUR")),
-    ref=[ans(op="balance", kind="group", name="School tour bus", linked_to="$me")]),
-  T("settle me up with mary lynch for it", diff(settle=["Mary Lynch"]),
-    ref=[act("settle_up", rows="$mary_l", args=lines(group="$tour"))]),
-  T("when was the bunratty trip", rows("school_tour"),
-    ref=[ans(kind="event", name="bunratty trip"),
-         search("bunratty", kind="event"),
-         ans(rows="$school_tour")]),
-  T("who went", rows("roisin", "mary_l"),
-    ref=[ans(kind="person", linked_to="$school_tour")]),
-  T("any notes about it", rows("tour_notes"),
-    ref=[ans(kind="note", name="School tour")]))
-
 S("T11-099", "ambiguous person star ask",
   T("star sean", ask("sean_m", "sean_h"),
     ref=[act("star", kind="person", name="Sean"),
          askc("sean mahon the contractor or sean hehir from the club?", options="$sean_m, $sean_h")]),
   T("hehir, the chairman", diff(upd("sean_h", starred=True)),
     ref=[act("star", rows="$sean_h")]))
-
-S("T11-100", "seven turns weekend spans focus cancel undo balance settle",
-  T("what was on this weekend", rows("pj_dinner", "draw_0726"),
-    ref=[ans(kind="event", when=W(span(U("week", 0, weekday=6), U("week", 0, weekday=7))))]),
-  T("and next weekend", rows("show", "mass", "draw_0802"),
-    ref=[ans(kind="event", when=W(span(U("week", 1, weekday=6), U("week", 1, weekday=7))))]),
-  T("cancel the club lotto draw, eileen's away", diff(upd("draw_0802", status="cancelled")),
-    ref=[act("cancel", kind="event", name="Club lotto draw")]),
-  T("and tonight's", diff(upd("draw_0726", status="cancelled")),
-    ref=[act("cancel", kind="event", name="Club lotto draw", when=W(U("day", 0)))]),
-  T("ah undo, sean said he'd do it", diff(),
-    ref=[act("undo")]),
-  T("what do i owe eileen frawley", val((-10, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Eileen Frawley")]),
-  T("settle the lotto float with her", diff(upd("d_eileen", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Lotto float")]))

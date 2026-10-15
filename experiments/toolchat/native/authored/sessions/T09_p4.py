@@ -22,17 +22,6 @@ S("T09-202", "ordinal second condo list complete ask pick bar prep at 7",
   T("3 is fine", diff(upd("bp_0602", date="2026-06-02T19:00")),
     ref=[act("reschedule", rows="$bp_0602", args=lines(to=U("day", 0, anchor="row", time="19:00")))]))
 
-# 203 which way the money goes: the sign flips after a debt I create
-S("T09-203", "debts owe direction balance flip create i_owe settle mine",
-  T("where am i with fatou", val((12, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Fatou Diallo")]),
-  T("she covered my lunch, i owe her 15", diff(new("debt", name=has("lunch"), amount=15, direction="i_owe"), link("new", "fatou")),
-    ref=[act("create", args=lines(kind="debt", name="Lunch", person="$fatou", amount="15", direction="i_owe"))]),
-  T("and now?", val((-3, "CAD")),
-    ref=[ans(op="balance", rows="$fatou")]),
-  T("settle mine with ethan too, e-transferred him", diff(upd("d_ethan", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$ethan", where='direction = "i_owe"')]))
-
 # 204 everything but two
 # 205 bare weekdays, "at N", a relative range
 S("T09-205", "bare weekday at N cake florist range create call today",
@@ -46,12 +35,3 @@ S("T09-205", "bare weekday at N cake florist range create call today",
     ref=[act("create", args=lines(kind="event", name="Call with Obaachan", date=U("day", 0, time="17:00")))]))
 
 # 206 two writes in one message
-S("T09-206", "two writes settle debt complete star document",
-  T("paid marcus for the raptors tickets and i booked the boardroom", diff(upd("d_marcus", status="settled"), upd("boardroom", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="Raptors tickets", more=True),
-         act("complete", kind="task", name="Book boardroom for June sessions")]),
-  T("stamps are bought and star the photographer contract", diff(upd("stamps", status="completed", completed=ANY), upd("photo_contract", starred=True)),
-    ref=[act("complete", kind="task", name="Buy stamps", more=True),
-         act("star", kind="document", name="Photographer contract")]),
-  T("total debt i'm carrying right now", val((2046.5, "CAD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))

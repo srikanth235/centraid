@@ -38,16 +38,6 @@ S("T16-052", "six turns photos today linked add_to span delete",
   T("and the photo of tutor's note", diff(trash("tutor_note")),
     ref=[act("delete", rows="$tutor_note")]))
 
-S("T16-053", "find miss search miss decline create add_to group",
-  T("is shirin in my contacts", decline("not_found"),
-    ref=[find(kind="person", name="Shirin"), search("shirin", kind="person"), dec("not_found")]),
-  T("add her then, Shirin Akhter, new overlock operator", diff(new("person", name="Shirin Akhter", role=ANY)),
-    ref=[act("create", args=lines(kind="person", name="Shirin Akhter", role="overlock operator, Line 3"))]),
-  T("put her in the eid bonus pool", diff(link("bonus", "+1")),
-    ref=[act("add_to", rows="$c1", args=lines(to="$bonus"))]),
-  T("who's in the pool", rows("rahim_u", "jahanara", "salma", "mizan", "me", "+1"),
-    ref=[ans(kind="person", linked_to="$bonus")]))
-
 S("T16-054", "empty result person search log undo ledger",
   T("jwel - last time we spoke?", rows("jewel"),
     ref=[find(kind="person", name="Jwel"), search("jwel", kind="person"), ans(rows="$jewel")]),
@@ -55,45 +45,6 @@ S("T16-054", "empty result person search log undo ledger",
     ref=[act("log", rows="$jewel", args=lines(kind="call"))]),
   T("undo that, it was rahim who rang", diff(),
     ref=[act("undo")]))
-
-S("T16-055", "search compute balance nickname",
-  T("how much is babu into me for, all in", val((1000, "BDT")),
-    ref=[search("babu", kind="person"), comp(op="balance", rows="$babu"), ans(value="@prev")]),
-  T("and does he have any tasks on him", rows("kitty_collect"),
-    ref=[ans(kind="task", linked_to="$babu")]))
-
-S("T16-056", "refused delete group ask delete empty group",
-  T("delete the cox's bazar trip group, we're doing it in cash", ask(),
-    ref=[bad(act("delete", rows="$coxs")),
-         askc("it still has the hotel advance in it, so it can't be deleted. settle up with masud and shafiq first?")]),
-  T("no leave it. delete factory picnic 2025 though, that's long done",
-    diff(gone("picnic"), unlink("picnic", "kamal"), unlink("picnic", "rubina"), unlink("picnic", "me")),
-    ref=[act("delete", rows="$picnic")]),
-  T("what groups are left", rows("fund", "tigers", "bonus", "coxs", "kolkata"),
-    ref=[ans(kind="group")]),
-  T("where's shafiq in the cox's one", val((-3000, "BDT")),
-    ref=[ans(op="balance", kind="group", name="Cox's Bazar trip", linked_to="$shafiq")]))
-
-S("T16-057", "refused delete group ask balance settle_up named",
-  T("delete the kolkata shopping group", ask(),
-    ref=[bad(act("delete", kind="group", name="Kolkata shopping")),
-         askc("the saree shopping is still in it, so the group can't go. want to settle up with farzana first?")]),
-  T("what's farzana's position in it", val((3200, "INR")),
-    ref=[ans(op="balance", kind="group", name="Kolkata shopping", linked_to="$farzana")]),
-  T("ok settle up with farzana there", diff(settle=["Farzana Akter"]),
-    ref=[act("settle_up", rows="$farzana", args=lines(group="$kolkata"))]))
-
-S("T16-058", "five turns tigers balance find settle_up prev",
-  T("who's in the tigers kitty", rows("rahim_m", "sohel", "imran", "babu", "jewel", "me"),
-    ref=[find(kind="person", linked_to="$tigers"), ans(rows="@prev")]),
-  T("rahim mia's position there", val((-950, "BDT")),
-    ref=[ans(op="balance", kind="group", name="Mirpur Tigers kitty", linked_to="$rahim_m")]),
-  T("who's our wicketkeeper again", rows("imran"),
-    ref=[find(kind="person", where='role contains "wicketkeeper"'), ans(rows="@prev")]),
-  T("square him up for the tigers kitty", diff(settle=["Imran Kabir"]),
-    ref=[act("settle_up", rows="@prev", args=lines(group="$tigers"))]),
-  T("does he owe me for the gloves", rows("d_imran"),
-    ref=[ans(kind="debt", linked_to="$imran")]))
 
 S("T16-059", "single ask without options",
   T("put the gas cylinder guy in the diary", ask(),
@@ -162,38 +113,6 @@ S("T16-067", "photo spans unstar where yesterday",
     ref=[ans(kind="photo", when=W(span(D("2026-12-05", "13:00"), U("week", -1, weekday=6))))]),
   T("unstar the starred one i took yesterday", diff(upd("fog", starred=False)),
     ref=[act("unstar", kind="photo", when=W(U("day", -1)), where="starred = yes")]))
-
-S("T16-068", "debt date time rel time settle multi",
-  T("what did i borrow yesterday morning, the one on fourteenth dec around 10am, and whatever i owe sohel", rows("d_monir", "d_selim", "d_sohel"),
-    ref=[find(kind="debt", when=W(U("day", -1, time="09:00"))),
-         find(kind="debt", when=W(D("2026-12-14", "10:00"))),
-         find(kind="debt", linked_to="$sohel", where='direction = "i_owe"'),
-         ans(rows="$d_monir, $d_selim, $d_sohel")]),
-  T("paid the first two today, settle them", diff(upd("d_monir", status="settled"), upd("d_selim", status="settled")),
-    ref=[act("settle_debt", rows="$d_monir, $d_selim")]),
-  T("what's left that i owe", rows("d_masud", "d_mizan", "d_sohel"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]))
-
-S("T16-069", "debt date time rel time status is set",
-  T("the debt from friday at 6pm, what's that", rows("d_sohel"),
-    ref=[ans(kind="debt", when=W(U("week", -1, weekday=5, time="18:00")))]),
-  T("and anything from two days ago in the evening", rows("d_selim"),
-    ref=[ans(kind="debt", when=W(U("day", -2, time="19:00")))]),
-  T("every debt on the owes-me side, settled or not", rows("d_shafiq", "d_babu", "d_jewel", "d_imran", "d_rahim_u", "d_topu"),
-    ref=[ans(kind="debt", where='status is set and direction = "owes_me"')]))
-
-S("T16-070", "five turns debts status spans settle",
-  T("all my debts, open or settled",
-    rows("d_shafiq", "d_babu", "d_jewel", "d_imran", "d_masud", "d_mizan", "d_selim", "d_rahim_u", "d_topu", "d_farzana", "d_monir", "d_sohel"),
-    ref=[ans(kind="debt", where="status is set")]),
-  T("which from monday till today 6pm", rows("d_selim", "d_monir"),
-    ref=[ans(kind="debt", when=W(span(U("week", 0, weekday=1), U("day", 0, time="18:00"))))]),
-  T("from october to first nov?", rows("d_rahim_u", "d_babu"),
-    ref=[ans(kind="debt", when=W(span(U("month", 0, name=10), D("2026-11-01"))))]),
-  T("rahim uddin's advance, is it open", rows("d_rahim_u"),
-    ref=[ans(kind="debt", linked_to="$rahim_u")]),
-  T("he paid it back out of his bonus, settle it", diff(upd("d_rahim_u", status="settled")),
-    ref=[act("settle_debt", rows="$d_rahim_u")]))
 
 S("T16-071", "notes span rel name pin",
   T("notes from last week through december",

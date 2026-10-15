@@ -49,45 +49,12 @@ S("T11-006", "trashed task empty recovery restore reschedule",
     ref=[act("restore", rows="$yard_light", more=True),
          act("reschedule", rows="$yard_light", args=lines(to=U("week", 2, weekday=5)))]))
 
-S("T11-008", "role find log prev balance",
-  T("who's the relief milker", rows("ger"),
-    ref=[find(kind="person", where='role contains "relief"'),
-         ans(rows="@prev")]),
-  T("he did saturday morning for me, log a visit", diff(upd("ger", date=ANY)),
-    ref=[act("log", rows="@prev", args=lines(kind="visit"))]),
-  T("and where am i with him money wise", val((-180, "EUR")),
-    ref=[ans(op="balance", rows="$ger")]))
-
-S("T11-009", "role linked_to all debt",
-  T("who's the mart manager", rows("tom"),
-    ref=[find(kind="person", where='role contains "mart"'),
-         ans(rows="@prev")]),
-  T("has he paid me that weanling deposit", rows("d_tom"),
-    ref=[ans(kind="debt", linked_to="@prev")]))
-
 S("T11-010", "task tomorrow reschedule where effort",
   T("what's due tomorrow", rows("tb_prep", "tb_pen", "tb_tags", "herd_reg", "vet_calves"),
     ref=[ans(kind="task", when=W(U("day", 1)))]),
   T("the ten min one there, push it to tuesday", diff(upd("vet_calves", date="2026-07-28")),
     ref=[act("reschedule", kind="task", when=W(U("day", 1)), where="effort <= 10",
              args=lines(to=U("week", 1, weekday=2)))]))
-
-S("T11-011", "create debt balance",
-  T("gerry mulqueen owes me 40 for the co-op dinner tickets",
-    diff(new("debt", name=has("dinner"), amount=40, direction="owes_me"), link("new", "gerry")),
-    ref=[act("create", args=lines(kind="debt", name="Co-op dinner tickets", person="$gerry", amount="40",
-                                  direction="owes_me"))]),
-  T("what's his balance now", val((40, "EUR")),
-    ref=[ans(op="balance", rows="$gerry")]))
-
-S("T11-013", "ambiguous debt ask settle open debts",
-  T("mark the silage bales paid", ask("d_sean_silage", "d_mick_silage"),
-    ref=[act("settle_debt", kind="debt", name="silage bales"),
-         askc("the 850 you owe sean mahon, or the 240 mick owes you?", options="$d_sean_silage, $d_mick_silage")]),
-  T("the one i owe sean", diff(upd("d_sean_silage", status="settled")),
-    ref=[act("settle_debt", rows="$d_sean_silage")]),
-  T("what's left outstanding on my side", rows("d_fergal", "d_eileen", "d_ger", "d_mary_c", "d_mick_diesel"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]))
 
 S("T11-014", "star photo named",
   T("star the U12 team photo", diff(upd("p_u12_team", starred=True)),

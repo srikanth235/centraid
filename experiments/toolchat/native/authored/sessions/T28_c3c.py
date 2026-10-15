@@ -14,12 +14,6 @@ S("T28-C001", "c3c compound create event create task evening",
     ref=[act("create", args=lines(kind="event", name="Hui with Pita", date=U("week", 1, weekday=2, time="19:00")), more=True),
          act("create", args=lines(kind="task", name="Write the agenda"))]))
 
-S("T28-C002", "c3c compound settle_debt cancel",
-  T("paid ria the groceries money so settle it, and cancel the bus depot reunion lunch",
-    diff(upd("d_ria", status="settled"), upd("depot_lunch", status="cancelled")),
-    ref=[act("settle_debt", kind="debt", name="Groceries", more=True),
-         act("cancel", kind="event", name="Bus depot reunion lunch")]))
-
 S("T28-C003", "c3c compound three writes add_to add_to star",
   T("put the brisbane itinerary in house and the netball draw in whanau, and star the itinerary",
     diff(link("house_f", "itinerary"), link("whanau_f", "draw"), upd("itinerary", starred=True)),

@@ -6,24 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-def settled(gold, d):
-    """a read gold after a settle_up in the same turn: gold.py's `also=` keeps only the row/link
-    diff, so the settlement check is carried over by hand"""
-    gold = dict(gold, diff=d["diff"])
-    gold["settle"] = d["settle"]
-    return gold
-
-
-S("T15-051", "trashed person recovery restore prev add_to group members",
-  T("find kristoffer dahl", rows("kristoffer"),
-    ref=[ans(kind="person", name="Kristoffer Dahl"),
-         ans(kind="person", name="Kristoffer Dahl", trashed=True)]),
-  T("put kristoffer dahl back in my contacts", diff(restore("kristoffer")),
-    ref=[act("restore", rows="@prev")]),
-  T("and add him to whale safari, he's coming", diff(link("whale", "kristoffer")),
-    ref=[act("add_to", rows="$kristoffer", args=lines(to="$whale"))]),
-  T("who's on whale safari", rows("silje", "ingvild", "me", "kristoffer"),
-    ref=[ans(kind="person", linked_to="$whale")]))
 
 S("T15-052", "create person delete restore new",
   T("new contact: Oda Lie, vet nurse at the clinic", diff(new("person", name="Oda Lie", role=ANY)),
@@ -32,14 +14,6 @@ S("T15-052", "create person delete restore new",
     ref=[act("delete", rows="$c1")]),
   T("no wait, restore her. different clinic", diff(restore("+1")),
     ref=[act("restore", rows="$c1")]))
-
-S("T15-053", "settle_up where role write read balance log",
-  T("settle up with the bosun in the crew mess fund and tell me where we stand",
-    settled(val((0, "NOK")), diff(settle=[("Bjørn Strand", "200.00")])),
-    ref=[act("settle_up", kind="person", where='role = "bosun"', args=lines(group="$mess"), more=True),
-         ans(op="balance", rows="$bjorn")]),
-  T("log a visit with bjørn strand too, saw him on the quay", diff(upd("bjorn", date=ANY)),
-    ref=[act("log", rows="$bjorn", args=lines(kind="visit"))]))
 
 S("T15-054", "reschedule event multi minutes tomorrow people",
   T("push lunch with ingvild and the seminar talk back half an hour",
@@ -201,21 +175,6 @@ S("T15-074", "single note body set notebook",
   T("which notes in the cabin book actually have text in them", rows("woodstove", "cabin_rules"),
     ref=[ans(kind="note", linked_to="$cabin_nb", where="body is set")]))
 
-S("T15-075", "debt amount set sum date settle prev",
-  T("debts i owe, anything with an amount on it",
-    rows("d_jonas_groceries", "d_torstein", "d_hallvard", "d_kaja", "d_mum"),
-    ref=[ans(kind="debt", where='amount is set and direction = "i_owe"')]),
-  T("what's that all together", val((3455, "NOK")),
-    ref=[ans(op="sum", field="amount", within="@prev")]),
-  T("anything from seventh november", rows("d_torstein"),
-    ref=[ans(kind="debt", when=W(D("2026-11-07")))]),
-  T("settle that one, paid tosse on the ferry", diff(upd("d_torstein", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]))
-
 X("T15-062",
   T("where's the polarfeed contract", decline("not_found"),
     ref=[search("Polarfeed"), dec("not_found")]))
-
-X("T15-075",
-  T("smallest open debt each way", vgroups({"i_owe": (95, "NOK"), "owes_me": (75, "NOK")}),
-    ref=[comp(op="min", field="amount", kind="debt", where='status = "open"', group="direction"), ans(value="@prev")]))

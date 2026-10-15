@@ -1,5 +1,5 @@
-"""What the blind gold audit settled (D-1044-13, refined): K1 the kind of a kind-less read (`kindless`), K2 a balance
-narrowed to one group (`narrowed-balance`, a widening), K3 a request broken off mid-sentence (`broken-off`), K4 a bare
+"""What the blind gold audit settled (D-1044-13, refined): K1 the kind of a kind-less read (`kindless`), K3 a request
+broken off mid-sentence (`broken-off`), K4 a bare
 plural is not "all" (`bare-plural`), the fix of the one gold-wrong turn (ruling A1); view_world.py on the authored
 worlds; and M5d and M5e, a recurring event or task named without a date is asked about (`series-ask`).
 
@@ -50,7 +50,7 @@ def rows_step(keys: list[str], args: dict, result: str = "@1") -> dict:
     return step("answer", args, {"answer": {"rows": [row(k) for k in keys], "ordered": False, "result": result}})
 
 
-def value_step(amount: float, args: dict, unit: str = "USD", op: str = "balance") -> dict:
+def value_step(amount: float, args: dict, unit: str = "USD", op: str = "sum") -> dict:
     return step("answer", args, {"value": {"op": op, "field": None, "values": [{"amount": amount, "unit": unit}]},
                                  "result": "@1"})
 
@@ -362,93 +362,6 @@ class KindlessExplain(unittest.TestCase):
         sess = sess_of(s)
         sess.dated_kinds[0] = regen.dated_kind(s["turns"][0], kind_of)
         self.assertEqual(sess.prev_dated_kind(1), "task")
-
-
-# ---------------------------------------------------------------------------------------------
-# K2: a balance narrowed to one group
-# ---------------------------------------------------------------------------------------------
-
-PERSON = {"op": "balance", "kind": "person", "name": "Tomás"}
-GROUP = {"op": "balance", "kind": "group", "name": "Casa Bills", "linked_to": "$tomas"}
-
-
-def balance_pair(user: str, asked: dict = GROUP, first: float = 157.55) -> dict:
-    return session(turn("what's tomás's balance", gold.val((first, "USD")), ref=[{"tool": "answer", "args": PERSON}]),
-                   turn(user, gold.val((-59.65, "USD")), ref=[{"tool": "answer", "args": asked}]))
-
-
-class NarrowedBalance(unittest.TestCase):
-    def sess(self, first: float = 157.55, person: str | None = "tomas") -> regen.Sess:
-        sess = sess_of()
-        sess.balances[0] = (person, [{"amount": first, "unit": "USD"}]) if person else None
-        return sess
-
-    def part(self, user: str, core: dict = GROUP, sess: regen.Sess | None = None):
-        return regen.narrowed_part(user, core, sess or self.sess(), 1)
-
-    def test_the_persons_part_in_the_currency_of_the_group(self):
-        self.assertEqual(self.part("just the casa one"), ("USD", 157.55))
-        self.assertEqual(self.part("and in casa bills specifically?"), ("USD", 157.55))
-        self.assertEqual(self.part("only the casa bills group"), ("USD", 157.55))
-
-    def test_the_part_is_the_one_value_in_that_currency_of_several(self):
-        sess = sess_of()
-        sess.balances[0] = ("tomas", [{"amount": 12000, "unit": "JPY"}, {"amount": 872.6, "unit": "USD"}])
-        self.assertEqual(regen.narrowed_part("just the casa one", GROUP, sess, 1), ("USD", 872.6))
-        sess.balances[0] = ("tomas", [{"amount": 12000, "unit": "JPY"}])
-        self.assertIsNone(regen.narrowed_part("just the casa one", GROUP, sess, 1))
-
-    def test_not_without_a_word_that_narrows_nor_for_another_person_nor_after_another_turn(self):
-        self.assertIsNone(self.part("and in casa bills"))
-        self.assertIsNone(self.part("just the casa one", sess=self.sess(person="arjun")))
-        self.assertIsNone(self.part("just the casa one", sess=self.sess(person=None)))
-        self.assertIsNone(regen.narrowed_part("just the casa one", GROUP, self.sess(), 2))
-        self.assertIsNone(self.part("just the casa one", {**GROUP, "linked_to": "$arjun"}))
-        self.assertIsNone(self.part("just the casa one", {**GROUP, "op": "sum"}))
-        self.assertIsNone(self.part("just the casa one", {**GROUP, "name": "No Such Group"}))
-
-    def test_the_person_balance_a_turn_left_for_the_next(self):
-        s = balance_pair("just the casa one")
-        sess = sess_of(s)
-        got = regen.person_balance(s["turns"][0], s["turns"][0]["gold"], sess)
-        self.assertEqual(got, ("tomas", [{"amount": 157.55, "unit": "USD"}]))
-        self.assertIsNone(regen.person_balance(s["turns"][1], s["turns"][1]["gold"], sess))  # a group's, not a person's
-        by_key = turn("balance", gold.val((60, "USD")), ref=[{"tool": "answer", "args": {"op": "balance",
-                                                                                         "rows": "$tomas"}}])
-        self.assertEqual(regen.person_balance(by_key, by_key["gold"], sess), ("tomas", [{"amount": 60, "unit": "USD"}]))
-
-    def test_the_gold_gets_the_persons_part_beside_the_groups_net(self):
-        s = balance_pair("just the casa one")
-        s["turns"][0]["gold"] = [gold.val((157.55, "USD"))]
-        new, found = regen.regen_session(s, run_of([value_step(157.55, PERSON)], [value_step(-59.65, GROUP)]))
-        self.assertEqual([(c["turn"], c["convention"]) for c in found], [(2, "narrowed-balance")])
-        self.assertEqual(new["turns"][1]["gold"], [gold.val((-59.65, "USD")), gold.val((157.55, "USD"))])
-        self.assertFalse(found[0]["was_failing"])
-
-    def test_widening_is_idempotent_and_stays_off_without_the_words(self):
-        s = balance_pair("just the casa one")
-        s["turns"][0]["gold"] = [gold.val((157.55, "USD"))]
-        new, _ = regen.regen_session(s, run_of([value_step(157.55, PERSON)], [value_step(-59.65, GROUP)]))
-        again, found = regen.regen_session(new, run_of([value_step(157.55, PERSON)], [value_step(-59.65, GROUP)]))
-        self.assertEqual((found, again), ([], new))
-        plain = balance_pair("and in casa bills")
-        plain["turns"][0]["gold"] = [gold.val((157.55, "USD"))]
-        _, found = regen.regen_session(plain, run_of([value_step(157.55, PERSON)], [value_step(-59.65, GROUP)]))
-        self.assertEqual(found, [])
-
-    def test_a_run_that_answers_the_other_value_is_explained_and_both_are_kept(self):
-        s = balance_pair("just the casa one")
-        s["turns"][0]["gold"] = [gold.val((157.55, "USD"))]
-        s["turns"][1]["gold"] = [gold.val((157.55, "USD"))]  # the gold took the person's part, the run gives the net
-        new, found = regen.regen_session(s, run_of([value_step(157.55, PERSON)], [value_step(-59.65, GROUP)]))
-        self.assertEqual([c["convention"] for c in found], ["narrowed-balance"])
-        self.assertEqual(new["turns"][1]["gold"], [gold.val((157.55, "USD")), gold.val((-59.65, "USD"))])
-
-    def test_any_other_value_is_not_the_rule(self):
-        s = balance_pair("just the casa one")
-        s["turns"][0]["gold"] = [gold.val((157.55, "USD"))]
-        _, found = regen.regen_session(s, run_of([value_step(157.55, PERSON)], [value_step(-12.0, GROUP)]))
-        self.assertEqual([c["convention"] for c in found], [regen.UNEXPLAINED])
 
 
 # ---------------------------------------------------------------------------------------------
@@ -833,12 +746,10 @@ class SeriesAsk(unittest.TestCase):
 
 class Registry(unittest.TestCase):
     def test_the_new_conventions_are_named_with_a_rule_and_a_kind(self):
-        for name in ("kindless", "narrowed-balance", "broken-off", "bare-plural", "series-ask"):
+        for name in ("kindless", "broken-off", "bare-plural", "series-ask"):
             self.assertIn(name, regen.CONVENTIONS)
             self.assertIn(name, regen.RULES)
         self.assertNotIn("series-ask", regen.WIDENING + regen.REWRITES)
-        self.assertIn("narrowed-balance", regen.WIDENING)
-        self.assertIn("narrowed-balance", regen.WIDENERS)
         self.assertIn("kindless", regen.REWRITES)
         self.assertEqual(sorted(regen.CONVENTIONS), sorted(regen.RULES))
 
@@ -855,35 +766,6 @@ class Registry(unittest.TestCase):
         self.assertIn('"name":12', call["when"])  # the message's month is a condition of the selector
         self.assertTrue(regen.pinned("D-E066", 1))
 
-    def test_the_next_fix_answers_the_members_of_the_group_the_call_is_linked_to(self):
-        fix = regen.FIXES[("D-E132", 1)]
-        self.assertEqual(fix["ruling"], "M1d-next")
-        self.assertEqual(fix["expect"], regen.digest("book club members, for the invite to the next one"))
-        self.assertEqual(fix["gold"], [gold.rows("pp40", "pp41", "liz", "me", "pp42")])  # the five members, no event
-        self.assertNotIn("derive", fix)
-        self.assertTrue(regen.pinned("D-E132", 1))
-
-
-    def test_the_who_owes_fix_adds_the_debt_row_beside_the_person(self):
-        fix = regen.FIXES[("T03-052", 3)]
-        self.assertEqual(fix["ruling"], "D-1044-15")
-        self.assertEqual(fix["expect"], regen.digest("who's that to"))
-        self.assertEqual(fix["add"], [gold.rows("d_glasses")])  # the biggest debt i owe (150 EUR, Marta's): the person stays
-        self.assertNotIn("gold", fix)
-        self.assertTrue(regen.pinned("T03-052", 3))  # that d_glasses is a debt of T03 is held to the world by heldout_checks.py
-
-    def test_the_number_fix_adds_the_ask_and_the_out_of_scope_decline_beside_the_balance(self):
-        fix = regen.FIXES[("D-E132", 2)]
-        self.assertEqual(fix["ruling"], "D-1044-15")
-        self.assertEqual(fix["expect"], regen.digest("what's my number for that one"))
-        self.assertEqual(fix["add"], [gold.ask(), gold.decline("out_of_scope")])
-        self.assertNotIn("gold", fix)
-        self.assertTrue(regen.pinned("D-E132", 2))
-        old = [{"type": "value", "values": [{"amount": -138.4, "unit": "USD"}]}]
-        t = {"user": "what's my number for that one", "gold": old, "ref": [], "tags": []}
-        new = regen.apply_fix(t, fix, "D-E132", 2)
-        self.assertEqual(new["gold"], [*old, gold.ask(), gold.decline("out_of_scope")])
-        self.assertEqual(regen.apply_fix(new, fix, "D-E132", 2)["gold"], new["gold"])  # idempotent
 
 
 class ViewWorld(unittest.TestCase):

@@ -12,16 +12,6 @@ DONE_BEFORE_NOV = ["mortgage_aug", "mortgage_sep", "mortgage_oct", "fridge_0821"
                    "winter_tiller", "winter_sails", "race_prizes", "jonas_fees_old", "elec_bill_old", "book_flights"]
 
 
-S("T35-004-P", "relation empty next decline para",
-  T("cod team meeting, which coffee club people are going", rows("sigrid", "ola", "lars_e"),
-    ref=[ans(kind="person", linked_to="$cod_team, $lab_coffee")]),
-  T("what about marit", rows(),
-    ref=[ans(kind="event", name="cod team meeting", linked_to="$marit")]),
-  T("next event she's got", rows("lab_1116"),
-    ref=[ans(kind="event", linked_to="$marit", when=J({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("let her know by text that i'm late monday", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]))
-
 S("T35-008-P", "event name month status person para",
   T("september's wednesday races", rows("race_0902", "race_0909", "race_0916", "race_0923", "race_0930"),
     ref=[ans(kind="event", name="wednesday race", when=J(U("month", 0, name=9)))]),
@@ -65,19 +55,6 @@ S("T35-024-P", "cancel name-date undo para",
     ref=[act("cancel", kind="event", name="morning swim", when=D("2026-12-01"))]),
   T("undo it", diff(),
     ref=[act("undo")]))
-
-S("T35-028-P", "group balance me compute search para",
-  T("my balance in the kiel week 2026 group?", val((63.5, "EUR")),
-    ref=[search("Freya", kind="person"),
-         comp(op="balance", kind="group", name="Kiel Week 2026", linked_to="$me"), ans(value="@prev")]),
-  T("lab coffee club?", val((32, "NOK")),
-    ref=[comp(op="balance", kind="group", name="Lab Coffee Club", linked_to="$me"), ans(value="@prev")]),
-  T("tuva's balance in the seilforening kitty group?", val((-1080, "NOK")),
-    ref=[comp(op="balance", kind="group", name="Seilforening Kitty", linked_to="$tuva"), ans(value="@prev")]),
-  T("lab coffee club headcount?", val(5),
-    ref=[ans(op="count", kind="person", linked_to="$lab_coffee")]),
-  T("sigrid's balance in the lab coffee club?", val((-308, "NOK")),
-    ref=[ans(op="balance", kind="group", name="Lab Coffee Club", linked_to="$sigrid")]))
 
 S("T35-032-P", "ambiguous log nickname answer-line para",
   T("i called lars, log it", ask("lars_h", "lars_e"),
@@ -196,12 +173,6 @@ S("T35-088-P", "set-answers same-word events meeting dentist weekday-decides par
     ref=[ans(kind="event", name="meeting", when=J(U("day", 1)))]),
   T("dentist on wednesday?", rows("dentist"),
     ref=[ans(kind="event", name="dentist", when=J(U("week", 1, weekday=3)))]))
-
-S("T35-092-P", "container-link-reads owner-row groups-i-am-in count within person-link para",
-  T("my group membership count", val(6),
-    ref=[ans(op="count", kind="group", linked_to="$me")]),
-  T("bjorn's a member of which of them", rows("seilklubb", "kiel"),
-    ref=[ans(within="@prev", linked_to="$bjorn")]))
 
 S("T35-096-P", "stray-conditions by-name writes inert purpose clause star reschedule complete para",
   T("agm coming up, club budget needs a star", diff(upd("club_budget", starred=True)),

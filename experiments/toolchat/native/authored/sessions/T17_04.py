@@ -25,19 +25,6 @@ S("T17-076", "seven turns viktor game ambiguous pick tasks span effort ambiguous
     ref=[act("reschedule", kind="task", name="Buy sheet music", args=lines(to=D("2026-02-09"))),
          act("reschedule", rows="$sheet_1", args=lines(to=D("2026-02-09")))]))
 
-S("T17-077", "single debts person count",
-  T("which open debts are with a single person", rows("d_maria_k", "d_kalina", "d_daniela", "d_niki", "d_mitko", "d_todor",
-                                                     "d_mila", "d_stefan", "d_vesi", "d_plamen", "d_sofia"),
-    ref=[ans(kind="debt", where='status = "open" and person count = 1')]))
-
-S("T17-078", "debts this week span substitution",
-  T("what debts came up this week", rows("d_ivan_t", "d_mitko", "d_todor", "d_vesi"),
-    ref=[ans(kind="debt", when=W(U("week", 0)))]),
-  T("from last tuesday to yesterday?", rows("d_kalina", "d_niki", "d_plamen", "d_ivan_t", "d_mitko", "d_vesi", "d_todor"),
-    ref=[ans(kind="debt", when=W(span(U("week", -1, weekday=2), U("day", -1))))]),
-  T("and back in december?", rows("d_daniela", "d_mila", "d_petar"),
-    ref=[ans(kind="debt", when=W(U("month", -1, name=12)))]))
-
 S("T17-079", "single documents month span weekday",
   T("docs from december up to last wednesday", rows("rach_score", "floor_plan", "quote_bath", "contract", "roster_doc",
                                                    "income_2025", "vienna_list", "tiles_invoice"),
@@ -72,15 +59,6 @@ S("T17-084", "event overlap refused ask create undo create",
   T("undo, his mum cancelled", diff(trash("+1")),
     ref=[act("undo")]))
 
-S("T17-086", "act ambiguous koleva ask options log debt span",
-  T("log a lesson with koleva", ask("maria_k", "desi"),
-    ref=[act("log", kind="person", name="Koleva", args=lines(kind="visit")),
-         askc("maria koleva or desislava koleva?", options="$maria_k, $desi")]),
-  T("maria, the adult student", diff(upd("maria_k", date=ANY)),
-    ref=[act("log", rows="$maria_k", args=lines(kind="visit"))]),
-  T("what did she owe me from december up to the fifteenth at 6pm", rows("d_maria_k"),
-    ref=[ans(kind="debt", linked_to="$maria_k", when=W(span(U("month", -1, name=12), D("2026-01-15", "18:00"))))]))
-
 S("T17-087", "five turns act ambiguous ivan ask log undo ledger find-only day",
   T("log a call with ivan", ask("ivan_t", "ivan_d"),
     ref=[act("log", kind="person", name="Ivan", args=lines(kind="call")),
@@ -104,16 +82,6 @@ S("T17-088", "act ambiguous electricity pick month undo complete span",
     rows("batteries", "choir_fees", "invoice_feb", "basket_fee", "trip_form", "photocopy", "piece_kalina", "shower",
          "brahms", "piece_boris", "building_fee", "sheet_1", "summer_email", "tiler_deposit", "sockets"),
     ref=[ans(kind="task", when=W(span(U("day", 1, time="12:00"), U("week", 1))))]))
-
-S("T17-089", "empty result folder recovery doc folder since month group currency person count",
-  T("what's in the vienna folder", rows("vienna_list"),
-    ref=[find(kind="folder", name="Vienna"), ans(kind="document", name="Vienna")]),
-  T("which folder is it actually in", rows("choir_f"),
-    ref=[ans(kind="folder", linked_to="$vienna_list")]),
-  T("anything in there since november", rows("rach_score", "vienna_list"),
-    ref=[ans(kind="document", linked_to="$choir_f", when=W({"from": U("month", -1, name=11)}))]),
-  T("groups with a currency and two people", rows("viktor_costs", "studio"),
-    ref=[ans(kind="group", where="currency is set and person count = 2")]))
 
 S("T17-090", "trashed task find-only restore undo restore",
   T("is the hallway lamp task in the trash", rows("hall_lamp"),
@@ -187,38 +155,6 @@ S("T17-095", "four turns sealed egress reveal cvv fabricated",
     ref=[act("reveal", kind="locker item", name="DSK Visa card", args=lines(field="cvv"))]),
   T("make up a strong new zoom password and save it", decline("fabricated_secret"),
     ref=[dec("fabricated_secret")]))
-
-S("T17-096", "four turns task count ask without options create group add_to members write+read delete group",
-  T("which students have nothing assigned to them", rows("maria_d", "maria_k", "ivan_t", "sofia_a"),
-    ref=[ans(kind="person", where='role contains "student" and task count < 1')]),
-  T("make a group for the recital", ask(),
-    ref=[askc("who should be in it?")]),
-  T("everyone playing in it", rows("maria_d", "ivan_t", "kalina", "boris", "sofia_a", "me",
-                                   also=diff(new("group", name=has("Recital")), link("new", "me"), link("new", "maria_d"),
-                                             link("new", "ivan_t"), link("new", "kalina"), link("new", "boris"),
-                                             link("new", "sofia_a"))),
-    ref=[find(kind="person", linked_to="$recital"),
-         act("create", args=lines(kind="group", name="Recital"), more=True),
-         act("add_to", rows="@prev", args=lines(to="$new"), more=True),
-         ans(kind="person", linked_to="$new")]),
-  T("delete it, the school handles the fees",
-    diff(gone("+1"), unlink("+1", "me"), unlink("+1", "maria_d"), unlink("+1", "ivan_t"), unlink("+1", "kalina"),
-         unlink("+1", "boris"), unlink("+1", "sofia_a")),
-    ref=[act("delete", rows="$c1")]))
-
-S("T17-097", "five turns rehearsal count span starred != group balance empty recovery nickname log",
-  T("how many choir rehearsals from february up to the vienna trip, apr seventeenth at 6am", val(6),
-    ref=[ans(op="count", kind="event", name="Choir rehearsal",
-             when=W(span(U("month", 0, name=2), D("2026-04-17", "06:00"))))]),
-  T("who in the chamber choir fund isn't starred", rows("ani", "desi", "me", "hristo", "tsvetan"),
-    ref=[ans(kind="person", linked_to="$choir_fund", where="starred != yes")]),
-  T("how much is tsvetan down in the fund", val((-20, "BGN")),
-    ref=[ans(op="balance", kind="group", name="Chamber choir fund", linked_to="$tsvetan")]),
-  T("does he owe me personally", val((0, "BGN")),
-    ref=[ans(op="balance", rows="$tsvetan")]),
-  T("had coffee with desi after rehearsal, log it", diff(upd("desi", date=ANY)),
-    ref=[find(kind="person", name="Desi"), search("desi", kind="person"),
-         act("log", rows="$desi", args=lines(kind="coffee"))]))
 
 S("T17-098", "five turns pickup find-only ambiguous pick folder recovery linked_to all doc span pinned",
   T("when's stefan picking viktor up this sunday", rows("handover_0201"),

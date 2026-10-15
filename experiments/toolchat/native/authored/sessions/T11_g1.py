@@ -17,29 +17,11 @@ S("T11-101", "ask gaa meeting two dates find then pick reschedule anchor",
   T("august one", diff(upd("gaa_0804", date="2026-08-04T20:30")),
     ref=[act("reschedule", rows="$gaa_0804", args=lines(to=U("day", 0, anchor="row", time="20:30")))]))
 
-S("T11-102", "ask mary star pick balance negative",
-  T("star mary", ask("mary_l", "mary_c"),
-    ref=[act("star", kind="person", name="Mary"),
-         askc("mary lynch from the parents group or mary considine next door?", options="$mary_l, $mary_c")]),
-  T("next door", diff(upd("mary_c", starred=True)),
-    ref=[act("star", rows="$mary_c")]),
-  T("what do i owe her", val((-12, "EUR")),
-    ref=[ans(op="balance", rows="$mary_c")]))
-
 S("T11-103", "ask june statement star pick already-so star",
   T("star the june statement", diff(upd("bank_stmt", starred=True)),
     ref=[act("star", kind="document", name="statement")]),
   T("and the house insurance policy", diff(already=["house_policy"]),
     ref=[act("star", kind="document", name="House insurance policy"), ans(rows="$house_policy")]))
-
-S("T11-104", "ask diesel debt settle pick balance positive",
-  T("mark the diesel paid", ask("d_pj", "d_mick_diesel"),
-    ref=[act("settle_debt", kind="debt", name="diesel"),
-         askc("the massey diesel pj owes you or the diesel you owe mick?", options="$d_pj, $d_mick_diesel")]),
-  T("the massey one", diff(upd("d_pj", status="settled")),
-    ref=[act("settle_debt", rows="$d_pj")]),
-  T("where am i with mick now", val((145, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Mick Considine")]))
 
 S("T11-105", "ask u12 trainings find never_mind",
   T("cancel the hurling training", ask("u12_0729", "u12_0805", "u12_0812", "u12_0819", "u12_0826"),
@@ -66,15 +48,6 @@ S("T11-107", "ask aib unstar locker pick star",
     ref=[act("unstar", rows="$debit")]),
   T("and star the icbf login instead", diff(upd("icbf", starred=True)),
     ref=[act("star", kind="locker item", name="ICBF herd account")]))
-
-S("T11-108", "repair balance two sean ask pick balance substitution",
-  T("how much do i owe sean", ask("sean_m", "sean_h"),
-    ref=[bad(ans(op="balance", kind="person", name="Sean")),
-         askc("sean mahon the silage man or sean hehir from the club?", options="$sean_m, $sean_h")]),
-  T("mahon", val((-850, "EUR")),
-    ref=[ans(op="balance", rows="$sean_m")]),
-  T("and hehir", val((-20, "EUR")),
-    ref=[ans(op="balance", rows="$sean_h")]))
 
 S("T11-109", "ask mary log coffee never_mind",
   T("log a coffee with mary", ask("mary_l", "mary_c"),

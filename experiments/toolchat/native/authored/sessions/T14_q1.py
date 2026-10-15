@@ -52,12 +52,6 @@ S("T14-Q010", "remove two named rows from list i2pat",
   T("take both mei tasks off the papelada list", diff(unlink("admin_l", "das"), unlink("admin_l", "mei_decl")),
     ref=[find(kind="task", name="mei", linked_to="$admin_l"), act("remove_from", rows="@prev", args="from: $admin_l")]))
 
-S("T14-Q011", "second clause whos left open owes_me i2pat",
-  T("guga's paid me for the headphones, who's left",
-    rows("d_rafa_s", "d_diego", "d_thiago", "d_kleber", "d_bianca", also=diff(upd("d_guga", status="settled"))),
-    ref=[act("settle_debt", kind="debt", linked_to="$guga", where="status = open", more=True),
-         ans(kind="debt", where="direction = owes_me and status = open")]))
-
 S("T14-Q012", "add a note content create i2pat",
   T("add a note, bring the spare cables to the gig", diff(new("note", name=ANY, body=has("spare cables"))),
     ref=[act("create", args="kind: note\nname: Spare cables\nbody: bring the spare cables to the gig")]))
@@ -100,10 +94,6 @@ S("T14-Q021", "add one after listing container create with link i2pat",
   T("add one to fix the gate buzzer", diff(new("task", name=has("buzzer")), link("casa_l", "new")),
     ref=[act("create", args="kind: task\nname: Fix the gate buzzer\nlist: $casa_l")]))
 
-S("T14-Q022", "cadence monthly or rarer i2pat",
-  T("who do i see monthly or rarer", rows("thiago", "marcos_t", "jorge", "regina", "fernanda", "priscila"),
-    ref=[ans(kind="person", where="cadence >= 30 days")]))
-
 S("T14-Q023", "my short word file star not role i2pat",
   T("star my cnh", diff(upd("cnh_doc", starred=True)),
     ref=[act("star", kind="document", name="CNH")]))
@@ -111,9 +101,3 @@ S("T14-Q023", "my short word file star not role i2pat",
 S("T14-Q024", "no notes description empty i2pat",
   T("which of my dj tasks have no notes", rows("setlist12", "mix", "headphones", "controller", "bsas_setlist", "flyer_art"),
     ref=[ans(kind="task", linked_to="$dj_l", where="description is empty")]))
-
-S("T14-Q025", "which most within prev order desc i2pat",
-  T("who owes me anything", rows("d_rafa_s", "d_guga", "d_diego", "d_thiago", "d_kleber", "d_bianca"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which is the most", rows("d_kleber"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))

@@ -48,7 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common  # noqa: E402
 from common import AUTHORED, Edit, render_call  # noqa: E402
 
-REWRITE_VERBS = {"edit", "reschedule", "complete", "reopen", "cancel", "delete", "restore", "star", "unstar", "settle_debt",
+REWRITE_VERBS = {"edit", "reschedule", "complete", "reopen", "cancel", "delete", "restore", "star", "unstar",
                  "reveal", "log"}
 NAME_KEYS = {"verb", "args", "more", "op", "field", "kind", "name", "value"}
 DATE_LINES = ("to", "date", "start", "due")

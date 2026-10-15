@@ -9,7 +9,7 @@ Built-in ambiguity: two Jonases (flatmate Jonas Keller, drummer Jonas Wirth), tw
 owner Hannah Seidel, climbing friend Hannah Bauer), nicknames (Kalle, Tobi, Olli, Steffi, Bea,
 Mama/Papa), a hard-to-spell name (Schmidtke), two soundchecks at Tonkeller, three mixing sessions
 with Greta, weekly band rehearsals, a year of kitty top-ups and rent tasks, two open invoices to
-Theater Lindenau, cancelled events, completed tasks, an empty group, an empty folder, an empty
+Theater Lindenau, cancelled events, completed tasks, an empty folder, an empty
 album, and trashed rows both inside and past the 30-day restore window.
 """
 from __future__ import annotations
@@ -76,33 +76,6 @@ def people():
         {"key": "frank", "name": "Frank Otto", "role": "gear buyer from Kleinanzeigen", "trashed": "2026-01-30T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "kitty", "name": "WG Kasse", "members": ["mira", "jonas_k"], "created": "2023-10-01T10:00"},
-    {"key": "band", "name": "Kaeltewelle band fund", "members": ["jonas_w", "lena", "kalle", "paul"],
-     "created": "2024-03-01T20:00"},
-    {"key": "crew", "name": "Festival crew 2026", "members": ["tobi", "nele", "emre", "olli"],
-     "created": "2026-01-29T22:30"},
-    {"key": "prague", "name": "Prague gig trip", "currency": "CZK", "members": ["jonas_w", "lena", "kalle", "marek"],
-     "created": "2026-01-12T21:00"},
-    {"key": "harz", "name": "Harz weekend", "members": ["sophie", "hannah_b", "yusuf"], "created": "2026-01-10T12:00"},
-    {"key": "mama60", "name": "Mama's 60th present", "members": ["sophie", "dieter"], "created": "2026-01-18T19:00"},
-]
-
-EXPENSES = [
-    {"group": "kitty", "name": "Toilet paper and dish soap", "amount": 18.40, "paid_by": "mira", "split": ["me", "mira", "jonas_k"], "date": "2026-01-09"},
-    {"group": "kitty", "name": "Internet January", "amount": 39.90, "paid_by": "me", "split": ["me", "mira", "jonas_k"], "date": "2026-01-15"},
-    {"group": "kitty", "name": "Big Rewe shop", "amount": 64.50, "paid_by": "jonas_k", "split": ["me", "mira", "jonas_k"], "date": "2026-01-24"},
-    {"group": "kitty", "name": "Internet February", "amount": 39.90, "paid_by": "me", "split": ["me", "mira", "jonas_k"], "date": "2026-02-02"},
-    {"group": "band", "name": "Rehearsal room January", "amount": 160, "paid_by": "me", "split": ["me", "jonas_w", "lena", "kalle"], "date": "2026-01-05"},
-    {"group": "band", "name": "Merch shirts", "amount": 240, "paid_by": "lena", "split": ["me", "jonas_w", "lena", "kalle"], "date": "2026-01-20"},
-    {"group": "band", "name": "Drum heads", "amount": 58, "paid_by": "jonas_w", "split": ["me", "jonas_w", "lena", "kalle"], "date": "2026-02-01"},
-    {"group": "crew", "name": "Kickoff dinner", "amount": 132, "paid_by": "tobi", "split": ["me", "tobi", "nele", "emre"], "date": "2026-01-29"},
-    {"group": "crew", "name": "Gaffer tape and cable ties", "amount": 46, "paid_by": "me", "split": ["me", "tobi", "nele", "emre"], "date": "2026-02-03"},
-    {"group": "prague", "name": "Van deposit", "amount": 4000, "paid_by": "me", "split": ["me", "jonas_w", "lena", "kalle"], "date": "2026-01-14"},
-    {"group": "prague", "name": "Hostel Zizkov", "amount": 6400, "paid_by": "kalle", "split": ["me", "jonas_w", "lena", "kalle"], "date": "2026-01-20"},
-    {"group": "mama60", "name": "Weekend spa voucher", "amount": 210, "paid_by": "sophie", "split": ["me", "sophie", "dieter"], "date": "2026-01-19"},
-]
 
 LISTS = [
     {"key": "bandlist", "name": "Band", "area": "band"},
@@ -441,23 +414,6 @@ PHOTOS = [
     {"key": "p_old_van", "name": "Old tour van", "taken": "2023-09-10T12:00", "trashed": "2025-12-15T10:00"},
 ]
 
-DEBTS = [
-    {"key": "d_mira_pizza", "person": "mira", "direction": "owes_me", "amount": 12.50, "name": "Pizza night", "date": "2026-01-30"},
-    {"key": "d_jonask_bvg", "person": "jonas_k", "direction": "i_owe", "amount": 8, "name": "Tram tickets", "date": "2026-02-03"},
-    {"key": "d_lena_cables", "person": "lena", "direction": "i_owe", "amount": 35, "name": "Cables from Thomann", "date": "2026-01-21"},
-    {"key": "d_kalle_beer", "person": "kalle", "direction": "owes_me", "amount": 22, "name": "Beer crate for the gig", "date": "2026-01-17"},
-    {"key": "d_kalle_strings", "person": "kalle", "direction": "owes_me", "amount": 16, "name": "Guitar strings", "date": "2026-02-03"},
-    {"key": "d_olli_mic", "person": "olli", "direction": "i_owe", "amount": 90, "name": "Borrowed mic money", "date": "2025-12-12"},
-    {"key": "d_sophie_train", "person": "sophie", "direction": "owes_me", "amount": 27.80, "name": "Harz train tickets", "date": "2026-01-24"},
-    {"key": "d_yusuf_parts", "person": "yusuf", "direction": "i_owe", "amount": 14, "name": "Bike parts", "date": "2025-12-20",
-     "settled": "2026-01-05T10:00"},
-    {"key": "d_ines_prints", "person": "ines", "direction": "i_owe", "amount": 45, "name": "Gig photo prints", "date": "2026-01-19"},
-    {"key": "d_paul_session", "person": "paul", "direction": "owes_me", "amount": 60, "name": "Session advance", "date": "2025-11-28"},
-    {"key": "d_hannah_b", "person": "hannah_b", "direction": "owes_me", "amount": 9.50, "name": "Climbing day pass", "date": "2026-02-01"},
-    {"key": "d_tobi_van", "person": "tobi", "direction": "owes_me", "amount": 30, "name": "Fuel for the crew van", "date": "2026-01-10",
-     "settled": "2026-01-29T22:00"},
-    {"key": "d_greta_dinner", "person": "greta", "direction": "i_owe", "amount": 19, "name": "Dinner after recording", "date": "2026-01-30"},
-]
 
 LOCKER = [
     {"key": "thomann", "name": "Thomann login", "type": "login", "username": "lukas.brandt", "url": "https://www.thomann.de",
@@ -530,8 +486,6 @@ def world():
         "seed": "T06",
         "currency": "EUR",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -541,7 +495,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

@@ -39,6 +39,7 @@
 //! `modified` (a later same-value edit that stamps `updated_at`) and `trashed`
 //! (`true` or a time). Keys are unique across the world; `me` is the owner.
 //! Times are `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, floating (no zone).
+//! A top-level key that is none of the above is an error (`groups`, `expenses` and `debts` were Tally's: #1115).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -147,6 +148,53 @@ impl Seeder {
     }
 }
 
+/// The top-level keys a world may carry: the scalars and the sections [`seed_report`] reads. `today` is the
+/// day the sessions on the world run; the Python tools read it and the seeder does not.
+const SECTIONS: &[&str] = &[
+    "me",
+    "epoch",
+    "seed",
+    "currency",
+    "today",
+    "people",
+    "lists",
+    "events",
+    "tasks",
+    "notebooks",
+    "notes",
+    "folders",
+    "documents",
+    "albums",
+    "photos",
+    "locker",
+    "accounts",
+    "transactions",
+    "links",
+];
+
+/// A section the seeder does not read is an error, never a silent drop: a world that still names a kind
+/// the runtime no longer has (`groups`, `expenses`, `debts` after Tally, #1099) would otherwise seed
+/// without it and pass for a household that never held it (#1115).
+fn reject_unknown_sections(world: &Value) -> Result<(), String> {
+    let Some(object) = world.as_object() else {
+        return Err("a world is a JSON object".to_owned());
+    };
+    let unknown: Vec<&str> = object
+        .keys()
+        .map(String::as_str)
+        .filter(|key| !SECTIONS.contains(key))
+        .collect();
+    if unknown.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "the world has sections the seeder does not read: {} (known: {})",
+            unknown.join(", "),
+            SECTIONS.join(", ")
+        ))
+    }
+}
+
 /// Seed `world` into a fresh vault at `path`. Returns every key's kind and id.
 pub fn seed(world: &Value, path: &Path) -> Result<Value, String> {
     seed_report(world, path).map(|(keys, _)| keys)
@@ -155,6 +203,7 @@ pub fn seed(world: &Value, path: &Path) -> Result<Value, String> {
 /// [`seed`], plus the `key.field` values the vault could not hold (a locker
 /// field its type does not keep).
 pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), String> {
+    reject_unknown_sections(world)?;
     let me = str_of(world, "me").unwrap_or("Me");
     let epoch = at(str_of(world, "epoch").unwrap_or("2026-01-01T09:00"))?;
     let clock = SetClock::at(epoch);

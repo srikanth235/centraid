@@ -40,35 +40,6 @@ S("T17-004", "person starred != enum role contains star named multi turn",
   T("and niki too", diff(upd("niki", starred=True)),
     ref=[search("niki", kind="person"), act("star", rows="$niki")]))
 
-S("T17-005", "nickname search group balance settle_up where",
-  T("where am i with vesi on the studio rent", val((150, "BGN")),
-    ref=[search("vesi", kind="person"),
-         ans(op="balance", kind="group", name="Studio rent", linked_to="$vesi")]),
-  T("settle up with the violinist there", diff(settle=[("Veselina Marinova", "150.00")]),
-    ref=[act("settle_up", kind="person", where='role = "violinist"', args=lines(group="$studio"))]))
-
-S("T17-006", "settle_up where balance after",
-  T("settle up with my ex-husband in viktor's costs", diff(settle=[("Stefan Petrov", "60.00")]),
-    ref=[act("settle_up", kind="person", where='role contains "ex-husband"', args=lines(group="$viktor_costs"))]),
-  T("so where's he at in that group", val((0, "BGN")),
-    ref=[ans(op="balance", kind="group", name="Viktor's costs", linked_to="$stefan")]))
-
-S("T17-007", "create person add_to group settle_up new amount",
-  T("add Iva Ruseva, new alto in the choir", diff(new("person", name="Iva Ruseva", role=ANY)),
-    ref=[act("create", args=lines(kind="person", name="Iva Ruseva", role="choir alto"))]),
-  T("put her in the chamber choir fund", diff(link("choir_fund", "+1")),
-    ref=[act("add_to", rows="$c1", args=lines(to="$choir_fund"))]),
-  T("she gave me 15 for her share of the copies, settle her up", diff(upd("+1", balance=ANY), settle=[("Iva Ruseva", "15.00")]),
-    ref=[act("settle_up", rows="$c1", args=lines(group="$choir_fund", amount="15"))]))
-
-S("T17-008", "create person more add_to settle_up new",
-  T("new contact galya mincheva, cellist, she's sharing the studio from feb. add her to studio rent too",
-    diff(new("person", name="Galya Mincheva", role=ANY), link("studio", "new")),
-    ref=[act("create", args=lines(kind="person", name="Galya Mincheva", role="cellist"), more=True),
-         act("add_to", rows="$new", args=lines(to="$studio"))]),
-  T("does she owe anything there yet? settle her up if so", diff(already=["+1"]),
-    ref=[act("settle_up", kind="person", rows="$c1", args=lines(group="$studio")), ans(rows="$c1")]))
-
 S("T17-009", "cancel event where tomorrow read",
   T("cancel tomorrow's coffee, mila's got flu", diff(upd("coffee_mila", status="cancelled")),
     ref=[act("cancel", kind="event", when=W(U("day", 1)))]),

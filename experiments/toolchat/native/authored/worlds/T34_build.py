@@ -229,114 +229,7 @@ for key, when in [(S["business"][3], "2027-06-12T10:00"), (S["estate"][5], "2027
                   (S["school"][8], "2027-02-12T10:00"), (S["friend"][6], "2026-06-03T10:00"),
                   (S["service"][4], "2025-10-10T10:00")]:
     P[key]["trashed"] = when
-# groups and debts only ever name live people
-S = {sec: [k for k in keys if not P[k].get("trashed")] for sec, keys in SECTION_KEYS.items()}
 
-# ----------------------------------------------------------------------------------------------
-# groups and expenses
-# ----------------------------------------------------------------------------------------------
-
-groups = []
-expenses = []
-
-
-def group(key, name, currency, members, created, spend=()):
-    groups.append({"key": key, "name": name, "currency": currency, "members": members, "created": created})
-    for ename, amount, payer, split, date in spend:
-        expenses.append({"group": key, "name": ename, "amount": amount, "paid_by": payer,
-                         "split": split, "date": date})
-
-
-group("family_fund", "Okafor Family Fund", "NGN", ["chidi_o", "ngozi_o", "daddy", "mummy", "aunty_uche"],
-      "2023-06-20T20:00", [
-          ("Daddy Chief's 72nd birthday party", 650000, "me", ["me", "chidi_o", "ngozi_o"], "2025-03-08"),
-          ("Mummy Grace's hospital bill", 420000, "chidi_o", ["me", "chidi_o", "ngozi_o"], "2025-09-14"),
-          ("Family house roof repair", 1800000, "daddy", ["me", "chidi_o", "ngozi_o", "daddy"], "2026-04-11"),
-          ("Christmas gifts for the elders", 380000, "ngozi_o", ["me", "chidi_o", "ngozi_o"], "2026-12-18"),
-          ("Water tanker for the compound", 75000, "me", ["me", "chidi_o"], "2027-03-02"),
-      ])
-group("mama_care", "Mama Nnukwu Care Fund", "NGN", ["chidi_o", "ngozi_o", "aunty_uche", "blessing"],
-      "2024-01-15T19:00", [
-          ("Mama Nnukwu's monthly drugs", 55000, "me", ["me", "chidi_o", "ngozi_o"], "2027-05-08"),
-          ("Hospital check-up", 90000, "ngozi_o", ["me", "chidi_o", "ngozi_o"], "2027-02-20"),
-          ("Wheelchair", 140000, "chidi_o", ["me", "chidi_o", "ngozi_o", "aunty_uche"], "2025-11-01"),
-          ("Physiotherapy sessions", 60000, "me", ["me", "ngozi_o"], "2026-06-15"),
-      ])
-group("church_build", "Church Building Fund", "NGN", ["pastor", "deacon", "funmi", "ngozi_e"] + S["church"][:8],
-      "2023-09-03T12:00", [
-          ("Cement for the new hall", 450000, "me", ["me", "pastor", "deacon"], "2024-02-10"),
-          ("Roofing sheets", 980000, "deacon", ["me", "pastor", "deacon", "ngozi_e"] + S["church"][:3], "2024-06-22"),
-          ("Plastering labour", 320000, "pastor", ["me", "pastor", "deacon"], "2025-01-18"),
-          ("Hall chairs", 560000, "ngozi_e", ["me", "pastor", "ngozi_e"] + S["church"][:2], "2026-03-07"),
-      ])
-group("estate", "Ikeja GRA Residents Association", "NGN", ["tunde_b", "mr_odili", "mallam"] + S["estate"][:12],
-      "2023-07-01T10:00", [
-          ("Security guards' December bonus", 240000, "tunde_b", ["me", "tunde_b", "mr_odili"] + S["estate"][:4],
-           "2023-12-20"),
-          ("Borehole repair", 380000, "mr_odili", ["me", "tunde_b", "mr_odili"] + S["estate"][:5], "2024-08-17"),
-          ("Estate gate remote", 95000, "me", ["me", "tunde_b", "mr_odili"], "2025-02-12"),
-          ("Drainage clearing", 210000, "tunde_b", ["me", "tunde_b"] + S["estate"][:6], "2025-07-26"),
-          ("Streetlights", 330000, "me", ["me", "tunde_b", "mr_odili"] + S["estate"][:3], "2026-10-24"),
-      ])
-group("diesel_pool", "Estate Diesel Pool", "NGN", ["tunde_b"] + S["estate"][12:19], "2023-08-05T09:00", [
-    ("Diesel drum, August", 210000, "tunde_b", ["me", "tunde_b"] + S["estate"][12:16], "2023-08-12"),
-    ("Diesel drum, December", 280000, "me", ["me", "tunde_b"] + S["estate"][12:15], "2023-12-09"),
-    ("Diesel drum, June", 350000, S["estate"][12], ["me", S["estate"][12], S["estate"][13]], "2025-06-14"),
-    ("Diesel drum, February", 410000, "tunde_b", ["me", "tunde_b"] + S["estate"][12:17], "2027-02-13"),
-])
-group("staff", "Okafor and Sons Staff Welfare", "NGN", ["emeka_n", "musa", "chinwe"] + S["business"][:8],
-      "2023-10-02T08:30", [
-          ("Staff end-of-year party", 360000, "me", ["me", "emeka_n", "musa", "chinwe"] + S["business"][:5],
-           "2023-12-22"),
-          ("Condolence for a driver's family", 150000, "emeka_n", ["me", "emeka_n", "musa", "chinwe"], "2024-09-05"),
-          ("Safety boots for the yard", 275000, "me", ["me", "emeka_n", "musa"] + S["business"][:4], "2025-04-14"),
-          ("Staff lunch on anniversary day", 120000, "chinwe", ["me", "chinwe", "emeka_n"], "2026-06-05"),
-      ])
-group("pta", "Greenfield PTA", "NGN", ["mrs_bakare", "principal"] + S["school"][:10], "2023-09-10T16:00", [
-    ("Teachers' day gifts", 90000, "mrs_bakare", ["me", "mrs_bakare"] + S["school"][:5], "2023-10-05"),
-    ("Sports day refreshments", 130000, "me", ["me", "mrs_bakare"] + S["school"][:4], "2024-03-16"),
-    ("Library books", 240000, S["school"][0], ["me", S["school"][0], S["school"][1], "mrs_bakare"], "2025-02-08"),
-    ("Graduation ceremony tent", 420000, "principal", ["me", "principal", "mrs_bakare"] + S["school"][:6],
-     "2026-07-10"),
-])
-group("london", "London Trip 2026", "GBP", ["aunty_uche", "adaobi", "chidi_o"], "2026-05-01T20:00", [
-    ("Heathrow airport pickup", 90, "aunty_uche", ["me", "aunty_uche", "adaobi"], "2026-08-02"),
-    ("Tickets to the Natural History Museum", 120, "me", ["me", "adaobi", "aunty_uche"], "2026-08-05"),
-    ("Dinner at Nando's", 85, "adaobi", ["me", "adaobi", "aunty_uche", "chidi_o"], "2026-08-06"),
-    ("Oyster cards", 60, "chidi_o", ["me", "adaobi", "chidi_o"], "2026-08-03"),
-])
-group("dubai", "Dubai Supply Trip 2025", "USD", ["chidi_a", "emeka_n"], "2025-04-01T20:00", [
-    ("Hotel for three nights", 540, "me", ["me", "chidi_a", "emeka_n"], "2025-05-14"),
-    ("Factory visit taxi", 70, "chidi_a", ["me", "chidi_a", "emeka_n"], "2025-05-15"),
-    ("Sample shipping", 320, "emeka_n", ["me", "chidi_a", "emeka_n"], "2025-05-20"),
-])
-group("wedding", "Chidi's Wedding 2026", "NGN", ["chidi_o", "ngozi_o", "daddy", "mummy"], "2026-06-10T20:00", [
-    ("Aso-ebi fabric", 480000, "ngozi_o", ["me", "ngozi_o", "chidi_o"], "2026-09-12"),
-    ("Traditional wedding caterers", 1500000, "daddy", ["me", "daddy", "chidi_o", "ngozi_o"], "2026-10-24"),
-    ("Church wedding programme printing", 90000, "me", ["me", "chidi_o"], "2026-11-02"),
-    ("Photographer deposit", 250000, "chidi_o", ["me", "chidi_o", "ngozi_o"], "2026-10-05"),
-])
-group("village", "Umunna Village Meeting", "NGN", ["daddy"] + S["village"], "2023-08-12T11:00", [
-    ("Contribution for the new school block", 600000, "daddy", ["me", "daddy"] + S["village"][:4], "2024-12-27"),
-    ("Kola and drinks for the elders", 80000, "me", ["me", "daddy", S["village"][0]], "2025-12-28"),
-    ("Burial contribution", 300000, S["village"][1], ["me", "daddy", S["village"][1], S["village"][2]], "2026-04-04"),
-])
-group("village_xmas", "Christmas in the Village", "NGN", S["extended"][:8], "2023-11-20T19:00", [
-    ("Rice and goat for the family", 520000, "me", ["me"] + S["extended"][:4], "2023-12-23"),
-    ("Generator for the compound", 180000, S["extended"][0], ["me"] + S["extended"][:3], "2024-12-22"),
-    ("Drinks and soft drinks", 140000, "me", ["me"] + S["extended"][:5], "2025-12-23"),
-    ("Cooks and helpers", 90000, S["extended"][1], ["me"] + S["extended"][:3], "2026-12-24"),
-])
-group("alumni", "Class of 98 Alumni", "NGN", S["friend"][:10], "2023-09-30T18:00", [
-    ("Reunion hall", 300000, S["friend"][0], ["me"] + S["friend"][:6], "2024-08-17"),
-    ("School library donation", 200000, "me", ["me"] + S["friend"][:5], "2025-08-16"),
-    ("Anniversary souvenirs", 110000, S["friend"][1], ["me", S["friend"][1], S["friend"][2]], "2026-08-15"),
-])
-group("cousins", "Cousins Group", "NGN", ["chukwuemeka", "chukwuma"] + S["extended"][8:16], "2024-02-10T20:00", [
-    ("Group gift for Aunty Obiageli", 85000, "chukwuemeka", ["me", "chukwuemeka", "chukwuma"], "2025-05-17"),
-    ("Cousins' day out", 160000, "me", ["me", "chukwuemeka"] + S["extended"][8:11], "2026-01-03"),
-])
-group("retired", "Retired Staff Fund", "NGN", S["business"][8:14], "2024-06-14T17:00")  # empty
 
 # ----------------------------------------------------------------------------------------------
 # events
@@ -923,31 +816,6 @@ for i, when in [(1, "2027-06-14T10:00"), (4, "2027-06-01T10:00"), (7, "2027-05-2
                 (14, "2026-09-15T10:00"), (18, "2026-04-02T10:00"), (22, "2025-10-02T10:00"), (27, "2025-04-02T10:00")]:
     _p[i]["trashed"] = when
 
-# ----------------------------------------------------------------------------------------------
-# debts (in NGN, the vault currency)
-# ----------------------------------------------------------------------------------------------
-
-DEBT_NAMES = ["lunch", "fuel for the generator", "taxi fare", "school books", "building sand", "aso-ebi fabric",
-              "church levy", "birthday gift share", "bag of rice", "airtime", "party drinks", "tyre repair",
-              "groceries", "contribution for the burial", "paint"]
-DEBT_PEOPLE = (["chidi_o", "chidi_a", "ngozi_o", "ngozi_e", "ngozi_n", "tunde_b", "tunde_k", "emeka_n", "chinwe",
-                "musa", "aunty_uche", "obiageli", "chukwuemeka", "chukwuma"] + S["church"][:6] + S["estate"][:6]
-               + S["friend"][:5] + S["business"][:4])
-debts = []
-for i in range(40):
-    d = dt.date(2023, 7, 1) + dt.timedelta(days=(i * 33) % 1440)
-    row = {"key": f"debt_{i + 1:02d}", "person": DEBT_PEOPLE[(i * 5) % len(DEBT_PEOPLE)],
-           "direction": "owes_me" if i % 3 != 1 else "i_owe",
-           "amount": float(5000 + (i * 3700) % 140000), "name": DEBT_NAMES[i % len(DEBT_NAMES)], "date": iso(d)}
-    if d < dt.date(2026, 12, 1) and i % 2 == 0:
-        row["settled"] = f"{iso(d + dt.timedelta(days=14))}T12:00"
-    debts.append(row)
-# one pair on the same person, one open and one settled
-debts[4]["person"] = "chidi_o"
-debts[5]["person"] = "chidi_o"
-debts[20]["person"] = "ngozi_o"
-debts[21]["person"] = "ngozi_e"
-debts[22]["person"] = "ngozi_n"
 
 # ----------------------------------------------------------------------------------------------
 # locker
@@ -1064,9 +932,9 @@ for d in documents[:30]:
 
 world = {
     "me": ME, "today": TODAY, "epoch": "2023-06-05T09:00", "seed": "T34", "currency": "NGN",
-    "people": people, "groups": groups, "expenses": expenses, "lists": lists, "events": events,
+    "people": people, "lists": lists, "events": events,
     "tasks": tasks, "notebooks": notebooks, "notes": notes, "folders": folders, "documents": documents,
-    "albums": albums, "photos": photos, "debts": debts, "locker": locker, "links": links,
+    "albums": albums, "photos": photos, "locker": locker, "links": links,
 }
 
 
@@ -1087,16 +955,6 @@ def check(w):
     def need(key, kind):
         assert keys.get(key) == kind, f"{key} is not a {kind}"
 
-    for g in w["groups"]:
-        [need(m, "people") for m in g["members"]]
-        assert len(set(g["members"])) == len(g["members"]), g["key"]
-    for e in w["expenses"]:
-        need(e["group"], "groups")
-        [need(m, "people") for m in e["split"]]
-        need(e["paid_by"], "people")
-        members = set(next(g["members"] for g in w["groups"] if g["key"] == e["group"])) | {"me"}
-        assert set(e["split"]) | {e["paid_by"]} <= members, f"expense outside its group: {e['name']}"
-        assert len(set(e["split"])) == len(e["split"]), e["name"]
     for t in w["tasks"]:
         if "parent" in t:
             need(t["parent"], "tasks")
@@ -1112,26 +970,23 @@ def check(w):
         [need(a, "albums") for a in p.get("albums", [])]
         [need(q, "people") for q in p.get("people", [])]
         assert len(set(p.get("albums", []))) == len(p.get("albums", [])), p["key"]
-    for d in w["debts"]:
-        need(d["person"], "people")
     for e in w["events"]:
         [need(a, "people") for a in e.get("attendees", [])]
     for ln in w["links"]:
         assert ln["from"] in keys and ln["to"] in keys, ln
-    names = [g["name"] for g in w["groups"]] + [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
-    assert len(names) == len(set(names)), "group/notebook/album names must be unique"
+    names = [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
+    assert len(names) == len(set(names)), "notebook/album names must be unique"
     spans = sorted((e["start"], e.get("end", e["start"]), e["key"]) for e in w["events"])
     for (s1, e1, k1), (s2, e2, k2) in zip(spans, spans[1:]):
         assert e1 <= s2, f"events overlap: {k1} and {k2}"
     assert len({r["type"] for r in w["locker"]}) == 15, sorted({r["type"] for r in w["locker"]})
     assert len({p["name"] for p in w["people"]}) == len(w["people"]), "duplicate person names"
     # the shape of a large world
-    n = {k: len(w[k]) for k in ("people", "groups", "events", "tasks", "notes", "documents", "photos", "debts",
-                                "locker")}
+    n = {k: len(w[k]) for k in ("people", "events", "tasks", "notes", "documents", "photos", "locker")}
     assert n["people"] >= 180, n
-    assert 10 <= n["groups"] <= 16 and 600 <= n["events"] <= 800, n
+    assert 600 <= n["events"] <= 800, n
     assert 700 <= n["tasks"] <= 900 and 35 <= n["notes"] <= 45 and 55 <= n["documents"] <= 65, n
-    assert n["photos"] >= 280 and 35 <= n["debts"] <= 45 and 22 <= n["locker"] <= 28, n
+    assert n["photos"] >= 280 and 22 <= n["locker"] <= 28, n
     done = sum(1 for t in w["tasks"] if t.get("completed"))
     assert done >= 0.7 * n["tasks"], f"tasks completed: {done} of {n['tasks']}"
     from collections import Counter
@@ -1147,7 +1002,6 @@ def check(w):
         assert sum(1 for r in w[kind] if r.get("trashed")) >= 2, f"trashed {kind}"
     assert any(e.get("cancelled") for e in w["events"]) and any(t.get("status") == "cancelled" for t in w["tasks"])
     assert any(not [x for x in w["documents"] if x.get("folder") == f["key"]] for f in w["folders"])
-    assert any(not [x for x in w["expenses"] if x["group"] == g["key"]] for g in w["groups"])
 
 
 if __name__ == "__main__":

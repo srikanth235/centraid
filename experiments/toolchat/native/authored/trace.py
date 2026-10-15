@@ -68,9 +68,9 @@ from pathlib import Path
 ROW_CAP = 12  # crates/nativetools meta::ROW_CAP: rows a result shows, and the most a write may take unless scope is all
 INTENTS = ("read", "count", "write", "ask", "decline")
 VERBS = ("create", "edit", "reschedule", "complete", "reopen", "cancel", "delete", "restore", "star", "unstar",
-         "add_to", "remove_from", "log", "settle_up", "settle_debt", "reveal", "undo")
+         "add_to", "remove_from", "log", "reveal", "undo")
 LOOKUPS = ("find", "search", "open")
-AGG_OPS = ("count", "sum", "min", "max", "balance")
+AGG_OPS = ("count", "sum", "min", "max")
 SCOPES = ("one", "some", "all")
 REFERS = ("it", "both", "that", "nth")
 REASONS = ("kind", "name", "position", "date", "status", "other")
@@ -280,7 +280,7 @@ def build_ctx(history: list[dict]) -> Ctx:
             for n_txt in re.finditer(r"\(#(\d+)\)", ctx.system):
                 ctx.directory.add(int(n_txt.group(1)))
             for line in ctx.system.split("\n"):
-                mm = re.match(r"(groups|albums|notebooks|folders|lists): (.*)$", line)
+                mm = re.match(r"(albums|notebooks|folders|lists): (.*)$", line)
                 if mm:
                     kind = mm.group(1)[:-1]
                     for name, n in re.findall(r"(.+?) \(#(\d+)\)(?:, |$)", mm.group(2)):
@@ -389,7 +389,7 @@ VERB_RX = {
     "reschedule": _rx(r"move", r"push(?:ed)?", r"shift", r"re-?schedule", r"bring (?:it )?forward", r"postpone", r"delay", r"put (?:it )?back", r"due", r"make (?:\w+ ){0,4}(?:\d+|\w+ \d+|half \w+)",
                       r"can wait", r"instead", r"give it", r"at half \d+", r"is \d+:\d\d now",
                       r"change (?:the )?(?:time|date|day)", r"make (?:it|that|them) (?:earlier|later)", r"swap", r"slide"),
-    "create": _rx(r"add", r"new", r"book", r"schedule", r"create", r"owes? me", r"catch up with", r"ring \w+", r"folder for", r"go on", r"yes,? \w+ \w+", r"put \w+(?: \w+){0,4} in(?: the diary| the calendar)?", r"make", r"set up",
+    "create": _rx(r"add", r"new", r"book", r"schedule", r"create", r"catch up with", r"ring \w+", r"folder for", r"go on", r"yes,? \w+ \w+", r"put \w+(?: \w+){0,4} in(?: the diary| the calendar)?", r"make", r"set up",
                   r"remind me", r"save", r"log", r"note down", r"start", r"open a", r"put in", r"put (?:a|an) \w+", r"stick"),
     "star": _rx(r"star(?:red)?", r"favou?rite", r"fav", r"bookmark"),
     "unstar": _rx(r"un-?star", r"un-?favou?rite", r"unfav\w*", r"remove (?:the )?star", r"drop (?:the )?star"),
@@ -397,8 +397,6 @@ VERB_RX = {
     "remove_from": _rx(r"take", r"remove", r"drop", r"pull", r"out of", r"kick", r"get \w+ out"),
     "log": _rx(r"log", r"record", r"note", r"tick", r"rang", r"met", r"had a", r"call with", r"a (?:call|visit|message|coffee)", r"stopped by", r"called", r"rings?",
                r"dropped by", r"texted", r"brew", r"visit", r"spoke"),
-    "settle_up": _rx(r"settle(?:d)?(?: him| her| them)? up", r"square(?:d)? up", r"pay(?:ing)? (?:him |her |them )?back", r"settle"),
-    "settle_debt": _rx(r"settle\w*", r"paid(?: off)?", r"cleared?", r"squared", r"pay(?:ing)? off", r"mark(?:ed)?", r"is paid"),
     "reveal": _rx(r"show me", r"tell me", r"read (?:it |me )?out", r"read me", r"reveal", r"give me", r"what(?:'s| is) the", r"show", r"read"),
     "edit": _rx(r"rename", r"change", r"update", r"edit", r"set", r"make (?:it|her|him|that|\w+)", r"put", r"add", r"pin", r"unpin", r"fix", r"correct",
                 r"call (?:it|him|her)", r"its?", r"is now", r"not", r"goes by", r"nickname", r"every \w+ (?:weeks?|days?|months?)", r"monthly", r"weekly",
@@ -409,9 +407,9 @@ READ_LEAD = re.compile(
     r"can i|do you|did you|tell me|show me|let me see|i want to see|give me|i need to know|do i|did i|have i|what about)\s+)*"
     r"(what'?s?|whats|which|who'?s?|whos|whose|whom|when'?s?|whens|where'?s?|wheres|how|any|is|are|was|were|do|does|did|have|has|"
     r"list|show|find|see|check|got|gimme|give|tell)\b", re.I)
-COUNT_RX = _rx(r"how many", r"how much", r"count", r"total", r"sum", r"add up", r"balance", r"owe[sd]?", r"up or down", r"average", r"most",
+COUNT_RX = _rx(r"how many", r"how much", r"count", r"total", r"sum", r"add up", r"average", r"most",
                r"least", r"biggest", r"smallest", r"cheapest", r"longest", r"shortest", r"spent", r"cost\w*", r"in all", r"altogether",
-               r"number of", r"stand", r"where am i with", r"am i (?:up|down)", r"net")
+               r"number of")
 DECLINE_RX = {
     "sealed_egress": _rx(r"text \w+", r"whats?app", r"e-?mail(?:ing)? \w+", r"send \w+", r"text (?:it|them|her|him|that)", r"e-?mail(?:ing)? (?:it|them|that|her|him)", r"send (?:it|them|that|me)",
                          r"forward", r"share (?:it|them|that)", r"message (?:it|them|that)", r"dm", r"text", r"e-?mail", r"send", r"share",
@@ -660,12 +658,12 @@ def pick_cluster(clusters: list[tuple[int, int, str]], exprs: list[str], intent_
 # argument analysis
 # ---------------------------------------------------------------------------------------------
 
-CLOSED_ARGS = {"kind", "op", "field", "group", "order", "limit", "trashed", "more", "reason", "verb", "question", "type", "direction",
+CLOSED_ARGS = {"kind", "op", "field", "group", "order", "limit", "trashed", "more", "reason", "verb", "question", "type",
                "status", "starred", "pinned", "currency"}
 NUM_MULT = (1, 60, 1440, 10080, 24, 7, 30, 0.5, 2, 12)
 CURRENCY = {"gbp", "usd", "eur", "cad", "aud", "ngn", "inr", "jpy", "chf", "cny", "brl", "mxn", "nzd", "sek", "nok", "dkk", "pln", "zar", "sgd",
             "hkd", "krw", "try", "aed", "thb", "idr", "php", "myr", "czk", "huf", "ils", "egp", "ars", "clp", "cop", "pen", "kes", "ghs", "rub"}
-ENUM_WORDS = {"open", "in_progress", "completed", "cancelled", "settled", "owes_me", "i_owe", "owed_to_me", "yes", "no", "confirmed", "tentative",
+ENUM_WORDS = {"open", "in_progress", "completed", "cancelled", "posted", "void", "yes", "no", "confirmed", "tentative",
               "true", "false", "low", "high", "call", "message", "visit", "coffee", "password", "code", "card_number", "cvv", "content", "login", "card",
               "note", "identity", "wifi", "ssh_key", "api_credential", "passport", "bank_account", "driving_licence", "software_licence",
               "crypto_wallet", "membership", "document", "asc", "desc", "me", "self"}
@@ -797,7 +795,7 @@ def guess_intent(msg: str) -> tuple[str, str | None]:
     the outcome is not known when the lookup is written)."""
     if READ_LEAD.search(msg):
         return ("count" if COUNT_RX.search(msg) else "read"), None
-    for verb in ("undo", "restore", "cancel", "delete", "reschedule", "complete", "reopen", "unstar", "star", "settle_up", "log", "reveal",
+    for verb in ("undo", "restore", "cancel", "delete", "reschedule", "complete", "reopen", "unstar", "star", "log", "reveal",
                  "create"):
         if VERB_RX[verb].search(msg):
             return "write", verb
@@ -1199,7 +1197,7 @@ def derive_slots(call: dict, history: list[dict], today: str | None = None, retr
             continue
         if v.startswith("{") or re.fullmatch(r"\d{4}-\d\d-\d\d(?:T\d\d:\d\d)?", v):
             continue  # a date: the when slot
-        if fold(v) in ENUM_WORDS or v.lower() in CURRENCY or k in ("kind", "field", "status", "direction", "type", "currency", "starred", "pinned"):
+        if fold(v) in ENUM_WORDS or v.lower() in CURRENCY or k in ("kind", "field", "status", "type", "currency", "starred", "pinned"):
             sources.append(("args." + k, v, "closed (enum)"))
             continue
         if re.fullmatch(r"-?\d+(?:\.\d+)?", v):
@@ -1224,7 +1222,7 @@ def derive_slots(call: dict, history: list[dict], today: str | None = None, retr
                 continue
             for h in hlist:
                 row = ctx.rows.get(int(h[1:])) if h.startswith("#") else None
-                if row and row.kind not in ("group", "album", "notebook", "folder", "list") or (row and key in ("rows", "row", "linked_to")):
+                if row and row.kind not in ("album", "notebook", "folder", "list") or (row and key in ("rows", "row", "linked_to")):
                     hit = find_span(norm_words(row.name), mt, msg)
                     if hit and hit[1] >= 0.5:
                         if not any(hit[0].lower() == f.lower() for f in front):
@@ -1717,7 +1715,7 @@ def split_segments(text: str, seps=(" · ", " and ")) -> list[str]:
 
 def parse_cond(part: str) -> dict:
     """One typed condition from a segment (ValueError when it is not one): `{"field","op","value"}`, `{"field","op"}` for
-    `is empty` / `is set`, `{"link","op","value"}` for a linked count (`debt count >= 2`). A bare number is a number, a bare
+    `is empty` / `is set`, `{"link","op","value"}` for a linked count (`photo count >= 2`). A bare number is a number, a bare
     `yes`/`no` a bool, a bare number with a unit (`35 BRL`, `1 hour`) a string with `bare: True` (it renders unquoted), any
     other bare word a string, a quoted value a string."""
     part = part.strip()

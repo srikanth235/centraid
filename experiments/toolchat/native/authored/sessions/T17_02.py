@@ -59,27 +59,6 @@ S("T17-030", "ambiguous album pick from conversation rename count album photo co
   T("which albums have two photos or less", rows("recital24", "vienna_album"),
     ref=[ans(kind="album", where="photo count <= 2")]))
 
-S("T17-031", "empty result group recovery balance nickname members",
-  T("what's mila's position in the renovation group", val((-300, "BGN")),
-    ref=[find(kind="group", name="Renovation"),
-         ans(op="balance", kind="group", name="Bathroom works", linked_to="$mila")]),
-  T("and mama's?", val((0, "BGN")),
-    ref=[search("mama", kind="person"),
-         ans(op="balance", kind="group", name="Bathroom works", linked_to="$radka")]),
-  T("who's actually in that group", rows("mila", "radka", "me"),
-    ref=[ans(kind="person", linked_to="$bathroom_g")]))
-
-S("T17-032", "empty result group find miss search delete group trash event",
-  T("who's in the bansko trip group", rows("mila", "viktor", "me"),
-    ref=[find(kind="group", name="Bansko trip"),
-         search("bansko", kind="group"),
-         ans(kind="person", linked_to="$bansko")]),
-  T("trip's off, delete the group", diff(gone("bansko"), unlink("bansko", "mila"), unlink("bansko", "viktor"),
-                                         unlink("bansko", "me")),
-    ref=[act("delete", rows="$bansko")]),
-  T("delete the calendar entry for it too", diff(trash("bansko_ev")),
-    ref=[act("delete", kind="event", name="Bansko ski weekend")]))
-
 S("T17-033", "trashed events find-only restore window refused ask restore",
   T("what's in the trash from my calendar", rows("coffee_desi", "choir_party"),
     ref=[find(kind="event", trashed=True), ans(rows="@prev")]),

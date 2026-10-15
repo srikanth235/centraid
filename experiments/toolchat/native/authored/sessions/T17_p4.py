@@ -8,8 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-OWE = 'direction = "i_owe" and status = "open"'
-
 S("T17-201", "both dentists reschedule prev read",
   T("when are the dentist appointments", rows("dentist_v", "dentist_me"),
     ref=[find(kind="event", name="dentist", when=W({"from": U("day", 0)})), ans(rows="@prev")]),
@@ -25,16 +23,6 @@ S("T17-202", "ordinal monday events reschedule cancel",
     ref=[act("reschedule", rows="$ivan_0202", args=lines(to=U("day", 0, anchor="row", time="16:00")))]),
   T("cancel the last one, vesi's ill", diff(upd("vesi_reh", status="cancelled")),
     ref=[act("cancel", kind="event", within="@2", order="date desc", limit=1)]))
-
-S("T17-203", "owe direction nickname balance settle sum mine",
-  T("do i owe mitko", val((-1500, "BGN")),
-    ref=[search("Mitko", kind="person"), ans(op="balance", rows="$mitko")]),
-  T("and what does maria koleva owe me", val((100, "BGN")),
-    ref=[ans(op="balance", kind="person", name="Maria Koleva")]),
-  T("settle mine with plamen, paid him cash", diff(upd("d_plamen", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$plamen")]),
-  T("what's my side now, all i owe", val((2325, "BGN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=OWE)]))
 
 S("T17-204", "except wednesday events cancel rest read",
   T("what's on wednesday", rows("dentist_v", "maria_0204", "sectional", order=True),
@@ -53,11 +41,3 @@ S("T17-205", "bare weekday at n range create",
     ref=[act("reschedule", kind="event", name="Piano tuner", args=lines(to=U("week", 0, weekday=5, time="16:00")))]),
   T("call mama sunday at 5", diff(new("event", name=has("Mama"), date="2026-02-01T17:00")),
     ref=[act("create", args=lines(kind="event", name="Call with Mama", date=U("week", 0, weekday=7, time="17:00")))]))
-
-S("T17-206", "two writes settle complete then complete reschedule",
-  T("paid plamen the survey money and bought the metronome batteries",
-    diff(upd("d_plamen", status="settled"), upd("batteries", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", linked_to="$plamen", more=True), act("complete", rows="$batteries")]),
-  T("invoiced february, and the choir fees can wait till monday",
-    diff(upd("invoice_feb", status="completed", completed=ANY), upd("choir_fees", date="2026-02-02")),
-    ref=[act("complete", kind="task", name="Invoice February", more=True), act("reschedule", rows="$choir_fees", args=lines(to=U("week", 1, weekday=1)))]))

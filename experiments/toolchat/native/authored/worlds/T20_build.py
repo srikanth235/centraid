@@ -11,7 +11,7 @@ nicknames (Mamma, Nonna, Enzo, Tommy, Fede, Bea, Ale, Signora Rosa), a misspelle
 (Ettore Brambila), two dentist appointments, two tastings with Francesca, recurring Sunday rides
 and Tuesday wine briefings, near-duplicate tasks ("Order Chianti Classico", monthly rent), two
 notebooks called "Tasting notes ...", cancelled events, completed tasks, rows trashed inside and
-past the 30-day restore window, an empty group, an empty folder, an empty album and an empty list.
+past the 30-day restore window, an empty folder, an empty album and an empty list.
 """
 from __future__ import annotations
 
@@ -88,41 +88,6 @@ def people():
         {"key": "silvia", "name": "Silvia Monti", "role": "old flatmate", "trashed": "2026-03-15T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "casa", "name": "Casa nuova", "currency": "EUR", "members": ["giulia"], "created": "2026-04-01T10:00"},
-    {"key": "club", "name": "Ciclisti del Mugnone", "members": ["marco_e", "marco_l", "stefano", "luca", "ale", "bea"],
-     "created": "2025-03-01T09:00"},
-    {"key": "staff", "name": "Staff dinner fund", "members": ["carla", "lorenzo_g", "sofia", "davide", "elena"],
-     "created": "2026-01-10T10:00"},
-    {"key": "vinitaly", "name": "Vinitaly trip", "members": ["federico", "sofia"], "created": "2026-03-20T10:00"},
-    {"key": "stag", "name": "Stag weekend Lisbon", "members": ["andrea", "marco_e", "lorenzo_r"],
-     "created": "2026-05-02T20:00"},
-    {"key": "gift_pool", "name": "Nonna's birthday gift", "members": ["chiara"], "created": "2026-05-18T10:00"},
-]
-
-EXPENSES = [
-    {"group": "casa", "name": "Moving van deposit", "amount": 300, "paid_by": "me",
-     "split": ["me", "giulia"], "date": "2026-05-14"},
-    {"group": "casa", "name": "Paint and rollers", "amount": 140, "paid_by": "giulia",
-     "split": ["me", "giulia"], "date": "2026-05-23"},
-    {"group": "casa", "name": "New flat security deposit", "amount": 2400, "paid_by": "me",
-     "split": ["me", "giulia"], "date": "2026-04-28"},
-    {"group": "club", "name": "Team jerseys", "amount": 360, "paid_by": "me",
-     "split": ["me", "marco_e", "stefano", "luca", "ale", "bea"], "date": "2026-04-12"},
-    {"group": "club", "name": "Inner tubes and CO2", "amount": 90, "paid_by": "marco_l",
-     "split": ["me", "marco_l", "stefano"], "date": "2026-05-17"},
-    {"group": "staff", "name": "Staff dinner at Sostanza", "amount": 250, "paid_by": "me",
-     "split": ["me", "sofia", "davide", "elena", "lorenzo_g"], "date": "2026-05-04"},
-    {"group": "staff", "name": "Carla's birthday cake", "amount": 60, "paid_by": "elena",
-     "split": ["me", "elena", "sofia"], "date": "2026-05-19"},
-    {"group": "vinitaly", "name": "Hotel in Verona", "amount": 420, "paid_by": "federico",
-     "split": ["me", "federico", "sofia"], "date": "2026-04-13"},
-    {"group": "vinitaly", "name": "Train tickets", "amount": 96, "paid_by": "me",
-     "split": ["me", "federico", "sofia"], "date": "2026-04-12"},
-    {"group": "stag", "name": "Flights to Lisbon", "amount": 480, "paid_by": "andrea",
-     "split": ["me", "andrea", "marco_e", "lorenzo_r"], "date": "2026-05-05"},
-]
 
 LISTS = [
     {"key": "move_l", "name": "Move", "area": "home"},
@@ -491,32 +456,6 @@ PHOTOS = [
     {"key": "blurry_3", "name": "Blurry fireworks", "taken": "2025-12-31T23:59", "trashed": "2026-02-10T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_giulia", "person": "giulia", "direction": "owes_me", "amount": 85, "name": "Curtain fabric",
-     "date": "2026-05-26"},
-    {"key": "d_andrea", "person": "andrea", "direction": "i_owe", "amount": 120, "name": "Lisbon hotel share",
-     "date": "2026-05-06"},
-    {"key": "d_stefano", "person": "stefano", "direction": "owes_me", "amount": 40, "name": "Gran fondo entry",
-     "date": "2026-05-21"},
-    {"key": "d_luca", "person": "luca", "direction": "owes_me", "amount": 25, "name": "Spare tube and gels",
-     "date": "2026-05-24"},
-    {"key": "d_sofia", "person": "sofia", "direction": "owes_me", "amount": 30, "name": "AIS textbook",
-     "date": "2026-05-27"},
-    {"key": "d_davide", "person": "davide", "direction": "owes_me", "amount": 50, "name": "Taxi after the staff dinner",
-     "date": "2026-05-04"},
-    {"key": "d_fede", "person": "federico", "direction": "i_owe", "amount": 180, "name": "Six bottles of Chianti",
-     "date": "2026-04-20"},
-    {"key": "d_chiara", "person": "chiara", "direction": "i_owe", "amount": 45, "name": "Half of Nonna's flowers",
-     "date": "2026-05-18"},
-    {"key": "d_gianni", "person": "gianni", "direction": "i_owe", "amount": 150, "name": "Extra packing materials",
-     "date": "2026-05-27"},
-    {"key": "d_marco_l", "person": "marco_l", "direction": "i_owe", "amount": 35, "name": "Chain and cassette",
-     "date": "2026-04-05", "settled": "2026-04-12T10:00"},
-    {"key": "d_elena", "person": "elena", "direction": "owes_me", "amount": 20, "name": "Pastry moulds",
-     "date": "2026-03-30", "settled": "2026-04-08T16:00"},
-    {"key": "d_stefano_2", "person": "stefano", "direction": "owes_me", "amount": 15, "name": "Coffee and cornetti",
-     "date": "2026-04-26", "settled": "2026-05-03T11:00"},
-]
 
 LOCKER = [
     {"key": "gmail", "name": "Gmail", "type": "login", "username": "matteo.ricci.fi@gmail.com",
@@ -591,8 +530,6 @@ def world():
         "seed": "T20",
         "currency": "EUR",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -602,7 +539,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

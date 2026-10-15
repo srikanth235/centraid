@@ -61,14 +61,6 @@ S("T26-A008", "follow-up c3a",
   T("and thursday on", rows("mama70", "parents_day", "dentist_kemi", "site_1205", "football_1205"),
     ref=[ans(within="@1", exclude="@2")]))
 
-S("T26-A009", "follow-up c3a",
-  T("who owes me", rows("d_chidi", "d_ibrahim", "d_tunde", "d_segun", "d_bayo", "d_garba", "d_funmi"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 50000", rows("d_bayo", "d_ibrahim", "d_funmi"),
-    ref=[ans(within="@prev", where="amount > 50000 NGN")]),
-  T("and the biggest one", rows("d_bayo"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T26-A010", "follow-up c3a",
   T("what's in the rig album", rows("p_crane", "p_heli", "p_muster", "p_deck", "p_fpso", "p_turbine"),
     ref=[ans(kind="photo", linked_to="$rig_al")]),

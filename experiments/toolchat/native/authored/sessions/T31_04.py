@@ -114,16 +114,6 @@ S("T31-078", "ambiguous-wifi reveal two wifi pick flat",
   T("the one for this flat", diff(reveal=[("flat_wifi", "Krakowska3Pokoje")]),
     ref=[act("reveal", rows="$flat_wifi", args="field: password")]))
 
-S("T31-079", "ambiguous-debt settle match balls pick sum",
-  T("settle the match balls debt", ask("d_piotr_balls", "d_michal_balls"),
-    ref=[act("settle_debt", kind="debt", name="match balls")]),
-  T("piotr's", diff(upd("d_piotr_balls", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="match balls", linked_to="$piotr")]),
-  T("and michal's too, he sent it as well", diff(upd("d_michal_balls", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="match balls", linked_to="$michal")]),
-  T("how much are people still holding back from me", val((110, "PLN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = owes_me and status = open")]))
-
 S("T31-080", "ambiguous-note delete diary entry pick october",
   T("delete the diary entry", ask("n_diary_shift", "n_diary_good"),
     ref=[act("delete", kind="note", name="diary entry")]),
@@ -133,42 +123,6 @@ S("T31-080", "ambiguous-note delete diary entry pick october",
     ref=[ans(kind="note", when=J(U("month", -1, name=10)), exclude="$n_diary_good")]),
   T("bring the diary entry back, i changed my mind", diff(restore("n_diary_good")),
     ref=[find(kind="note", name="diary entry", trashed=True), act("restore", rows="@2")]))
-
-S("T31-081", "recovery-nolink zakopane group events december decline-text open-tasks reschedule",
-  T("what's the zakopane group got planned in december", rows("zakopane_trip"),
-    ref=[find(kind="event", linked_to="$zakopane", when=J(U("month", 0, name=12))),
-         ans(kind="event", name="zakopane", when=J(U("month", 0, name=12)))]),
-  T("text everyone who's coming that we meet at glowny at 5", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("any open tasks for the trip", rows("zak_pack"),
-    ref=[ans(kind="task", name="zakopane", where="status = open")]),
-  T("push the packing list to the 3rd", diff(upd("zak_pack", date="2026-12-03")),
-    ref=[act("reschedule", rows="$zak_pack", args=lines(to=D("2026-12-03")))]))
-
-S("T31-082", "recovery-nolink stag group event reschedule anchor besides",
-  T("anything in the calendar for adi's stag do group", rows("stag_planning"),
-    ref=[ans(kind="event", linked_to="$stag"),
-         ans(kind="event", name="stag do")]),
-  T("push the planning dinner back an hour", diff(upd("stag_planning", date="2026-11-28T20:00")),
-    ref=[act("reschedule", rows="$stag_planning", args=lines(to=U("hour", 1, anchor="row")))]),
-  T("rename it to stag do dinner", diff(upd("stag_planning", name="Stag do dinner")),
-    ref=[act("edit", rows="$stag_planning", args="name: Stag do dinner")]))
-
-S("T31-083", "recovery-nolink london group notes empty pinned pin",
-  T("what notes have i got on the london christmas group", rows("n_london_ideas"),
-    ref=[ans(kind="note", linked_to="$london"),
-         ans(kind="note", name="london")]),
-  T("is the gift ideas one pinned", rows(),
-    ref=[ans(kind="note", name="gift ideas", where="pinned = yes")]),
-  T("pin it then", diff(upd("n_gifts", pinned=True)),
-    ref=[act("edit", kind="note", name="gift ideas", args="pinned: yes")]))
-
-S("T31-084", "recovery-nolink london group photos star pub",
-  T("photos in the london christmas group", rows("p_tr_london"),
-    ref=[ans(kind="photo", linked_to="$london"),
-         ans(kind="photo", name="london")]),
-  T("star the pub one with james too", diff(upd("p_tr_pub", starred=True)),
-    ref=[act("star", kind="photo", name="pub", linked_to="$james")]))
 
 S("T31-085", "repair-cadence-unit starred people within-date log exclude",
   T("which of my starred people should i be in touch with at least every 3 weeks",

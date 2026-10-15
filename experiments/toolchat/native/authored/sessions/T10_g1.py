@@ -30,63 +30,6 @@ S("T10-102", "contrast star document context multi",
     diff(upd("echo", starred=True), upd("blood_may", starred=True)),
     ref=[act("star", rows="$echo, $blood_may")]))
 
-S("T10-103", "ask options person add_to count",
-  T("add khaled to the aqaba trip", ask("khaled_o", "khaled_s"),
-    ref=[act("add_to", kind="person", name="Khaled", args=lines(to="$aqaba")),
-         askc("khaled omari or khaled sweidan the pharmacist?", options="$khaled_o, $khaled_s")]),
-  T("omari, he's driving down with jamal", diff(link("aqaba", "khaled_o")),
-    ref=[act("add_to", rows="$khaled_o", args=lines(to="$aqaba"))]),
-  T("how many of us is that", val(5),
-    ref=[ans(op="count", kind="person", linked_to="$aqaba")]))
-
-S("T10-104", "contrast add_to person context star",
-  T("who was the pharmacist again", rows("khaled_s"),
-    ref=[ans(kind="person", where='role contains "pharmacist"')]),
-  T("add khaled to the aqaba trip, he's got a car", diff(link("aqaba", "khaled_s")),
-    ref=[act("add_to", rows="@prev", args=lines(to="$aqaba"))]),
-  T("star him", diff(upd("khaled_s", starred=True)),
-    ref=[act("star", rows="$khaled_s")]))
-
-S("T10-105", "ask options person add_to group",
-  T("put sami on the eid group, he's coming this year", ask("sami_h", "sami_k"),
-    ref=[act("add_to", kind="person", name="Sami", args=lines(to="$eid")),
-         askc("sami haddad your grandson or sami khoury from chess?", options="$sami_h, $sami_k")]),
-  T("haddad, the kid", diff(link("eid", "sami_h")),
-    ref=[act("add_to", rows="$sami_h", args=lines(to="$eid"))]),
-  T("and layla", diff(link("eid", "layla")),
-    ref=[act("add_to", kind="person", name="Layla", args=lines(to="$eid"))]),
-  T("and get the balcony door task back, the carpenter cancelled", diff(restore("balcony")),
-    ref=[find(kind="task", name="balcony door", trashed=True), act("restore", rows="$balcony")]))
-
-S("T10-106", "contrast add_to person context balance",
-  T("who are omar's boys", rows("zaid", "sami_h"),
-    ref=[ans(kind="person", where='role contains "Omar"')]),
-  T("put sami on the eid group", diff(link("eid", "sami_h")),
-    ref=[act("add_to", rows="$sami_h", args=lines(to="$eid"))]),
-  T("does huda owe me anything", val((101, "JOD")),
-    ref=[ans(op="balance", kind="person", name="Huda Haddad")]))
-
-S("T10-107", "ask options person log long balance",
-  T("khalil came by this morning with some bread from the bakery, log that as a visit", ask("khalil", "umm_khalil"),
-    ref=[act("log", kind="person", name="Khalil", args=lines(kind="visit")),
-         askc("khalil masri from the committee or samira khalil next door?", options="$khalil, $umm_khalil")]),
-  T("next door", diff(upd("umm_khalil", date=ANY)),
-    ref=[act("log", rows="$umm_khalil", args=lines(kind="visit"))]),
-  T("what's her balance", val((8, "JOD")),
-    ref=[ans(op="balance", rows="$umm_khalil")]),
-  T("she paid me, settle it", diff(upd("d_umm_khalil", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Bread from the bakery")]))
-
-S("T10-108", "contrast log person description balance star",
-  T("khalil from the committee rang, log a call", diff(upd("khalil", date=ANY)),
-    ref=[act("log", kind="person", name="Khalil Masri", args=lines(kind="call"))]),
-  T("what's his balance", val((25, "JOD")),
-    ref=[ans(op="balance", rows="$khalil")]),
-  T("and star him", diff(upd("khalil", starred=True)),
-    ref=[act("star", rows="$khalil")]),
-  T("how many debts are still open", val(9),
-    ref=[ans(op="count", kind="debt", where='status = "open"')]))
-
 S("T10-109", "ask options locker star unstar",
   T("star the bank one", ask("arab_bank", "visa_card", "cairo_amman"),
     ref=[act("star", kind="locker item", name="bank"),

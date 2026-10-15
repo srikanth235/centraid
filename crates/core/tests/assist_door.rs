@@ -5,7 +5,6 @@
 //! already holds. Over the same scenario they must answer the same rows, or
 //! the phone and the fine-tuning loop run one runtime over two worlds.
 
-
 use centraid_assist::native::world::World;
 use centraid_assist::native::{Door, meta::Kind};
 use centraid_core::api_proto as wire;

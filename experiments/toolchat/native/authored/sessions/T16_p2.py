@@ -8,10 +8,7 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 OPEN = 'status = "open"'
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 LIVE = 'status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
 LIVE_EV = 'status != "cancelled"'
 def next_prod():
     return find(kind="event", name="Weekly production meeting", when=W({"from": U("day", 0)}), order="date asc", limit=1)
@@ -48,13 +45,3 @@ S("T16-133-P", "ask cancel fire drill never mind then cricket list min max para"
     ref=[ans(op="min", field="effort", kind="task", linked_to="$cricket_l", where=LIVE)]),
   T("longest there", val(30),
     ref=[ans(op="max", field="effort", kind="task", linked_to="$cricket_l", where=LIVE)]))
-
-S("T16-139-P", "biggest i owe limit then next cardiology then sum this week then shortest event next week para",
-  T("top two debts of mine", rows("d_masud", "d_mizan", order=True),
-    ref=[ans(kind="debt", where=OWE, order="amount desc", limit=2)]),
-  T("abba's next cardilogy check-up date?", rows("cardio_jan"),
-    ref=[ans(kind="event", name="Cardiology check-up", when=W({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("this week's tasks summed up, how much work", val(455),
-    ref=[ans(op="sum", field="effort", kind="task", when=W(U("week", 0)), where=LIVE)]),
-  T("next week's diary, the shortest non-cancelled event? looking for a phone call gap", val(60),
-    ref=[ans(op="min", field="duration", kind="event", when=W(U("week", 1)), where=LIVE_EV)]))

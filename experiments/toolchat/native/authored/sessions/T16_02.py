@@ -6,22 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T16-026", "seven turns match day debts settle multi max",
-  T("what's on friday", rows("nets_1218", "match_uttara", "team_dinner"),
-    ref=[ans(kind="event", when=W(U("week", 0, weekday=5)))]),
-  T("who's playing the uttara match", rows("sohel", "rahim_m", "imran", "babu", "jewel"),
-    ref=[ans(kind="person", linked_to="$match_uttara")]),
-  T("which kitty debts are open", rows("d_babu", "d_jewel"),
-    ref=[ans(kind="debt", name="Kitty", where='status = "open"')]),
-  T("both paid at nets this morning, settle the two", diff(upd("d_babu", status="settled"), upd("d_jewel", status="settled")),
-    ref=[act("settle_debt", rows="$d_babu, $d_jewel")]),
-  T("does imran owe me anything", val((1300, "BDT")),
-    ref=[ans(op="balance", rows="$imran")]),
-  T("what do i owe other people", rows("d_masud", "d_mizan", "d_selim", "d_monir", "d_sohel"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("biggest one of those?", rows("d_masud"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T16-027", "six turns audit linked_to all note duration ambiguous event",
   T("what's on monday", rows("buyer_audit"),
     ref=[ans(kind="event", when=W(U("week", 1, weekday=1)))]),
@@ -139,12 +123,6 @@ S("T16-038", "starred people photo count unstar",
   T("unstar kamal bhai, he's work not family", diff(upd("kamal", starred=False)),
     ref=[act("unstar", rows="$kamal")]))
 
-S("T16-039", "group currency empty inr",
-  T("any groups with no currency set", rows(),
-    ref=[ans(kind="group", where="currency is empty")]),
-  T("which one's in rupees", rows("kolkata"),
-    ref=[ans(kind="group", where='currency = "INR"')]))
-
 S("T16-040", "task status empty person count description",
   T("tasks that have had their status left blank", rows(),
     ref=[ans(kind="task", where="status is empty")]),
@@ -205,19 +183,6 @@ S("T16-045", "remove_from photo where month linked",
   T("what pics have i got of arif", rows("arif_bday", "family_dinner"),
     ref=[find(kind="photo", linked_to="$arif"), ans(rows="@prev")]))
 
-S("T16-046", "five turns event dates description cancelled reschedule",
-  T("everything in january", rows("nets_0101", "match_final", "prod_0103", "bonus_meet", "nets_0108", "rehana_visit", "pitha",
-                                  "prod_0110", "cardio_jan", "nets_0115", "prod_0117", "coxs_trip", "nets_0122", "prod_0124", "nets_0129"),
-    ref=[ans(kind="event", when=W(U("month", 1, name=1)))]),
-  T("from this friday through next week, what's at the indoor stadium", rows("nets_1218", "match_uttara", "nets_1225"),
-    ref=[ans(kind="event", when=W(span(U("week", 0, weekday=5), U("week", 1))), where='description = "Mirpur indoor stadium"')]),
-  T("november up to fifth dec, what got cancelled", rows("nets_1120", "doctor_amma"),
-    ref=[ans(kind="event", when=W(span(U("month", 0, name=11), D("2026-12-05"))), where='status = "cancelled"')]),
-  T("move the electrician for the meter to twenty-third dec 4pm", diff(upd("electrician", date="2026-12-23T16:00")),
-    ref=[act("reschedule", kind="event", name="Electrician for the meter", args=lines(to=D("2026-12-23", "16:00")))]),
-  T("so the twenty-third has what", rows("fire_drill", "electrician"),
-    ref=[ans(kind="event", when=W(D("2026-12-23")))]))
-
 S("T16-047", "overdue complete priority span completed to month",
   T("what's overdue", rows("tv_bill"),
     ref=[ans(kind="task", when=W({"to": U("day", -1)}), where='status = "open"')]),
@@ -234,25 +199,3 @@ S("T16-048", "task date time span within",
     ref=[ans(kind="task", when=W(span(U("week", 0, weekday=4, time="09:00"), U("week", 0, weekday=6, time="18:00"))))]),
   T("which of those are on the factory list", rows("overtime", "needle_log"),
     ref=[ans(within="@prev", linked_to="$factory_l")]))
-
-S("T16-049", "single debt span weekday datetime",
-  T("anything owed from last monday all the way to monday at noon", rows("d_imran", "d_mizan", "d_sohel", "d_selim"),
-    ref=[ans(kind="debt", when=W(span(U("week", -1, weekday=1), U("week", 0, weekday=1, time="12:00"))))]))
-
-S("T16-050", "six turns debt create datetime rel time sum span min",
-  T("lent selim 200 today for his kid's medicine",
-    diff(new("debt", name=has("medicine"), amount=200, direction="owes_me"), link("new", "selim")),
-    ref=[act("create", args=lines(kind="debt", name="Medicine for Selim's kid", person="$selim", amount="200",
-                                  direction="owes_me"))]),
-  T("and imran took 300 off me last night, cash for imran",
-    diff(new("debt", amount=300, direction="owes_me"), link("new", "imran")),
-    ref=[act("create", args=lines(kind="debt", name="Cash for Imran", person="$imran", amount="300",
-                                  direction="owes_me"))]),
-  T("how much does imran owe me altogether", val((1100, "BDT")),
-    ref=[ans(op="sum", field="amount", kind="debt", linked_to="$imran", where='status = "open"')]),
-  T("debts from november through fifth dec", rows("d_babu", "d_masud", "d_shafiq", "d_jewel", "d_farzana"),
-    ref=[ans(kind="debt", when=W(span(U("month", 0, name=11), D("2026-12-05"))))]),
-  T("any settled in there", rows("d_farzana"),
-    ref=[ans(within="@prev", where='status = "settled"')]),
-  T("what's the tiniest debt anyone has with me", val((200, "BDT")),
-    ref=[ans(op="min", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]))

@@ -28,42 +28,6 @@ S("T24-004", "met literal within unstar person prev",
   T("unstar him", diff(upd("ray", starred=False)),
     ref=[act("unstar", rows="@prev")]))
 
-S("T24-005", "empty result group find miss decline not_found edit group prev",
-  T("what's my fantasy football group called", decline("not_found"),
-    ref=[find(kind="group", name="fantasy football"), search("fantasy football", kind="group"),
-         dec("not_found")]),
-  T("ok what currency is the quince group in", rows("quince_g"),
-    ref=[ans(kind="group", name="quince")]),
-  T("call it Ana's quinceañera gift, cousin ana hates being called cousin", diff(upd("quince_g", name="Ana's quinceañera gift")),
-    ref=[act("edit", rows="@prev", args=lines(name="Ana's quinceañera gift"))]))
-
-S("T24-006", "edit group named refused delete group ask never_mind",
-  T("rename the reunion group to Reunión Juárez 2026",
-    diff(upd("reunion_g", name="Reunión Juárez 2026")),
-    ref=[act("edit", rows="$reunion_g", args=lines(name="Reunión Juárez 2026"))]),
-  T("delete the reunion one", ask(),
-    ref=[bad(act("delete", rows="$reunion_g")),
-         askc("it still has the salon deposit in it, so the vault won't delete it. settle up with tio beto first?")]),
-  T("no leave it", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
-S("T24-007", "refused delete group ask settle_up undo ledger",
-  T("delete the union pizza fund, we're done with it", ask(),
-    ref=[bad(act("delete", rows="$union_g")),
-         askc("the september pizza is still in there so it can't be deleted. want to settle up with david salazar?")]),
-  T("yeah settle up with david salazar in there", diff(settle=["David Salazar"]),
-    ref=[act("settle_up", rows="$david_s", args=lines(group="$union_g"))]),
-  T("undo that", diff(),
-    ref=[act("undo")]))
-
-S("T24-008", "empty result group find miss decline create group add_to",
-  T("who's in the carpool group", decline("not_found"),
-    ref=[search("carpool", kind="group"), dec("not_found")]),
-  T("fine, make one called Carpool with veronica and gilbert",
-    diff(new("group", name="Carpool"), link("new", "me"), link("new", "veronica"), link("new", "gilbert")),
-    ref=[act("create", args=lines(kind="group", name="Carpool"), more=True),
-         act("add_to", rows="$veronica, $gilbert", args=lines(to="$new"))]))
-
 S("T24-009", "event duration unit refused unit repair cancel named",
   T("anything next week that runs longer than two hours", rows("lucia_bday", "ref_clinic", "fb_0925", "yard_0926"),
     ref=[bad(ans(kind="event", when=U("week", 1), where="duration > 2 hours")),

@@ -20,15 +20,6 @@ S("T02-A002", "ask-options task complete c3a",
   T("greenleaf", diff(upd("inv_gl_final", status="completed", completed=ANY)),
     ref=[act("complete", rows="$inv_gl_final")]))
 
-S("T02-A003", "ask-options person add_to c3a",
-  T("put sophie in the book club group", ask("sophie_t", "sophie_d"),
-    ref=[act("add_to", kind="person", name="Sophie", args=lines(to="$bookclub")),
-         askc("Sophie Tran or Sophie Delacroix?", options="$sophie_t, $sophie_d")]),
-  T("delacroix, she's reading it too", diff(link("bookclub", "sophie_d")),
-    ref=[act("add_to", rows="$sophie_d", args=lines(to="$bookclub"))]),
-  T("and the colour one's done, tick it off", diff(upd("gl_colour", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="colour")]))
-
 S("T02-A004", "ask-options document delete never_mind c3a",
   T("get rid of the insurance doc", ask("ins_policy", "tenant_doc"),
     ref=[act("delete", kind="document", name="insurance"),
@@ -56,14 +47,6 @@ S("T02-A007", "follow-up c3a",
     ref=[ans(within="@prev", name="2026")]),
   T("star the first two", diff(upd("receipts", starred=True), upd("t2125", starred=True)),
     ref=[act("star", rows="$receipts, $t2125")]))
-
-S("T02-A008", "follow-up c3a",
-  T("which people owe me", rows("d_tomo", "d_carlos", "d_mf", "d_kai_books", "d_sophie_taxi"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("those but not the airport taxi", rows("d_kai_books", "d_tomo", "d_mf", "d_carlos"),
-    ref=[ans(within="@prev", exclude="$d_sophie_taxi")]),
-  T("which is the biggest", rows("d_mf"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
 
 S("T02-A009", "follow-up c3a",
   T("what's in the pottery album", rows("test_tiles", "yuki_demo", "vase", "first_bowl", "celadon_mug", "kiln_open"),

@@ -4,11 +4,9 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 OPEN = 'status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 LIVE = 'status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
 def next_group():
     return find(kind="event", name="Lab group meeting", when=W({"from": U("day", 0)}), order="date asc", limit=1)
 def badminton():
@@ -71,13 +69,6 @@ S("T13-034-P", "photos datetime to weekday album count para",
     ref=[ans(within="@prev", where="album count = 0")]),
   T("and those sitting in an album?", rows("p_movie", "p_suya", "p_garden", "p_bbq", "p_films"),
     ref=[ans(within="@1", where="album count != 0")]))
-
-S("T13-039-P", "debts span month named max para",
-  T("lent money from two months ago through august, to whom",
-    rows("d_chinedu", "d_tom_h", "d_kasia", "d_seun", "d_lukas", "d_tunde"),
-    ref=[ans(kind="debt", when=W(span(U("month", -2), U("month", 0, name=8))), where='direction = "owes_me"')]),
-  T("largest one among them", rows("d_chinedu"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
 
 S("T13-045-P", "contacted since datetime para",
   T("contacts i've spoken to after yesterday 6pm", rows("tom_h", "priya", "wei"),
@@ -148,15 +139,6 @@ S("T13-074-P", "event status empty cancelled delete undo para",
   T("put that back, undo", diff(restore("gp")),
     ref=[act("undo")]))
 
-S("T13-079-P", "groups linked_to all delete group currency contains para",
-  T("groups containing priya menon and daniel mensah both", rows("walkers"),
-    ref=[ans(kind="group", linked_to="$priya, $daniel")]),
-  T("we never use it, get rid of it",
-    diff(gone("walkers"), unlink("walkers", "priya"), unlink("walkers", "daniel"), unlink("walkers", "me")),
-    ref=[act("delete", rows="$walkers")]),
-  T("naira groups?", rows("family"),
-    ref=[ans(kind="group", where='currency contains "NGN"')]))
-
 S("T13-086-P", "photo counts spans refused date repair album count latest para",
   T("photo count, first aug midday through this monday", val(14),
     ref=[ans(op="count", kind="photo", when=W(span(D("2026-08-01", "12:00"), U("week", 0, weekday=1))))]),
@@ -165,20 +147,6 @@ S("T13-086-P", "photo counts spans refused date repair album count latest para",
          ans(op="count", kind="photo", when=W({"to": U("week", -1, weekday=1)}), where="album count != 0")]),
   T("latest photo not in any album, which", rows("p_ticket"),
     ref=[ans(kind="photo", where="album count = 0", order="date desc", limit=1)]))
-
-S("T13-091-P", "five turns debts last month sums status amount ask settle para",
-  T("total lent out last month?", val((120.5, "GBP")),
-    ref=[ans(op="sum", field="amount", kind="debt", when=W(U("month", -1)), where='direction = "owes_me"')]),
-  T("minus whatever got repaid", val((85.5, "GBP")),
-    ref=[ans(op="sum", field="amount", kind="debt", when=W(U("month", -1)),
-             where='direction = "owes_me" and status != "settled"')]),
-  T("any of those 20 quid or above", rows("d_kasia", "d_tunde"),
-    ref=[ans(kind="debt", when=W(U("month", -1)),
-             where='direction = "owes_me" and status != "settled" and amount >= 20 GBP')]),
-  T("tom's debt, mark it settled", ask("tom_h", "tom_b"),
-    ref=[find(kind="person", name="Tom"), askc("tom hargreaves or tom bennett?", options="$tom_h, $tom_b")]),
-  T("tom hargreaves", diff(upd("d_tom_h", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$tom_h")]))
 
 S("T13-096-P", "decline out of scope search miss not found para",
   T("reserve saturday at the nigerian place on oxford road", decline("out_of_scope"),
@@ -193,14 +161,6 @@ S("T13-A001-P", "ask-options event reschedule c3a para",
          askc("The one on 9 Sept or the one on 30 Sept?", options="$jc_0909, $jc_0930")]),
   T("i'm presenting on the 9th, that one", diff(upd("jc_0909", date="2026-09-11T16:00")),
     ref=[act("reschedule", rows="$jc_0909", args=lines(to=U("week", 1, weekday=5)))]))
-
-S("T13-A007-P", "follow-up c3a para",
-  T("anyone owing me", rows("d_kasia", "d_chinedu", "d_tom_b", "d_nkechi", "d_tom_h", "d_tunde", "d_fatima"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("over 20 among them", rows("d_nkechi", "d_kasia", "d_tunde", "d_chinedu"),
-    ref=[ans(within="@prev", where="amount > 20 GBP")]),
-  T("what else is there", rows("d_tom_h", "d_tom_b", "d_fatima"),
-    ref=[ans(within="@1", exclude="@2")]))
 
 S("T13-B005-P", "c4b state-change cancel event restore trashed task para",
   T("landlord inspection is off, gary called", diff(upd("landlord", status="cancelled")),

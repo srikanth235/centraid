@@ -23,16 +23,6 @@ S("T27-076", "six turns task person count folder refused ask write then read",
     ref=[act("complete", kind="task", name="Write the menu boards", more=True),
          ans(kind="task", linked_to="$open_l", where='status = "open"')]))
 
-S("T27-077", "home task person count debt settle prev",
-  T("home list tasks that involve someone else", rows("boiler", "nursery"),
-    ref=[ans(kind="task", linked_to="$home_l", where="person count != 0")]),
-  T("who's on Paint the nursery", rows("julien", "thomas_m"),
-    ref=[ans(kind="person", linked_to="$nursery")]),
-  T("what do i owe thomas for the paint", rows("d_thomas"),
-    ref=[ans(kind="debt", linked_to="$thomas_m")]),
-  T("settle it, sent him the money", diff(upd("d_thomas", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]))
-
 S("T27-078", "six turns note month span person count pinned edit multi empty note search count",
   T("notes from november up to last sunday that mention at most one person",
     rows("lamination", "kouign", "praline", "midwife_q", "butter_notes", "choc_notes", "baby_names", "oven_manual",
@@ -205,71 +195,6 @@ S("T27-092", "photo since last friday no album julien",
          askc("camille roux or camille petit?", options="$camille_r, $camille_p")]),
   T("roux, she came by the flat", diff(upd("camille_r", date=ANY)),
     ref=[act("log", rows="$camille_r", args=lines(kind="visit"))]))
-
-S("T27-093", "six turns debt span date weekday amount literal settle debt margaux balance settle up",
-  T("debts from fifteenth nov up to last sunday", rows("d_max", "d_margaux", "d_thomas", "d_sarah"),
-    ref=[ans(kind="debt", when=W(span(D("2026-11-15"), U("week", -1, weekday=7))))]),
-  T("which are open and thirty or less", rows("d_max", "d_margaux"),
-    ref=[ans(within="@prev", where='status = "open" and amount <= 30')]),
-  T("settle Pizza night, max paid", diff(upd("d_max", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Pizza night")]),
-  T("and margaux's yoga class one?", rows("d_margaux"),
-    ref=[ans(kind="debt", name="Yoga class")]),
-  T("where am i with her", val((17, "EUR")),
-    ref=[comp(op="balance", rows="$margaux"), ans(value="@prev")]),
-  T("settle up with her in the Prenatal group", diff(settle=["Margaux Fontaine"]),
-    ref=[act("settle_up", rows="$margaux", args=lines(group="$prenatal_g"))]))
-
-S("T27-094", "debt span date weekday owe compute max min balance",
-  T("what do i owe from first october to monday last week", rows("d_lea", "d_camille", "d_antoine", "d_thomas", "d_matthieu"),
-    ref=[ans(kind="debt", when=W(span(D("2026-10-01"), U("week", -1, weekday=1))), where='direction = "i_owe"')]),
-  T("biggest one still open", val((1500, "EUR")),
-    ref=[comp(op="max", field="amount", within="@prev", where='status = "open"'), ans(value="@prev")]),
-  T("and the smallest", val((60, "EUR")),
-    ref=[comp(op="min", field="amount", within="@1", where='status = "open"'), ans(value="@prev")]),
-  T("where am i with antoine mercier all in", val((-1900, "EUR")),
-    ref=[comp(op="balance", rows="$antoine"), ans(value="@prev")]))
-
-S("T27-095", "debt span datetime person count settle debt",
-  T("debts between fourteenth nov 9am and twenty-fourth nov 6pm", rows("d_chloe", "d_max", "d_margaux", "d_thomas", "d_sarah"),
-    ref=[ans(kind="debt", when=W(span(D("2026-11-14", "09:00"), D("2026-11-24", "18:00"))))]),
-  T("which of those have a person on them and are over 40", rows("d_chloe", "d_thomas"),
-    ref=[ans(within="@prev", where="person count != 0 and amount > 40")]),
-  T("settle concert tickets", diff(upd("d_chloe", status="settled")),
-    ref=[act("settle_debt", rows="$d_chloe")]))
-
-S("T27-096", "debt span datetime sum balance max",
-  T("debts logged from tuesday 8am till", rows("d_chloe2", "d_hugo", "d_nadia"),
-    ref=[ans(kind="debt", when=W(span(U("week", 0, weekday=2, time="08:00"), U("minute", 0))))]),
-  T("how much is that all together", val((57, "EUR")),
-    ref=[comp(op="sum", field="amount", rows="@prev"), ans(value="@prev")]),
-  T("what's chloé's balance with me", val((70, "EUR"), (-30, "GBP")),
-    ref=[comp(op="balance", rows="$chloe"), ans(value="@prev")]),
-  T("biggest open debt anyone owes me", val((45, "EUR")),
-    ref=[comp(op="max", field="amount", kind="debt", where='direction = "owes_me" and status = "open"'),
-         ans(value="@prev")]),
-  T("settle nadia's takeaway lunch and hugo's knife sharpening, both paid me in cash",
-    diff(upd("d_nadia", status="settled"), upd("d_hugo", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Takeaway lunch"), search("lunch", kind="debt"),
-         act("settle_debt", rows="$d_nadia", more=True), act("settle_debt", kind="debt", name="Knife sharpening")]))
-
-S("T27-097", "debt open start date amount literal currency not eur",
-  T("debts from before november", rows("d_lea", "d_antoine"),
-    ref=[ans(kind="debt", when=W({"to": D("2026-10-31")}))]),
-  T("any debts at all of 30 or under", rows("d_chloe2", "d_max", "d_hugo", "d_margaux", "d_nadia"),
-    ref=[ans(kind="debt", where="amount <= 30")]),
-  T("groups that use some other currency than euros?", rows("geneva_g", "london_g"),
-    ref=[ans(kind="group", where='currency != "EUR"')]),
-  T("the london trip group, who's in it", rows("chloe", "maxime", "me"),
-    ref=[find(kind="group", name="London trip"), search("london", kind="group"), ans(kind="person", linked_to="$london_g")]))
-
-S("T27-098", "debt open start date person count ask remind",
-  T("open debts from before tenth november", rows("d_lea", "d_camille", "d_antoine"),
-    ref=[ans(kind="debt", when=W({"to": D("2026-11-10")}), where='status = "open"')]),
-  T("of those, the ones over 100 with someone on them", rows("d_lea", "d_camille", "d_antoine"),
-    ref=[ans(within="@prev", where="person count != 0 and amount > 100")]),
-  T("remind me to pay antoine back", ask(),
-    ref=[askc("when do you want to be reminded? i'll add it as a task due that day.")]))
 
 S("T27-099", "six turns locker type empty starred reveal sealed egress create undo create",
   T("locker items with no type set", rows(),

@@ -26,12 +26,6 @@ S("T13-C003", "c3c compound complete edit",
     ref=[act("complete", kind="task", name="Buy toilet roll for the house", more=True),
          act("edit", kind="task", name="Sort out the broadband switch", args=lines(name="Switch broadband provider"))]))
 
-S("T13-C004", "c3c compound settle_debt create task",
-  T("tom h paid his takeaway money so settle that, and remind me friday to ask kasia about the router money",
-    diff(upd("d_tom_h", status="settled"), new("task", name=has("kasia", "router"), date="2026-09-04")),
-    ref=[act("settle_debt", kind="debt", name="Takeaway", more=True),
-         act("create", args=lines(kind="task", name="Ask Kasia about the router money", date=U("week", 0, weekday=5)))]))
-
 S("T13-C101", "c3c bulk delete per kind before year find multi-kind",
   T('clear out everything before 2025', diff(trash("cas"), trash("visa_letter"), trash("studentship"), trash("p_graduation")),
     ref=[find(kind="event,task,note,document,photo", when=W({"to": D("2024-12-31")})),

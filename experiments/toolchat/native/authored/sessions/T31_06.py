@@ -69,13 +69,6 @@ S("T31-109", "football list find-delete-finished restore count compute two-compl
     diff(upd("pay_pizza", status="completed", completed=ANY), upd("match_balls", status="completed", completed=ANY)),
     ref=[act("complete", rows="$pay_pizza", more=True), act("complete", rows="$match_balls")]))
 
-S("T31-110", "recovery-nolink london group events rename",
-  T("what has the london christmas group got coming up", rows("london_flight", "london_back"),
-    ref=[ans(kind="event", linked_to="$london", when=J({"from": U("day", 0)})),
-         ans(kind="event", name="london", when=J({"from": U("day", 0)}))]),
-  T("rename the first one to outbound flight", diff(upd("london_flight", name="Outbound flight")),
-    ref=[act("edit", rows="$london_flight", args="name: Outbound flight")]))
-
 S("T31-111", "short open tasks within find-complete-within find-reschedule-within undo",
   T("which open tasks due before the 12th take 10 minutes or less",
     rows("pay_ola", "bin_rota", "pay_pizza", "pay_marta", "physio_book", "uniforms", "pay_kuba", "match_balls"),
@@ -132,11 +125,3 @@ S("T31-115", "mama calls edit-duration find-edit-all where when reschedule",
          act("edit", rows="@1", args="duration: 45")]),
   T("move the one on the 8th to 7pm", diff(upd("mama_1108", date="2026-11-08T19:00")),
     ref=[act("reschedule", kind="event", name="call mama", when=J(D("2026-11-08")), args=lines(to=D("2026-11-08", "19:00")))]))
-
-S("T31-116", "recovery-nolink london group documents add-to to-file",
-  T("which documents are filed under the london christmas group", rows("d_flights"),
-    ref=[find(kind="document", linked_to="$london"), ans(kind="document", name="london")]),
-  T("put it in the to file folder", diff(link("empty_f", "d_flights")),
-    ref=[act("add_to", rows="$d_flights", args=lines(to="$empty_f"))]),
-  T("and the id card scan too", diff(link("empty_f", "d_dowod")),
-    ref=[act("add_to", kind="document", name="id card", args=lines(to="$empty_f"))]))

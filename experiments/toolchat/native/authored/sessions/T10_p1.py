@@ -195,10 +195,6 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 
-IOWE = 'direction = "i_owe" and status = "open"'
-
-OWED = 'direction = "owes_me" and status = "open"'
-
 S("T10-B004-P", "c4b state-change complete complete create contrast para",
   T("adel's dish is paid for", diff(upd("sat_task", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Adel dish")]),
@@ -206,12 +202,6 @@ S("T10-B004-P", "c4b state-change complete complete create contrast para",
     ref=[act("complete", kind="task", name="gas cylinder")]),
   T("task needed to tell abu ahmad about the airport run", diff(new("task", name=has("airport"))),
     ref=[act("create", args=lines(kind="task", name="Tell Abu Ahmad about the airport run"))]))
-
-S("T10-B006-P", "c4b state-change settle_debt log nickname para",
-  T("got the chess book money from walid", diff(upd("d_walid", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="chess book")]),
-  T("rang umm tareq back", diff(upd("huda", date=ANY)),
-    ref=[search("umm tareq", kind="person"), act("log", rows="$huda", args=lines(kind="call"))]))
 
 import json
 
@@ -230,25 +220,6 @@ S("T10-101-P", "ask options document star unstar para",
     ref=[act("unstar", kind="document", name="Fund ledger")]),
   T("old uk visa copy should come back to my docs", diff(restore("old_visa")),
     ref=[act("restore", kind="document", name="Old UK visa copy", trashed=True)]))
-
-S("T10-104-P", "contrast add_to person context star para",
-  T("pharmacist's name?", rows("khaled_s"),
-    ref=[ans(kind="person", where='role contains "pharmacist"')]),
-  T("khaled has a car, so he joins the aqaba trip", diff(link("aqaba", "khaled_s")),
-    ref=[act("add_to", rows="@prev", args=lines(to="$aqaba"))]),
-  T("give him a star", diff(upd("khaled_s", starred=True)),
-    ref=[act("star", rows="$khaled_s")]))
-
-S("T10-107-P", "ask options person log long balance para",
-  T("this morning khalil brought some bread from the bakery, log it as a visit", ask("khalil", "umm_khalil"),
-    ref=[act("log", kind="person", name="Khalil", args=lines(kind="visit")),
-         askc("khalil masri from the committee or samira khalil next door?", options="$khalil, $umm_khalil")]),
-  T("the one next door", diff(upd("umm_khalil", date=ANY)),
-    ref=[act("log", rows="$umm_khalil", args=lines(kind="visit"))]),
-  T("her balance?", val((8, "JOD")),
-    ref=[ans(op="balance", rows="$umm_khalil")]),
-  T("she's paid me, so settle it", diff(upd("d_umm_khalil", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Bread from the bakery")]))
 
 S("T10-109-P", "ask options locker star unstar para",
   T("bank one gets a star", ask("arab_bank", "visa_card", "cairo_amman"),

@@ -18,14 +18,6 @@ S("T32-091", "container-link-reads list-name-collision within-linked folder-vs-l
   T("and what's in the family folder", rows("d_carmen_id", "d_deed"),
     ref=[ans(kind="document", linked_to="$family_f")]))
 
-S("T32-092", "container-link-reads owner-row groups person-count within photos-of-me",
-  T("how many groups am i in", val(6),
-    ref=[ans(op="count", kind="group", linked_to="$me")]),
-  T("which of them have more than 3 people", rows("coro", "familia", "boda", "panaderos"),
-    ref=[ans(within="@prev", where="person count > 3")]),
-  T("how many photos am i in", val(0),
-    ref=[ans(op="count", kind="photo", linked_to="$me")]))
-
 S("T32-093", "container-link-reads person-appointments linked within week",
   T("what's don memo got coming up this week and next", rows("stall_oct31", "stall_nov01", "stall_nov02", "vendors"),
     ref=[ans(kind="event", linked_to="$memo", when=W(span(U("week", 0), U("week", 1))))]),
@@ -70,16 +62,6 @@ S("T32-097", "stray-or-operator-conditions inert-clause by-name-writes star pin 
     ref=[act("complete", kind="task", name="thermostat", more=True),
          ans(kind="task", linked_to="$bakery_l", where="status = open", when=W(U("day", 1)))]))
 
-S("T32-098", "stray-or-operator-conditions role-like-nouns exact-role name-not-direction group-not-role status-lacking",
-  T("who's on the counter", rows("yesenia"),
-    ref=[ans(kind="person", where='role = "counter"')]),
-  T("any open deposits", rows("d_flor"),
-    ref=[ans(kind="debt", name="deposit", where="status = open")]),
-  T("who are the chicago cousins", rows("me", "pepe", "gaby"),
-    ref=[ans(kind="person", linked_to="$chicago")]),
-  T("and who's still in the choir", rows("me", "aurelio", "marilu", "marichuy", "lupita", "xochitl", "cuauh", "ramiro"),
-    ref=[ans(kind="person", linked_to="$coro")]))
-
 S("T32-099", "stray-or-operator-conditions met-description-body-contains photo-name-only",
   T("who did i meet at the mercado", rows("memo", "omar"),
     ref=[ans(kind="person", where='met contains "Mercado"')]),
@@ -89,17 +71,6 @@ S("T32-099", "stray-or-operator-conditions met-description-body-contains photo-n
     ref=[ans(kind="photo", name="oven")]),
   T("and notes in the bakery notebook about the technician", rows("b_oven"),
     ref=[ans(kind="note", linked_to="$bakery_nb", where='body contains "technician"')]))
-
-S("T32-100", "stray-or-operator-conditions side-clause-with-date effort-when reschedule",
-  T("which debts are open, i want to square things before the wedding",
-    rows("d_memo_flour", "d_teodoro", "d_maria_roof", "d_maria_med", "d_emi", "d_dani", "d_rodrigo", "d_xochitl",
-         "d_aurelio", "d_chela", "d_flor", "d_omar"),
-    ref=[ans(kind="debt", where="status = open")]),
-  T("what's due friday that takes under an hour, i've got a free afternoon",
-    rows("mu_sugar", "mu_float", "tea_towels", "carmen_meds", "gas_tank", "marigolds", "van_fuel"),
-    ref=[ans(kind="task", where="status = open and effort < 60", when=W(U("week", 0, weekday=5)))]),
-  T("move the yeast to friday, beto won't be in till then", diff(upd("yeast", date="2026-10-30")),
-    ref=[act("reschedule", kind="task", name="yeast", args=lines(to=U("week", 0, weekday=5)))]))
 
 S("T32-101", "date-window-reads before-window both-tenses ordinal-past ordinal-upcoming repair-date-expression",
   T("what's on before friday", rows("pickup_flor", "coro_1029"),
@@ -162,13 +133,6 @@ S("T32-107", "mixed body-append note",
     diff(upd("b_oven", body="thermostat drifts twenty degrees, left deck runs hot, technician is Don Chato from the Abastos, call don chato monday")),
     ref=[opn("$b_oven"),
          act("edit", rows="$b_oven", args="body: thermostat drifts twenty degrees, left deck runs hot, technician is Don Chato from the Abastos, call don chato monday")]))
-
-S("T32-108", "mixed settle_up-amount-and-person group-balance",
-  T("i gave xochitl 100 for the posters, settle that in the coro group",
-    diff(upd("xochitl", balance=ANY), settle=[("Xochitl Villalobos", "100.00")]),
-    ref=[act("settle_up", rows="$xochitl", args="group: $coro\namount: 100")]),
-  T("and where is she at in the group now", val((211, "MXN")),
-    ref=[ans(op="balance", kind="group", name="Coro Santo Domingo", linked_to="$xochitl")]))
 
 S("T32-109", "mixed kind-word-decides documents notes photos van",
   T("what van documents do i have", rows("d_ins25", "d_ins26", "d_vanreg", "d_service"),

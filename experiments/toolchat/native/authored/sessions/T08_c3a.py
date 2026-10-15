@@ -21,13 +21,6 @@ S("T08-A002", "ask-options task complete c3a",
   T("the union one", diff(upd("union_dues", status="completed", completed=ANY)),
     ref=[act("complete", rows="$union_dues")]))
 
-S("T08-A005", "ask-options debt settle_debt c3a",
-  T("settle the deposit", ask("d_dre", "d_monique"),
-    ref=[act("settle_debt", kind="debt", name="deposit"),
-         askc("Dre's reunion shirt deposit (he owes you 120) or Monique's half of the summer camp deposit (she owes you 210)?", options="$d_dre, $d_monique")]),
-  T("dre's, he paid cash at the shop", diff(upd("d_dre", status="settled")),
-    ref=[act("settle_debt", rows="$d_dre")]))
-
 S("T08-A006", "ask-options locker_item star c3a",
   T("star the login", ask("servicetitan", "bank_login"),
     ref=[act("star", kind="locker item", name="login"),
@@ -57,14 +50,6 @@ S("T08-A008", "follow-up c3a",
     ref=[ans(within="@prev", name="practice")]),
   T("what else is on then", rows("oil_change", "epa", "boost_0413", "science_fair", "handoff_0417", "ptc", "walkthrough"),
     ref=[ans(kind="event", when=J(U("week", 1)), exclude="$prac_0414, $prac_0416")]))
-
-S("T08-A009", "follow-up c3a",
-  T("who still owes me money", rows("d_trey", "d_tanya2", "d_quanisha", "d_dre", "d_coach", "d_monique"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 100", rows("d_dre", "d_monique"),
-    ref=[ans(within="@prev", where="amount > 100 USD")]),
-  T("and the biggest one", rows("d_monique"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
 
 S("T08-A010", "follow-up c3a",
   T("show me the twins album", rows("p_band", "p_fair", "p_school", "p_td", "p_bday12", "p_bigmama"),

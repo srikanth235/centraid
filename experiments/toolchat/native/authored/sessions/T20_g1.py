@@ -24,20 +24,6 @@ S("T20-102", "star ask options intesa locker then contrast strava",
   T("and my strava login", diff(upd("strava", starred=True)),
     ref=[act("star", kind="locker item", name="Strava")]))
 
-S("T20-103", "ask options remove marco then never mind",
-  T("take marco out of the club group", ask("marco_e", "marco_l"),
-    ref=[act("remove_from", kind="person", name="Marco", args=lines(from_="$club")),
-         askc("marco esposito the captain or marco lombardi the mechanic?", options="$marco_e, $marco_l")]),
-  T("actually never mind, they both stay", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
-S("T20-104", "ask options lorenzo add_to long",
-  T("add lorenzo to casa nuova, he's helping with the van on the twentieth and paying his share", ask("lorenzo_r", "lorenzo_g"),
-    ref=[act("add_to", kind="person", name="Lorenzo", args=lines(to="$casa")),
-         askc("lorenzo ricci your cousin or lorenzo gallo the head chef?", options="$lorenzo_r, $lorenzo_g")]),
-  T("the cousin", diff(link("casa", "lorenzo_r")),
-    ref=[act("add_to", rows="$lorenzo_r", args=lines(to="$casa"))]))
-
 S("T20-105", "ask options dentist description then star dentist role",
   T("put 'bring the x-rays' in the dentist description", ask("dentist_may", "dentist_jun"),
     ref=[act("edit", kind="event", name="Dentist", args=lines(description="bring the x-rays")),
@@ -112,25 +98,3 @@ S("T20-112", "ask options note add_to tasting notes then pin",
     ref=[act("add_to", kind="note", name="Montalcino supplier", args=lines(to="$tasting_nb"))]),
   T("and pin it", diff(upd("supplier_n", pinned=True)),
     ref=[act("edit", kind="note", name="Montalcino supplier", args=lines(pinned="yes"))]))
-
-S("T20-114", "balance negative andrea fede chiara positive giulia",
-  T("what do i owe andrea", val((-240, "EUR")),
-    ref=[ans(op="balance", rows="$andrea")]),
-  T("and fede", val((-288, "EUR")),
-    ref=[search("fede", kind="person"), ans(op="balance", rows="$federico")]),
-  T("chiara?", val((-45, "EUR")),
-    ref=[ans(op="balance", rows="$chiara")]),
-  T("and giulia owes me what, all in", val((1365, "EUR")),
-    ref=[ans(op="balance", rows="$giulia")]))
-
-S("T20-115", "balance positive luca stefano davide then star",
-  T("what does luca owe me", val((85, "EUR")),
-    ref=[ans(op="balance", rows="$luca")]),
-  T("stefano", val((100, "EUR")),
-    ref=[ans(op="balance", rows="$stefano")]),
-  T("and davide", val((100, "EUR")),
-    ref=[ans(op="balance", rows="$davide")]),
-  T("star davide, he keeps covering weekends", diff(upd("davide", starred=True)),
-    ref=[act("star", rows="$davide")]),
-  T("bring back pietro neri, he's coming to the wedding", diff(restore("pietro")),
-    ref=[act("restore", kind="person", name="Pietro Neri", trashed=True)]))

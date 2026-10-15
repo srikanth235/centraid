@@ -177,20 +177,6 @@ S("T10-096", "single photo datetime date",
   T("photos from eid al-adha morning, twenty-seventh may from 7am", rows("adha_family", "adha_lamb", "adha_lunch_p", "adha_call"),
     ref=[ans(kind="photo", when=W(span(D("2026-05-27", "07:00"), D("2026-05-27"))))]))
 
-S("T10-097", "six turns debts date spans settle sum balance",
-  T("debts from the start of last month up to the fifteenth at noon", rows("d_mounir", "d_huda", "d_nabil", "d_walid", "d_khaled_s", "d_ziad"),
-    ref=[ans(kind="debt", when=W(span(U("month", -1), D("2026-06-15", "12:00"))))]),
-  T("and from last monday to the eighteenth", rows("d_walid", "d_khaled_s", "d_ziad", "d_tariq", "d_umm_khalil", "d_hani"),
-    ref=[ans(kind="debt", when=W(span(U("week", -1, weekday=1), D("2026-06-18"))))]),
-  T("biggest of those", rows("d_walid"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]),
-  T("settle walid's", diff(upd("d_walid", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$walid", where='status = "open"')]),
-  T("how much do i owe", val((160, "JOD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]),
-  T("and what's the balance with ziad", val((10, "JOD")),
-    ref=[ans(op="balance", rows="$ziad")]))
-
 S("T10-098", "five turns photo spans already count",
   T("pics between fifth may and last friday", rows("chess_mounir", "adha_family", "adha_lamb", "adha_lunch_p", "adha_call", "dump_receipt", "chess_board", "yousef_grad", "dump_meter", "blur_1", "layla_school"),
     ref=[ans(kind="photo", when=W(span(D("2026-05-05"), U("week", -1, weekday=5))))]),
@@ -270,14 +256,6 @@ X("T10-045",
          act("reschedule", kind="event", name="Video call with Yousef", when=W({"from": U("day", 0)}),
              args=lines(to=U("day", 0, anchor="row", time="17:30")))]))
 
-X("T10-047",
-  T("cancel the mosque committee meeting", ask("committee_0711", "committee_0808"),
-    ref=[act("cancel", kind="event", name="Mosque committee meeting"),
-         find(kind="event", name="Mosque committee meeting"),
-         askc("the one on 11 july or 8 august?", options="$committee_0711, $committee_0808")]),
-  T("july", diff(upd("committee_0711", status="cancelled")),
-    ref=[act("cancel", rows="$committee_0711")]))
-
 X("T10-052",
   T("find the sanad login", rows("sanad"),
     ref=[find(kind="locker item", name="Sanad"), ans(rows="@prev")]),
@@ -297,14 +275,6 @@ X("T10-086",
          askc("the one on 6 june or tomorrow's?", options="$call_layla_0606, $call_layla_0620")]),
   T("the old one", diff(trash("call_layla_0606")),
     ref=[act("delete", rows="$call_layla_0606")]))
-
-X("T10-053",
-  T("set up a new group", ask(),
-    ref=[askc("what should it be called, and who's in it?")]),
-  T("Tournament fund, with tariq and faris",
-    diff(new("group", name="Tournament fund"), link("new", "me"), link("new", "tariq"), link("new", "faris")),
-    ref=[act("create", more=True, args=lines(kind="group", name="Tournament fund")),
-         act("add_to", rows="$tariq, $faris", args=lines(to="$new"))]))
 
 X("T10-018",
   T("add a reminder", ask(),
@@ -366,14 +336,6 @@ X("T10-067",
     ref=[bad(ans(kind="photo", where='person = "Huda"')),
          ans(kind="photo", linked_to="$huda")]))
 
-X("T10-015",
-  T("who have i seen since tenth june", rows("umm_khalil", "hasan", "ziad", "yousef", "rami", "sami_k", "tariq", "lina", "nabil", "abu_fadi"),
-    ref=[ans(kind="person", when=W(span(D("2026-06-10"), U("day", 0))))]))
-
-X("T10-066",
-  T("anyone i spoke to since monday 9am", rows("sami_k", "tariq", "lina", "nabil", "umm_khalil"),
-    ref=[ans(kind="person", when=W(span(U("week", 0, weekday=1, time="09:00"), U("day", 0))))]))
-
 X("T10-050",
   T("what's on between today and the end of the month", rows("nabil_lunch_0619", "satellite", "ac_service", "call_layla_0620", "call_omar_kids", "physio_0622", "huda_visit", "lecture", "blood_test", "site_visit", "chess_0623", "dentist", "abu_fadi_coffee", "simul", "nabil_lunch_0626", "tournament", "call_yousef_0628", "physio_0629", "contractor", "chess_0630"),
     ref=[ans(kind="event", when=W(span(U("day", 0), U("month", 0))))]))
@@ -396,20 +358,6 @@ X("T10-088",
   T("docs from monday two weeks back to the end of june", rows("pension_june", "tile_quote", "carpet_inv", "chess_rating"),
     ref=[ans(kind="document", when=W(span(U("week", -2, weekday=1), U("month", 0, name=6))))]))
 
-X("T10-049",
-  T("debts from last week up to wednesday 6pm", rows("d_walid", "d_khaled_s", "d_ziad", "d_tariq", "d_umm_khalil"),
-    ref=[ans(kind="debt", when=W(span(U("week", -1), U("week", 0, weekday=3, time="18:00"))))]),
-  T("and from this monday to today", rows("d_ziad", "d_tariq", "d_umm_khalil", "d_hani"),
-    ref=[ans(kind="debt", when=W(span(U("week", 0, weekday=1), U("day", 0))))]))
-
-X("T10-009",
-  T("which debts are over 100", rows("d_rami", "d_jamal"),
-    ref=[ans(kind="debt", where="amount > 100")]))
-
-X("T10-036",
-  T("any where the direction's blank", rows(),
-    ref=[ans(kind="debt", where="direction is empty")]))
-
 X("T10-080",
   T("folders holding a max of two docs", rows("car_f", "misc_f", "scans_f", "deeds_f", "travel_f"),
     ref=[ans(kind="folder", where="document count <= 2")]))
@@ -429,18 +377,6 @@ X("T10-021",
     ref=[act("log", kind="person", name="Yousef", args=lines(kind="call"))]),
   T("undo that, it was rami on the phone", diff(),
     ref=[act("undo")]))
-
-X("T10-073",
-  T("what's my balance with lina", val((56, "JOD")),
-    ref=[ans(op="balance", rows="$lina")]))
-
-X("T10-057",
-  T("remind me what the debt with him is about", rows("d_jamal"),
-    ref=[ans(kind="debt", linked_to="$jamal")]))
-
-X("T10-065",
-  T("what's tariq's position in the chess kitty", val((84, "JOD")),
-    ref=[ans(op="balance", kind="group", name="Chess club kitty", linked_to="$tariq")]))
 
 X("T10-033",
   T("undo that, she's flying back that day", diff(trash("+1")),

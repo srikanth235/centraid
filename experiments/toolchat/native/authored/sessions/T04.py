@@ -15,28 +15,6 @@ S("T04-001", "events tomorrow reschedule edit",
   T("push the rota one to half 1", diff(upd("rota_meet", date="2026-10-15T13:30")),
     ref=[act("reschedule", rows="$rota_meet", args=lines(to=U("day", 1, time="13:30")))]))
 
-S("T04-002", "balance person ambiguity fatima",
-  T("how much do i owe fatima", ask("fatima_k", "fatima_h"),
-    ref=[bad(ans(op="balance", kind="person", name="Fatima")),
-         askc("fatima khan or fatima hussain?", options="$fatima_k, $fatima_h")]),
-  T("hussain, the bridesmaid one", val((-85, "GBP"), (3300, "TRY")),
-    ref=[ans(op="balance", rows="$fatima_h")]),
-  T("paid her for the decorations yday", diff(upd("d_fatima_h", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Hen do decorations")]),
-  T("who've i got saved as abbu", rows("dad"),
-    ref=[ans(kind="person", where='nickname = "Abbu"')]))
-
-S("T04-003", "group members group balance",
-  T("who's in the hen do group", rows("zainab", "fatima_h", "sana", "aoife", "me"),
-    ref=[ans(kind="person", linked_to="$hen")]),
-  T("where am i at in it", val((16200, "TRY")),
-    ref=[ans(op="balance", kind="group", name="Istanbul hen do", linked_to="$me")]),
-  T("settle up with sana in there", diff(settle=[("Sana Akhtar", "3300")]),
-    ref=[act("settle_up", rows="$sana", args=lines(group="$hen"))]),
-  T("move the flight to the afternoon", ask("flight_out", "flight_back"),
-    ref=[act("reschedule", kind="event", name="Flight", args=lines(to=U("day", 0, anchor="row", time="14:00"))),
-         askc("the flight out on the 20th or the one home on the 23rd?", options="$flight_out, $flight_back")]))
-
 S("T04-004", "date reschedule linked people",
   T("move the car service to next thurs at 8", diff(upd("car_service", date="2026-10-22T08:00")),
     ref=[act("reschedule", kind="event", name="Car service at Barker Motors",
@@ -78,12 +56,6 @@ S("T04-007", "decline sealed_egress reveal card",
     ref=[dec("sealed_egress")]),
   T("ok show it to me", diff(reveal=[("monzo", "5355 7700 1234 8841")]),
     ref=[act("reveal", kind="locker item", name="Monzo debit card", args=lines(field="card_number"))]))
-
-S("T04-008", "note create notebook pin",
-  T("new note in medicine: AKI - stop nephrotoxics, fluid balance chart, repeat U&E in 6h",
-    diff(new("note", name=has("AKI"), body=has("nephrotoxics")), link("med_nb", "new")),
-    ref=[act("create", args=lines(kind="note", name="AKI", body="stop nephrotoxics, fluid balance chart, repeat U&E in 6h",
-                                  notebook="$med_nb"))]))
 
 S("T04-009", "cancelled food bank count from",
   T("did a food bank shift get cancelled", rows("fb_1003"),
@@ -135,25 +107,11 @@ S("T04-016", "photos person star already add_to",
     ref=[act("star", kind="photo", name="pier"),
          askc("the photo on the pier or the darkroom print of it?", options="$pier, $print_pier")]))
 
-S("T04-017", "debts owed to me order limit sum settle",
-  T("who owes me money", rows("d_chloe", "d_zainab", "d_leah", "d_fatima_k", "d_aoife", "d_sana"),
-    ref=[ans(kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("biggest?", val((142, "GBP")),
-    ref=[ans(op="max", field="amount", within="@prev")]))
-
 S("T04-018", "wifi bare read reveal star",
   T("house wifi pw", rows("wifi"),
     ref=[ans(kind="locker item", where='type = "wifi"')]),
   T("show me house wifi", diff(reveal=[("wifi", "headingley-hotpot-9")]),
     ref=[act("reveal", rows="$wifi", args=lines(field="password"))]))
-
-S("T04-019", "person create add_to group balance",
-  T("maryam iqbal is coming to istanbul too, add her to the group",
-    diff(new("person", name="Maryam Iqbal"), link("hen", "new")),
-    ref=[act("create", more=True, args=lines(kind="person", name="Maryam Iqbal")),
-         act("add_to", rows="$new", args=lines(to="$hen"))]),
-  T("what's her balance there", val((0, "TRY")),
-    ref=[ans(op="balance", kind="group", name="Istanbul hen do", linked_to="$new")]))
 
 S("T04-020", "folder create document add_to",
   T("make a folder called Mehndi", diff(new("folder", name="Mehndi")),
@@ -191,15 +149,6 @@ S("T04-023", "count since month",
     ref=[ans(op="count", kind="event", name="Long day AMU", when=W({"from": D("2026-10-01"), "to": U("month", 0)}))]),
   T("and from today to the end of november", val(6),
     ref=[ans(op="count", kind="event", name="Long day AMU", when=W({"from": U("day", 0), "to": U("month", 0, name=11)}))]))
-
-S("T04-024", "group create add_to ask",
-  T("start a group for mum and dads anniversary present", diff(new("group", name=has("anniversary")), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Mum and Dad's anniversary present"))]),
-  T("add zainab and imran", diff(link("+1", "zainab"), link("+1", "imran")),
-    ref=[act("add_to", rows="$zainab, $imran", args=lines(to="$new"))]),
-  T("and fatima", ask("fatima_k", "fatima_h"),
-    ref=[act("add_to", kind="person", name="Fatima", args=lines(to="$c1")),
-         askc("fatima khan or fatima hussain?", options="$fatima_k, $fatima_h")]))
 
 S("T04-025", "list edit area open count",
   T("move the food bank list under community", diff(upd("fblist", area="community")),

@@ -11,7 +11,7 @@ elder), nicknames (Shiru, Bri, Tabby, Mama Njeri, Fundi), a misspelled-looking n
 two "Dentist" events, two "Clinic review" events, two "BOM meeting" events, near-duplicate
 tasks ("Buy exercise books", "Submit TSC returns", "Send chama contribution", monthly KPLC),
 two folders sharing "School" (School board, School fees), cancelled events, completed tasks,
-rows trashed inside and past the 30-day restore window, an empty group, an empty folder, an
+rows trashed inside and past the 30-day restore window, an empty folder, an
 empty album, empty notebooks and an empty list.
 """
 from __future__ import annotations
@@ -76,33 +76,6 @@ def people():
         {"key": "ndegwa", "name": "Francis Ndegwa", "role": "former BOM member", "trashed": "2026-03-02T09:00"},
     ]
 
-
-GROUPS = [
-    {"key": "chama", "name": "Tumaini chama", "currency": "KES",
-     "members": ["alice", "mary_a", "beatrice", "rose", "susan"], "created": "2024-01-06T14:00"},
-    {"key": "harambee", "name": "Church harambee 2026", "currency": "KES",
-     "members": ["peter_o", "rev_kiprono", "susan"], "created": "2026-04-12T13:00"},
-    {"key": "bom_tea", "name": "BOM tea fund", "currency": "KES",
-     "members": ["peter_k", "mary_w", "joseph"], "created": "2025-09-01T10:00"},
-    {"key": "family", "name": "Mwangi family", "members": ["kevin", "brian", "naomi"],
-     "created": "2025-12-20T19:00"},
-    {"key": "grad_trip", "name": "Eldoret graduation trip", "currency": "KES", "created": "2026-05-30T20:00"},
-]
-
-EXPENSES = [
-    {"group": "chama", "name": "Tent hire", "amount": 6000, "paid_by": "me",
-     "split": ["me", "alice", "mary_a", "beatrice"], "date": "2026-03-21"},
-    {"group": "chama", "name": "Lunch at May meeting", "amount": 2500, "paid_by": "mary_a",
-     "split": ["me", "mary_a", "rose", "susan", "beatrice"], "date": "2026-05-02"},
-    {"group": "harambee", "name": "Harambee cards printing", "amount": 4500, "paid_by": "peter_o",
-     "split": ["me", "peter_o", "rev_kiprono"], "date": "2026-05-20"},
-    {"group": "bom_tea", "name": "Tea and mandazi", "amount": 1800, "paid_by": "me",
-     "split": ["me", "peter_k", "mary_w", "joseph"], "date": "2026-05-13"},
-    {"group": "bom_tea", "name": "Sugar and milk", "amount": 900, "paid_by": "joseph",
-     "split": ["me", "joseph", "mary_w"], "date": "2026-06-03"},
-    {"group": "family", "name": "Dad's memorial lunch", "amount": 12000, "paid_by": "kevin",
-     "split": ["me", "kevin", "brian"], "date": "2026-02-15"},
-]
 
 LISTS = [
     {"key": "school_l", "name": "School", "area": "work"},
@@ -462,34 +435,6 @@ PHOTOS = [
     {"key": "dup_tank", "name": "Water tank duplicate", "taken": "2026-05-28T16:11", "trashed": "2026-05-29T08:00"},
 ]
 
-DEBTS = [
-    {"key": "d_mary_a", "person": "mary_a", "direction": "owes_me", "amount": 500, "name": "Lunch contribution",
-     "date": "2026-05-02"},
-    {"key": "d_rose", "person": "rose", "direction": "owes_me", "amount": 500, "name": "Fabric for choir robes",
-     "date": "2026-05-16"},
-    {"key": "d_beatrice", "person": "beatrice", "direction": "i_owe", "amount": 1200, "name": "Merry-go-round top up",
-     "date": "2026-04-04"},
-    {"key": "d_brian", "person": "brian", "direction": "owes_me", "amount": 15000, "name": "Rent deposit Eldoret",
-     "date": "2026-03-10"},
-    {"key": "d_kevin", "person": "kevin", "direction": "i_owe", "amount": 3000, "name": "Airtime and data",
-     "date": "2026-05-28"},
-    {"key": "d_githinji", "person": "githinji", "direction": "i_owe", "amount": 4500, "name": "Brake pads",
-     "date": "2026-06-01"},
-    {"key": "d_peter_o", "person": "peter_o", "direction": "owes_me", "amount": 2000, "name": "Harambee card printing",
-     "date": "2026-05-20"},
-    {"key": "d_joseph", "person": "joseph", "direction": "i_owe", "amount": 800, "name": "Staff tea sugar",
-     "date": "2026-06-03"},
-    {"key": "d_esther", "person": "esther", "direction": "owes_me", "amount": 7000, "name": "Shiru's uniform",
-     "date": "2026-02-14", "settled": "2026-04-01T10:00"},
-    {"key": "d_susan", "person": "susan", "direction": "i_owe", "amount": 500, "name": "Choir robe deposit",
-     "date": "2026-05-21"},
-    {"key": "d_tabby", "person": "tabby", "direction": "i_owe", "amount": 2500, "name": "Tabby's advance",
-     "date": "2026-04-30", "settled": "2026-05-30T18:00"},
-    {"key": "d_alice", "person": "alice", "direction": "owes_me", "amount": 1500, "name": "Tent hire share",
-     "date": "2026-03-21"},
-    {"key": "d_naomi", "person": "naomi", "direction": "owes_me", "amount": 1000, "name": "Baby shower cake",
-     "date": "2026-01-17", "settled": "2026-02-01T12:00"},
-]
 
 LOCKER = [
     {"key": "kcb", "name": "KCB mobile banking", "type": "login", "username": "gmwangi", "url": "https://kcb.co.ke",
@@ -568,8 +513,6 @@ def world():
         "seed": "T21",
         "currency": "KES",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -579,7 +522,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

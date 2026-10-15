@@ -24,14 +24,6 @@ S("T13-202", "ordinal house list reschedule complete",
   T("tick the first one, got it at aldi", diff(upd("loo_roll", status="completed", completed=ANY)),
     ref=[act("complete", rows="$loo_roll")]))
 
-S("T13-203", "owe direction balance settle debt both signs",
-  T("do i owe emeka", val((-20, "GBP")),
-    ref=[ans(op="balance", kind="person", name="Emeka Obi")]),
-  T("and what does tj owe me", val((22, "GBP")),
-    ref=[search("TJ", kind="person"), ans(op="balance", rows="$tunde")]),
-  T("settle mine with emeka", diff(upd("d_emeka", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$emeka")]))
-
 S("T13-204", "except weekend tasks reschedule rest",
   T("what's due this weekend", rows("abstract", "send_mum", "garri", "bins", "rota"),
     ref=[find(kind="task", when=W(span(U("week", 0, weekday=6), U("week", 0, weekday=7))), where='status = "open"'), ans(rows="@prev")]),
@@ -51,9 +43,3 @@ S("T13-205", "bare weekday at n range create",
     ref=[act("reschedule", kind="event", name="Coffee with Seun", args=lines(to=U("week", 1, weekday=1, time="16:00")))]),
   T("call aunty ngozi saturday at 5", diff(new("event", name=has("Aunty Ngozi"), date="2026-09-05T17:00")),
     ref=[act("create", args=lines(kind="event", name="Call with Aunty Ngozi", date=U("week", 0, weekday=6, time="17:00")))]))
-
-S("T13-206", "two writes settle debt complete then complete reschedule",
-  T("paid priya for the cinema and printed the flyers", diff(upd("d_priya", status="settled"), upd("print_flyers", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", linked_to="$priya", more=True), act("complete", kind="task", name="Print 200 flyers")]),
-  T("sent mum the money, glovebox clean can go to tuesday", diff(upd("send_mum", status="completed", completed=ANY), upd("glovebox", date="2026-09-08")),
-    ref=[act("complete", rows="$send_mum", more=True), act("reschedule", rows="$glovebox", args=lines(to=U("week", 1, weekday=2)))]))

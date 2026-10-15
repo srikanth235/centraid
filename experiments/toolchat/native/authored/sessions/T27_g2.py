@@ -8,43 +8,6 @@ def W(expr):
 
 WEEKEND = W(span(U("week", 0, weekday=6), U("week", 0, weekday=7)))
 
-S("T27-116", "balance person lea thomas max nickname",
-  T("what do i owe lea", val((-120, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Léa")]),
-  T("and thomas moreau", val((-60, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Thomas Moreau")]),
-  T("max said he'd pay me back for the pizza night, what does he owe me now", val((30, "EUR")),
-    ref=[search("Max", kind="person"), ans(op="balance", rows="$maxime")]))
-
-S("T27-117", "balance antoine startup group me camille",
-  T("how much do i owe antoine all in", val((-1900, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Antoine")]),
-  T("where am i in the bakery startup costs", val((175, "EUR")),
-    ref=[find(kind="person", linked_to="$startup_g"),
-         ans(op="balance", kind="group", name="Bakery startup costs", linked_to="$me")]),
-  T("and camille roux", val((-1775, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Bakery startup costs", linked_to="$camille_r")]))
-
-S("T27-118", "balance margaux julien prenatal group",
-  T("margaux, where do we stand", val((17, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Margaux")]),
-  T("julien says we're square after the crib and groceries, so what does he actually owe me", val((117, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Julien")]),
-  T("and my side of the prenatal group", val((22, "EUR")),
-    ref=[find(kind="person", linked_to="$prenatal_g"),
-         ans(op="balance", kind="group", name="Prenatal group", linked_to="$me")]),
-  T("how many of us are in it", val(5),
-    ref=[ans(op="count", kind="person", linked_to="$prenatal_g")]))
-
-S("T27-119", "balance chf group zero star",
-  T("where am i in the geneva pastry fair", val((400, "CHF")),
-    ref=[find(kind="person", linked_to="$geneva_g"),
-         ans(op="balance", kind="group", name="Geneva pastry fair", linked_to="$me")]),
-  T("what do i owe yasmine", val((0, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Yasmine")]),
-  T("star yasmine, she's been so helpful with the birth ball", diff(upd("yasmine", starred=True)),
-    ref=[act("star", kind="person", name="Yasmine")]))
-
 S("T27-120", "wifi bare reads then reveal shop",
   T("where's the wifi password", rows("wifi_home", "wifi_shop"),
     ref=[ans(kind="locker item", name="wifi")]),
@@ -99,17 +62,6 @@ S("T27-126", "reschedule bare weekday at-n then cancel that undo then weekday",
     ref=[act("undo")]),
   T("make it wednesday at 11", diff(upd("hygiene", date="2026-12-09T11:00")),
     ref=[act("reschedule", rows="$hygiene", args=lines(to=U("week", 1, weekday=3, time="11:00")))]))
-
-S("T27-127", "ask person add_to geneva thomas then scratch that then star",
-  T("add thomas to the geneva pastry fair", ask("thomas_m", "thomas_g"),
-    ref=[act("add_to", kind="person", name="Thomas", args=lines(to="$geneva_g")),
-         askc("thomas moreau or thomas girard?", options="$thomas_m, $thomas_g")]),
-  T("scratch that, wrong group", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("star nadia and log a message to hugo, told him the new schedule",
-    diff(upd("nadia", starred=True), upd("hugo", date=ANY)),
-    ref=[act("star", kind="person", name="Nadia", more=True),
-         act("log", kind="person", name="Hugo", args=lines(kind="message"))]))
 
 S("T27-128", "reopen task reschedule repair count open",
   T("reopen order balloons, the delivery was wrong", diff(upd("balloons", status="open", completed=None)),

@@ -4,9 +4,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 NOW = W({"from": U("day", 0)})
 NEXT_WEEK = W(U("week", 1))
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-BIG_OWE = find(kind="debt", where=IOWE, order="amount desc", limit=2)
 NEXT_WEEKEND = W(span(U("week", 1, weekday=6), U("week", 1, weekday=7)))
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
@@ -15,22 +12,6 @@ OPEN = 'status = "open"'
 def J(d):
     return json.dumps(d, separators=(",", ":"))
 
-
-S("T18-001-P", "star person named add_to group knock-on person read para",
-  T("Priya Raman gets a star", diff(upd("priya", starred=True)),
-    ref=[act("star", rows="$priya")]),
-  T("sam okafor's joining the gdc trip as well: put him in that group and give him a star",
-    diff(link("gdc", "sam_o"), upd("sam_o", starred=True)),
-    ref=[act("add_to", rows="$sam_o", args=lines(to="$gdc"), more=True),
-         act("star", rows="$sam_o")]),
-  T("GDC 2025 trip members?", rows("priya", "mei", "sam_o", "me"),
-    ref=[ans(kind="person", linked_to="$gdc")]))
-
-S("T18-006-P", "settle_up prev chloe shower para",
-  T("chloe nguyen's entry", rows("chloe"),
-    ref=[ans(kind="person", name="Chloe Nguyen")]),
-  T("shower group, settle up with her", diff(settle=["Chloe Nguyen"]),
-    ref=[act("settle_up", rows="@prev", args=lines(group="$shower"))]))
 
 S("T18-011-P", "delete event named day read para",
   T("not going to pub trivia, get rid of it", diff(trash("trivia")),
@@ -128,24 +109,6 @@ S("T18-070-P", "note span weekday datetime open compute count loose para",
   T("count of notes sitting outside every notebook", val(6),
     ref=[comp(op="count", kind="note", where="notebook count = 0"), ans(value="@prev")]))
 
-S("T18-076-P", "seven turns sam ambiguous ask log person spans within event debt para",
-  T("i phoned sam, log it", ask("sam_o", "sam_t"),
-    ref=[act("log", kind="person", name="Sam", args=lines(kind="call")),
-         askc("sam okafor from the co-op or sam tran from d&d?", options="$sam_o, $sam_t")]),
-  T("i mean the artist one", diff(upd("sam_o", date=ANY)),
-    ref=[act("log", rows="$sam_o", args=lines(kind="call"))]),
-  T("contacts i spoke to from the twenty-fourth at 6pm to end of feb",
-    rows("tess", "priya", "mei", "bex", "jules", "chloe", "zoe"),
-    ref=[ans(kind="person", when=W(span(D("2026-02-24", "18:00"), U("month", 0, name=2))))]),
-  T("starred ones among them", rows("tess", "bex"),
-    ref=[ans(within="@prev", kind="person", where="starred = yes")]),
-  T("between last week and the end of feb, which starred people did i speak to", rows("tess", "mum", "bex"),
-    ref=[ans(kind="person", when=W(span(U("week", -1), U("month", 0, name=2))), where="starred = yes")]),
-  T("next thing with bex?", rows("dnd_0305"),
-    ref=[ans(kind="event", linked_to="$bex", when=W({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("does she owe me any money", val((40, "AUD")),
-    ref=[ans(op="balance", rows="$bex")]))
-
 S("T18-082-P", "seven turns pitch prep open span people note edit already folder ask para",
   T("before the Publisher pitch with Hollow Pine, what's due", rows("ci", "cart", "trailer"),
     ref=[ans(kind="task", linked_to="$dev_l", when=W({"to": D("2026-03-05", "11:00")}), where='status = "open"')]),
@@ -162,21 +125,6 @@ S("T18-082-P", "seven turns pitch prep open span people note edit already folder
     ref=[ans(kind="folder", linked_to="$deck")]),
   T("schedule a pitch retro with the team afterwards", ask(),
     ref=[askc("sure, what day and time for the retro?")]))
-
-S("T18-087-P", "people where cadence group count photo count task count alex ambiguous ask trashed para",
-  T("grace liu, in my contacts?", rows("grace"),
-    ref=[ans(kind="person", name="Grace Liu"), ans(rows="$grace")]),
-  T("weekly or tighter cadence, who", rows("tess", "mum", "priya", "bex"),
-    ref=[ans(kind="person", where="cadence < 8")]),
-  T("among them, exactly one group each", rows("mum", "bex"),
-    ref=[ans(within="@prev", kind="person", where="group count = 1")]),
-  T("two groups plus over one photo, who", rows("priya", "mei"),
-    ref=[ans(kind="person", where="group count = 2 and photo count > 1")]),
-  T("at most two tasks, among the co-op crowd", rows("priya", "sam_o", "mei", "oliver", "me"),
-    ref=[ans(kind="person", linked_to="$coop", where="task count <= 2")]),
-  T("i messaged sam, log it", ask("sam_o", "sam_t"),
-    ref=[find(kind="person", name="Sam"),
-         askc("sam okafor or sam tran?", options="$sam_o, $sam_t")]))
 
 S("T18-092-P", "document named month span open to date delete named trashed recovery para",
   T("docs spanning last december to january", rows("receipts", "grant", "char_sheet"),
@@ -205,14 +153,6 @@ S("T18-A003-P", "ask-options event reschedule c3a para",
   T("finish one is finished, complete it", diff(upd("slice", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="finish")]))
 
-S("T18-A009-P", "follow-up c3a para",
-  T("who am i in debt to", rows("d_priya", "d_alex", "d_chloe", "d_nadia", "d_jules_pizza"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("all but the pizza one", rows("d_nadia", "d_alex", "d_chloe", "d_priya"),
-    ref=[ans(within="@prev", exclude="$d_jules_pizza")]),
-  T("largest one", rows("d_alex"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T18-B004-P", "c4b state-change complete complete create contrast para",
   T("biscuit's flea treatment is done", diff(upd("flea", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="flea treatment")]),
@@ -232,13 +172,3 @@ S("T18-102-P", "ask options star agreement documents already para",
     ref=[act("star", kind="document", name="agreement")]),
   T("lease too", diff(already=["lease"]),
     ref=[act("star", rows="$lease"), ans(rows="$lease")]))
-
-S("T18-107-P", "balance group coop dnd members para",
-  T("co-op members?", rows("priya", "sam_o", "mei", "oliver", "me"),
-    ref=[ans(kind="person", linked_to="$coop")]),
-  T("my standing with them", val((878, "AUD")),
-    ref=[ans(op="balance", kind="group", name="Tinfoil Owl co-op", linked_to="$me")]),
-  T("d&d lot?", val((75, "AUD")),
-    ref=[ans(op="balance", kind="group", name="Thursday D&D", linked_to="$me")]),
-  T("mei runs the whole co-op, so give her a star", diff(upd("mei", starred=True)),
-    ref=[act("star", kind="person", name="Mei")]))

@@ -24,10 +24,6 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 
-OWE = 'direction = "i_owe" and status = "open"'
-
-OWED = 'direction = "owes_me" and status = "open"'
-
 LIVE = 'status = "open"'
 
 def fb_shifts():
@@ -35,18 +31,6 @@ def fb_shifts():
 
 def wed_open():
     return find(kind="task", linked_to="$wedlist", where=LIVE)
-
-S("T04-133-P", "fitting ask never-mind, debts min max para",
-  T("fitting needs cancelling", ask("fitting_1", "fitting_2", "mehndi_fit"),
-    ref=[act("cancel", kind="event", name="fitting"),
-         find(kind="event", name="fitting", when=W({"from": U("day", 0)})),
-         askc("The dress fitting on the 17th, the one on the 14th of november, or the mehndi outfit one?", options="@prev")]),
-  T("forget it, zainab has already messaged saying she's rearranging them all anyway", decline("never_mind"),
-    ref=[dec("never_mind")]),
-  T("i want to pay off my smallest debt tonight, which is it", val((9, "GBP")),
-    ref=[comp(op="min", field="amount", kind="debt", where=OWE), ans(value="@prev")]),
-  T("biggest one i owe then, presumably my dad's car deposit help still", val((500, "GBP")),
-    ref=[comp(op="max", field="amount", kind="debt", where=OWE), ans(value="@prev")]))
 
 S("T04-138-P", "shortest of next three, wipe everything, longest next week, food bank list sum para",
   T("shortest among the next three calendar items", val(60),

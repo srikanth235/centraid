@@ -27,19 +27,6 @@ S("T29-060", "home-list count person-count bulk-reschedule undo narrow-week find
     ref=[find(kind="task", linked_to="$home_list", where="status = open and person count = 0", when=J(U("week", 0))),
          act("reschedule", rows="@prev", args=lines(to=U("week", 1, weekday=5)))]))
 
-S("T29-061", "debts bulk settle-debt over-ten-thousand before-august sum owes-me year repair-sum-field ambiguous-debt",
-  T("settle the debts i owe over 10000 from before august",
-    diff(upd("d_lena", status="settled"), upd("d_otieno", status="settled")),
-    ref=[find(kind="debt", where="direction = i_owe and status = open and amount > 10000", when=J({"to": D("2026-07-31")})),
-         act("settle_debt", rows="@prev")]),
-  T("and what's owed to me from this year, all in", val((8300, "KES")),
-    ref=[bad(ans(op="sum", kind="debt", where="direction = owes_me and status = open", when=J(U("year", 0)))),
-         ans(op="sum", field="amount", kind="debt", where="direction = owes_me and status = open", when=J(U("year", 0)))]),
-  T("clear wambs' debt", ask("d_wambui_wifi", "d_wambui_tokens"),
-    ref=[act("settle_debt", kind="debt", linked_to="$wambui")]),
-  T("the wifi one", diff(upd("d_wambui_wifi", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="wifi", linked_to="$wambui")]))
-
 S("T29-062", "calendar ambiguous-event cancel call next-week role-narrow",
   T("cancel the call next week", ask("structural", "berlin_call"),
     ref=[act("cancel", kind="event", name="call", when=J(U("week", 1)))]),
@@ -79,38 +66,6 @@ S("T29-064", "photos docs trash bulk-star september count-person-count exclude a
     ref=[search("lamu"), ans(kind="photo", name="lamu", when=J(U("month", 0, name=8)))]),
   T("karen site electrician?", rows(),
     ref=[search("electrician"), ans(kind="person", name="electrician")]))
-
-S("T29-065", "club rides kip count-five-facets ambiguous-event cancel date-narrow bulk-star since repair-group-balance settle-debt decline-text search-miss find-only sum-effort",
-  T("how many club rides with kip are left in october that haven't been cancelled", val(5),
-    ref=[ans(op="count", kind="event", name="club ride", linked_to="$kip", where="status != cancelled",
-             when=J(U("month", 0, name=10)))]),
-  T("cancel the karura ride next month", ask("ride_1003", "ride_1010", "ride_1017", "ride_1024"),
-    ref=[act("cancel", kind="event", name="karura ride", when=J(U("month", 1)))]),
-  T("the 17th one", diff(upd("ride_1017", status="cancelled")),
-    ref=[act("cancel", kind="event", name="karura ride", when=J(D("2026-10-17")))]),
-  T("star the riders i've been in touch with since august who aren't starred yet",
-    diff(upd("kevin_m", starred=True), upd("nyambura", starred=True)),
-    ref=[find(kind="person", linked_to="$riders", where="starred = no", when=J({"from": U("month", 0, name=8)})),
-         act("star", rows="@prev")]),
-  T("message kip that the ride on the 17th is off", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("how much is the riders kitty owing kip", val((5900, "KES")),
-    ref=[bad(ans(op="balance", kind="group", name="Ngong Road Riders Kitty")),
-         ans(op="balance", kind="group", name="Ngong Road Riders Kitty", linked_to="$kip")]),
-  T("mark my race entry debt with him as paid", diff(upd("d_kip", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="race entry", linked_to="$kip")]),
-  T("log a call with the club treasurer", decline("not_found"),
-    ref=[search("treasurer"), act("log", kind="person", name="treasurer", linked_to="$riders", args="kind: call")]),
-  T("which open club tasks take half an hour or more", rows("kitty_report", "bike_service"),
-    ref=[find(kind="task", linked_to="$club_list", where="status = open and effort >= 30 minutes"),
-         ans(rows="@prev")]),
-  T("how long are the open club tasks due before october, all together", val(120),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$club_list", where="status = open",
-             when=J({"to": D("2026-09-30")}))]),
-  T("move my landlord meeting on the 5th to friday", decline("not_found"),
-    ref=[search("landlord"),
-         act("reschedule", kind="event", name="landlord", when=J(D("2026-10-05")),
-             args=lines(to=U("week", 0, weekday=5)))]))
 
 # follow-up turns appended to sessions of the earlier files (their own turns stay as they are)
 X("T29-040",

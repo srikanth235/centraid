@@ -8,12 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T15-C001", "c3c compound add_to person group star referential",
-  T("add anders to the cabin share group and star him",
-    diff(link("cabin", "anders"), upd("anders", starred=True)),
-    ref=[act("add_to", kind="person", name="Anders", args=lines(to="$cabin"), more=True),
-         act("star", rows="$anders")]))
-
 S("T15-C002", "c3c compound complete delete tasks",
   T("tick off the cat food and delete the snow shovel one, dad's lending me his",
     diff(upd("cat_food", status="completed", completed=ANY), trash("snow_shovel")),

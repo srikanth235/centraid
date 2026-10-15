@@ -52,16 +52,6 @@ S("T02-121", "ask options quick idea note delete then studio photo delete",
   T("the shelves", diff(trash("shelves")),
     ref=[act("delete", rows="$shelves")]))
 
-S("T02-122", "ask options sophie debt settle then contrast tom balance",
-  T("settle sophie's debt", ask("sophie_t", "sophie_d"),
-    ref=[askc("sophie tran or sophie delacroix?", options="$sophie_t, $sophie_d")]),
-  T("tran, the taxi one", diff(upd("d_sophie_taxi", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$sophie_t")]),
-  T("and tom paid me the tomo logo kill fee", diff(upd("d_tomo", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Tomo logo kill fee")]),
-  T("so what does tom owe me now", val((0, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Tom Nguyen")]))
-
 S("T02-124", "decline out_of_scope booking then task create then priority",
   T("book me a table at kirin for sunday", decline("out_of_scope"),
     ref=[dec("out_of_scope")]),

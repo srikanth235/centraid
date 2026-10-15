@@ -41,24 +41,6 @@ S("T38-003", "clinic-list open before-event effort within complete reschedule tw
              args=lines(to=U("week", 1, weekday=2)), more=True),
          ans(kind="task", linked_to="$clinic_l", when=J(U("week", 1, weekday=2)))]))
 
-S("T38-004", "building-fund committee role balance group-narrowed",
-  T("which of the building fund lot are on the committee", rows("shireen_barghouti", "tamara_nimri"),
-    ref=[find(kind="person", linked_to="$building", where='role contains "committee"'), ans(rows="@prev")]),
-  T("where am i with shireen", val((136, "JOD")),
-    ref=[ans(op="balance", kind="person", rows="$shireen_barghouti")]),
-  T("just the building fund one", val((-65, "JOD")),
-    ref=[ans(op="balance", kind="group", name="Abdoun Building Fund", linked_to="$shireen_barghouti")]))
-
-S("T38-005", "layla decoys ask role log pharma-rep group",
-  T("log a call with layla", ask("layla_h", "layla_n", "layla_q"),
-    ref=[act("log", kind="person", name="Layla", args="kind: call")]),
-  T("the cousin", diff(upd("layla_h", date=ANY)),
-    ref=[act("log", kind="person", name="Layla", where='role = "cousin"', args="kind: call")]),
-  T("when did i last speak to the pharma rep layla", rows("layla_q"),
-    ref=[ans(kind="person", name="Layla", where='role = "pharma rep"')]),
-  T("which group is she in", rows("dubai"),
-    ref=[ans(kind="group", linked_to="$layla_q")]))
-
 S("T38-006", "notes notebook body-contains year pin pinned",
   T("notes in clinic admin from 2025 on that mention rasha",
     rows("cl_4", "cl_5", "cl_6", "cl_7", "cl_8", "cl_9", "cl_10"),
@@ -119,18 +101,6 @@ S("T38-011", "weekend eid attendees last-year both relation chain",
   T("who was at both", rows("teta", "ammo_fadi"),
     ref=[ans(kind="person", linked_to="$eid_a27, $eid_a26")]))
 
-S("T38-012", "anniversary group event starred exclude reschedule decline-text",
-  T("which starred people from the staff lunch group are coming to the anniversary party", rows("rasha"),
-    ref=[ans(kind="person", linked_to="$clinic_lunch, $clinic_anniv", where="starred = yes")]),
-  T("and everyone else in that group besides her", rows("ahmad", "mahmoud", "um_ali", "dr_sami", "me"),
-    ref=[ans(kind="person", linked_to="$clinic_lunch", exclude="$rasha")]),
-  T("move the party to 7pm and tell me who's coming",
-    rows("baba", "rasha", "ahmad", "mahmoud", "dr_sami", also=diff(upd("clinic_anniv", date="2027-06-03T19:00"))),
-    ref=[act("reschedule", rows="$clinic_anniv", args=lines(to=D("2027-06-03", "19:00")), more=True),
-         ans(kind="person", linked_to="$clinic_anniv")]),
-  T("text them all the new time", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]))
-
 S("T38-013", "wifi read reveal egress trashed restore",
   T("what's the wifi password", rows("home_wifi", "clinic_wifi", "teta_wifi"),
     ref=[ans(kind="locker item", name="wifi")]),
@@ -170,26 +140,6 @@ S("T38-016", "repair person create-met star cadence",
   T("keep in touch with her about once a fortnight", diff(upd("+1", cadence=14)),
     ref=[act("edit", rows="$c1", args="cadence: 14")]))
 
-S("T38-017", "group refusal ask balance narrowed settle_up",
-  T("take rula out of saturday football", ask("rula_halaby", "football"),
-    ref=[act("remove_from", kind="person", name="Rula Halaby", args="from: $football")]),
-  T("what's my balance with her", val((-22.5, "JOD")),
-    ref=[ans(op="balance", kind="person", rows="$rula_halaby")]),
-  T("just the football one", val((67.5, "JOD")),
-    ref=[ans(op="balance", kind="group", name="Saturday Football", linked_to="$rula_halaby")]),
-  T("settle up with her in football", diff(settle=[("Rula Halaby", "22.500")]),
-    ref=[act("settle_up", rows="$rula_halaby", args="group: $football")]))
-
-S("T38-018", "group delete refused ask rename delete-empty unlink",
-  T("delete the dubai expo group", ask(),
-    ref=[act("delete", kind="group", name="Dubai Medical Expo 2026")]),
-  T("ok just rename it to dubai expo", diff(upd("dubai", name="Dubai Expo")),
-    ref=[act("edit", rows="$dubai", args="name: Dubai Expo")]),
-  T("and the umrah one can go, nothing in it",
-    diff(gone("umrah"), unlink("umrah", "baba"), unlink("umrah", "mama"), unlink("umrah", "teta"),
-         unlink("umrah", "me")),
-    ref=[act("delete", kind="group", name="Umrah Fund 2028")]))
-
 S("T38-019", "near-names hussam husam role star unstar name-where",
   T("star hussam, the neighbour", diff(upd("hussam", starred=True)),
     ref=[act("star", kind="person", name="Hussam", where='role = "neighbour"')]),
@@ -199,24 +149,6 @@ S("T38-019", "near-names hussam husam role star unstar name-where",
     ref=[ans(kind="person", name="Khoury", where="starred = yes")]),
   T("unstar salem", diff(upd("salem_khoury", starred=False)),
     ref=[act("unstar", kind="person", name="Salem", where="starred = yes")]))
-
-S("T38-020", "debts person year within status direction settle_debt",
-  T("my cousin omar's debts from 2024", rows("debt_01", "debt_05", "debt_06"),
-    ref=[ans(kind="debt", linked_to="$omar_k", when=J(U("year", -3)))]),
-  T("which are still open", rows("debt_06"),
-    ref=[ans(within="@prev", where="status = open")]),
-  T("and is there anything open going the other way", rows("debt_32"),
-    ref=[ans(kind="debt", linked_to="$omar_k", where="direction = i_owe and status = open")]),
-  T("settle the pharmacy one with him", diff(upd("debt_32", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$omar_k", where="direction = i_owe and status = open")]))
-
-S("T38-021", "debts superlatives biggest smallest sum order-limit",
-  T("which debt of mine is the largest one still open", rows("debt_26"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount desc", limit=1)]),
-  T("and the smallest", rows("debt_32"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open", order="amount asc", limit=1)]),
-  T("and how much of what i owe is from last year", val((334.5, "JOD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = i_owe and status = open", when=J(U("year", -1)))]))
 
 S("T38-022", "event create clash ask create reschedule",
   T("put a dentist for dana on thursday at 7pm", ask("ct_270513"),

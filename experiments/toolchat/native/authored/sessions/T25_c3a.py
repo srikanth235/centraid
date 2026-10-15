@@ -29,13 +29,6 @@ S("T25-A003", "ask-options task complete never_mind c3a",
   T("and the holiday one's done, tick it off", diff(upd("holiday_sched", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="holiday")]))
 
-S("T25-A004", "ask-options debt settle_debt c3a",
-  T("settle the half one", ask("d_daniel_camp", "d_daniel_boots"),
-    ref=[act("settle_debt", kind="debt", name="half"),
-         askc("Half of the summer camp (180) or half of the winter boots (64.50)?", options="$d_daniel_camp, $d_daniel_boots")]),
-  T("the camp one, he paid in full", diff(upd("d_daniel_camp", status="settled")),
-    ref=[act("settle_debt", rows="$d_daniel_camp")]))
-
 S("T25-A006", "ask-options document star c3a",
   T("star the lumen doc", ask("t4", "contract"),
     ref=[act("star", kind="document", name="lumen"),
@@ -60,14 +53,6 @@ S("T25-A008", "follow-up c3a",
     ref=[ans(within="@prev", when=J({"to": U("week", 1, weekday=3)}))]),
   T("and thursday on", rows("book_10", "portfolio_rev", "mom_flight", "lawyer_call", "handoff_1016", "hike_tremblant"),
     ref=[ans(within="@1", exclude="@2")]))
-
-S("T25-A009", "follow-up c3a",
-  T("who owes me", rows("d_priya", "d_daniel_camp", "d_nadia", "d_daniel_boots", "d_matthieu", "d_marc_g", "d_jess"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 50", rows("d_marc_g", "d_daniel_boots", "d_daniel_camp"),
-    ref=[ans(within="@prev", where="amount > 50 CAD")]),
-  T("and the biggest one", rows("d_daniel_camp"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
 
 S("T25-A010", "follow-up c3a",
   T("what's in the mika album", rows("apples", "tooth", "recital", "first_day", "grandma", "la_ronde"),

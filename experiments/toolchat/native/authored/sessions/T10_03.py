@@ -12,12 +12,6 @@ S("T10-052", "locker username ne read",
   T("what's the url for arab bank online", rows("arab_bank"),
     ref=[ans(rows="$arab_bank")]))
 
-S("T10-053", "locker url in star multi",
-  T("which saved logins are for https://lichess.org or https://sanad.gov.jo", rows("lichess", "sanad"),
-    ref=[ans(kind="locker item", where='url in ("https://lichess.org", "https://sanad.gov.jo")')]),
-  T("star the pair of them", diff(upd("lichess", starred=True), upd("sanad", starred=True)),
-    ref=[act("star", rows="$lichess, $sanad")]))
-
 S("T10-054", "folder doc count lte linked read",
   T("folders that have either one document or nothing", rows("scans_f", "misc_f", "travel_f"),
     ref=[ans(kind="folder", where="document count <= 1")]),
@@ -43,18 +37,6 @@ S("T10-056", "find ambiguous person ask star",
                                               "chess_0728", "tournament"),
     ref=[ans(kind="event", linked_to="$sami_k", when=W({"from": U("day", 0)}))]))
 
-S("T10-057", "trashed events restore linked",
-  T("anything in the trash from the calendar", rows("jamal_lunch", "tank_clean"),
-    ref=[find(kind="event", trashed=True), ans(rows="@prev")]),
-  T("put the jamal one back", diff(restore("jamal_lunch")),
-    ref=[act("restore", rows="$jamal_lunch")]),
-  T("who's on it", rows("jamal"),
-    ref=[ans(kind="person", linked_to="$jamal_lunch")]),
-  T("and when did i last actually talk to him", rows("jamal"),
-    ref=[ans(rows="$jamal")]),
-  T("put a phone call with him on the record, confirming it", diff(upd("jamal", date=ANY)),
-    ref=[act("log", rows="$jamal", args=lines(kind="call"))]))
-
 S("T10-058", "note create add_to new pin undo",
   T("new note Tile colours: light grey floor, white walls, check with Ziad. put it in the mosque fund notebook",
     diff(new("note", name=has("Tile colours"), body=has("grey")), link("mosque_nb", "new")),
@@ -72,21 +54,6 @@ S("T10-059", "find ambiguous album rename",
          askc("the eid al-fitr one or eid al-adha?", options="$fitr_album, $adha_album")]),
   T("adha", diff(upd("adha_album", name="Eid 2026")),
     ref=[act("edit", rows="$adha_album", args=lines(name="Eid 2026"))]))
-
-S("T10-060", "refused group delete ask never mind",
-  T("delete the mosque renovation fund group, ziad keeps it all in excel", ask(),
-    ref=[bad(act("delete", rows="$mosque")),
-         askc("it still has expenses in it so the vault won't delete it. settle up and leave it?")]),
-  T("leave it then", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
-S("T10-061", "group members remove multi delete group",
-  T("who's in the old building committee", rows("adel", "umm_khalil", "me"),
-    ref=[ans(kind="person", linked_to="$building")]),
-  T("take adel and umm khalil out", diff(unlink("building", "adel"), unlink("building", "umm_khalil")),
-    ref=[act("remove_from", rows="$adel, $umm_khalil", args=lines(from_="$building"))]),
-  T("and get rid of the group", diff(gone("building"), unlink("building", "me")),
-    ref=[act("delete", rows="$building")]))
 
 S("T10-062", "locker username ne within",
   T("any logins not under bhaddad", rows("gmail", "sanad", "lichess"),
@@ -112,28 +79,6 @@ S("T10-064", "refused folder delete move then delete",
          act("delete", kind="folder", name="Old scans")]),
   T("what's in property deeds", rows("deed_house", "deed_land", "school_certs"),
     ref=[ans(kind="document", linked_to="$deeds_f")]))
-
-S("T10-065", "tournament five turns subtasks complete reschedule",
-  T("when's the amman open chess tournament", rows("tournament"),
-    ref=[ans(kind="event", name="Amman open chess tournament")]),
-  T("who's playing", rows("tariq", "sami_k", "faris", "mounir"),
-    ref=[ans(kind="person", linked_to="$tournament")]),
-  T("what's under prepare tournament pairings", rows("pair_list", "pair_print"),
-    ref=[ans(kind="task", linked_to="$pairings")]),
-  T("print score sheets is done", diff(upd("pair_print", status="completed", completed=ANY)),
-    ref=[act("complete", rows="$pair_print")]),
-  T("and move confirm player list to monday", diff(upd("pair_list", date="2026-06-22")),
-    ref=[act("reschedule", rows="$pair_list", args=lines(to=U("week", 1, weekday=1)))]))
-
-S("T10-066", "log where nickname debt",
-  T("umm khalil brought bread round, log a visit", diff(upd("umm_khalil", date=ANY)),
-    ref=[act("log", kind="person", where='nickname = "Umm Khalil"', args=lines(kind="visit"))]),
-  T("how's the bread from the bakery debt looking", rows("d_umm_khalil"),
-    ref=[ans(kind="debt", linked_to="$umm_khalil")]),
-  T("forget it, mark it settled", diff(upd("d_umm_khalil", status="settled")),
-    ref=[act("settle_debt", rows="$d_umm_khalil")]),
-  T("wait undo that, she insists on paying", diff(),
-    ref=[act("undo")]))
 
 S("T10-067", "unstar photo multi starred",
   T("unstar the eid table at nabil's and the club trophy 2025 pic",
@@ -165,21 +110,6 @@ S("T10-071", "restore window task ask create",
     ref=[act("create", args=lines(kind="task", name="Book Umrah package", date=D("2026-08-31"), list="$travel_l"))]),
   T("what's on the travel list", rows("flight", "passport", "visa", "+1"),
     ref=[ans(kind="task", linked_to="$travel_l")]))
-
-S("T10-073", "six turns lina visit",
-  T("when's lina landing", rows("airport_lina"),
-    ref=[ans(kind="event", name="Pick up Lina from the airport")]),
-  T("who's going to pick up lina from the airport", rows("lina", "abu_ahmad"),
-    ref=[ans(kind="person", linked_to="$airport_lina")]),
-  T("what's abu ahmad's actual name, i always forget", rows("abu_ahmad"),
-    ref=[ans(kind="person", where='nickname = "Abu Ahmad"')]),
-  T("and the dinner after, who's coming", rows("lina", "layla", "karim"),
-    ref=[find(kind="event", name="Dinner with Lina and Layla"), ans(kind="person", linked_to="@prev")]),
-  T("have i sorted layla's birthday gift", rows("layla_gift"),
-    ref=[ans(kind="task", name="Buy birthday gift for Layla")]),
-  T("not yet. make it due the first and priority one", diff(upd("layla_gift", date="2026-07-01", priority=1)),
-    ref=[act("reschedule", rows="$layla_gift", args=lines(to=D("2026-07-01")), more=True),
-         act("edit", rows="$layla_gift", args=lines(priority=1))]))
 
 S("T10-074", "met in star",
   T("anyone i met in amman or london", rows("karim", "nabil", "huda", "khaled_s"),

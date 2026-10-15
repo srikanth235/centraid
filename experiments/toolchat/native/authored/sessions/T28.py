@@ -8,66 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T28-001", "add_to person named group members read",
-  T("put Tui Ngata in the marae koha fund, she's helping moana with the books",
-    diff(link("marae_g", "tui")),
-    ref=[act("add_to", rows="$tui", args=lines(to="$marae_g"))]),
-  T("how many in that group", val(6),
-    ref=[ans(op="count", kind="person", linked_to="$marae_g")]))
-
-S("T28-002", "add_to person named count value",
-  T("add Trevor Wilson to Tarawera fishing", diff(link("fish_g", "trev")),
-    ref=[act("add_to", rows="$trev", args=lines(to="$fish_g"))]),
-  T("how many of us in it", val(5),
-    ref=[ans(op="count", kind="person", linked_to="$fish_g")]),
-  T("and is the fishing trip on or did we cancel", rows("fishing"),
-    ref=[find(kind="event", name="fishing"), ans(rows="@prev")]))
-
-S("T28-003", "add_to person where secretary tangi group",
-  T("add the marae secretary to Uncle Hohepa's tangi group, she's doing the koha list",
-    diff(link("tangi_g", "huia")),
-    ref=[act("add_to", kind="person", where='role contains "secretary"', args=lines(to="$tangi_g"))]),
-  T("what's my balance with her", val((-30, "NZD")),
-    ref=[ans(op="balance", rows="$huia")]))
-
-S("T28-004", "add_to person where mechanic bus group",
-  T("can you put the mechanic in bus depot old boys, tony drove the 11 back in the day",
-    diff(link("bus_g", "tony")),
-    ref=[act("add_to", kind="person", where='role contains "mechanic"', args=lines(to="$bus_g"))]),
-  T("and when's the depot lunch", rows("depot_lunch"),
-    ref=[find(kind="event", name="depot lunch"), ans(rows="@prev")]))
-
-S("T28-005", "group person count delete group where",
-  T("which of my groups have three people or fewer", rows("bus_g"),
-    ref=[ans(kind="group", where="person count <= 3")]),
-  T("delete the three person one, we meet at the RSA",
-    diff(gone("bus_g"), unlink("bus_g", "kevin"), unlink("bus_g", "trev"), unlink("bus_g", "me")),
-    ref=[act("delete", kind="group", where="person count = 3")]))
-
-S("T28-006", "delete group where linked empty read",
-  T("get rid of the group trev is in, never used it",
-    diff(gone("bus_g"), unlink("bus_g", "kevin"), unlink("bus_g", "trev"), unlink("bus_g", "me")),
-    ref=[act("delete", kind="group", linked_to="$trev")]),
-  T("is kevin in any groups", rows(),
-    ref=[ans(kind="group", linked_to="$kevin")]))
-
-S("T28-007", "create group add_to person new delete group new",
-  T("new group Brisbane footy tickets", diff(new("group", name="Brisbane footy tickets"), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Brisbane footy tickets"))]),
-  T("add rawiri to it", diff(link("+1", "rawiri")),
-    ref=[act("add_to", rows="$rawiri", args=lines(to="$c1"))]),
-  T("delete it, he's sorting the tickets himself",
-    diff(gone("+1"), unlink("+1", "me"), unlink("+1", "rawiri")),
-    ref=[act("delete", rows="$c1")]))
-
-S("T28-008", "create group delete group new list groups",
-  T("make a group called Regionals van", diff(new("group", name="Regionals van"), link("new", "me")),
-    ref=[act("create", args=lines(kind="group", name="Regionals van"))]),
-  T("hmm no scrap that group, the kura is paying for the van", diff(gone("+1"), unlink("+1", "me")),
-    ref=[act("delete", rows="$new")]),
-  T("which groups have i got in aussie dollars", rows("brisbane_g"),
-    ref=[ans(kind="group", where='currency contains "AUD"')]))
-
 S("T28-009", "trashed event restore prev read",
   T("is the tyre change in the trash", rows("tyre"),
     ref=[ans(kind="event", name="Tyre change", trashed=True)]),

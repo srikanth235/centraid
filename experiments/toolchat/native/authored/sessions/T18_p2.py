@@ -4,9 +4,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 NOW = W({"from": U("day", 0)})
 NEXT_WEEK = W(U("week", 1))
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-BIG_OWE = find(kind="debt", where=IOWE, order="amount desc", limit=2)
 NEXT_WEEKEND = W(span(U("week", 1, weekday=6), U("week", 1, weekday=7)))
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
@@ -36,20 +33,6 @@ S("T18-120-P", "decline oos twice then not_found trashed event para",
   T("band practice on thursday instead", decline("not_found"),
     ref=[act("reschedule", kind="event", name="Band practice", args=lines(to=U("week", 1, weekday=4))),
          dec("not_found")]))
-
-S("T18-133-P", "min owed typo then max then ask playtest never mind para",
-  T("lowest debt anyone has with me, chasing the little ones first beacuse they're quick", val((24, "AUD")),
-    ref=[ans(op="min", field="amount", kind="debt", where=OWED)]),
-  T("largest, probably ollie's microphone from january still",
-    val((150, "AUD")),
-    ref=[ans(op="max", field="amount", kind="debt", where=OWED)]),
-  T("playtest night, friday instead", ask("playtest_feb", "playtest_mar"),
-    ref=[act("reschedule", kind="event", name="Playtest night", args=lines(to=U("week", 1, weekday=5, time="18:00"))),
-         find(kind="event", name="Playtest night"),
-         askc("the one on the 20th of february or the one on the 6th of march?", options="$playtest_feb, $playtest_mar")]),
-  T("scratch that, priya says the timing's locked in for now so both stay as they are, i'll revisit it on thursady",
-    decline("never_mind"),
-    ref=[dec("never_mind")]))
 
 S("T18-140-P", "latest photos then unbounded typo then ask cancel vet never mind then sum tasks typo para",
   T("two newest photos of mine", rows("b_creek", "whiteboard", order=True),

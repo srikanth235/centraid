@@ -6,18 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T09-026", "cadence within log balance",
-  T("which contacts have a check-in cadence of a week or less", rows("dan", "mom", "dad", "ada", "aiden", "fatou"),
-    ref=[ans(kind="person", where="cadence <= 7 days")]),
-  T("which of those haven't i talked to since before the weekend", rows("dad"),
-    ref=[ans(within="@prev", when=W({"to": U("week", -1, weekday=5)}))]),
-  T("log a call with him now, hung up", diff(upd("dad", date=ANY)),
-    ref=[act("log", rows="$dad", args=lines(kind="call"))]),
-  T("where do i stand with dad money wise", val((-2000, "CAD")),
-    ref=[ans(op="balance", rows="$dad")]),
-  T("and with ada", val((-50, "CAD")),
-    ref=[ans(op="balance", kind="person", name="Adaeze Okafor")]))
-
 S("T09-027", "person date spans within",
   T("who did i talk to between may first and sunday noon", rows("dad", "priya_r", "gord", "jordan_p", "colette"),
     ref=[ans(kind="person", when=W(span(D("2026-05-01"), U("week", -1, weekday=7, time="12:00"))))]),
@@ -60,18 +48,6 @@ S("T09-030", "event duration person count span already ask decline",
          askc("this saturday's fitting or the one on 20 june?", options="$fitting_1, $fitting_2")]),
   T("nvm leave it, ada will sort it", decline("never_mind"),
     ref=[dec("never_mind")]))
-
-S("T09-031", "count from next week group members",
-  T("how many bar prep sessions are left from next week on", val(3),
-    ref=[ans(op="count", kind="event", name="Bar prep session", when=W({"from": U("week", 1)}))]),
-  T("and condo board meetings from next month on", val(1),
-    ref=[ans(op="count", kind="event", name="Condo board meeting", when=W({"from": U("month", 1)}))]),
-  T("who's in the bar prep group again", rows("aiden", "fatou", "mateo", "jordan_p", "me"),
-    ref=[ans(kind="person", linked_to="$barprep")]),
-  T("what's due in june", rows("thanks_new", "headcount", "playlist", "reserve", "dryer", "fees_06"),
-    ref=[ans(kind="task", when=W(U("month", 0, name=6)))]),
-  T("just the wedding ones", rows("thanks_new", "headcount", "playlist"),
-    ref=[ans(within="@prev", linked_to="$wed_list")]))
 
 S("T09-032", "task june name month",
   T("anything on the condo list due in june", rows("reserve"),
@@ -149,23 +125,6 @@ S("T09-042", "photo count since april album to weekday",
   T("what's in the bar prep crew album up to the sunday before last", rows("bp_board", "bp_pizza"),
     ref=[ans(kind="photo", linked_to="$bar_album", when=W({"to": U("week", -2, weekday=7)}))]))
 
-S("T09-043", "debt spans amount direction settle sum",
-  T("what ious came up from the start of last month to may fifth",
-    rows("d_ada", "d_marcus", "d_priya_s", "d_aiden", "d_jordan_l", "d_mom", "d_fatou", "d_ada2"),
-    ref=[ans(kind="debt", when=W(span(U("month", -1), D("2026-05-05"))))]),
-  T("which of those are 30 bucks or less", rows("d_priya_s", "d_jordan_l", "d_fatou", "d_ada2"),
-    ref=[ans(within="@prev", where="amount <= 30 CAD")]),
-  T("settle the one with fatou, paid her back at session", diff(upd("d_fatou", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Tabs for my binder")]),
-  T("wait undo that, i paid her for the pizza not the tabs", diff(),
-    ref=[act("undo")]),
-  T("any new ones this month", rows("d_kemi", "d_priya_r", "d_ethan", "d_fatou", "d_ada2"),
-    ref=[ans(kind="debt", when=W({"from": U("month", 0)}))]),
-  T("which of those am i the one paying", rows("d_ethan", "d_fatou"),
-    ref=[ans(within="@prev", where='direction in ("i_owe")')]),
-  T("and the biggest thing i owe anyone", val((2000, "CAD")),
-    ref=[ans(op="max", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
-
 S("T09-045", "locker username url star multi",
   T("which logins use hokafor", rows("firm_login", "lso_portal"),
     ref=[ans(kind="locker item", where='username = "hokafor"')]),
@@ -183,17 +142,6 @@ S("T09-046", "locker url contains reveal",
     ref=[ans(kind="locker item", where='url contains "condoportal"')]),
   T("show me the password", diff(reveal=[("condo_portal", "lobbyplants22")]),
     ref=[act("reveal", rows="$condo_portal", args=lines(field="password"))]))
-
-S("T09-047", "group person count delete group",
-  T("show groups that have a headcount of five or higher", rows("wparty", "barprep"),
-    ref=[ans(kind="group", where="person count >= 5")]),
-  T("delete the stag and doe group and start a fresh one called Stag night with the same guys",
-    diff(gone("stag"), unlink("stag", "marcus"), unlink("stag", "jordan_l"), unlink("stag", "me"),
-         new("group", name="Stag night"), link("new", "me"), link("new", "marcus"), link("new", "jordan_l")),
-    ref=[find(kind="person", linked_to="$stag"),
-         act("delete", kind="group", name="Stag and doe", more=True),
-         act("create", more=True, args=lines(kind="group", name="Stag night")),
-         act("add_to", rows="$marcus, $jordan_l", args=lines(to="$new"))]))
 
 S("T09-048", "list area in open",
   T("lists for home or condo stuff", rows("home_list", "condo_list"),

@@ -14,12 +14,6 @@ S("T05-002-P", "event find edit prev para",
   T("amma cataract surgery, thirteenth right?", rows("cataract_2"),
     ref=[ans(kind="event", name="Amma cataract surgery")]))
 
-S("T05-006-P", "debt settle prev para",
-  T("my debts to revathi subramanian, what are they", rows("d_revathi"),
-    ref=[ans(kind="debt", linked_to="$revathi", where='direction = "i_owe"')]),
-  T("i settled it with her over gpay, mark it as paid", diff(upd("d_revathi", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]))
-
 S("T05-011-P", "photo delete multi undo para",
   T("the blurry kolam shot and the pharmacy receipt pic can go, wipe both",
     diff(trash("blurry_kolam"), trash("receipt_pic"), unlink("pongal_al", "blurry_kolam")),
@@ -47,14 +41,6 @@ import json
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
-S("T05-028-P", "groups person count balance compute para",
-  T("groups whose member count isn't three", rows("cricket_g", "carpool", "dubai_g", "farewell_g"),
-    ref=[ans(kind="group", where="person count != 3")]),
-  T("carpool members?", rows("divya_s", "jaya", "ramesh_d", "me"),
-    ref=[ans(kind="person", linked_to="$carpool")]),
-  T("my balance there?", val((740, "INR")),
-    ref=[comp(op="balance", kind="group", name="Night shift carpool", linked_to="$me"), ans(value="@prev")]))
-
 S("T05-034-P", "documents no folder para",
   T("documents sitting outside any folder", rows("aadhaar", "pan"),
     ref=[ans(kind="document", where="folder count != 1")]),
@@ -80,19 +66,6 @@ import json
 
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
-
-S("T05-057-P", "delete group refused members balance delete empty group para",
-  T("trip's postponed, so the dubai trip group goes: wipe it", ask(),
-    ref=[bad(act("delete", kind="group", name="Dubai trip")),
-         askc("the dubai trip group still has expenses in it, so it can't be deleted. settle up first or keep it?")]),
-  T("ok keep it. its members?", rows("karthik", "harish", "anand", "me"),
-    ref=[ans(kind="person", linked_to="$dubai_g")]),
-  T("my balance in there?", val((450, "AED")),
-    ref=[comp(op="balance", kind="group", name="Dubai trip", linked_to="$me"), ans(value="@prev")]),
-  T("farhan farewell gift group, we're doing cash so wipe it", diff(gone("farewell_g"), unlink("farewell_g", "me")),
-    ref=[act("delete", kind="group", name="Farhan farewell gift")]),
-  T("group count?", val(5),
-    ref=[ans(op="count", kind="group")]))
 
 S("T05-062-P", "note restore multi undo restore para",
   T("notes in the trash?", rows("adai", "old_roster", "old_shopping", "hindi_words"),
@@ -185,14 +158,6 @@ S("T05-096-P", "search find-only miss pin write read para",
 def J(d):
     return json.dumps(d, separators=(",", ":"))
 
-S("T05-A008-P", "follow-up c3a para",
-  T("people i owe money to", rows("d_jaya", "d_divya_s", "d_revathi", "d_ramesh_mama", "d_appa"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("all but the scooty one", rows("d_ramesh_mama", "d_divya_s", "d_revathi", "d_jaya"),
-    ref=[ans(within="@prev", exclude="$d_appa")]),
-  T("largest of them?", rows("d_ramesh_mama"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 import json
 
 def W(expr):
@@ -201,26 +166,10 @@ def W(expr):
 
 OPEN = 'status = "open"'
 
-IOWE = 'direction = "i_owe" and status = "open"'
-
-S("T05-B003-P", "c3b superlative debt biggest sum smallest para",
-  T("largest debt i owe?", rows("d_appa"),
-    ref=[ans(kind="debt", where=IOWE, order="amount desc", limit=1)]),
-  T("sum of everything i owe", val((18570, "INR")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=IOWE)]),
-  T("smallest among those", rows("d_jaya"),
-    ref=[ans(kind="debt", where=IOWE, order="amount asc", limit=1)]))
-
 import json
 
 def W(expr):
     return json.dumps(expr, separators=(",", ":"))
-
-S("T05-C901-P", "c3c cell7 empty recovery wrong kind then debt amount para",
-  T("sbi card, where did i keep it", rows("sbi_card"),
-    ref=[find(kind="document", name="sbi card"), ans(kind="locker item", name="sbi card")]),
-  T("debts from 1000 upwards", rows("d_karthik", "d_arjun", "d_appa", "d_ramesh_mama"),
-    ref=[ans(kind="debt", where="amount >= 1000")]))
 
 import json
 
@@ -277,14 +226,3 @@ S("T05-120-P", "wifi read trashed locker restore star para",
     ref=[act("restore", rows="$netflix")]),
   T("aadhaar scan gets a star", diff(upd("aadhaar", starred=True)),
     ref=[act("star", kind="document", name="Aadhaar scan")]))
-
-S("T05-126-P", "balance jaya group not_found trashed event para",
-  T("jaya's balance in the carpool group?", val((-780, "INR")),
-    ref=[ans(op="balance", kind="group", name="Night shift carpool", linked_to="$jaya")]),
-  T("vet appointment date?", decline("not_found"),
-    ref=[search("vet"), dec("not_found")]),
-  T("yoga class should be on friday", decline("not_found"),
-    ref=[act("reschedule", kind="event", name="Yoga class", args=lines(to=U("week", 0, weekday=5))),
-         dec("not_found")]),
-  T("icu locker code gets a star", diff(upd("locker_combo", starred=True)),
-    ref=[act("star", kind="locker item", name="ICU locker code")]))

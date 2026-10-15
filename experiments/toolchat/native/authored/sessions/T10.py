@@ -50,20 +50,6 @@ S("T10-007", "effort unit within overdue",
   T("which of those are overdue", rows("receipts"),
     ref=[ans(within="@prev", when=W({"to": U("day", -1)}))]))
 
-S("T10-008", "group members remove multi balance",
-  T("who's in the chess club kitty", rows("sami_k", "tariq", "walid", "faris", "mounir", "me"),
-    ref=[ans(kind="person", linked_to="$chess")]),
-  T("where am i in it", val((-18, "JOD")),
-    ref=[ans(op="balance", kind="group", name="Chess club kitty", linked_to="$me")]),
-  T("take walid and mounir out, they never chip in", diff(unlink("chess", "walid"), unlink("chess", "mounir")),
-    ref=[act("remove_from", rows="$walid, $mounir", args=lines(from_="$chess"))]))
-
-S("T10-009", "compute max min debts",
-  T("what's the most anyone owes me right", val((120, "JOD")),
-    ref=[ans(op="max", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("and the least", val((8, "JOD")),
-    ref=[ans(op="min", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]))
-
 S("T10-010", "edit event multi description",
   T("when are the blood test at al-borg lab and the dentist appointment", rows("blood_test", "dentist"),
     ref=[ans(rows="$blood_test, $dentist")]),
@@ -99,18 +85,6 @@ S("T10-013", "note create add_to new count",
     ref=[act("add_to", rows="$c1", args=lines(to="$chess_nb"))]),
   T("how many notes in there", val(5),
     ref=[ans(op="count", kind="note", linked_to="$chess_nb")]))
-
-S("T10-014", "balance person settle debt",
-  T("do i owe nabil or does he owe me", val((-44, "JOD")),
-    ref=[ans(op="balance", rows="$nabil")]),
-  T("settle the chalet one, gave him cash at lunch", diff(upd("d_nabil", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Chalet share")]))
-
-S("T10-015", "log where nickname debt linked",
-  T("had coffee with abu fadi this morning", diff(upd("abu_fadi", date=ANY)),
-    ref=[act("log", kind="person", where='nickname = "Abu Fadi"', args=lines(kind="coffee"))]),
-  T("does he owe me for the coffee beans from kuwait", rows("d_abu_fadi"),
-    ref=[ans(kind="debt", linked_to="$abu_fadi")]))
 
 S("T10-016", "locker edit where starred",
   T("new router. rename the wifi entry to Home wifi 5G", diff(upd("wifi", name="Home wifi 5G")),

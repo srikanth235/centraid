@@ -9,9 +9,6 @@ def W(expr):
 
 
 LIVE = 'status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
-
 
 def next_group():
     return find(kind="event", name="Lab group meeting", when=W({"from": U("day", 0)}), order="date asc", limit=1)
@@ -31,17 +28,6 @@ S("T13-131", "recovery next lab group meeting then lab list min max sum",
   T("how long is the whole lab list altogther, i wanna see if it fits in a weekend", val(230),
     ref=[comp(op="sum", field="effort", kind="task", linked_to="$lab_l", where=LIVE), ans(value="@prev")]))
 
-S("T13-132", "recovery twice badminton then house sum then debts min max",
-  T("just the next two badmington nights, i'm sorting out lifts", rows("badminton_0904", "badminton_0911", order=True),
-    ref=[badminton(), bad(badminton()), bad(badminton()),
-         ans(within="@prev", order="date asc", limit=2)]),
-  T("how long are all the house chores put together, i want to blitz them on sunday", val(85),
-    ref=[ans(op="sum", field="effort", kind="task", linked_to="$house_l", where=LIVE)]),
-  T("what's the smallst amount anyone owes me right now, i want to chase the easy one first", val((8, "GBP")),
-    ref=[ans(op="min", field="amount", kind="debt", where=OWED)]),
-  T("and the biggest i owe, i want to clear that one first when the stipend lands", val((50, "GBP")),
-    ref=[ans(op="max", field="amount", kind="debt", where=OWE)]))
-
 S("T13-133", "ask star payslip never mind then personal list min max",
   T("star the payslip", ask("payslip_jul", "payslip_aug"),
     ref=[act("star", kind="document", name="Payslip"),
@@ -52,26 +38,6 @@ S("T13-133", "ask star payslip never mind then personal list min max",
     ref=[ans(op="min", field="effort", kind="task", linked_to="$personal_l", where=LIVE)]),
   T("and the slowest one, probaly the brp renewal", val(120),
     ref=[ans(op="max", field="effort", kind="task", linked_to="$personal_l", where=LIVE)]))
-
-S("T13-134", "nigsoc list min max thesis sum then biggest debts owed limit",
-  T("which of the nigsoc jobs is the shortest, i'm stood at the bus stop", rows("hall"),
-    ref=[ans(kind="task", linked_to="$nigsoc_l", where=LIVE, order="effort asc", limit=1)]),
-  T("longest one there?", val(120),
-    ref=[ans(op="max", field="effort", kind="task", linked_to="$nigsoc_l", where=LIVE)]),
-  T("what's the total for the thesis list, i need to know how many hours i'm behind", val(345),
-    ref=[comp(op="sum", field="effort", kind="task", linked_to="$thesis_l", where=LIVE), ans(value="@prev")]),
-  T("who are my three biggest debtrs", rows("d_chinedu", "d_kasia", "d_nkechi", order=True),
-    ref=[ans(kind="debt", where=OWED, order="amount desc", limit=3)]))
-
-S("T13-135", "what i owe sum max min then next two events",
-  T("how much do i owe people in total, doing my budjet for the month", val((112, "GBP")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=OWE)]),
-  T("and the most i owe any one person, i think it's obinna for mum's phone", val((50, "GBP")),
-    ref=[ans(op="max", field="amount", kind="debt", where=OWE)]),
-  T("smallest one?", val((12, "GBP")),
-    ref=[ans(op="min", field="amount", kind="debt", where=OWE)]),
-  T("whats my next two evnts", rows("sem", "wei_xrd", order=True),
-    ref=[ans(kind="event", when=W({"from": U("day", 0)}), order="date asc", limit=2)]))
 
 S("T13-136", "ask cancel flight never mind then latest notes limit then longest event",
   T("cancel the flight", ask("lisbon_out", "lisbon_back", "lagos_flight"),

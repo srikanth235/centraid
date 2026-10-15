@@ -9,7 +9,7 @@ Eid group. Built-in ambiguity: two Samis (grandson Sami Haddad, chess friend Sam
 Khaleds, nicknames (Abu Fadi, Umm Khalil, Abu Ahmad), a misspelled-looking name (Mounir), two
 cardiology check-ups, recurring video calls and chess nights, two Eid albums, near-duplicate
 bill tasks and two "Renew car license" tasks, cancelled events, completed tasks, trashed rows
-inside and past the 30-day restore window, an empty group, an empty folder, and a folder whose
+inside and past the 30-day restore window, an empty folder, and a folder whose
 only document is in the trash.
 """
 from __future__ import annotations
@@ -77,37 +77,6 @@ def people():
         {"key": "basel", "name": "Basel Odeh", "role": "old tenant", "trashed": "2026-06-08T10:00"},
     ]
 
-
-GROUPS = [
-    {"key": "mosque", "name": "Mosque renovation fund", "members": ["ziad", "khalil", "hasan", "nabil"],
-     "created": "2026-02-01T12:00"},
-    {"key": "chess", "name": "Chess club kitty", "members": ["sami_k", "tariq", "walid", "faris", "mounir"],
-     "created": "2025-09-01T19:00"},
-    {"key": "eid", "name": "Eid family group", "members": ["nabil", "huda", "rami", "lina"],
-     "created": "2026-03-01T10:00"},
-    {"key": "aqaba", "name": "Aqaba trip", "members": ["nabil", "jamal", "abu_fadi"], "created": "2026-05-20T18:00"},
-    {"key": "building", "name": "Old building committee", "members": ["adel", "umm_khalil"],
-     "created": "2025-03-01T10:00"},
-]
-
-EXPENSES = [
-    {"group": "mosque", "name": "Ablution tiles deposit", "amount": 400, "paid_by": "me",
-     "split": ["me", "ziad", "khalil", "hasan", "nabil"], "date": "2026-05-12"},
-    {"group": "mosque", "name": "Carpet cleaning", "amount": 150, "paid_by": "ziad",
-     "split": ["me", "ziad", "khalil"], "date": "2026-06-02"},
-    {"group": "mosque", "name": "New loudspeaker", "amount": 220, "paid_by": "khalil",
-     "split": ["me", "ziad", "khalil", "nabil"], "date": "2026-06-11"},
-    {"group": "chess", "name": "Tournament hall rent", "amount": 120, "paid_by": "tariq",
-     "split": ["me", "sami_k", "tariq", "faris"], "date": "2026-06-01"},
-    {"group": "chess", "name": "Tea and ka'ak", "amount": 18, "paid_by": "me",
-     "split": ["me", "sami_k", "tariq"], "date": "2026-06-16"},
-    {"group": "eid", "name": "Eid lamb", "amount": 280, "paid_by": "me",
-     "split": ["me", "nabil", "huda", "rami", "lina"], "date": "2026-05-26"},
-    {"group": "eid", "name": "Sweets from Habibah", "amount": 45, "paid_by": "huda",
-     "split": ["me", "nabil", "huda"], "date": "2026-05-27"},
-    {"group": "aqaba", "name": "Chalet booking", "amount": 360, "paid_by": "nabil",
-     "split": ["me", "nabil", "jamal", "abu_fadi"], "date": "2026-06-03"},
-]
 
 LISTS = [
     {"key": "home_l", "name": "Home", "area": "home"},
@@ -446,31 +415,6 @@ PHOTOS = [
     {"key": "trash_old", "name": "Old garage door", "taken": "2026-02-01T12:00", "trashed": "2026-03-01T09:00"},
 ]
 
-DEBTS = [
-    {"key": "d_nabil", "person": "nabil", "direction": "i_owe", "amount": 90, "name": "Chalet share", "date": "2026-06-03"},
-    {"key": "d_abu_fadi", "person": "abu_fadi", "direction": "owes_me", "amount": 25, "name": "Coffee beans from Kuwait",
-     "date": "2026-04-30"},
-    {"key": "d_walid", "person": "walid", "direction": "owes_me", "amount": 40, "name": "Chess book order",
-     "date": "2026-06-09"},
-    {"key": "d_tariq", "person": "tariq", "direction": "i_owe", "amount": 15, "name": "Tournament entry fee",
-     "date": "2026-06-16"},
-    {"key": "d_rami", "person": "rami", "direction": "owes_me", "amount": 150, "name": "Yousef's bike", "date": "2025-08-10",
-     "settled": "2025-09-01T10:00"},
-    {"key": "d_hani", "person": "hani", "direction": "i_owe", "amount": 35, "name": "Leak repair callout",
-     "date": "2026-06-18"},
-    {"key": "d_huda", "person": "huda", "direction": "owes_me", "amount": 60, "name": "Eid clothes for her grandson",
-     "date": "2026-05-22"},
-    {"key": "d_jamal", "person": "jamal", "direction": "owes_me", "amount": 120, "name": "Engineering books",
-     "date": "2026-03-12"},
-    {"key": "d_ziad", "person": "ziad", "direction": "i_owe", "amount": 20, "name": "Taxi to the tile shop",
-     "date": "2026-06-15"},
-    {"key": "d_khaled_s", "person": "khaled_s", "direction": "i_owe", "amount": 12.5, "name": "Pharmacy tab",
-     "date": "2026-06-12", "settled": "2026-06-14T10:00"},
-    {"key": "d_umm_khalil", "person": "umm_khalil", "direction": "owes_me", "amount": 8, "name": "Bread from the bakery",
-     "date": "2026-06-17"},
-    {"key": "d_mounir", "person": "mounir", "direction": "owes_me", "amount": 30, "name": "Arbiter badge",
-     "date": "2026-05-19", "settled": "2026-06-02T21:00"},
-]
 
 LOCKER = [
     {"key": "gmail", "name": "Gmail", "type": "login", "username": "bashir.haddad52@gmail.com",
@@ -537,8 +481,6 @@ def world():
         "seed": "T10",
         "currency": "JOD",
         "people": people(),
-        "groups": GROUPS,
-        "expenses": EXPENSES,
         "lists": LISTS,
         "events": events(),
         "tasks": tasks(),
@@ -548,7 +490,6 @@ def world():
         "documents": DOCUMENTS,
         "albums": ALBUMS,
         "photos": PHOTOS,
-        "debts": DEBTS,
         "locker": LOCKER,
         "links": LINKS,
     }

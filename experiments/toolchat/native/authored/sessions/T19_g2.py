@@ -6,65 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T19-116", "balance youssef repair ask negative",
-  T("what do i owe youssef, we've been doing so much cash back and forth lately", ask("youssef_a", "youssef_b"),
-    ref=[bad(ans(op="balance", kind="person", name="Youssef")),
-         askc("youssef el amrani or youssef berrada the wholesaler rep?", options="$youssef_a, $youssef_b")]),
-  T("my husband, who else", val((-1000, "MAD")),
-    ref=[ans(op="balance", rows="$youssef_a")]),
-  T("does hamza owe me anything", val((400, "MAD")),
-    ref=[ans(op="balance", kind="person", name="Hamza")]),
-  T("star the delivery driver", diff(upd("hamza", starred=True)),
-    ref=[act("star", kind="person", where='role contains "delivery driver"')]))
-
-S("T19-117", "balance khalid aicha settle debt star",
-  T("how much do i owe khalid", val((-350, "MAD")),
-    ref=[ans(op="balance", kind="person", name="Khalid")]),
-  T("and aicha", val((-100, "MAD")),
-    ref=[ans(op="balance", kind="person", name="Aicha")]),
-  T("settle the sink repair and star khalid, paid him cash on the spot and he's the best plumber i've had",
-    diff(upd("d_khalid", status="settled"), upd("khalid", starred=True)),
-    ref=[act("settle_debt", kind="debt", name="Sink repair", more=True),
-         act("star", kind="person", name="Khalid")]))
-
-S("T19-118", "balance simo nickname ifrane group me",
-  T("what do i owe simo, i need to sort the ifrane money before the trip", val((-500, "MAD")),
-    ref=[search("simo", kind="person"), ans(op="balance", rows="$simo")]),
-  T("who's in the ifrane weekend group", rows("omar", "simo", "youssef_a", "me"),
-    ref=[ans(kind="person", linked_to="$ifrane")]),
-  T("where do i stand there", val((-500, "MAD")),
-    ref=[comp(op="balance", kind="group", name="Ifrane weekend", linked_to="$me"), ans(value="@prev")]))
-
-S("T19-119", "balance substitution positives",
-  T("does kenza owe me anything", val((300, "MAD")),
-    ref=[ans(op="balance", kind="person", name="Kenza")]),
-  T("and rachid", val((310, "MAD")),
-    ref=[ans(op="balance", kind="person", name="Rachid")]),
-  T("what about omar", val((1390, "MAD")),
-    ref=[ans(op="balance", kind="person", name="Omar")]),
-  T("kenza paid the night duty dinner, tick it", diff(upd("d_kenza", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Night duty dinner")]))
-
-S("T19-120", "balance samira imane coffee group",
-  T("how much do i owe samira bennani", val((-200, "MAD")),
-    ref=[ans(op="balance", kind="person", name="Samira Bennani")]),
-  T("where does imane stand in the coffee fund", val((-80, "MAD")),
-    ref=[ans(op="balance", kind="group", name="Pharmacy coffee fund", linked_to="$imane")]),
-  T("and rachid there", val((-80, "MAD")),
-    ref=[ans(op="balance", kind="group", name="Pharmacy coffee fund", linked_to="$rachid")]),
-  T("star imane, she covered the till all week", diff(upd("imane", starred=True)),
-    ref=[act("star", kind="person", name="Imane")]))
-
-S("T19-121", "balance omar settle debt",
-  T("what does omar owe me", val((1390, "MAD")),
-    ref=[ans(op="balance", kind="person", name="Omar")]),
-  T("he sent the glucometer money, settle it", diff(upd("d_omar", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Baba's new glucometer")]),
-  T("and what does omar owe me now", val((190, "MAD")),
-    ref=[ans(op="balance", rows="$omar")]),
-  T("how many people owe me money now", val(5),
-    ref=[ans(op="count", kind="debt", where='direction = "owes_me" and status = "open"')]))
-
 S("T19-122", "reopen task near-miss not_found trashed",
   T("reopen the card terminal one, it's acting up again", diff(upd("terminal", status="open", completed=None)),
     ref=[act("reopen", kind="task", name="Fix the card terminal")]),
@@ -124,17 +65,6 @@ S("T19-127", "decline fabricated out_of_scope weekend next",
     ref=[ans(kind="event", when=W(span(U("week", 1, weekday=6), U("week", 1, weekday=7))))]),
   T("call baba for me and tell him about it", decline("out_of_scope"),
     ref=[dec("out_of_scope")]))
-
-S("T19-128", "group members balance me delete refused rename",
-  T("who's in baba's care", rows("omar", "salma", "me"),
-    ref=[ans(kind="person", linked_to="$baba_care")]),
-  T("where do i stand in it", val((90, "MAD")),
-    ref=[comp(op="balance", kind="group", name="Baba's care", linked_to="$me"), ans(value="@prev")]),
-  T("delete the ifrane weekend group, the trip is planned differently now", ask(),
-    ref=[bad(act("delete", kind="group", name="Ifrane weekend")),
-         askc("ifrane weekend still has a chalet deposit on it so it can't be deleted. keep it?")]),
-  T("keep it but rename it to Ifrane May", diff(upd("ifrane", name="Ifrane May")),
-    ref=[act("edit", kind="group", name="Ifrane weekend", args=lines(name="Ifrane May"))]))
 
 S("T19-129", "repair unit cadence star create overlap",
   T("who's on a longer cycle than two weeks", rows("simo", "mouhcine"),

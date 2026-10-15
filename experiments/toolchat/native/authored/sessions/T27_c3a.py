@@ -62,14 +62,6 @@ S("T27-A008", "follow-up c3a",
   T("what else is on", rows("partners_1211", "opening", "midwife_dec", "workshop", "hygiene", "flour_2", "soft_open"),
     ref=[ans(within="@1", exclude="@2")]))
 
-S("T27-A009", "follow-up c3a",
-  T("who do i owe", rows("d_camille", "d_thomas", "d_antoine", "d_lea"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("which of those are over 100", rows("d_camille", "d_antoine", "d_lea"),
-    ref=[ans(within="@prev", where="amount > 100 EUR")]),
-  T("which is the biggest", rows("d_antoine"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T27-A010", "follow-up c3a",
   T("what's in the bakes album", rows("p_croissants", "p_scoring", "p_praline", "p_burnt", "p_kouign"),
     ref=[ans(kind="photo", linked_to="$bakes_al")]),

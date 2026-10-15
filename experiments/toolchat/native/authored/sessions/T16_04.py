@@ -39,21 +39,6 @@ S("T16-077", "six turns karim ambiguous ask star subtasks spans",
   T("what about before today", rows("tv_bill"),
     ref=[ans(kind="task", when=W({"to": U("day", -1)}), where='status = "open"')]))
 
-S("T16-078", "five turns task datetime span complete write read reschedule linked",
-  T("what's due between friday 8am and sunday 8pm",
-    rows("water_pump", "abba_meds", "salma_leave", "kitty_collect", "rice", "needle_log", "gas_bill", "audit_prep", "ground_book"),
-    ref=[ans(kind="task", when=W(span(U("week", 0, weekday=5, time="08:00"), U("week", 0, weekday=7, time="20:00"))))]),
-  T("Approve Salma's leave is done. what's left for friday",
-    rows("water_pump", "abba_meds", "kitty_collect", also=diff(upd("salma_leave", status="completed", completed=ANY))),
-    ref=[act("complete", kind="task", name="Approve Salma's leave", more=True),
-         ans(kind="task", when=W(U("week", 0, weekday=5)), where='status = "open"')]),
-  T("Fix the water pump - monir's coming sunday, move it", diff(upd("water_pump", date="2026-12-20")),
-    ref=[act("reschedule", kind="task", name="Fix the water pump", args=lines(to=U("week", 0, weekday=7)))]),
-  T("who's linked to it", rows("monir"),
-    ref=[ans(kind="person", linked_to="$water_pump")]),
-  T("do i owe him anything", val((-600, "BDT")),
-    ref=[ans(op="balance", rows="$monir")]))
-
 S("T16-079", "trashed task recovery restore reschedule list",
   T("what's happening with the fridge task", rows("fridge"),
     ref=[ans(kind="task", name="fridge"), ans(kind="task", name="fridge", trashed=True)]),
@@ -74,37 +59,11 @@ S("T16-080", "trashed event recovery restore reschedule day",
   T("book amma's eye check the same evening too", ask(),
     ref=[askc("what time for amma? mim's dentist is 5:30 to 6 that day.")]))
 
-S("T16-081", "five turns nickname find miss search edit role empty balance",
-  T("what's topu's real name", rows("topu"),
-    ref=[find(kind="person", name="Topu"), search("topu", kind="person"), ans(rows="$topu")]),
-  T("give him a role, mirpur tigers 12th man", diff(upd("topu", role=has("12th"))),
-    ref=[act("edit", rows="$topu", args=lines(role="Mirpur Tigers, 12th man"))]),
-  T("does he owe me anything", val((0, "BDT")),
-    ref=[ans(op="balance", rows="$topu")]),
-  T("any contacts without a role", rows("anwar", "faruk", "me"),
-    ref=[ans(kind="person", where="role is empty")]),
-  T("and where am i with topu", val((0, "BDT")),
-    ref=[ans(op="balance", rows="$topu")]))
-
-S("T16-082", "search compute balance settle undo ledger tasks",
-  T("how much do i owe monir all in", val((-600, "BDT")),
-    ref=[search("monir", kind="person"), comp(op="balance", rows="$monir"), ans(value="@prev")]),
-  T("settle the fan wiring debt, paid him", diff(upd("d_monir", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Fan wiring")]),
-  T("undo that, paying him tomorrow", diff(),
-    ref=[act("undo")]),
-  T("what tasks is he on", rows("water_pump"),
-    ref=[ans(kind="task", linked_to="$monir")]))
-
 S("T16-083", "single find-only task count",
   T("which contacts have tasks linked to them",
     rows("monir", "rehana", "amma", "tanvir", "mim", "abba", "karim_h", "kamal", "rahim_u", "jahanara", "salma", "babu",
          "jewel", "sohel", "shafiq"),
     ref=[find(kind="person", where="task count != 0"), ans(rows="@prev")]))
-
-S("T16-084", "single group currency empty",
-  T("does any group not have a currency on it", rows(),
-    ref=[ans(kind="group", where="currency is empty")]))
 
 S("T16-085", "single task status empty",
   T("tasks missing a status?", rows(),
@@ -143,29 +102,6 @@ S("T16-091", "five turns ambiguous document ask never mind rename multi add_to",
     ref=[act("add_to", rows="$scan_a, $scan_b", args=lines(to="$house_f"))]),
   T("how many docs in there", val(5),
     ref=[ans(op="count", kind="document", linked_to="$house_f")]))
-
-S("T16-092", "six turns create undo create complete write read four calls settle sum max",
-  T("add task Collect team jerseys, due thirty-first dec, cricket list",
-    diff(new("task", name="Collect team jerseys", date="2026-12-31"), link("cricket_l", "new")),
-    ref=[act("create", args=lines(kind="task", name="Collect team jerseys", date=D("2026-12-31"), list="$cricket_l"))]),
-  T("undo, imran already has them", diff(trash("+1")),
-    ref=[act("undo")]),
-  T("Collect kitty from the team is done and so is Book Abahani ground for the final. what's open on cricket",
-    rows("balls_1", also=diff(upd("kitty_collect", status="completed", completed=ANY),
-                              upd("ground_book", status="completed", completed=ANY))),
-    ref=[act("complete", kind="task", name="Collect kitty from the team", more=True),
-         act("complete", kind="task", name="Book Abahani ground for the final", more=True),
-         ans(kind="task", linked_to="$cricket_l", where='status = "open"')]),
-  T("imran paid for the Wicketkeeping gloves and jewel paid the Kitty for December. settle both and tell me who's owing me",
-    rows("d_shafiq", "d_babu", "d_rahim_u", also=diff(upd("d_imran", status="settled"), upd("d_jewel", status="settled"))),
-    ref=[find(kind="debt", name="Wicketkeeping gloves"),
-         find(kind="debt", name="Kitty for December"),
-         act("settle_debt", rows="$d_imran, $d_jewel", more=True),
-         ans(kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("total of that?", val((7500, "BDT")),
-    ref=[ans(op="sum", field="amount", within="@prev")]),
-  T("and the biggest single one", val((5000, "BDT")),
-    ref=[ans(op="max", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]))
 
 S("T16-093", "six turns production meeting ambiguous ask reschedule cancel",
   T("move the weekly production meeting to 10", ask(),

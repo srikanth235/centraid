@@ -53,50 +53,6 @@ S("T31-176", "search-role physio next-session one-after exclude",
   T("and the one after that", rows("physio_b"),
     ref=[ans(kind="event", linked_to="$physio", order="date asc", limit=1, when=J({"from": U("day", 0)}), exclude="$physio_a")]))
 
-S("T31-177", "search-role neighbour debts balance",
-  T("who's the neighbour", rows("hania"),
-    ref=[search("neighbour", kind="person"), ans(rows="@1")]),
-  T("any debts with her", rows("d_hania"),
-    ref=[ans(kind="debt", linked_to="$hania")]),
-  T("so where do i stand with her", val((0, "PLN")),
-    ref=[ans(op="balance", rows="$hania")]))
-
-S("T31-178", "recovery-nolink stag tasks notes priority add-to-notebook",
-  T("what tasks have i got for the stag do group", rows("adi_gift"),
-    ref=[ans(kind="task", linked_to="$stag"), ans(kind="task", name="stag")]),
-  T("make it priority 1", diff(upd("adi_gift", priority=1)),
-    ref=[act("edit", rows="$adi_gift", args="priority: 1")]),
-  T("which notes mention the stag do group", rows("n_stag"),
-    ref=[ans(kind="note", linked_to="$stag"), ans(kind="note", name="stag")]),
-  T("file it in the ideas notebook", diff(link("ideas_nb", "n_stag")),
-    ref=[act("add_to", rows="$n_stag", args=lines(to="$ideas_nb"))]))
-
-S("T31-179", "recovery-nolink flat bills events within-ahead delete-october restore",
-  T("anything in the diary for the flat bills group", rows("flat_dinner2", "flat_dinner"),
-    ref=[ans(kind="event", linked_to="$flat_bills"), ans(kind="event", name="flat")]),
-  T("and which of those haven't happened yet", rows("flat_dinner"),
-    ref=[ans(within="@prev", when=J({"from": U("day", 0)}))]),
-  T("delete the october flat dinner", diff(trash("flat_dinner2")),
-    ref=[act("delete", kind="event", name="flat dinner", when=J(U("month", 0, name=10)))]),
-  T("no wait, bring the flat dinner back", diff(restore("flat_dinner2")),
-    ref=[find(kind="event", name="flat dinner", trashed=True), act("restore", rows="@3")]))
-
-S("T31-180", "recovery-nolink ward gifts tasks add-to-list count",
-  T("any secret santa tasks for the ward gifts group", rows("ward_secret"),
-    ref=[ans(kind="task", linked_to="$ward_gifts"), ans(kind="task", name="secret santa")]),
-  T("put it on the ward list", diff(link("ward_l", "ward_secret")),
-    ref=[act("add_to", rows="$ward_secret", args=lines(to="$ward_l"))]),
-  T("how many open tasks are on the ward list now", val(7),
-    ref=[ans(op="count", kind="task", linked_to="$ward_l", where="status = open")]))
-
-S("T31-181", "recovery-nolink football fund notes tasks pin",
-  T("any five-a-side notes for the football fund group", rows("n_tactics"),
-    ref=[ans(kind="note", linked_to="$fiveaside"), ans(kind="note", name="five-a-side")]),
-  T("pin it", diff(upd("n_tactics", pinned=True)),
-    ref=[act("edit", rows="$n_tactics", args="pinned: yes")]),
-  T("and which tasks have i got for the football fund group", rows("boots"),
-    ref=[ans(kind="task", linked_to="$fiveaside"), ans(kind="task", name="football")]))
-
 S("T31-182", "trash-notes restore shopping-list draft-still-in",
   T("what's in the notes trash", rows("old_draft", "old_note"),
     ref=[ans(kind="note", trashed=True)]),

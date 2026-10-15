@@ -16,17 +16,6 @@ S("T22-116", "star contrast payslip count docs star",
   T("and the car registration", diff(upd("car_reg", starred=True)),
     ref=[act("star", kind="document", name="Car registration")]))
 
-S("T22-117", "star ask person haddad log",
-  T("star haddad", ask("ahmed", "samira", "nour"),
-    ref=[act("star", kind="person", name="Haddad"),
-         askc("ahmed, samira or nour?", options="$ahmed, $samira, $nour")]),
-  T("nour", diff(upd("nour", starred=True)),
-    ref=[act("star", rows="$nour")]),
-  T("log a call with her too, spoke tonight", diff(upd("nour", date=ANY)),
-    ref=[act("log", rows="$nour", args=lines(kind="call"))]),
-  T("what does dragan owe me", val((150, "SEK")),
-    ref=[ans(op="balance", kind="person", name="Dragan")]))
-
 S("T22-118", "star contrast person unstar weekend read",
   T("star samira haddad", diff(upd("samira", starred=True)),
     ref=[act("star", kind="person", name="Samira Haddad")]),
@@ -44,14 +33,6 @@ S("T22-119", "reschedule ask summer house event edit prev",
     ref=[act("reschedule", rows="$sh_meeting", args=lines(to=U("day", 0, anchor="row", time="16:00")))]),
   T("add on it, bring the deed and both keys", diff(upd("sh_meeting", description="bring the deed and both keys")),
     ref=[act("edit", rows="$sh_meeting", args=lines(description="bring the deed and both keys"))]))
-
-S("T22-120", "reschedule contrast event group balance negative",
-  T("move the co-owners meeting to 4", diff(upd("sh_meeting", date="2026-07-26T16:00")),
-    ref=[act("reschedule", kind="event", name="Summer house co-owners meeting", args=lines(to=U("day", 0, anchor="row", time="16:00")))]),
-  T("who's coming to it", rows("karin", "johan_b", "ahmed"),
-    ref=[ans(kind="person", linked_to="$sh_meeting")]),
-  T("what's karin's balance in the summer house group", val((-2033.33, "SEK")),
-    ref=[ans(op="balance", kind="group", name="Summer house Österlen", linked_to="$karin")]))
 
 S("T22-121", "delete ask note mamma undo scratch that",
   T("delete the mamma note", ask("gift_ideas", "meatballs"),

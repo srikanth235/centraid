@@ -63,10 +63,6 @@ S("T01-K010", "relation to event find first i3skill S2",
   T("what's left on the kids list before the farm trip", rows("permission", "dinner_money", "boots", "tobi_passport", "reading_book", "swim_kit"),
     ref=[ans(kind="task", linked_to="$kids_list", where=OPEN, when=J({"to": D("2026-03-25")}))]))
 
-S("T01-K011", "read not write debt paid i3skill S3",
-  T("did i pay kwame back for the taxi", rows("d_kwame_taxi"),
-    ref=[ans(kind="debt", name="taxi")]))
-
 S("T01-K012", "read then write passport i3skill S3",
   T("is tobi's passport renewal done", rows("tobi_passport"),
     ref=[ans(kind="task", name="Renew Tobi's passport")]),

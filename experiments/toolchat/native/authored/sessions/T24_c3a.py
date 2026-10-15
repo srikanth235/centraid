@@ -22,13 +22,6 @@ S("T24-A003", "ask-options task complete c3a",
   T("and the opener one's done, tick it off", diff(upd("garage_door", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="opener")]))
 
-S("T24-A005", "ask-options debt settle_debt c3a",
-  T("settle the gas one", ask("d_hector", "d_veronica"),
-    ref=[act("settle_debt", kind="debt", name="gas"),
-         askc("Hector's gas money (you owe 60) or Veronica's carpool gas (she owes you 55)?", options="$d_hector, $d_veronica")]),
-  T("veronica's, she gave me cash at practice", diff(upd("d_veronica", status="settled")),
-    ref=[act("settle_debt", rows="$d_veronica")]))
-
 S("T24-A006", "ask-options event cancel never_mind c3a",
   T("cancel sofia's game", ask("vb_0919", "vb_0924"),
     ref=[act("cancel", kind="event", name="Sofia volleyball game"),
@@ -54,14 +47,6 @@ S("T24-A008", "follow-up c3a",
     ref=[ans(within="@prev", name="gym")]),
   T("what else is on", rows("fb_0925", "ref_clinic", "dentist_mateo", "yard_0926", "cond_0921", "vb_0924", "checkup", "film_session", "cond_0923", "lucia_bday"),
     ref=[ans(within="@1", exclude="@2")]))
-
-S("T24-A009", "follow-up c3a",
-  T("which people owe me", rows("d_veronica", "d_patty", "d_gilbert", "d_marisol", "d_ray", "d_rudy"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 50", rows("d_veronica", "d_patty", "d_rudy"),
-    ref=[ans(within="@prev", where="amount > 50 USD")]),
-  T("which is the biggest", rows("d_rudy"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
 
 S("T24-A010", "follow-up c3a",
   T("what's in the team album", rows("p_summer", "p_clinic", "p_andre", "p_team_huddle", "p_marcus", "p_press", "p_opengym"),

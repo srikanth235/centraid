@@ -158,12 +158,6 @@ S("T14-046", "photo album count album photo count",
   T("put the buenos aires flyer in it", diff(link("empty_album", "flyer_bsas")),
     ref=[act("add_to", rows="$flyer_bsas", args=lines(to="$empty_album"))]))
 
-S("T14-047", "debt amount empty status in",
-  T("any debts where i never put an amount", rows(),
-    ref=[ans(kind="debt", where="amount is empty")]),
-  T("list every debt i owe, paid or not", rows("d_junior", "d_nath", "d_patricia", "d_larissa", "d_wesley", "d_marcos_t"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status in ("open", "settled")')]))
-
 S("T14-048", "locker username set notes ne",
   T("which locker things have a username on them", rows("gmail", "gov", "soundcloud", "uber_login"),
     ref=[find(kind="locker item", where="username is set"), ans(rows="@prev")]),
@@ -176,17 +170,3 @@ S("T14-049", "list task count area ne",
     ref=[find(kind="list", where="task count < 5"), ans(rows="@prev")]),
   T("add renew passport to compras too... no wait, what's on papelada", rows("das", "mei_decl", "nf", "passport"),
     ref=[ans(kind="task", linked_to="$admin_l")]))
-
-S("T14-050", "six turns larissa birthday",
-  T("when's larissa's birthday dinner", rows("lari_bday"),
-    ref=[ans(kind="event", name="Larissa's birthday dinner")]),
-  T("who's coming", rows("larissa", "bianca"),
-    ref=[ans(kind="person", linked_to="$lari_bday")]),
-  T("buy larissa's birthday gift, done yet?", rows("gift_lari"),
-    ref=[ans(kind="task", name="Buy Larissa's birthday gift")]),
-  T("what did i put in gift ideas for larissa", rows("gift_ideas"),
-    ref=[ans(kind="note", name="Gift ideas for Larissa")]),
-  T("pin that note", diff(upd("gift_ideas", pinned=True)),
-    ref=[act("edit", rows="$gift_ideas", args=lines(pinned="yes"))]),
-  T("and bianca owes me for pizza right", rows("d_bianca"),
-    ref=[ans(kind="debt", linked_to="$bianca")]))

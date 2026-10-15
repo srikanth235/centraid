@@ -29,13 +29,6 @@ S("T07-A004", "ask-options photo delete never_mind c3a",
   T("actually keep both, i might want them for the loan form", decline("never_mind"),
     ref=[dec("never_mind")]))
 
-S("T07-A005", "ask-options debt settle_debt c3a",
-  T("settle the share", ask("d_rosa", "d_carmen", "d_hugo"),
-    ref=[act("settle_debt", kind="debt", name="share"),
-         askc("Rosa's fertilizer share (she owes 120), Carmen's robe cleaning share (she owes 15) or Hugo's lab fee share (you owe 90)?", options="$d_rosa, $d_carmen, $d_hugo")]),
-  T("carmen's, she paid at mass", diff(upd("d_carmen", status="settled")),
-    ref=[act("settle_debt", rows="$d_carmen")]))
-
 S("T07-A006", "ask-options note delete c3a",
   T("get rid of the seed order note", ask("seed_2025", "seed_2026"),
     ref=[act("delete", kind="note", name="Seed order"),
@@ -58,14 +51,6 @@ S("T07-A007", "follow-up c3a",
     ref=[ans(within="@prev", when=J(U("week", 1)))]),
   T("what about the others", rows("storehouse", "irrigation", "fung_1", "ferti", "sacks"),
     ref=[ans(within="@1", exclude="@2")]))
-
-S("T07-A008", "follow-up c3a",
-  T("what am i owing", rows("d_hugo", "d_efrain", "d_wilber", "d_lucia", "d_sonia", "d_carla"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("which of those are over 50", rows("d_sonia", "d_carla", "d_efrain", "d_hugo"),
-    ref=[ans(within="@prev", where="amount > 50 PEN")]),
-  T("the biggest of those?", rows("d_sonia"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
 
 S("T07-A009", "follow-up c3a",
   T("what's in the coop folder", rows("expo_contract", "register", "statutes", "min_doc"),

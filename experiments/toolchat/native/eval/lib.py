@@ -210,12 +210,13 @@ class Transcript:
 
 ROW_TEXT_RE = re.compile(r"#(\d+)(?: \[\d+\])? ([a-z ]+?) \"([^\"]+)\"")
 DIR_RE = re.compile(r"([^,:\n]+?) \(#(\d+)\)")
-DIR_KIND = {"groups": "group", "albums": "album", "notebooks": "notebook", "folders": "folder", "lists": "list"}
+DIR_KIND = {"albums": "album", "notebooks": "notebook", "folders": "folder", "lists": "list"}
 
 
-SECTION_KIND = {"people": "person", "groups": "group", "events": "event", "tasks": "task", "notes": "note",
-                "documents": "document", "photos": "photo", "albums": "album", "debts": "debt",
-                "locker": "locker item", "notebooks": "notebook", "folders": "folder", "lists": "list"}
+SECTION_KIND = {"people": "person", "events": "event", "tasks": "task", "notes": "note",
+                "documents": "document", "photos": "photo", "albums": "album",
+                "locker": "locker item", "notebooks": "notebook", "folders": "folder", "lists": "list",
+                "transactions": "transaction"}
 
 
 class NameIndex:
@@ -340,7 +341,7 @@ def turn_effect(steps: list[dict]) -> dict:
     A turn the runtime ended itself (a retraction: `run.py` records a step with no model message, the
     runtime's own `decline never_mind`) reads as any decline does.
     """
-    diffs, already, revealed, settles, verbs = [], [], [], [], []
+    diffs, already, revealed, verbs = [], [], [], []
     final: dict = {}
     for step in steps:
         resp = step.get("response") or {}
@@ -353,15 +354,13 @@ def turn_effect(steps: list[dict]) -> dict:
                 revealed.append(eff["revealed"])
             if eff.get("verb"):
                 verbs.append(eff["verb"])
-            if eff.get("verb") == "settle_up" and "error" not in eff:
-                settles.append(resp.get("text", ""))
         if resp.get("ends_turn"):
             final = resp
             break
     eff = final.get("effect") or {}
     tool = eff.get("tool")
     out: dict[str, Any] = {"diff": merge_diffs(diffs), "already": already, "revealed": revealed,
-                           "settle_texts": settles, "verbs": verbs, "steps": len(steps)}
+                           "verbs": verbs, "steps": len(steps)}
     if not final:
         out["kind"] = "cap"  # the driver stopped without the runtime ending the turn
     elif eff.get("loop"):

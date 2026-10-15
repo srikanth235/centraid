@@ -8,8 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-OWED = 'direction = "owes_me" and status = "open"'
-OWE = 'direction = "i_owe" and status = "open"'
 LIVE = 'status = "open"'
 
 S("T16-202", "ordinal weekend events reschedule cancel",
@@ -38,11 +36,3 @@ S("T16-205", "bare weekday at n range create",
     ref=[act("reschedule", kind="event", name="Abba's echo test", args=lines(to=U("week", 1, weekday=1, time="09:00")))]),
   T("call rehana apa saturday at 5", diff(new("event", name=has("Rehana"), date="2026-12-19T17:00")),
     ref=[act("create", args=lines(kind="event", name="Call with Rehana apa", date=U("week", 0, weekday=6, time="17:00")))]))
-
-S("T16-206", "two writes settle complete then complete reschedule",
-  T("paid monir for the wiring and approved salma's leave",
-    diff(upd("d_monir", status="settled"), upd("salma_leave", status="completed", completed=ANY)),
-    ref=[search("Monir", kind="person"), act("settle_debt", kind="debt", linked_to="$monir", more=True), act("complete", rows="$salma_leave")]),
-  T("sent the bkash to rehana apa, rice sack can wait till monday",
-    diff(upd("bkash", status="completed", completed=ANY), upd("rice", date="2026-12-21")),
-    ref=[act("complete", rows="$bkash", more=True), act("reschedule", rows="$rice", args=lines(to=U("week", 1, weekday=1)))]))

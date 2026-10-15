@@ -8,9 +8,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-
 S("T18-201", "both cancel events both star sams",
   T("whats on saturday", rows("dogclass_0307", "market"),
     ref=[ans(kind="event", when=W(U("week", 1, weekday=6)))]),
@@ -33,16 +30,6 @@ S("T18-202", "ordinal third last shower list complete reschedule then second",
     ref=[ans(kind="task", linked_to="$shower_l", where='status = "open"')]),
   T("the second one's done too", diff(upd("balloons", status="completed", completed=ANY)),
     ref=[act("complete", rows="$balloons")]))
-
-S("T18-203", "owe direction balance both signs settle mine sum",
-  T("what does marcus owe me", val((54, "AUD")),
-    ref=[ans(op="balance", rows="$marcus")]),
-  T("and my side with nadia", val((-60, "AUD")),
-    ref=[ans(op="balance", rows="$nadia")]),
-  T("settle mine, gave her the cash", diff(upd("d_nadia", status="settled")),
-    ref=[act("settle_debt", kind="debt", where=IOWE, linked_to="$nadia")]),
-  T("how much do i still owe overall", val((205, "AUD")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=IOWE)]))
 
 S("T18-204", "except cancel sprint reviews rest still on",
   T("sprint reviews this month", rows("sprint_0306", "sprint_0313", "sprint_0320", "sprint_0327"),

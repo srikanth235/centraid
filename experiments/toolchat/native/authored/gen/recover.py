@@ -6,10 +6,10 @@
 
 For every error family of the runtime (`common.FAMILIES`) this inserts, in a COPY of the session sources, one
 `bad(...)` step in front of a reference call that a faulty variant of it plausibly precedes: a wrong parameter name,
-a field of another kind, a balance without a person, an act without rows or a selector, a verb that does not apply or
+a field of another kind, an act without rows or a selector, a verb that does not apply or
 does not exist, a repeated identical call, a number written as words, a date expression the runtime cannot read, a
 status value it does not know, a name put in `where`, a missing `field` for sum, a create with the kind inside args,
-a row number never shown, and `undo` with nothing to undo (the 19 families of `MUTATORS` and `TURN_FAMILIES`). The next step of the turn is the unchanged reference
+a row number never shown, and `undo` with nothing to undo (the 18 families of `MUTATORS` and `TURN_FAMILIES`). The next step of the turn is the unchanged reference
 call, which is the repair. At most one insertion per session; each family is aimed at `--per-family` sessions (and
 never over `--cap`), chosen by a seeded hash so a rerun picks the same ones. Sessions whose turns already carry a
 `bad` step are not used for that turn.
@@ -44,14 +44,12 @@ from common import AUTHORED, Edit, classify, rank, render_bad  # noqa: E402
 # the fields each kind keeps (the system prompt's kinds block); what a where clause or an edit may name
 KIND_FIELDS = {
     "person": {"name", "date", "role", "nickname", "met", "cadence", "starred"},
-    "group": {"name", "currency"},
     "event": {"name", "date", "status", "duration", "description"},
     "task": {"name", "date", "status", "effort", "priority", "completed", "description"},
     "note": {"name", "date", "body", "pinned"},
     "document": {"name", "date", "starred"},
     "photo": {"name", "date", "starred"},
     "album": {"name"},
-    "debt": {"name", "date", "amount", "direction", "status"},
     "transaction": {"name", "date", "amount", "account", "category", "status"},
     "locker item": {"name", "type", "username", "url", "notes", "starred"},
 }
@@ -59,14 +57,14 @@ FIELD_SWAP = {"effort": "duration", "duration": "effort", "body": "description",
               "starred": "pinned", "pinned": "starred"}
 STATUS_FAULT = {"open": ["pending", "todo"], "completed": ["done", "complete"], "cancelled": ["canceled", "dropped"],
                 "in_progress": ["in progress", "started"], "confirmed": ["booked"], "tentative": ["maybe"],
-                "settled": ["paid", "closed"], "owes_me": ["owes me"], "i_owe": ["i owe"]}
+                "posted": ["done", "cleared"], "void": ["voided", "cancelled"]}
 VERB_FAULT = {"complete": ["done", "finish"], "cancel": ["call_off", "drop"], "delete": ["remove", "trash"],
               "create": ["add", "new"], "reschedule": ["move", "postpone"], "edit": ["update", "change"],
               "star": ["favourite", "like"], "unstar": ["unfavourite"], "add_to": ["put_in", "link"],
               "remove_from": ["unlink", "take_out"], "restore": ["recover", "undelete"], "reopen": ["uncomplete", "reset"],
-              "settle_debt": ["pay", "settle"], "log": ["record"]}
+              "log": ["record"]}
 VERB_CUE = {"done": "done", "finish": "finish", "move": "move", "postpone": "postpone", "add": "add", "remove": "remove",
-            "update": "update", "change": "change", "trash": "trash", "like": "like", "pay": "pay", "record": "record"}
+            "update": "update", "change": "change", "trash": "trash", "like": "like", "record": "record"}
 NO_ARGS_VERBS = {"complete": "status: completed", "cancel": "status: cancelled", "reopen": "status: open"}
 SELECTOR = ("kind", "name", "where", "when", "linked_to", "within", "exclude", "order", "limit", "trashed", "rows", "row")
 WORDS = {"day": {0: "today", 1: "tomorrow", -1: "yesterday"}}
@@ -199,20 +197,9 @@ def m_field(call, cx):
     return out
 
 
-def m_balance(call, cx):
-    a = call["args"]
-    if call["tool"] not in ("answer", "compute") or a.get("op") != "balance":
-        return []
-    if a.get("kind") == "group" and a.get("linked_to"):
-        return [with_args(call, linked_to=None)]
-    if a.get("kind") in (None, "person") and (a.get("rows") or a.get("name")) and "within" not in a:
-        return [{"tool": call["tool"], "args": {"op": "balance", "kind": "person"}}]
-    return []
-
-
 def m_rows_needed(call, cx):
     a = call["args"]
-    if call["tool"] != "act" or a.get("verb") in ("create", "undo", "log", "settle_up") or not (
+    if call["tool"] != "act" or a.get("verb") in ("create", "undo", "log") or not (
             a.get("rows") or a.get("kind")):
         return []
     keep = {k: v for k, v in a.items() if k not in SELECTOR}
@@ -371,7 +358,7 @@ def m_addslot(call, cx):
 
 
 MUTATORS = {
-    "param_not_taken": m_param, "args_not_taken": m_args, "field_wrong_kind": m_field, "balance_person": m_balance,
+    "param_not_taken": m_param, "args_not_taken": m_args, "field_wrong_kind": m_field,
     "rows_needed": m_rows_needed, "verb_not_apply": m_verb_apply, "verb_unknown": m_verb_unknown,
     "number_field": m_number, "date_expr": m_date, "date_via_edit": m_date_via_edit, "create_kind": m_create_kind,
     "unshown_row": m_unshown, "bad_value": m_value, "op_needs_field": m_opfield, "where_name": m_where_name,

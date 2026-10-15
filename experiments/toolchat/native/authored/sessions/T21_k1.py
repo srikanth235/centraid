@@ -58,12 +58,6 @@ S("T21-K102", "list word is a document name i3skill S6",
   T("star it", diff(upd("arrears_list", starred=True)),
     ref=[act("star", rows="$arrears_list")]))
 
-S("T21-K103", "iou debt either direction i3skill S6",
-  T("any iou with brian", rows("d_brian"),
-    ref=[ans(kind="debt", linked_to="$brian")]),
-  T("and kevin", rows("d_kevin"),
-    ref=[ans(kind="debt", linked_to="$kevin")]))
-
 S("T21-K104", "a note about body search pin i3skill S6",
   T("that note about the missing beacons", rows("plot_notes"),
     ref=[ans(kind="note", where='body contains "beacons"')]),

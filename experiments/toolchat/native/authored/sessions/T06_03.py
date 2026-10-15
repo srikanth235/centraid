@@ -6,18 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T06-052", "kitty balance settle up tasks top up",
-  T("what's my balance in the WG Kasse", val((25.56, "EUR")),
-    ref=[search("Lukas", kind="person"), ans(op="balance", kind="group", name="WG Kasse", linked_to="$me")]),
-  T("and mira's", val((-35.83, "EUR")),
-    ref=[ans(op="balance", kind="group", name="WG Kasse", linked_to="$mira")]),
-  T("settle up with her in there", diff(settle=[("Mira Hoffmann", "20.46")]),
-    ref=[act("settle_up", rows="$mira", args=lines(group="$kitty"))]),
-  T("top up wg kasse for feb is done too", diff(upd("kitty_02", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="Top up WG Kasse", where='status = "open"')]),
-  T("anything else open on the Flat list", rows("kuhn_heat", "bin_bags", "fridge", "cleaning_rota", "rent_02", "rent_03"),
-    ref=[ans(kind="task", linked_to="$flatlist", where='status = "open"')]))
-
 S("T06-054", "photos album star multi restore trashed",
   T("show me the photos in Gear for sale", rows("p_mixer_sale", "p_di_sale", "p_stands_sale"),
     ref=[ans(kind="photo", linked_to="$sale_album")]),
@@ -61,30 +49,6 @@ S("T06-057", "folder edit where empty result documents",
     ref=[act("add_to", kind="document", name="Van rental contract", args=lines(to="$old_f"))]),
   T("what docs have no folder", rows("manual", "rental_offer"),
     ref=[ans(kind="document", where="folder count < 1")]))
-
-S("T06-058", "edit person multi cadence where",
-  T("put tobi and nele on a weekly check in till the festival",
-    diff(upd("tobi", cadence=7), upd("nele", cadence=7)),
-    ref=[search("tobi", kind="person"), act("edit", rows="$tobi, $nele", args=lines(cadence="7"))]),
-  T("who's on a check in of less than ten days",
-    rows("mira", "jonas_k", "jonas_w", "lena", "ute", "tobi", "nele"),
-    ref=[ans(kind="person", where="cadence < 10")]),
-  T("which festival crew people have more than one task on them", rows("tobi", "nele"),
-    ref=[ans(kind="person", linked_to="$crew", where="task count > 1")]))
-
-S("T06-059", "remove_from person named prev crew",
-  T("olli's not doing the festival after all, take him out of Festival crew 2026", diff(unlink("crew", "olli")),
-    ref=[search("olli", kind="person"), act("remove_from", rows="$olli", args=lines(from_="$crew"))]),
-  T("and emre, is he in there", rows("emre"),
-    ref=[find(kind="person", name="Emre", linked_to="$crew"), ans(rows="@prev")]),
-  T("take him out too", ask(),
-    ref=[bad(act("remove_from", rows="@prev", args=lines(from_="$crew"))),
-         askc("emre still has an unsettled balance in the crew group, so he can't be removed. settle up with him first?")]),
-  T("yeah settle up with him", diff(settle=[("Emre Yilmaz")]),
-    ref=[act("settle_up", rows="$emre", args=lines(group="$crew"))]),
-  T("now take him out", ask(),
-    ref=[bad(act("remove_from", rows="$emre", args=lines(from_="$crew"))),
-         askc("he's still got a balance with tobi and nele in there, so the vault won't remove him. leave him in?")]))
 
 S("T06-060", "notes remove_from named pinned",
   T("take mira's lentil curry out of Recipes, it's hers not mine", diff(unlink("recipe_nb", "curry")),
@@ -161,26 +125,6 @@ S("T06-068", "linked_to all tasks notes",
   T("tasks with both on them?", rows("crew_rota"),
     ref=[ans(kind="task", linked_to="$tobi, $nele")]))
 
-S("T06-069", "debt count people balance",
-  T("which people have debts with me at all", rows("mira", "jonas_k", "lena", "kalle", "olli", "sophie", "yusuf", "ines",
-                                                  "paul", "hannah_b", "tobi", "greta"),
-    ref=[ans(kind="person", where="debt count != 0")]),
-  T("and the ones in the band fund", rows("lena", "kalle", "paul"),
-    ref=[ans(kind="person", linked_to="$band", where="debt count != 0")]),
-  T("what's my balance with paul", val((60, "EUR")),
-    ref=[ans(op="balance", rows="$paul")]))
-
-S("T06-070", "harz group remove named delete refused",
-  T("who's in the Harz weekend group", rows("sophie", "hannah_b", "yusuf", "me"),
-    ref=[ans(kind="person", linked_to="$harz")]),
-  T("remove hannah bauer from it", diff(unlink("harz", "hannah_b")),
-    ref=[act("remove_from", kind="person", name="Hannah Bauer", args=lines(from_="$harz"))]),
-  T("and delete the Mama's 60th present group while i'm at it", ask(),
-    ref=[bad(act("delete", rows="$mama60")),
-         askc("mama's 60th present still has the spa voucher expense in it, so it can't be deleted. settle up with sophie first?")]),
-  T("nah leave it", decline("never_mind"),
-    ref=[dec("never_mind")]))
-
 S("T06-071", "event duration where find only",
   T("anything in march that's under two hours", rows("sc_0306", "crew_call2"),
     ref=[bad(ans(kind="event", when=W(U("month", 0, name=3)), where="duration < 2 hours")),
@@ -205,17 +149,6 @@ S("T06-072", "task priority effort unit",
   T("and Buy a new bike light", diff(upd("bike_light", status="completed", completed=ANY)),
     ref=[act("complete", kind="task", name="Buy a new bike light")]))
 
-S("T06-073", "event create edit new overlap",
-  T("book a listening session with paul thursday the twenty-sixth at 6pm", ask(),
-    ref=[bad(act("create", args=lines(kind="event", name="Listening session with Paul", date=D("2026-02-26", "18:00")))),
-         askc("thursday the 26th at 6 you're picking up the van at rico's. want it at 19:00 instead?")]),
-  T("19:00 ok", diff(new("event", name="Listening session with Paul", date="2026-02-26T19:00")),
-    ref=[act("create", args=lines(kind="event", name="Listening session with Paul", date=D("2026-02-26", "19:00")))]),
-  T("put 'bring the live multitrack' as the description", diff(upd("+1", description="bring the live multitrack")),
-    ref=[act("edit", rows="$c1", args=lines(description="bring the live multitrack"))]),
-  T("and add paul to the band fund group", diff(already=["paul"]),
-    ref=[act("add_to", rows="$paul", args=lines(to="$band")), ans(rows="$paul")]))
-
 S("T06-074", "notebooks count create note",
   T("how many notes in Mixing notes", val(5),
     ref=[ans(op="count", kind="note", linked_to="$mix_nb")]),
@@ -227,11 +160,3 @@ S("T06-074", "notebooks count create note",
     ref=[act("edit", rows="$c1", args=lines(pinned="yes"))]),
   T("which notebooks have at least five notes", rows("mix_nb"),
     ref=[ans(kind="notebook", where="note count >= 5")]))
-
-S("T06-075", "group count people linked all",
-  T("who's in both the band fund and the prague trip", rows("jonas_w", "lena", "kalle", "me"),
-    ref=[ans(kind="person", linked_to="$band, $prague")]),
-  T("anyone in three or more groups", rows("me"),
-    ref=[ans(kind="person", where="group count > 2")]),
-  T("and people in more than one group, not counting me", rows("jonas_w", "lena", "kalle", "sophie"),
-    ref=[find(kind="person", where="group count > 1"), ans(within="@prev", where='role is set')]))

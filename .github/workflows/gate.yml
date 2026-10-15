@@ -349,11 +349,10 @@ jobs:
   # scans the tree: the Rust tests read `authored/golden_v3.json`, and `secrets`
   # scans every file.)
   #
-  # What it runs is `experiments/toolchat/native/run_cpu_tests.py`: all 26 test
+  # What it runs is `experiments/toolchat/native/run_cpu_tests.py`: all 29 test
   # modules of `authored/`, `authored/gen/`, `eval/` and `train/`, each in an
-  # interpreter of its own, none skipped and none left out. Two tests of `authored/test_noise.py` are red on this tree for a
-  # reason the owner has yet to rule on (HANDOFF.md, "Known failing checks"); the
-  # script names them, runs them every time, and fails when they start to pass.
+  # interpreter of its own, none skipped and none left out. A red or a skipped
+  # test fails the job; the script has no list of tolerated failures.
   # Nothing here needs model weights or a GPU. Reproduce a run by following the
   # steps below by hand, or read them as the setup the script's docstring lists.
   #

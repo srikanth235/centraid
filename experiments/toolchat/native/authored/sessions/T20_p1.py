@@ -6,9 +6,6 @@ NOW = W({"from": U("day", 0)})
 TOMORROW = W({"from": U("day", 1)})
 THIS_WEEK = W(U("week", 0))
 NEXT_MONTH = W(U("month", 1))
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-BIG2 = find(kind="debt", where=IOWE, order="amount desc", limit=2)
 def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
@@ -23,14 +20,6 @@ S("T20-001-P", "person nickname contains find-only star prev para",
   T("he's covering my shifts during the move, so he gets a star", diff(upd("lorenzo_g", starred=True)),
     ref=[act("star", rows="@prev")]))
 
-S("T20-006-P", "group count person count edit group named para",
-  T("people on a cadence who belong to no group", rows("mamma", "papa", "nonna", "francesca"),
-    ref=[ans(kind="person", where="cadence is set and group count < 1")]),
-  T("groups with under three members", rows("casa", "gift_pool"),
-    ref=[ans(kind="group", where="person count < 3")]),
-  T("nonna's birthday gift is now Nonna's 90th", diff(upd("gift_pool", name="Nonna's 90th")),
-    ref=[act("edit", rows="$gift_pool", args=lines(name="Nonna's 90th"))]))
-
 S("T20-012-P", "empty result note search edit para",
   T("corkage fees note, show what it says", rows("corkage_n"),
     ref=[find(kind="note", name="Corkage fees"), search("corkage", kind="note"), ans(rows="$corkage_n")]),
@@ -44,12 +33,6 @@ S("T20-017-P", "event weekend cancel prev multi undo cancel para",
     ref=[act("cancel", rows="@prev")]),
   T("take that back, undo", diff(),
     ref=[act("undo")]))
-
-S("T20-023-P", "settle_up multi staff balance group para",
-  T("staff dinner fund: settle up with sofia and davide", diff(settle=["Sofia Marchetti", "Davide Russo"]),
-    ref=[act("settle_up", rows="$sofia, $davide", args=lines(group="$staff"))]),
-  T("elena's position in that fund", val((-10, "EUR")),
-    ref=[ans(op="balance", kind="group", name="Staff dinner fund", linked_to="$elena")]))
 
 S("T20-029-P", "delete note where date linked empty restore para",
   T("the note from the nineteenth, get rid of it", diff(trash("nonna_gift_n")),
@@ -117,23 +100,6 @@ S("T20-067-P", "ambiguous lorenzo ask log para",
     rows("mamma", "papa", "marco_e", "marco_l", "stefano", "andrea", "carla", "lorenzo_g", "mauro"),
     ref=[ans(kind="person", when=W(span(U("week", -1, weekday=6), U("week", 0, weekday=2))))]))
 
-S("T20-072-P", "single balance person para",
-  T("am i in debt to andrea costa", val((-240, "EUR")),
-    ref=[ans(op="balance", rows="$andrea")]))
-
-S("T20-078-P", "five turns task count person count debt count linked_to all debt para",
-  T("contacts attached to at least three tasks", rows("giulia", "federico"),
-    ref=[ans(kind="person", where="task count >= 3")]),
-  T("wedding list tasks involving two or more people", rows("guest_list", "wine_pairing"),
-    ref=[ans(kind="task", linked_to="$wedding_l", where="person count >= 2")]),
-  T("single debt with me, which contacts",
-    rows("giulia", "andrea", "luca", "sofia", "davide", "federico", "chiara", "gianni", "marco_l", "elena"),
-    ref=[ans(kind="person", where="debt count = 1")]),
-  T("any debt shared by stefano and luca", rows(),
-    ref=[ans(kind="debt", linked_to="$stefano, $luca")]),
-  T("federico's, show it", rows("d_fede"),
-    ref=[ans(kind="debt", linked_to="$federico")]))
-
 S("T20-083-P", "four turns document spans date weekday date month to date to rel para",
   T("documents eleventh may through this monday", rows("venue_quote", "movers_contract", "enel_bill", "gf_ticket", "id_scan"),
     ref=[ans(kind="document", when=W(span(D("2026-05-11"), U("week", 0, weekday=1))))]),
@@ -143,16 +109,6 @@ S("T20-083-P", "four turns document spans date weekday date month to date to rel
     ref=[ans(kind="document", when=W({"to": D("2024-12-31")}))]),
   T("until last month", rows("contract_work", "wset", "ais_2", "haccp", "floor_plan", "payslip_mar", "tari", "lease_new"),
     ref=[ans(kind="document", when=W({"to": U("month", -1)}))]))
-
-S("T20-088-P", "treasurer find-only linked_to prev debt empty para",
-  T("club treasurer is who", rows("bea"),
-    ref=[find(kind="person", where='role contains "treasurer"'), ans(rows="@prev")]),
-  T("any money from her owed to me", val((60, "EUR")),
-    ref=[ans(op="balance", rows="@prev")]),
-  T("every debt from april onwards, whether settled or not",
-    rows("d_marco_l", "d_fede", "d_stefano_2", "d_andrea", "d_davide", "d_chiara", "d_stefano", "d_luca", "d_giulia",
-         "d_sofia", "d_gianni"),
-    ref=[ans(kind="debt", where="direction is set", when=W({"from": U("month", 0, name=4)}))]))
 
 S("T20-093-P", "event overlap refused ask create read para",
   T("sunday at 8, ride with ale, book it", ask(),

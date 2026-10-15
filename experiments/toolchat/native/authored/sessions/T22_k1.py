@@ -44,12 +44,6 @@ S("T22-K101", "family word father role i3skill S6",
   T("when did i last talk to my father", rows("lennart"),
     ref=[ans(kind="person", where='role contains "father"')]))
 
-S("T22-K102", "iou debt either direction i3skill S6",
-  T("do i have an iou with karin", rows("d_karin"),
-    ref=[ans(kind="debt", linked_to="$karin")]),
-  T("and samira", rows("d_samira"),
-    ref=[ans(kind="debt", linked_to="$samira")]))
-
 S("T22-K103", "a note about body search pin i3skill S6",
   T("any note about the hall cupboard", rows("wifi_summer"),
     ref=[ans(kind="note", where='body contains "cupboard"')]),
@@ -83,9 +77,3 @@ S("T22-K204", "other two subtasks reschedule i3skill S7",
     ref=[act("complete", rows="$licences")]),
   T("push the other two to friday", diff(upd("holiday_req", date="2026-07-17"), upd("send_sched", date="2026-07-17")),
     ref=[find(within="@1", exclude="$licences"), act("reschedule", rows="@prev", args=lines(to=U("week", 0, weekday=5)))]))
-
-S("T22-K205", "pick by description debt settle i3skill S7",
-  T("which debts are exactly 250", rows("d_tobias", "d_hanna", "d_mats"),
-    ref=[ans(kind="debt", where="amount = 250 SEK")]),
-  T("settle the one for the balls, tobbe paid", diff(upd("d_tobias", status="settled")),
-    ref=[act("settle_debt", rows="$d_tobias")]))

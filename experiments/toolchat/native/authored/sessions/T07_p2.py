@@ -6,25 +6,9 @@ def W(expr):
     """a `when` filter as the JSON text the model writes"""
     return json.dumps(expr, separators=(",", ":"))
 
-IOWE = 'direction = "i_owe" and status = "open"'
-
-OWED = 'direction = "owes_me" and status = "open"'
-
-TOP3 = find(kind="debt", where=IOWE, order="amount desc", limit=3)
-
 OPEN = 'status = "open"'
 
 BIGJOB = find(kind="task", where=OPEN)
-
-S("T07-131-P", "recovery limit find debts repeated min sum typo para",
-  T("top three debts i owe, largest first", rows("d_sonia", "d_hugo", "d_carla", order=True),
-    ref=[TOP3, bad(TOP3), ans(within="@prev")]),
-  T("which of my debts is the smallest, i want that cleared before the others", val((20, "PEN")),
-    ref=[ans(op="min", field="amount", kind="debt", where=IOWE)]),
-  T("total still due to me from everybody, the tractor money included", val((510, "PEN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where=OWED)]),
-  T("largest among those?", val((300, "PEN")),
-    ref=[ans(op="max", field="amount", kind="debt", where=OWED)]))
 
 S("T07-136-P", "rehearsal ask never_mind masses limit min typo para",
   T("rehearsal needs moving", ask(),

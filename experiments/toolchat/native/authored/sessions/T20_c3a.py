@@ -47,14 +47,6 @@ S("T20-A008", "follow-up c3a",
   T("drop the first two", rows("brief_0602", "electrician_visit"),
     ref=[ans(within="@prev", exclude="$keys_pickup, $fede_visit")]))
 
-S("T20-A009", "follow-up c3a",
-  T("who owes me", rows("d_giulia", "d_luca", "d_stefano", "d_davide", "d_sofia"),
-    ref=[ans(kind="debt", where="direction = owes_me and status = open")]),
-  T("which of those are over 40", rows("d_giulia", "d_davide"),
-    ref=[ans(within="@prev", where="amount > 40 EUR")]),
-  T("which is the biggest", rows("d_giulia"),
-    ref=[ans(within="@prev", order="amount desc", limit=1)]))
-
 S("T20-A010", "follow-up c3a",
   T("what's in the rides album", rows("sunrise_ride", "impruneta_p", "fiesole_top", "group_ride", "flat_tyre"),
     ref=[ans(kind="photo", linked_to="$rides_album")]),

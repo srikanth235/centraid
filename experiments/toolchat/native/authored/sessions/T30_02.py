@@ -18,14 +18,6 @@ S("T30-023", "list status bulk find-act when overdue",
     ref=[find(kind="task", linked_to="$maison", where="status = open", when=J({"to": U("day", -1)})),
          act("complete", rows="@prev")]))
 
-S("T30-024", "balance multi-currency settle_up refusal-ask remove_from",
-  T("where am i with marie-eve", val((-374, "CAD"), (640, "EUR")),
-    ref=[ans(op="balance", kind="person", name="Marie-Eve")]),
-  T("she paid me back for paris, settle that up", diff(settle=[("Marie-Ève Pelletier", "640.00")]),
-    ref=[act("settle_up", rows="$marie_eve", args="group: $paris")]),
-  T("and take her out of the paris group", ask("marie_eve", "paris"),
-    ref=[act("remove_from", rows="$marie_eve", args="from: $paris")]))
-
 S("T30-025", "role search find-only log message",
   T("accountant, last time we talked?", rows("annie_belanger"),
     ref=[search("accountant", kind="person"), ans(rows="@prev")]),
@@ -54,17 +46,6 @@ S("T30-028", "list add_to move where",
   T("move the open car insurance task to the budget list, it's a bill",
     diff(unlink("auto", "ins_270215"), link("budget", "ins_270215")),
     ref=[act("add_to", kind="task", name="car insurance", where="status = open", args="to: $budget")]))
-
-S("T30-029", "event next relation group exclude reschedule anchor-row",
-  T("when's the next book club", rows("bc_270226"),
-    ref=[ans(kind="event", name="Book club", when=J({"from": U("day", 0)}), order="date asc", limit=1)]),
-  T("who from the cercle is going", rows("book_host", "marie_eve", "genevieve_t"),
-    ref=[ans(kind="person", linked_to="$cercle, $bc_270226")]),
-  T("and who's in the cercle but not going",
-    rows("antoine_thibault", "yasmine_khoury", "raj_gauthier", "camille_paquette", "thierry_leclerc", "me"),
-    ref=[ans(kind="person", linked_to="$cercle", exclude="@prev")]),
-  T("push it back a day", diff(upd("bc_270226", date="2027-02-27T19:30")),
-    ref=[act("reschedule", rows="$bc_270226", args=lines(to=U("day", 1, anchor="row")))]))
 
 S("T30-030", "event order-limit name person-relation",
   T("what was the latest réunion de ruelle", rows("oo_016"),
@@ -156,23 +137,6 @@ S("T30-041", "ambiguous-ask event delete date-select month-year",
     ref=[act("delete", kind="event", name="Team lunch")]),
   T("the april 2024 one", diff(trash("oo_060")),
     ref=[act("delete", kind="event", name="Team lunch", when=J(U("month", -3, name=4)))]))
-
-S("T30-042", "find-chain event person group within exclude",
-  T("who was at the souper chez maman last march", rows("maman", "papa"),
-    ref=[find(kind="event", name="Souper chez Maman", when=J(U("month", -1, name=3))),
-         ans(kind="person", linked_to="@prev")]),
-  T("which of them are in the famille gagnon group", rows("maman", "papa"),
-    ref=[ans(within="@prev", linked_to="$famille_gagnon")]),
-  T("and who else is in it", rows("isabelle", "martin", "marie_claude", "me"),
-    ref=[ans(kind="person", linked_to="$famille_gagnon", exclude="@prev")]))
-
-S("T30-038", "debt create write-read balance settle_debt amount relation",
-  T("marie-pier owes me 15 for the carpool gas, what's her total now",
-    val((209.68, "CAD"), also=diff(new("debt", name="carpool gas", amount=15, direction="owes_me"), link("new", "marie_pier"))),
-    ref=[act("create", args="kind: debt\nname: carpool gas\namount: 15\ndirection: owes_me\nperson: $marie_pier", more=True),
-         ans(op="balance", rows="$marie_pier")]),
-  T("she paid the 15, settle it", diff(upd("+1", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$marie_pier", where="amount = 15")]))
 
 S("T30-043", "note open find-open-answer relation edit-after-open",
   T("what does my allergy note say", rows("loose_5"),

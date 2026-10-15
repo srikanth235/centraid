@@ -27,11 +27,6 @@ S("T04-Q030", "skip cancel event by day i2pat",
   T("skip friday's long day, i'm swapping it", diff(upd("ld_1016", status="cancelled")),
     ref=[act("cancel", kind="event", name="Long day", when=J(U("week", 0, weekday=5)))]))
 
-S("T04-Q031", "lent me debt i_owe verbatim item i2pat",
-  T("ravi lent me 25 for darkroom paper",
-    diff(new("debt", name=has("darkroom paper"), amount=25, direction="i_owe"), link("new", "ravi")),
-    ref=[act("create", args=lines(kind="debt", name="Darkroom paper", amount="25", direction="i_owe", person="$ravi"))]))
-
 S("T04-Q032", "add after in body insert position i2pat",
   T("what's in the hamper ideas note", rows("fb_hampers"),
     ref=[ans(kind="note", name="hamper ideas")]),
@@ -66,7 +61,3 @@ S("T04-Q037", "which have person search then link within i2pat",
     ref=[ans(kind="photo", linked_to="$fam_album")]),
   T("which have zainab in them", rows("ring", "engagement"),
     ref=[search("zainab", kind="person"), ans(within="@1", linked_to="$zainab")]))
-
-S("T04-Q038", "whos in X event and group membership i2pat",
-  T("who's in darkroom", rows("me", "owen", "ravi"),
-    ref=[ans(kind="person", linked_to="$darkroom")]))

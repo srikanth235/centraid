@@ -9,19 +9,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T32-045", "group members delete-group undo-not-undone group-with-expenses ask rename",
-  T("who's in the posada vecinal group", rows("me", "chela", "lupe_r"),
-    ref=[ans(kind="person", linked_to="$posada")]),
-  T("delete it, the street isn't doing it", diff(gone("posada"), unlink("posada", "me"), unlink("posada", "chela"),
-                                                  unlink("posada", "lupe_r")),
-    ref=[act("delete", rows="$posada")]),
-  T("undo that", diff(),
-    ref=[act("undo")]),
-  T("delete the boda group then", ask(),
-    ref=[act("delete", rows="$boda")]),
-  T("ok rename it to wedding fund", diff(upd("boda", name="Wedding fund")),
-    ref=[act("edit", rows="$boda", args="name: Wedding fund")]))
-
 S("T32-046", "search find-only within multi-kind when reschedule cancel-by-date",
   T("anything about the oven", rows("oven_fix", "oven_old", "oven_part", "b_oven", "p_oven_serial", "p_ba_oven"),
     ref=[find(kind="event,task,note,photo", name="oven"), ans(rows="@prev")]),
@@ -31,18 +18,6 @@ S("T32-046", "search find-only within multi-kind when reschedule cancel-by-date"
     ref=[act("reschedule", rows="$oven_part", args=lines(to=U("week", 0, weekday=5)))]),
   T("cancel the maintenance on the ninth", diff(upd("oven_fix", status="cancelled")),
     ref=[act("cancel", kind="event", name="Oven maintenance", when=W(D("2026-11-09")))]))
-
-S("T32-047", "debt create balance since k4 sum-within settle_debt created-row",
-  T("i owe chuy 800 for the tires", diff(new("debt", name=has("tires"), direction="i_owe", amount=800), link("new", "chuy")),
-    ref=[act("create", args=lines(kind="debt", name="tires", amount=800, direction="i_owe", person="$chuy"))]),
-  T("and my balance with chuy?", val((-800, "MXN")),
-    ref=[ans(op="balance", rows="$chuy")]),
-  T("debts i owe since the start of october over 500", rows("d_memo_flour", "d_teodoro", "+1"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open and amount > 500", when=W({"from": D("2026-10-01")}))]),
-  T("so what's the total", val((10800, "MXN")),
-    ref=[ans(op="sum", field="amount", kind="debt", within="@prev")]),
-  T("settle the teodoro one, paid him cash", diff(upd("d_teodoro", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$teodoro", where="status = open")]))
 
 S("T32-048", "what-else exclude within duration",
   T("what's on thursday", rows("pickup_flor", "coro_1029"),
@@ -125,35 +100,6 @@ S("T32-056", "ambiguous log ask pick role then ambiguous cancel by weekday",
   T("saturday's one", diff(upd("stall_oct31", status="cancelled")),
     ref=[act("cancel", kind="event", name="market stall", when=W(U("week", 0, weekday=6)))]))
 
-S("T32-057", "wedding chain named-month relation where date same-time day-before group-balance k4",
-  T("what's open on the wedding list in november", rows("w_guests", "w_cake", "w_menu"),
-    ref=[ans(kind="task", linked_to="$wedding_l", where="status = open", when=W(U("month", 0, name=11)))]),
-  T("starred people at the cake tasting", rows("dani"),
-    ref=[ans(kind="person", linked_to="$tasting", where="starred = yes")]),
-  T("move the tasting to the 5th of december, same time", diff(upd("tasting", date="2026-12-05T16:00")),
-    ref=[act("reschedule", rows="$tasting", args=lines(to=D("2026-12-05")))]),
-  T("and the cake sample the day before", diff(upd("w_cake", date="2026-12-04")),
-    ref=[act("reschedule", rows="$w_cake", args=lines(to=D("2026-12-04")))]),
-  T("where am i in the boda group", val((18175, "MXN")),
-    ref=[search("Rosa", kind="person"),
-         ans(op="balance", kind="group", name="Boda de Dani", linked_to="$me")]),
-  T("open high priority wedding jobs due before the tasting", rows("call_dani", "w_venue"),
-    ref=[ans(kind="task", linked_to="$wedding_l", where="status = open and priority = 1", when=W({"to": D("2026-12-05")}))]))
-
-S("T32-058", "choir find-answer exclude count-k4 decline create-task",
-  T("who's coming to thursday's choir rehearsal", rows("aurelio", "marilu", "marichuy"),
-    ref=[find(kind="event", name="Choir rehearsal", when=W(U("week", 0, weekday=4))),
-         ans(kind="person", linked_to="@prev")]),
-  T("which sopranos aren't on that list", rows("lupita", "xochitl"),
-    ref=[ans(kind="person", linked_to="$coro", where='role contains "soprano"', exclude="@prev")]),
-  T("rehearsals maestro cancelled this month, how many", val(1),
-    ref=[ans(op="count", kind="event", name="Choir rehearsal", where="status = cancelled", when=W(U("month", 0)))]),
-  T("text them", decline("out_of_scope"),
-    ref=[dec("out_of_scope")]),
-  T("add a task to call lupita and xochitl, due tomorrow, on the choir list",
-    diff(new("task", name=has("lupita", "xochitl"), date="2026-10-29", status="open"), link("choir_l", "new")),
-    ref=[act("create", args=lines(kind="task", name="Call Lupita and Xochitl", date=U("day", 1), list="$choir_l"))]))
-
 S("T32-059", "van week long session ambiguous-task two-writes already-so",
   T("when's the van service, this week or next", rows("van_service"),
     ref=[ans(kind="event", name="Van service", when=W(span(U("week", 0), U("week", 1))))]),
@@ -172,36 +118,11 @@ S("T32-059", "van week long session ambiguous-task two-writes already-so",
   T("star it", diff(already=["d_ins26"]),
     ref=[act("star", rows="$d_ins26"), ans(rows="$d_ins26")]))
 
-S("T32-060", "repair money-unit k4 debts when",
-  T("debts i still owe over a thousand pesos since september",
-    rows("d_maria_roof", "d_memo_flour", "d_teodoro"),
-    ref=[bad(ans(kind="debt", where="direction = i_owe and status = open and amount > 1000 pesos",
-                 when=W({"from": D("2026-09-01")}))),
-         ans(kind="debt", where="direction = i_owe and status = open and amount > 1000 MXN",
-             when=W({"from": D("2026-09-01")}))]))
-
-S("T32-061", "sum k4 debts month",
-  T("total people still owe me from october", val((3120, "MXN")),
-    ref=[ans(op="sum", field="amount", kind="debt", where="direction = owes_me and status = open",
-             when=W(U("month", 0)))]))
-
 S("T32-062", "empty named-month recovery photos relation where",
   T("any starred photos of beto from august", rows(),
     ref=[ans(kind="photo", linked_to="$beto", where="starred = yes", when=W(U("month", 0, name=8)))]),
   T("september then", rows("p_ba_oven"),
     ref=[ans(kind="photo", linked_to="$beto", where="starred = yes", when=W(U("month", 0, name=9)))]))
-
-S("T32-063", "compute group status direction",
-  T("how many tasks by status", vgroups({"open": 46, "completed": 11, "in_progress": 1, "cancelled": 1}),
-    ref=[comp(op="count", kind="task", group="status"), ans(value="@prev")]),
-  T("open debts, what i owe versus owed to me", vgroups({"i_owe": (12026, "MXN"), "owes_me": (23120, "MXN")}),
-    ref=[comp(op="sum", field="amount", kind="debt", where="status = open", group="direction"), ans(value="@prev")]))
-
-S("T32-064", "find-then-star several relation where",
-  T("star all three sopranos in the choir", diff(upd("marilu", starred=True), upd("lupita", starred=True),
-                                              upd("xochitl", starred=True)),
-    ref=[find(kind="person", linked_to="$coro", where='role contains "soprano"'),
-         act("star", rows="@prev")]))
 
 S("T32-065", "delete photo-in-album undo-photo delete-two restore-photo",
   T("delete the old sign photo, la espiga", diff(trash("p_ba_sign"), unlink("bakery_a", "p_ba_sign")),

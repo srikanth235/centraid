@@ -39,12 +39,6 @@ S("T05-K005", "referent list then the noun i3skill S1",
   T("done with the drops", diff(upd("eye_drops", status="completed", completed=ANY)),
     ref=[act("complete", rows="$eye_drops")]))
 
-S("T05-K006", "referent debt he it i3skill S1",
-  T("what's the biryani bet", rows("d_suresh"),
-    ref=[ans(kind="debt", name="Biryani bet")]),
-  T("has he paid it", rows("d_suresh"),
-    ref=[ans(rows="$d_suresh")]))
-
 S("T05-K007", "perfect been to this month i3skill S2",
   T("how many cricket nights have i been to this month", val(1),
     ref=[ans(kind="event", op="count", name="Cricket night", when=J({"from": U("month", 0), "to": U("day", 0)}))]))
@@ -82,16 +76,6 @@ S("T05-K013", "relation to event dates line i3skill S2",
 S("T05-K014", "read not write eb bill i3skill S3",
   T("did i pay the eb bill", rows("eb_jan", "eb_dec"),
     ref=[ans(kind="task", name="Pay EB bill")]))
-
-S("T05-K015", "read debt pooja items i3skill S3",
-  T("have i paid revathi for the pooja items", rows("d_revathi"),
-    ref=[ans(kind="debt", name="Pooja items")]))
-
-S("T05-K016", "read debt two follow i3skill S3",
-  T("did karthik pay me back the visa fee", rows("d_karthik"),
-    ref=[ans(kind="debt", name="Visa fee")]),
-  T("and arjun's ticket", rows("d_arjun"),
-    ref=[ans(kind="debt", name="Chepauk ticket")]))
 
 S("T05-K017", "read cancelled appraisal i3skill S3",
   T("was the appraisal cancelled", rows("appraisal"),

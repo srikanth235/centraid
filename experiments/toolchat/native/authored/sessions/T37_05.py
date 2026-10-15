@@ -37,13 +37,6 @@ S("T37-093", "container-link-read person-link events dr-prasad then within-upcom
   T("just the ones still to come", rows("cardio", "cardio_bloods"),
     ref=[ans(within="@prev", when=W({"from": U("day", 0)}))]))
 
-S("T37-094", "container-link-read owner groups-i-am-in count then within person-count",
-  T("how many groups am i in", val(6),
-    ref=[ans(op="count", kind="group", linked_to="$me")]),
-  T("which of those have more than four people", rows("bookclub", "gaa"),
-    ref=[bad(ans(within="@prev", where="member count > 4")),
-         ans(within="@prev", where="person count > 4")]))
-
 S("T37-095", "container-link-read list-vs-folder-vs-notebook health status then within-linked_to person substitution then by-date",
   T("what's left on health", rows("hearing_aid", "bp_log", "knee_ex", "eye_form", "rx_apr"),
     ref=[ans(kind="task", linked_to="$health_list", where="status = open")]),
@@ -55,14 +48,6 @@ S("T37-095", "container-link-read list-vs-folder-vs-notebook health status then 
     ref=[ans(kind="task", linked_to="$family_list", where="status = open", when=W({"to": D("2027-03-20")}))]))
 
 # ---- stray-or-operator-conditions: an inert clause or a noun that is not a condition --------------------------------
-
-S("T37-096", "stray-condition inert-reason-clause members then met-contains then met-contains side-clause",
-  T("who's in the boston group because i'm doing the christmas cards", rows("me", "declan", "kathleen", "jack"),
-    ref=[ans(kind="person", linked_to="$boston")]),
-  T("who did i meet at the book club", rows("mary_k", "sean_b", "siobhan"),
-    ref=[ans(kind="person", where='met contains "book club"')]),
-  T("and the gaa crowd, i'm ringing them about the agm", rows("tadhg", "caoimhe", "padraig", "sean_m", "eoin"),
-    ref=[ans(kind="person", where='met contains "GAA"')]))
 
 S("T37-097", "stray-condition body-contains note then by-name star inert-purpose",
   T("which notes mention the hse grant", rows("hl_hearing"),
@@ -84,17 +69,6 @@ S("T37-099", "stray-condition photos no-description inert then role-looking noun
     ref=[ans(kind="task", name="treasurer's note")]),
   T("who's my gp, need to book a check-up", rows("dr_nolan"),
     ref=[ans(kind="person", where='role = "GP"')]))
-
-S("T37-100", "stray-condition by-name writes inert reason clause complete reschedule then direction-looking noun then effort",
-  T("tick off the blood pressure log, wrote it up over my tea",
-    diff(upd("bp_log", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="blood pressure log")]),
-  T("push the gp check-up to the 17th because i've a meeting that morning", diff(upd("gp", date="2027-03-17T09:30")),
-    ref=[act("reschedule", kind="event", name="gp check-up", args=lines(to=D("2027-03-17")))]),
-  T("how much is the baby gear loan", val((200, "EUR")),
-    ref=[ans(op="sum", field="amount", kind="debt", name="baby gear loan")]),
-  T("which open tasks are left that take longer than an hour", rows("camino_boots", "book_next"),
-    ref=[ans(kind="task", where="status = open and effort > 60")]))
 
 # ---- date-window-reads: date phrases in reads and counts, each span form in both tenses ---------------------------------
 
@@ -173,11 +147,6 @@ S("T37-107", "mixed body-append note edit jot-down open-then-edit",
     diff(upd("gaa_u12", body=has("twenty two players", "bibs"))),
     ref=[act("edit", rows="$gaa_u12",
              args="body: twenty two players, six new this year, Eoin's lad is the best with the hurl, new bibs come friday")]))
-
-S("T37-108", "mixed settle_up amount person group repair-missing-group",
-  T("settle 20 with padraig in the fund", diff(upd("padraig", balance=ANY), settle=[("Padraig Fahy", "20.00")]),
-    ref=[bad(act("settle_up", rows="$padraig", args="amount: 20")),
-         act("settle_up", rows="$padraig", args="group: $gaa\namount: 20")]))
 
 S("T37-109", "mixed kind-word read jot-down notes photos tasks same-topic knee",
   T("what did i jot down about the knee", rows("hl_knee"),

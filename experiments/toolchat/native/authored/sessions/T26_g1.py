@@ -42,16 +42,6 @@ S("T26-104", "gap contrast star person unstar locker count",
   T("how many of my people are starred", val(5),
     ref=[ans(op="count", kind="person", where="starred = yes")]))
 
-S("T26-105", "gap ask document star scan repair remove_from refused",
-  T("star the scan", ask("scan_a", "scan_b", "passport_scan"),
-    ref=[act("star", kind="document", name="scan"),
-         askc("scan 1121, scan 1122 or the passport scan?", options="$scan_a, $scan_b, $passport_scan")]),
-  T("the 22nd one", diff(upd("scan_b", starred=True)),
-    ref=[act("star", rows="$scan_b")]),
-  T("take victor out of the bonga crew kitty, he's left the rig", ask(),
-    ref=[bad(act("remove_from", kind="person", name="Victor Etim", args=lines(from_="$rig_g"))),
-         askc("victor still has an unsettled balance in the bonga crew kitty, so he can't come out yet. settle up with him first?")]))
-
 S("T26-106", "gap contrast star document count decline unbounded",
   T("star scan 1121", diff(upd("scan_a", starred=True)),
     ref=[act("star", kind="document", name="Scan 1121")]),
@@ -91,17 +81,6 @@ S("T26-110", "gap ask photo star kemi repair edit field",
     ref=[bad(act("edit", kind="task", name="gate motor", args=lines(duration="3 hours"))),
          act("edit", kind="task", name="gate motor", args=lines(effort="180"))]))
 
-S("T26-112", "gap contrast delete task date undo never mind balance positive restore",
-  T("delete the old diesel one from the fifteenth, it's done and i don't want it cluttering the home list",
-    diff(trash("diesel_1")),
-    ref=[act("delete", kind="task", name="Buy diesel for generator", when=W(D("2026-11-15")))]),
-  T("cancel that, i want it for the fuel log", diff(restore("diesel_1")),
-    ref=[act("undo")]),
-  T("where do i stand with garba", val((15000, "NGN")),
-    ref=[ans(op="balance", kind="person", name="Garba")]),
-  T("bring back the sell old generator task", diff(restore("old_gen")),
-    ref=[act("restore", kind="task", name="Sell old generator", trashed=True)]))
-
 S("T26-113", "gap ask event cancel dentist not_found search count",
   T("cancel the dentist", ask("dentist_femi", "dentist_kemi"),
     ref=[act("cancel", kind="event", name="Dentist"),
@@ -112,22 +91,3 @@ S("T26-113", "gap ask event cancel dentist not_found search count",
     ref=[search("tailor fitting", kind="event"), dec("not_found")]),
   T("tell me how many events i called off this month", val(3),
     ref=[ans(op="count", kind="event", where='status = "cancelled"', when=W(U("month", 0)))]))
-
-S("T26-114", "gap contrast cancel event balance negative decline unbounded",
-  T("cancel femi's dentist, we're travelling", diff(upd("dentist_femi", status="cancelled")),
-    ref=[act("cancel", kind="event", name="Dentist for Femi")]),
-  T("what's my balance with victor", val((-45000, "NGN")),
-    ref=[ans(op="balance", kind="person", name="Victor")]),
-  T("clear everything off my calendar, starting over", decline("unbounded_destruction"),
-    ref=[dec("unbounded_destruction")]))
-
-S("T26-115", "gap ask balance kunle",
-  T("where do i stand with kunle", ask("kunle_b", "kunle_a"),
-    ref=[find(kind="person", name="Kunle"),
-         askc("kunle bello or kunle adeyemi?", options="$kunle_b, $kunle_a")]),
-  T("bello, the cousin", val((-100000, "NGN")),
-    ref=[ans(op="balance", rows="$kunle_b")]),
-  T("and olumide", val((-250000, "NGN")),
-    ref=[ans(op="balance", kind="person", name="Olumide")]),
-  T("log a call with olumide, he rang about the labour money", diff(upd("olumide", date=ANY)),
-    ref=[act("log", kind="person", name="Olumide Sanni", args=lines(kind="call"))]))

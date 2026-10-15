@@ -9,8 +9,7 @@ Persona: Rosa Delgado-Ortiz, 52, who runs Panaderia La Espiga, a family bakery i
 de Juarez. Her son Emiliano ("Emi", 24) bakes with her; her daughter Daniela ("Dani", 27) is an architect
 in Mexico City and is getting married in February to Rodrigo. Rosa sings alto in the Coro de Santo Domingo
 (the choir group), looks after her mother Mama Carmen, and drives a Nissan NV200 van for deliveries that
-needs a service. The vault is in MXN; the one foreign-currency position is the USD group "Chicago Cousins"
-(a vault debt can only be in the vault's own currency).
+needs a service. The vault is in MXN.
 
 Built-in ambiguity: two Marias (Maria Ortiz, her sister; Maria Luisa Perez, "Marilu" in the choir), two
 Lupes who look alike (Guadalupe Hernandez "Lupita" and Lupe Hernandez Ruiz), hard-to-spell names
@@ -87,50 +86,6 @@ people = [
      "trashed": "2026-10-14T10:00"},
 ]
 
-groups = [
-    {"key": "coro", "name": "Coro Santo Domingo", "currency": "MXN",
-     "members": ["aurelio", "marilu", "marichuy", "lupita", "xochitl", "cuauh", "ramiro"],
-     "created": "2024-09-05T20:00"},
-    {"key": "familia", "name": "Familia Delgado Ortiz", "currency": "MXN",
-     "members": ["emi", "dani", "carmen", "maria_o"], "created": "2024-03-01T10:00"},
-    {"key": "boda", "name": "Boda de Dani", "currency": "MXN", "members": ["dani", "emi", "rodrigo"],
-     "created": "2026-08-15T20:00"},
-    {"key": "panaderos", "name": "Panaderos de Sanchez Pascuas", "currency": "MXN",
-     "members": ["memo", "teodoro", "omar"], "created": "2025-02-10T08:00"},
-    {"key": "chicago", "name": "Chicago Cousins", "currency": "USD", "members": ["pepe", "gaby"],
-     "created": "2025-12-01T20:00"},
-    {"key": "posada", "name": "Posada Vecinal 2026", "currency": "MXN", "members": ["chela", "lupe_r"],
-     "created": "2026-10-20T19:00"},
-]
-
-expenses = [
-    {"group": "coro", "name": "Sheet music copies", "amount": 840, "paid_by": "aurelio",
-     "split": ["me", "aurelio", "marilu", "marichuy", "lupita", "xochitl", "cuauh", "ramiro"], "date": "2026-09-10"},
-    {"group": "coro", "name": "Candles for the Mass", "amount": 360, "paid_by": "me",
-     "split": ["me", "marilu", "marichuy", "lupita"], "date": "2026-10-02"},
-    {"group": "coro", "name": "Concert posters", "amount": 520, "paid_by": "xochitl",
-     "split": ["me", "xochitl", "cuauh", "ramiro", "marilu"], "date": "2026-10-20"},
-    {"group": "familia", "name": "Mama Carmen's medicine", "amount": 1450, "paid_by": "me",
-     "split": ["me", "maria_o", "emi", "dani"], "date": "2026-10-05"},
-    {"group": "familia", "name": "Roof leak repair", "amount": 3200, "paid_by": "maria_o",
-     "split": ["me", "maria_o"], "date": "2026-09-02"},
-    {"group": "familia", "name": "Birthday cake supplies", "amount": 480, "paid_by": "emi",
-     "split": ["me", "emi", "dani"], "date": "2026-08-22"},
-    {"group": "boda", "name": "Venue deposit", "amount": 30000, "paid_by": "me",
-     "split": ["me", "dani", "rodrigo"], "date": "2026-09-05"},
-    {"group": "boda", "name": "Wedding invitations", "amount": 4800, "paid_by": "dani",
-     "split": ["me", "dani", "rodrigo"], "date": "2026-10-08"},
-    {"group": "boda", "name": "Cake tasting", "amount": 900, "paid_by": "rodrigo",
-     "split": ["me", "dani", "rodrigo", "emi"], "date": "2026-10-17"},
-    {"group": "panaderos", "name": "Shared flour order", "amount": 14400, "paid_by": "teodoro",
-     "split": ["me", "memo", "teodoro"], "date": "2026-10-13"},
-    {"group": "panaderos", "name": "Market stall fee", "amount": 1800, "paid_by": "me",
-     "split": ["me", "memo", "omar"], "date": "2026-10-26"},
-    {"group": "chicago", "name": "Mama Carmen's hospital top-up", "amount": 300, "paid_by": "pepe",
-     "split": ["me", "pepe", "gaby"], "date": "2026-07-15"},
-    {"group": "chicago", "name": "Gift for Mama Carmen", "amount": 90, "paid_by": "gaby",
-     "split": ["me", "pepe", "gaby"], "date": "2026-09-12"},
-]
 
 lists = [
     {"key": "bakery_l", "name": "Bakery", "area": "work"},
@@ -526,40 +481,6 @@ photos = [
     {"key": "p_screen", "name": "Screenshot of the order", "taken": "2026-07-03T12:00", "trashed": "2026-08-05T09:00"},
 ]
 
-# ------------------------------------------------------------------------------------------------
-# debts (in MXN, the vault currency)
-# ------------------------------------------------------------------------------------------------
-
-debts = [
-    {"key": "d_memo_flour", "person": "memo", "direction": "i_owe", "amount": 4800, "name": "my third of the shared flour",
-     "date": "2026-10-13"},
-    {"key": "d_teodoro", "person": "teodoro", "direction": "i_owe", "amount": 5200, "name": "flour on credit",
-     "date": "2026-10-27"},
-    {"key": "d_maria_roof", "person": "maria_o", "direction": "i_owe", "amount": 1600, "name": "half the roof repair",
-     "date": "2026-09-02"},
-    {"key": "d_maria_med", "person": "maria_o", "direction": "owes_me", "amount": 360, "name": "Mama Carmen's medicine share",
-     "date": "2026-10-05"},
-    {"key": "d_emi", "person": "emi", "direction": "owes_me", "amount": 360, "name": "medicine share",
-     "date": "2026-10-05"},
-    {"key": "d_dani", "person": "dani", "direction": "owes_me", "amount": 10000, "name": "wedding venue share",
-     "date": "2026-09-05"},
-    {"key": "d_rodrigo", "person": "rodrigo", "direction": "owes_me", "amount": 10000, "name": "wedding venue other share",
-     "date": "2026-09-05"},
-    {"key": "d_xochitl", "person": "xochitl", "direction": "i_owe", "amount": 104, "name": "concert posters",
-     "date": "2026-10-20"},
-    {"key": "d_aurelio", "person": "aurelio", "direction": "i_owe", "amount": 105, "name": "sheet music copies",
-     "date": "2026-09-10"},
-    {"key": "d_chela", "person": "chela", "direction": "i_owe", "amount": 217, "name": "piñatas and candy",
-     "date": "2026-10-24"},
-    {"key": "d_flor", "person": "flor", "direction": "owes_me", "amount": 1800, "name": "cake deposit",
-     "date": "2026-10-22"},
-    {"key": "d_omar", "person": "omar", "direction": "owes_me", "amount": 600, "name": "stall fee share",
-     "date": "2026-10-26"},
-    {"key": "d_chuy", "person": "chuy", "direction": "i_owe", "amount": 3500, "name": "oil change and filters",
-     "date": "2026-02-10", "settled": "2026-02-12T10:00"},
-    {"key": "d_lupita", "person": "lupita", "direction": "owes_me", "amount": 120, "name": "candles share",
-     "date": "2026-10-02", "settled": "2026-10-09T21:00"},
-]
 
 # ------------------------------------------------------------------------------------------------
 # locker
@@ -648,13 +569,13 @@ links = [
 
 world = {
     "me": ME, "today": TODAY, "epoch": "2024-03-01T09:00", "seed": "T32", "currency": "MXN",
-    "people": people, "groups": groups, "expenses": expenses, "lists": lists, "events": events,
+    "people": people, "lists": lists, "events": events,
     "tasks": tasks, "notebooks": notebooks, "notes": notes, "folders": folders, "documents": documents,
-    "albums": albums, "photos": photos, "debts": debts, "locker": locker, "links": links,
+    "albums": albums, "photos": photos, "locker": locker, "links": links,
 }
 
-SIZES = {"people": (25, 35), "groups": (4, 6), "events": (50, 70), "tasks": (50, 70), "notes": (20, 30),
-         "documents": (15, 20), "photos": (30, 40), "debts": (10, 15), "locker": (15, 22)}
+SIZES = {"people": (25, 35), "events": (50, 70), "tasks": (50, 70), "notes": (20, 30),
+         "documents": (15, 20), "photos": (30, 40), "locker": (15, 22)}
 
 
 def check(w):
@@ -674,15 +595,6 @@ def check(w):
     def need(key, kind):
         assert keys.get(key) == kind, f"{key} is not a {kind}"
 
-    for g in w["groups"]:
-        [need(m, "people") for m in g["members"]]
-        assert len(set(g["members"])) == len(g["members"]), g["key"]
-    for e in w["expenses"]:
-        need(e["group"], "groups")
-        [need(m, "people") for m in e["split"]]
-        need(e["paid_by"], "people")
-        members = set(next(g["members"] for g in w["groups"] if g["key"] == e["group"])) | {"me"}
-        assert set(e["split"]) | {e["paid_by"]} <= members, f"expense outside its group: {e['name']}"
     for t in w["tasks"]:
         if "parent" in t:
             need(t["parent"], "tasks")
@@ -697,14 +609,12 @@ def check(w):
     for p in w["photos"]:
         [need(a, "albums") for a in p.get("albums", [])]
         [need(q, "people") for q in p.get("people", [])]
-    for d in w["debts"]:
-        need(d["person"], "people")
     for e in w["events"]:
         [need(a, "people") for a in e.get("attendees", [])]
     for ln in w["links"]:
         assert ln["from"] in keys and ln["to"] in keys, ln
-    names = [g["name"] for g in w["groups"]] + [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
-    assert len(names) == len(set(names)), "group/notebook/album names must be unique"
+    names = [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
+    assert len(names) == len(set(names)), "notebook/album names must be unique"
     spans = sorted((e["start"], e.get("end", e["start"]), e["key"]) for e in w["events"])
     for (s1, e1, k1), (s2, e2, k2) in zip(spans, spans[1:]):
         assert e1 <= s2, f"events overlap: {k1} and {k2}"
@@ -718,7 +628,6 @@ def check(w):
     assert any(t.get("completed") for t in w["tasks"])
     assert any(not [x for x in w["documents"] if x.get("folder") == f["key"]] for f in w["folders"])
     assert any(not [x for x in w["notes"] if x.get("notebook") == n["key"]] for n in w["notebooks"])
-    assert any(not [x for x in w["expenses"] if x["group"] == g["key"]] for g in w["groups"])
 
 
 if __name__ == "__main__":

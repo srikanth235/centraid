@@ -10,9 +10,6 @@ def W(expr):
 
 
 OPEN = 'status = "open"'
-IOWE = 'direction = "i_owe" and status = "open"'
-OWED = 'direction = "owes_me" and status = "open"'
-
 S("T27-B002", "c3b superlative event next three classes count task biggest",
   T("next 3 prenatal classes", rows("class_1208", "class_1215", "class_1222", order=True),
     ref=[ans(kind="event", name="Prenatal class", when=W({"from": U("day", 0)}), order="date asc", limit=3)]),
@@ -34,12 +31,6 @@ S("T27-B005", "c4b state-change cancel event restore trashed task",
     ref=[act("cancel", kind="event", name="Oven inspection")]),
   T("bring back the old stand mixer one", diff(restore("old_mixer")),
     ref=[act("restore", kind="task", name="stand mixer", trashed=True)]))
-
-S("T27-B006", "c4b state-change settle_debt log nickname",
-  T("chloé paid me for the concert tickets", diff(upd("d_chloe", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Concert tickets")]),
-  T("called maman back", diff(upd("helene", date=ANY)),
-    ref=[search("maman", kind="person"), act("log", rows="$helene", args=lines(kind="call"))]))
 
 S("T27-B007", "c4b state-change complete catch up create contrast",
   T("ordered the flour", diff(upd("flour_b", status="completed", completed=ANY)),

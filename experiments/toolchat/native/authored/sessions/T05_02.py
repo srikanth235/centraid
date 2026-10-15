@@ -6,37 +6,6 @@ def W(expr):
     return json.dumps(expr, separators=(",", ":"))
 
 
-S("T05-026", "person where nickname empty cadence edit prev",
-  T("who in the cricket gang has no nickname saved", rows("arjun", "divya_k", "me"),
-    ref=[ans(kind="person", linked_to="$cricket_g", where="nickname is empty")]),
-  T("which of them are on a fortnightly catch up", rows("arjun", "divya_k"),
-    ref=[ans(within="@prev", where="cadence = 14")]),
-  T("ok arjun, set him to weekly", diff(upd("arjun", cadence=7)),
-    ref=[find(within="@prev", name="Arjun"), act("edit", rows="@prev", args=lines(cadence=7))]),
-  T("and give him the nickname Appu", diff(upd("arjun", nickname="Appu")),
-    ref=[act("edit", rows="$arjun", args=lines(nickname="Appu"))]),
-  T("who's not on weekly", rows("divya_k", "vignesh", "sowmya", "revathi", "kavya", "ramesh_mama", "meena", "anand",
-                                    "amma", "appa", "karthik"),
-    ref=[ans(kind="person", where="cadence != 7 days")]))
-
-S("T05-027", "people links counts",
-  T("who's in no group at all", rows("amma", "paati", "ramesh_mama", "meena", "sowmya", "farhan", "rajan",
-                                     "nirmala", "balu", "kavya", "nandini", "rao_doc", "dentist", "muthu", "selvi"),
-    ref=[ans(kind="person", where="group count <= 0")]),
-  T("of those, who has no tasks either", rows("ramesh_mama", "meena", "rajan",
-                                               "balu", "nandini", "rao_doc", "dentist", "muthu"),
-    ref=[ans(within="@prev", where="task count <= 0")]),
-  T("and who of them do i have exactly one debt with", rows("ramesh_mama"),
-    ref=[ans(within="@prev", where="debt count = 1")]))
-
-S("T05-028", "groups person count balance compute",
-  T("which groups aren't three people", rows("cricket_g", "carpool", "dubai_g", "farewell_g"),
-    ref=[ans(kind="group", where="person count != 3")]),
-  T("who's in the carpool one", rows("divya_s", "jaya", "ramesh_d", "me"),
-    ref=[ans(kind="person", linked_to="$carpool")]),
-  T("where do i stand in it", val((740, "INR")),
-    ref=[comp(op="balance", kind="group", name="Night shift carpool", linked_to="$me"), ans(value="@prev")]))
-
 S("T05-030", "events no description edit prev",
   T("which of my events next week have no description", rows("dentist_ev", "duty_swap", "accounts", "electrician",
                                                               "bank", "nets", "cne", "farewell"),
@@ -66,13 +35,6 @@ S("T05-034", "documents no folder",
     ref=[act("add_to", rows="@prev", args=lines(to="$med_f"))]),
   T("hmm no, undo", diff(unlink("med_f", "aadhaar"), unlink("med_f", "pan")),
     ref=[act("undo")]))
-
-S("T05-035", "debt amount where",
-  T("any open debts that aren't 500 rupees", rows("d_divya_k", "d_arjun", "d_karthik", "d_jaya", "d_ramesh_mama",
-                                                  "d_appa", "d_vignesh", "d_revathi"),
-    ref=[ans(kind="debt", where='status = "open" and amount != 500 INR')]),
-  T("any with no amount written down", rows(),
-    ref=[ans(kind="debt", where="amount is empty")]))
 
 S("T05-036", "locker type not login username empty",
   T("locker items that aren't logins or cards", rows("wifi", "locker_combo", "aadhaar_id", "upi_pin", "pi_key", "maps_key",
@@ -147,11 +109,6 @@ S("T05-047", "photos from month",
     ref=[ans(kind="photo", when=W({"from": U("month", -1, name=11)}))]),
   T("december through new year's day", rows("kavya_pic", "lamp", "rain", "gopuram", "beach", "icu_xmas"),
     ref=[ans(kind="photo", when=W({"from": U("month", -1, name=12), "to": D("2026-01-01", "23:59")}))]))
-
-S("T05-048", "debts dated span",
-  T("debts from this month up to the twelfth evening", rows("d_divya_k", "d_suresh", "d_karthik", "d_jaya",
-                                                         "d_ramesh_mama", "d_sowmya"),
-    ref=[ans(kind="debt", when=W({"from": U("month", 0), "to": D("2026-01-12", "20:00")}))]))
 
 S("T05-049", "undo after field reschedule",
   T("move the dentist to 11", diff(upd("dentist_ev", date="2026-01-26T11:00")),

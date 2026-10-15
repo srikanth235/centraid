@@ -10,16 +10,6 @@ S("T14-051", "single person to named month",
   T("who haven't i been in touch with since the end of september", rows("lurdes", "regina", "fernanda"),
     ref=[find(kind="person", when=W({"to": U("month", 0, name=9)})), ans(rows="@prev")]))
 
-S("T14-052", "person datetime span log settle_up",
-  T("who did i talk to between tuesday 6pm and thursday", rows("patricia", "rafa_m", "nath", "mae", "thiago"),
-    ref=[find(kind="person", when=W(span(U("week", 0, weekday=2, time="18:00"), U("week", 0, weekday=4)))), ans(rows="@prev")]),
-  T("which of them are my mother, sister or cousin", rows("patricia", "mae", "thiago"),
-    ref=[ans(within="@prev", where='role in ("sister", "mother", "cousin")')]),
-  T("called patrícia again, log it", diff(upd("patricia", date=ANY)),
-    ref=[act("log", rows="$patricia", args=lines(kind="call"))]),
-  T("and settle up with patrícia ferreira in mãe's medical bills", diff(settle=[("Patrícia Ferreira", "50.00")]),
-    ref=[act("settle_up", rows="$patricia", args=lines(group="$mae_g"))]))
-
 S("T14-053", "person month to date nickname log",
   T("who'd i been in touch with from last month up to oct fifth", rows("regina", "lurdes", "diego", "jorge"),
     ref=[find(kind="person", when=W(span(U("month", -1), D("2026-10-05")))), ans(rows="@prev")]),
@@ -161,47 +151,6 @@ S("T14-068", "photo to august trashed restore window",
     ref=[find(kind="photo", name="Gol", trashed=True),
          bad(act("restore", rows="$old_car")),
          askc("the old gol pic has been in the bin past the 30-day window, so it can't come back. anything else?")]))
-
-S("T14-069", "debt last friday within settle prev undo ledger",
-  T("what debts came up last friday", rows("d_rafa_s", "d_kleber"),
-    ref=[ans(kind="debt", when=W(U("week", -1, weekday=5)))]),
-  T("which is kleber's", rows("d_kleber"),
-    ref=[ans(within="@prev", linked_to="$kleber")]),
-  T("he paid it, settle it", diff(upd("d_kleber", status="settled")),
-    ref=[act("settle_debt", rows="@prev")]),
-  T("undo that, the pix bounced", diff(),
-    ref=[act("undo")]))
-
-S("T14-070", "debt from month within sum",
-  T("debts since the start of this month",
-    rows("d_thiago", "d_kleber_old", "d_junior", "d_bianca", "d_rafa_s", "d_kleber", "d_nath", "d_guga", "d_wesley"),
-    ref=[find(kind="debt", when=W({"from": U("month", 0)})), ans(rows="@prev")]),
-  T("the ones i owe", rows("d_junior", "d_nath", "d_wesley"),
-    ref=[ans(within="@prev", where='direction = "i_owe"')]),
-  T("total?", val((495, "BRL")),
-    ref=[ans(op="sum", field="amount", within="@prev")]))
-
-S("T14-071", "debt weekday to month compute min settle",
-  T("debts from last monday to the end of october", rows("d_rafa_s", "d_kleber", "d_nath", "d_guga", "d_wesley"),
-    ref=[find(kind="debt", when=W(span(U("week", -1, weekday=1), U("month", 0, name=10)))), ans(rows="@prev")]),
-  T("smallest of those each way", vgroups({"owes_me": (85, "BRL"), "i_owe": (35, "BRL")}),
-    ref=[comp(op="min", field="amount", within="@prev", group="direction"), ans(value="@prev")]),
-  T("and the biggest i'm owed", val((600, "BRL")),
-    ref=[ans(op="max", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("settle the uber to the gig one, paid nath back", diff(upd("d_nath", status="settled")),
-    ref=[act("settle_debt", kind="debt", name="Uber to the gig")]),
-  T("so how much am i on the hook for", val((865, "BRL")),
-    ref=[ans(op="sum", field="amount", kind="debt", where='direction = "i_owe" and status = "open"')]))
-
-S("T14-073", "create event reschedule new linked",
-  T("put a studio session with nath on monday at 2pm", diff(new("event", name=has("Studio"), date="2026-10-26T14:00")),
-    ref=[act("create", args=lines(kind="event", name="Studio session with Nath", date=U("week", 1, weekday=1, time="14:00")))]),
-  T("make it 4 instead", diff(upd("+1", date="2026-10-26T16:00")),
-    ref=[act("reschedule", rows="$c1", args=lines(to=U("day", 0, anchor="row", time="16:00")))]),
-  T("what else is on monday", rows("hand_1026"),
-    ref=[ans(kind="event", when=W(U("week", 1, weekday=1)), exclude="$c1")]),
-  T("what do i owe nath", val((-40, "BRL")),
-    ref=[search("nath", kind="person"), ans(op="balance", rows="$nath")]))
 
 S("T14-074", "single create complete new",
   T("add renew spotify premium and tick it off, did it",

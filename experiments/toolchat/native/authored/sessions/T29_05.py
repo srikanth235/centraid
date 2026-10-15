@@ -10,27 +10,6 @@ def J(d):
 
 # ---- same-word-pick: a name word that several rows share (T29-066 .. T29-070) ----------------------------
 
-S("T29-066", "r2 same-word link-target add-to group folder photo family members kind-word-decides",
-  T("add mama and baba to the family fund",
-    diff(link("kisumu_fund", "mama"), link("kisumu_fund", "baba")),
-    ref=[act("add_to", rows="$mama, $baba", args=lines(to="$kisumu_fund"))]),
-  T("who's in the family fund now", rows("me", "otieno", "akinyi", "aunt_atieno", "mama", "baba"),
-    ref=[ans(kind="person", linked_to="$kisumu_fund")]),
-  T("and what's in the family folder", rows("land_title", "baba_nhif", "simba_cert"),
-    ref=[ans(kind="document", linked_to="$family_f")]),
-  T("which photos of mama are in the kisumu album", rows("p_kisumu_family", "p_kisumu_mama"),
-    ref=[ans(kind="photo", linked_to="$mama, $kisumu_album")]))
-
-S("T29-067", "r2 same-word possessor-vs-relation debt person baba otieno empty settle",
-  T("what do i owe baba", rows(),
-    ref=[ans(kind="debt", linked_to="$baba")]),
-  T("what about baba's hospital share", rows("d_otieno"),
-    ref=[ans(kind="debt", name="hospital share")]),
-  T("who's that one owed to", rows("otieno"),
-    ref=[ans(kind="person", linked_to="$d_otieno")]),
-  T("settle it", diff(upd("d_otieno", status="settled")),
-    ref=[act("settle_debt", rows="$d_otieno")]))
-
 S("T29-068", "r2 same-word both documents star topic-decides jersey photo task folder",
   T("what's in the club folder", rows("club_constitution", "club_budget", "jersey_quote"),
     ref=[ans(kind="document", linked_to="$club_f")]),
@@ -56,18 +35,6 @@ S("T29-069", "r2 same-word both-events second-name car-service task-decoy resche
   T("put the courtyard sketch and the printed drawing set in the karen album",
     diff(link("site_album", "p_sketch"), link("site_album", "p_drawing_set")),
     ref=[act("add_to", rows="$p_sketch, $p_drawing_set", args=lines(to="$site_album"))]))
-
-S("T29-070", "r2 same-word verb-decides wifi star complete settle-debt locker task debt",
-  T("star the kisumu wifi", diff(upd("kisumu_wifi", starred=True)),
-    ref=[act("star", kind="locker item", name="kisumu wifi")]),
-  T("tick off the wifi, paid it", diff(upd("wifi_pay", status="completed", completed=ANY)),
-    ref=[act("complete", kind="task", name="wifi")]),
-  T("and i've paid wambs my half of it, mark that and tell me where i stand with her",
-    val((-250, "KES"), also=diff(upd("d_wambui_wifi", status="settled"))),
-    ref=[act("settle_debt", kind="debt", name="wifi", more=True),
-         ans(op="balance", rows="$wambui")]),
-  T("pin the vet's advice note", diff(upd("simba_vet", pinned=True)),
-    ref=[act("edit", kind="note", name="advice", args="pinned: yes")]))
 
 
 # ---- create-args: a create sentence with extra clauses (T29-071 .. T29-075) --------------------------------
@@ -99,17 +66,6 @@ S("T29-072", "r2 create-args task-vs-event tradesperson-call appointment errand 
     diff(new("event", name=has("baba"), date="2026-09-26T18:00")),
     ref=[act("create", args=lines(kind="event", name="Call with Baba", date=U("week", 0, weekday=6, time="18:00")))]))
 
-S("T29-073", "r2 create-args person role nickname one-per-line debt inert-clause album purpose-clause",
-  T("add jane kamau, a roofer, nickname jay, i need her for the kisumu job",
-    diff(new("person", name="Jane Kamau", role="roofer", nickname="Jay")),
-    ref=[act("create", args=lines(kind="person", name="Jane Kamau", role="roofer", nickname="Jay"))]),
-  T("i owe her 12000 for the roof deposit, i'll pay after the 15th",
-    diff(new("debt", name=has("roof", "deposit"), amount=12000, direction="i_owe"), link("new", "+1")),
-    ref=[act("create", args=lines(kind="debt", name="Roof deposit", person="$c1", amount="12000", direction="i_owe"))]),
-  T("make an album for the kisumu roof job, i'll send it to the insurer",
-    diff(new("album", name=has("kisumu", "roof"))),
-    ref=[act("create", args=lines(kind="album", name="Kisumu roof job"))]))
-
 S("T29-074", "r2 create-args container-link to-it task-list note-notebook document-folder write-read",
   T("add buy a battery for the gate to the home list, due the 30th, the keypad's dying",
     diff(new("task", name=has("battery", "gate"), date="2026-09-30"), link("home_list", "new")),
@@ -122,20 +78,6 @@ S("T29-074", "r2 create-args container-link to-it task-list note-notebook docume
     ref=[act("create", args=lines(kind="document", name="Site agreement", folder="$contracts_f"))]),
   T("what's in contracts now", rows("karen_contract", "runda_contract", "lease", "+3"),
     ref=[ans(kind="document", linked_to="$contracts_f")]))
-
-S("T29-075", "r2 create-args remind-me-lead card-type-implied group-members one-attribute-per-line add-one-more add-to",
-  T("remind me to send gladys the receipts by friday",
-    diff(new("task", name=has("send", "gladys", "receipts"), date="2026-09-25")),
-    ref=[act("create", args=lines(kind="task", name="Send Gladys the receipts", date=U("week", 0, weekday=5)))]),
-  T("add my new stanbic debit card to the locker",
-    diff(new("locker item", name=has("stanbic"), type="card")),
-    ref=[act("create", args=lines(kind="locker item", name="Stanbic debit card", type="card"))]),
-  T("start a group called roof money with akinyi and auntie atieno, we're splitting the bill",
-    diff(new("group", name=has("roof", "money")), link("new", "me"), link("new", "akinyi"), link("new", "aunt_atieno")),
-    ref=[act("create", args=lines(kind="group", name="Roof money"), more=True),
-         act("add_to", rows="$akinyi, $aunt_atieno", args=lines(to="$new"))]),
-  T("add one more, mama", diff(link("+3", "mama")),
-    ref=[act("add_to", rows="$mama", args=lines(to="$c3"))]))
 
 # ---- verb-choice: a short idiom whose verb is not the surface verb (T29-076 .. T29-080) -------------------
 
@@ -258,16 +200,6 @@ S("T29-086", "r2 set-answer role-noun best-friend exact-role friends dentist nam
     ref=[ans(kind="person", where='role = "dentist"')]),
   T("and my clients", rows("faith", "dennis"),
     ref=[ans(kind="person", where='role = "client"')]))
-
-S("T29-087", "r2 set-answer debts both-directions wambui owes-me i-owe subset settle kin-aunt star pick",
-  T("what does wambs owe me", rows("d_wambui_tokens"),
-    ref=[ans(kind="debt", linked_to="$wambui", where="direction = owes_me and status = open")]),
-  T("and the one i still have to pay her", rows("d_wambui_wifi"),
-    ref=[ans(kind="debt", linked_to="$wambui", where="direction = i_owe and status = open")]),
-  T("settle the one she owes me", diff(upd("d_wambui_tokens", status="settled")),
-    ref=[act("settle_debt", kind="debt", linked_to="$wambui", where="direction = owes_me")]),
-  T("and star my aunt", diff(upd("aunt_atieno", starred=True)),
-    ref=[find(kind="person", where='role = "aunt"'), act("star", rows="@prev")]))
 
 S("T29-088", "r2 set-answer same-word events weekday-decides vet grooming reschedule put-it-back-reschedule",
   T("what time's the vet on saturday", rows("vet_vacc"),

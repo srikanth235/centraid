@@ -29,12 +29,6 @@ S("T01-C003", "c3c compound cancel create task referential",
   T("when's it due", rows("+1"),
     ref=[ans(rows="$new")]))
 
-S("T01-C004", "c3c compound settle_debt complete",
-  T("callum paid me his half of the skip, and i've booked the skip as well",
-    diff(upd("d_callum", status="settled"), upd("skip", status="completed", completed=ANY)),
-    ref=[act("settle_debt", kind="debt", name="his half of the skip", more=True),
-         act("complete", kind="task", name="Book skip")]))
-
 S("T01-C101", "c3c bulk delete per kind last november month find multi-kind",
   T('delete everything from last november', diff(trash("drug_calc"), trash("ghic"), trash("p_engagement"), unlink("chi_album", "p_engagement"), trash("p_ring"), unlink("chi_album", "p_ring"), trash("p_girls"), unlink("chi_album", "p_girls"), trash("p_bday_cake"), unlink("kids_album", "p_bday_cake")),
     ref=[find(kind="event,task,note,document,photo", when=W(U("month", -1, name=11))),

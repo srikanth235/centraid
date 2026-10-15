@@ -22,14 +22,6 @@ S("T19-A004", "ask-options document delete never_mind c3a",
   T("actually hold on, i don't know what they are. leave them", decline("never_mind"),
     ref=[dec("never_mind")]))
 
-S("T19-A005", "ask-options debt settle_debt c3a",
-  T("mark the fuel one as paid", ask("d_samira", "d_driss"),
-    ref=[act("settle_debt", kind="debt", name="Fuel for the school run"),
-         find(kind="debt", name="Fuel for the school run", where="status = open"),
-         askc("Samira's fuel for the school run (you owe 200) or Driss's (he owes you 200)?", options="$d_samira, $d_driss")]),
-  T("driss's, he paid me back at the pharmacy", diff(upd("d_driss", status="settled")),
-    ref=[act("settle_debt", rows="$d_driss")]))
-
 S("T19-A101", "ask-options event reschedule c3a",
   T("can the dentist be monday instead", ask("dentist_adam", "dentist_me"),
     ref=[act("reschedule", kind="event", name="dentist", args=lines(to=U("week", 1, weekday=1))),
@@ -49,14 +41,6 @@ S("T19-A008", "follow-up c3a",
   T("just up to thursday", rows("berrada_meet", "lina_vacc", "run_0414", "run_0416", "yoga", "ptm", "swim_0415", "plumber_pharm"),
     ref=[ans(within="@prev", when=J({"to": U("week", 0, weekday=4)}))]),
   T("what about the others", rows("stock_count", "podiatrist", "dinner_hajja", "garde_0418"),
-    ref=[ans(within="@1", exclude="@2")]))
-
-S("T19-A009", "follow-up c3a",
-  T("who do i owe", rows("d_youssef", "d_khalid", "d_aicha", "d_nadia", "d_samira"),
-    ref=[ans(kind="debt", where="direction = i_owe and status = open")]),
-  T("which of those are over 150", rows("d_youssef", "d_khalid", "d_samira"),
-    ref=[ans(within="@prev", where="amount > 150 MAD")]),
-  T("and the rest", rows("d_aicha", "d_nadia"),
     ref=[ans(within="@1", exclude="@2")]))
 
 S("T19-A010", "follow-up c3a",

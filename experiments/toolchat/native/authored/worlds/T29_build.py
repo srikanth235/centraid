@@ -6,8 +6,7 @@ Today in the sessions is Wednesday 2026-09-23 18:10 (home in Kilimani after a da
 
 Persona: Achieng Odhiambo, 34, a freelance architect in Nairobi. Shares a flat in Kilimani with
 Wambui "Wambs" Njoroge, keeps the kitty for the Ngong Road Riders cycling club, parents (Baba and
-Mama) live in Kisumu, and has a dog, Simba. The vault is in KES; the one foreign-currency position
-is the EUR group "Berlin Build Week" (a vault debt can only be in the vault's own currency).
+Mama) live in Kisumu, and has a dog, Simba. The vault is in KES.
 
 Built-in ambiguity: two Kevins (Kevin Mwangi, club rider; Kevin Otieno, contractor), look-alike
 events (club ride Karura vs Karura loop, site visit Karen vs Runda, vet visits), near-duplicate
@@ -73,47 +72,6 @@ people = [
     {"key": "old_client", "name": "Rose Wanjala", "role": "old client", "trashed": "2026-09-14T10:00"},
 ]
 
-groups = [
-    {"key": "riders", "name": "Ngong Road Riders Kitty", "currency": "KES",
-     "members": ["kip", "kevin_m", "mwende", "juma", "nyambura"], "created": "2026-02-01T08:00"},
-    {"key": "flat", "name": "Kilimani Flat Bills", "currency": "KES", "members": ["wambui"],
-     "created": "2026-01-05T10:00"},
-    {"key": "diani", "name": "Diani Weekend", "currency": "KES", "members": ["brenda", "ian", "naomi", "amina"],
-     "created": "2026-08-02T19:00"},
-    {"key": "berlin", "name": "Berlin Build Week", "currency": "EUR", "members": ["lena", "hanna"],
-     "created": "2026-06-01T10:00"},
-    {"key": "kisumu_fund", "name": "Kisumu Family Fund", "currency": "KES",
-     "members": ["otieno", "akinyi", "aunt_atieno"], "created": "2026-03-10T20:00"},
-]
-
-expenses = [
-    {"group": "riders", "name": "Jersey order deposit", "amount": 42000, "paid_by": "me",
-     "split": ["me", "kip", "kevin_m", "mwende", "juma", "nyambura"], "date": "2026-08-10"},
-    {"group": "riders", "name": "Race entry fees", "amount": 18000, "paid_by": "kip",
-     "split": ["me", "kip", "kevin_m", "mwende"], "date": "2026-08-22"},
-    {"group": "riders", "name": "Puncture repair kit", "amount": 6500, "paid_by": "me",
-     "split": ["me", "kevin_m", "juma"], "date": "2026-09-05"},
-    {"group": "riders", "name": "Post-ride chai and mandazi", "amount": 3600, "paid_by": "juma",
-     "split": ["me", "kip", "kevin_m", "mwende", "juma", "nyambura"], "date": "2026-09-19"},
-    {"group": "flat", "name": "Wifi September", "amount": 3500, "paid_by": "wambui", "split": ["me", "wambui"],
-     "date": "2026-09-02"},
-    {"group": "flat", "name": "KPLC tokens", "amount": 2400, "paid_by": "me", "split": ["me", "wambui"],
-     "date": "2026-09-08"},
-    {"group": "flat", "name": "Water bill", "amount": 1800, "paid_by": "wambui", "split": ["me", "wambui"],
-     "date": "2026-09-12"},
-    {"group": "diani", "name": "Villa deposit", "amount": 60000, "paid_by": "brenda",
-     "split": ["me", "brenda", "ian", "naomi", "amina"], "date": "2026-08-04"},
-    {"group": "diani", "name": "Groceries and charcoal", "amount": 9200, "paid_by": "me",
-     "split": ["me", "brenda", "ian"], "date": "2026-08-28"},
-    {"group": "berlin", "name": "Hostel for the week", "amount": 420, "paid_by": "lena",
-     "split": ["me", "lena", "hanna"], "date": "2026-06-14"},
-    {"group": "berlin", "name": "Workshop dinner", "amount": 96, "paid_by": "me",
-     "split": ["me", "lena", "hanna"], "date": "2026-06-16"},
-    {"group": "kisumu_fund", "name": "Baba's hospital bill", "amount": 85000, "paid_by": "otieno",
-     "split": ["me", "otieno", "akinyi"], "date": "2026-07-02"},
-    {"group": "kisumu_fund", "name": "Roof repair", "amount": 120000, "paid_by": "me",
-     "split": ["me", "otieno", "akinyi", "aunt_atieno"], "date": "2026-05-20"},
-]
 
 lists = [
     {"key": "karen_list", "name": "Karen Courtyard House", "area": "work"},
@@ -464,34 +422,6 @@ photos = [
     {"key": "p_receipt", "name": "Screenshot of receipt", "taken": "2026-06-02T12:00", "trashed": "2026-07-03T09:00"},
 ]
 
-debts = [
-    {"key": "d_juma_chai", "person": "juma", "direction": "owes_me", "amount": 600, "name": "chai and mandazi",
-     "date": "2026-09-19"},
-    {"key": "d_kevin_m", "person": "kevin_m", "direction": "owes_me", "amount": 1500, "name": "puncture kit share",
-     "date": "2026-09-05"},
-    {"key": "d_kip", "person": "kip", "direction": "i_owe", "amount": 3000, "name": "race entry",
-     "date": "2026-08-22"},
-    {"key": "d_wambui_wifi", "person": "wambui", "direction": "i_owe", "amount": 1750, "name": "wifi half",
-     "date": "2026-09-02"},
-    {"key": "d_wambui_tokens", "person": "wambui", "direction": "owes_me", "amount": 1200, "name": "KPLC tokens half",
-     "date": "2026-09-08"},
-    {"key": "d_brenda", "person": "brenda", "direction": "i_owe", "amount": 12000, "name": "Diani villa deposit share",
-     "date": "2026-08-04"},
-    {"key": "d_lena", "person": "lena", "direction": "i_owe", "amount": 14000, "name": "Berlin hostel in shillings",
-     "date": "2026-06-14"},
-    {"key": "d_otieno", "person": "otieno", "direction": "i_owe", "amount": 28000, "name": "Baba's hospital share",
-     "date": "2026-07-02"},
-    {"key": "d_moses", "person": "moses", "direction": "i_owe", "amount": 4500, "name": "drawing prints",
-     "date": "2026-09-23"},
-    {"key": "d_collins", "person": "collins", "direction": "i_owe", "amount": 8500, "name": "brake pads",
-     "date": "2026-07-18", "settled": "2026-07-20T10:00"},
-    {"key": "d_ian", "person": "ian", "direction": "owes_me", "amount": 2500, "name": "cinema tickets",
-     "date": "2026-08-14", "settled": "2026-08-20T10:00"},
-    {"key": "d_naomi", "person": "naomi", "direction": "owes_me", "amount": 5000, "name": "bus fare to Kisumu",
-     "date": "2026-07-25"},
-    {"key": "d_amina", "person": "amina", "direction": "i_owe", "amount": 1000, "name": "yoga mat",
-     "date": "2026-07-19", "settled": "2026-07-21T10:00"},
-]
 
 locker = [
     {"key": "equity_login", "name": "Equity Bank online", "type": "login", "username": "achieng.odhiambo",
@@ -558,9 +488,9 @@ links = [
 
 world = {
     "me": ME, "today": TODAY, "epoch": "2026-01-05T09:00", "seed": "T29", "currency": "KES",
-    "people": people, "groups": groups, "expenses": expenses, "lists": lists, "events": events,
+    "people": people, "lists": lists, "events": events,
     "tasks": tasks, "notebooks": notebooks, "notes": notes, "folders": folders, "documents": documents,
-    "albums": albums, "photos": photos, "debts": debts, "locker": locker, "links": links,
+    "albums": albums, "photos": photos, "locker": locker, "links": links,
 }
 
 
@@ -580,14 +510,6 @@ def check(w):
     def need(key, kind):
         assert keys.get(key) == kind, f"{key} is not a {kind}"
 
-    for g in w["groups"]:
-        [need(m, "people") for m in g["members"]]
-    for e in w["expenses"]:
-        need(e["group"], "groups")
-        [need(m, "people") for m in e["split"]]
-        need(e["paid_by"], "people")
-        members = set(next(g["members"] for g in w["groups"] if g["key"] == e["group"])) | {"me"}
-        assert set(e["split"]) | {e["paid_by"]} <= members, f"expense outside its group: {e['name']}"
     for t in w["tasks"]:
         if "parent" in t:
             need(t["parent"], "tasks")
@@ -602,14 +524,12 @@ def check(w):
     for p in w["photos"]:
         [need(a, "albums") for a in p.get("albums", [])]
         [need(q, "people") for q in p.get("people", [])]
-    for d in w["debts"]:
-        need(d["person"], "people")
     for e in w["events"]:
         [need(a, "people") for a in e.get("attendees", [])]
     for ln in w["links"]:
         assert ln["from"] in keys and ln["to"] in keys, ln
-    names = [g["name"] for g in w["groups"]] + [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
-    assert len(names) == len(set(names)), "group/notebook/album names must be unique"
+    names = [n["name"] for n in w["notebooks"]] + [a["name"] for a in w["albums"]]
+    assert len(names) == len(set(names)), "notebook/album names must be unique"
     spans = sorted((e["start"], e.get("end", e["start"]), e["key"]) for e in w["events"])
     for (s1, e1, k1), (s2, e2, k2) in zip(spans, spans[1:]):
         assert e1 <= s2, f"events overlap: {k1} and {k2}"

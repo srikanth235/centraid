@@ -18,20 +18,6 @@ S("T02-051", "compute group answer value follow-ups",
   T("which one has four spots, autumn issue as the description", rows("mf_spots"),
     ref=[ans(kind="task", where='description = "four spots, autumn issue"')]))
 
-S("T02-052", "min max debts",
-  T("smallest amount anyone owes me?", val((30, "CAD")),
-    ref=[ans(op="min", field="amount", kind="debt", where='direction = "owes_me" and status = "open"')]),
-  T("which debt of mine is highest", rows("d_arun_tix"),
-    ref=[ans(kind="debt", where='direction = "i_owe" and status = "open"', order="amount desc", limit=1)]),
-  T("who's that to", rows("arun"),
-    ref=[find(kind="debt", where='direction = "i_owe" and status = "open"', order="amount desc", limit=1),
-         ans(kind="person", linked_to="@prev")]),
-  T("which ones exactly 30", rows("d_sophie_taxi"),
-    ref=[ans(kind="debt", where="amount = 30")]),
-  T("how many did i end up owing from april first to the end of may", val(4),
-    ref=[ans(op="count", kind="debt", where='direction = "i_owe"',
-             when=W({"from": D("2027-04-01", "00:00"), "to": U("month", 0, name=5)}))]))
-
 S("T02-053", "find linked_to order limit reschedule keep time",
   T("move my next climbing sesh with diego to wed the sixteenth", diff(upd("climb_0614", date="2027-06-16T19:00")),
     ref=[find(kind="event", linked_to="$diego", when=W({"from": U("day", 0)}), order="date asc", limit=1),
@@ -82,18 +68,6 @@ S("T02-057", "act within act where",
   T("the high priority one on tokyo prep with no time on it, call it 45 min", diff(upd("insurance", effort=45)),
     ref=[act("edit", kind="task", linked_to="$tokyoprep", where="effort is empty and priority is set",
              args=lines(effort=45))]))
-
-S("T02-059", "repair balance two people ask pick",
-  T("how much does sophie owe me", ask("sophie_t", "sophie_d"),
-    ref=[bad(ans(op="balance", kind="person", name="Sophie")),
-         askc("sophie tran or sophie delacroix?", options="$sophie_t, $sophie_d")]),
-  T("tran", val((30, "CAD"), (49500, "JPY")),
-    ref=[ans(op="balance", rows="$sophie_t")]),
-  T("she owes me another 25 for the gallery drinks",
-    diff(new("debt", name=has("drinks"), amount=25, direction="owes_me"), link("new", "sophie_t")),
-    ref=[act("create", args=lines(kind="debt", name="Gallery drinks", person="$sophie_t", amount="25", direction="owes_me"))]),
-  T("who did i talk to from the monday before last through may", rows("priya", "kai"),
-    ref=[ans(kind="person", when=W({"from": U("week", -2, weekday=1), "to": U("month", 0, name=5)}))]))
 
 S("T02-060", "ask photo pick star",
   T("can you star the sunset photo", diff(upd("sunset_flat", starred=True)),
@@ -175,22 +149,6 @@ S("T02-067", "compute name group trashed",
          ans(kind="task", name="Return library books", trashed=True)]),
   T("restore that and the bike tune up", diff(restore("library"), restore("bike")),
     ref=[find(kind="task", trashed=True, name="Tune up bike"), act("restore", rows="$library, $bike")]))
-
-S("T02-068", "compute rows within exclude",
-  T("show me every debt that's open", rows("d_mf", "d_tomo", "d_arun_tix", "d_sophie_taxi", "d_diego_chalk",
-                                              "d_kai_books", "d_priya_sushi", "d_mom_phone", "d_carlos"),
-    ref=[ans(kind="debt", where='status = "open"')]),
-  T("split by direction", vgroups({"owes_me": (1375, "CAD"), "i_owe": (215.5, "CAD")}),
-    ref=[comp(op="sum", field="amount", group="direction", rows="@prev"), ans(value="@prev")]),
-  T("same but leave out the tomo kill fee, that's never getting paid",
-    vgroups({"owes_me": (1075, "CAD"), "i_owe": (215.5, "CAD")}),
-    ref=[comp(op="sum", field="amount", group="direction", kind="debt", where='status = "open"', exclude="$d_tomo"),
-         ans(value="@prev")]),
-  T("the open ones over 200 CAD", rows("d_mf", "d_tomo"),
-    ref=[ans(kind="debt", where='status = "open" and amount > 200 CAD')]),
-  T("and open ones from before last friday",
-    rows("d_mf", "d_arun_tix", "d_sophie_taxi", "d_diego_chalk", "d_kai_books", "d_priya_sushi", "d_mom_phone", "d_carlos"),
-    ref=[ans(kind="debt", where='status = "open"', when=W({"to": U("week", -1, weekday=5)}))]))
 
 S("T02-069", "search log multi-row decline",
   T("had lunch at my parents, log a visit with mom and dad", diff(upd("mom", date=ANY), upd("dad", date=ANY)),

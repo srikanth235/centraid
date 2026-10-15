@@ -26,13 +26,6 @@ S("T16-C003", "c3c compound star add_to photo",
     ref=[act("star", kind="photo", name="Sunset from the roof", more=True),
          act("add_to", rows="$sunset_roof", args=lines(to="$family_album"))]))
 
-S("T16-C004", "c3c compound three writes complete settle_debt log",
-  T("overtime list is in, tick it off, settle selim's cng fare and log a call with masud",
-    diff(upd("overtime", status="completed", completed=ANY), upd("d_selim", status="settled"), upd("masud", date=ANY)),
-    ref=[act("complete", kind="task", name="overtime list", more=True),
-         act("settle_debt", kind="debt", name="CNG fare to Gazipur", more=True),
-         act("log", kind="person", name="Masud", args=lines(kind="call"))]))
-
 S("T16-C101", "c3c bulk delete per kind before this year find multi-kind",
   T('delete everything before this year', diff(trash("eid24_gifts"), trash("eid25_gifts"), trash("eid25_list"), trash("deed"), trash("mutation"), trash("appointment"), trash("tin"), trash("team_2025"), unlink("tigers_album", "team_2025"), trash("victory_2025"), unlink("victory_album", "victory_2025"), trash("old_team")),
     ref=[find(kind="event,task,note,document,photo", when=W({"to": U("year", -1)})),
