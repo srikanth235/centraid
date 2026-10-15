@@ -85,6 +85,14 @@ jobs:
           actionlint --version
           gitleaks version
           osv-scanner --version
+      - name: Install buf
+        env:
+          BUF_VERSION: 1.61.0
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" -o /usr/local/bin/buf
+          chmod +x /usr/local/bin/buf
+          buf --version
       - run: cargo xtask gate --profile nightly
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
@@ -132,6 +140,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
           toolchain: ${{ steps.channel.outputs.channel }}
+      - name: Install buf
+        env:
+          BUF_VERSION: 1.61.0
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-x86_64" -o /usr/local/bin/buf
+          chmod +x /usr/local/bin/buf
+          buf --version
       - run: cargo xtask gate --profile mobile-jvm
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()

@@ -45,6 +45,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import {
   RUNG_BUDGET_MS,
@@ -272,18 +273,31 @@ export function renderFindings(findings, verdict, rung) {
 
 // --- fetching ---------------------------------------------------------------
 
-async function gh(url, token) {
-  const response = await fetch(url, {
-    headers: {
-      accept: "application/vnd.github+json",
-      "x-github-api-version": "2022-11-28",
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  if (!response.ok) {
+export async function gh(
+  url,
+  token,
+  { request = fetch, wait = delay, warn = console.warn } = {}
+) {
+  const attemptRequest = async (attempt) => {
+    const response = await request(url, {
+      headers: {
+        accept: "application/vnd.github+json",
+        "x-github-api-version": "2022-11-28",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (response.ok) return response.json();
+    if (attempt < 3 && [502, 503, 504].includes(response.status)) {
+      await response.body?.cancel();
+      warn(
+        `lane-health: GitHub ${response.status}; retry ${attempt}/2 for ${url}`
+      );
+      await wait(attempt * 1000);
+      return attemptRequest(attempt + 1);
+    }
     throw new Error(`${url} → ${response.status} ${response.statusText}`);
-  }
-  return response.json();
+  };
+  return attemptRequest(1);
 }
 
 async function fetchRuns(repo, workflow, limit, token) {

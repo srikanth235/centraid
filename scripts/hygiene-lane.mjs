@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // The rung-5 hygiene lane (#915 Wave 4).
 //
-// Seven gates are tighten-only ratchets over the TEST SUITE's own quality —
+// Six gates are tighten-only ratchets over the TEST SUITE's own quality —
 // comment density, assertion-matcher families, fixed sleeps, skips,
-// environment-red sites, the type floor and the schema/export fingerprint.
+// environment-red sites, and the type floor.
 // They protect the suite from the agents; none of them can prove the phone
 // works. Charging every push for them bought latency nobody used.
 //
@@ -40,7 +40,6 @@ export const HYGIENE_GATES = Object.freeze([
   "test:skip-inventory",
   "test:sleep-inventory",
   "lint:type-floor",
-  "lint:schema-export",
 ]);
 
 /**

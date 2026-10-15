@@ -1,8 +1,5 @@
 // @vitest-environment jsdom
-// Refresh discipline: the two wrappers that keep an app from re-reading the
-// vault on every doorbell and every alt-tab, plus the width observer. Each one
-// exists because the naive version is a performance bug, so the assertions are
-// mostly about the reads that must NOT happen.
+// Refresh guards avoid redundant vault reads.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -98,9 +95,6 @@ describe(onDataChange, () => {
     expect(feed.stopped()).toBe(true);
   });
 
-  // THE WRITE'S OWN ECHO IS NOT A DOORBELL (#922 D1). The window exists for
-  // other people's churn; making the member's own edit the one change that
-  // arrives late is the opposite of what it is for.
   it("hands the seat's own overlay detail straight through, with no window", () => {
     useFakeClock();
     const feed = installFeed();

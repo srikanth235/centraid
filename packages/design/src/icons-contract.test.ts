@@ -20,37 +20,10 @@ function json<T>(file: string): T {
   return JSON.parse(readFileSync(path.join(ROOT, file), "utf8")) as T;
 }
 
-// ── WHO CONSUMES THE REGISTRY, AND HOW THAT MOVED ─────────────────────────
-//
-// Until #1029 the two tests below scanned `packages/blueprints` — the app
-// adapters and their `app.json` catalogues were the surfaces that could fork
-// the icon set or name a key it did not hold. That tree was deleted with the
-// rest of v0, and both tests then died on `ENOENT` inside `readdirSync` before
-// asserting anything. An icon contract that scans nothing is worse than no
-// icon contract: it reports two green cases per run for a guarantee nobody is
-// making any more.
-//
-// The consumers now are the two native shells, and they reach the registry
-// through ONE emitted artifact each: `contracts/tools/export-native-catalog.ts`
-// lowers `icons` into `design/native-catalog.json`, `Catalog.kt` and
-// `Catalog.swift`. So the same two questions re-point, and both still have
-// teeth here:
-//
-//   1. does anything OUTSIDE that emitted pair carry silhouette path data?
-//   2. does every icon key a shipped artifact or a shell names RESOLVE?
-//
-// Question 2 is the one with a real failure mode behind it. `Icon.swift` reads
-// `CentraidCatalog.icons[iconKey] ?? []` and `Icon.kt` reads
-// `.icons[iconKey].orEmpty()`, so a misspelled key draws NOTHING and nothing
-// throws — the silent blank mark `CatalogSpec` was written after. That spec and
-// `IconSilhouetteTests` cover the keys the Kotlin POLICIES name; this file
-// covers the string literals typed into the view layer and the emitted table
-// itself, neither of which needs a JVM or an Xcode toolchain to read.
+// Native shells consume the emitted catalogues. Check silhouette ownership
+// and every view-layer icon key: unresolved keys otherwise render blank (#1029).
 
-/** The hand-written shell sources, plus the two emitted catalogue files that
- *  live among them. `iosApp/Sources/Generated` holds protobuf output and is
- *  walked like anything else — it is generated, but it is not the icon
- *  lowering, so it may not carry path data either. */
+/** Scan shell sources, including generated protobuf sources. */
 const SHELL_ROOTS = [
   "mobile/iosApp/Sources",
   "mobile/iosApp/Design",
@@ -58,9 +31,7 @@ const SHELL_ROOTS = [
   "mobile/shared/src/commonMain",
 ];
 
-/** The ONLY two files permitted to carry silhouette path data, and both are
- *  generated. Hand-editing either is caught elsewhere — the gate's `emitters`
- *  step and the `mobile-jvm` profile both regenerate and fail on a diff. */
+/** Only these emitted catalogues may own silhouette paths; emitters check drift. */
 const EMITTED_CATALOGUES = new Set([
   "mobile/iosApp/Design/Catalog.swift",
   "mobile/shared/src/commonMain/kotlin/dev/centraid/design/Catalog.kt",
@@ -84,9 +55,7 @@ function walkShellSources(): string[] {
 
 describe("single icon registry", () => {
   test("no shell source outside the emitted catalogue carries path data", () => {
-    // A `"M…"` string literal in a 24-box is what a silhouette IS, so a view
-    // that holds one is holding artwork the registry cannot revise — the
-    // native form of the local SVG dictionary this case has always forbidden.
+    // Local silhouette literals would fork the registry.
     const pathData = /"M-?[\d.]+[\s,]/u;
     const sources = walkShellSources();
     expect(
@@ -114,11 +83,7 @@ describe("single icon registry", () => {
   });
 
   test("the emitted native catalogue is this registry, not a second one", () => {
-    // `design/native-catalog.json` is COMMITTED, so it can go stale against the
-    // registry it was lowered from. The drift gate that catches that lives in
-    // `cargo xtask gate` (`emitters`, and the `mobile-jvm` profile), which is
-    // neither cheap nor run on a TypeScript-only change — and the emitted table
-    // is what both shells actually draw.
+    // Check the committed table too; it can drift from the registry.
     const catalogue = json<{
       apps: { id: string; iconKey: string }[];
       icons: Record<string, unknown[]>;
@@ -135,10 +100,7 @@ describe("single icon registry", () => {
   });
 
   test("every icon key a shell names by literal resolves", () => {
-    // `Icon.swift` and `Icon.kt` both fall back to an EMPTY path list, so a key
-    // the table does not hold renders a blank chip and nothing fails. These are
-    // the keys typed into the views rather than declared in a Kotlin policy —
-    // the half `CatalogSpec` cannot enumerate.
+    // Unknown view-layer keys silently render blank in both shells.
     const literal = /iconKey\s*[:=]\s*"(?<key>[^"]+)"/gu;
     const named = new Map<string, string>();
     for (const file of walkShellSources()) {
@@ -171,15 +133,7 @@ describe("single icon registry", () => {
   });
 });
 
-// ── App-icon silhouette contract (handoff brief, "App icons") ──────────────
-//
-// The brief's two-tone filled mark — evenodd knockouts plus a 50%-opacity
-// decorative path — is not what this repo ships: icons are single-tone strokes,
-// so a test for "identity absent from the secondary path" would pass vacuously.
-// This suite pins the stronger guarantee the current model does give: no path
-// carries baked-in colour, only `currentColor`. `fillRule` is the seam —
-// `pathMarkup` already emits it, so the contract activates the day a filled
-// mark is authored.
+// Paths use currentColor. Filled marks must preserve fillRule.
 describe("app-icon silhouette contract", () => {
   const appIconNames = [...new Set(apps.map((app) => app.iconKey))];
 
@@ -241,10 +195,7 @@ describe("app-icon silhouette contract", () => {
   });
 });
 
-// ── Photos v4 handoff icon keys (CHANGELOG v4 - Photos.md §B2) ─────────────
-//
-// The lowercase names are the binding part, so these are checked by literal key
-// and deliberately never through the PascalCase `ICON_CONCEPTS` layer.
+// Photos handoff binds lowercase keys directly.
 describe("Photos v4 handoff icon keys", () => {
   const PHOTOS_ICON_KEYS = [
     "heart",

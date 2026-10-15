@@ -945,6 +945,13 @@ fn cargo_subcommand_available(root: &Path, subcommand: &str) -> bool {
 /// both; 240 s of test time back to back under `cargo test`, a 69 s run under
 /// nextest).
 fn run_tests(ctx: &Ctx) -> Result<Outcome> {
+    // The C harness links the workspace cdylib, which `cargo test` does not
+    // refresh. Build with workspace feature resolution before either runner
+    // so a restored library cannot exercise a previous schema or ABI.
+    let built = process(ctx, "test-build", "cargo", &["build", "--workspace"])?;
+    if !matches!(built, Outcome::Ok(_)) {
+        return Ok(built);
+    }
     if !cargo_subcommand_available(&ctx.root, "nextest") {
         return process(ctx, "test", "cargo", &["test", "--workspace"]);
     }

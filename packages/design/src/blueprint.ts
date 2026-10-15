@@ -1,15 +1,5 @@
-// Blueprint CSS lowering.
-//
-// Blueprint apps share the same role NAMES and now the same VALUES as the
-// shell: the Binding Layer has one ink ramp and one paper, and an app surface
-// that quietly re-tuned its own greys was the mechanism by which "one product"
-// stopped being true. The two remaining blueprint adaptations are real ones —
-// host-relative type units (rem, so 200% OS text scale works), and the fact
-// that an app owns an identity hue while the shell owns none.
-//
-// The surface ramp is NOT parameterised by `--app-hue`: that hue is only the
-// app's slot on the OKLCH identity wheel, and the neutrals are the system's
-// literal paper.
+// Blueprint lowering shares the system ink and paper. Type uses host-relative
+// rem units; the app hue owns identity only, never the neutral surface ramp.
 
 import {
   DENSITY_TIERS,

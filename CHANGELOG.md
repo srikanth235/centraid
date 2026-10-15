@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+- CI scans the root Rust workspace lockfile, refuses empty supply-chain scans, installs buf in both nightly consumers, and records the existing assistant unsafe surface with its safety evidence ([#1108](https://github.com/srikanth235/centraid/issues/1108)).
+
 ### Added
 
 - **Money in the assistant** ([#1099](https://github.com/srikanth235/centraid/issues/1099)). The assistant reads a member's transactions of this month and the two before it (date, signed amount in the account's currency, account, category, display name, status) and can find, open and sum them; sums stay one figure per currency. Read-only in v0: it cannot categorise or void. A chat card on a transaction opens Money's home. The phone's session leaves Money off (`Flags::money`) until the shipped model has been measured with the new kind in its prompt.
@@ -227,3 +229,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Read-only CLI verbs (`devices list`, `backup status`, `backup list`) report that the running daemon owns the database instead of a raw `database is locked` stack trace ([#568](https://github.com/srikanth235/centraid/issues/568))
 - macOS network-filesystem detection reads the mount table's filesystem type; the previous probe could never match and also suppressed its own fallback ([#568](https://github.com/srikanth235/centraid/issues/568))
 - Re-opening the founding QR while a restore is downloading no longer destroys that restore ([#568](https://github.com/srikanth235/centraid/issues/568))
+
+- #1108: Retry transient lane-health gateway failures without suppressing errors; reconcile deleted push commands and pin surviving bundle identities.
+
+- #1108: Repair Money protobuf enum sizing, existing card-route metadata, synthetic secret-scanner fixture naming and runtime test handles after #1112; preserve checks and budgets.
