@@ -3,14 +3,14 @@
   "skips": {
     "_comment": "The skip budget (#656 Layer 2). Every deliberate hole in the suite — test.skip / describe.skipIf / .todo / runtime t.skip() / a CENTRAID_* or CLAWGNITION_* opt-in env gate — is inventoried here with an OPEN tracking issue and a reason. scripts/test-report/skip-inventory.mjs discovers the population by scanning; validate-matrix.mjs (in check:pr) fails on an uninventoried skip, on a stale entry, and whenever the count differs from _budget. _budget is DOWN-ONLY: deleting a skip must lower it in the same change, and adding one costs an explicit hand edit plus an issue. Keys are <path>#<ordinal> (nth skip site in that file) so they survive line drift; `line` is informational and refreshed by `node scripts/test-report/skip-inventory.mjs --write`. A skip site also forbids its file from backing a computed-solid matrix cell — see scripts/test-report/matrix-grades.mjs.",
     "_entries": "exceptions",
-    "_budget": 3,
+    "_budget": 0,
     "approvedDeviation": "#1120 removes the 22 `sites` whose files no longer exist (the retired apps/** and packages/** test trees, plus the tests/perf, tests/scale and scripts/gateway-package files deleted with them) and lowers `_budget` 25 to 3 with them, exactly the count of rows removed; no surviving row exists to move. Prior: #799 — the budget falls 30 → 25 (down-only). The five retired sites were all permanent skips against the served-app plane: the three desktop copilot cases (7.2–7.4) drove a panel inside the app iframe, builder publish drove the app builder, and the app-bundle case gated on the shipped Photos + kit dirs the whole-graph asset bundler read. Stages 2 and 3 of #799 delete those surfaces, so the holes close by removal rather than by fix.",
     "sites": {}
   },
   "envRed": {
     "_comment": "Deterministically-environment-red inventory (#781). A test whose law cannot hold in a known environment — the wal-shipper [G4] class, fixed as an instance in #782 — is neither a flake (tests/quarantine.json) nor merely a declared skip (tests/skips.json): quarantine would exclude it everywhere to silence one environment, and the skip budget records the hole without the environment shape or a revisit discipline. The mechanism is therefore a REQUIRED env guard (skipIf / runtime t.skip — which also lands in the skip budget) plus this ledger: every environment-predicate guard site (process.platform / process.arch / process.getuid comparisons in test files, discovered by scripts/test-report/env-red-inventory.mjs over the same globs as skip-inventory) must be recorded here with the guarded test, the human-readable predicate, the guard mechanism, an OPEN tracking issue, and an expiresAt date or a revisitTrigger sentence. An expired entry is a hard failure; _budget is DOWN-ONLY — the way to shrink this file is the #782 move: rewrite the test so the environment stops mattering. Keys are <path>#<ordinal>; `line` is informational and refreshed by `node scripts/test-report/env-red-inventory.mjs --write`.",
     "_entries": "exceptions",
-    "_budget": 2,
+    "_budget": 0,
     "approvedDeviation": "#1120 removes the 4 `sites` whose files no longer exist (packages/server and packages/vault integration tests of the retired TypeScript gateway) and lowers `_budget` 6 to 2 with them, exactly the count of rows removed.",
     "sites": {}
   },
