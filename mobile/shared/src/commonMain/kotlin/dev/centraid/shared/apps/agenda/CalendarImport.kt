@@ -91,11 +91,14 @@ public data class PhoneSeries(
  * cancelled there, and becomes a skip; one the member moved becomes an
  * override (`schedule.edit_event_occurrence`); one the phone shows and the
  * vault does not expand is written on its own, so nothing is lost where the
- * two readings of a rule differ. **A rule the vault refuses** — `BYSETPOS`
- * or a positional `BYDAY`, for instance (`rrule.rs` holds the whole list) —
- * falls back to the occurrences in the window, each its own event: a refused
- * rule kept would expand to nothing, and a reworded one would repeat on the
- * wrong days.
+ * two readings of a rule differ. **A rule the vault refuses** — `BYSETPOS`,
+ * a `BYDAY` list or a `BYMONTHDAY` list, for instance (`rrule.rs` holds the
+ * whole list) — falls back to the occurrences in the window, each its own
+ * event: a refused rule kept would expand to nothing, and a reworded one
+ * would repeat on the wrong days. What the vault takes of a monthly rule
+ * (#1119, R-1119-1) is ONE positional `BYDAY` (`2MO`, `-1FR`; first to fourth
+ * or last) or ONE `BYMONTHDAY` (`1`..`31` or `-1`), with RFC 5545's meaning —
+ * a month without that day has no occurrence — so [rule] keeps both.
  *
  * **The one loss**: an occurrence the member moved from inside the window to
  * outside it is not in the phone's answer at all, so it reads as cancelled
@@ -211,12 +214,15 @@ public object CalendarImport {
 
     /**
      * THE RULE AS THE VAULT TAKES IT, or empty for none. The `RRULE:` prefix
-     * goes, and a part that only restates the anchor goes with it — a monthly
-     * rule's `BYMONTHDAY` on the first occurrence's own day, a yearly one's
-     * `BYMONTH` on its own month, a `WKST` that moves no day — because
-     * EventKit and Google write those out and the vault, which steps from the
-     * anchor, refuses them. Any other
-     * part stays, and a rule the vault cannot honour is refused there.
+     * goes, and a part that only restates the anchor goes with it — a yearly
+     * rule's `BYMONTHDAY` on the first occurrence's own day and its `BYMONTH`
+     * on its own month, a `WKST` that moves no day — because EventKit and
+     * Google write those out and the vault, which steps from the anchor,
+     * refuses them. **A monthly rule's `BYMONTHDAY` and positional `BYDAY`
+     * stay** (#1119): the vault expands them, and dropping a `BYMONTHDAY=31`
+     * would turn "the 31st" into "the last day" in the short months. Any
+     * other part stays too, and a rule the vault cannot honour is refused
+     * there.
      */
     public fun rule(rrule: String, start: String): String {
         val text = rrule.trim().removePrefix("RRULE:").trim().trimEnd(';')
@@ -231,7 +237,7 @@ public object CalendarImport {
         val interval = parts.firstOrNull { it.startsWith("INTERVAL=") }?.removePrefix("INTERVAL=")?.toIntOrNull() ?: 1
         val weekStartMatters = freq == "WEEKLY" && interval > 1 && parts.any { it.startsWith("BYDAY=") }
         return parts.filterNot { part ->
-            (freq == "MONTHLY" || freq == "YEARLY") && part == "BYMONTHDAY=$day" ||
+            freq == "YEARLY" && part == "BYMONTHDAY=$day" ||
                 freq == "YEARLY" && part == "BYMONTH=$month" ||
                 !weekStartMatters && part.startsWith("WKST=")
         }.joinToString(";")

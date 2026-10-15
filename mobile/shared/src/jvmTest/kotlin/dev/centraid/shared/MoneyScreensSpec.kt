@@ -63,6 +63,7 @@ import dev.centraid.shared.apps.money.MoneyInput
 import dev.centraid.shared.apps.money.MoneyPlanOutcome
 import dev.centraid.shared.apps.money.MoneyRecurringMachine
 import dev.centraid.shared.apps.money.MoneyRulesMachine
+import dev.centraid.shared.apps.money.MoneyRulesReads
 import dev.centraid.shared.apps.money.MoneySearchMachine
 import dev.centraid.shared.apps.money.MoneySearchReads
 import dev.centraid.shared.apps.money.MoneyTargetMachine
@@ -663,11 +664,13 @@ class MoneyScreensSpec : StringSpec({
 
     "rules add, edit, delete and apply to history, each after the member decides" {
         val opened = open(MoneyRulesMachine, MoneyRulesEvent(opened = MoneyRulesEvent.Opened(draft_token = "tok")))
+        MoneyRulesReads.requests(opened, CLOCK)!!.mapNotNull { it.money_accounts?.tz } shouldBe listOf("Europe/Lisbon")
         val held = answeredWith(
             MoneyRulesMachine,
             opened,
             AppQueryResponse(money_rules = rules()),
             AppQueryResponse(money_categories = categories()),
+            AppQueryResponse(money_accounts = accounts()),
         )
         val data = held.screen.data_.shouldNotBeNull()
         data.rows.single().title shouldBe "TRADER JOE S"
@@ -693,7 +696,7 @@ class MoneyScreensSpec : StringSpec({
         edit.screen.editor?.category_id shouldBe "c-groc"
         val saved = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(save = MoneyRulesEvent.Save())))
         (saved.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
-            """{"rule_id":"r1","match_kind":"contains","pattern":"TRADER JOE S","set_category_concept_id":"c-groc","set_display_name":"Trader Joe’s"}"""
+            """{"rule_id":"r1","match_kind":"contains","pattern":"TRADER JOE S","set_category_concept_id":"c-groc","set_display_name":"Trader Joe’s","amount_min_minor":null,"amount_max_minor":null,"account_id":null}"""
 
         // Delete and apply both ask first.
         val delete = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(delete = MoneyRulesEvent.DeleteTapped())))
@@ -709,6 +712,195 @@ class MoneyScreensSpec : StringSpec({
         (MoneyRulesMachine.reduce(applyAll.state, view(MoneyRulesEvent(confirm_accepted = MoneyRulesEvent.ConfirmAccepted()))).effects.single() as ScreenEffect.SubmitWrite)
             .inputJson shouldBe "{}"
         MoneyRulesMachine.reduce(applyAll.state, view(MoneyRulesEvent(confirm_dismissed = MoneyRulesEvent.ConfirmDismissed()))).state.screen.confirm.shouldBeNull()
+    }
+
+    "the bank's number is removed by its own action, after a confirm, and the mask is never sent" {
+        val opened = open(MoneyAccountsMachine, MoneyAccountsEvent(opened = MoneyAccountsEvent.Opened(draft_token = "tok")))
+        val held = answeredWith(MoneyAccountsMachine, opened, AppQueryResponse(money_accounts = accounts()))
+        val edit = MoneyAccountsMachine.reduce(held, view(MoneyAccountsEvent(account = MoneyAccountsEvent.AccountPicked(account_id = "a-chase")))).state
+        val editor = edit.screen.editor.shouldNotBeNull()
+        editor.has_external_ref shouldBe true
+        editor.remove_number_label shouldBe MoneyCopy.ACCOUNT_REMOVE_NUMBER
+        editor.can_remove_number shouldBe true
+        // The field starts empty: the last four digits are never put in it.
+        editor.external_ref shouldBe ""
+
+        // It asks first, and a dismissed ask writes nothing.
+        val ask = MoneyAccountsMachine.reduce(edit, view(MoneyAccountsEvent(remove_number = MoneyAccountsEvent.RemoveNumberTapped())))
+        ask.effects.shouldBeEmpty()
+        ask.state.screen.confirm?.destructive shouldBe true
+        ask.state.screen.confirm?.title shouldBe MoneyCopy.ACCOUNT_REMOVE_NUMBER_TITLE
+        MoneyAccountsMachine.reduce(ask.state, view(MoneyAccountsEvent(confirm_dismissed = MoneyAccountsEvent.ConfirmDismissed())))
+            .let { it.effects.shouldBeEmpty(); it.state.screen.confirm.shouldBeNull() }
+
+        // Confirmed: the number alone, as null.
+        val sent = MoneyAccountsMachine.reduce(ask.state, view(MoneyAccountsEvent(confirm_accepted = MoneyAccountsEvent.ConfirmAccepted())))
+        val write = sent.effects.single() as ScreenEffect.SubmitWrite
+        write.command shouldBe "money.edit_account"
+        write.inputJson shouldBe """{"account_id":"a-chase","external_ref":null}"""
+        write.inputJson.contains("2291") shouldBe false
+        sent.state.screen.confirm.shouldBeNull()
+        val done = MoneyAccountsMachine.reduce(sent.state, MoneyInput.Settled(WriteSettled(invoke_key = write.invokeKey, committed = true))).state
+        done.screen.editor.shouldBeNull()
+        done.screen.status?.sentence shouldBe MoneyCopy.ACCOUNT_NUMBER_REMOVED
+
+        // Typing a new number still replaces it, and an empty field keeps it.
+        val typed = MoneyAccountsMachine.reduce(edit, view(MoneyAccountsEvent(external_ref = MoneyAccountsEvent.ExternalRefEdited(text = " 777001 ")))).state
+        (MoneyAccountsMachine.reduce(typed, view(MoneyAccountsEvent(save = MoneyAccountsEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
+            .inputJson shouldBe """{"account_id":"a-chase","name":"Chase Total Checking","kind":"checking","on_budget":true,"external_ref":"777001"}"""
+
+        // An account with no number offers nothing to remove.
+        val bare = accounts().copy(off_budget = accounts().off_budget.map { it.copy(mask = null) })
+        val bareHeld = answeredWith(MoneyAccountsMachine, opened, AppQueryResponse(money_accounts = bare))
+        val bareEdit = MoneyAccountsMachine.reduce(bareHeld, view(MoneyAccountsEvent(account = MoneyAccountsEvent.AccountPicked(account_id = "a-tang")))).state
+        bareEdit.screen.editor?.remove_number_label shouldBe ""
+        bareEdit.screen.editor?.can_remove_number shouldBe false
+        MoneyAccountsMachine.reduce(bareEdit, view(MoneyAccountsEvent(remove_number = MoneyAccountsEvent.RemoveNumberTapped())))
+            .state.screen.confirm.shouldBeNull()
+        // A new account has no number to remove either.
+        val add = MoneyAccountsMachine.reduce(held, view(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped()))).state
+        add.screen.editor?.remove_number_label shouldBe ""
+    }
+
+    "a rule's limits and account are shown in its account's currency and sent back as they stand" {
+        val held = rulesHeld(limitedRules())
+        val edit = MoneyRulesMachine.reduce(held, view(MoneyRulesEvent(rule = MoneyRulesEvent.RulePicked(rule_id = "r2")))).state
+        val editor = edit.screen.editor.shouldNotBeNull()
+        editor.account_id shouldBe "a-chase"
+        editor.account_label shouldBe "Chase Total Checking"
+        editor.amount_min_text shouldBe "5.00"
+        editor.amount_max_text shouldBe "200.00"
+        editor.amount_min shouldBe centraid.screen.v1.Money(minor = 500, currency = "USD", exponent = 2)
+        editor.amount_max shouldBe centraid.screen.v1.Money(minor = 20_000, currency = "USD", exponent = 2)
+        editor.amount_min_label shouldBe "Smallest amount · USD"
+        editor.amount_max_label shouldBe "Largest amount · USD"
+        editor.limits_enabled shouldBe true
+        editor.amount_note shouldBe MoneyCopy.RULE_AMOUNT_NOTE
+
+        // UNTOUCHED: the same values go back.
+        val untouched = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(save = MoneyRulesEvent.Save())))
+        (untouched.effects.single() as ScreenEffect.SubmitWrite).inputJson shouldBe
+            """{"rule_id":"r2","match_kind":"contains","pattern":"COSTCO","set_category_concept_id":"c-groc","set_display_name":null,"amount_min_minor":500,"amount_max_minor":20000,"account_id":"a-chase"}"""
+
+        // EDITED: the typed amounts, in minor units.
+        val min = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(amount_min = MoneyRulesEvent.AmountMinEdited(text = "10")))).state
+        val max = MoneyRulesMachine.reduce(min, view(MoneyRulesEvent(amount_max = MoneyRulesEvent.AmountMaxEdited(text = "250.50")))).state
+        (MoneyRulesMachine.reduce(max, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
+            .inputJson shouldBe
+            """{"rule_id":"r2","match_kind":"contains","pattern":"COSTCO","set_category_concept_id":"c-groc","set_display_name":null,"amount_min_minor":1000,"amount_max_minor":25050,"account_id":"a-chase"}"""
+
+        // CLEARED: each limit and the account go as null.
+        val noMin = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(amount_min = MoneyRulesEvent.AmountMinEdited(text = "")))).state
+        val noMax = MoneyRulesMachine.reduce(noMin, view(MoneyRulesEvent(amount_max = MoneyRulesEvent.AmountMaxEdited(text = "  ")))).state
+        val sheet = MoneyRulesMachine.reduce(noMax, view(MoneyRulesEvent(account_sheet = MoneyRulesEvent.AccountSheetOpened()))).state
+        sheet.screen.sheet shouldBe MoneyRulesState.Sheet.SHEET_ACCOUNT
+        val options = sheet.screen.data_?.account_options.shouldNotBeNull()
+        options.map { it.key } shouldBe listOf("", "a-chase", "a-amex", "a-tang")
+        options.first().label shouldBe MoneyCopy.RULE_ACCOUNT_ANY
+        options.first { it.selected }.key shouldBe "a-chase"
+        sheet.screen.data_?.account_sheet_title shouldBe MoneyCopy.RULE_ACCOUNT_SHEET_TITLE
+        val any = MoneyRulesMachine.reduce(sheet, view(MoneyRulesEvent(account = MoneyRulesEvent.AccountPicked(account_id = "")))).state
+        any.screen.sheet shouldBe MoneyRulesState.Sheet.SHEET_EDITOR
+        any.screen.editor?.account_label shouldBe ""
+        (MoneyRulesMachine.reduce(any, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
+            .inputJson shouldBe
+            """{"rule_id":"r2","match_kind":"contains","pattern":"COSTCO","set_category_concept_id":"c-groc","set_display_name":null,"amount_min_minor":null,"amount_max_minor":null,"account_id":null}"""
+
+        // Closing the account sheet returns to the editor with the account as it was.
+        MoneyRulesMachine.reduce(sheet, view(MoneyRulesEvent(sheet_closed = MoneyRulesEvent.SheetClosed()))).state.screen.sheet shouldBe
+            MoneyRulesState.Sheet.SHEET_EDITOR
+    }
+
+    "a rule's smallest amount above its largest is refused, with a sentence" {
+        val held = rulesHeld(limitedRules())
+        val edit = MoneyRulesMachine.reduce(held, view(MoneyRulesEvent(rule = MoneyRulesEvent.RulePicked(rule_id = "r2")))).state
+        val min = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(amount_min = MoneyRulesEvent.AmountMinEdited(text = "300")))).state
+        min.screen.editor?.can_save shouldBe false
+        min.screen.editor?.issue shouldBe MoneyCopy.RULE_LIMITS_ORDER
+        MoneyRulesMachine.reduce(min, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.shouldBeEmpty()
+        // Equal is allowed; one limit alone is never compared.
+        val equal = MoneyRulesMachine.reduce(min, view(MoneyRulesEvent(amount_min = MoneyRulesEvent.AmountMinEdited(text = "200")))).state
+        equal.screen.editor?.can_save shouldBe true
+        val onlyMin = MoneyRulesMachine.reduce(min, view(MoneyRulesEvent(amount_max = MoneyRulesEvent.AmountMaxEdited(text = "")))).state
+        onlyMin.screen.editor?.can_save shouldBe true
+        // Words that are not an amount are refused too.
+        val words = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(amount_max = MoneyRulesEvent.AmountMaxEdited(text = "lots")))).state
+        words.screen.editor?.can_save shouldBe false
+        words.screen.editor?.issue shouldBe MoneyCopy.AMOUNT_INVALID
+        MoneyRulesMachine.reduce(words, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.shouldBeEmpty()
+    }
+
+    "a rule's limits lock where no one exponent is known, and go back unchanged" {
+        val yen = accounts().copy(
+            off_budget = accounts().off_budget + MoneyAccounts.AccountLine(
+                account_id = "a-yen",
+                name = "Yen Wallet",
+                kind = "cash",
+                currency = "JPY",
+                balance = amount(5_000, "JPY", 0),
+            ),
+        )
+        val held = rulesHeld(limitedRules(), yen)
+        // r3 names no account, and the accounts disagree about decimals.
+        val edit = MoneyRulesMachine.reduce(held, view(MoneyRulesEvent(rule = MoneyRulesEvent.RulePicked(rule_id = "r3")))).state
+        val locked = edit.screen.editor.shouldNotBeNull()
+        locked.limits_enabled shouldBe false
+        locked.amount_note shouldBe MoneyCopy.RULE_LIMITS_LOCKED_NOTE
+        locked.amount_min_label shouldBe MoneyCopy.RULE_AMOUNT_MIN
+        locked.amount_min_text shouldBe ""
+        (MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
+            .inputJson shouldBe
+            """{"rule_id":"r3","match_kind":"contains","pattern":"ATM","set_category_concept_id":"c-util","set_display_name":null,"amount_min_minor":500,"amount_max_minor":null,"account_id":null}"""
+        // Naming an account says which decimals the limits are in: they show.
+        val named = MoneyRulesMachine.reduce(edit, view(MoneyRulesEvent(account = MoneyRulesEvent.AccountPicked(account_id = "a-yen")))).state
+        named.screen.editor?.limits_enabled shouldBe true
+        named.screen.editor?.amount_min_text shouldBe "500"
+        named.screen.editor?.amount_max_text shouldBe ""
+        named.screen.editor?.amount_max_label shouldBe "Largest amount · JPY"
+        named.screen.editor?.amount_note shouldBe "${MoneyCopy.RULE_AMOUNT_NOTE} ${MoneyCopy.WHOLE_UNITS}"
+        (MoneyRulesMachine.reduce(named, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
+            .inputJson shouldBe
+            """{"rule_id":"r3","match_kind":"contains","pattern":"ATM","set_category_concept_id":"c-util","set_display_name":null,"amount_min_minor":500,"amount_max_minor":null,"account_id":"a-yen"}"""
+
+        // An account the page cannot name stays as it is, with its limits locked.
+        val strange = MoneyRules(
+            limit = 500,
+            rules = listOf(
+                MoneyRules.RuleLine(
+                    rule_id = "r4",
+                    kind = MoneyMatchKind.MONEY_MATCH_KIND_IS,
+                    pattern = "OLD",
+                    amount_max = 9_900,
+                    account_label = "Closed Elsewhere",
+                    display_name = "Old",
+                ),
+            ),
+        )
+        val strangeEdit = MoneyRulesMachine.reduce(
+            rulesHeld(strange),
+            view(MoneyRulesEvent(rule = MoneyRulesEvent.RulePicked(rule_id = "r4"))),
+        ).state
+        strangeEdit.screen.editor?.limits_enabled shouldBe false
+        (MoneyRulesMachine.reduce(strangeEdit, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
+            .inputJson shouldBe
+            """{"rule_id":"r4","match_kind":"is","pattern":"OLD","set_category_concept_id":null,"set_display_name":"Old","amount_min_minor":null,"amount_max_minor":9900}"""
+    }
+
+    "a new rule can carry limits and an account, and sends only what is set" {
+        val held = rulesHeld(rules())
+        val add = MoneyRulesMachine.reduce(held, view(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped()))).state
+        val editor = add.screen.editor.shouldNotBeNull()
+        // Every account has two decimals, so the limits are typed in them.
+        editor.limits_enabled shouldBe true
+        val pattern = MoneyRulesMachine.reduce(add, view(MoneyRulesEvent(pattern = MoneyRulesEvent.PatternEdited(text = "COSTCO")))).state
+        val named = MoneyRulesMachine.reduce(pattern, view(MoneyRulesEvent(name = MoneyRulesEvent.NameEdited(text = "Costco")))).state
+        val max = MoneyRulesMachine.reduce(named, view(MoneyRulesEvent(amount_max = MoneyRulesEvent.AmountMaxEdited(text = "150")))).state
+        val account = MoneyRulesMachine.reduce(max, view(MoneyRulesEvent(account = MoneyRulesEvent.AccountPicked(account_id = "a-amex")))).state
+        (MoneyRulesMachine.reduce(account, view(MoneyRulesEvent(save = MoneyRulesEvent.Save()))).effects.single() as ScreenEffect.SubmitWrite)
+            .inputJson shouldBe
+            """{"rule_id":"rule-tok-1","match_kind":"contains","pattern":"COSTCO","set_display_name":"Costco","amount_max_minor":15000,"account_id":"a-amex"}"""
+        // An account that is not among the answered ones is not taken.
+        MoneyRulesMachine.reduce(max, view(MoneyRulesEvent(account = MoneyRulesEvent.AccountPicked(account_id = "a-nope")))).state shouldBe max
     }
 
     "categories add under a group, archive and restore, and merge only after a confirm" {
@@ -943,6 +1135,42 @@ class MoneyScreensSpec : StringSpec({
                 ),
             ),
         )
+
+        /** The rules, with two that carry limits: r2 is limited to Chase, r3 to no account. */
+        fun limitedRules() = rules().let { base ->
+            base.copy(
+                rules = base.rules + listOf(
+                    MoneyRules.RuleLine(
+                        rule_id = "r2",
+                        kind = MoneyMatchKind.MONEY_MATCH_KIND_CONTAINS,
+                        pattern = "COSTCO",
+                        amount_min = 500,
+                        amount_max = 20_000,
+                        account_label = "Chase Total Checking",
+                        category_label = "Groceries",
+                        specificity = 4,
+                    ),
+                    MoneyRules.RuleLine(
+                        rule_id = "r3",
+                        kind = MoneyMatchKind.MONEY_MATCH_KIND_CONTAINS,
+                        pattern = "ATM",
+                        amount_min = 500,
+                        category_label = "Utilities",
+                        specificity = 2,
+                    ),
+                ),
+            )
+        }
+
+        /** The Rules page, answered with its rules, the categories and the accounts. */
+        fun rulesHeld(rules: MoneyRules, accounts: MoneyAccounts = accounts()): MoneyHeld<MoneyRulesState> =
+            answeredWith(
+                MoneyRulesMachine,
+                open(MoneyRulesMachine, MoneyRulesEvent(opened = MoneyRulesEvent.Opened(draft_token = "tok"))),
+                AppQueryResponse(money_rules = rules),
+                AppQueryResponse(money_categories = categories()),
+                AppQueryResponse(money_accounts = accounts),
+            )
 
         fun targetSheet() = MoneyTargetSheet(
             category_id = "c-util",
