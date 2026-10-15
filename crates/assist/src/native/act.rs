@@ -1440,6 +1440,25 @@ impl Session {
     ) -> Result<Outcome, String> {
         let mut plans = Vec::new();
         for key in targets {
+            // A ROW THAT GOES INTO NO CONTAINER (a person, an event) put into one: nothing can lift
+            // that, and no other row repairs it, because the destination decides and not the name.
+            // The words of a near spelling of some other row (`Did you mean`) must not preempt it.
+            if matches!(verb, Verb::AddTo | Verb::RemoveFrom)
+                && verb.command(key.0).is_none()
+                && container_of(key.0).is_none()
+            {
+                let refusal = not_container_verb(verb, &self.row_of(key)?);
+                if self.flags.compose {
+                    return Ok(self.compose_declined_write(
+                        verb,
+                        key,
+                        &refusal,
+                        "wrong_container",
+                        "out_of_scope",
+                    ));
+                }
+                return Err(refusal);
+            }
             if verb.command(key.0).is_none() {
                 let kinds: Vec<&str> = verb.kinds().iter().map(|kind| kind.name()).collect();
                 let mut refusal = format!(

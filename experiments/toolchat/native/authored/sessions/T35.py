@@ -46,6 +46,14 @@ S("T35-008", "event name month status person",
   T("how many actually ran in august", val(3),
     ref=[ans(op="count", kind="event", name="wednesday race", when=J(U("month", 0, name=8)), where="status != cancelled")]))
 
+S("T35-009", "create clash ask wrong-container decline",
+  T("book a call with marit friday at 11", ask("cod_team"),
+    ref=[act("create", args=lines(kind="event", name="Call with Marit", date=U("week", 0, weekday=5, time="11:00")))]),
+  T("ok make it 2", diff(new("event", name=has("marit"), date="2026-11-13T14:00")),
+    ref=[act("create", args=lines(kind="event", name="Call with Marit", date=U("week", 0, weekday=5, time="14:00")))]),
+  T("add sigrid to it", decline("out_of_scope"),
+    ref=[act("add_to", rows="$sigrid", args=lines(to="$c1"))]))
+
 S("T35-010", "person tasks narrowing complete reschedule",
   T("what do i still have for ola", rows("sample_log", "cod_echo"),
     ref=[ans(kind="task", linked_to="$ola", where="status = open")]),

@@ -64,6 +64,15 @@ S("T33-033", "locker star find-then-restore past-window-decline",
     ref=[find(kind="locker item", name="hdb wifi", trashed="true"),
          act("restore", rows="@prev")]))
 
+S("T33-035", "create-event two-writes-one-row wrong-container-decline",
+  T("dinner with celine thursday at 7:30", diff(new("event", name=has("celine"), date="2026-12-17T19:30")),
+    ref=[act("create", kind="event", args="name: Dinner with Celine\ndate: " + J(U("week", 1, weekday=4, time="19:30")))]),
+  T("make it two hours, start at 8", diff(upd("+1", duration=120, date="2026-12-17T20:00")),
+    ref=[act("edit", rows="$c1", args="duration: 120", more="true"),
+         act("reschedule", rows="$c1", args=lines(to=U("week", 1, weekday=4, time="20:00")))]),
+  T("invite celine to it", decline("out_of_scope"),
+    ref=[act("add_to", rows="$celine", args="to: $c1")]))
+
 S("T33-036", "find-then-add_to whole-result count-three narrow-date",
   T("stick all the tasks that aren't on a list into the money list",
     diff(link("money_l", "pay_priya"), link("money_l", "pay_jiahui"), link("money_l", "pay_weijie"), link("money_l", "pay_junhao")),

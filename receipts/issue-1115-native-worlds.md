@@ -16,21 +16,23 @@
 
 **The seeder** (`crates/nativetools/src/seed.rs`). A top-level key that is none of the scalars and sections it reads is an error naming the key, so a stale builder fails at the seed. `today` stays allowed: the Python tools read it (T29 to T38 carry it, and the first run of the rule found it). Test: `a_section_the_seeder_does_not_read_is_an_error`. The same crate drops `vault_of` from `tests/phase9_nt9b.rs`, which no test calls since #1112.
 
-**The sessions** (`authored/sessions/`). 1,416 of 6,816 sessions leave, with the 38 turns appended to them (`X(...)`) and 199 helper definitions only they used (`OWED = 'direction = "owes_me" ...'`, `TOP3 = find(kind="debt", ...)`):
+**The sessions** (`authored/sessions/`). 1,413 of 6,816 sessions leave, with the 38 turns appended to them (`X(...)`) and 199 helper definitions only they used (`OWED = 'direction = "owes_me" ...'`, `TOP3 = find(kind="debt", ...)`):
 
 - 1,388 name a removed row by key (in a reference call or in the gold), or a removed kind, verb or op (`debt`, `group`, `settle_up`, `settle_debt`, `balance`, `owes_me`, `i_owe`, `settle=`); the message and the tags are never read;
 - 5 reach one through a helper;
-- 23 verified before #1112 (the tree at `d8c0b99b4`, the old runtime and the old worlds) and no longer verify, 20 of them `trace unsourced`: a `where` value ("Ward 7", "Leeds Photo Co-op", `cadence >= 30 days`) that the vault block used to show through a group's name or a former parse, and three adds of a person "to it" that ended in a decline.
+- 20 verified before #1112 (the tree at `d8c0b99b4`, the old runtime and the old worlds) and no longer verify, all `trace unsourced`: a `where` value ("Ward 7", "Leeds Photo Co-op", `cadence >= 30 days`) that the vault block used to show through a group's name or a former parse. (A first count was 23; the other three, T33-035, T34-017 and T35-009, hid a runtime regression and are back, see "Runtime fix".)
 
-5,400 sessions remain. The build (`authored/build.py W --gold-from-ref`, 35 worlds) verified 5,283 of the 5,423 in the tree then; the 23 above were removed after it and the rest are unchanged. The old tree verified 6,654 of 6,816, so the share that builds is the same (97.6 % before, 97.8 % after); the 117 that do not build were failing before #1112 and are left as they were.
+5,403 sessions remain. The build (`authored/build.py W --gold-from-ref`, 35 worlds) verified 5,283 of the 5,423 in the tree then; the 20 above were removed after it, the rest are unchanged, and the three restored sessions verify on the fixed runtime (5,286 in all). The old tree verified 6,654 of 6,816, so the share that builds is the same (97.6 % before, 97.8 % after); the 117 that do not build were failing before #1112 and are left as they were.
 
 **The code** (`authored/*.py`, `authored/gen/*.py`, `eval/*.py`, `train/*.py`): the verb list, the `balance` op, the directory regex, the `settle_*` lexicons and intent cues, the `direction` and `settled` words, the person's-own-row guard of `noise.py` (`SENSE`, `me_hit`: the runtime dropped the rule), the `debt` and `group` kind tables of the drill generator, its `debt`, `group`-twin and `sum` drills (the only sum was over debts), the `balance_person` error family and its mutator, `settle` in `gold.py`, `lib.py` and `score.py`, the `debt-or-person` and `narrowed-balance` conventions and the `settle` bookkeeping of `regen.py`, `conventions.py`' balance sign, the hand corrections of ten held-out turns that named a debt or a group, `view_world.py`' balances, `fmt.py`' `direction` hard parameter (no tool has one). `fixture_world.py` holds two transactions instead of debts and groups; the tests that needed money use them.
 
 **Tests removed with the machinery they tested (21 of 1,139):** `test_regen`: `test_settle_up_is_the_settlement_and_not_a_balance_change`, `test_a_balance_that_did_not_reach_zero_is_a_change_not_a_settlement`, `test_who_owes_me_has_the_people_of_the_debts_beside_the_debt_rows`, `test_two_debts_of_one_person_are_one_person`, `test_a_check_the_accept_carries_stays_with_the_people`, `test_the_people_of_the_debts_need_the_words_and_debt_rows`, `test_the_cues_of_the_debt_idiom`, `test_the_people_when_the_run_answers_the_debts_and_the_other_way_round`; `test_audit`: the eight `NarrowedBalance` tests, `test_the_next_fix_answers_the_members_of_the_group_the_call_is_linked_to`, `test_the_who_owes_fix_adds_the_debt_row_beside_the_person` and `test_the_number_fix_adds_the_ask_and_the_out_of_scope_decline_beside_the_balance` (they pin the removed hand corrections); `test_score`: `test_settle_up_balance_row`; `test_gen`: `test_balance`. No test of a convention or a family that still exists was removed or loosened; the ones that used a debt or a group as their data (`test_a_money_field_has_the_currency_of_the_vault`, `test_the_effect_names_the_refusal_and_the_verb_can_be_any`, the nickname chain, the drill evaluator's `where`, `sel_pair`, `tidy` and `follow_*` tests, `test_noise`'s world) run on a transaction, a folder refusal, a count and the other kinds, with the same assertions.
 
+**Runtime fix** (`crates/assist/src/native/act.rs`). The audit found that three of the sessions first removed (T33-035 "invite celine to it", T34-017 "and add chinwe to it", T35-009 "add sigrid to it", each after creating an event) hid a regression of #1112, not stale data. Before it, adding a person to an event reached `plan_membership` and ended in the composed `wrong_container` decline (`out_of_scope`); #1112 dropped that path with the group (`container_of(Person)` went away), so `add_to` on a person failed the verb check and its "Did you mean" repair, a fuzzy hit on some other row (`#26 task "Review the home insurance"`), preempted the decline. `Session::write` now declines `add_to` and `remove_from` on a row of a kind that goes into no container (a person, an event, an album, ...) with `wrong_container` before any near-spelling is offered, behind no flag (uncomposed it is the `error:` of the same sentence). Red first, on `40d96f5de`: `a_person_added_to_an_event_declines_wrong_container` (the `phase7_compose` test #1112 had rewritten onto a note and a folder, restored for a person) and `a_near_spelling_of_another_row_does_not_preempt_the_wrong_container_decline` (a task whose name holds the person's) both failed; both pass now. The three sessions are restored as they stood and verify.
+
 **Docs.** `SPEC.md`, `CONTRACT_V3.md` and `authored/BRIEF.md` describe the runtime's twelve kinds, its verbs and its ops (the `balance` op, the group directory line, the group's rows in `vault:` and `focus:`, the closing `(you)` row, `member_off_ledger` and `group_empty` leave). `HANDOFF.md` has the owner's hand-offs; `README.md` names `authored/untally.py`. `docs/decisions.md` carries R-1099-85 and the supersession marker on R-1099-59; `CHANGELOG.md` one line. `.github/workflows/gate.yml`'s comment on the job said 26 modules and two tolerated red tests; it is 29 and none.
 
-**`authored/untally.py`** is the one-shot migration the owner runs on the held-out sources (on a copy of the old tree, from `d8c0b99b4`, it drops the same 1,393 sessions, 38 appended turns and 199 definitions; the tree then differs from that copy by the 23 sessions and a few banner comments above).
+**`authored/untally.py`** is the one-shot migration the owner runs on the held-out sources (on a copy of the old tree, from `d8c0b99b4`, it drops the same 1,393 sessions, 38 appended turns and 199 definitions; the tree then differs from that copy by the 20 sessions and a few banner comments above).
 
 **Not done, and why (owner hand-offs, `HANDOFF.md`).** The data version stays `data-v7`. data-v8 is made by `artefacts.py version` from files that are on the Hub, and published with the token: the held-out world builders and sessions (T03, T12, T23, the eval worlds A to G), `eval/sets/*.jsonl` (val and test), the screen set and `data/train*.jsonl.gz` all still hold Tally. `collide.TARGETS` are measured on A to D and must be measured again on the rebuilt worlds (`verify-heldout` will say so). `authored/golden_v3.json` is not regenerated: it comes from the r1 corpus, 117 of its 871 shapes name Tally, and regenerating it from the corpus the tree builds today (1,136 shapes) would drop 144 older-form shapes that `think.rs` and `test_trace.py` use to prove the compiler still takes the older form. R-1099-82: nothing was trained or scored on the `transaction` kind.
 
@@ -90,7 +92,7 @@ pass: `differ: 0` (35 worlds; the other sections, the links and the order are eq
 python authored/build.py W --gold-from-ref   # the 35 worlds, tree at d8c0b99b4 (old runtime) and this tree
 ```
 
-pass: old tree 6,654 of 6,816 verified; this tree 5,283 of 5,423 (23 more removed after, see above). No session of the tree names a removed row, kind, verb or op (the `untally.py` scan below).
+pass: old tree 6,654 of 6,816 verified; this tree 5,283 of 5,423 (20 more removed after, 3 restored and verified, see above). No session of the tree names a removed row, kind, verb or op (the `untally.py` scan below).
 
 ```sh
 python authored/untally.py sessions --worlds-dir OLDWORLDS --dry
@@ -99,12 +101,30 @@ python authored/untally.py sessions --worlds-dir OLDWORLDS --dry
 pass: `would drop 0 session ids` on this tree; on a copy of the old one it dropped 1,393 session ids, 38 appended turns and 199 definitions.
 
 ```sh
-cargo test --locked -p centraid-nativetools --all-features
-cargo clippy --locked -p centraid-nativetools --all-targets --all-features -- -D warnings
-cargo fmt -p centraid-nativetools -- --check
+cargo test --locked --no-fail-fast -p centraid-assist -p centraid-nativetools --all-features
+cargo clippy --locked -p centraid-assist -p centraid-nativetools --all-targets --all-features -- -D warnings
+cargo fmt -p centraid-assist -p centraid-nativetools -- --check
 ```
 
-pass: 48 test binaries `ok`, none failed (the new `a_section_the_seeder_does_not_read_is_an_error` among them); clippy clean once `vault_of` is gone (an unused helper in `tests/phase9_nt9b.rs` that #1112 left when it removed the tests that called it); fmt clean. `cargo fmt --all -- --check` also flags `crates/core/tests/assist_door.rs`, which this change does not touch.
+pass, with one failure that is not this change's: 50 test binaries `ok`, among them the two new tests, `export_fixture` (the exporter output is unchanged, so `contracts/assist/export` is as committed) and the error-family catalogue; clippy clean (it needed `vault_of` gone from `tests/phase9_nt9b.rs`, an unused helper #1112 left); fmt clean. The one failure is `centraid-assist` lib `native_turn::cards::tests::the_shells_row_routes_are_exactly_the_entries_that_open_a_row` ("money transaction: ChatRouting.swift and the table disagree"): `mobile/iosApp/Sources/Chat/ChatRouting.swift` routes `("money", "transaction")` to the row and the Rust table says `AppHome` (R-1099-83); neither file is touched here. `cargo fmt --all -- --check` also flags `crates/core/tests/assist_door.rs`, untouched too.
+
+```sh
+cargo test --locked -p centraid-nativetools --test phase7_compose wrong_container   # on 40d96f5de's act.rs, before the fix
+```
+
+fail: both new tests red (`a_person_added_to_an_event_declines_wrong_container`: predicate `does_not_apply`; `a_near_spelling_of_another_row_does_not_preempt_the_wrong_container_decline`: a `Did you mean` error, no decline). After the fix, `phase7_compose`: 107 passed.
+
+```sh
+python authored/build.py {T33,T34,T35} --only {T33-035,T34-017,T35-009} --gold-from-ref   # the fixed runtime
+```
+
+pass: `1/1 sessions verified` for each of the three restored sessions.
+
+```sh
+python -m unittest test_noise test_gen test_drills test_loop test_retry test_replay test_composed test_regen test_audit test_trace3   # each in its directory, GEN_INTEGRATION=1 NOISE_INTEGRATION=1
+```
+
+pass: every module `OK`, none skipped (the modules that read sessions or the runtime's declines; a full `run_cpu_tests.py` was not repeated, the fix touches no other).
 
 ```sh
 cargo xtask rules

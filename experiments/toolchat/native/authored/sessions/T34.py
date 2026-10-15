@@ -148,6 +148,16 @@ S("T34-016", "two-writes undo redo-one",
   T("just the diesel one, the salaries aren't paid yet", diff(upd("dsl_270622", status="completed", completed=ANY)),
     ref=[act("complete", rows="$dsl_270622")]))
 
+S("T34-017", "create-clash ask create wrong-container decline day",
+  T("put a meeting with chinwe on monday at half seven", ask("sd_270621"),
+    ref=[act("create", kind="event", args=lines(name="Meeting with Chinwe", date=D("2027-06-21", "07:30")))]),
+  T("make it ten then", diff(new("event", name=has("chinwe"), date="2027-06-21T10:00")),
+    ref=[act("create", kind="event", args=lines(name="Meeting with Chinwe", date=D("2027-06-21", "10:00")))]),
+  T("and add chinwe to it", decline("out_of_scope"),
+    ref=[act("add_to", rows="$chinwe", args="to: $c1")]),
+  T("what's on monday now", rows("sd_270621", "+1"),
+    ref=[ans(kind="event", when=W(U("week", 1, weekday=1)))]))
+
 S("T34-018", "model-ask create note add_to body-contains",
   T("add a note", ask(),
     ref=[askc("What should the note say?")]),
