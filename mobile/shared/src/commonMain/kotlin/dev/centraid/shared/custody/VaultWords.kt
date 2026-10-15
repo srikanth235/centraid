@@ -147,10 +147,20 @@ public object VaultWordsMachine {
             // the show that follows. `minted` answers in CHECKING.
             Enrollment.Standing.NO_SEED ->
                 WordsStep(render(model.copy(custody = input.custody, quiet = input.synchronizing)), listOf(WordsEffect.Mint))
-            // THE WORDS ALREADY ROOT THIS PHONE'S VAULTS: a name, and the
-            // choice to keep this one on its own words (R-1047-E18); not
-            // ticked, the next index with no words.
-            Enrollment.Standing.SETTLED ->
+            // A SETTLED SEED AND NO VAULT ON THE PHONE: the app was deleted and
+            // put back, and the keychain kept the key. This is the member's
+            // FIRST vault here, so it asks nothing — no name, no own-words
+            // choice (offered only for a further vault, R-ONBOARD-10 (4)) —
+            // and is made at the next index, as a quiet first make is.
+            Enrollment.Standing.SETTLED -> if (!input.holdsAVault) {
+                WordsStep(
+                    render(model.copy(phase = VaultWordsState.Phase.PHASE_MAKING, custody = input.custody, quiet = input.synchronizing)),
+                    listOf(make(model)),
+                )
+            } else {
+                // THE WORDS ALREADY ROOT THIS PHONE'S VAULTS: a name, and the
+                // choice to keep this one on its own words (R-1047-E18); not
+                // ticked, the next index with no words.
                 WordsStep(
                     render(
                         model.copy(
@@ -160,6 +170,7 @@ public object VaultWordsMachine {
                         ),
                     ),
                 )
+            }
             Enrollment.Standing.UNSETTLED ->
                 WordsStep(render(model.copy(phase = VaultWordsState.Phase.PHASE_RESTORE_FIRST)))
         }
@@ -349,12 +360,14 @@ public sealed interface WordsInput {
 
     /**
      * What this phone holds; [custody] is the platform's sentence about its
-     * key, and [synchronizing] whether its synchronised store will take it.
+     * key, [synchronizing] whether its synchronised store will take it, and
+     * [holdsAVault] whether a vault is already on the phone.
      */
     public data class Standing(
         public val standing: Enrollment.Standing,
         public val custody: String,
         public val synchronizing: Boolean = false,
+        public val holdsAVault: Boolean = true,
     ) : WordsInput
 
     /** The core's words; null is a refused mint. */
@@ -458,6 +471,7 @@ public class VaultWordsFlow(
                     standing = enrolled?.standing() ?: Enrollment.Standing.NO_SEED,
                     custody = availability?.let { PhraseMachine.custodySentence(it) }.orEmpty(),
                     synchronizing = availability?.synchronizing == true,
+                    holdsAVault = enrolled?.holdsAVault() ?: false,
                 )
             }
             WordsEffect.Mint -> WordsInput.Minted(words = enrolled?.mint())
