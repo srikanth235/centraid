@@ -810,6 +810,35 @@ fn a_near_spelling_of_another_row_does_not_preempt_the_wrong_container_decline()
     assert!(!text(&reply).contains("Did you mean"), "{reply}");
 }
 
+/// Only a person lost its container with the group. A wrong-kind target that is itself a container
+/// (an album named where a photo was meant) keeps the repair: the photo its words fit is offered.
+#[test]
+fn an_album_added_somewhere_still_gets_the_photo_its_words_fit() {
+    let world = world_with(|world| {
+        push(
+            world,
+            "photos",
+            json!({"key": "summer_sunset", "name": "Summer sunset", "taken": "2026-07-02T19:00"}),
+        );
+    });
+    let mut session = world.session();
+    session.user("add summer to taxes");
+    let taxes = find_in_turn(&mut session, "folder", "Taxes");
+    let reply = call(
+        &mut session,
+        "act",
+        json!({"verb": "add_to", "kind": "album", "name": "Summer", "args": format!("to: {taxes}")}),
+    );
+    assert!(
+        text(&reply).contains("Did you mean") && text(&reply).contains("Summer sunset"),
+        "{reply}"
+    );
+    assert!(
+        reply["effect"].get("refusal").is_none(),
+        "no decline preempts the repair: {reply}"
+    );
+}
+
 #[test]
 fn an_event_that_clashes_in_time_asks_over_the_events_in_the_way() {
     let world = seeded();
