@@ -63,13 +63,13 @@ public fun TrashListScreen(
                             testTag = "trash-row-${row.id}",
                         ) {
                             Row {
-                                QuietButton(
+                                OutlineButton(
                                     label = row.restore_label.ifEmpty { SharedCopy.TRASH_RESTORE },
                                     testTag = "trash-restore-${row.id}",
                                     modifier = Modifier.padding(start = 8.dp),
                                 ) { onEvent(TrashListEvent(restore = TrashListEvent.RestoreTapped(id = row.id))) }
                                 if (row.purge_label.isNotEmpty()) {
-                                    QuietButton(
+                                    OutlineButton(
                                         label = row.purge_label,
                                         testTag = "trash-purge-${row.id}",
                                         ink = "net",

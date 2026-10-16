@@ -476,7 +476,7 @@ private struct ChatDrawer: View {
                 .padding(.bottom, 12)
                 .accessibilityAddTraits(.isHeader)
 
-            KitOutlineButton(label: state.newChatLabel, fullWidth: true, iconKey: "Plus", action: onNewChat)
+            KitOutlineButton(label: state.newChatLabel, iconKey: "Plus", action: onNewChat)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
                 .accessibilityIdentifier("chat-drawer-new")
@@ -1380,10 +1380,11 @@ private struct ProgressTrack: View {
 
 /// A TYPE ROLE THAT FOLLOWS THE MEMBER'S TEXT SIZE.
 ///
-/// `centraidType` draws each role at its emitted point size; the chat's reading
-/// text and composer take that size as the BODY rung of Dynamic Type instead,
-/// scaled by `UIFontMetrics` at the member's category, with the role's own line
-/// height scaled by the same factor.
+/// `centraidType` scales each role on the system text style nearest its size;
+/// the chat's reading text and composer take every role's size as the BODY rung
+/// of Dynamic Type instead, scaled by `UIFontMetrics` at the member's category,
+/// with the role's own line height scaled by the same factor. It starts from
+/// `Theme.baseFont`, the face at the token's size, so nothing scales twice.
 private struct ChatTypeModifier: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dynamicTypeSize) private var size
@@ -1391,7 +1392,7 @@ private struct ChatTypeModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let style = Theme.style(role, scheme)
-        let base = Theme.uiFont(role, scheme)
+        let base = Theme.baseFont(role, scheme)
         let traits = UITraitCollection(preferredContentSizeCategory: Self.category(size))
         let font = UIFontMetrics(forTextStyle: .body).scaledFont(for: base, compatibleWith: traits)
         let scale = font.pointSize / base.pointSize

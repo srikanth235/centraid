@@ -117,12 +117,22 @@ struct MoneyImportView: View {
             statementView(statement, keepProposed: state.keepProposed)
         }
         if !plan.publishLabel.isEmpty {
-            MoneyInkButton(label: plan.publishLabel, identifier: "money-import-publish") {
-                send(event { $0.publish = .init() })
+            // PUBLISH AND DISCARD ARE ALTERNATIVES: one stack, the note that
+            // says what publishing does between them.
+            MoneyChoiceStack {
+                MoneyInkButton(label: plan.publishLabel, identifier: "money-import-publish") {
+                    send(event { $0.publish = .init() })
+                }
+                if !plan.publishNote.isEmpty {
+                    MoneyNote(text: plan.publishNote)
+                }
+                if !plan.discardLabel.isEmpty {
+                    MoneyQuietButton(label: plan.discardLabel, identifier: "money-import-discard") {
+                        send(event { $0.discard = .init() })
+                    }
+                }
             }
-            MoneyNote(text: plan.publishNote)
-        }
-        if !plan.discardLabel.isEmpty {
+        } else if !plan.discardLabel.isEmpty {
             MoneyQuietButton(label: plan.discardLabel, identifier: "money-import-discard") {
                 send(event { $0.discard = .init() })
             }

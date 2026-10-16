@@ -23,6 +23,7 @@ import java.io.File
  * | Android sizes from the descriptor | `available()` is what reads without blocking, not the length |
  * | Android asks for the original | the camera's GPS tags are redacted from the backed-up bytes |
  * | iOS marks an edited asset | the core offers an edit's render for deletion, and the next edit loses it |
+ * | both read the capture's EXIF `OffsetTimeOriginal` through `ExifOffset`, and neither reads `OffsetTime` | every photograph is filed at a zero offset again (D-1025-S7-77), and a late-evening shot in Kathmandu lands on the next day; or the file's last-change zone moves the wall clock off the shutter's |
  */
 class WalkerPlatformLawSpec : StringSpec({
 
@@ -87,6 +88,32 @@ class WalkerPlatformLawSpec : StringSpec({
         withClue("Android 11 refuses LIMIT in a MediaStore sort order") {
             Regex("""ASC LIMIT""").containsMatchIn(android).shouldBeFalse()
         }
+    }
+
+    "both platforms read the capture's offset from the file and through the one rule" {
+        // D-1025-S7-77: neither `PHAsset` nor MediaStore states a zone, so each
+        // platform finds the one EXIF tag and hands its text to `ExifOffset`.
+        ios shouldContain "ExifOffset.of("
+        ios shouldContain "OffsetTimeOriginal"
+        android shouldContain "ExifOffset.of("
+        android shouldContain "TAG_OFFSET_TIME_ORIGINAL"
+        withClue("`OffsetTime` is read again, and the wall clock moves off the shutter's") {
+            // THE FALLBACK IS DROPPED (D-1025-S7-77, amended 2026-10-15): the
+            // file's own tag is the zone of its last change, and Photos has
+            // already built the capture time in the device's zone. The quoted
+            // key and the constant's closing parenthesis are what tell the
+            // general tag from the shutter's, which both begin the same way.
+            ios.contains("OffsetTime\"").shouldBeFalse()
+            android.contains("TAG_OFFSET_TIME)").shouldBeFalse()
+        }
+        withClue("an asset is described with a hard-coded zero offset again") {
+            ios.contains("capturedUtcOffsetMinutes = 0").shouldBeFalse()
+            android.contains("capturedUtcOffsetMinutes = 0").shouldBeFalse()
+        }
+        // THE OFFSET IS READ THROUGH PHOTOS' OWN URL, which the "downloads only
+        // when the walker said" law above already holds to `networkAccessAllowed
+        // = false`: describing a page must never download a library.
+        ios shouldContain "PHContentEditingInputRequestOptions"
     }
 
     "both platforms draw the derivatives themselves" {

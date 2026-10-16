@@ -26,8 +26,8 @@ import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FailureView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PushedPage
-import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RowSkeleton
@@ -128,8 +128,8 @@ private fun PersonBody(
         if (chrome != null) {
             item(key = "acts") {
                 Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)) {
-                    QuietButton(chrome.log_touch, testTag = "people-log-touch") { open(Which.WHICH_LOG_TOUCH) }
-                    QuietButton(chrome.edit, testTag = "people-edit", modifier = Modifier.padding(start = 8.dp)) {
+                    OutlineButton(chrome.log_touch, testTag = "people-log-touch") { open(Which.WHICH_LOG_TOUCH) }
+                    OutlineButton(chrome.edit, testTag = "people-edit", modifier = Modifier.padding(start = 8.dp)) {
                         onEvent(PeoplePersonEvent(edit = PeoplePersonEvent.EditRequested()))
                     }
                 }
@@ -153,14 +153,14 @@ private fun PersonBody(
                 onTap = { onEvent(PeoplePersonEvent(channel = PeoplePersonEvent.ChannelTapped(channel.channel_id))) },
             ) {
                 if (channel.action_label.isNotEmpty()) {
-                    QuietButton(
+                    OutlineButton(
                         channel.action_label,
                         testTag = "people-channel-act-${channel.channel_id}",
                         modifier = Modifier.padding(start = 8.dp),
                     ) { onEvent(PeoplePersonEvent(channel = PeoplePersonEvent.ChannelTapped(channel.channel_id))) }
                 }
                 if (channel.remove_label.isNotEmpty()) {
-                    QuietButton(
+                    OutlineButton(
                         channel.remove_label,
                         testTag = "people-channel-remove-${channel.channel_id}",
                         ink = "net",
@@ -183,7 +183,7 @@ private fun PersonBody(
                 testTag = "people-date-${date.date_id}",
             ) {
                 if (date.toggle_label.isNotEmpty()) {
-                    QuietButton(
+                    OutlineButton(
                         date.toggle_label,
                         testTag = "people-reminder-${date.date_id}",
                         modifier = Modifier.padding(start = 8.dp),

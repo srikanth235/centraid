@@ -195,16 +195,19 @@ targets:
         # WHY CENTRAID ASKS FOR THE LOCAL NETWORK (#1047 E5; #1080). A gateway
         # is dialled at the addresses its pairing record keeps, which are
         # usually on the member's own Wi-Fi; iOS asks before an app reaches a
-        # device on the local network. NO SHELL BROWSES YET (Q-1080-D3 in
+        # device on the local network. THE IOS SHELL BROWSES (Q-1080-D3 in
         # `docs/decisions.md`): `serve` advertises `_centraid-gateway._tcp`,
-        # and the type is declared in `NSBonjourServices` below only so that a
-        # foreground browse can be added without a bundle change, since iOS
-        # refuses to browse a type the bundle does not list. Today the pairing
-        # payload lists the gateway's interface addresses and then its
-        # `<host>.local` name (`crates/gateway/src/server/addrs.rs`), the
-        # core dials them in turn, and iOS resolves the name through Bonjour:
-        # an address change on the same network is survived by the name, and a
-        # gateway whose name changed is paired again.
+        # and `GatewayBrowser.swift` browses it with `NWBrowser` in the
+        # foreground, only after a pass found no paired gateway reachable, at
+        # most once every 30 s. iOS refuses to browse a type the bundle does
+        # not list, so the type is declared in `NSBonjourServices` below. A
+        # result is matched by its TXT `gw`, never by its name, and the core
+        # re-verifies each address it is offered by the pinned certificate and
+        # `/v2/info`. The pairing payload still lists the gateway's interface
+        # addresses and then its `<host>.local` name
+        # (`crates/gateway/src/server/addrs.rs`), which the core dials in turn
+        # and iOS resolves through Bonjour. The phone only browses and
+        # connects out; it never listens. Android does not browse yet.
         NSLocalNetworkUsageDescription: Centraid finds and reaches your laptop on this network to back up your vault and to bring it back.
         NSBonjourServices:
           - _centraid-gateway._tcp

@@ -534,12 +534,14 @@ struct MoneyInkButton: View {
     let action: () -> Void
 
     @Environment(\.moneyInset) private var inset
+    /// A `MoneyChoiceStack` carries the gutter and the gaps itself.
+    @Environment(\.inChoiceStack) private var stacked
 
     var body: some View {
         KitInkButton(label: label, destructive: destructive, identifier: identifier, action: action)
             .disabled(!enabled)
-            .padding(.horizontal, inset)
-            .padding(.vertical, 8)
+            .padding(.horizontal, stacked ? 0 : inset)
+            .padding(.vertical, stacked ? 0 : 8)
     }
 }
 
@@ -551,6 +553,8 @@ struct MoneyQuietButton: View {
     let action: () -> Void
 
     @Environment(\.moneyInset) private var inset
+    /// A `MoneyChoiceStack` carries the gutter and the gaps itself.
+    @Environment(\.inChoiceStack) private var stacked
 
     var body: some View {
         HStack {
@@ -558,8 +562,25 @@ struct MoneyQuietButton: View {
                 .accessibilityIdentifier(identifier)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, inset)
-        .padding(.vertical, 6)
+        .padding(.horizontal, stacked ? 0 : inset)
+        .padding(.vertical, stacked ? 0 : 6)
+    }
+}
+
+/// ALTERNATIVES, PADDED TO THE GUTTER: a `KitChoiceStack` whose buttons (and
+/// the notes between them) share the page's margin, so a Money page's ink
+/// button and its outline alternative stand at one width.
+struct MoneyChoiceStack<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    @Environment(\.moneyInset) private var inset
+
+    var body: some View {
+        KitChoiceStack { content() }
+            // The stack carries the margin, so what is inside draws none.
+            .environment(\.moneyInset, 0)
+            .padding(.horizontal, inset)
+            .padding(.vertical, 8)
     }
 }
 
@@ -866,7 +887,7 @@ struct MoneyCashflowChart: View {
     @ViewBuilder
     private func bar(_ basisPoints: UInt32, ink: String, partial: Bool) -> some View {
         let height = max(2, plotHeight * CGFloat(min(basisPoints, 10_000)) / 10_000)
-        let shape = RoundedRectangle(cornerRadius: 2)
+        let shape = RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
         if partial {
             shape.stroke(Theme.color(ink, scheme), lineWidth: 1.5).frame(width: 8, height: height)
         } else {
@@ -900,9 +921,9 @@ struct MoneyLegend: View {
         HStack(spacing: 6) {
             Group {
                 if filled {
-                    RoundedRectangle(cornerRadius: 2).fill(Theme.color(ink, scheme))
+                    RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)).fill(Theme.color(ink, scheme))
                 } else {
-                    RoundedRectangle(cornerRadius: 2).stroke(Theme.color(ink, scheme), lineWidth: 1.5)
+                    RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)).stroke(Theme.color(ink, scheme), lineWidth: 1.5)
                 }
             }
             .frame(width: 10, height: 10)
@@ -1043,40 +1064,6 @@ struct MoneyFactRow: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(MoneyWords.spoken(label + ", " + value))
-    }
-}
-
-/// AN ACTION AS A FULL-WIDTH BUTTON: outlined on a raised plate, and the
-/// destructive one outlined in `net` ink. Disabled dims the whole button and
-/// takes no tap; the state decides which is which.
-struct MoneyActionButton: View {
-    let label: String
-    var destructive: Bool = false
-    var enabled: Bool = true
-    var identifier: String = ""
-    let onTap: () -> Void
-
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        Button(action: onTap) {
-            Text(label)
-                .centraidType("smallStrong")
-                .foregroundStyle(Theme.color(destructive ? "net" : "text", scheme))
-                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-                .background(
-                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                        .fill(destructive ? Color.clear : Theme.color("bgElev", scheme))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
-                        .strokeBorder(Theme.color(destructive ? "net" : "lineStrong", scheme), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
-        .accessibilityIdentifier(identifier)
     }
 }
 

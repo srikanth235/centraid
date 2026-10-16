@@ -148,6 +148,26 @@ struct RoomTrailing: View {
 /// controls in the same place. A drawn header put Docs' "Add" as bare text
 /// where Photos' "Select" sat in glass: two apps, two grammars for one slot.
 /// `showsBand` is false for a denied room, which has nowhere in the app to go.
+/// THE SHELL'S STATUS LINE, handed down to whichever place draws it above its
+/// band (`ShellLineHost`); nil where the shell has none to give.
+private struct ShellStatusLineKey: EnvironmentKey {
+    static let defaultValue: AnyView? = nil
+}
+
+extension EnvironmentValues {
+    var shellStatusLine: AnyView? {
+        get { self[ShellStatusLineKey.self] }
+        set { self[ShellStatusLineKey.self] = newValue }
+    }
+}
+
+/// A PLACE THAT DRAWS THE SHELL'S LINE ITSELF tells its host so, and the host
+/// does not draw a second one at the page's foot.
+struct PlaceDrawsShellLine: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
 struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     let app: String
     let title: String
@@ -159,6 +179,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     let content: () -> Content
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.shellStatusLine) private var shellLine
 
     /// File-private: an app passes its one action as a `RoomAction` value
     /// (R-CHROME-1), through the init below.
@@ -218,11 +239,17 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
             ToolbarItem(placement: .primaryAction) { trailing() }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if showsBand {
-                band()
-                    .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom))
+            VStack(spacing: 0) {
+                // THE SHELL'S LINE SITS ON THE BAND, never under it: the band
+                // is the foot of every app, and the line reads as its own.
+                if let shellLine { shellLine }
+                if showsBand {
+                    band()
+                }
             }
+            .background(Theme.color("bg", scheme).ignoresSafeArea(edges: .bottom))
         }
+        .preference(key: PlaceDrawsShellLine.self, value: shellLine != nil)
     }
 }
 
@@ -387,6 +414,17 @@ struct SheetPrimary {
     let action: () -> Void
 }
 
+/// AN ALTERNATIVE TO A SHEET'S PRIMARY: Cancel, Not now, or a removal. It is
+/// drawn as an outline in the same `KitChoiceStack` as the ink button, under
+/// it, so the sheet's answers share one full width.
+struct SheetOutline {
+    let label: String
+    /// `net` when it destroys.
+    var tone: String = "text"
+    var identifier: String = ""
+    let action: () -> Void
+}
+
 /// A SHEET: grabber, a title carrying the noun, at most one ink button, and a
 /// status line hosted inside. Present it with `.sheet`; the room sets its own
 /// grabber and detents.
@@ -394,6 +432,8 @@ struct SheetRoom<Content: View>: View {
     let title: String
     var status: String = ""
     var primary: SheetPrimary? = nil
+    /// The primary's alternatives, drawn under it in one `KitChoiceStack`.
+    var outlines: [SheetOutline] = []
     /// The sheet's own id, carried by its TITLE — a leaf — so it names the
     /// sheet without replacing its children's ids, which an identifier on the
     /// container does (#1047).
@@ -406,12 +446,14 @@ struct SheetRoom<Content: View>: View {
         title: String,
         status: String = "",
         primary: SheetPrimary? = nil,
+        outlines: [SheetOutline] = [],
         titleIdentifier: String = "",
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.status = status
         self.primary = primary
+        self.outlines = outlines
         self.titleIdentifier = titleIdentifier
         self.content = content
     }
@@ -431,14 +473,22 @@ struct SheetRoom<Content: View>: View {
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .accessibilityIdentifier("kit-sheet-status")
             }
-            if let primary {
-                KitInkButton(
-                    label: primary.label,
-                    destructive: primary.destructive,
-                    identifier: primary.identifier,
-                    action: primary.action
-                )
-                .disabled(!primary.enabled)
+            if primary != nil || !outlines.isEmpty {
+                KitChoiceStack {
+                    if let primary {
+                        KitInkButton(
+                            label: primary.label,
+                            destructive: primary.destructive,
+                            identifier: primary.identifier,
+                            action: primary.action
+                        )
+                        .disabled(!primary.enabled)
+                    }
+                    ForEach(Array(outlines.enumerated()), id: \.offset) { _, outline in
+                        KitOutlineButton(label: outline.label, tone: outline.tone, action: outline.action)
+                            .accessibilityIdentifier(outline.identifier)
+                    }
+                }
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -465,6 +515,9 @@ struct SheetPresentation: ViewModifier {
             .presentationBackground(Theme.color("bgElev", scheme))
             .presentationDragIndicator(.visible)
             .presentationDetents(detents)
+            // THE TEXT-SIZE CAP, STATED AGAIN: a sheet does not inherit the app
+            // root's (see `Theme.textSizeCap`).
+            .dynamicTypeSize(...Theme.textSizeCap)
     }
 }
 

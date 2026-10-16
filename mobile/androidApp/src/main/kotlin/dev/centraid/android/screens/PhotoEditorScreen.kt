@@ -70,7 +70,7 @@ import centraid.screen.v1.PhotoEditorState
 import centraid.screen.v1.PhotoLightboxState
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.kit.StageKey
 import dev.centraid.android.kit.StageSpinner
@@ -162,7 +162,7 @@ public fun PhotoEditorScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 ScreenFailure(sentence = failure.sentence, remedy = failure.remedy)
-                QuietButton(
+                OutlineButton(
                     label = PhotoEditorMachine.EDITOR_CANCEL,
                     testTag = "editor-failure-cancel",
                     ink = "onStage",

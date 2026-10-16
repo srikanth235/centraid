@@ -78,6 +78,65 @@ pub fn content_urls(vault: &Vault, request: &wire::ContentUrlRequest) -> Result<
 /// more request rather than a refusal.
 pub const MAX_CONTENT_URLS: usize = 100;
 
+/// **THE TABLES THE WIRE'S PAGE DOOR READS (2026-10-16).** `Request::Page` names
+/// a table in `from`, and a door that reads any table by name is wider than any
+/// screen needs: it would page the receipts, the provenance log, the Locker's
+/// fields and passkeys, the money ledger and every revision snapshot for a
+/// shell that asked. So it reads these twenty and refuses the rest as an
+/// invalid request, before the vault is asked.
+///
+/// The set is every `from` a shell sends today, read off `mobile/shared`'s
+/// `PageQuery` builders and the Rust callers of the wire:
+///
+/// | Screens | Tables |
+/// |---|---|
+/// | The vault roster | `core_vault` |
+/// | Home's tiles | `media_asset`, `core_document`, `knowledge_note`, `schedule_task`, `core_party`, `locker_item` |
+/// | Trash (Notes, Docs, Tasks, People, Locker) | `knowledge_note`, `core_document`, `schedule_task`, `people_profile`, `locker_item` |
+/// | Photos (grid, shelves, lightbox, collections, search, picker, places, memories, duplicates, album choice, editor) | `media_asset`, `media_asset_phash`, `media_memory`, `media_memory_member`, `core_collection`, `core_collection_entry`, `core_concept`, `core_concept_scheme`, `core_tag`, `core_place`, `core_content_item` |
+/// | Notes' editor | `knowledge_note` |
+/// | Calendar import | `schedule_calendar` |
+/// | `with_minor_units` | `core_account` |
+///
+/// `core_account` has no shell caller: it is the one table whose `currency`
+/// the `with_minor_units` arm is specified over, so the arm stays reachable
+/// and tested; Home's money tile rides its own arm (`Request.money`).
+///
+/// NOT HERE, ON PURPOSE: every other Locker table (`locker_item_field`,
+/// `locker_item_passkey`, `locker_item_address`, `locker_item_alias`), the
+/// audit band (`access_receipt`, `access_provenance`), `core_entity_revision`,
+/// `core_link`, the money tables and `core_transaction`. The apps that read
+/// those do it in the core (`Request.app_query`, `Request.money`), through
+/// [`crate::app_query::VaultDoor`], which this list does not govern. A screen
+/// that starts paging a new table adds it here, in the same change, and the
+/// test `a_table_no_screen_pages_is_refused_and_one_a_screen_pages_still_answers`
+/// is where that is read.
+///
+/// What this does not cover: the query's `where` is predicate text and may
+/// name a subquery on another table. That is a separate door to close.
+pub const PAGE_TABLES: [&str; 20] = [
+    "core_account",
+    "core_collection",
+    "core_collection_entry",
+    "core_concept",
+    "core_concept_scheme",
+    "core_content_item",
+    "core_document",
+    "core_party",
+    "core_place",
+    "core_tag",
+    "core_vault",
+    "knowledge_note",
+    "locker_item",
+    "media_asset",
+    "media_asset_phash",
+    "media_memory",
+    "media_memory_member",
+    "people_profile",
+    "schedule_calendar",
+    "schedule_task",
+];
+
 /// One page of rows, as the wire spells it.
 ///
 /// `limit` is **required and validated**, not defaulted. Proto3 cannot say
@@ -89,6 +148,11 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
             detail: "a page request carries no query".to_owned(),
         });
     };
+    if !PAGE_TABLES.contains(&query.from.as_str()) {
+        return Err(CoreError::InvalidRequest {
+            detail: format!("`{}` is not a table any screen pages", query.from),
+        });
+    }
     let Some(order) = &query.order else {
         return Err(CoreError::InvalidRequest {
             detail: "a page query carries no order; a keyset cursor is read off the row by the \
@@ -717,6 +781,100 @@ mod tests {
         )
         .expect_err("no currency, no exponent");
         assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// THE PAGE DOOR READS ONLY THE TABLES A SCREEN PAGES (2026-10-16).
+    ///
+    /// A table named in `from` that no screen pages is refused as an invalid
+    /// request BEFORE the vault is asked: the door used to read any table by
+    /// name, which is wider than any screen needs. The refused set names what a
+    /// shell must never be able to walk through a page: the receipts, the
+    /// provenance log, the Locker's fields, passkeys and addresses, the money
+    /// ledger and the revision snapshots. The paired half is that every table
+    /// a screen does page still answers.
+    /// Every table a screen pages, with a column that can key its cursor. Spelled
+    /// here, not derived from the allowlist, so the allowlist cannot grow without
+    /// this list (and the paragraph above it) being read.
+    const PAGED_BY_A_SCREEN: [(&str, &str); 20] = [
+        ("core_account", "account_id"),
+        ("core_collection", "collection_id"),
+        ("core_collection_entry", "entry_id"),
+        ("core_concept", "concept_id"),
+        ("core_concept_scheme", "scheme_id"),
+        ("core_content_item", "content_id"),
+        ("core_document", "document_id"),
+        ("core_party", "party_id"),
+        ("core_place", "place_id"),
+        ("core_tag", "tag_id"),
+        ("core_vault", "vault_id"),
+        ("knowledge_note", "note_id"),
+        ("locker_item", "item_id"),
+        ("media_asset", "asset_id"),
+        ("media_asset_phash", "asset_id"),
+        ("media_memory", "memory_id"),
+        ("media_memory_member", "memory_id"),
+        ("people_profile", "profile_id"),
+        ("schedule_calendar", "calendar_id"),
+        ("schedule_task", "task_id"),
+    ];
+
+    #[test]
+    fn a_table_no_screen_pages_is_refused_and_one_a_screen_pages_still_answers() {
+        let scratch = centraid_ontology::golden::scratch_dir();
+        std::fs::create_dir_all(&scratch).expect("made");
+        let vault = Vault::create(scratch.join("v.db")).expect("a vault");
+        vault.found("T", "O").expect("founded");
+        for (table, pk) in [
+            ("access_receipt", "receipt_id"),
+            ("access_provenance", "prov_id"),
+            ("locker_item_field", "field_id"),
+            ("locker_item_passkey", "item_id"),
+            ("locker_item_address", "address_id"),
+            ("core_transaction", "txn_id"),
+            ("money_transaction", "txn_id"),
+            ("core_entity_revision", "revision_id"),
+            ("sqlite_master", "name"),
+        ] {
+            let mut asked = query(&[pk], pk, pk);
+            asked.from = table.to_owned();
+            let refused = page(
+                &vault,
+                &wire::PageRequest {
+                    query: Some(asked),
+                    limit: 10,
+                    after: None,
+                },
+            )
+            .expect_err(&format!("`{table}` is not a table a screen pages"));
+            assert_eq!(
+                refused.code(),
+                wire::ErrorCode::InvalidRequest,
+                "`{table}`: {refused}"
+            );
+        }
+        // AND THE ONES THEY DO PAGE ANSWER: the allowlist is the screens' own set.
+        let mut spelled: Vec<&str> = PAGED_BY_A_SCREEN.iter().map(|(table, _)| *table).collect();
+        spelled.sort_unstable();
+        assert_eq!(
+            spelled, PAGE_TABLES,
+            "the allowlist and the screens' list differ"
+        );
+        for (table, pk) in PAGED_BY_A_SCREEN {
+            let mut asked = query(&[pk], pk, pk);
+            asked.from = (*table).to_owned();
+            page(
+                &vault,
+                &wire::PageRequest {
+                    query: Some(asked),
+                    limit: 10,
+                    after: None,
+                },
+            )
+            .unwrap_or_else(|error| {
+                panic!("`{table}` is paged by a screen and was refused: {error}")
+            });
+        }
         let _ = std::fs::remove_dir_all(&scratch);
     }
 

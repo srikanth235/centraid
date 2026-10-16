@@ -1,7 +1,6 @@
 package dev.centraid.shared.apps.locker
 
 import centraid.core.v1.AppQueryRequest
-import centraid.core.v1.LockerAccessKind
 import centraid.core.v1.LockerAccessRequest
 import centraid.core.v1.LockerField
 import centraid.core.v1.LockerItem
@@ -824,33 +823,11 @@ public object LockerItemMachine :
      */
     private fun access(held: LockerHeld<LockerItemState>, item: LockerItem): LockerSection? {
         val access = held.answers.access ?: return null
-        val rows = access.entries.map { entry ->
-            val column = entry.columns.firstOrNull().orEmpty()
-            val subject = if (entry.field_id.isNotEmpty()) {
-                item.fields.firstOrNull { it.field_id == entry.field_id }?.label ?: LockerCopy.ACCESS_FIELD_GONE
-            } else {
-                labelOf(column)
-            }
-            val label = when {
-                entry.kind == LockerAccessKind.LOCKER_ACCESS_KIND_CODE && entry.copied -> LockerCopy.ACCESS_CODE_COPIED
-                entry.kind == LockerAccessKind.LOCKER_ACCESS_KIND_CODE -> LockerCopy.ACCESS_CODE_SHOWN
-                entry.copied -> LockerFold.fill(LockerCopy.ACCESS_COPIED, "field" to subject)
-                else -> LockerFold.fill(LockerCopy.ACCESS_REVEALED, "field" to subject)
-            }
-            val day = entry.local_day.takeIf { it.length >= 10 }?.let { CivilWords.dayMonth(it) }.orEmpty()
-            val `when` = listOf(day, entry.local_time).filter { it.isNotEmpty() }.joinToString(" · ")
-            LockerFieldRow(
-                key = "access:${entry.receipt_id}",
-                label = label,
-                value_ = `when`,
-                note = if (entry.allowed) "" else LockerCopy.ACCESS_REFUSED,
-                accessibility_label = listOf(label, `when`, if (entry.allowed) "" else LockerCopy.ACCESS_REFUSED).filter { it.isNotEmpty() }.joinToString(", "),
-            )
-        }.ifEmpty {
-            listOf(LockerFieldRow(key = "access:none", label = LockerCopy.ACCESS_NONE, accessibility_label = LockerCopy.ACCESS_NONE))
+        // THE ROWS ARE THE WHOLE-LOCKER PAGE'S TOO (`LockerAccessRows`); here
+        // a custom field is named from the item the page already holds.
+        return LockerAccessRows.section(access, title = LockerCopy.ACCESS_HEAD, none = LockerCopy.ACCESS_NONE) { entry ->
+            LockerAccessRows.row(entry, LockerAccessRows.subject(entry, item.fields.firstOrNull { it.field_id == entry.field_id }?.label))
         }
-        val window = if (access.truncated) " ${LockerFold.fill(LockerCopy.ACCESS_WINDOW, "n" to access.window.toString())}" else ""
-        return LockerSection(title = LockerCopy.ACCESS_HEAD, rows = rows, note = LockerCopy.ACCESS_NOTE + window)
     }
 
     /** The column whose value is never shown, only the codes it makes. */

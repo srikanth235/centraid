@@ -6,7 +6,7 @@ import CentraidShared
 
 /// LOCKER, REGISTERED (#1047, D-5). Its one line is in `AppRegistry.apps`.
 ///
-/// Five routes over five bridges, every one riding `LockerGate.shared`, plus
+/// Seven routes over seven bridges, every one riding `LockerGate.shared`, plus
 /// the lock wall's bridge (`locker.lock`) — the platform seam this file and
 /// `LockerLockSeam` implement exactly as `LockerGate.kt` states it: the
 /// capability read, one OS prompt per token, the answer mapped to its
@@ -34,6 +34,8 @@ enum LockerScreens: AppScreens {
     static let export = "locker.export"
     /// `LockerImportMachine.SCREEN_ID` (#1047 T2).
     static let importScreen = "locker.import"
+    /// `LockerAccessMachine.SCREEN_ID` — the whole Locker's access history (Q-1047-21).
+    static let access = "locker.access"
     /// The lock wall's state.
     static let lock = "locker.lock"
 
@@ -46,6 +48,8 @@ enum LockerScreens: AppScreens {
     /// The export's bridge, whose save seam `LockerTransferRoot` installs.
     static let exportBridge = LockerExportBridge()
     static let importBridge = LockerImportBridge()
+    /// The access history's bridge: read-only metadata, so no seam to install.
+    static let accessBridge = LockerAccessBridge()
     #endif
 
     // MARK: Routes
@@ -76,6 +80,7 @@ enum LockerScreens: AppScreens {
     static let trashRoute = ShellModel.Route.screen(trash, Data())
     static let exportRoute = ShellModel.Route.screen(export, Data())
     static let importRoute = ShellModel.Route.screen(importScreen, Data())
+    static let accessRoute = ShellModel.Route.screen(access, Data())
 
     // MARK: Registration
 
@@ -102,6 +107,7 @@ enum LockerScreens: AppScreens {
         shell.register(.of(trash, LockerTrashBridge(gate: LockerGate.Companion.shared.shared)))
         shell.register(.locker(export, exportBridge))
         shell.register(.locker(importScreen, importBridge))
+        shell.register(.locker(access, accessBridge))
         #endif
 
         func push(_ shell: ShellModel?) -> (ShellModel.Route) -> Void {
@@ -232,6 +238,26 @@ enum LockerScreens: AppScreens {
                     },
                     onBack: pop(shell),
                     onDeparted: { [weak shell] in shell?.departed(importScreen) }
+                ))
+            }
+        )
+        shell.route(
+            access,
+            open: { [weak shell] _ in
+                guard let shell else { return }
+                LockerLockSeam.attached(shell)
+                #if canImport(CentraidShared)
+                accessBridge.open()
+                #endif
+            },
+            view: { shell, _ in
+                AnyView(LockerAccessView(
+                    data: shell.state(access),
+                    lock: shell.state(lock),
+                    send: sender(shell, access),
+                    sendLock: sender(shell, lock),
+                    onBack: pop(shell),
+                    onDeparted: { [weak shell] in shell?.departed(access) }
                 ))
             }
         )

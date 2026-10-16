@@ -82,17 +82,16 @@ fn the_ddl_fixture_is_not_vacuous() {
 fn the_fixture_is_the_ladder_head_and_not_the_corpuss_description() {
     // THE POINT OF THE SPLIT. The two files are different fixtures answering
     // different questions, and this is what stops one being silently repointed
-    // at the other: the ladder head carries every rung's objects, and the
-    // corpus, a v0 file, carries none of them — and what a later rung dropped
-    // is in neither.
+    // at the other: the ladder head carries v1's objects, and the corpus, a v0
+    // file, carries none of them — and what v1 dropped is in neither.
     let fixture = std::fs::read_to_string(repo_root().join("contracts/schema/vault-ddl.sql"))
         .expect("the ladder-head fixture is committed");
     let corpus =
         std::fs::read_to_string(repo_root().join("contracts/golden/issue-1020/vault-ddl.sql"))
             .expect("the corpus's description is committed");
-    // Rung three and four's backup tables were the other two names here; rung
-    // ten drops them again (#1080), so the head carries rung six's and seven's
-    // guards instead.
+    // The old backup plane's tables were once two more names here; they were
+    // dropped before the first release (#1080), so the head carries the
+    // collection kind's and the Locker's guards instead.
     for object in [
         "core_entity_revision_no_self_parent",
         "core_link_no_revises_edge",
@@ -101,7 +100,7 @@ fn the_fixture_is_the_ladder_head_and_not_the_corpuss_description() {
     ] {
         assert!(
             fixture.contains(object),
-            "`{object}` is a rung's object and is not in the ladder-head fixture"
+            "`{object}` is v1's object and is not in the ladder-head fixture"
         );
         assert!(
             !corpus.contains(object),
@@ -111,7 +110,7 @@ fn the_fixture_is_the_ladder_head_and_not_the_corpuss_description() {
     for dropped in ["backup_base_range", "backup_blob_custody"] {
         assert!(
             !fixture.contains(&format!("CREATE TABLE {dropped}")),
-            "`{dropped}` is founded by rung three or four and dropped by rung ten"
+            "`{dropped}` is the old backup plane's, which a new vault no longer founds"
         );
     }
 }

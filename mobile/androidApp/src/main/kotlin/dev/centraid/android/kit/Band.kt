@@ -187,8 +187,10 @@ private fun BandTab(
         }
         Text(
             label,
-            // The same 11/15 rung either way, so a tap cannot reflow the strip.
-            style = centraidType(if (selected) "control" else "band"),
+            // The same 11/15 rung either way, so a tap cannot reflow the strip,
+            // and it HOLDS at every font scale: `control` scales elsewhere, so the
+            // active half says `scales = false`.
+            style = centraidType(if (selected) "control" else "band", scales = false),
             color = if (selected) centraidColor("text") else centraidColor("textSoft"),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -405,8 +407,9 @@ private fun AppBandTabView(
         )
         Text(
             label,
-            // THE HELD PAIR: one rung, two weights, no reflow.
-            style = centraidType(if (selected) "control" else "band"),
+            // THE HELD PAIR: one rung, two weights, no reflow — and it holds at
+            // every font scale (`control` scales elsewhere).
+            style = centraidType(if (selected) "control" else "band", scales = false),
             color = if (selected) centraidColor("text") else centraidColor("textSoft"),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

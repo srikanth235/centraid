@@ -32,6 +32,7 @@ public object PeopleCopy {
     public const val CADENCE_NEVER: String = "Never"
     public const val CADENCE_NONE: String = "No cadence"
     public const val CANCEL: String = "Cancel"
+    public const val CHANNELS_UNKNOWN: String = "The channels could not be read."
     public const val CHANNEL_A11Y: String = "{kind}, {value}"
     public const val CHANNEL_ADDRESS: String = "Address"
     public const val CHANNEL_EMAIL: String = "Email"

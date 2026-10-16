@@ -23,7 +23,7 @@ import okio.ByteString.Companion.encodeUtf8
 
 /**
  * What SwiftUI holds instead of Collections' `StateFlow`, AND the runtime that
- * composes its ten reads (#1029, the photos port).
+ * composes its nine reads (#1029, the photos port).
  *
  * `PhotosBridge`'s shape for the boundary half, and both of its rules are
  * load-bearing:
@@ -41,15 +41,15 @@ import okio.ByteString.Companion.encodeUtf8
  *
  * `ScreenRuntime` serves ONE `ScreenReads` — one table, one statement — and
  * this screen is a list of SHELVES, which is to say a list of COUNTS, and the
- * door has no `COUNT(*)` and no join. So it reads ten tables:
+ * door has no `COUNT(*)` and no join. So it reads nine tables:
  * `core_collection` for the albums, `core_collection_entry` for their sizes,
  * `media_asset` three times for Archive, Trash and Videos, the
- * scheme/concept/tag chain for Favorites, and one table each for the People,
- * Places, Memories and Duplicates doors.
+ * scheme/concept/tag chain for Favorites, and one table each for the Places,
+ * Memories and Duplicates doors.
  *
  * They cannot be chained through the reducer because `PhotosCollectionsState`'s
  * content is a protobuf `oneof`: `loading` and `data` cannot both be set, so
- * there is nowhere to hold nine answers while the tenth is in flight. Wire
+ * there is nowhere to hold eight answers while the ninth is in flight. Wire
  * refuses the state in its own constructor, which is the three-state read law
  * made structural. So the composition happens here, which is what `HomeRuntime`
  * already does and says it exists for.
@@ -113,7 +113,7 @@ public class PhotosCollectionsBridge {
     }
 
     /**
-     * THE TEN READS, AND THE ONE SCREEN THEY MAKE.
+     * THE NINE READS, AND THE ONE SCREEN THEY MAKE.
      *
      * Order is load-bearing in exactly one place — the star is a CHAIN, because
      * a concept cannot be asked for until its scheme has been named — and
@@ -124,8 +124,8 @@ public class PhotosCollectionsBridge {
      * read this".
      *
      * The counts are re-read on a CONTINUED page too. A page of albums is a
-     * hundred rows and the counts are nine local reads against a file on this
-     * phone; the alternative is caching nine answers on a state that has no
+     * hundred rows and the counts are eight local reads against a file on this
+     * phone; the alternative is caching eight answers on a state that has no
      * field for one, which is how a screen comes to show yesterday's numbers
      * beside today's rows.
      */
@@ -143,8 +143,8 @@ public class PhotosCollectionsBridge {
         )
         val albumScan = albums.scanOrRefuse() ?: return
         // THE CURSOR THE SCREEN CARRIES. `Scan` deliberately does not hold one:
-        // nine of these ten reads never walk, and a cursor field on the shape
-        // they share would be nine fields that are always null.
+        // eight of these nine reads never walk, and a cursor field on the shape
+        // they share would be eight fields that are always null.
         val albumsNextCursor = (albums as? PhotosPage.Rows)?.nextCursor
 
         val counts = listOf(
@@ -152,7 +152,6 @@ public class PhotosCollectionsBridge {
             PhotosCollectionsReads.archiveQuery(),
             PhotosCollectionsReads.trashQuery(),
             PhotosCollectionsReads.videosQuery(),
-            PhotosCollectionsReads.facesQuery(),
             PhotosCollectionsReads.placesQuery(),
             PhotosCollectionsReads.memoriesQuery(),
             PhotosCollectionsReads.duplicatesQuery(),
@@ -213,7 +212,6 @@ public class PhotosCollectionsBridge {
                     trash = counts[TRASH],
                     videos = counts[VIDEOS],
                     starred = starred,
-                    faces = counts[FACES],
                     places = counts[PLACES],
                     memories = counts[MEMORIES],
                     duplicates = counts[DUPLICATES],
@@ -361,9 +359,8 @@ public class PhotosCollectionsBridge {
         private const val ARCHIVE: Int = 1
         private const val TRASH: Int = 2
         private const val VIDEOS: Int = 3
-        private const val FACES: Int = 4
-        private const val PLACES: Int = 5
-        private const val MEMORIES: Int = 6
-        private const val DUPLICATES: Int = 7
+        private const val PLACES: Int = 4
+        private const val MEMORIES: Int = 5
+        private const val DUPLICATES: Int = 6
     }
 }

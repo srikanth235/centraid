@@ -47,7 +47,7 @@ import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.OptionSheet
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
@@ -63,7 +63,7 @@ import dev.centraid.shared.apps.photos.PhotoShelfMachine
  * A PHOTO SHELF: the library under a predicate (#1029, photos port).
  *
  * One screen for four of v0's routes — `PhotoStateView` (favourites, archive,
- * trash, videos, one person), `AlbumDetail`, `PlaceDetail` and a memory's
+ * trash, videos), `AlbumDetail`, `PlaceDetail` and a memory's
  * members. They were four screens reading one table in one order and drawing
  * one cell, and they drifted exactly where four copies drift: only
  * `AlbumDetail.tsx` had a selection mode, only `PlaceDetail.tsx` had its own
@@ -138,7 +138,7 @@ public fun PhotoShelfScreen(
 
         // ONLY AN ALBUM CAN BE ADDED TO. `PhotoShelf` is a oneof, so this is
         // a case check and not a flag: favourites, archive, trash, videos, a
-        // place, a person and a memory are all predicates over photographs
+        // place and a memory are all predicates over photographs
         // already in the vault, and "add" means nothing on any of them.
         val album = shelf?.album
         if (album != null) {
@@ -384,7 +384,7 @@ private fun ShelfHeader(
                 // selection. A text control and never a filled one: the safety
                 // is the confirm behind it.
                 if (PhotoShelfMachine.isTrash(state.shelf)) {
-                    QuietButton(
+                    OutlineButton(
                         label = PhotosCopy.PHOTOS_EMPTY_TRASH,
                         testTag = "shelf-empty-trash",
                         ink = "net",
@@ -598,7 +598,7 @@ private fun Verb(iconKey: String, label: String, enabled: Boolean, run: () -> Un
  * The confirmation, with the whole cost stated.
  *
  * v0's words, because they are the ones that say what actually leaves: not only
- * the photograph but its captions, faces, tags and album membership. "Delete
+ * the photograph but its captions, tags and album membership. "Delete
  * forever" with no body is a member agreeing to something they have not been
  * told.
  */

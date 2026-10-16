@@ -271,7 +271,7 @@ struct MoneyRulesView: View {
                 }
                 MoneyChoiceField(
                     key: editor.accountRowLabel,
-                    value: editor.accountLabel.isEmpty ? editor.clearAccountLabel : editor.accountLabel,
+                    value: editor.accountLabel.isEmpty ? editor.clearAccountLabel_p : editor.accountLabel,
                     identifier: "money-rule-account"
                 ) { send(event { $0.accountSheet = .init() }) }
                 if editor.limitsEnabled {
@@ -284,14 +284,17 @@ struct MoneyRulesView: View {
                 }
                 MoneyNote(text: editor.amountNote)
                 MoneyNote(text: editor.issue, ink: "net")
-                if !editor.applyLabel.isEmpty {
-                    MoneyQuietButton(label: editor.applyLabel, identifier: "money-rule-apply") {
-                        send(event { $0.apply = .init() })
+                // APPLY AND DELETE ARE ALTERNATIVES: one stack.
+                MoneyChoiceStack {
+                    if !editor.applyLabel.isEmpty {
+                        MoneyQuietButton(label: editor.applyLabel, identifier: "money-rule-apply") {
+                            send(event { $0.apply = .init() })
+                        }
                     }
-                }
-                if !editor.deleteLabel.isEmpty {
-                    MoneyQuietButton(label: editor.deleteLabel, tone: "net", identifier: "money-rule-delete") {
-                        send(event { $0.delete = .init() })
+                    if !editor.deleteLabel.isEmpty {
+                        MoneyQuietButton(label: editor.deleteLabel, tone: "net", identifier: "money-rule-delete") {
+                            send(event { $0.delete = .init() })
+                        }
                     }
                 }
             }

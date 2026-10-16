@@ -1,7 +1,7 @@
-//! # Photos — a manifest, eight statement sets, five pure folds, 18 actions
+//! # Photos — a manifest, five statement sets, pure folds, 18 actions
 //!
 //! Photos is the largest app in the product: 21,348 lines of v0 TypeScript, 8
-//! queries, 18 actions, 38 scopes over five schemas and a 551-line demo seed
+//! queries (five today: the three face ones were retired, Q-1047-2), 18 actions, 38 scopes over five schemas and a 551-line demo seed
 //! (#1020, wave 4 census §A2). Its doctrine, from the manifest's own
 //! description (`manifest.json`, copied verbatim from v0's `app.json`):
 //!
@@ -15,9 +15,6 @@
 //! - **the storage answer is the gateway's sweep**, never something the app can
 //!   compute: local-CAS presence is a filesystem fact. Until the sweep has run
 //!   the answer is *not counted yet* — never zeroes ([`storage`], D-1020-P1);
-//! - **confidence is a match count, never a percentage**, and "first seen" is
-//!   the earliest `captured_at` among matches because `media_face_region` has
-//!   no `created_at` — no proposal time is invented ([`faces`], D-1020-P2);
 //! - **duplicates are read, never computed here.** The union-find over phash
 //!   Hamming distance ≤ 6 lives in `crates/media::duplicates`; this app reads
 //!   the `cluster_id` a sweep already stamped ([`duplicates`], D-1020-P3);
@@ -49,7 +46,6 @@
 pub mod commands;
 pub mod duplicates;
 pub mod enrichment;
-pub mod faces;
 pub mod manifest;
 pub mod places;
 pub mod queries;
@@ -59,9 +55,6 @@ pub mod storage;
 pub use commands::{ACTIONS, Commands, Invocation, Outcome};
 pub use duplicates::{DuplicateCluster, duplicate_clusters};
 pub use enrichment::{EnrichmentStatus, Tier};
-pub use faces::{
-    FaceQueue, FaceQueueEntry, PeopleRoster, QUEUE_LIMIT, face_queue, group_people_faces,
-};
 pub use manifest::{APP_ID, manifest};
 pub use places::{PlacePhrase, PlacePhraseSource, PlaceRow, place_phrase};
 pub use queries::{LibraryData, LibraryInput, load_library};

@@ -167,13 +167,13 @@ mod tests {
     /// scopes are the manifest's declaration of what the app may ask the core
     /// to open, and they are still exactly three.
     #[test]
-    fn it_declares_thirty_seven_scopes_and_the_three_reveals_are_lockers_own() {
+    fn it_declares_thirty_three_scopes_and_the_three_reveals_are_lockers_own() {
         let manifest = manifest();
         let vault = manifest
             .vault
             .as_ref()
             .expect("Locker declares its vault reach");
-        assert_eq!(vault.scopes.len(), 37);
+        assert_eq!(vault.scopes.len(), 33);
 
         let reveals: Vec<String> = vault
             .scopes
@@ -211,6 +211,26 @@ mod tests {
             manifest.ext_tables.is_empty(),
             "Locker is a projection over the vault's own tables"
         );
+    }
+
+    /// L4 (ruled 2026-10-15): `edit-item` REPLACES the item's type fields, and
+    /// the manifest — which an assistant or an API caller reads as the
+    /// contract — says so in the action's description and on its input, in the
+    /// same words the command's own schema carries
+    /// (`the_edit_commands_schema_says_it_replaces` holds the other half).
+    #[test]
+    fn edit_item_says_it_replaces_rather_than_patches() {
+        let edit = manifest()
+            .action("edit-item")
+            .expect("Locker declares edit-item");
+        let said = edit.description.as_deref().expect("a description");
+        assert!(said.contains("REPLACES and does not patch"), "{said}");
+        let input = edit.input["description"]
+            .as_str()
+            .expect("the input carries the same sentence for a caller that reads only it");
+        for phrase in ["REPLACES, does not patch", "CLEARED", "«sealed»"] {
+            assert!(input.contains(phrase), "the input lost `{phrase}`: {input}");
+        }
     }
 
     #[test]
@@ -252,5 +272,21 @@ mod tests {
         assert_eq!(keys, ["archived", "limit"]);
         assert_eq!(items.input["properties"]["limit"]["minimum"], 20);
         assert_eq!(items.input["properties"]["limit"]["maximum"], 2000);
+    }
+
+    /// THE ACT SCOPES AND THE ACTIONS AGREE, both ways (finding PE-F1, P3): a
+    /// narrow `act` scope names a command some action invokes, and every
+    /// action's command is covered by a scope. A scope no action uses tells a
+    /// consent screen the app reaches a command it never calls.
+    #[test]
+    fn every_act_scope_names_a_command_an_action_invokes_and_every_command_is_covered() {
+        let commands: Vec<&str> = crate::commands::ACTIONS
+            .iter()
+            .map(|row| row.command)
+            .collect();
+        assert_eq!(
+            manifest().act_scope_disagreements(&commands),
+            Vec::<String>::new()
+        );
     }
 }

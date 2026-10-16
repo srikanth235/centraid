@@ -3,7 +3,7 @@
 //! A member's conversations with the on-device assistant are vault data
 //! (R-CHAT-1): `chat_thread` is an entity, `chat_message` is a projection of
 //! its thread, and the card and attachment tables are projections of a message
-//! (rung eleven, `contracts/migrations/011_chat.sql`). Nothing writes them but
+//! (`contracts/migrations/001_baseline.sql`). Nothing writes them but
 //! these commands, so a chat is backed up, receipted and captured exactly as a
 //! note is.
 //!
@@ -12,8 +12,8 @@
 //! A write the assistant makes parks behind a confirm card (R-1088-2). The turn
 //! that parked is saved by [`save_turn`] with the outcome `proposed`, and
 //! [`settle_proposal`] records how the card ended: `applied`, `dismissed`,
-//! `stale` or `failed` (rung twelve, `contracts/migrations/012_chat_proposals.sql`,
-//! which states the five words). The pending write itself is memory and is inert
+//! `stale` or `failed` (`contracts/migrations/001_baseline.sql`, whose
+//! `chat_message` states the five words). The pending write itself is memory and is inert
 //! when its thread is reopened (R-1088-10); the vault stores only the outcome and
 //! the line the member was told. A `proposed` message nobody settled is
 //! dismissed by the next turn saved into its thread, as a new message dismisses

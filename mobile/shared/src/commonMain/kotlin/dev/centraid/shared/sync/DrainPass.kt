@@ -175,6 +175,14 @@ public data class DrainAnswer(
         UNTRUSTED,
 
         /**
+         * The gateway answered and refused a write for its own reason: its
+         * disk is full, or it has a quota (#1080, the sweep's F1). Nothing was
+         * lost and nothing was acknowledged; the member's backup device has to
+         * make room, so this is not [UNREACHABLE]'s "try again later".
+         */
+        REFUSED,
+
+        /**
          * A gateway refused this phone's writes: the vault was restored onto
          * another phone, which claimed the next writer epoch (#1029 F1, #1080).
          * The shell freezes the vault read-only; nothing is deleted.

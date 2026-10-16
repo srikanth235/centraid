@@ -175,7 +175,7 @@ struct BackupView: View {
                     }
                     if addShown {
                         if keyInk {
-                            KitOutlineButton(label: model.addLabel, fullWidth: true, action: onAddDestination)
+                            KitOutlineButton(label: model.addLabel, action: onAddDestination)
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-add-destination")
                         } else {
@@ -190,7 +190,7 @@ struct BackupView: View {
                     // beside it.
                     if !model.backUpNowLabel.isEmpty {
                         if keyInk || addShown {
-                            KitOutlineButton(label: model.backUpNowLabel, fullWidth: true) { send(BackupEvents.backUpNow()) }
+                            KitOutlineButton(label: model.backUpNowLabel) { send(BackupEvents.backUpNow()) }
                                 .disabled(!model.backUpNowEnabled)
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-now")

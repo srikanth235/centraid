@@ -418,7 +418,8 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
                     // NO DIGEST HERE (#1025 S4): the core names the bytes.
                     bytes = cursor.getLong(2),
                     capturedAtIso = java.time.Instant.ofEpochMilli(taken).toString(),
-                    capturedUtcOffsetMinutes = 0,
+                    // THE SHUTTER'S ZONE, from the file's own EXIF (D-1025-S7-77).
+                    capturedUtcOffsetMinutes = if (video) 0 else captureOffsetOf(id),
                     kind = if (video) MediaLibrary.Kind.VIDEO else MediaLibrary.Kind.PHOTO,
                     // NO INFERRED GROUPING for motion photos, RAW or burst
                     // members (`NATIVE_V0.md:11-19`): they pass through as
@@ -534,6 +535,41 @@ public class AndroidMediaLibrary(private val context: Context) : MediaLibrary {
         val out = java.io.ByteArrayOutputStream()
         fitted.compress(android.graphics.Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
         return out.toByteArray()
+    }
+
+    /**
+     * THE CAPTURE'S TIME-ZONE OFFSET, MINUTES EAST OF UTC (D-1025-S7-77).
+     *
+     * MediaStore states a capture INSTANT (`DATE_TAKEN`) and no zone; the camera
+     * wrote the zone into the file as the EXIF `OffsetTimeOriginal` tag. This
+     * only finds that tag, and **`OffsetTime` is never read**: it is the zone of
+     * the file's last change, not of the shutter. What a malformed tag is and the
+     * vault's bound are [ExifOffset]'s, in `commonMain` and proved on the JVM.
+     *
+     * **Zero, the old answer, whenever the tags cannot be read**, and never the
+     * phone's own zone, which would re-date a library into wherever it was
+     * uploaded from. The framework's `ExifInterface` parses the two tags from
+     * API 31 and silently ignores them before it, so an older phone keeps zero
+     * rather than asking a parser that cannot answer. A refusal — a revoked or
+     * partial grant, a row whose file went between the page and now, a file
+     * that is not an image `ExifInterface` can read — is the same zero: the
+     * photograph is offered either way. A video has no EXIF and is never asked.
+     */
+    private fun captureOffsetOf(id: Long): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return 0
+        val uri = android.content.ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                val exif = android.media.ExifInterface(stream)
+                ExifOffset.of(exif.getAttribute(android.media.ExifInterface.TAG_OFFSET_TIME_ORIGINAL))
+            } ?: 0
+        } catch (refused: SecurityException) {
+            0
+        } catch (unsupported: UnsupportedOperationException) {
+            0
+        } catch (failed: java.io.IOException) {
+            0
+        }
     }
 
     /** The content uri a ref names; a v0 ref (a bare `_ID`) was always an image. */

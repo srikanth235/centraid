@@ -36,7 +36,7 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 
 | Profile | Budget | Steps it adds | Where it runs |
 | --- | --- | --- | --- |
-| `local` | 120 s **warm** | `fmt`, `clippy`, `test` (the whole workspace), `restore-drill`, `rules`, `ledgers` | By hand, the edit-run loop |
+| `local` | 120 s **warm** | `fmt`, `clippy`, `test` (the crates the change touches and their dependents), `restore-drill`, `rules`, `doc-links`, `ledgers` | By hand, the edit-run loop |
 | `pr` | 1500 s | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `advisory`, `lockfile`, `call-budget`, `fault-door` | [`gate.yml`](.github/workflows/gate.yml), every PR and every push to `main` |
 | `nightly` | unbounded | `pr` plus `device-lanes` | [`gate-nightly.yml`](.github/workflows/gate-nightly.yml), 05:30 UTC |
 | `release` | unbounded | `artifact-identity`, `prebuilt-core-required` | By hand before a tag |
@@ -51,8 +51,9 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 | Step | What it runs |
 | --- | --- |
 | `fmt`, `clippy` | `cargo fmt --all --check`; `cargo clippy --workspace --all-targets -- -D warnings` |
-| `test` | `cargo nextest run --workspace` then `cargo test --workspace --doc` when nextest is installed (nextest runs no doctests, so the second command keeps the set of tests the same), otherwise `cargo test --workspace`; the step line says which. `gate.yml` installs nextest, so CI runs the first |
+| `test` | `cargo nextest run --workspace` then `cargo test --workspace --doc` when nextest is installed (nextest runs no doctests, so the second command keeps the set of tests the same), otherwise `cargo test --workspace`; the step line says which. `gate.yml` installs nextest, so CI runs the first. **On `local` only, the nextest run carries a filter naming the crates the change touches and the crates that depend on them** (`cargo xtask test-plan` prints them), and the step line starts `NARROWED to N of M crates`; the root manifest or lockfile, any crate manifest, the runner's code, or no merge base runs all of them. `pr` and every profile above it always run the whole workspace |
 | `rules` | The structural rules: `sql-confinement` (SQL only under `crates/{ontology,vault,search}` and `crates/apps/kit`), `abi-five-symbols`, `no-listening-socket` (the phone dials and accepts nothing; the one exemption is `crates/gateway/src/server/serve.rs`), `commonmain-no-platform-import`. Also `cargo xtask rules` on its own |
+| `doc-links` | Every relative link and in-repo anchor in the repository's markdown resolves, against the files the repository tracks; no network. Skips only what `doc-integrity` freezes (`receipts/`, `QUALITY.md` § Resolved, `CONSTITUTION.md` § Evolution Log) and the vendored governance kit. Also `cargo xtask doc-links` on its own |
 | `ledgers` | Every number in `contracts/ledgers/` against the merge base — see [the ledgers](#the-ledgers-915-wave-4-927) |
 | `buf` | `buf lint`, then `buf breaking` against the PR base **and** every released tag inside the version window |
 | `deny`, `secrets`, `osv`, `lockfile` | `cargo-deny` over [`deny.toml`](deny.toml); gitleaks over the working tree; osv-scanner, CRITICAL only; no `http:` URLs and pinned checksums in `bun.lock` and `Cargo.lock` |

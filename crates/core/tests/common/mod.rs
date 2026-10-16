@@ -555,3 +555,89 @@ pub fn file_names(handle: &Handle) -> BTreeSet<Name> {
         })
         .expect("reads")
 }
+
+/// **THE OPERATING SYSTEM MOVES WHAT THE PHONE HANDED IT, AND SETTLE RECORDS
+/// IT** (#1080 ruling 2), as iOS's background session does while the app is
+/// suspended: every part a handoff names is `PUT` to the gateway by the test
+/// under the headers it was handed, and the answers are settled. Answers how
+/// many parts the operating system moved.
+pub fn the_os_moves_what_was_handed_off(phone: &Handle, gateway: &Gateway) -> usize {
+    let wire::response::Kind::Handoff(batch) = ask(
+        phone,
+        wire::request::Kind::Handoff(wire::HandoffRequest {
+            max_bytes: 256 << 20,
+            max_parts: 64,
+        }),
+    ) else {
+        panic!("a handoff answers");
+    };
+    let mut settled = Vec::new();
+    for part in &batch.parts {
+        let header = |name: &str| {
+            part.headers
+                .iter()
+                .find(|header| header.name == name)
+                .map(|header| header.value.clone())
+                .unwrap_or_else(|| panic!("no {name} header"))
+        };
+        let token: centraid_gateway::rules::ids::Token = header("authorization")
+            .strip_prefix("Bearer ")
+            .expect("a bearer token")
+            .parse()
+            .expect("a token");
+        let digest = centraid_gateway::rules::ids::Digest::from_header(&header("content-digest"))
+            .expect("a digest");
+        let vault = centraid_gateway::rules::ids::VaultId::from_bytes(
+            hex::decode(&part.vault_id)
+                .expect("hex")
+                .try_into()
+                .expect("32 bytes"),
+        );
+        let name: centraid_gateway::rules::ids::Name = part.name.parse().expect("a name");
+        gateway
+            .runtime
+            .block_on(gateway.spawned.client(token).put_file(
+                &vault,
+                &name,
+                &digest,
+                Path::new(&part.path),
+            ))
+            .expect("the gateway takes it");
+        settled.push(wire::Settled {
+            name: part.name.clone(),
+            http_status: 201,
+            error: String::new(),
+            gateway_id: part.gateway_id.clone(),
+            vault_id: part.vault_id.clone(),
+        });
+    }
+    let moved = settled.len();
+    let wire::response::Kind::Settle(answer) = ask(
+        phone,
+        wire::request::Kind::Settle(wire::SettleRequest { settled }),
+    ) else {
+        panic!("a settle answers");
+    };
+    assert_eq!(
+        answer.confirmed as usize, moved,
+        "every part the operating system moved is confirmed"
+    );
+    moved
+}
+
+/// The parts of the newest snapshot the gateway did not hold in `before`: what
+/// a pass that took a snapshot moved besides files (R-1080-C15 makes a pass
+/// that confirms files take one). A pass's `confirmed_parts` counts every part
+/// acknowledged, ranges and manifest included, so a test that means "each file
+/// part once" takes these off.
+pub fn snapshot_parts_after(path: &Path, before: &BTreeSet<Name>) -> u32 {
+    let book = ledger(path);
+    let snapshots = book.snapshots().expect("reads");
+    let newest = snapshots.last().expect("a snapshot was taken");
+    let manifest =
+        centraid_vault::backup::snapshot::Manifest::from_json(newest.manifest_json.as_bytes())
+            .expect("a manifest");
+    let mut names = manifest.range_names();
+    names.insert(newest.name);
+    u32::try_from(names.iter().filter(|name| !before.contains(name)).count()).expect("fits")
+}

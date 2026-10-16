@@ -5,10 +5,11 @@
 --     > contracts/schema/vault-ddl.sql
 --
 -- Not the corpus. `contracts/golden/issue-1020/vault-ddl.sql` describes the
--- frozen v0 file as it was, and a rung is allowed to move this file away from
--- it — which is exactly what rung five does (#1029, the owner's ruling of
--- 2026-09-21). Ordered by type then name, for READING; the runnable ordering
--- is `contracts/migrations/001_baseline.sql`.
+-- frozen v0 file as it was, and the ladder is allowed to move this file away
+-- from it — which is exactly what it did when it dropped the planes #1029
+-- struck (the owner's ruling of 2026-09-21) and what the baseline's 2026-10-15
+-- squash kept (Q-1029-1). Ordered by type then name, for READING; the runnable
+-- ordering is `contracts/migrations/001_baseline.sql`.
 --
 -- Source: sqlite_master (type, name, tbl_name, sql) where sql is not null.
 -- `sqlite_stat*` is excluded: it is the planner's own statistics, so it says
@@ -198,8 +199,8 @@ CREATE INDEX idx_blob_staging_sha ON blob_staging(content_hash);
 -- index idx_calendar_owner_party on schedule_calendar
 CREATE INDEX idx_calendar_owner_party ON schedule_calendar(owner_party_id);
 
--- index idx_capability_command on agent_capability
-CREATE INDEX idx_capability_command ON agent_capability(command_id);
+-- index idx_capability_command on command_capability
+CREATE INDEX idx_capability_command ON command_capability(command_id);
 
 -- index idx_chat_attachment_asset on chat_message_attachment
 CREATE INDEX idx_chat_attachment_asset
@@ -229,8 +230,8 @@ CREATE INDEX idx_collection_owner_party ON core_collection(owner_party_id);
 -- index idx_collection_parent_collection on core_collection
 CREATE INDEX idx_collection_parent_collection ON core_collection(parent_collection_id);
 
--- index idx_command_invocation_receipt on agent_command_invocation
-CREATE INDEX idx_command_invocation_receipt ON agent_command_invocation(receipt_id);
+-- index idx_command_invocation_receipt on command_invocation
+CREATE INDEX idx_command_invocation_receipt ON command_invocation(receipt_id);
 
 -- index idx_concept_broader_concept on core_concept
 CREATE INDEX idx_concept_broader_concept ON core_concept(broader_concept_id);
@@ -241,15 +242,9 @@ CREATE INDEX idx_content_derivative_content ON core_content_derivative(content_i
 -- index idx_content_item_creator_party on core_content_item
 CREATE INDEX idx_content_item_creator_party ON core_content_item(creator_party_id);
 
--- index idx_content_item_origin_device on core_content_item
-CREATE INDEX idx_content_item_origin_device ON core_content_item(origin_device_id);
-
 -- index idx_content_representation_content on core_content_representation
 CREATE INDEX idx_content_representation_content
   ON core_content_representation(content_id);
-
--- index idx_device_owner_party on access_device
-CREATE INDEX idx_device_owner_party ON access_device(owner_party_id);
 
 -- index idx_document_current_content on core_document
 CREATE INDEX idx_document_current_content ON core_document(current_content_id);
@@ -307,11 +302,11 @@ CREATE INDEX idx_event_organizer_party ON core_event(organizer_party_id);
 -- index idx_event_purge_at on core_event
 CREATE INDEX idx_event_purge_at ON core_event(purge_at);
 
--- index idx_evidence_invocation on agent_evidence
-CREATE INDEX idx_evidence_invocation ON agent_evidence(invocation_id);
+-- index idx_evidence_invocation on command_evidence
+CREATE INDEX idx_evidence_invocation ON command_evidence(invocation_id);
 
--- index idx_evidence_prov on agent_evidence
-CREATE INDEX idx_evidence_prov ON agent_evidence(prov_id);
+-- index idx_evidence_prov on command_evidence
+CREATE INDEX idx_evidence_prov ON command_evidence(prov_id);
 
 -- index idx_face_region_asset on media_face_region
 CREATE INDEX idx_face_region_asset ON media_face_region(asset_id);
@@ -325,8 +320,8 @@ CREATE INDEX idx_face_region_party ON media_face_region(party_id);
 -- index idx_important_date_party on people_important_date
 CREATE INDEX idx_important_date_party ON people_important_date(party_id);
 
--- index idx_invocation_check_invocation on agent_invocation_check
-CREATE INDEX idx_invocation_check_invocation ON agent_invocation_check(invocation_id);
+-- index idx_invocation_check_invocation on command_invocation_check
+CREATE INDEX idx_invocation_check_invocation ON command_invocation_check(invocation_id);
 
 -- index idx_link_from on core_link
 CREATE INDEX idx_link_from ON core_link(from_type, from_id);
@@ -336,9 +331,6 @@ CREATE INDEX idx_link_relation_concept ON core_link(relation_concept_id);
 
 -- index idx_link_to on core_link
 CREATE INDEX idx_link_to ON core_link(to_type, to_id);
-
--- index idx_media_asset_camera_device on media_asset
-CREATE INDEX idx_media_asset_camera_device ON media_asset(camera_device_id);
 
 -- index idx_media_asset_capture_group on media_asset
 CREATE INDEX idx_media_asset_capture_group ON media_asset(capture_group_id);
@@ -675,27 +667,6 @@ CREATE TABLE access_app_ext (
   PRIMARY KEY (app_id, band, table_name)
 ) STRICT;
 
--- table access_device on access_device
-CREATE TABLE access_device (
-  device_id      TEXT PRIMARY KEY,
-  -- Identity here, authority next door: this says who the device IS;
-  -- `share_authority` says what the member let it do (#883).
-  owner_party_id TEXT NOT NULL REFERENCES core_party(party_id),
-  name           TEXT NOT NULL,
-  platform       TEXT,
-  enrolled_at    TEXT NOT NULL,
-  last_seen_at   TEXT
-) STRICT;
-
--- table access_device_secret on access_device_secret
-CREATE TABLE access_device_secret (
-  device_id      TEXT PRIMARY KEY REFERENCES access_device(device_id) ON DELETE CASCADE,
-  public_key     TEXT NOT NULL UNIQUE,
-  -- How far the gateway has served THIS device. Gateway bookkeeping about a
-  -- seat, never a fact the seat's own copy should carry.
-  sync_cursor    TEXT
-, sync_cursor_at TEXT) STRICT;
-
 -- table access_provenance on access_provenance
 CREATE TABLE access_provenance (
   prov_id       TEXT PRIMARY KEY,
@@ -719,7 +690,7 @@ CREATE TABLE access_receipt (
   -- by whoever read it. Every answer is a `share_authority` row now, and
   -- NULL means owner-direct — the one act that needs no answer.
   authority_id       TEXT, -- → share.authority; NULL for owner-direct
-  invocation_id      TEXT REFERENCES agent_command_invocation(invocation_id),
+  invocation_id      TEXT REFERENCES command_invocation(invocation_id),
   action             TEXT NOT NULL,
   object_type        TEXT NOT NULL,
   object_id          TEXT,
@@ -748,83 +719,12 @@ CREATE TABLE access_seed_row (
   UNIQUE (target_type, target_id)
 ) STRICT;
 
--- table agent_capability on agent_capability
-CREATE TABLE agent_capability (
-  capability_id         TEXT PRIMARY KEY,
-  schema_name           TEXT NOT NULL,
-  verb                  TEXT NOT NULL CHECK (verb IN ('discover','query','reason','act','verify','explain')),
-  command_id            TEXT REFERENCES agent_command(command_id),
-  description           TEXT NOT NULL,
-  requires_confirmation INTEGER NOT NULL CHECK (requires_confirmation IN (0,1))
-) STRICT;
-
--- table agent_command on agent_command
-CREATE TABLE agent_command (
-  command_id          TEXT PRIMARY KEY,
-  name                TEXT NOT NULL UNIQUE,
-  owner_schema        TEXT NOT NULL,
-  input_schema_json   TEXT NOT NULL CHECK (json_valid(input_schema_json)),
-  output_schema_json  TEXT NOT NULL CHECK (json_valid(output_schema_json)),
-  preconditions_json  TEXT NOT NULL CHECK (json_valid(preconditions_json)),
-  postconditions_json TEXT NOT NULL CHECK (json_valid(postconditions_json)),
-  idempotency         TEXT NOT NULL CHECK (idempotency IN ('idempotent','once','retry-safe')),
-  risk                TEXT NOT NULL CHECK (risk IN ('low','medium','high')),
-  ontology_version    TEXT NOT NULL
-) STRICT;
-
--- table agent_command_invocation on agent_command_invocation
-CREATE TABLE agent_command_invocation (
-  invocation_id TEXT PRIMARY KEY,
-  -- Pointers into the MODEL half stay VALUE columns, not keys: an audit row
-  -- outlives its subject by design, and a foreign key would either block the
-  -- member's purge or quietly rewrite the evidence (#916).
-  command_id    TEXT NOT NULL, -- → agent.command
-  caller_id     TEXT NOT NULL, -- → access.agent / access.device
-  authority_id  TEXT,          -- → share.authority; NULL for owner-direct
-  input_json    TEXT NOT NULL CHECK (json_valid(input_json)),
-  status        TEXT NOT NULL CHECK (status IN ('proposed','checked','executed','failed','rolled_back')),
-  requested_at  TEXT NOT NULL,
-  executed_at   TEXT,
-  receipt_id    TEXT REFERENCES access_receipt(receipt_id)
-) STRICT;
-
--- table agent_evidence on agent_evidence
-CREATE TABLE agent_evidence (
-  evidence_id   TEXT PRIMARY KEY,
-  invocation_id TEXT NOT NULL REFERENCES agent_command_invocation(invocation_id),
-  claim         TEXT NOT NULL,
-  entity_type   TEXT NOT NULL,
-  entity_id     TEXT NOT NULL,
-  prov_id       TEXT REFERENCES access_provenance(prov_id),
-  weight        REAL CHECK (weight BETWEEN 0 AND 1)
-) STRICT;
-
--- table agent_explanation on agent_explanation
-CREATE TABLE agent_explanation (
-  explanation_id TEXT PRIMARY KEY,
-  invocation_id  TEXT NOT NULL UNIQUE REFERENCES agent_command_invocation(invocation_id),
-  audience       TEXT NOT NULL CHECK (audience IN ('owner','auditor')),
-  summary        TEXT NOT NULL,
-  generated_at   TEXT NOT NULL
-) STRICT;
-
--- table agent_invocation_check on agent_invocation_check
-CREATE TABLE agent_invocation_check (
-  check_id      TEXT PRIMARY KEY,
-  invocation_id TEXT NOT NULL REFERENCES agent_command_invocation(invocation_id),
-  phase         TEXT NOT NULL CHECK (phase IN ('pre','post')),
-  predicate     TEXT NOT NULL,
-  passed        INTEGER NOT NULL CHECK (passed IN (0,1)),
-  observed_json TEXT CHECK (observed_json IS NULL OR json_valid(observed_json)),
-  checked_at    TEXT NOT NULL
-) STRICT;
-
 -- table audit_archive_manifest on audit_archive_manifest
 CREATE TABLE audit_archive_manifest (
   manifest_id      TEXT PRIMARY KEY,
   -- 'provenance' (access_provenance) or 'invocation_cluster' (the mutually
-  -- FK-linked agent_command_invocation + access_receipt +
-  -- agent_invocation_check + agent_evidence + agent_explanation rows for a
+  -- FK-linked command_invocation + access_receipt +
+  -- command_invocation_check + command_evidence + command_explanation rows for a
   -- batch of invocations old enough, receipt included, to seal together —
   -- see journal-archive.ts for why these archive as one unit).
   stream           TEXT NOT NULL CHECK (stream IN ('provenance', 'invocation_cluster')),
@@ -1013,6 +913,77 @@ CREATE TABLE chat_thread (
   FOREIGN KEY (thread_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
+-- table command_capability on command_capability
+CREATE TABLE command_capability (
+  capability_id         TEXT PRIMARY KEY,
+  schema_name           TEXT NOT NULL,
+  verb                  TEXT NOT NULL CHECK (verb IN ('discover','query','reason','act','verify','explain')),
+  command_id            TEXT REFERENCES command_definition(command_id),
+  description           TEXT NOT NULL,
+  requires_confirmation INTEGER NOT NULL CHECK (requires_confirmation IN (0,1))
+) STRICT;
+
+-- table command_definition on command_definition
+CREATE TABLE command_definition (
+  command_id          TEXT PRIMARY KEY,
+  name                TEXT NOT NULL UNIQUE,
+  owner_schema        TEXT NOT NULL,
+  input_schema_json   TEXT NOT NULL CHECK (json_valid(input_schema_json)),
+  output_schema_json  TEXT NOT NULL CHECK (json_valid(output_schema_json)),
+  preconditions_json  TEXT NOT NULL CHECK (json_valid(preconditions_json)),
+  postconditions_json TEXT NOT NULL CHECK (json_valid(postconditions_json)),
+  idempotency         TEXT NOT NULL CHECK (idempotency IN ('idempotent','once','retry-safe')),
+  risk                TEXT NOT NULL CHECK (risk IN ('low','medium','high')),
+  ontology_version    TEXT NOT NULL
+) STRICT;
+
+-- table command_evidence on command_evidence
+CREATE TABLE command_evidence (
+  evidence_id   TEXT PRIMARY KEY,
+  invocation_id TEXT NOT NULL REFERENCES command_invocation(invocation_id),
+  claim         TEXT NOT NULL,
+  entity_type   TEXT NOT NULL,
+  entity_id     TEXT NOT NULL,
+  prov_id       TEXT REFERENCES access_provenance(prov_id),
+  weight        REAL CHECK (weight BETWEEN 0 AND 1)
+) STRICT;
+
+-- table command_explanation on command_explanation
+CREATE TABLE command_explanation (
+  explanation_id TEXT PRIMARY KEY,
+  invocation_id  TEXT NOT NULL UNIQUE REFERENCES command_invocation(invocation_id),
+  audience       TEXT NOT NULL CHECK (audience IN ('owner','auditor')),
+  summary        TEXT NOT NULL,
+  generated_at   TEXT NOT NULL
+) STRICT;
+
+-- table command_invocation on command_invocation
+CREATE TABLE command_invocation (
+  invocation_id TEXT PRIMARY KEY,
+  -- Pointers into the MODEL half stay VALUE columns, not keys: an audit row
+  -- outlives its subject by design, and a foreign key would either block the
+  -- member's purge or quietly rewrite the evidence (#916).
+  command_id    TEXT NOT NULL, -- → command.definition
+  caller_id     TEXT NOT NULL, -- → access.agent / access.device
+  authority_id  TEXT,          -- → share.authority; NULL for owner-direct
+  input_json    TEXT NOT NULL CHECK (json_valid(input_json)),
+  status        TEXT NOT NULL CHECK (status IN ('proposed','checked','executed','failed','rolled_back')),
+  requested_at  TEXT NOT NULL,
+  executed_at   TEXT,
+  receipt_id    TEXT REFERENCES access_receipt(receipt_id)
+) STRICT;
+
+-- table command_invocation_check on command_invocation_check
+CREATE TABLE command_invocation_check (
+  check_id      TEXT PRIMARY KEY,
+  invocation_id TEXT NOT NULL REFERENCES command_invocation(invocation_id),
+  phase         TEXT NOT NULL CHECK (phase IN ('pre','post')),
+  predicate     TEXT NOT NULL,
+  passed        INTEGER NOT NULL CHECK (passed IN (0,1)),
+  observed_json TEXT CHECK (observed_json IS NULL OR json_valid(observed_json)),
+  checked_at    TEXT NOT NULL
+) STRICT;
+
 -- table core_account on core_account
 CREATE TABLE core_account (
   account_id           TEXT PRIMARY KEY,
@@ -1161,7 +1132,6 @@ CREATE TABLE core_content_item (
   byte_size        INTEGER NOT NULL CHECK (byte_size >= 0),
   language         TEXT,
   creator_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
-  origin_device_id TEXT REFERENCES access_device(device_id),
   deleted_at       TEXT,
   purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   created_at       TEXT NOT NULL,
@@ -1267,7 +1237,7 @@ CREATE TABLE core_entity_revision (
   -- because the archive pass removes old invocations and a revision outlives
   -- the invocation record of it.
   invocation_id  TEXT
-    REFERENCES agent_command_invocation(invocation_id) ON DELETE SET NULL,
+    REFERENCES command_invocation(invocation_id) ON DELETE SET NULL,
   -- THE REVISION OCCURRENCE (#996, ruling R20(a) / #916's ONT-revisions).
   --
   -- This table was ruled "the only history table", and a SECOND history graph
@@ -1394,7 +1364,7 @@ CREATE TABLE core_party (
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   -- No `ontology_version` (#916, ruling ONT-04): the ontology version is a
   -- property of the FILE (`PRAGMA user_version`) and of the CONTRACT
-  -- (`agent_command.ontology_version`), never of a row.
+  -- (`command_definition.ontology_version`), never of a row.
   -- THE TRASH PAIR (#916, owner decision D1). A person the member no longer
   -- keeps was previously undeletable: `erasePurgedPerson` walked foreign keys
   -- by nullability and deleted whatever it could reach, which destroyed OTHER
@@ -2122,7 +2092,6 @@ CREATE TABLE media_asset (
   -- Stable logical capture grouping for Live Photo / motion-photo companions.
   capture_group_id TEXT,
   place_id         TEXT REFERENCES core_place(place_id),
-  camera_device_id TEXT REFERENCES access_device(device_id),
   width            INTEGER CHECK (width > 0),
   height           INTEGER CHECK (height > 0),
   duration_s       REAL CHECK (duration_s >= 0),
@@ -2432,8 +2401,8 @@ CREATE TABLE people_profile (
   updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   -- Trash (#630 P5): trashing the profile hides the person from the People
-  -- projection while the canonical party, its links and its Tally
-  -- participation stay, so restore is lossless until the sweep purges.
+  -- projection while the canonical party and its links stay, so restore is
+  -- lossless until the sweep purges.
   deleted_at        TEXT,
   purge_at          TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   FOREIGN KEY (profile_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
@@ -2500,7 +2469,7 @@ CREATE TABLE schedule_project (
 -- table schedule_recurrence_exception on schedule_recurrence_exception
 CREATE TABLE schedule_recurrence_exception (
   exception_id  TEXT PRIMARY KEY,
-  target_type   TEXT NOT NULL CHECK (target_type IN ('core.event','tally.recurring_expense')),
+  target_type   TEXT NOT NULL CHECK (target_type IN ('core.event')),
   target_id     TEXT NOT NULL,
   -- The series-local wall clock of the occurrence, in the series' own zone —
   -- never a UTC instant, and never suffixed 'Z' unless the series is itself
@@ -2698,9 +2667,6 @@ CREATE TABLE social_thread_participant (
   FOREIGN KEY (tp_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
--- table sqlite_sequence on sqlite_sequence
-CREATE TABLE sqlite_sequence(name,seq);
-
 -- trigger access_app_ext_touch_updated_at on access_app_ext
 CREATE TRIGGER access_app_ext_touch_updated_at
 AFTER UPDATE ON access_app_ext
@@ -2744,72 +2710,6 @@ BEFORE UPDATE ON access_receipt
 WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
 BEGIN
   SELECT RAISE(ABORT, 'access_receipt is append-only: an audit row is never rewritten');
-END;
-
--- trigger agent_command_invocation_append_only_d on agent_command_invocation
-CREATE TRIGGER agent_command_invocation_append_only_d
-BEFORE DELETE ON agent_command_invocation
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_command_invocation is append-only: rows leave only through the archive pass');
-END;
-
--- trigger agent_command_invocation_append_only_u on agent_command_invocation
-CREATE TRIGGER agent_command_invocation_append_only_u
-BEFORE UPDATE OF invocation_id, command_id, caller_id, authority_id, input_json,
-                 requested_at
-ON agent_command_invocation
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_command_invocation is append-only in what was asked: only status, executed_at and receipt_id settle');
-END;
-
--- trigger agent_evidence_append_only_d on agent_evidence
-CREATE TRIGGER agent_evidence_append_only_d
-BEFORE DELETE ON agent_evidence
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_evidence is append-only: rows leave only through the archive pass');
-END;
-
--- trigger agent_evidence_append_only_u on agent_evidence
-CREATE TRIGGER agent_evidence_append_only_u
-BEFORE UPDATE ON agent_evidence
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_evidence is append-only: an audit row is never rewritten');
-END;
-
--- trigger agent_explanation_append_only_d on agent_explanation
-CREATE TRIGGER agent_explanation_append_only_d
-BEFORE DELETE ON agent_explanation
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_explanation is append-only: rows leave only through the archive pass');
-END;
-
--- trigger agent_explanation_append_only_u on agent_explanation
-CREATE TRIGGER agent_explanation_append_only_u
-BEFORE UPDATE ON agent_explanation
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_explanation is append-only: an audit row is never rewritten');
-END;
-
--- trigger agent_invocation_check_append_only_d on agent_invocation_check
-CREATE TRIGGER agent_invocation_check_append_only_d
-BEFORE DELETE ON agent_invocation_check
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_invocation_check is append-only: rows leave only through the archive pass');
-END;
-
--- trigger agent_invocation_check_append_only_u on agent_invocation_check
-CREATE TRIGGER agent_invocation_check_append_only_u
-BEFORE UPDATE ON agent_invocation_check
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_invocation_check is append-only: an audit row is never rewritten');
 END;
 
 -- trigger blob_content_key_touch_updated_at on blob_content_key
@@ -2887,6 +2787,72 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE thread_id = NEW.thread_id;
+END;
+
+-- trigger command_evidence_append_only_d on command_evidence
+CREATE TRIGGER command_evidence_append_only_d
+BEFORE DELETE ON command_evidence
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_evidence is append-only: rows leave only through the archive pass');
+END;
+
+-- trigger command_evidence_append_only_u on command_evidence
+CREATE TRIGGER command_evidence_append_only_u
+BEFORE UPDATE ON command_evidence
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_evidence is append-only: an audit row is never rewritten');
+END;
+
+-- trigger command_explanation_append_only_d on command_explanation
+CREATE TRIGGER command_explanation_append_only_d
+BEFORE DELETE ON command_explanation
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_explanation is append-only: rows leave only through the archive pass');
+END;
+
+-- trigger command_explanation_append_only_u on command_explanation
+CREATE TRIGGER command_explanation_append_only_u
+BEFORE UPDATE ON command_explanation
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_explanation is append-only: an audit row is never rewritten');
+END;
+
+-- trigger command_invocation_append_only_d on command_invocation
+CREATE TRIGGER command_invocation_append_only_d
+BEFORE DELETE ON command_invocation
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_invocation is append-only: rows leave only through the archive pass');
+END;
+
+-- trigger command_invocation_append_only_u on command_invocation
+CREATE TRIGGER command_invocation_append_only_u
+BEFORE UPDATE OF invocation_id, command_id, caller_id, authority_id, input_json,
+                 requested_at
+ON command_invocation
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_invocation is append-only in what was asked: only status, executed_at and receipt_id settle');
+END;
+
+-- trigger command_invocation_check_append_only_d on command_invocation_check
+CREATE TRIGGER command_invocation_check_append_only_d
+BEFORE DELETE ON command_invocation_check
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_invocation_check is append-only: rows leave only through the archive pass');
+END;
+
+-- trigger command_invocation_check_append_only_u on command_invocation_check
+CREATE TRIGGER command_invocation_check_append_only_u
+BEFORE UPDATE ON command_invocation_check
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_invocation_check is append-only: an audit row is never rewritten');
 END;
 
 -- trigger core_account_entity_delete on core_account

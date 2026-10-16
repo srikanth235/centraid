@@ -71,7 +71,7 @@ import dev.centraid.design.copy.PhotosCopy
  * **LAID OUT AS THE SYSTEM PHOTOS APP LAYS OUT ITS COLLECTIONS TAB** (iOS 26):
  * titled, foldable sections — Memories as one wide card, Pinned as a strip of
  * square covers with the name on the picture, Albums as covers with the name
- * and count beneath, People, and Utilities as a grouped list. Which section a
+ * and count beneath, and Utilities as a grouped list. Which section a
  * row lands in is read off what the row already is (`member_owned`, the
  * standing shelf's mode, the door's kind); a row this file does not recognise
  * goes to Pinned rather than nowhere.
@@ -182,11 +182,6 @@ public fun PhotosCollectionsScreen(
                         Strip { layout.albums.forEach { row -> AlbumCard(row, onOpenShelf) { deleting = row } } }
                     }
                 }
-                layout.people?.let { people ->
-                    Section("People", "people" in folded, { toggle("people") }) {
-                        PeopleCard(people, onOpenDoor)
-                    }
-                }
                 if (layout.utilities.isNotEmpty()) {
                     Section("Utilities", "utilities" in folded, { toggle("utilities") }) {
                         UtilitiesGroup(layout.utilities, onOpenShelf, onOpenDoor)
@@ -226,7 +221,7 @@ public fun PhotosCollectionsScreen(
 }
 
 /** Every section's fold key — what "Collapse all" folds. */
-private val SECTION_KEYS: Set<String> = setOf("memories", "pinned", "albums", "people", "utilities")
+private val SECTION_KEYS: Set<String> = setOf("memories", "pinned", "albums", "utilities")
 
 // --- the measures, and where each came from (iOS's `PhotosCollectionsView`) ---
 
@@ -255,7 +250,6 @@ private sealed interface CollectionsItem {
  */
 private class CollectionsLayout(shelves: List<ShelfRow>, doors: List<CollectionsDoor>) {
     var memories: CollectionsDoor? = null
-    var people: CollectionsDoor? = null
     val pinned = mutableListOf<CollectionsItem>()
     val albums = mutableListOf<ShelfRow>()
     val utilities = mutableListOf<CollectionsItem>()
@@ -266,7 +260,6 @@ private class CollectionsLayout(shelves: List<ShelfRow>, doors: List<Collections
         doors.forEach { door ->
             when (door.kind) {
                 CollectionsDoor.Kind.KIND_MEMORIES -> memories = door
-                CollectionsDoor.Kind.KIND_PEOPLE -> people = door
                 CollectionsDoor.Kind.KIND_PLACES -> places = door
                 CollectionsDoor.Kind.KIND_DUPLICATES -> duplicates = door
                 CollectionsDoor.Kind.KIND_UNSPECIFIED -> Unit
@@ -461,7 +454,7 @@ private fun AlbumCard(row: ShelfRow, onOpen: (PhotoShelf) -> Unit, onDelete: () 
     }
 }
 
-/** The wide card Memories and People are drawn on: icon at the top, sentence at the foot. */
+/** The wide card Memories is drawn on: icon at the top, sentence at the foot. */
 @Composable
 private fun WideCard(iconKey: String, title: String, caption: String?, urgent: Boolean, spoken: String, onClick: () -> Unit) {
     Column(
@@ -497,20 +490,6 @@ private fun MemoriesCard(door: CollectionsDoor, onOpen: (CollectionsDoor.Kind) -
         urgent = count?.third ?: false,
         spoken = count?.let { "Memories, ${it.second}" } ?: "Memories, none yet",
         onClick = { onOpen(CollectionsDoor.Kind.KIND_MEMORIES) },
-    )
-}
-
-/** PEOPLE: the state carries a count and no faces, so the card names the door. */
-@Composable
-private fun PeopleCard(door: CollectionsDoor, onOpen: (CollectionsDoor.Kind) -> Unit) {
-    val count = doorCount(door)
-    WideCard(
-        iconKey = "Users",
-        title = count?.let { if (it.third) it.first else "${it.first} people" } ?: "People",
-        caption = PhotosCopy.PHOTOS_COLLECTIONS_PEOPLE_CAPTION,
-        urgent = count?.third ?: false,
-        spoken = count?.let { "People, ${it.second}" } ?: "People",
-        onClick = { onOpen(CollectionsDoor.Kind.KIND_PEOPLE) },
     )
 }
 
@@ -672,7 +651,6 @@ private fun iconKeyOf(shelf: PhotoShelf): String {
     if (shelf.place != null) return "place"
     if (shelf.memory != null) return "Sparkle"
     val view = shelf.state_view
-    if (view?.person != null) return "person"
     return when (view?.mode?.kind) {
         PhotoStateView.Mode.Kind.KIND_FAVORITES -> "heart"
         PhotoStateView.Mode.Kind.KIND_ARCHIVE -> "Archive"
@@ -683,7 +661,6 @@ private fun iconKeyOf(shelf: PhotoShelf): String {
 }
 
 private fun iconKeyOf(kind: CollectionsDoor.Kind): String = when (kind) {
-    CollectionsDoor.Kind.KIND_PEOPLE -> "Users"
     CollectionsDoor.Kind.KIND_PLACES -> "place"
     CollectionsDoor.Kind.KIND_MEMORIES -> "Sparkle"
     CollectionsDoor.Kind.KIND_DUPLICATES -> "dupe"
@@ -693,12 +670,11 @@ private fun iconKeyOf(kind: CollectionsDoor.Kind): String = when (kind) {
 /**
  * A DOOR'S NAME IS COPY AND RIDES THE SHELL, not the wire.
  *
- * `CollectionsDoor` carries a `kind` and no title, deliberately: the four are
- * fixed and a string on the row would be four strings to keep in step with
- * SwiftUI's four. The kind is the fact; this is the word.
+ * `CollectionsDoor` carries a `kind` and no title, deliberately: the three are
+ * fixed and a string on the row would be three strings to keep in step with
+ * SwiftUI's three. The kind is the fact; this is the word.
  */
 private fun doorTitle(kind: CollectionsDoor.Kind): String = when (kind) {
-    CollectionsDoor.Kind.KIND_PEOPLE -> "People"
     CollectionsDoor.Kind.KIND_PLACES -> "Places"
     CollectionsDoor.Kind.KIND_MEMORIES -> "Memories"
     CollectionsDoor.Kind.KIND_DUPLICATES -> "Duplicates"

@@ -39,7 +39,7 @@ import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RowSkeleton
@@ -184,7 +184,7 @@ private fun EditorBody(state: AgendaEditorState, data: AgendaEditorData, onEvent
         )
         if (data.blocked_reason.isNotEmpty()) Note(data.blocked_reason)
         if (data.show_skip && data.skip_label.isNotEmpty()) {
-            QuietButton(data.skip_label, testTag = "agenda-editor-skip", ink = "net", modifier = Modifier.padding(KitGeometry.GUTTER)) {
+            OutlineButton(data.skip_label, testTag = "agenda-editor-skip", ink = "net", modifier = Modifier.padding(KitGeometry.GUTTER)) {
                 onEvent(AgendaEditorEvent(skip = AgendaEditorEvent.SkipTapped()))
             }
         }

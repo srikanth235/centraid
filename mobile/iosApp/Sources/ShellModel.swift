@@ -74,8 +74,6 @@ final class ShellModel: ObservableObject {
         case photoLightbox(String, [String], album: String = "")
         case photoPicker(String, String)
         case places
-        case photosPeople
-        case photoFaceReview
         case photosMemories
         case photoDuplicates
         case photoDuplicateReview(String)
@@ -84,7 +82,11 @@ final class ShellModel: ObservableObject {
         case photoEditor(String, [String])
     }
 
-    @Published var path: [Route] = []
+    @Published var path: [Route] = [] {
+        // A SETTLED IMPORT LINE GOES WITH THE NEXT MOVE (DESIGN.md: the line
+        // never clears on a timer; the member's own next step puts it away).
+        didSet { if path != oldValue { importLineMoved() } }
+    }
     @Published var masked = false
 
     /// WHICH PLACE THE BAND'S ROOT IS SHOWING: Home's springboard, or the Chat
@@ -95,7 +97,9 @@ final class ShellModel: ObservableObject {
         case home, chat, backup
     }
 
-    @Published var tab: Tab = .home
+    @Published var tab: Tab = .home {
+        didSet { if tab != oldValue { importLineMoved() } }
+    }
 
     /// THE ON-DEVICE CHAT, with its own observable (see `ChatModel`): a state
     /// per streamed token must not re-evaluate Home.
@@ -264,8 +268,6 @@ final class ShellModel: ObservableObject {
     @Published var photosCollectionsState = Data()
     @Published var photosSearchState = Data()
     @Published var placesState = Data()
-    @Published var photosPeopleState = Data()
-    @Published var faceReviewState = Data()
     @Published var duplicatesState = Data()
     @Published var duplicateReviewState = Data()
     @Published var photosMemoriesState = Data()
@@ -338,8 +340,6 @@ final class ShellModel: ObservableObject {
     private let photosCollections = PhotosCollectionsBridge()
     private let photosSearch = PhotosSearchBridge()
     private let places = PlacesBridge()
-    private let photosPeople = PhotosPeopleBridge()
-    private let faceReview = FaceReviewBridge()
     private let duplicates = DuplicatesBridge()
     private let duplicateReview = DuplicateReviewBridge()
     private let photosMemories = PhotosMemoriesBridge()
@@ -397,8 +397,6 @@ final class ShellModel: ObservableObject {
         photosCollections.observe { [weak self] bytes in self?.photosCollectionsState = bytes.data }
         photosSearch.observe { [weak self] bytes in self?.photosSearchState = bytes.data }
         places.observe { [weak self] bytes in self?.placesState = bytes.data }
-        photosPeople.observe { [weak self] bytes in self?.photosPeopleState = bytes.data }
-        faceReview.observe { [weak self] bytes in self?.faceReviewState = bytes.data }
         duplicates.observe { [weak self] bytes in self?.duplicatesState = bytes.data }
         duplicateReview.observe { [weak self] bytes in self?.duplicateReviewState = bytes.data }
         photosMemories.observe { [weak self] bytes in self?.photosMemoriesState = bytes.data }
@@ -432,8 +430,6 @@ final class ShellModel: ObservableObject {
             self.photosCollections.attach(session: session)
             self.photosSearch.attach(session: session)
             self.places.attach(session: session)
-            self.photosPeople.attach(session: session)
-            self.faceReview.attach(session: session)
             self.duplicates.attach(session: session)
             self.duplicateReview.attach(session: session)
             self.photosMemories.attach(session: session)
@@ -474,6 +470,10 @@ final class ShellModel: ObservableObject {
         // `HomeBridge` hands it to the session when the session opens.
         #if canImport(CentraidShared)
         home.installLibraryDeleter(deleter: PhotoLibraryDeleter())
+        // THE GATEWAY BROWSE (#1080, Q-1080-D3): `NWBrowser` over
+        // `_centraid-gateway._tcp`, run in the foreground after a pass found no
+        // paired gateway. Outbound only; the phone never listens.
+        home.installGatewayBrowser(browser: BonjourGatewayBrowser())
         #endif
         // THE DEVICE MAKES ITS OWN VAULT (#1025 S5; #1029 §1).
         //
@@ -1100,6 +1100,9 @@ final class ShellModel: ObservableObject {
         }
         importing = true
         importNotice = words.running
+        // ASKED FROM THE APP ITSELF: the rows land on the page the member is
+        // reading, so the line has nowhere else to send them.
+        importOpens = ""
         Task { @MainActor in
             let sentence = await self.imported(source)
             self.importing = false
@@ -1117,18 +1120,35 @@ final class ShellModel: ObservableObject {
         guard !importing else { return }
         importing = true
         Task { @MainActor in
+            var apps: [String] = []
             var outcomes: [String] = []
             for source in [Centraid_Screen_V1_ImportSource.contacts, .calendar, .reminders] {
                 self.importNotice = Self.importWords(source)?.running ?? ""
-                if let sentence = await self.imported(source) { outcomes.append(sentence) }
+                if let sentence = await self.imported(source) {
+                    apps.append(Self.importApp(source))
+                    outcomes.append(sentence)
+                }
             }
             self.importing = false
             self.importNotice = PhoneImport.shared.madeSummary(outcomes: outcomes)
+            // THE LINE'S ONE ACTION opens what came in (the first app that
+            // received anything); a line with nothing new opens nothing.
+            self.importOpens = self.importNotice.isEmpty ? "" : PhoneImport.shared.madeOpens(apps: apps, outcomes: outcomes)
         }
         #endif
     }
 
     #if canImport(CentraidShared)
+    /// The app an import writes to: Contacts → People, Calendar → Agenda, Reminders → Tasks.
+    private static func importApp(_ source: Centraid_Screen_V1_ImportSource) -> String {
+        switch source {
+        case .contacts: return "people"
+        case .calendar: return "agenda"
+        case .reminders: return "tasks"
+        default: return ""
+        }
+    }
+
     private static func importWords(_ source: Centraid_Screen_V1_ImportSource) -> (running: String, denied: String)? {
         switch source {
         case .contacts: return (ShellWords.importContactsRunning, ShellWords.importContactsDenied)
@@ -1183,6 +1203,7 @@ final class ShellModel: ObservableObject {
         guard !importing, !identifiers.isEmpty else { return }
         importing = true
         importNotice = ShellWords.importContactsRunning
+        importOpens = ""
         Task { @MainActor in
             let found = await PhoneContacts.read(identifiers: identifiers)
             let sentence: String = await withCheckedContinuation { done in
@@ -1194,10 +1215,31 @@ final class ShellModel: ObservableObject {
         #endif
     }
 
-    /// The import banner's Done.
+    /// The app the import line's one action opens ("Open People"), or empty.
+    @Published var importOpens = ""
+
+    /// The import line's close key.
     func dismissImportNotice() {
         guard !importing else { return }
         importNotice = ""
+        importOpens = ""
+    }
+
+    /// The import line's action: put the line away and open what came in.
+    func openImported() {
+        let app = importOpens
+        dismissImportNotice()
+        guard let route = ChatRouting.appHome(app) else { return }
+        tab = .home
+        path.append(route)
+    }
+
+    /// The member moved: a settled line has been read, and goes. A running
+    /// import keeps its line, since the work it describes is not done.
+    private func importLineMoved() {
+        guard !importing, !importNotice.isEmpty else { return }
+        importNotice = ""
+        importOpens = ""
     }
 
     /// Clear member-visible copy that named a vault no longer in front.
@@ -1288,9 +1330,9 @@ final class ShellModel: ObservableObject {
         #endif
     }
 
-    /// THE THREE SHELVES THAT ARE REACHED FROM ANOTHER SCREEN, ENCODED.
+    /// THE TWO SHELVES THAT ARE REACHED FROM ANOTHER SCREEN, ENCODED.
     ///
-    /// A place card, a person and a memory each open the SAME screen —
+    /// A place card and a memory each open the SAME screen —
     /// `photos.shelf`, the library under a predicate — so each of these builds
     /// the parameter that says which. They are here rather than in the views
     /// because a route's payload is the shell's business, and because
@@ -1305,21 +1347,6 @@ final class ShellModel: ObservableObject {
         shelf.place = .with {
             $0.placeID = identifier
             $0.placeName = name
-        }
-        return (try? shelf.serializedData()) ?? Data()
-    }
-
-    func personShelf(identifier: String, name: String) -> Data {
-        var shelf = Centraid_Screen_V1_PhotoShelf()
-        // A PERSON IS A `PhotoStateView`, NOT AN ARM OF ITS OWN — law 3, and
-        // the shape `navigation.ts:43-46` chose: the state view is a
-        // discriminated union and "one person's photographs" is one of its
-        // cases, beside favourites, archive, trash and videos.
-        shelf.stateView = .with {
-            $0.person = .with {
-                $0.partyID = identifier
-                $0.personName = name
-            }
         }
         return (try? shelf.serializedData()) ?? Data()
     }
@@ -1365,8 +1392,6 @@ final class ShellModel: ObservableObject {
         case "photos.collections": photosCollections.send(event: event.kotlin)
         case "photos.search": photosSearch.send(event: event.kotlin)
         case "photos.places": places.send(event: event.kotlin)
-        case "photos.people": photosPeople.send(event: event.kotlin)
-        case "photos.faces": faceReview.send(event: event.kotlin)
         case "photos.duplicates": duplicates.send(event: event.kotlin)
         case "photos.duplicate": duplicateReview.send(event: event.kotlin)
         case "photos.memories": photosMemories.send(event: event.kotlin)
@@ -1537,8 +1562,6 @@ final class ShellModel: ObservableObject {
             )
 
         case .places: places.opened()
-        case .photosPeople: photosPeople.opened()
-        case .photoFaceReview: faceReview.opened()
         case .photosMemories: photosMemories.opened()
         case .photoDuplicates: duplicates.opened()
         case let .photoEditor(identifier, _):

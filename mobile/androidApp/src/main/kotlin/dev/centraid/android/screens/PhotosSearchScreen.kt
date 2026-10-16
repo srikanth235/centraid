@@ -46,7 +46,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.EmptyState
 import centraid.screen.v1.PhotoShelf
-import centraid.screen.v1.PhotoStateView
 import centraid.screen.v1.PhotosSearchEvent
 import centraid.screen.v1.PhotosSearchState
 import centraid.screen.v1.SearchMatch
@@ -85,7 +84,7 @@ public fun PhotosSearchScreen(
     /** A cell was tapped. Where that GOES is the navigator's business. */
     onOpenAsset: (String) -> Unit = {},
     /**
-     * A person, place or album was tapped — above the grid or on the resting
+     * A place or album was tapped — above the grid or on the resting
      * page. The shelf arrives WHOLE, built by the read with its name in it, so
      * nothing here composes one.
      */
@@ -148,7 +147,7 @@ public fun PhotosSearchScreen(
 }
 
 /**
- * THE PEOPLE, PLACES AND ALBUMS THE QUERY NAMED, AND WHY THE GRID MATCHED.
+ * THE PLACES AND ALBUMS THE QUERY NAMED, AND WHY THE GRID MATCHED.
  *
  * The doors come first (v0 §9: "each one tap from the surface that owns it"),
  * then the reason line. HOW MANY REASONS FIT IS THE VIEW'S DECISION: the read
@@ -202,12 +201,11 @@ private fun TopHitRow(hit: SearchTopHit, onOpenShelf: (PhotoShelf) -> Unit) {
 }
 
 /**
- * "Person · 12 photos", or "Album · at least 500 photos". A zero is
+ * "Place · 12 photos", or "Album · at least 500 photos". A zero is
  * "not counted" on this door, so it prints the kind alone rather than a "0".
  */
 private fun topHitSub(hit: SearchTopHit): String {
     val kind = when (hit.kind) {
-        SearchMatch.Kind.KIND_PERSON -> "Person"
         SearchMatch.Kind.KIND_PLACE -> "Place"
         SearchMatch.Kind.KIND_ALBUM -> "Album"
         else -> ""
@@ -220,7 +218,6 @@ private fun topHitSub(hit: SearchTopHit): String {
 }
 
 private fun kindIcon(kind: SearchMatch.Kind): String = when (kind) {
-    SearchMatch.Kind.KIND_PERSON -> "person"
     SearchMatch.Kind.KIND_PLACE -> "place"
     SearchMatch.Kind.KIND_ALBUM -> "album"
     else -> "Search"
@@ -251,9 +248,8 @@ private val REST_PAD = ((BandPolicy.BAND_HEIGHT - 48) / 2).dp
  * NOTHING HAS BEEN ASKED YET — so this says what there is to ask FOR.
  *
  * One line that is true of every vault — what a search reaches — and then this
- * vault's own vocabulary under it: the people confirmed on its photographs and
- * the places they were taken, each a door to its shelf, and the labels on them
- * as words to type. Never a fixed list of words the product hopes are there;
+ * vault's own vocabulary under it: the places its photographs were taken, each
+ * a door to its shelf, and the labels on them as words to type. Never a fixed list of words the product hopes are there;
  * a vault with none of them shows the line alone, which is the honest resting
  * page of a new vault.
  */
@@ -268,24 +264,6 @@ private fun RestingPanel(resting: SearchResting, onOpenShelf: (PhotoShelf) -> Un
             style = centraidType("small"),
             color = centraidColor("textSoft"),
         )
-        if (resting.people.isNotEmpty()) {
-            RestingSection("People") {
-                resting.people.forEach { person ->
-                    RestingDoor(person.display_name, "person") {
-                        onOpenShelf(
-                            PhotoShelf(
-                                state_view = PhotoStateView(
-                                    person = PhotoStateView.Person(
-                                        party_id = person.party_id,
-                                        person_name = person.display_name,
-                                    ),
-                                ),
-                            ),
-                        )
-                    }
-                }
-            }
-        }
         if (resting.places.isNotEmpty()) {
             RestingSection("Places") {
                 resting.places.forEach { place ->
@@ -326,7 +304,7 @@ private fun RestingSection(title: String, content: @Composable () -> Unit) {
     }
 }
 
-/** One person or place on the resting page, opening its shelf. */
+/** One place on the resting page, opening its shelf. */
 @Composable
 private fun RestingDoor(label: String, iconKey: String, onOpen: () -> Unit) {
     Row(
@@ -362,10 +340,10 @@ private const val RESTING_NOTE: String =
  *
  * **THE KIND IS THE CONTRACT'S AND THE WORDS ARE THE SHELL'S.** The field used
  * to be `repeated string matched_on` and it was the one place in that section
- * carrying a kind as prose — two shells composing their own "Person: Ada" and
+ * carrying a kind as prose — two shells composing their own "Place: Lisbon" and
  * "In Lisbon" is two shells wording one fact two ways, which is how v0's empty
  * states drifted apart. So the enum travels and this is where Compose spells
- * it; `PhotosSearchView.swift` spells the same five the same way, and the two
+ * it; `PhotosSearchView.swift` spells the same four the same way, and the two
  * are kept in step by hand.
  *
  * Grouped by kind rather than listed flat, because "Captions: a, b - Places:
@@ -373,7 +351,6 @@ private const val RESTING_NOTE: String =
  */
 private fun reason(matches: List<SearchMatch>): String {
     val order = listOf(
-        SearchMatch.Kind.KIND_PERSON,
         SearchMatch.Kind.KIND_PLACE,
         SearchMatch.Kind.KIND_ALBUM,
         SearchMatch.Kind.KIND_LABEL,
@@ -393,7 +370,6 @@ private fun reason(matches: List<SearchMatch>): String {
 }
 
 private fun noun(kind: SearchMatch.Kind): String = when (kind) {
-    SearchMatch.Kind.KIND_PERSON -> "People"
     SearchMatch.Kind.KIND_PLACE -> "Places"
     SearchMatch.Kind.KIND_ALBUM -> "Albums"
     SearchMatch.Kind.KIND_LABEL -> "Labels"

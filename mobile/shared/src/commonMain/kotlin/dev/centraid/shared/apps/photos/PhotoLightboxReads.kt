@@ -10,7 +10,6 @@ import centraid.screen.v1.PhotoDetail
 import centraid.screen.v1.PhotoLabel
 import centraid.screen.v1.PhotoLightboxEvent
 import centraid.screen.v1.PhotoLightboxState
-import centraid.screen.v1.PhotoPerson
 import centraid.screen.v1.PhotoPlaceChoice
 import centraid.screen.v1.ReadFailure
 import dev.centraid.shared.screen.Reads
@@ -22,18 +21,18 @@ import dev.centraid.shared.sync.ScreenWrites
  * WHAT THE LIGHTBOX READS (#1029, photos port, lane 2).
  *
  * This object is the ASSET — one row of `media_asset`, bound by id — and the
- * screen's writes. [PhotoLightboxLeg] is the other six statements.
+ * screen's writes. [PhotoLightboxLeg] is the other four statements.
  *
- * ## Why this is seven reads and not one
+ * ## Why this is five reads and not one
  *
  * **The page door has no join clause.** `PageQuery.select` is rendered as a
  * list of QUOTED IDENTIFIERS (`crates/vault/src/page.rs`: `select.iter().map(quoted)`),
  * so an entry is a real column and can never be `<expression> AS <alias>`; and
  * `from` is one table. The three computed columns the door does offer —
  * `with_held_thumbnail`, `with_note_body`, `with_document_size` — are the only
- * cross-table answers on it, and none of them is a place, a person or a word.
+ * cross-table answers on it, and none of them is a place or a word.
  *
- * So the photograph is assembled from seven statements, each bound to an id it
+ * So the photograph is assembled from five statements, each bound to an id it
  * learned from the one before. The machine sequences them; the state is what
  * carries the intermediate ids, which is why [query] takes a state at all.
  *
@@ -59,11 +58,9 @@ import dev.centraid.shared.sync.ScreenWrites
  *   `PhotoLightboxBridge` asks the byte door by the content id the CONTENT leg
  *   brings, landing the answer as `OriginalLocated`. Nothing here fabricates a
  *   path.
- * - **`camera`.** `media_asset.camera_device_id` is a foreign key into
- *   `access_device`, which is an ACCESS-plane row about a device that has
- *   reached this vault — not a camera model — and `exif_json` is a JSON blob
- *   that a reducer must not parse. Left empty rather than filled with an id: a
- *   member reading `dev-01j…` under "Camera" has been told less than nothing.
+ * - **`camera`.** No column of `media_asset` names a camera model, and
+ *   `exif_json` is a JSON blob that a reducer must not parse. Left empty rather
+ *   than guessed.
  *   The shells read the make and model out of the ORIGINAL's own header once
  *   it is located, which is where a camera wrote them.
  */
@@ -251,8 +248,8 @@ public object PhotoLightboxReads :
      *
      * A MEMBER AND NOT A TOP-LEVEL EXTENSION: every reads object in this
      * package needs the same three lines, and a file-level one would be
-     * ambiguous against the `internal` copy `PhotosPeopleReads` already
-     * publishes. Inside the object it is unambiguous and unexported.
+     * ambiguous between them. Inside the object it is unambiguous and
+     * unexported.
      */
     private fun Row.text(index: Int): String = values.getOrNull(index)?.text ?: ""
 
@@ -271,25 +268,24 @@ public object PhotoLightboxReads :
 }
 
 /**
- * ONE OF THE SIX READS THAT ARE NOT THE PHOTOGRAPH ITSELF.
+ * ONE OF THE FOUR READS THAT ARE NOT THE PHOTOGRAPH ITSELF.
  *
  * A CLASS WITH A LEG RATHER THAN AN OBJECT WITH A PHASE. `ScreenReads` pairs
  * one `query` with one `arrived` under one screen id, and `arrived` is handed
  * rows with no note saying which statement produced them. An object that kept
  * "which leg am I on" in a field would be an object two reads in flight could
  * race, and nothing in `ScreenRuntime` promises to sequence them — it launches
- * each `ReadPage` in its own coroutine. Six instances, six ids, six pairings
+ * each `ReadPage` in its own coroutine. Four instances, four ids, four pairings
  * that cannot come apart.
  *
  * **EVERY ONE OF THESE SETS `DataArrived.amendment`.** It is a flag and not an
- * inference from an empty `asset_id`: `media_face_region` and `core_tag` both
- * carry the asset in a column, so the day a leg projects it the inference would
- * start replacing the photograph with a face region — silently, because both
- * shapes typecheck.
+ * inference from an empty `asset_id`: `core_tag` carries the asset in a column,
+ * so the day a leg projects it the inference would start replacing the
+ * photograph with a tag — silently, because both shapes typecheck.
  *
  * **A REFUSED LEG NAMES ITS [PhotoDetail.Part] AND CHANGES NOTHING ELSE.** It
- * used to answer an event the reducer ignored, so "nobody is in this
- * photograph" and "the face read was refused" drew the same empty panel; see
+ * used to answer an event the reducer ignored, so "no label is on this
+ * photograph" and "the tag read was refused" drew the same empty panel; see
  * [refused].
  */
 public class PhotoLightboxLeg internal constructor(
@@ -299,8 +295,6 @@ public class PhotoLightboxLeg internal constructor(
 
     override val table: String = when (leg) {
         PhotoLightboxMachine.Leg.PLACE -> "core_place"
-        PhotoLightboxMachine.Leg.FACES -> "media_face_region"
-        PhotoLightboxMachine.Leg.PEOPLE -> "core_party"
         PhotoLightboxMachine.Leg.TAGS -> "core_tag"
         PhotoLightboxMachine.Leg.CONCEPTS -> "core_concept"
         PhotoLightboxMachine.Leg.CONTENT -> "core_content_item"
@@ -310,14 +304,13 @@ public class PhotoLightboxLeg internal constructor(
      * **THESE ARE CEILINGS, AND A FULL PAGE IS A FLOOR.**
      *
      * There is no `COUNT(*)` on this door, and none of these reads walks: each
-     * is bound to one asset's ids, and a photograph with more than thirty-two
-     * confirmed faces or sixty-four tags on it is not a page this screen tries
-     * to complete. What a full page costs here is a face or a chip that is not
-     * drawn — never a wrong number, because the lightbox prints no counts.
+     * is bound to one asset's ids, and a photograph with more than sixty-four
+     * tags on it is not a page this screen tries to complete. What a full page
+     * costs here is a chip that is not drawn — never a wrong number, because the
+     * lightbox prints no counts.
      */
     override val limit: Int = when (leg) {
         PhotoLightboxMachine.Leg.PLACE, PhotoLightboxMachine.Leg.CONTENT -> 1
-        PhotoLightboxMachine.Leg.FACES, PhotoLightboxMachine.Leg.PEOPLE -> 32
         PhotoLightboxMachine.Leg.TAGS, PhotoLightboxMachine.Leg.CONCEPTS -> 64
     }
 
@@ -329,7 +322,7 @@ public class PhotoLightboxLeg internal constructor(
      * into silence. The machine does not emit these reads before the asset has
      * landed, so a null here means the member moved on mid-read.
      *
-     * **SORT AND PRIMARY KEY ARE THE SAME COLUMN** on five of the six. That is
+     * **SORT AND PRIMARY KEY ARE THE SAME COLUMN** on every one of the four. That is
      * `crates/apps/photos`' own idiom for a set read by id
      * (`content_statement`, `concepts_statement`, `custody_statement` all use
      * `PageOrder::asc("content_id", "content_id")`), and it is what keeps these
@@ -351,38 +344,6 @@ public class PhotoLightboxLeg internal constructor(
                     where_ = "place_id = ?",
                     bind = listOf(Value(text = placeId)),
                     order = PageOrder("place_id", "place_id", descending = false),
-                )
-            }
-
-            // CONFIRMED FACES ONLY, and the proto says why: "a proposal belongs
-            // to face review and naming it here would make a guess look like a
-            // fact". `party_id IS NOT NULL` is the second half of that — the
-            // column is `ON DELETE SET NULL` so a purged person leaves a
-            // confirmed region behind with nobody in it.
-            PhotoLightboxMachine.Leg.FACES -> PageQuery(
-                name = "photos.lightbox.faces",
-                select = listOf("region_id", "party_id"),
-                from = table,
-                where_ = "asset_id = ? AND review_state = ? AND party_id IS NOT NULL",
-                bind = listOf(Value(text = assetId), Value(text = CONFIRMED)),
-                order = PageOrder("region_id", "region_id", descending = false),
-            )
-
-            PhotoLightboxMachine.Leg.PEOPLE -> {
-                val ids = detail?.people?.map { it.party_id }?.filter { it.isNotEmpty() }
-                    ?: return null
-                if (ids.isEmpty()) return null
-                PageQuery(
-                    name = "photos.lightbox.people",
-                    select = listOf("party_id", "display_name"),
-                    from = table,
-                    // A DELETED PARTY IS NOT A NAME TO DRAW. The row survives
-                    // until the purge sweep takes it, and a face labelled with
-                    // somebody the member has forgotten is the one thing
-                    // "forgetting" was supposed to mean.
-                    where_ = inList("party_id", ids.size) + " AND deleted_at IS NULL",
-                    bind = ids.map { Value(text = it) },
-                    order = PageOrder("party_id", "party_id", descending = false),
                 )
             }
 
@@ -432,7 +393,7 @@ public class PhotoLightboxLeg internal constructor(
      * The rows, as an AMENDMENT to the photograph on screen.
      *
      * An empty page is a real answer everywhere here — no place row on this
-     * device, nobody confirmed in the picture, no tags — and each one folds in
+     * device, no tags — and each one folds in
      * as an absence that changes nothing, which is what the machine's `amend`
      * is built to do.
      */
@@ -440,11 +401,10 @@ public class PhotoLightboxLeg internal constructor(
         PhotoLightboxEvent(
             data_ = PhotoLightboxEvent.DataArrived(
                 // AN AMENDMENT SAYS SO, and is never inferred from an empty
-                // `asset_id`. Two of these legs COULD carry one —
-                // `media_face_region` and `core_tag` both have the asset in a
+                // `asset_id`. `core_tag` COULD carry one — it has the asset in a
                 // column — and a reducer that read absence as "satellite" would
-                // start replacing the photograph with a face region the day one
-                // of them did. Both shapes typecheck; only one is right.
+                // start replacing the photograph with a tag the day it did.
+                // Both shapes typecheck; only one is right.
                 amendment = true,
                 detail = when (leg) {
                     PhotoLightboxMachine.Leg.PLACE -> PhotoDetail(
@@ -481,22 +441,6 @@ public class PhotoLightboxLeg internal constructor(
                         place_has_coordinate = rows.firstOrNull()?.let {
                             it.real(2) != null && it.real(3) != null
                         } ?: false,
-                    )
-
-                    PhotoLightboxMachine.Leg.FACES -> PhotoDetail(
-                        // IDS NOW, NAMES ON THE NEXT HOP. A person with an
-                        // empty `display_name` is one this leg found and the
-                        // party read has not answered for yet; both views draw
-                        // only the named ones, because a party id is not a
-                        // person's name.
-                        people = rows.map { PhotoPerson(party_id = it.text(1)) }
-                            .filter { it.party_id.isNotEmpty() },
-                    )
-
-                    PhotoLightboxMachine.Leg.PEOPLE -> PhotoDetail(
-                        people = rows.map {
-                            PhotoPerson(party_id = it.text(0), display_name = it.text(1))
-                        },
                     )
 
                     PhotoLightboxMachine.Leg.TAGS -> PhotoDetail(
@@ -568,8 +512,8 @@ public class PhotoLightboxLeg internal constructor(
      * A SATELLITE READ THAT FAILED IS NOT A PHOTOGRAPH THAT FAILED — AND IT IS
      * NOT SILENCE EITHER.
      *
-     * It was, for one draft: an empty event the reducer ignored, so **"nobody
-     * is in this photograph" and "the face read was refused" drew the same
+     * It was, for one draft: an empty event the reducer ignored, so **"no label
+     * is on this photograph" and "the tag read was refused" drew the same
      * empty panel.** That is the two-empty-cell-sentences defect one level up,
      * and the fix is the same one — say which absence this is.
      *
@@ -579,7 +523,7 @@ public class PhotoLightboxLeg internal constructor(
      * sheet says it could not be read.
      *
      * The `ReadFailure`'s own sentence is dropped here on purpose. A refusal
-     * per part would put up to four vault sentences in a facts panel, and what
+     * per part would put up to three vault sentences in a facts panel, and what
      * a member needs is WHICH PART — the read law's sentence belongs to the
      * read that can fail the screen, which is the asset's.
      */
@@ -593,17 +537,14 @@ public class PhotoLightboxLeg internal constructor(
     /**
      * WHICH PART OF THE PHOTOGRAPH THIS LEG SPEAKS FOR.
      *
-     * Six legs, four parts: [PhotoLightboxMachine.Leg.FACES] and
-     * [PhotoLightboxMachine.Leg.PEOPLE] are two hops at ONE answer — who is in
-     * it — and so are [PhotoLightboxMachine.Leg.TAGS] and
-     * [PhotoLightboxMachine.Leg.CONCEPTS]. A member reading "Centraid could not
-     * read who is in this photograph" does not need to know which of the two
-     * reads it was, and a part per hop would be the plumbing showing through.
+     * Four legs, three parts: [PhotoLightboxMachine.Leg.TAGS] and
+     * [PhotoLightboxMachine.Leg.CONCEPTS] are two hops at ONE answer — which
+     * labels it carries. A member reading that Centraid could not read them
+     * does not need to know which of the two reads it was, and a part per hop
+     * would be the plumbing showing through.
      */
     public val part: PhotoDetail.Part = when (leg) {
         PhotoLightboxMachine.Leg.PLACE -> PhotoDetail.Part.PART_PLACE
-        PhotoLightboxMachine.Leg.FACES, PhotoLightboxMachine.Leg.PEOPLE ->
-            PhotoDetail.Part.PART_PEOPLE
         PhotoLightboxMachine.Leg.TAGS, PhotoLightboxMachine.Leg.CONCEPTS ->
             PhotoDetail.Part.PART_LABELS
         PhotoLightboxMachine.Leg.CONTENT -> PhotoDetail.Part.PART_CONTENT
@@ -618,9 +559,6 @@ public class PhotoLightboxLeg internal constructor(
     private fun Row.real(index: Int): Double? = values.getOrNull(index)?.real
 
     private companion object {
-        /** `media_face_region.review_state`'s own value. */
-        const val CONFIRMED: String = "confirmed"
-
         /** `crates/apps/photos`' `TAG_TARGET_TYPE`, spelled the same. */
         const val TAG_TARGET_TYPE: String = "media.asset"
 

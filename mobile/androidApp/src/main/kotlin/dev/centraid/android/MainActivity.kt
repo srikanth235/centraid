@@ -21,7 +21,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import dev.centraid.android.kit.LocalShellLine
+import dev.centraid.shared.nav.RowRoutes
 import dev.centraid.android.kit.LocalPhoneImport
 import dev.centraid.android.kit.ShellBanner
 import dev.centraid.android.screens.agenda.rememberCalendarImport
@@ -460,17 +463,32 @@ public class MainActivity : FragmentActivity() {
                     RouteNav(read = { stack }, write = { next -> stack = next }, scope = scope)
                 }
                 Column(Modifier.fillMaxSize()) {
-                if (shellNote.sentence.isNotEmpty()) {
-                    ShellBanner(
-                        sentence = shellNote.sentence,
-                        action = if (shellNote.holds) "" else KitWords.DONE,
-                        tag = "import",
-                        onAct = { shellNote = ShellNote("", holds = false) },
-                    )
+                // THE MEMBER MOVED: a settled line has been read, and goes. A
+                // held line (an import still running) stays, since the work it
+                // describes is not done.
+                LaunchedEffect(stack.current) {
+                    if (!shellNote.holds) shellNote = ShellNote("", holds = false)
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
+                // THE IMPORT'S LINE, handed to every place, which draws it on
+                // its band (DESIGN.md's one status line, docked at the foot).
+                val shellLine: @Composable () -> Unit = {
+                    ShellBanner(
+                        sentence = shellNote.sentence,
+                        actionLabel = if (shellNote.holds) "" else PhoneImport.openLabel(shellNote.opens),
+                        closeLabel = if (shellNote.holds) "" else KitWords.DISMISS,
+                        tag = "import",
+                        onAct = {
+                            val opens = RowRoutes.appHome(shellNote.opens)
+                            shellNote = ShellNote("", holds = false)
+                            if (opens != null) stack = stack.push(opens)
+                        },
+                        onClose = { shellNote = ShellNote("", holds = false) },
+                    )
+                }
                 CompositionLocalProvider(
                     LocalPhoneImport provides phoneImport,
+                    LocalShellLine provides shellLine,
                 ) {
                 // EVERY APP'S ROOT WATCH (`AppRoutes.Global`), on every screen.
                 routes.forEach { app -> key(app) { app.Global(nav) } }
@@ -523,8 +541,12 @@ public class MainActivity : FragmentActivity() {
                         routes.filterIsInstance<PhotosRoutes>().firstOrNull()?.photosAnswered(scope)
                         contactsImport { people ->
                             calendarImport { events ->
-                                val summary = PhoneImport.madeSummary(listOfNotNull(people, events))
-                                shellNote = ShellNote(summary, holds = false)
+                                val made = listOf("people" to people, "agenda" to events).filter { it.second != null }
+                                val outcomes = made.map { it.second.orEmpty() }
+                                val summary = PhoneImport.madeSummary(outcomes)
+                                // THE LINE'S ONE ACTION opens what came in.
+                                val opens = if (summary.isEmpty()) "" else PhoneImport.madeOpens(made.map { it.first }, outcomes)
+                                shellNote = ShellNote(summary, holds = false, opens = opens)
                             }
                         }
                     }
@@ -666,7 +688,8 @@ public class MainActivity : FragmentActivity() {
     }
 
     /** The shell's banner line; [holds] draws it with no Done (an import running). */
-    private data class ShellNote(val sentence: String, val holds: Boolean)
+    /** The import's line: its sentence, whether the work is still running, and the app its action opens. */
+    private data class ShellNote(val sentence: String, val holds: Boolean, val opens: String = "")
 
     private companion object {
         /** The launch extra a debug build reads its demo seed from. See `DevSeed`. */

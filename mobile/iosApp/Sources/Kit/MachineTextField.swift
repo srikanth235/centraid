@@ -23,6 +23,9 @@ struct MachineTextField: View {
     var focusOnAppear: Bool = false
     let onEdit: (String) -> Void
     var onSubmit: (() -> Void)? = nil
+    /// Told when the field takes or gives up the keyboard, for a screen that
+    /// makes room for it (Tasks' quick add puts its band away, as an editor does).
+    var onFocusChange: ((Bool) -> Void)? = nil
 
     @State private var typed = ""
     @State private var echoes = TypedText(initial: "")
@@ -45,5 +48,6 @@ struct MachineTextField: View {
                 if let adopted = echoes.answer(value: text, shown: typed, open: open) { typed = adopted }
             }
             .onChange(of: focusOnAppear) { _, now in if now { focused = true } }
+            .onChange(of: focused) { _, now in onFocusChange?(now) }
     }
 }

@@ -778,22 +778,6 @@ private fun LightboxInfoSheet(
             }
         }
 
-        // CONFIRMED FACES ONLY, and only the ones with a NAME: a party id is
-        // not a person, and a proposal belongs to face review.
-        Column {
-            InfoLabel(PhotosCopy.PHOTOS_WHO_IN_IT)
-            Text(
-                text = lightboxSection(
-                    values = detail.people.map { it.display_name }.filter { it.isNotEmpty() },
-                    unread = PhotoDetail.Part.PART_PEOPLE in detail.unread_parts,
-                    unreadSentence = PhotosCopy.PHOTOS_PEOPLE_UNREADABLE,
-                    emptySentence = PhotosCopy.PHOTOS_PEOPLE_NONE,
-                ),
-                style = centraidType("body"),
-                color = ink,
-            )
-        }
-
         // LABELS, each with its own remove, and a field to add one. Only
         // labels with a word on them are drawn: a concept id is not a word.
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1076,19 +1060,4 @@ private fun lightboxBytes(count: Long): String = when {
 private fun lightboxTenths(count: Long, unit: Long): String {
     val tenth = (count * 10L + unit / 2L) / unit
     return "${tenth / 10L}.${tenth % 10L}"
-}
-
-/**
- * ONE SECTION, AND THREE THINGS IT CAN SAY: values, "there are none", or "this
- * could not be read" — never a heading over a blank space.
- */
-private fun lightboxSection(
-    values: List<String>,
-    unread: Boolean,
-    unreadSentence: String,
-    emptySentence: String,
-): String = when {
-    values.isNotEmpty() -> values.joinToString(" · ")
-    unread -> unreadSentence
-    else -> emptySentence
 }

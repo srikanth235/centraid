@@ -59,6 +59,26 @@ pub fn admits(held: u64, plaintext_len: u64, budget: u64) -> bool {
     budget > 0 && (held == 0 || held.saturating_add(sealed_bound(plaintext_len)) <= budget)
 }
 
+/// How much of the volume must stay free after a part larger than the whole
+/// budget goes into the spool alone (#1080, the sweep's F6): the room the
+/// phone itself needs, so that one oversize part never fills the disk.
+pub const ALONE_FREE_FLOOR_BYTES: u64 = 256 * 1024 * 1024;
+
+/// [`admits`], with the free-space floor on the exception: a part that fits
+/// the budget is admitted as [`admits`] says, and one larger than the whole
+/// budget goes alone into an empty spool only when the volume — `free` bytes —
+/// would still have [`ALONE_FREE_FLOOR_BYTES`] left after it. A phone with
+/// under about 640 MiB free has a budget under a part, and before the
+/// exception reached the library a film there waited for bytes it was never
+/// asked for (the sweep's F6).
+#[must_use]
+pub fn admits_on(held: u64, plaintext_len: u64, budget: u64, free: u64) -> bool {
+    let bound = sealed_bound(plaintext_len);
+    admits(held, plaintext_len, budget)
+        && (held.saturating_add(bound) <= budget
+            || free >= bound.saturating_add(ALONE_FREE_FLOOR_BYTES))
+}
+
 const PARTIAL: &str = "partial";
 
 /// The spool directory.
@@ -435,6 +455,31 @@ mod tests {
         assert!(!admits(1, 64 << 20, 1 << 20));
         assert!(!admits(0, 1, 0), "a budget of nothing takes nothing");
         assert!(sealed_bound(0) > 0 && sealed_bound(part) > part);
+    }
+
+    /// **THE EXCEPTION KEEPS A FLOOR** (the sweep's F6): a part larger than
+    /// the whole budget goes alone into an empty spool only where the volume
+    /// stays 256 MiB free after it; a part that fits needs no floor.
+    #[test]
+    fn an_oversize_part_goes_alone_only_where_the_volume_keeps_its_floor() {
+        let part: u64 = 64 << 20;
+        let budget = 10 << 20;
+        let bound = sealed_bound(part);
+        // Fits the budget: no floor to keep.
+        assert!(admits_on(0, 4_096, budget, 0));
+        // Larger than the budget, an empty spool, room for it and the floor.
+        assert!(admits_on(0, part, budget, bound + ALONE_FREE_FLOOR_BYTES));
+        // One byte short of leaving the floor: not alone.
+        assert!(!admits_on(
+            0,
+            part,
+            budget,
+            bound + ALONE_FREE_FLOOR_BYTES - 1
+        ));
+        // Not alone is not alone: a spool holding anything admits nothing oversize.
+        assert!(!admits_on(1, part, budget, u64::MAX));
+        // A budget of nothing — a volume that would not say — admits nothing.
+        assert!(!admits_on(0, 1, 0, u64::MAX));
     }
 
     #[test]

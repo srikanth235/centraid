@@ -25,7 +25,7 @@ AES-256-GCM with a **fresh random 96-bit nonce per value**. The deterministic no
 
 The phone's two doors are `Vault::locker_generation` (names the generation, writing the one `locker_key` row on a vault that has none; never inside a commit) and `Vault::locker_sealed_item_cell` (one sealed cell's ciphertext and generation, for a reveal). Neither returns plaintext.
 
-`locker_key(key_id, created_at)` holds **at most one row**: `locker_key_one_generation` is a unique index on a constant, so a second generation is refused by the file (rung seven, `contracts/migrations/007_locker_key_one_generation.sql`). `K` is the seed's single leaf, so nothing ever retires a generation; `retired_at` and the predicate index that let one live row stand beside retired ones are gone ([R-1047-D2](../../../../docs/decisions.md#the-sealedv1-cell-layer-and-the-retired-locker-generation-deleted-1047)).
+`locker_key(key_id, created_at)` holds **at most one row**: `locker_key_one_generation` is a unique index on a constant, so a second generation is refused by the file (in `contracts/migrations/001_baseline.sql`). `K` is the seed's single leaf, so nothing ever retires a generation; `retired_at` and the predicate index that let one live row stand beside retired ones are gone ([R-1047-D2](../../../../docs/decisions.md#the-sealedv1-cell-layer-and-the-retired-locker-generation-deleted-1047)).
 
 Only secret **values** are encrypted. Title, url and username stay plaintext, so a locked Locker can list and search — which is the whole reason Locker is usable on a phone in airplane mode.
 

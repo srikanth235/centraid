@@ -16,7 +16,6 @@ import centraid.screen.v1.PhotoDetail
 import centraid.screen.v1.PhotoLabel
 import centraid.screen.v1.PhotoLightboxEvent
 import centraid.screen.v1.PhotoLightboxState
-import centraid.screen.v1.PhotoPerson
 import dev.centraid.core.CentraidCore
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.apps.photos.PhotoEditorMachine
@@ -215,8 +214,8 @@ class PhotoLightboxSpec : StringSpec({
         // field can be filled this test is what says where.
         detailOf().original_path.shouldBeNull()
         detailOf().byte_size shouldBe 0L
-        // AND NEITHER FOR THE CAMERA: `camera_device_id` is an access-plane id
-        // and `exif_json` is not a reducer's to parse.
+        // AND NEITHER FOR THE CAMERA: no column names a camera model, and
+        // `exif_json` is not a reducer's to parse.
         detailOf().camera shouldBe ""
     }
 
@@ -228,10 +227,6 @@ class PhotoLightboxSpec : StringSpec({
 
     "the asset's arrival asks the legs its own row makes possible" {
         val effects = loaded().effects
-        effects shouldContain ScreenEffect.ReadPage(
-            PhotoLightboxMachine.readId(PhotoLightboxMachine.Leg.FACES),
-            null,
-        )
         effects shouldContain ScreenEffect.ReadPage(
             PhotoLightboxMachine.readId(PhotoLightboxMachine.Leg.TAGS),
             null,
@@ -257,7 +252,6 @@ class PhotoLightboxSpec : StringSpec({
     "every leg reads a real table and binds what the photograph already knows" {
         val state = loaded().state.copy(
             detail = loaded().state.detail?.copy(
-                people = listOf(PhotoPerson(party_id = "party-1")),
                 labels = listOf(PhotoLabel(concept_id = "concept-1")),
             ),
         )
@@ -269,8 +263,8 @@ class PhotoLightboxSpec : StringSpec({
                 val order = query.order.shouldNotBeNull()
                 // THE SAME RULE AS EVERY OTHER STATEMENT ON THIS DOOR: an order
                 // column that is not projected produces a walk that is not a
-                // walk. Five of the six sort by their own primary key, which is
-                // `crates/apps/photos`' idiom for a set read by id and is what
+                // walk. Every one of the four sorts by its own primary key, which
+                // is `crates/apps/photos`' idiom for a set read by id and is what
                 // keeps them off the nullable `captured_at`.
                 query.select shouldContain order.sort_column
                 query.select shouldContain order.pk_column
@@ -293,36 +287,33 @@ class PhotoLightboxSpec : StringSpec({
     }
 
     "a refused leg keeps the photograph and names the part it could not read" {
-        // A FACE READ THAT NEVER ANSWERS IS NOT A FAILURE OF THE PHOTOGRAPH —
-        // and it is not silence either. It was, for one draft, so "nobody is in
-        // this photograph" and "the face read was refused" drew the same empty
-        // panel: the two-empty-cell-sentences defect one level up.
+        // A TAG READ THAT NEVER ANSWERS IS NOT A FAILURE OF THE PHOTOGRAPH —
+        // and it is not silence either. It was, for one draft, so "no label is
+        // on this photograph" and "the tag read was refused" drew the same
+        // empty panel: the two-empty-cell-sentences defect one level up.
         val before = loaded().state
         val step = PhotoLightboxMachine.reduce(
             before,
-            PhotoLightboxLeg(PhotoLightboxMachine.Leg.FACES).refused(Reads.refused("nope")),
+            PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS).refused(Reads.refused("nope")),
         )
         step.state.detail.shouldNotBeNull().asset_id shouldBe asset
         step.state.failure.shouldBeNull()
         step.state.loading.shouldBeNull()
         step.effects.shouldBeEmpty()
         step.state.detail.shouldNotBeNull().unread_parts shouldBe
-            listOf(PhotoDetail.Part.PART_PEOPLE)
+            listOf(PhotoDetail.Part.PART_LABELS)
     }
 
-    "six legs answer for four parts, because two of them are second hops" {
-        // A MEMBER READING "could not read who is in this photograph" does not
-        // need to know which of the two reads it was, and a part per hop would
-        // be the plumbing showing through.
+    "four legs answer for three parts, because two of them are second hops" {
+        // A MEMBER READING "could not read this photo's labels" does not need
+        // to know which of the two reads it was, and a part per hop would be
+        // the plumbing showing through.
         PhotoLightboxMachine.Leg.entries.map { PhotoLightboxLeg(it).part }.toSet() shouldBe
             setOf(
                 PhotoDetail.Part.PART_PLACE,
-                PhotoDetail.Part.PART_PEOPLE,
                 PhotoDetail.Part.PART_LABELS,
                 PhotoDetail.Part.PART_CONTENT,
             )
-        PhotoLightboxLeg(PhotoLightboxMachine.Leg.PEOPLE).part shouldBe
-            PhotoLightboxLeg(PhotoLightboxMachine.Leg.FACES).part
         PhotoLightboxLeg(PhotoLightboxMachine.Leg.CONCEPTS).part shouldBe
             PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS).part
     }
@@ -353,47 +344,66 @@ class PhotoLightboxSpec : StringSpec({
         loaded().state.detail.shouldNotBeNull().unread_parts.shouldBeEmpty()
     }
 
-    "faces bring ids and the party read brings names, in two hops that terminate" {
-        val faces = PhotoLightboxLeg(PhotoLightboxMachine.Leg.FACES).arrived(
+    "tags bring ids and the concept read brings words, in two hops that terminate" {
+        val tags = PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS).arrived(
             listOf(
-                Row(values = listOf(Value(text = "region-1"), Value(text = "party-1"))),
-                // A CONFIRMED REGION WITH NOBODY IN IT. `party_id` is
-                // `ON DELETE SET NULL`, so a purged person leaves one behind.
-                Row(values = listOf(Value(text = "region-2"), Value(null_ = NullValue()))),
+                Row(
+                    values = listOf(
+                        Value(text = "tag-1"),
+                        Value(text = "concept-beach"),
+                        Value(text = "party-me"),
+                    ),
+                ),
             ),
             null,
         )
-        val withIds = PhotoLightboxMachine.reduce(loaded().state, faces)
-        withIds.state.detail.shouldNotBeNull().people.map { it.party_id } shouldBe
-            listOf("party-1")
+        val withIds = PhotoLightboxMachine.reduce(loaded().state, tags)
+        withIds.state.detail.shouldNotBeNull().labels.map { it.concept_id } shouldBe
+            listOf("concept-beach")
         withIds.effects shouldContain ScreenEffect.ReadPage(
-            PhotoLightboxMachine.readId(PhotoLightboxMachine.Leg.PEOPLE),
+            PhotoLightboxMachine.readId(PhotoLightboxMachine.Leg.CONCEPTS),
             null,
         )
 
-        val people = PhotoLightboxLeg(PhotoLightboxMachine.Leg.PEOPLE).arrived(
-            listOf(Row(values = listOf(Value(text = "party-1"), Value(text = "Ada")))),
+        val concepts = PhotoLightboxLeg(PhotoLightboxMachine.Leg.CONCEPTS).arrived(
+            listOf(
+                Row(
+                    values = listOf(
+                        Value(text = "concept-beach"),
+                        Value(text = "Beach"),
+                        Value(text = "beach"),
+                    ),
+                ),
+            ),
             null,
         )
-        val named = PhotoLightboxMachine.reduce(withIds.state, people)
-        named.state.detail.shouldNotBeNull().people.single().display_name shouldBe "Ada"
+        val worded = PhotoLightboxMachine.reduce(withIds.state, concepts)
+        worded.state.detail.shouldNotBeNull().labels.single().label shouldBe "Beach"
         // AND IT STOPS. The follow-up fires only for ids the arrival
-        // INTRODUCED, so an answer that names everybody asks for nobody — and a
-        // rule of "read while anything is unnamed" would ask for ever.
-        named.effects.shouldBeEmpty()
+        // INTRODUCED, so an answer that words everything asks for nothing — and
+        // a rule of "read while anything is unworded" would ask for ever.
+        worded.effects.shouldBeEmpty()
     }
 
-    "a party the read could not name asks again about nobody" {
-        val faces = PhotoLightboxLeg(PhotoLightboxMachine.Leg.FACES).arrived(
-            listOf(Row(values = listOf(Value(text = "region-1"), Value(text = "ghost")))),
+    "a concept the read could not word asks again about nothing" {
+        val tags = PhotoLightboxLeg(PhotoLightboxMachine.Leg.TAGS).arrived(
+            listOf(
+                Row(
+                    values = listOf(
+                        Value(text = "tag-1"),
+                        Value(text = "ghost"),
+                        Value(text = "party-me"),
+                    ),
+                ),
+            ),
             null,
         )
-        val withIds = PhotoLightboxMachine.reduce(loaded().state, faces)
-        // The party was purged between the two reads: an empty page.
-        val nobody = PhotoLightboxLeg(PhotoLightboxMachine.Leg.PEOPLE).arrived(emptyList(), null)
-        val after = PhotoLightboxMachine.reduce(withIds.state, nobody)
+        val withIds = PhotoLightboxMachine.reduce(loaded().state, tags)
+        // The concept was purged between the two reads: an empty page.
+        val nothing = PhotoLightboxLeg(PhotoLightboxMachine.Leg.CONCEPTS).arrived(emptyList(), null)
+        val after = PhotoLightboxMachine.reduce(withIds.state, nothing)
         after.effects.shouldBeEmpty()
-        after.state.detail.shouldNotBeNull().people.single().display_name shouldBe ""
+        after.state.detail.shouldNotBeNull().labels.single().label shouldBe ""
     }
 
     "a tag says who put it there, structurally" {
@@ -497,11 +507,10 @@ class PhotoLightboxSpec : StringSpec({
     // --- Amendments and the photograph on screen ---------------------------
 
     "an amendment says so, and a leg that could carry an asset id would not fool it" {
-        // `amendment` IS EXPLICIT. `media_face_region` and `core_tag` both have
-        // the asset in a column, so the day a leg projects one, the old
-        // inference — "a detail with no id is a satellite" — would start
-        // REPLACING the photograph with a face region. Both shapes typecheck,
-        // which is why this is asserted rather than trusted.
+        // `amendment` IS EXPLICIT. `core_tag` has the asset in a column, so the
+        // day a leg projects it, the old inference — "a detail with no id is a
+        // satellite" — would start REPLACING the photograph with a tag. Both
+        // shapes typecheck, which is why this is asserted rather than trusted.
         PhotoLightboxMachine.Leg.entries.forEach { leg ->
             val reads = PhotoLightboxLeg(leg)
             withClue(leg.name) {

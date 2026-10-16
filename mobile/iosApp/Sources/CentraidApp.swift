@@ -77,7 +77,6 @@ struct CentraidApp: App {
                 // onto the way to make one, not onto a Home with nothing to
                 // read. The shelf's answer, never a count taken here.
                 root
-                    .safeAreaInset(edge: .top, spacing: 0) { ShellBanner(shell: shell) }
                     .navigationDestination(for: ShellModel.Route.self) { route in
                         Group {
                             switch route {
@@ -165,25 +164,6 @@ struct CentraidApp: App {
                                     onOpenShelf: { shell.path.append(.photoShelf($0)) }
                                 )
 
-                            case .photosPeople:
-                                PhotosPeopleView(
-                                    data: shell.photosPeopleState,
-                                    onEvent: { shell.send(screen: "photos.people", event: $0) },
-                                    onOpenPerson: { identifier, name in
-                                        shell.path.append(.photoShelf(shell.personShelf(
-                                            identifier: identifier,
-                                            name: name
-                                        )))
-                                    },
-                                    onOpenFaceReview: { shell.path.append(.photoFaceReview) }
-                                )
-
-                            case .photoFaceReview:
-                                FaceReviewView(
-                                    data: shell.faceReviewState,
-                                    onEvent: { shell.send(screen: "photos.faces", event: $0) }
-                                )
-
                             case .photosMemories:
                                 PhotosMemoriesView(
                                     data: shell.photosMemoriesState,
@@ -249,12 +229,10 @@ struct CentraidApp: App {
                         .environment(\.importFromPhone, { shell.importFromPhone($0) })
                         // THE ASSISTANT'S DOOR for a search that found nothing (#1097, R-1097-30).
                         .environment(\.askChat, { shell.askChat($0) })
-                        // THE IMPORT'S LINE over every route. ON EACH DESTINATION and not on the stack: an
-                        // app hides the navigation bar and draws its own header
-                        // at the top of its safe area, and an inset on the
-                        // stack did not reach a pushed cover — the banner drew
-                        // over the app's title and its add.
-                        .safeAreaInset(edge: .top, spacing: 0) { ShellBanner(shell: shell) }
+                        // THE IMPORT'S LINE on every route, at the foot (DESIGN.md's
+                        // one status line): above the app's band where the page
+                        // has one, at the page's own foot where it does not.
+                        .modifier(ShellLineHost(shell: shell))
                     }
             }
             // THE ROOT'S TINT (DESIGN.md "The controls (mobile)"): `link`
@@ -295,6 +273,9 @@ struct CentraidApp: App {
             .overlay { if shell.masked { Color.black.ignoresSafeArea() } }
             // THE MEMBER'S APPEARANCE (R-CHROME-7): nil follows the phone.
             .preferredColorScheme(shell.preferredScheme)
+            // THE SYSTEM TEXT SIZE, CAPPED ONCE (DESIGN.md, Dynamic Type): every
+            // role but `band` follows it up to `xxxLarge`, here and nowhere else.
+            .dynamicTypeSize(...Theme.textSizeCap)
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
                 case .active:

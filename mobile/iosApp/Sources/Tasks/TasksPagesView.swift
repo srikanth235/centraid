@@ -102,6 +102,7 @@ struct TasksProjectView: View {
                         .padding(.bottom, 16)
                     }
                     .refreshable { send(event { $0.refreshed = .init() }) }
+                    .scrollDismissesKeyboard(.interactively)
                     .accessibilityIdentifier("tasks-project")
                 }
                 StatusLineView(status: state.status, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }

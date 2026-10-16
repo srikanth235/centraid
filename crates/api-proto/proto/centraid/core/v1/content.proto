@@ -222,4 +222,12 @@ message StageHandle {
   // re-scanned is the ordinary case, and a shell that could not tell would
   // re-upload the roll.
   bool already_held = 3;
+  // THE TIERS (`thumb`, `preview`) THE VAULT ALREADY HOLDS FOR THIS ORIGINAL,
+  // whose bytes this core has (#1080, the simulator run). Set for a library
+  // item: a restored phone's re-walk finds `already_held` false — the original
+  // is the gateway's, not the phone's — while the restore brought every
+  // derivative back with its rows, so a shell that rendered a tier listed here
+  // would re-make and re-stage what the vault holds. A shell renders only the
+  // tiers it is not told about.
+  repeated string derivatives_held = 4;
 }

@@ -1352,6 +1352,7 @@ fn edit_item() -> CommandDefinition {
         concat!(
             r#"{
           "type": "object",
+          "description": "REPLACES, does not patch. Every field of the item's type (username, url, password, one-time-code seed, notes, and the rest of its type's columns) is rewritten from this input, and each one the input leaves out or leaves empty is CLEARED: an edit carrying only a password erases the username, address, seed and notes. Send the whole draft; a sealed secret you are keeping goes as the placeholder «sealed». Only the title, the tags (an empty list clears them), the alias (an empty one clears it) and the compromised flag (a changed password clears it) are left alone when omitted. Custom fields, addresses, the passkey and the memo are their own commands and are never touched here.",
           "required": ["item_id"],
           "additionalProperties": false,
           "properties": {
@@ -1408,27 +1409,32 @@ fn edit_item() -> CommandDefinition {
                 );
             }
 
-            // EDIT REWRITES THE TYPE'S FIELDS; IT DOES NOT PATCH THEM.
+            // EDIT REPLACES THE TYPE'S FIELDS; IT DOES NOT PATCH THEM, AND SAYS SO
+            // (L4, ruled 2026-10-15).
             //
-            // `fieldValues` returns **every** column of the item's type, `null`
-            // for the ones the input omits, and the handler writes all of them.
-            // So an edit carrying only a password clears the username, the url,
-            // the OTP seed and the notes.
+            // `field_values` returns **every** column of the item's type,
+            // `None` for the ones the input omits, and the handler writes all
+            // of them. So an edit carrying only a password clears the
+            // username, the url, the OTP seed and the notes.
             //
-            // Reproduced, not improved, and the hazard is a finding rather
-            // than a silent divergence (receipt, lane Locker). The UI always
-            // sends the whole draft — `draft.ts`'s payload builder emits every
-            // key the type owns and round-trips a sealed one as the
-            // placeholder — so the replace semantics are invisible to it. An
-            // **assistant** or an API caller reading the manifest's optional
-            // fields as a patch API loses data, and the port making the same
-            // input produce a different vault than v0 would be worse than the
-            // footgun.
+            // It is the contract and not an accident: the editor always sends
+            // the whole draft (every key the type owns, a sealed one
+            // round-tripped as the placeholder), so a replace is invisible to
+            // it. A caller reading the optional fields as a patch API loses
+            // data, which is why the semantics are stated where callers read:
+            // this command's schema (`describe` serves it), the manifest's
+            // `edit-item` description, the editor's proto comment and the
+            // Locker README. A patch, if it is ever wanted, is a new command
+            // and a proposal (#1047), not a quiet change to this one. The
+            // title, the tags, the alias and the compromised flag are the
+            // exceptions: omitted, they are left alone.
+            // `an_edit_rewrites_the_types_fields_rather_than_patching_them`
+            // pins it.
             //
-            // A round-tripped placeholder is the one exception and is SKIPPED:
-            // that is what "leave this secret alone" means, and it is the
-            // mechanism that lets an edit form exist without holding the
-            // password.
+            // A round-tripped placeholder is the one exception to the
+            // clearing and is SKIPPED: that is what "leave this secret alone"
+            // means, and it is the mechanism that lets an edit form exist
+            // without holding the password.
             let mut changed: Vec<&str> = Vec::new();
             for (column, value) in field_values(ctx, &item_type) {
                 if ctx.optional_str(column) == Some(SEALED_PLACEHOLDER) {

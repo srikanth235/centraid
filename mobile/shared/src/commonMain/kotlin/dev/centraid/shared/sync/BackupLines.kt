@@ -48,6 +48,25 @@ public object BackupLines {
                 ),
             )
         }
+        // EVERY GATEWAY REFUSED THIS PHONE'S TOKEN (#1080, the sweep's F2): the
+        // ledger may still say "all acknowledged", but no gateway will take
+        // anything now, so the line says to pair again rather than that
+        // everything is backed up. One gateway among several refusing is
+        // not that: the others carry the backup, and only the tone earns a look.
+        if (reading.destinations.all { it.pairAgain }) {
+            return finish(
+                BackupLine(
+                    confirmed = reading.contentConfirmed,
+                    total = reading.contentTotal,
+                    waiting = waiting,
+                    sentence = SharedCopy.BACKUP_LINE_PAIR_AGAIN,
+                    status = SharedCopy.BACKUP_STATUS_PAIR_AGAIN,
+                    detail = counts(reading),
+                    tone = BackupLine.Tone.TONE_ATTENTION,
+                    pair_again = true,
+                ),
+            )
+        }
         val acked = reading.lastAckMs
         val counts = counts(reading)
         if (acked == null) {
@@ -81,7 +100,11 @@ public object BackupLines {
                 detail = counts,
                 // A MACHINE THAT IS NOT THE GATEWAY answered at its address
                 // (#1080): the member is owed a look, however recent the ack.
-                tone = if (stale || untrusted(reading)) BackupLine.Tone.TONE_ATTENTION else BackupLine.Tone.TONE_QUIET,
+                tone = if (stale || untrusted(reading) || reading.destinations.any { it.pairAgain }) {
+                    BackupLine.Tone.TONE_ATTENTION
+                } else {
+                    BackupLine.Tone.TONE_QUIET
+                },
             ),
         )
     }
@@ -122,6 +145,8 @@ public object BackupLines {
         WaitReason.WINDOW -> SharedCopy.BACKUP_WAIT_WINDOW
         WaitReason.ASK -> SharedCopy.BACKUP_WAIT_ASK
         WaitReason.UNTRUSTED -> SharedCopy.BACKUP_WAIT_UNTRUSTED
+        WaitReason.REFUSED -> SharedCopy.BACKUP_WAIT_REFUSED
+        WaitReason.PAIR_AGAIN -> SharedCopy.BACKUP_WAIT_PAIR_AGAIN
     }
 
     private fun wire(reason: WaitReason): BackupWaitingRow.Reason = when (reason) {
@@ -133,6 +158,8 @@ public object BackupLines {
         WaitReason.WINDOW -> BackupWaitingRow.Reason.REASON_WINDOW
         WaitReason.ASK -> BackupWaitingRow.Reason.REASON_ASK
         WaitReason.UNTRUSTED -> BackupWaitingRow.Reason.REASON_UNTRUSTED
+        WaitReason.REFUSED -> BackupWaitingRow.Reason.REASON_REFUSED
+        WaitReason.PAIR_AGAIN -> BackupWaitingRow.Reason.REASON_PAIR_AGAIN
     }
 
     /** The accessibility label is the line read aloud: sentence, detail, then what waits. */

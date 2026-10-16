@@ -1,5 +1,6 @@
 package dev.centraid.android.screens
 
+import dev.centraid.android.kit.LocalShellLine
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -174,6 +175,7 @@ public fun HomeScreen(
         // vault's, and the band stays where it is.
         if (backupShown) {
             Box(Modifier.weight(1f)) { backupTab() }
+            LocalShellLine.current?.invoke()
             HomeBand(
                 active = "backup",
                 onSelect = { target -> if (target == "home") onOpenHome() },
@@ -195,6 +197,8 @@ public fun HomeScreen(
                 else -> SpringboardGrid(data, onEvent)
             }
         }
+        // THE IMPORT'S LINE, on the band (DESIGN.md's one status line).
+        LocalShellLine.current?.invoke()
         HomeBand(
             active = "home",
             onSelect = { target ->

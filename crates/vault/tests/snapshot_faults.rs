@@ -16,7 +16,7 @@ const CANARY: &str = "CANARY-c0ffee-DO-NOT-REPLICATE";
 
 fn founded_with_a_canary(seed: &str) -> common::Scratch {
     let scratch = common::Scratch::founded(seed).expect("a vault is founded");
-    common::enrol(&scratch.vault, "canary-device", CANARY).expect("the device enrols");
+    common::plant_canary(&scratch.vault, CANARY).expect("the canary is planted");
     common::insert_note(&scratch.vault, "beach holiday").expect("a note is written");
     scratch
 }
@@ -35,7 +35,7 @@ fn founded_with_a_canary(seed: &str) -> common::Scratch {
 // longer does any of it — a snapshot is a compacted copy of the file. The
 // private tables are therefore IN the copy, which is exactly #1029's defect B1
 // ("the base copy is stored unsealed: a gzipped `VACUUM INTO` copy that
-// includes `locker_key` and `access_device_secret`"). The protection is
+// includes `locker_key` and the rest"). The protection is
 // SEALING the base, which W3 builds; a `DROP TABLE` that ran for a reader who
 // no longer exists was never the protection, and keeping these tests would
 // have made it look like one.
@@ -123,16 +123,14 @@ fn an_interrupted_build_leaves_no_artifact_and_the_next_one_succeeds() {
             live_before.len(),
             "the live vault changed size after a fault at {step:?}"
         );
-        let survived: i64 = scratch
-            .vault
-            .read(|connection| {
-                Ok(connection.query_row(
-                    "SELECT COUNT(*) FROM access_device_secret",
-                    [],
-                    |row| row.get(0),
-                )?)
-            })
-            .expect("the count reads");
+        let survived: i64 =
+            scratch
+                .vault
+                .read(|connection| {
+                    Ok(connection
+                        .query_row("SELECT COUNT(*) FROM locker_key", [], |row| row.get(0))?)
+                })
+                .expect("the count reads");
         assert_eq!(survived, 1, "the live private table lost a row at {step:?}");
     }
 

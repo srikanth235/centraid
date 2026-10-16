@@ -152,12 +152,11 @@ struct AgendaEventView: View {
                         .padding(.top, 12)
                         .accessibilityIdentifier("agenda-event-status")
                 }
-                VStack(spacing: 8) {
+                KitChoiceStack {
                     ForEach(detail.actions, id: \.key) { action in
                         KitOutlineButton(label: action.label, tone: action.destructive ? "net" : "text") {
                             send(event { $0.action = .with { $0.key = action.key } })
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         .disabled(!action.enabled)
                         .accessibilityLabel(action.accessibilityLabel.isEmpty ? action.label : action.accessibilityLabel)
                         .accessibilityIdentifier("agenda-action-\(action.key)")

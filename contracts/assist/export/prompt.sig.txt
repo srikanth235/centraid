@@ -43,7 +43,7 @@ me: Sam Park
 kinds:
 person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes, photos · verbs: create edit delete restore star unstar log
 event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore
-task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (1 highest..9 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from
+task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from
 note: name, date (created), body, pinned (yes|no) · links: notebook, people · verbs: create edit delete restore add_to remove_from
 document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from
 photo: name, date (taken), starred (yes|no) · links: albums, people · verbs: edit delete restore star unstar add_to remove_from

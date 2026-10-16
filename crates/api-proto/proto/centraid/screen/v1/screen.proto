@@ -546,8 +546,12 @@ message PhotoCell {
 message PhotoStateView {
   oneof view {
     Mode mode = 1;
-    Person person = 2;
   }
+
+  // 2 was `Person`: one person's photographs, opened from Photos' People
+  // screen and from a search door. Both left with the face surfaces (Q-1047-2).
+  reserved 2;
+  reserved "person";
 
   message Mode {
     Kind kind = 1;
@@ -559,12 +563,6 @@ message PhotoStateView {
       KIND_TRASH = 3;
       KIND_VIDEOS = 4;
     }
-  }
-
-  message Person {
-    string party_id = 1;
-    // The name rides along, so the app bar need not wait a replica round trip.
-    string person_name = 2;
   }
 }
 
@@ -1793,9 +1791,6 @@ message HomeSearchEvent {
 // - **`PlacesState`** — places and their counts. Cards and the map are one
 //   screen with a `Presentation` parameter, because v0's `PlacesView` and
 //   `PlacesMap` read the same rows and differed only in how they drew them.
-// - **`PhotosPeopleState`** — confirmed identities.
-// - **`FaceReviewState`** — a QUEUE worked one item at a time, whose state is
-//   a cursor and a verdict rather than a page.
 // - **`DuplicatesState`** / **`DuplicateReviewState`** — a shelf of clusters,
 //   and one cluster with a keep decision. Two, for the reason v0 gave: listing
 //   clusters and choosing within one are different jobs with different writes.
@@ -1811,7 +1806,7 @@ message HomeSearchEvent {
 // reducer has to defend rather than match on.
 message PhotoShelf {
   oneof of {
-    // Favorites, archive, trash, videos, or one person's photographs.
+    // Favorites, archive, trash or videos.
     PhotoStateView state_view = 1;
     Album album = 2;
     Place place = 3;
@@ -2216,9 +2211,10 @@ message PhotoDetail {
   // sentence. Empty when the asset has no place.
   string place_name = 17;
   string place_id = 18;
-  // WHO IS IN IT: confirmed face regions only. A proposal belongs to face
-  // review and naming it here would make a guess look like a fact.
-  repeated PhotoPerson people = 19;
+  // 19 was `repeated PhotoPerson people`: who is in it, off the confirmed face
+  // regions. It left with the face surfaces (Q-1047-2).
+  reserved 19;
+  reserved "people";
   // What the enrichment plane has said about this photograph, as labels. The
   // member's own tags and a model's proposals are the SAME table with
   // different confidence, so the row says which.
@@ -2235,12 +2231,12 @@ message PhotoDetail {
   uint32 fetch_percent = 22;
   // WHICH PARTS OF THIS PHOTOGRAPH COULD NOT BE READ.
   //
-  // A lightbox is SEVEN reads — the asset, then place, faces, people, tags,
-  // concepts and content — and only the first can honestly fail the screen. A
-  // refused tag read must not replace the photograph with a sentence. But the
-  // opposite is just as wrong and was the state for one draft: a satellite
-  // that refused simply produced nothing, so **"nobody is in this photograph"
-  // and "the face read was refused" drew the same empty panel.** That is the
+  // A lightbox is FIVE reads — the asset, then place, tags, concepts and
+  // content — and only the first can honestly fail the screen. A refused tag
+  // read must not replace the photograph with a sentence. But the opposite is
+  // just as wrong and was the state for one draft: a satellite that refused
+  // simply produced nothing, so **"no label is on this photograph" and "the
+  // tag read was refused" drew the same empty panel.** That is the
   // two-empty-cell-sentences defect one level up, and the fix is the same one
   // — say which absence this is.
   //
@@ -2276,16 +2272,13 @@ message PhotoDetail {
   enum Part {
     PART_UNSPECIFIED = 0;
     PART_PLACE = 1;
-    PART_PEOPLE = 2;
+    // 2 was `PART_PEOPLE`, with the face reads (Q-1047-2).
+    reserved 2;
+    reserved "PART_PEOPLE";
     PART_LABELS = 3;
     // The content row: byte size, and the original's hash.
     PART_CONTENT = 4;
   }
-}
-
-message PhotoPerson {
-  string party_id = 1;
-  string display_name = 2;
 }
 
 message PhotoLabel {
@@ -2416,9 +2409,9 @@ message PhotoLightboxEvent {
   // **`amendment` is explicit and is not inferred from an empty `asset_id`.**
   // It was, for one draft: "a detail with no id is a satellite". That works
   // only while no satellite can carry an id, and it fails silently the moment
-  // one does — which is exactly what a placement or face leg would want to
-  // carry. A reducer that cannot tell a merge from a replace paints one
-  // photograph's people onto another, and both shapes typecheck.
+  // one does — which is exactly what a placement leg would want to carry. A
+  // reducer that cannot tell a merge from a replace paints one photograph's
+  // labels onto another, and both shapes typecheck.
   //
   // False replaces the detail; true merges the fields this leg set into the
   // detail already on screen, and is dropped when there is none.
@@ -2571,7 +2564,7 @@ message PhotoLightboxEvent {
 // v0 drew two component families here and had to keep their covers, counts and
 // empty states in step by hand.
 //
-// The DOORS that are not shelves — People, Places, Memories, Duplicates — are
+// The DOORS that are not shelves — Places, Memories, Duplicates — are
 // [CollectionsDoor] below, because their tap lands somewhere else.
 message ShelfRow {
   PhotoShelf shelf = 1;
@@ -2602,8 +2595,8 @@ message CollectionsDoor {
   // door because a member deciding whether to open it is deciding on the
   // number, and a door that says nothing is a door nobody opens.
   uint32 count = 2;
-  // Set when the door has something waiting: proposed faces to name, duplicate
-  // clusters to resolve. It is what draws the badge.
+  // Set when the door has something waiting: duplicate clusters to resolve. It
+  // is what draws the badge.
   uint32 needs_attention = 3;
   // THE COUNT IS A FLOOR, NOT A TOTAL. The read door has no `COUNT(*)`, so
   // every count in this section is counted from the rows one page returned —
@@ -2615,7 +2608,9 @@ message CollectionsDoor {
 
   enum Kind {
     KIND_UNSPECIFIED = 0;
-    KIND_PEOPLE = 1;
+    // 1 was `KIND_PEOPLE`, the door to Photos' People screen (Q-1047-2).
+    reserved 1;
+    reserved "KIND_PEOPLE";
     KIND_PLACES = 2;
     KIND_MEMORIES = 3;
     KIND_DUPLICATES = 4;
@@ -2757,8 +2752,10 @@ message SearchResting {
   // Concepts the enrichment plane has actually attached to this vault's
   // photographs — never a fixed list of words the product hopes are there.
   repeated PhotoLabel suggested_labels = 1;
-  // People a member has CONFIRMED on a face. A proposal is not a person yet.
-  repeated PhotoPerson people = 2;
+  // 2 was `repeated PhotoPerson people`, the people confirmed on a face
+  // (Q-1047-2).
+  reserved 2;
+  reserved "people";
   // Places with photographs behind them, as the shelf each one opens — so a
   // tap on "Lisbon" lands on Lisbon's photographs and costs no second lookup.
   // Only places whose name is a name: a coordinate-shaped label reads as an
@@ -2774,12 +2771,12 @@ message SearchHits {
   repeated PhotoCell cells = 1;
   optional string next_cursor = 2;
   bool thumbnail_pack_absent = 3;
-  // WHY THESE MATCHED — the same query can hit a label, a person or a place,
+  // WHY THESE MATCHED — the same query can hit a label, a place or a title,
   // and a member looking at a grid with no explanation cannot tell which.
   repeated SearchMatch matches = 5;
-  // THE PEOPLE, PLACES AND ALBUMS THE QUERY NAMED, above the photographs
-  // (v0's `search-hits.ts`): each one tap from the shelf that owns it. At most
-  // three of each kind, narrowest kind first — person, place, album.
+  // THE PLACES AND ALBUMS THE QUERY NAMED, above the photographs (v0's
+  // `search-hits.ts`): each one tap from the shelf that owns it. At most three
+  // of each kind, narrowest kind first — place, album.
   repeated SearchTopHit top_hits = 6;
   // WHICH QUERY THESE HITS ANSWER. A member types faster than a vault reads,
   // so a page can land after the field has moved on; a reducer that took it
@@ -2794,7 +2791,7 @@ message SearchHits {
 
   // 4 WAS `repeated string matched_on`, AND IT WAS THE ONE PLACE IN THIS
   // SECTION THAT CARRIED A KIND AS PROSE. Every shell composing its own
-  // "Person: Ada" / "In Lisbon" is two shells wording one fact two ways, which
+  // "Place: Lisbon" / "In Lisbon" is two shells wording one fact two ways, which
   // is precisely how v0's empty states drifted apart. The kind is an enum and
   // the name is a string, so the sentence is the view's and the DISTINCTION is
   // the contract's.
@@ -2805,14 +2802,16 @@ message SearchHits {
 message SearchMatch {
   Kind kind = 1;
   // What was matched, in the vault's own words: the concept's label, the
-  // party's display name, the place's name. Never the member's query echoed
+  // place's name, the album's. Never the member's query echoed
   // back — the point is to show what it landed on.
   string value = 2;
 
   enum Kind {
     KIND_UNSPECIFIED = 0;
     KIND_LABEL = 1;
-    KIND_PERSON = 2;
+    // 2 was `KIND_PERSON`, a party confirmed on a face (Q-1047-2).
+    reserved 2;
+    reserved "KIND_PERSON";
     KIND_PLACE = 3;
     // The member's own words on the asset: its title.
     KIND_TITLE = 4;
@@ -2821,13 +2820,13 @@ message SearchMatch {
   }
 }
 
-// ONE PERSON, PLACE OR ALBUM THE QUERY NAMED — a door, not a photograph.
+// ONE PLACE OR ALBUM THE QUERY NAMED — a door, not a photograph.
 message SearchTopHit {
-  // Person, place or album. Never a title or a label: a caption belongs to
+  // Place or album. Never a title or a label: a caption belongs to
   // one photograph and a label has no shelf of its own, so both are reasons
   // under the grid (`SearchMatch`) and not rows above it.
   SearchMatch.Kind kind = 1;
-  // The vault's own words: the party's name, the place's name, the album's.
+  // The vault's own words: the place's name, the album's.
   string label = 2;
   // How many photographs it holds, counted off one page — so a FLOOR when
   // `photo_count_capped` says the page filled, and "at least" is the phrase.
@@ -3002,333 +3001,6 @@ message PlacesEvent {
   message WriteSettled {
     bool committed = 1;
     string sentence = 2;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// People, and the faces that are not people yet
-// ---------------------------------------------------------------------------
-
-message PersonRow {
-  string party_id = 1;
-  string display_name = 2;
-  // Confirmed regions only. A proposal is not a photograph of someone until a
-  // member has said so.
-  uint32 photo_count = 3;
-  optional string cover_thumbnail_path = 4;
-  // THE ASSET THE COVER COMES FROM, SO A SECOND READ HAS A KEY.
-  //
-  // Without it the cover cannot be filled at all: a cover is `media_asset`'s
-  // thumbnail, the door has no join, and a row with no asset id gives a
-  // second leg nothing to ask about. Same shape as
-  // `DuplicateCluster.member_asset_ids` and for the same reason.
-  string cover_asset_id = 6;
-  // THE COUNT IS A FLOOR, NOT A TOTAL. The read door has no `COUNT(*)`, so
-  // every count in this section is counted from the rows one page returned —
-  // and a page that filled has more behind it. `HomeState.ThingCount` carries
-  // this as `capped` for the same reason and with the same consequence: the
-  // honest phrasing is "at least", and a screen that printed a bare number
-  // over a full page would be stating a total nobody counted.
-  bool photo_count_capped = 5;
-}
-
-message PhotosPeopleState {
-  SeatState seat = 1;
-  oneof content {
-    Loading loading = 2;
-    ReadFailure failure = 3;
-    PhotosPeopleData data = 4;
-  }
-  // A WRITE WAS REFUSED, AND THE SENTENCE A MEMBER READS.
-  //
-  // **Its own slot, never the `content` oneof's `failure`.** That slot is the
-  // READ's — it is one of the three states a read can be in — and putting a
-  // denied write there would replace the rows on screen with an error, so a
-  // member whose rename was refused would lose the list they were renaming
-  // from. `NoteDraft.save_failure` is the same field for the same reason.
-  //
-  // Without it a refusal is SILENT: every screen here has a `WriteSettled`
-  // event carrying a sentence and, for one draft, nowhere to put it.
-  optional ReadFailure write_failure = 5;
-}
-
-message PhotosPeopleData {
-  repeated PersonRow people = 1;
-  optional string next_cursor = 2;
-  // FACES WAITING TO BE NAMED. The door to review, with its count on it — and
-  // the reason this screen and review are not the same screen: one is a list of
-  // answers, the other is a queue of questions.
-  uint32 proposed_face_count = 3;
-  // WHY THE LIST IS EMPTY, WHEN IT IS. An empty People screen has three
-  // different causes and v0 drew one sentence for all of them
-  // (`PeopleEmptyState.tsx`): recognition is off, it is on and has found
-  // nothing yet, or it has found faces and none are named.
-  EmptyReason empty_reason = 4;
-
-  enum EmptyReason {
-    EMPTY_REASON_UNSPECIFIED = 0;
-    // Not empty.
-    EMPTY_REASON_NONE = 1;
-    // The member turned recognition off, or never turned it on. A setting,
-    // and the screen says where it is.
-    EMPTY_REASON_RECOGNITION_OFF = 2;
-    // On, and nothing has been looked at yet.
-    EMPTY_REASON_NOT_RUN_YET = 3;
-    // Faces found, none confirmed. The door to review is the answer.
-    EMPTY_REASON_NONE_NAMED = 4;
-  }
-}
-
-message PhotosPeopleEvent {
-  oneof kind {
-    Opened opened = 1;
-    NextPageRequested next_page = 2;
-    DataArrived data = 3;
-    ReadRefused refused = 4;
-    RowsChanged rows_changed = 5;
-    SeatChanged seat_changed = 6;
-    PersonRenamed renamed = 7;
-    WriteSettled write_settled = 8;
-  }
-
-  message Opened {}
-
-  message NextPageRequested {
-    string after_cursor = 1;
-  }
-
-  message DataArrived {
-    PhotosPeopleData data = 1;
-  }
-
-  message ReadRefused {
-    ReadFailure failure = 1;
-  }
-
-  message RowsChanged {
-    repeated string party_ids = 1;
-  }
-
-  message SeatChanged {
-    SeatState seat = 1;
-  }
-
-  message PersonRenamed {
-    string party_id = 1;
-    string display_name = 2;
-  }
-
-  message WriteSettled {
-    bool committed = 1;
-    string sentence = 2;
-  }
-}
-
-// ONE FACE, AS A QUESTION.
-message FaceCandidate {
-  string region_id = 1;
-  string asset_id = 2;
-  // The crop the member looks at. The ASSET's thumbnail plus the box, because
-  // there is no per-face derivative in the vault and inventing one would be a
-  // second copy of every photograph.
-  optional string thumbnail_path = 3;
-  // The box within the asset, in FRACTIONS of the image's width and height, so
-  // a view can draw it over whatever size it rendered at. Pixels would be
-  // wrong the moment the thumbnail is not the original's size — which it never
-  // is.
-  double box_x = 4;
-  double box_y = 5;
-  double box_width = 6;
-  double box_height = 7;
-  // Who the derivation thinks it is, empty when it has no guess at all. A
-  // proposal, never drawn as a fact.
-  string proposed_party_id = 8;
-  string proposed_name = 9;
-  // 0…1 as the row holds it. Shown as words and not a percentage: "probably"
-  // is what a member can act on.
-  double confidence = 10;
-}
-
-// A QUEUE, WORKED ONE AT A TIME — not a page of rows with checkboxes.
-//
-// The shape follows the job: a member answers "is this Ada?" and the next
-// question arrives. `cursor` is which question, and it is on the state because
-// a member who leaves and comes back should not be asked the first one again.
-message FaceReviewState {
-  SeatState seat = 1;
-  oneof content {
-    Loading loading = 2;
-    ReadFailure failure = 3;
-    FaceReviewData data = 4;
-  }
-  // Which candidate is showing, an index into `data.candidates`. Past the end
-  // means the queue is worked through, which is a real screen and not an
-  // empty one.
-  //
-  // **AN INDEX INTO A PAGED LIST BINDS THE REDUCER: `DataArrived` APPENDS AND
-  // NEVER REPLACES.** `FaceReviewData` carries a `next_cursor`, so the list
-  // grows — and a second page that replaced the first would leave this cursor
-  // pointing at a different question than the one the member left on. Nothing
-  // mechanical can catch that, because both shapes typecheck and both render;
-  // it is stated here because this is the field it would corrupt.
-  uint32 cursor = 5;
-  // The name picker is open over the current candidate.
-  bool naming = 6;
-  // Whether the recognition plane is on at all. A queue cannot fill while it
-  // is off, and the screen says so rather than showing an empty queue.
-  bool recognition_enabled = 7;
-  // A WRITE WAS REFUSED, AND THE SENTENCE A MEMBER READS.
-  //
-  // **Its own slot, never the `content` oneof's `failure`.** That slot is the
-  // READ's — it is one of the three states a read can be in — and putting a
-  // denied write there would replace the rows on screen with an error, so a
-  // member whose rename was refused would lose the list they were renaming
-  // from. `NoteDraft.save_failure` is the same field for the same reason.
-  //
-  // Without it a refusal is SILENT: every screen here has a `WriteSettled`
-  // event carrying a sentence and, for one draft, nowhere to put it.
-  optional ReadFailure write_failure = 8;
-  // THE REGION WHOSE `people.add_person` IS IN FLIGHT, empty when none (#1089).
-  // The picker stays open over the question while the create runs, so a double
-  // tap reaches the reducer twice, and the core remembers no key (R-1088-12):
-  // the second would make a second person. One create at a time; cleared by the
-  // settle or the `PersonCreated` for this region.
-  string creating_region = 9;
-}
-
-message FaceReviewData {
-  repeated FaceCandidate candidates = 1;
-  optional string next_cursor = 2;
-  // Every party a face could be named as, so the picker needs no second read
-  // while a member is mid-answer.
-  repeated PhotoPerson known_people = 3;
-}
-
-message FaceReviewEvent {
-  oneof kind {
-    Opened opened = 1;
-    NextPageRequested next_page = 2;
-    DataArrived data = 3;
-    ReadRefused refused = 4;
-    RowsChanged rows_changed = 5;
-    SeatChanged seat_changed = 6;
-    // The three answers, and they are three because they are three different
-    // writes: this IS someone, this is NOT the proposal, and this face is
-    // kept and deliberately left unnamed (`dismissed`).
-    Confirmed confirmed = 7;
-    Rejected rejected = 8;
-    // DECIDE LATER — and it WRITES NOTHING (v0's `triageSkip`). The question
-    // goes to the back of the queue and stays a proposal; a skip that saved a
-    // dismissal would retire a face the member only postponed.
-    Skipped skipped = 9;
-    NamingChanged naming = 10;
-    WriteSettled write_settled = 11;
-    ThumbnailsArrived thumbnails = 12;
-    RecognitionChanged recognition = 13;
-    Dismissed dismissed = 14;
-    PersonCreated person_created = 15;
-  }
-
-  // KEEP THE FACE, AND LEAVE IT UNNAMED: `media.answer_face_proposal` with
-  // `dismiss`. Reviewed, so the enricher does not propose it again.
-  message Dismissed {
-    string region_id = 1;
-  }
-
-  // THE PERSON A FACE WAS BEING NAMED AS NOW EXISTS, and this is their id.
-  //
-  // `core.add_party` mints the id and answers it in `CommandOutcome.output`;
-  // the bridge reads it there and hands it back here, so the confirm that
-  // needs it follows in the same breath and "New person" is one step.
-  message PersonCreated {
-    string region_id = 1;
-    string party_id = 2;
-  }
-
-  message Opened {}
-
-  message NextPageRequested {
-    string after_cursor = 1;
-  }
-
-  message DataArrived {
-    FaceReviewData data = 1;
-  }
-
-  message ReadRefused {
-    ReadFailure failure = 1;
-  }
-
-  message RowsChanged {
-    repeated string region_ids = 1;
-  }
-
-  message SeatChanged {
-    SeatState seat = 1;
-  }
-
-  // `party_id` empty with a `new_name` means a person this vault has no row
-  // for yet — which is most of them on a first run, and the case v0's
-  // `FaceNamePicker` handled by creating the party first and losing the answer
-  // when the create failed.
-  message Confirmed {
-    string region_id = 1;
-    string party_id = 2;
-    string new_name = 3;
-  }
-
-  message Rejected {
-    string region_id = 1;
-  }
-
-  message Skipped {
-    string region_id = 1;
-  }
-
-  // THE THUMBNAIL LEG LANDED.
-  //
-  // **Without it face review draws a box over a sentence, not a photograph.**
-  // `with_held_thumbnail` is a correlated subquery on the FROM table's
-  // `content_id` and is REFUSED AT PREPARE when the table has none — and
-  // `media_face_region` has none, so asking for it fails the whole read rather
-  // than answering nulls. `FaceCandidate.asset_id` is already on the wire, so
-  // a second leg over `media_asset` keyed on the page's asset ids is what
-  // fills this, and it arrives here rather than as a second `DataArrived`: a
-  // reducer handed two `DataArrived`s cannot tell an amendment from a replace,
-  // which is the same arm `DuplicateReviewEvent.PlacementArrived` exists for.
-  message ThumbnailsArrived {
-    // Asset id to thumbnail path. An asset missing from the map is an
-    // unanswered question and not "no thumbnail".
-    map<string, string> path_by_asset_id = 1;
-  }
-
-  // WHETHER RECOGNITION IS ON AT ALL.
-  //
-  // The tier lives in `enrich_policy` and every read on this screen answers
-  // with a `FaceReviewData`, which carries candidates and a roster and has
-  // nowhere to put a boolean — so `FaceReviewState.recognition_enabled` had no
-  // writer and the screen could not tell an empty queue from a switch that is
-  // off. Those are different screens with different next moves, the same way
-  // `PhotosPeopleData.EmptyReason` keeps three of them apart.
-  message RecognitionChanged {
-    bool enabled = 1;
-  }
-
-  message NamingChanged {
-    bool naming = 1;
-  }
-
-  // WHICH ANSWER SETTLED.
-  //
-  // **Two commands can be in flight at once here** — creating a party, and
-  // answering the proposal against it — and a settle that does not say which
-  // one it is forces the reducer to guess. Guessing wrong on this screen
-  // advances the cursor past a question whose answer was dropped, and the
-  // member is never asked again.
-  message WriteSettled {
-    bool committed = 1;
-    string sentence = 2;
-    string region_id = 3;
   }
 }
 
@@ -5807,6 +5479,11 @@ message NotesJournalData {
   EmptyState empty = 3;
   bool truncated = 4;
   string window_end_verb = 5;
+  // The IANA zone `today` and the day sections were read in (the core's
+  // answer: the device's, else the vault's own). The new-entry sheet states it
+  // back as `tz`, so east of UTC+11:59 today's entry is not filed under
+  // tomorrow. Empty before an answer lands.
+  string tz = 6;
 }
 
 message NotesJournalState {
@@ -5850,6 +5527,9 @@ message NotesJournalCompose {
   bool saving = 10;
   // A refusal, in the core's words; EMPTY otherwise. The sheet's status line.
   string status_label = 11;
+  // `NotesJournalData.tz` when the sheet opened: the zone `day` is a day in,
+  // sent with the write. Empty sends none.
+  string tz = 12;
 }
 
 message NotesJournalEvent {
@@ -6587,6 +6267,9 @@ message PeoplePersonData {
   repeated PeopleFact facts = 10;
   SectionHead channels_head = 11;
   repeated PeopleChannelRow channels = 12;
+  // One sentence: no channels yet, or the channels could not be read (the
+  // contact plane refused, and the rest of the sheet stands). Empty draws
+  // nothing.
   string channels_empty = 13;
   SectionHead dates_head = 14;
   repeated PeopleDateRow dates = 15;
@@ -9340,7 +9023,7 @@ message LockerHomeChrome {
   string retry = 3;
   string more_title = 4;
   // The More sheet's rows, in order; `key` is what `MorePicked` sends:
-  // `trash`, `facts`, `lock`.
+  // `import`, `trash`, `export`, `access`, `facts`, `lock`.
   repeated LockerMoreRow more_rows = 5;
   string facts_title = 6;
   repeated LockerFact facts = 7;
@@ -9447,8 +9130,9 @@ message LockerHomeEvent {
   }
 
   // `import` and `export` push Locker's import and export pages (#1047 T2),
-  // `trash` pushes Locker's trash; `lock` locks (the shell forwards
-  // `LockTapped` to the gate); `facts` opens the facts sheet.
+  // `access` pushes the whole Locker's access history (Q-1047-21), `trash`
+  // pushes Locker's trash; `lock` locks (the shell forwards `LockTapped` to
+  // the gate); `facts` opens the facts sheet.
   message MorePicked {
     string key = 1;
   }
@@ -9719,6 +9403,14 @@ message LockerItemEvent {
 // AN EXPLICIT SAVE, NOT AUTOSAVE (R-1047-L5): a secret saved on a pause
 // mid-typing would be a wrong secret the member did not choose, and a half
 // title would be a row in a list. Leaving with changes asks first.
+//
+// A SAVE OF AN EXISTING ITEM IS THE WHOLE DRAFT (L4, ruled 2026-10-15): the
+// editor sends `locker.edit_item` every field of the item's type, because
+// that command REPLACES the type's fields rather than patching them — a field
+// the input leaves out or empty is cleared, and a sealed secret the member did
+// not touch goes as the placeholder `«sealed»`, which keeps it. Whoever builds
+// an edit for themselves (an assistant, an API caller) does the same: there is
+// no patch.
 message LockerEditorState {
   SeatState seat = 1;
   Mode mode = 2;
@@ -10142,6 +9834,56 @@ message LockerImportEvent {
   message DiscardTapped {}
 
   message Left {}
+}
+
+// --- locker.access ----------------------------------------------------------
+
+// THE WHOLE LOCKER'S ACCESS HISTORY (#1047, Q-1047-21; the handoff's
+// `locker/access`): every unlock, reveal, copy, one-time code and export,
+// newest first, from the More sheet's Access history. A page with nothing to
+// do but be read — no verb, no sheet, no write — over the same
+// `locker.access` query the item page asks, asked with no item. Its rows are
+// the item page's own history rows (`LockerSection` of `LockerFieldRow`),
+// each also naming the item it is about. METADATA ONLY: a row names the act,
+// the item and the minute, never a value, and nothing here is drawn while the
+// Locker is locked.
+message LockerAccessState {
+  SeatState seat = 1;
+  oneof content {
+    Loading loading = 2;
+    ReadFailure failure = 3;
+    Denied denied = 4;
+    LockerAccessData data = 5;
+  }
+  LockerAccessChrome chrome = 6;
+}
+
+message LockerAccessChrome {
+  // "Access history".
+  string title = 1;
+  string back_label = 2;
+  string retry = 3;
+}
+
+message LockerAccessData {
+  // "Every unlock, reveal, copy and export, newest first."
+  string lede = 1;
+  // One row per receipt: the act (and the item) as the label, its day and
+  // minute as the value, a refusal as the note. The section's note says the
+  // value is never logged and where the window ends. An empty history is one
+  // row saying so, never a made-up one.
+  LockerSection history = 2;
+}
+
+message LockerAccessEvent {
+  oneof kind {
+    Opened opened = 1;
+    Refreshed refreshed = 2;
+  }
+
+  message Opened {}
+
+  message Refreshed {}
 }
 
 // ---------------------------------------------------------------------------
@@ -10709,6 +10451,12 @@ message BackupWaitingRow {
     // The machine that answered at a gateway's address is not the gateway
     // this phone pinned (#1080).
     REASON_UNTRUSTED = 8;
+    // The gateway answered and refused a write for its own reason, a full
+    // disk or a quota (#1080, the sweep's F1).
+    REASON_REFUSED = 9;
+    // The gateway no longer knows this phone's token: pair it again (#1080,
+    // the sweep's F2).
+    REASON_PAIR_AGAIN = 10;
   }
 }
 
@@ -10735,6 +10483,10 @@ message BackupLine {
   // draws it (R-ONBOARD-11): "Backed up 2 minutes ago", "Not backed up".
   // `sentence` is the Backup screen's.
   string status = 11;
+  // EVERY GATEWAY THIS PHONE IS PAIRED WITH REFUSED ITS TOKEN (#1080, the
+  // sweep's F2): `sentence` and `status` say to pair again, and the Backup
+  // screen's add control is the way. A view may offer it beside the line.
+  bool pair_again = 12;
 
   enum Tone {
     TONE_UNSPECIFIED = 0;
@@ -10759,6 +10511,8 @@ message BackupDestinationRow {
   int64 last_seen_ms = 4;
   int64 last_ack_ms = 5;
   string accessibility_label = 6;
+  // This gateway refused the phone's token: `detail` says to pair it again.
+  bool pair_again = 7;
 }
 
 message BackupScreenState {

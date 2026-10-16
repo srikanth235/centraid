@@ -669,6 +669,26 @@ class NotesAppSpec : StringSpec({
         NotesJournalMachine.reduce(refused, NotesJournalEvent(compose_closed = NotesJournalEvent.ComposeClosed())).state.compose shouldBe null
     }
 
+    "the journal's new entry states the zone the day was read in, so east of UTC+11:59 today is not tomorrow" {
+        val loaded = NotesJournalMachine.reduce(
+            NotesJournalMachine.reduce(NotesJournalMachine.initial(), NotesJournalEvent(opened = NotesJournalEvent.Opened())).state,
+            NotesJournalReads.arrived(
+                listOf(AppQueryResponse(notes_journal = NotesJournal(today = "2026-03-12", tz = "Pacific/Auckland"))),
+            ),
+        ).state
+        loaded.data_!!.tz shouldBe "Pacific/Auckland"
+        val composing = NotesJournalMachine.reduce(loaded, NotesJournalEvent(new_entry = NotesJournalEvent.NewEntryRequested())).state
+        composing.compose!!.day shouldBe "2026-03-12"
+        composing.compose.tz shouldBe "Pacific/Auckland"
+        val typed = NotesJournalMachine.reduce(
+            composing,
+            NotesJournalEvent(compose_edited = NotesJournalEvent.ComposeEdited(mood = "Good", text = "Walked")),
+        ).state
+        NotesJournalMachine.reduce(typed, NotesJournalEvent(compose_saved = NotesJournalEvent.ComposeSaved()))
+            .effects.filterIsInstance<ScreenEffect.SubmitWrite>().single().inputJson shouldBe
+            """{"mood":"Good","text":"Walked","entry_date":"2026-03-12","tz":"Pacific/Auckland"}"""
+    }
+
     // --- History -----------------------------------------------------------
 
     "history: versions newest first, the current one unrestorable, restore is a write" {

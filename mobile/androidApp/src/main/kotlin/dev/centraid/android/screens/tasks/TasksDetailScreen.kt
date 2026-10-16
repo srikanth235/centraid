@@ -42,7 +42,7 @@ import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
@@ -171,12 +171,12 @@ private fun TasksDetailBody(state: TasksDetailState, data: TasksDetailData, onEv
         if (data.subtask_note.isNotEmpty()) FieldNote(data.subtask_note)
         Row(Modifier.padding(KitGeometry.GUTTER)) {
             if (data.can_release && data.release_label.isNotEmpty()) {
-                QuietButton(data.release_label, testTag = "tasks-release", modifier = Modifier.padding(end = 8.dp)) {
+                OutlineButton(data.release_label, testTag = "tasks-release", modifier = Modifier.padding(end = 8.dp)) {
                     onEvent(TasksDetailEvent(release = TasksDetailEvent.ReleaseRequested()))
                 }
             }
             if (data.delete_label.isNotEmpty()) {
-                QuietButton(data.delete_label, testTag = "tasks-delete", ink = "net") {
+                OutlineButton(data.delete_label, testTag = "tasks-delete", ink = "net") {
                     onEvent(TasksDetailEvent(delete = TasksDetailEvent.DeleteRequested()))
                 }
             }
@@ -220,7 +220,7 @@ private fun AddLine(placeholder: String, verb: String, testTag: String, onAdd: (
             )
         }
         if (verb.isNotEmpty() && text.isNotBlank()) {
-            QuietButton(verb, testTag = "$testTag-verb", modifier = Modifier.padding(start = 8.dp), onPress = submit)
+            OutlineButton(verb, testTag = "$testTag-verb", modifier = Modifier.padding(start = 8.dp), onPress = submit)
         }
     }
 }

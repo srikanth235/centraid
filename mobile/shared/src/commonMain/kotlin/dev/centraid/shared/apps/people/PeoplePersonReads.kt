@@ -106,9 +106,12 @@ public object PeopleSheetFold {
                 if (sheet.nickname.isNotBlank()) add(PeopleFact(label = PeopleCopy.FACT_NICKNAME, value_ = sheet.nickname))
                 if (sheet.met.isNotBlank()) add(PeopleFact(label = PeopleCopy.FACT_MET, value_ = sheet.met))
             },
+            // A refused contact plane is UNKNOWN, never an empty rail (P1): no
+            // count is drawn and the empty line says it could not be read,
+            // exactly as the touch log does below.
             channels_head = SectionHead(
                 title = PeopleCopy.SECTION_CHANNELS,
-                count = sheet.channels.size,
+                count = if (sheet.channels_known) sheet.channels.size else null,
                 verb_label = PeopleCopy.ADD_CHANNEL,
             ),
             channels = sheet.channels.map { channel ->
@@ -131,7 +134,11 @@ public object PeopleSheetFold {
                     accessibility_label = fill(PeopleCopy.CHANNEL_A11Y, "kind" to kind, "value" to channel.value_),
                 )
             },
-            channels_empty = if (sheet.channels.isEmpty()) PeopleCopy.EMPTY_CHANNELS else "",
+            channels_empty = when {
+                !sheet.channels_known -> PeopleCopy.CHANNELS_UNKNOWN
+                sheet.channels.isEmpty() -> PeopleCopy.EMPTY_CHANNELS
+                else -> ""
+            },
             dates_head = SectionHead(
                 title = PeopleCopy.SECTION_DATES,
                 count = sheet.dates.size,

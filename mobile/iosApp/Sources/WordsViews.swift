@@ -98,28 +98,31 @@ struct VaultWordsView: View {
                             .accessibilityIdentifier("words-making")
                     }
 
-                    WordsControls(
-                        primary: state.primaryLabel,
-                        primaryEnabled: state.primaryEnabled,
-                        secondary: state.secondaryLabel,
-                        prefix: "words-make",
-                        onPrimary: { send(Self.event { $0.primary = .init() }) },
-                        onSecondary: { send(Self.event { $0.secondary = .init() }) }
-                    )
+                    // THE PRIMARY AND RESTORING ARE ALTERNATIVES: one stack.
+                    KitChoiceStack {
+                        WordsControls(
+                            primary: state.primaryLabel,
+                            primaryEnabled: state.primaryEnabled,
+                            secondary: state.secondaryLabel,
+                            prefix: "words-make",
+                            onPrimary: { send(Self.event { $0.primary = .init() }) },
+                            onSecondary: { send(Self.event { $0.secondary = .init() }) }
+                        )
 
-                    // ONE INK BUTTON: with the primary drawn, restoring is the
-                    // outline.
-                    if !state.restoreLabel.isEmpty {
-                        if state.primaryLabel.isEmpty {
-                            KitInkButton(label: state.restoreLabel) {
-                                send(Self.event { $0.restore = .init() })
+                        // ONE INK BUTTON: with the primary drawn, restoring is
+                        // the outline.
+                        if !state.restoreLabel.isEmpty {
+                            if state.primaryLabel.isEmpty {
+                                KitInkButton(label: state.restoreLabel) {
+                                    send(Self.event { $0.restore = .init() })
+                                }
+                                .accessibilityIdentifier("words-make-restore")
+                            } else {
+                                KitOutlineButton(label: state.restoreLabel) {
+                                    send(Self.event { $0.restore = .init() })
+                                }
+                                .accessibilityIdentifier("words-make-restore")
                             }
-                            .accessibilityIdentifier("words-make-restore")
-                        } else {
-                            KitOutlineButton(label: state.restoreLabel, fullWidth: true) {
-                                send(Self.event { $0.restore = .init() })
-                            }
-                            .accessibilityIdentifier("words-make-restore")
                         }
                     }
                 }
@@ -305,6 +308,7 @@ private struct EntryCell: View {
     let onReturn: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -321,7 +325,7 @@ private struct EntryCell: View {
                         spoken: cell.accessibilityLabel,
                         identifier: "words-cell-\(cell.position)",
                         focus: focus,
-                        font: Theme.uiFont("body", scheme),
+                        font: Theme.uiFont("body", scheme, dynamicTypeSize),
                         color: UIColor(Theme.color("text", scheme)),
                         onEdit: onEdit,
                         onReturn: onReturn
@@ -572,18 +576,22 @@ struct WordsControls: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(spacing: 4) {
-            if !primary.isEmpty {
-                KitInkButton(label: primary, action: onPrimary)
-                    .disabled(!primaryEnabled)
-                    .accessibilityIdentifier("\(prefix)-primary")
+        // NOTHING DRAWN WHEN THERE IS NOTHING TO DRAW: an empty stack would
+        // still spend its top padding and a gap in whatever holds it.
+        if !primary.isEmpty || !secondary.isEmpty {
+            VStack(spacing: 4) {
+                if !primary.isEmpty {
+                    KitInkButton(label: primary, action: onPrimary)
+                        .disabled(!primaryEnabled)
+                        .accessibilityIdentifier("\(prefix)-primary")
+                }
+                if !secondary.isEmpty {
+                    KitLink(label: secondary, identifier: "\(prefix)-secondary", action: onSecondary)
+                        .frame(maxWidth: .infinity)
+                }
             }
-            if !secondary.isEmpty {
-                KitLink(label: secondary, identifier: "\(prefix)-secondary", action: onSecondary)
-                    .frame(maxWidth: .infinity)
-            }
+            .padding(.top, 8)
         }
-        .padding(.top, 8)
     }
 }
 
@@ -788,6 +796,9 @@ struct WordField: UIViewRepresentable {
             coordinator.sent = [value]
         }
         field.isEnabled = context.environment.isEnabled
+        // THE FONT FOLLOWS THE SYSTEM TEXT SIZE: `makeUIView` set it once, and a
+        // setting changed while the field is on screen arrives here.
+        if field.font != font { field.font = font }
         // FOCUS MOVES ON A CHANGE, NEVER ON A RE-RENDER. A cell that took the
         // keyboard back whenever `focus` still named it stole it from the
         // endpoint field on its first keystroke — that edit re-renders every

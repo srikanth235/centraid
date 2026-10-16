@@ -1,4 +1,5 @@
-//! THE PHONE'S SHELVES, CUT FROM THE ONE DRIVE WINDOW (#1046).
+//! THE PHONE'S SHELVES, CUT FROM THE DRIVE WINDOW (#1046) — AND, WHEN IT IS
+//! TRUNCATED, THREE OF THEM FROM THEIR OWN READS (Q-1047-7).
 //!
 //! v0 shipped [`crate::queries::load_drive`]'s whole window to every screen and
 //! let each one filter, sort and slice it in JavaScript (`logic.ts`'s
@@ -8,9 +9,12 @@
 //! plus the counts its rail needs — pure, over the drive's answer, with no
 //! read of its own.
 //!
-//! **Every shelf is cut from ONE window**, the drive's newest-filed `limit`,
-//! so when the drive says `truncated` every count here is of that window too.
-//! That is v0's own limitation, carried and stated rather than hidden.
+//! **All and Folders are cut from ONE window**, the drive's newest-filed
+//! `limit`, so when the drive says `truncated` their rows and counts are of that
+//! window. Trash, Starred and Recent are not defined by when a document was
+//! filed, so a truncated window must not cut them: each reads its own set
+//! ([`crate::queries::ShelfArm`], Q-1047-7) and [`shelve_with_arms`] lays that
+//! over the window's answer.
 //!
 //! Civil time is the request's zone: [`local_minute`] and [`local_day`] read
 //! through the vault's one zone database. A grace window is not civil time —
@@ -23,7 +27,7 @@ use centraid_vault::time::recurrence::parse_instant_ms;
 use centraid_vault::time::zone::{FireZone, WallTime, wall_iso};
 
 use crate::kind::{TypeFilter, kind_of};
-use crate::queries::{DocumentRow, DriveData};
+use crate::queries::{ArmCount, ArmData, DocumentRow, DriveData, ShelfArm};
 
 /// "Recently added" is a WINDOW, not a filter: v0's phone drew the fifty
 /// newest-added live documents (`RecentlyChanged.tsx`'s `RECENT_WINDOW`).
@@ -176,6 +180,88 @@ pub fn shelve(
         starred_count: live.iter().filter(|row| row.starred).count(),
         trash_count: drive.documents.len() - live.len(),
     }
+}
+
+/// What the three own-read shelves add to a truncated drive (Q-1047-7).
+///
+/// All empty is the answer for a drive whose window holds everything, and
+/// [`shelve_with_arms`] then IS [`shelve`].
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Arms {
+    /// The asked shelf's own rows, when it is Trash, Starred or Recent.
+    pub shelf: Option<ArmData>,
+    /// The rail's counts, from the arms: the window cannot count what it does
+    /// not hold.
+    pub starred: Option<ArmCount>,
+    pub trash: Option<ArmCount>,
+}
+
+impl Arms {
+    /// The arm a shelf reads for itself. `None` for All and Folders, which the
+    /// window defines.
+    #[must_use]
+    pub const fn arm_of(shelf: &Shelf) -> Option<ShelfArm> {
+        match shelf {
+            Shelf::Trash => Some(ShelfArm::Trash),
+            Shelf::Starred => Some(ShelfArm::Starred),
+            Shelf::Recent => Some(ShelfArm::Recent),
+            Shelf::All | Shelf::Folder(_) => None,
+        }
+    }
+
+    /// Whether the shelf's rows stop short of what exists: the arm's own cursor
+    /// when it read, else the window's. Recent is "the newest fifty", a
+    /// definition and not a cut, so it never says older documents are missing.
+    #[must_use]
+    pub fn truncated(&self, shelf: &Shelf, window_truncated: bool) -> bool {
+        match (&self.shelf, shelf) {
+            (Some(_), Shelf::Recent) => false,
+            (Some(own), _) => own.filled,
+            (None, _) => window_truncated,
+        }
+    }
+}
+
+/// [`shelve`], with the shelves the window does not define cut from their own
+/// reads when `arms` carries them.
+///
+/// The window still answers everything it defines — the folder rail, the
+/// counts of All and of each folder — and the arms override only what they own:
+/// the asked shelf's rows, the Starred and Trash counts, and the label options
+/// the asked shelf's rows add.
+#[must_use]
+pub fn shelve_with_arms(
+    drive: &DriveData,
+    arms: &Arms,
+    view: &View,
+    zone: &FireZone,
+    today: &str,
+    now_ms: i64,
+) -> ShelfData {
+    let mut shelf = shelve(drive, view, zone, today, now_ms);
+    if let Some(own) = &arms.shelf {
+        let own_drive = DriveData {
+            documents: own.documents.clone(),
+            ..DriveData::default()
+        };
+        let cut = shelve(&own_drive, view, zone, today, now_ms);
+        shelf.documents = cut.documents;
+        shelf.labels = shelf
+            .labels
+            .iter()
+            .chain(&cut.labels)
+            .cloned()
+            .collect::<BTreeSet<String>>()
+            .into_iter()
+            .collect();
+    }
+    if let Some(count) = arms.starred {
+        shelf.starred_count = count.rows;
+    }
+    if let Some(count) = arms.trash {
+        shelf.trash_count = count.rows;
+    }
+    shelf
 }
 
 /// Filters COMPOSE: a chain, never a score (`filters.ts`).

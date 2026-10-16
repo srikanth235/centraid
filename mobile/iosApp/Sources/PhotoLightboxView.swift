@@ -665,15 +665,6 @@ private struct PhotoInfoSheetView: View {
 
                 place
 
-                section(
-                    title: PhotosWords.photosWhoInIt,
-                    icon: "person",
-                    values: state.people,
-                    unread: state.isUnread(.people),
-                    unreadSentence: PhotosWords.photosPeopleUnreadable,
-                    emptySentence: PhotosWords.photosPeopleNone
-                )
-
                 labels
 
                 // WHERE THE BYTES ARE, in a sentence that says what fetching
@@ -801,38 +792,6 @@ private struct PhotoInfoSheetView: View {
 
     private func textAction(_ title: String, action: @escaping () -> Void) -> some View {
         KitLink(label: title, action: action)
-    }
-
-    /// ONE SECTION, AND THREE THINGS IT CAN SAY.
-    ///
-    /// Values, "there are none", or "this could not be read" — never a heading
-    /// over a blank space, which is the one shape that tells a member nothing
-    /// and looks deliberate.
-    @ViewBuilder
-    private func section(
-        title: String,
-        icon: String,
-        values: [String],
-        unread: Bool,
-        unreadSentence: String,
-        emptySentence: String
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label {
-                Text(title)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-            } icon: {
-                CentraidIconView(iconKey: icon, tint: Theme.color("textSoft", scheme))
-            }
-            if !values.isEmpty {
-                Text(values.joined(separator: " · ")).centraidType("body")
-            } else {
-                Text(unread ? unreadSentence : emptySentence)
-                    .centraidType("small")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-            }
-        }
     }
 }
 
@@ -1217,13 +1176,6 @@ struct PhotoLightboxStateView {
         if !detail.placeName.isEmpty { return detail.placeName }
         if isUnread(.place) { return PhotosWords.photosPlaceUnreadable }
         return detail.placeID.isEmpty ? "No place" : PhotosWords.placeUnnamed
-    }
-
-    /// CONFIRMED FACES ONLY, and only the ones with a NAME.
-    var people: [String] {
-        (detail?.people ?? [])
-            .map(\.displayName)
-            .filter { !$0.isEmpty }
     }
 
     /// Only labels with a word on them, each with the edge a remove takes off.

@@ -6,8 +6,8 @@
 //! (`core.content_item`: the caption, the text recognised in the picture and the
 //! transcript of a video, in rank order) and its album leg is the album
 //! container (`core.collection`, narrowed to the rows that open in Photos). The
-//! shell keeps the STRUCTURED legs (the people confirmed on a face, the places,
-//! the labels) and folds them with this answer.
+//! shell keeps the STRUCTURED legs (the places, the labels) and folds them with
+//! this answer.
 //!
 //! **THE PHOTOGRAPHS ARE LIVE ONES.** A hit is a content item; the app opens it
 //! as the media assets that hold it, and a trashed or archived asset is no hit
@@ -19,14 +19,14 @@
 //! structured legs, and a typo is corrected only when EVERY leg is empty. So the
 //! request carries `correct` only when the shell's legs found nothing for the
 //! term as typed; the core corrects over the vocabularies of the photograph
-//! domain, the people (`core.party`) and the album container, runs its legs at
-//! the corrected words and answers them with the words. The core does NOT drop
-//! a correction its own legs found nothing at, because the shell's legs may find
-//! something at those words (a mistyped person's name finds no caption); the
-//! shell keeps the correction only if the whole answer is not empty. Places and
-//! labels are not corrected: the vault holds no vocabulary of them in the index
-//! (a place is arithmetic on a coordinate and a gazetteer name inside a JSON
-//! column, a label a concept the shell reads through the page door).
+//! domain and the album container, runs its legs at the corrected words and
+//! answers them with the words. The core does NOT drop a correction its own legs
+//! found nothing at, because the shell's legs may find something at those words
+//! (a mistyped place's name finds no caption); the shell keeps the correction
+//! only if the whole answer is not empty. Places and labels are not corrected:
+//! the vault holds no vocabulary of them in the index (a place is arithmetic on
+//! a coordinate and a gazetteer name inside a JSON column, a label a concept the
+//! shell reads through the page door).
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_kit::Denial;
@@ -40,10 +40,6 @@ use super::{RecordingSearch, VaultDoor, named, settle};
 use crate::error::{CoreError, Result};
 
 type Answer = wire::app_query_response::Answer;
-
-/// The entity of a person in the index; with the photograph domain and the album
-/// container, the vocabulary a Photos correction reads.
-const PARTY_ENTITY: &str = "core.party";
 
 /// The app a Photos album opens in.
 const APP: &str = "photos";
@@ -102,7 +98,7 @@ fn answer(
     if denial.is_some() || !may_correct || !is_empty(&exact) || term.trim().is_empty() {
         return Ok(((exact, String::new()), denial));
     }
-    let entities = [PHOTO_TARGET_TYPE, PARTY_ENTITY, "core.collection"];
+    let entities = [PHOTO_TARGET_TYPE, "core.collection"];
     // A failure of the door's `correct` is the recorder's to keep; here it only
     // means there is no correction.
     let Ok(Some(words)) = search.correct(&Principal::Owner, &entities, term) else {
@@ -401,20 +397,18 @@ mod tests {
         assert!(none.corrected.is_empty() && none.asset_ids.is_empty());
     }
 
-    /// A PERSON'S NAME IS PART OF THE VOCABULARY (R-1097-27): `core.party` is
-    /// read, so a mistyped name is corrected even though no caption holds it.
-    /// The core keeps the words although its own legs find nothing at them,
-    /// because the shell's people leg may; the shell drops them if its answer is
-    /// empty too.
+    /// A PERSON'S NAME IS NOT PART OF THE VOCABULARY: Photos searches no
+    /// people any more (the face surfaces left, Q-1047-2), so a mistyped name is
+    /// not corrected to words nothing in Photos could find.
     #[test]
-    fn a_mistyped_name_is_corrected_over_the_parties_and_kept_for_the_shell() {
+    fn a_mistyped_name_is_not_corrected_over_the_parties() {
         let scratch = Scratch::founded();
         scratch.run(
             "people.add_person",
             serde_json::json!({ "display_name": "Marguerite", "cadence_days": 30 }),
         );
         let fixed = scratch.search_with("margerite", 50, true);
-        assert_eq!(fixed.corrected, "marguerite");
+        assert!(fixed.corrected.is_empty());
         assert!(fixed.asset_ids.is_empty() && fixed.albums.is_empty());
     }
 

@@ -31,7 +31,7 @@ struct PhotosMoreSheet: View {
 
     var body: some View {
         // ONE CLAUSE ONLY in the foot. It said "Everything Photos can show."
-        // over one row, and Photos has a dozen other surfaces — People, Places,
+        // over one row, and Photos has a dozen other surfaces — Places,
         // Memories, Duplicates, Trash, Archive, Favorites, Albums — every one of
         // them reached from Collections, so the claim was false as printed.
         OptionSheet(title: PhotosWords.photosMoreTitle, status: PhotosWords.photosMoreFoot) {
@@ -74,6 +74,13 @@ private struct FreeUpSpaceRow: View {
                     .foregroundStyle(Theme.color("textSoft", scheme))
                 if !freeUp.reason.isEmpty {
                     Text(freeUp.reason)
+                        .centraidType("small")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                }
+                // WHAT A PHOTO DELETED FOR GOOD COSTS THE BACKUP DEVICE
+                // (#1080 F5), said once, with the row it is true beside.
+                if freeUp.offered {
+                    Text(PhotosWords.photosFreeUpRetentionBody)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textFaint", scheme))
                 }

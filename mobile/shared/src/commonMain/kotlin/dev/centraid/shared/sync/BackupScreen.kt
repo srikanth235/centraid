@@ -237,7 +237,13 @@ public object BackupScreenMachine {
         val label = destination.label.ifBlank { SharedCopy.BACKUP_UNNAMED }
         val seen = destination.lastSeenMs?.let { SharedCopy.BACKUP_SEEN.replace("{when}", BackupLines.ago(it, nowMs)) }
             ?: SharedCopy.BACKUP_SEEN_NEVER
-        val detail = listOfNotNull(destination.addrs.firstOrNull(), seen).joinToString(" · ")
+        // A GATEWAY THAT REFUSED THIS PHONE'S TOKEN says so where it says
+        // when it was reached: the way back is to pair it again (#1080, F2).
+        val detail = listOfNotNull(
+            destination.addrs.firstOrNull(),
+            seen,
+            SharedCopy.BACKUP_DEST_PAIR_AGAIN.takeIf { destination.pairAgain },
+        ).joinToString(" · ")
         return BackupDestinationRow(
             gateway_id = destination.gatewayId,
             label = label,
@@ -245,6 +251,7 @@ public object BackupScreenMachine {
             last_seen_ms = destination.lastSeenMs ?: 0L,
             last_ack_ms = destination.lastAckMs ?: 0L,
             accessibility_label = "$label. $detail",
+            pair_again = destination.pairAgain,
         )
     }
 }

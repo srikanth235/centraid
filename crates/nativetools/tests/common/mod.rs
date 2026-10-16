@@ -201,7 +201,7 @@ pub fn journal(world: &World) -> BTreeMap<(String, String), usize> {
         .expect("the journal opens");
     let rows = handle
         .table(
-            "agent_command_invocation",
+            "command_invocation",
             "invocation_id, command_id, status, requested_at",
             "requested_at",
             "invocation_id",

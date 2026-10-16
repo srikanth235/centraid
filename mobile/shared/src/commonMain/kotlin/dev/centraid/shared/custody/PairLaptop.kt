@@ -52,8 +52,11 @@ public object PairLaptopMachine {
     }
 
     private fun view(model: Pairing, event: PairLaptopEvent): PairStep {
-        val waiting = model.phase == PairLaptopState.Phase.PHASE_WAITING ||
-            model.phase == PairLaptopState.Phase.PHASE_FAILED
+        // A BARRED REFUSAL HAS NO FIELD TO TYPE IN OR SCAN INTO (see [Pairing.barred]).
+        val waiting = (
+            model.phase == PairLaptopState.Phase.PHASE_WAITING ||
+                model.phase == PairLaptopState.Phase.PHASE_FAILED
+            ) && !model.barred
         return when {
             event.opened != null -> PairStep(
                 render(Pairing(phase = PairLaptopState.Phase.PHASE_UNSPECIFIED, camera = event.opened.camera)),
@@ -69,7 +72,10 @@ public object PairLaptopMachine {
             event.unread != null && waiting ->
                 PairStep(render(model.copy(phase = PairLaptopState.Phase.PHASE_WAITING, notice = CustodyCopy.PAIR_PHOTO_UNREAD)))
             event.primary != null -> when (model.phase) {
-                PairLaptopState.Phase.PHASE_WAITING, PairLaptopState.Phase.PHASE_FAILED -> pair(model)
+                // A BARRED REFUSAL'S ONE KEY IS DONE: pairing again would be
+                // refused the same way, so there is nothing to send.
+                PairLaptopState.Phase.PHASE_WAITING, PairLaptopState.Phase.PHASE_FAILED ->
+                    if (model.barred) PairStep(closed()) else pair(model)
                 PairLaptopState.Phase.PHASE_PAIRED,
                 PairLaptopState.Phase.PHASE_NEEDS_WORDS,
                 -> PairStep(closed())
@@ -144,6 +150,11 @@ public object PairLaptopMachine {
                             PairRefusal.NOT_TAKEN -> WordsCopy.PAIR_NOT_TAKEN
                             PairRefusal.MOVED -> WordsCopy.PAIR_MOVED
                         },
+                        // A MOVED VAULT IS THE ONE REFUSAL NO SECOND ATTEMPT
+                        // CHANGES: another phone holds the writer epoch, so the
+                        // same pairing, or a fresh code, is answered the same
+                        // way. The screen says so and offers nothing to retry.
+                        barred = result.because == PairRefusal.MOVED,
                     )
                     // A PAIRING WITH NOTHING TO COMPARE IS NOT ONE A MEMBER CAN
                     // CHECK, so it is refused rather than shown: the core
@@ -174,18 +185,24 @@ public object PairLaptopMachine {
             PairLaptopState.Phase.PHASE_CLOSED -> ""
             else -> CustodyCopy.PAIR_TITLE
         }
+        val barred = model.barred && phase == PairLaptopState.Phase.PHASE_FAILED
         val body = when (phase) {
+            // A BARRED REFUSAL IS ITS NOTICE ALONE: the instruction to paste a
+            // code would be asking for what cannot work.
+            PairLaptopState.Phase.PHASE_FAILED -> if (barred) "" else CustodyCopy.PAIR_ASK
             PairLaptopState.Phase.PHASE_WAITING,
-            PairLaptopState.Phase.PHASE_FAILED,
             PairLaptopState.Phase.PHASE_PAIRING,
             -> CustodyCopy.PAIR_ASK
             PairLaptopState.Phase.PHASE_PAIRED -> if (answer == null) "" else CustodyCopy.pairedLine(answer)
             else -> ""
         }
-        val entering = phase == PairLaptopState.Phase.PHASE_WAITING || phase == PairLaptopState.Phase.PHASE_FAILED
+        val entering = (phase == PairLaptopState.Phase.PHASE_WAITING || phase == PairLaptopState.Phase.PHASE_FAILED) && !barred
         val primary = when (phase) {
             PairLaptopState.Phase.PHASE_WAITING -> CustodyCopy.PAIR_PRIMARY
-            PairLaptopState.Phase.PHASE_FAILED -> CustodyCopy.TRY_AGAIN
+            // THE ACTION THAT CAN SUCCEED, OR NONE (#1080 receipt, "for the
+            // owner"): Try again under a refusal no retry changes is a key that
+            // does nothing, so a barred refusal closes instead.
+            PairLaptopState.Phase.PHASE_FAILED -> if (barred) CustodyCopy.DONE else CustodyCopy.TRY_AGAIN
             PairLaptopState.Phase.PHASE_PAIRED, PairLaptopState.Phase.PHASE_NEEDS_WORDS -> CustodyCopy.DONE
             else -> ""
         }
@@ -247,6 +264,12 @@ public data class Pairing(
     public val camera: Boolean = false,
     /** NEEDS_WORDS because the vault opened without its words, so re-key is the way on. */
     public val rekey: Boolean = false,
+    /**
+     * FAILED, AND NO ATTEMPT WOULD CHANGE IT: the gateway answered
+     * `VAULT_MOVED`. The screen draws the sentence and Done, with no field, no
+     * scan and no Try again.
+     */
+    public val barred: Boolean = false,
 ) {
     override fun toString(): String = "Pairing(phase=$phase, <redacted>)"
 }

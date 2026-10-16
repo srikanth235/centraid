@@ -275,7 +275,7 @@ fn a_full_disk_during_a_snapshot_build_leaves_no_partial_artifact() {
         .vault
         .read(|connection| {
             Ok(connection.query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'access_device_secret'",
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'locker_key'",
                 [],
                 |row| row.get(0),
             )?)

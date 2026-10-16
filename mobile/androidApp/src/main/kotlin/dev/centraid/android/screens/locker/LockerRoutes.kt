@@ -18,6 +18,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import centraid.screen.v1.LockerAccessEvent
 import centraid.screen.v1.LockerEditorEvent
 import centraid.screen.v1.LockerExportEvent
 import centraid.screen.v1.LockerGeneratorEvent
@@ -35,6 +36,7 @@ import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.words.SecureHolds
 import dev.centraid.design.copy.LockerCopy
+import dev.centraid.shared.apps.locker.LockerAccessBridge
 import dev.centraid.shared.apps.locker.LockerEditorBridge
 import dev.centraid.shared.apps.locker.LockerExportBridge
 import dev.centraid.shared.apps.locker.LockerGeneratorBridge
@@ -85,6 +87,9 @@ public class LockerRoutes(
     private val trash = LockerTrashBridge()
     private val export = LockerExportBridge()
     private val importer = LockerImportBridge()
+
+    /** The whole Locker's access history (Q-1047-21): metadata only, so there is no seam to hold. */
+    private val access = LockerAccessBridge()
 
     /** The last export owner-check token raised: once per token, like the wall's. */
     private var raisedExport: Long = 0L
@@ -160,6 +165,7 @@ public class LockerRoutes(
     override fun handles(destination: Destination): Boolean = when (destination) {
         is Destination.LockerHome, is Destination.LockerItem, is Destination.LockerEditor,
         Destination.LockerGenerator, Destination.LockerTrash, Destination.LockerExport, Destination.LockerImport,
+        Destination.LockerAccess,
         -> true
         else -> false
     }
@@ -180,6 +186,7 @@ public class LockerRoutes(
         trash.attach(session)
         export.attach(session)
         importer.attach(session)
+        access.attach(session)
     }
 
     /**
@@ -303,6 +310,21 @@ public class LockerRoutes(
             }
             Destination.LockerExport -> ExportRoute(nav, state, unlock, words)
             Destination.LockerImport -> ImportRoute(nav, state, unlock, words)
+            Destination.LockerAccess -> {
+                // OPENED EACH TIME IT IS PUSHED: a history is as old as the last look.
+                LaunchedEffect(destination) { access.open() }
+                DisposableEffect(destination) { onDispose { access.departed() } }
+                val held by access.host.state.collectAsStateWithLifecycle()
+                if (state.cover) {
+                    CoveredPage(state, nav, unlock, words)
+                } else {
+                    LockerAccessScreen(
+                        held.screen,
+                        onEvent = { event: LockerAccessEvent -> access.forward(event) },
+                        onBack = nav::pop,
+                    )
+                }
+            }
             else -> Unit
         }
     }
@@ -350,6 +372,7 @@ public class LockerRoutes(
                     event.more != null -> when (event.more!!.key) {
                         "import" -> push(nav, Destination.LockerImport)
                         "export" -> push(nav, Destination.LockerExport)
+                        "access" -> push(nav, Destination.LockerAccess)
                         "trash" -> push(nav, Destination.LockerTrash)
                         "lock" -> lock.forward(LockerLockEvent(lock = LockerLockEvent.LockTapped()))
                         else -> Unit

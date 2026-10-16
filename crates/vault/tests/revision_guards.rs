@@ -1,24 +1,26 @@
-//! THE ONE-GRAPH MIGRATION, PROPOSED AND PROVEN (#1020, D-1020-N2).
+//! THE REVISION GRAPH'S FOUR GUARDS (#1020, D-1020-N2).
 //!
-//! `contracts/migrations/002_revisions.sql` is a PROPOSAL: `LADDER` in
-//! `crates/vault/src/migrations.rs` still ends at rung one, and appending the
-//! rung is the root's per-slot migration. This suite is what makes the proposal
-//! reviewable rather than plausible — it applies the file to a real founded
-//! vault and answers four questions:
+//! `core_entity_revision` is the ONLY history table (#916, ONT-revisions) and a
+//! revision is an OCCURRENCE (#996, R20(a)). Both were reader-enforced, and the
+//! schema still permitted a self-parent, a parent belonging to another object,
+//! an UPDATE re-pointing a parent (the only way a cycle can be closed) and a
+//! `revises` `core_link`. A founded vault now refuses all four, and this suite
+//! answers three questions over one:
 //!
 //! 1. **Does it accept everything the product writes?** Every one of the nine
-//!    `knowledge.*` commands runs after it, including the restore that appends a
-//!    third occurrence.
+//!    `knowledge.*` commands runs, including the restore that appends a third
+//!    occurrence.
 //! 2. **Does each guard refuse the row it is for?** A self-parent, a foreign
 //!    parent, a re-pointed parent, and a `revises` link — each asserted by its
 //!    own sentence, so a guard that stopped working fails here and not in a
 //!    count.
-//! 3. **Does the backfill check refuse a file that already carries a cycle?**
-//!    The migration must not silently leave a malformed chain behind, because
-//!    dropping the row would be deciding which of two histories a member keeps.
-//! 4. **Is the reader still needed?** Yes, and the last test says why: the
-//!    ladder is forward-only, so a vault written by an older binary reaches this
-//!    build with rows the guards were added after.
+//! 3. **Is the ladder's head the guards' home?** A founded vault carries all four
+//!    and refuses a file from a newer build.
+//!
+//! (The rung that added the guards also refused to run over a file that already
+//! carried a cycle. That path is not proved here: the ladder was squashed into
+//! one baseline on 2026-10-15, Q-1029-1, and no vault in the field predates the
+//! guards. The reader's own refusal of a cycle stays.)
 
 mod common;
 
@@ -27,82 +29,29 @@ use centraid_vault::commands::Registry;
 use centraid_vault::{Command, CommandStatus, Vault};
 use serde_json::{Value, json};
 
-/// The proposal, read from `contracts/` rather than embedded: it is not on the
-/// ladder, so nothing compiles it in yet.
-fn proposal() -> String {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../contracts/migrations/002_revisions.sql");
-    std::fs::read_to_string(&path)
-        .unwrap_or_else(|error| panic!("{} is not readable: {error}", path.display()))
-}
-
-struct Proposed {
+struct Founded {
     scratch: common::Scratch,
     registry: Registry,
     principal: Principal,
 }
 
-impl Proposed {
-    /// A founded vault with the registry installed, at rung two or at rung one.
-    ///
-    /// SINCE THE RUNG LANDED (#1020, close pass) a founded vault already
-    /// carries the guards, so `migrate: true` is simply what founding gives.
-    /// `migrate: false` winds the file BACK to rung one — which is the shape a
-    /// vault written by an older binary arrives in, and the only way to seed a
-    /// malformed chain and watch the rung refuse it.
-    fn open(seed: &str, migrate: bool) -> Self {
+impl Founded {
+    /// A founded vault with the registry installed.
+    fn open(seed: &str) -> Self {
         let scratch = common::Scratch::founded(seed).expect("a vault is founded");
         let registry = Registry::with_system_commands().expect("the registry builds");
         registry
             .install(&scratch.vault)
             .expect("the registry's record installs");
-        let proposed = Self {
+        Self {
             scratch,
             registry,
             principal: Principal::owner("phone"),
-        };
-        if !migrate {
-            proposed.unmigrate();
         }
-        proposed
-    }
-
-    /// Wind the file back to rung one: drop the rung's four triggers and stamp
-    /// `user_version = 1`. Not a downgrade path the product has — the ladder is
-    /// forward-only — but the honest way for a TEST to produce the file an
-    /// older binary wrote, without committing a second copy of the schema.
-    fn unmigrate(&self) {
-        self.vault()
-            .commit(|tx| {
-                for trigger in [
-                    "core_entity_revision_no_self_parent",
-                    "core_entity_revision_parent_is_same_object",
-                    "core_entity_revision_parent_is_immutable",
-                    "core_link_no_revises_edge",
-                ] {
-                    tx.connection()
-                        .execute_batch(&format!("DROP TRIGGER IF EXISTS {trigger}"))?;
-                }
-                Ok(())
-            })
-            .expect("the guards come off");
     }
 
     fn vault(&self) -> &Vault {
         &self.scratch.vault
-    }
-
-    /// Apply the proposal the way a rung is applied: one transaction, all of it.
-    fn migrate(&self) -> Result<(), String> {
-        let sql = proposal();
-        self.vault()
-            .commit(|tx| {
-                tx.set_producer("migration.002_revisions");
-                tx.connection().execute_batch(&sql)?;
-                Ok(())
-            })
-            .map(drop)
-            .map_err(|error| error.to_string())
     }
 
     fn run(&self, command: &str, input: Value) -> Value {
@@ -201,11 +150,11 @@ impl Proposed {
     }
 }
 
-/// THE MIGRATION ACCEPTS EVERYTHING THE PRODUCT WRITES. Nine commands, after
-/// the rung, including the restore that appends a third occurrence.
+/// THE GUARDS ACCEPT EVERYTHING THE PRODUCT WRITES. Nine commands, under them,
+/// including the restore that appends a third occurrence.
 #[test]
-fn every_knowledge_command_still_runs_after_the_rung() {
-    let vault = Proposed::open("revisions-accepts", true);
+fn every_knowledge_command_runs_under_the_guards() {
+    let vault = Founded::open("revisions-accepts");
     let notebook =
         vault.run("knowledge.create_notebook", json!({ "name": "Travel" }))["notebook_id"]
             .as_str()
@@ -264,7 +213,7 @@ fn every_knowledge_command_still_runs_after_the_rung() {
 /// **THE THREE REVISION GUARDS**, each refused by its own sentence.
 #[test]
 fn a_self_parent_a_foreign_parent_and_a_moved_parent_are_all_refused() {
-    let vault = Proposed::open("revisions-guards", true);
+    let vault = Founded::open("revisions-guards");
     let mine = vault.note("Mine", "My words.");
     let theirs = vault.note("Theirs", "Their words.");
 
@@ -321,7 +270,7 @@ fn a_self_parent_a_foreign_parent_and_a_moved_parent_are_all_refused() {
 /// to close A→B→A is the UPDATE the third guard refuses.
 #[test]
 fn the_cycle_the_reader_refuses_becomes_unwritable() {
-    let vault = Proposed::open("revisions-cycle", true);
+    let vault = Founded::open("revisions-cycle");
     let note = vault.note("Cabin", "Book it.");
     let head: String = vault
         .vault()
@@ -363,7 +312,7 @@ fn the_cycle_the_reader_refuses_becomes_unwritable() {
 /// rather than redundant.
 #[test]
 fn a_revises_link_is_refused_once_the_concept_exists() {
-    let vault = Proposed::open("revisions-link", true);
+    let vault = Founded::open("revisions-link");
     let one = vault.note("One", "First.");
     let two = vault.note("Two", "Second.");
     // The concept is not seeded by this build; a seeded vocabulary or an import
@@ -421,94 +370,28 @@ fn a_revises_link_is_refused_once_the_concept_exists() {
         .expect("a references edge still links");
 }
 
-/// **THE BACKFILL CHECK REFUSES A FILE THAT ALREADY CARRIES A CYCLE**, rather
-/// than leaving it behind. Dropping the row would be deciding which of two
-/// histories a member keeps.
-#[test]
-fn the_migration_refuses_a_vault_that_already_holds_a_malformed_chain() {
-    let vault = Proposed::open("revisions-backfill", false);
-    let note = vault.note("Cabin", "Book it.");
-    // A→B→A, written BEFORE the rung — which is what a vault from an older
-    // binary can reach and the whole reason the reader's refusal stays.
-    vault
-        .revision("rev-cycle-a", &note, "rev-cycle-b")
-        .expect_err("the parent does not exist yet");
-    vault
-        .revision("rev-cycle-a", &note, "")
-        .expect("a parentless occurrence lands");
-    vault
-        .revision("rev-cycle-b", &note, "rev-cycle-a")
-        .expect("a child lands");
-    vault
-        .direct(
-            "UPDATE core_entity_revision SET parent_revision_id = 'rev-cycle-b'
-              WHERE revision_id = 'rev-cycle-a'",
-            &[],
-        )
-        .expect("before the rung, nothing stops the loop");
-
-    let refusal = vault.migrate().expect_err("the rung refuses the file");
-    assert!(
-        refusal.contains("CHECK") || refusal.contains("constraint"),
-        "{refusal}"
-    );
-    // AND THE FILE IS UNTOUCHED: the rung's own transaction rolled back, so the
-    // guard table is not left behind.
-    assert_eq!(
-        vault.count(
-            "SELECT COUNT(*) FROM sqlite_master WHERE name = 'migration_002_guard'",
-            &[],
-        ),
-        0
-    );
-    assert_eq!(
-        vault.count(
-            "SELECT COUNT(*) FROM sqlite_master
-              WHERE name = 'core_entity_revision_no_self_parent'",
-            &[],
-        ),
-        0,
-        "no guard landed, so the file is exactly as it was"
-    );
-}
-
-/// THE RUNG IS ON THE LADDER (#1020, close pass, D-1020-N2 landed).
+/// A FOUNDED VAULT CARRIES ALL FOUR GUARDS AND REFUSES A FILE FROM A NEWER BUILD.
 ///
-/// Four claims, because they are four different things: the rung is rung TWO
-/// and appended rather than inserted; the text the ladder compiles in is the
-/// same file this suite applies by hand; a fresh vault comes up already
-/// carrying the guards, so every test above describes what a member's file IS
-/// rather than what it could be; and a file from a newer build is still
-/// refused — the forward-only rule restated at the ladder's new head, because
-/// "the ladder grew" is exactly the change that would make a downgrade look
+/// Two claims, because they are two different things: a founded vault comes up
+/// already carrying every guard, so each test above describes what a member's
+/// file IS rather than what it could be; and a file from a newer build is still
+/// refused — the forward-only rule restated at the ladder's head, because "the
+/// ladder grew" is exactly the change that would make a downgrade look
 /// survivable.
 #[test]
-fn the_rung_is_on_the_ladder_and_a_fresh_vault_carries_it() {
-    let ladder = centraid_vault::migrations::LADDER;
-    let names: Vec<&str> = ladder.iter().map(|rung| rung.name).collect();
-    // Rung three is the in-vault backup index (#1029 §2, §4). This test is
-    // rung TWO's, so it asserts rung two's position in the ladder rather than
-    // the ladder's length — a rung appended above it is the ladder working, and
-    // a rung inserted below it is the failure this line is for.
-    assert_eq!(
-        &names[..2],
-        &["baseline", "revisions"],
-        "rung two must still be rung two"
-    );
-    assert!(centraid_vault::migrations::head_version() >= 2);
-    assert_eq!(
-        centraid_vault::migrations::REVISIONS_SQL,
-        proposal(),
-        "the ladder compiles in the committed fixture, not a second copy"
-    );
+fn a_fresh_vault_carries_the_four_guards_and_refuses_a_file_from_the_future() {
+    // Rung one is the baseline, and the guards live in it; a rung appended above it is the
+    // ladder working.
+    assert_eq!(centraid_vault::migrations::LADDER[0].name, "baseline");
 
-    let fresh = Proposed::open("ladder-rung-two", true);
+    let fresh = Founded::open("ladder-guards");
     assert_eq!(
         fresh.vault().schema_version(),
         centraid_vault::migrations::head_version()
     );
     for guard in [
         "core_entity_revision_no_self_parent",
+        "core_entity_revision_parent_is_same_object",
         "core_entity_revision_parent_is_immutable",
         "core_link_no_revises_edge",
     ] {

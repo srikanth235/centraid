@@ -35,7 +35,6 @@ import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.DuplicateReviewScreen
 import dev.centraid.android.screens.DuplicatesScreen
-import dev.centraid.android.screens.FaceReviewScreen
 import dev.centraid.android.screens.LocalPhotoEditOpener
 import dev.centraid.android.screens.PhotoEditorScreen
 import dev.centraid.android.screens.PhotoLightboxScreen
@@ -44,7 +43,6 @@ import dev.centraid.android.screens.PhotoShelfScreen
 import dev.centraid.android.screens.PhotosCollectionsScreen
 import dev.centraid.android.screens.PhotosGridScreen
 import dev.centraid.android.screens.PhotosMemoriesScreen
-import dev.centraid.android.screens.PhotosPeopleScreen
 import dev.centraid.android.screens.PhotosSearchScreen
 import dev.centraid.android.screens.PhotosSelectionBar
 import dev.centraid.android.screens.PhotosSheets
@@ -55,7 +53,6 @@ import dev.centraid.android.screens.installPhotoEditRenderer
 import dev.centraid.android.screens.photosSelectionTitle
 import dev.centraid.shared.apps.photos.DuplicateReviewBridge
 import dev.centraid.shared.apps.photos.DuplicatesBridge
-import dev.centraid.shared.apps.photos.FaceReviewBridge
 import dev.centraid.shared.apps.photos.LibraryCopies
 import dev.centraid.shared.apps.photos.PhotoEditorBridge
 import dev.centraid.shared.apps.photos.PhotoLightboxBridge
@@ -66,8 +63,6 @@ import dev.centraid.shared.apps.photos.PhotosGridMachine
 import dev.centraid.shared.apps.photos.PhotosGridWiring
 import dev.centraid.shared.apps.photos.PhotosMemoriesBridge
 import dev.centraid.shared.apps.photos.PhotosMemoriesMachine
-import dev.centraid.shared.apps.photos.PhotosPeopleBridge
-import dev.centraid.shared.apps.photos.PhotosPeopleMachine
 import dev.centraid.shared.apps.photos.PhotosSearchBridge
 import dev.centraid.shared.apps.photos.PlacesBridge
 import dev.centraid.shared.apps.photos.PlacesMachine
@@ -84,15 +79,15 @@ import kotlinx.coroutines.launch
 
 /**
  * THE PHOTOS MINIAPP'S ROUTES (#1029, photos port): the library and its
- * eleven pushed screens, moved out of `MainActivity` unchanged (K5).
+ * nine pushed screens, moved out of `MainActivity` unchanged (K5).
  *
- * **The eleven are held as BRIDGES and not as bare [ScreenHost]s.** Compose
+ * **The nine are held as BRIDGES and not as bare [ScreenHost]s.** Compose
  * collects the grid's host directly, but a screen with more than one read has
  * nothing to hand `attachScreen`:
  *
- * * **Collections, People and Faces have no `ScreenReads` at all.** Their
- *   reads are a FAN-OUT folded into one state; the trip lives in the bridge
- *   and `changes.route(host)` is what it calls instead.
+ * * **Collections and Search have no `ScreenReads` at all.** Their reads are a
+ *   FAN-OUT folded into one state; the trip lives in the bridge and
+ *   `changes.route(host)` is what it calls instead.
  * * **The lightbox, Duplicates and Duplicate review carry LEGS whose
  *   constructors are `internal`** to `:shared`, so only the bridge can write
  *   `attachReads(host, PhotoLightboxLeg(leg))`.
@@ -110,8 +105,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
     private val photoLightbox = PhotoLightboxBridge()
     private val photoPicker = PhotoPickerBridge()
     private val places = PlacesBridge()
-    private val photosPeople = PhotosPeopleBridge()
-    private val faceReview = FaceReviewBridge()
     private val photosMemories = PhotosMemoriesBridge()
     private val duplicates = DuplicatesBridge()
     private val duplicateReview = DuplicateReviewBridge()
@@ -133,8 +126,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
         is Destination.PhotoEditor,
         is Destination.PhotoPicker,
         is Destination.Places,
-        is Destination.PhotosPeople,
-        is Destination.PhotoFaceReview,
         is Destination.PhotosMemories,
         is Destination.PhotoDuplicates,
         is Destination.PhotoDuplicateReview,
@@ -167,8 +158,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
         photoLightbox.attach(opened)
         photoPicker.attach(opened)
         places.attach(opened)
-        photosPeople.attach(opened)
-        faceReview.attach(opened)
         photosMemories.attach(opened)
         duplicates.attach(opened)
         duplicateReview.attach(opened)
@@ -486,7 +475,7 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                                 collapseAllLabel = chrome.collapse_all_label,
                                 // COLLECTIONS IS THE HUB, and this is the whole
                                 // of it: the four standing shelves, every album
-                                // and the four doors all leave from here. The
+                                // and the three doors all leave from here. The
                                 // grid's More sheet says so in as many words —
                                 // "The rest of Photos is in Collections."
                                 //
@@ -498,8 +487,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                                 },
                                 onOpenDoor = { kind ->
                                     stack = when (kind) {
-                                        CollectionsDoor.Kind.KIND_PEOPLE ->
-                                            stack.push(Destination.PhotosPeople)
                                         CollectionsDoor.Kind.KIND_PLACES ->
                                             stack.push(Destination.Places())
                                         CollectionsDoor.Kind.KIND_MEMORIES ->
@@ -752,46 +739,6 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                         onOpenShelf = { shelf ->
                             stack = stack.push(Destination.PhotoShelfRoute(shelf))
                         },
-                    )
-                }
-            }
-
-            is Destination.PhotosPeople -> {
-                LaunchedEffect(destination) { photosPeople.opened() }
-                val state by photosPeople.host.state.collectAsStateWithLifecycle()
-                PushedPage(
-                    title = "People",
-                    parentTitle = "Collections",
-                    onBack = { stack = stack.pop() },
-                ) {
-                    PhotosPeopleScreen(
-                        state = state,
-                        onEvent = { event -> scope.launch { photosPeople.host.send(event) } },
-                        onOpenPerson = { person ->
-                            stack = stack.push(
-                                Destination.PhotoShelfRoute(
-                                    PhotosPeopleMachine.shelfFor(person),
-                                ),
-                            )
-                        },
-                        onOpenFaceReview = {
-                            stack = stack.push(Destination.PhotoFaceReview)
-                        },
-                    )
-                }
-            }
-
-            is Destination.PhotoFaceReview -> {
-                LaunchedEffect(destination) { faceReview.opened() }
-                val state by faceReview.host.state.collectAsStateWithLifecycle()
-                PushedPage(
-                    title = "Faces",
-                    parentTitle = "People",
-                    onBack = { stack = stack.pop() },
-                ) {
-                    FaceReviewScreen(
-                        state = state,
-                        onEvent = { event -> scope.launch { faceReview.host.send(event) } },
                     )
                 }
             }

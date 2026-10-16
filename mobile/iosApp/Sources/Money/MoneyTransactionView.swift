@@ -112,15 +112,15 @@ struct MoneyTransactionView: View {
         }
         if transaction.hasTransferOffer { offer(transaction.transferOffer, key: "transfer") }
         if transaction.hasRuleOffer { offer(transaction.ruleOffer, key: "rule") }
-        VStack(spacing: 8) {
+        // THE ACTIONS ARE ALTERNATIVES: one stack.
+        KitChoiceStack {
             ForEach(Array(transaction.actions.filter { !folded.contains($0.key) }.enumerated()), id: \.offset) { _, action in
                 let key = action.key
-                MoneyActionButton(
-                    label: action.label,
-                    destructive: action.destructive,
-                    enabled: action.enabled,
-                    identifier: "money-action-\(key)"
-                ) { send(event { $0.action = .with { $0.key = key } }) }
+                KitOutlineButton(label: action.label, tone: action.destructive ? "net" : "text") {
+                    send(event { $0.action = .with { $0.key = key } })
+                }
+                .disabled(!action.enabled)
+                .accessibilityIdentifier("money-action-\(key)")
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -275,12 +275,15 @@ struct MoneyTargetView: View {
         }
         MoneyNote(text: target.carryNote)
         MoneyPreviewCard(label: target.previewLabel, amount: target.preview, note: target.previewNote)
-        MoneyInkButton(label: target.saveLabel, enabled: target.canSave, identifier: "money-target-save") {
-            send(event { $0.save = .init() })
-        }
-        if !target.removeLabel.isEmpty {
-            MoneyQuietButton(label: target.removeLabel, tone: "net", identifier: "money-target-remove") {
-                send(event { $0.remove = .init() })
+        // SAVE AND REMOVE ARE ALTERNATIVES: one stack.
+        MoneyChoiceStack {
+            MoneyInkButton(label: target.saveLabel, enabled: target.canSave, identifier: "money-target-save") {
+                send(event { $0.save = .init() })
+            }
+            if !target.removeLabel.isEmpty {
+                MoneyQuietButton(label: target.removeLabel, tone: "net", identifier: "money-target-remove") {
+                    send(event { $0.remove = .init() })
+                }
             }
         }
     }

@@ -16,6 +16,7 @@
 //! | [`pairing_a_gateway_that_holds_the_vault_takes_it_over`] | `VAULT_KNOWN` at pairing is a takeover by claim, and the phone it supersedes freezes |
 //! | [`a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_damaged`] | a flipped bit in the gateway's copy is `FETCH_OUTCOME_DAMAGED` and lands nothing; another machine at the gateway's address is `FETCH_OUTCOME_UNTRUSTED`, a pass that stops `DRAIN_STOP_UNTRUSTED`, and a status that waits `WAIT_REASON_UNTRUSTED` |
 //! | [`a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time`] | R-1080-C39: a film twice the spool, hashed on its first read and sealed a window per later read under names known before each; a pass that moved a window asks for the next; an edit between reads keeps nothing; the spool never holds more than its ceiling |
+//! | [`a_gateway_that_moved_is_found_again_by_its_identity_and_only_by_it`] | `refresh_destination` (Q-1080-D3): a gateway that woke at another address is unreachable at the recorded one, a candidate that is a different gateway or a dead port is never recorded, the one that answers as the pinned gateway goes first, and the next pass reaches it |
 //! | [`forgetting_a_gateway_revokes_this_phones_token_there`] | `forget_destination` revokes the phone's token on the gateway first, and a gateway that cannot be reached is forgotten anyway and says it was not revoked |
 
 mod common;
@@ -898,6 +899,99 @@ fn pairing_a_gateway_that_holds_the_vault_takes_it_over() {
     );
 }
 
+fn refresh(
+    handle: &centraid_core::Handle,
+    id: &str,
+    candidates: &[String],
+) -> wire::RefreshDestinationResponse {
+    let wire::response::Kind::RefreshDestination(answer) = ask(
+        handle,
+        wire::request::Kind::RefreshDestination(wire::RefreshDestinationRequest {
+            gateway_id: id.to_owned(),
+            candidates: candidates.to_vec(),
+        }),
+    ) else {
+        panic!("a refresh answers");
+    };
+    answer
+}
+
+#[test]
+fn a_gateway_that_moved_is_found_again_by_its_identity_and_only_by_it() {
+    let first = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let handle = phone(dir.path());
+    let id = pair(&handle, &first)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    let recorded = first.spawned.addr.to_string();
+    drain(&handle, at_home());
+
+    // THE LAPTOP WOKE AT ANOTHER ADDRESS: the same state and so the same
+    // identity and certificate, on a new port.
+    let Gateway {
+        runtime,
+        dir: state,
+        spawned,
+    } = first;
+    runtime.block_on(spawned.shutdown());
+    drop(runtime);
+    let moved = gateway_in(state);
+    let found = moved.spawned.addr.to_string();
+    assert_ne!(found, recorded, "the test needs a new address");
+    let cut = drain(&handle, at_home());
+    assert_eq!(
+        cut.stopped,
+        wire::DrainStop::Unreachable as i32,
+        "the recorded address is dead: {cut:?}"
+    );
+
+    // ANOTHER GATEWAY'S ADDRESS, A DEAD PORT, A NAME AND NONSENSE are never
+    // recorded: the certificate refuses the first, nothing answers the second,
+    // and the last two are not addresses the core dials.
+    let stranger = gateway();
+    let answer = refresh(
+        &handle,
+        &id,
+        &[
+            stranger.spawned.addr.to_string(),
+            "127.0.0.1:1".to_owned(),
+            "laptop.local:7443".to_owned(),
+            "not an address".to_owned(),
+            "[fe80::1]:7443".to_owned(),
+        ],
+    );
+    assert!(!answer.refreshed, "{answer:?}");
+    assert_eq!(answer.addrs, vec![recorded.clone()], "{answer:?}");
+
+    // THE ONE THAT ANSWERS AS THE PINNED GATEWAY GOES FIRST, AHEAD OF THE
+    // STALE ONE, which stays as a fallback.
+    let answer = refresh(&handle, &id, &["127.0.0.1:1".to_owned(), found.clone()]);
+    assert!(answer.refreshed, "{answer:?}");
+    assert_eq!(answer.addrs, vec![found.clone(), recorded.clone()]);
+    let wire::response::Kind::Pins(pins) =
+        ask(&handle, wire::request::Kind::Pins(wire::PinsRequest {}))
+    else {
+        panic!("pins answer");
+    };
+    assert_eq!(pins.destinations[0].addrs, vec![found, recorded]);
+    let back = drain(&handle, at_home());
+    assert_ne!(
+        back.stopped,
+        wire::DrainStop::Unreachable as i32,
+        "the next pass reaches it: {back:?}"
+    );
+
+    // A GATEWAY THE LEDGER DOES NOT HOLD IS AN ANSWER, NOT A REFUSAL.
+    let none = refresh(
+        &handle,
+        "not-a-paired-gateway",
+        &[moved.spawned.addr.to_string()],
+    );
+    assert!(!none.refreshed && none.addrs.is_empty(), "{none:?}");
+}
+
 #[test]
 fn forgetting_a_gateway_revokes_this_phones_token_there() {
     let kept = gateway();
@@ -1017,4 +1111,82 @@ fn a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_d
         "{status:?}"
     );
     assert_eq!(tokens(&impostor), 0, "nothing paired with the impostor");
+}
+
+/// **A LIBRARY FILM WHOSE PART IS LARGER THAN THE WHOLE SPOOL STILL BACKS UP**
+/// (#1080, the sweep's F6). The spool is a tenth of the free space, so on a
+/// phone with under about 640 MiB free it is smaller than one 64 MiB part, and
+/// a library video there waited for bytes nobody asked for. The store files'
+/// rule applies: a part larger than the budget is sealed alone into an empty
+/// spool where the volume keeps its floor, a window of one part at a time. The
+/// spool here is 8 MiB; the film is a part and a little more.
+#[test]
+fn a_library_film_with_a_part_larger_than_the_spool_still_backs_up() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let part = centraid_media::sealed::PART_BYTES;
+    let phone = phone_with(dir.path(), |config| config.with_spool_ceiling(8 << 20));
+    pair(&phone, &gateway);
+    let spool = dir.path().join("vault.spool");
+    let spooled = || -> u64 {
+        std::fs::read_dir(&spool)
+            .expect("lists")
+            .map(|entry| entry.expect("an entry"))
+            .filter(|entry| entry.file_name().len() == 64)
+            .map(|entry| entry.metadata().expect("measures").len())
+            .sum()
+    };
+    // ONE PART AT A TIME, ALONE: never two parts, whatever the ceiling says.
+    let one_part = part + 64 * 1024;
+
+    let film = bytes_of(
+        "a film whose first part is larger than the spool",
+        usize::try_from(part).expect("fits") + 4_096,
+    );
+    let begin = || wire::StageBegin {
+        media_type: "video/quicktime".to_owned(),
+        byte_size: film.len() as u64,
+        source: wire::StageSource::OsLibrary as i32,
+        os_ref: "lib-big-film".to_owned(),
+        ..wire::StageBegin::default()
+    };
+    // THE FIRST READ ONLY HASHES IT: its size cannot fit the spool.
+    let staged = stage(&phone, begin(), &film);
+    add_asset(&phone, &staged, "video");
+    assert_eq!(spooled(), 0, "nothing sealed that could not be kept");
+
+    let mut reads = 0;
+    let mut passes = 0;
+    loop {
+        let answer = drain(&phone, at_home());
+        passes += 1;
+        assert!(spooled() <= one_part, "{} bytes spooled", spooled());
+        if answer.need_bytes.is_empty() {
+            break;
+        }
+        assert!(passes < 8, "two windows take a few passes");
+        let waits = status(&phone);
+        assert_eq!(
+            waiting(&waits, wire::WaitReason::Bytes),
+            1,
+            "what the pass asked for waits for the shell's bytes: {:?}",
+            waits.waiting
+        );
+        for need in &answer.need_bytes {
+            assert_eq!(need.os_ref, "lib-big-film");
+            reads += 1;
+            let again = stage(&phone, begin(), &film);
+            assert_eq!(again.content_hash, staged.content_hash);
+            assert!(
+                spooled() > 0 && spooled() <= one_part,
+                "one window sealed, alone: {} bytes",
+                spooled()
+            );
+        }
+    }
+    assert_eq!(reads, 2, "one read per part: {passes} passes");
+    let backed = status(&phone);
+    assert_eq!(backed.content_confirmed, backed.content_total, "{backed:?}");
+    assert!(backed.waiting.is_empty(), "{:?}", backed.waiting);
+    assert_eq!(spooled(), 0, "the spool is empty once both parts moved");
 }

@@ -613,6 +613,188 @@ fn a_journal_entry_is_a_marked_note_with_its_own_day() {
     );
 }
 
+/// WHERE A JOURNAL ENTRY IS FILED (the Q-1047-8 follow-up). Noon UTC is the
+/// civil day only between UTC-12:00 and UTC+11:59: east of that (NZST, Fiji,
+/// Tonga, Kiritimati) it is already the NEXT day, so a journal that groups by
+/// the member's local day filed today's entry under tomorrow.
+mod journal_filing {
+    use super::*;
+    use centraid_vault::time::FireZone;
+    use centraid_vault::time::recurrence::parse_instant_ms;
+
+    /// File one entry and read back where it landed.
+    fn filed(circle: &Circle, input: Value) -> String {
+        let entry = circle.run("people.add_journal_entry", input)["entry_id"]
+            .as_str()
+            .expect("an entry id")
+            .to_owned();
+        circle
+            .text(&format!(
+                "SELECT created_at FROM knowledge_note WHERE note_id = '{entry}'"
+            ))
+            .expect("the entry has a stamp")
+    }
+
+    /// The day a stamp is on in `tz`, as a journal that groups by the member's
+    /// local day reads it.
+    fn local_day(stamp: &str, tz: &str) -> String {
+        let zone = FireZone::named(tz).expect("a zone");
+        let wall = zone.zoned_parts(parse_instant_ms(stamp).expect("an instant"));
+        format!("{:04}-{:02}-{:02}", wall.year, wall.month, wall.day)
+    }
+
+    /// NO ZONE IS TODAY'S BEHAVIOUR, to the character — and the bug it has east
+    /// of UTC+11:59, which is why the zone exists.
+    #[test]
+    fn no_zone_files_at_noon_utc_as_it_always_did() {
+        let circle = Circle::open("journal-no-zone");
+        let stamp = filed(
+            &circle,
+            json!({ "mood": "Quiet", "text": "a", "entry_date": "2099-05-04" }),
+        );
+        assert_eq!(stamp, "2099-05-04T12:00:00.000Z");
+        // WEST AND AS FAR EAST AS +11:59, noon UTC is the entry's day...
+        assert_eq!(local_day(&stamp, "America/Los_Angeles"), "2099-05-04");
+        assert_eq!(local_day(&stamp, "Asia/Tokyo"), "2099-05-04");
+        // ...and from UTC+12:00 it is not: THE BUG.
+        assert_eq!(local_day(&stamp, "Pacific/Auckland"), "2099-05-05");
+        assert_eq!(local_day(&stamp, "Pacific/Fiji"), "2099-05-05");
+        assert_eq!(local_day(&stamp, "Pacific/Tongatapu"), "2099-05-05");
+    }
+
+    /// WITH A ZONE, EVERY READER AGREES: the stored date's own first ten
+    /// characters are `entry_date` (a reader that buckets on them), and so is
+    /// the day in the member's zone (a reader that buckets in it). Across the
+    /// zones that stress it: both ends of the clock's range and a DST flip.
+    #[test]
+    fn with_a_zone_both_readers_file_it_under_the_entrys_day() {
+        let circle = Circle::open("journal-zone");
+        for (tz, date) in [
+            ("Pacific/Auckland", "2099-05-04"), // UTC+12 (NZST)
+            ("Pacific/Auckland", "2099-01-10"), // UTC+13 (NZDT)
+            ("Pacific/Fiji", "2099-05-04"),
+            ("Pacific/Tongatapu", "2099-05-04"),  // UTC+13
+            ("Pacific/Kiritimati", "2099-05-04"), // UTC+14
+            ("Pacific/Chatham", "2099-05-04"),    // UTC+12:45
+            ("Asia/Kolkata", "2099-05-04"),       // UTC+5:30
+            ("UTC", "2099-05-04"),
+            ("America/Los_Angeles", "2099-05-04"), // UTC-7
+            ("America/Los_Angeles", "2099-01-10"), // UTC-8
+            ("Etc/GMT+12", "2099-05-04"),          // UTC-12
+        ] {
+            let stamp = filed(
+                &circle,
+                json!({ "mood": "Quiet", "text": "a", "entry_date": date, "tz": tz }),
+            );
+            assert_eq!(&stamp[..10], date, "{tz}: the stored date's own prefix");
+            assert_eq!(
+                local_day(&stamp, tz),
+                date,
+                "{tz}: the day in the zone ({stamp})"
+            );
+        }
+    }
+
+    /// AND IT IS NOON WHERE NOON IS ON THE DAY, so an entry sorts among the
+    /// day's own and not at its edge; where local noon falls off the UTC day it
+    /// is the nearest instant that is on both.
+    #[test]
+    fn with_a_zone_it_is_local_noon_where_that_is_on_the_days_utc_date() {
+        let circle = Circle::open("journal-noon");
+        let at = |tz: &str, date: &str| {
+            filed(
+                &circle,
+                json!({ "mood": "Quiet", "text": "a", "entry_date": date, "tz": tz }),
+            )
+        };
+        // 12:00 in UTC-7 is 19:00Z, the same UTC date.
+        assert_eq!(
+            at("America/Los_Angeles", "2099-05-04"),
+            "2099-05-04T19:00:00.000Z"
+        );
+        // 12:00 in UTC+12 is 00:00Z that very date: on the edge, and on both.
+        assert_eq!(
+            at("Pacific/Auckland", "2099-05-04"),
+            "2099-05-04T00:00:00.000Z"
+        );
+        // 12:00 in UTC+13 is 23:00Z the day BEFORE: moved to the first instant
+        // of the entry's own UTC date, which is 13:00 there, still its day.
+        assert_eq!(
+            at("Pacific/Auckland", "2099-01-10"),
+            "2099-01-10T00:00:00.000Z"
+        );
+        // 12:00 in UTC-12 is 00:00Z the day AFTER: moved to the last instant of
+        // the UTC date, 11:59:59.999 there.
+        assert_eq!(at("Etc/GMT+12", "2099-05-04"), "2099-05-04T23:59:59.999Z");
+    }
+
+    /// NO `entry_date` IS TODAY IN THE ZONE, not today in UTC: the vault clock
+    /// reads 2026-01-01T11:00Z, which is already 2 January in Auckland.
+    #[test]
+    fn with_a_zone_and_no_date_it_is_the_zones_today() {
+        let circle = Circle::open("journal-today");
+        circle.scratch.clock.advance_ms(11 * 3_600_000);
+        let auckland = filed(
+            &circle,
+            json!({ "mood": "Quiet", "text": "a", "tz": "Pacific/Auckland" }),
+        );
+        assert_eq!(local_day(&auckland, "Pacific/Auckland"), "2026-01-02");
+        assert_eq!(&auckland[..10], "2026-01-02");
+        let los_angeles = filed(
+            &circle,
+            json!({ "mood": "Quiet", "text": "a", "tz": "America/Los_Angeles" }),
+        );
+        assert_eq!(local_day(&los_angeles, "America/Los_Angeles"), "2026-01-01");
+        // NO ZONE AT ALL IS UTC'S TODAY, as it was.
+        let none = filed(&circle, json!({ "mood": "Quiet", "text": "a" }));
+        assert_eq!(none, "2026-01-01T12:00:00.000Z");
+    }
+
+    /// A ZONE THAT IS NOT ONE, A DAY THAT IS NOT ONE, AND A DAY THE ZONE SKIPS
+    /// are refused in the sentence a member reads — the entry is not filed
+    /// under a day nobody chose.
+    #[test]
+    fn a_zone_or_day_that_does_not_resolve_is_refused_not_guessed() {
+        let circle = Circle::open("journal-refusals");
+        let refused = |input: Value| {
+            let outcome = circle.try_run("people.add_journal_entry", input);
+            assert_eq!(
+                outcome.status,
+                CommandStatus::Failed,
+                "{:?}",
+                outcome.output
+            );
+            assert_eq!(outcome.predicate.as_deref(), Some("entry_dated"));
+            outcome.reason.expect("a sentence")
+        };
+        assert_eq!(
+            refused(json!({ "mood": "Q", "text": "a", "tz": "Mars/Olympus" })),
+            "Mars/Olympus is not a time zone."
+        );
+        assert!(
+            refused(json!({ "mood": "Q", "text": "a", "tz": "UTC", "entry_date": "banana" }))
+                .contains("YYYY-MM-DD")
+        );
+        // A real day that the calendar has no such date for.
+        assert!(
+            refused(json!({ "mood": "Q", "text": "a", "tz": "UTC", "entry_date": "2099-02-30" }))
+                .contains("YYYY-MM-DD")
+        );
+        // SAMOA SKIPPED 30 DECEMBER 2011 entirely: noon never happened there.
+        assert_eq!(
+            refused(
+                json!({ "mood": "Q", "text": "a", "tz": "Pacific/Apia", "entry_date": "2011-12-30" })
+            ),
+            "2011-12-30 does not exist in Pacific/Apia: the clocks skip it."
+        );
+        // NOTHING WAS WRITTEN by any of them.
+        assert_eq!(
+            circle.count("SELECT COUNT(*) FROM knowledge_note WHERE title LIKE 'People journal%'"),
+            0
+        );
+    }
+}
+
 #[test]
 fn a_contact_channel_normalises_once_and_a_duplicate_value_is_reported_not_merged() {
     let circle = Circle::open("people-channels");
@@ -807,11 +989,12 @@ fn the_sweep_is_generated_from_the_live_schema_and_covers_three_kinds_of_pointer
         .filter(|reference| reference.predicate.is_some())
         .count();
 
-    // Twenty-eight engine foreign keys onto `core_party` in the committed DDL
+    // Twenty-seven engine foreign keys onto `core_party` in the committed DDL
     // (`grep -c 'REFERENCES core_party' contracts/schema/vault-ddl.sql`). It was
-    // 44 before rung five dropped the sharing and connector planes (#1029) and 40
-    // before rung fifteen dropped Tally's twelve (#1099).
-    assert_eq!(engine, 28, "the engine FK walk found a different set");
+    // 44 before rung five dropped the sharing and connector planes (#1029), 40
+    // before rung fifteen dropped Tally's twelve (#1099) and 28 before the
+    // baseline stopped founding `access_device` (2026-10-16).
+    assert_eq!(engine, 27, "the engine FK walk found a different set");
     // TWELVE `(type, id)` pairs — `core_link` carries two, its from- and to-
     // endpoints. It was fifteen before rung five dropped `outbox_item`,
     // `sync_external_entity` and `share_subscription_lineage` (#1029).
@@ -827,7 +1010,7 @@ fn the_sweep_is_generated_from_the_live_schema_and_covers_three_kinds_of_pointer
     // `share_authority.principal_id` — and rung five drops its table (#1029),
     // so the two mechanical walks are now the whole sweep.
     assert_eq!(hand_kept, 0);
-    assert_eq!(sweep.len(), 40);
+    assert_eq!(sweep.len(), 39);
     assert!(
         sweep
             .iter()
@@ -914,13 +1097,14 @@ fn no_column_that_names_a_party_is_outside_the_sweep() {
         "these columns name a party and no walk re-points them: {missing:?}"
     );
     // A floor, so a scan that suddenly matches nothing fails rather than
-    // passing vacuously. It is BELOW the sweep's 28 engine columns on purpose:
+    // passing vacuously. It is NO MORE than the sweep's 27 engine columns on purpose:
     // the audit matches on NAME, which is itself the reason a name-shaped audit
     // cannot be the only check, and why the sweep is generated from foreign keys
     // rather than from names. (It was 36 before rung fifteen dropped Tally's
-    // columns, #1099.)
+    // columns, #1099, and 28 before the baseline lost `access_device`, whose
+    // `owner_party_id` was one, on 2026-10-16.)
     assert!(
-        candidates.len() >= 28,
+        candidates.len() >= 27,
         "the audit found only {} candidate columns",
         candidates.len()
     );
@@ -1126,7 +1310,7 @@ fn the_merge_leaves_no_row_naming_the_folded_in_party() {
         "exactly one referencing column is excluded, and the reason is in the loop"
     );
     assert_eq!(planted.len() + refused_by_the_merge.len(), sweep.len());
-    assert_eq!(planted.len(), 39);
+    assert_eq!(planted.len(), 38);
 
     // THE MERGE.
     let output = circle.run(

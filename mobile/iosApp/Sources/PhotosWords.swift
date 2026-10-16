@@ -34,7 +34,6 @@ enum PhotosWords {
     static var photosCollectionsNoAlbumsCaption: String { PhotosCopy.shared.PHOTOS_COLLECTIONS_NO_ALBUMS_CAPTION }
     static var photosCollectionsNoMemories: String { PhotosCopy.shared.PHOTOS_COLLECTIONS_NO_MEMORIES }
     static var photosCollectionsNoMemoriesCaption: String { PhotosCopy.shared.PHOTOS_COLLECTIONS_NO_MEMORIES_CAPTION }
-    static var photosCollectionsPeopleCaption: String { PhotosCopy.shared.PHOTOS_COLLECTIONS_PEOPLE_CAPTION }
     static var photosCopyExactLocation: String { PhotosCopy.shared.PHOTOS_COPY_EXACT_LOCATION }
     static var photosCropArea: String { PhotosCopy.shared.PHOTOS_CROP_AREA }
     static var photosCropDown: String { PhotosCopy.shared.PHOTOS_CROP_DOWN }
@@ -80,19 +79,9 @@ enum PhotosWords {
     static var photosErrorInCloud: String { PhotosCopy.shared.PHOTOS_ERROR_IN_CLOUD }
     static var photosErrorWriteNotSaved: String { PhotosCopy.shared.PHOTOS_ERROR_WRITE_NOT_SAVED }
     static var photosExportSaved: String { PhotosCopy.shared.PHOTOS_EXPORT_SAVED }
-    static var photosFacesAFace: String { PhotosCopy.shared.PHOTOS_FACES_A_FACE }
-    static var photosFacesKeepUnnamed: String { PhotosCopy.shared.PHOTOS_FACES_KEEP_UNNAMED }
-    static var photosFacesNewName: String { PhotosCopy.shared.PHOTOS_FACES_NEW_NAME }
-    static var photosFacesNone: String { PhotosCopy.shared.PHOTOS_FACES_NONE }
-    static var photosFacesNoneCaption: String { PhotosCopy.shared.PHOTOS_FACES_NONE_CAPTION }
-    static var photosFacesNotThis: String { PhotosCopy.shared.PHOTOS_FACES_NOT_THIS }
-    static var photosFacesOffCaption: String { PhotosCopy.shared.PHOTOS_FACES_OFF_CAPTION }
-    static var photosFacesSayWho: String { PhotosCopy.shared.PHOTOS_FACES_SAY_WHO }
-    static var photosFacesSkipForNow: String { PhotosCopy.shared.PHOTOS_FACES_SKIP_FOR_NOW }
-    static var photosFacesSomeoneElse: String { PhotosCopy.shared.PHOTOS_FACES_SOMEONE_ELSE }
-    static var photosFacesWho: String { PhotosCopy.shared.PHOTOS_FACES_WHO }
     static var photosFavorite: String { PhotosCopy.shared.PHOTOS_FAVORITE }
     static var photosFileSizeUnreadable: String { PhotosCopy.shared.PHOTOS_FILE_SIZE_UNREADABLE }
+    static var photosFreeUpRetentionBody: String { PhotosCopy.shared.PHOTOS_FREE_UP_RETENTION_BODY }
     static var photosFreeUpTitle: String { PhotosCopy.shared.PHOTOS_FREE_UP_TITLE }
     static var photosGridEmpty: String { PhotosCopy.shared.PHOTOS_GRID_EMPTY }
     static var photosGridEmptyCaption: String { PhotosCopy.shared.PHOTOS_GRID_EMPTY_CAPTION }
@@ -146,17 +135,6 @@ enum PhotosWords {
     static var photosOriginalHeldBack: String { PhotosCopy.shared.PHOTOS_ORIGINAL_HELD_BACK }
     static var photosOriginalOnPhone: String { PhotosCopy.shared.PHOTOS_ORIGINAL_ON_PHONE }
     static var photosOriginalYourChoice: String { PhotosCopy.shared.PHOTOS_ORIGINAL_YOUR_CHOICE }
-    static var photosPeopleAllMatched: String { PhotosCopy.shared.PHOTOS_PEOPLE_ALL_MATCHED }
-    static var photosPeopleNone: String { PhotosCopy.shared.PHOTOS_PEOPLE_NONE }
-    static var photosPeopleNoneNamed: String { PhotosCopy.shared.PHOTOS_PEOPLE_NONE_NAMED }
-    static var photosPeopleNoneNamedCaption: String { PhotosCopy.shared.PHOTOS_PEOPLE_NONE_NAMED_CAPTION }
-    static var photosPeopleNotLooked: String { PhotosCopy.shared.PHOTOS_PEOPLE_NOT_LOOKED }
-    static var photosPeopleNotLookedCaption: String { PhotosCopy.shared.PHOTOS_PEOPLE_NOT_LOOKED_CAPTION }
-    static var photosPeopleNoOne: String { PhotosCopy.shared.PHOTOS_PEOPLE_NO_ONE }
-    static var photosPeopleOff: String { PhotosCopy.shared.PHOTOS_PEOPLE_OFF }
-    static var photosPeopleOffCaption: String { PhotosCopy.shared.PHOTOS_PEOPLE_OFF_CAPTION }
-    static var photosPeopleToNameCaption: String { PhotosCopy.shared.PHOTOS_PEOPLE_TO_NAME_CAPTION }
-    static var photosPeopleUnreadable: String { PhotosCopy.shared.PHOTOS_PEOPLE_UNREADABLE }
     static var photosPermissionDenied: String { PhotosCopy.shared.PHOTOS_PERMISSION_DENIED }
     static var photosPermissionLimited: String { PhotosCopy.shared.PHOTOS_PERMISSION_LIMITED }
     static var photosPermissionNotAsked: String { PhotosCopy.shared.PHOTOS_PERMISSION_NOT_ASKED }
@@ -232,7 +210,6 @@ enum PhotosWords {
     static var photosUntitledAlbum: String { PhotosCopy.shared.PHOTOS_UNTITLED_ALBUM }
     static var photosVideoStatus: String { PhotosCopy.shared.PHOTOS_VIDEO_STATUS }
     static var photosVideoStillOnly: String { PhotosCopy.shared.PHOTOS_VIDEO_STILL_ONLY }
-    static var photosWhoInIt: String { PhotosCopy.shared.PHOTOS_WHO_IN_IT }
     static var placeNoLocation: String { PhotosCopy.shared.PLACE_NO_LOCATION }
     static var placeUnnamed: String { PhotosCopy.shared.PLACE_UNNAMED }
     static var tileCountMany: String { PhotosCopy.shared.TILE_COUNT_MANY }
@@ -270,7 +247,6 @@ enum PhotosWords {
     static let photosCollectionsNoAlbumsCaption = ""
     static let photosCollectionsNoMemories = ""
     static let photosCollectionsNoMemoriesCaption = ""
-    static let photosCollectionsPeopleCaption = ""
     static let photosCopyExactLocation = ""
     static let photosCropArea = ""
     static let photosCropDown = ""
@@ -316,19 +292,9 @@ enum PhotosWords {
     static let photosErrorInCloud = ""
     static let photosErrorWriteNotSaved = ""
     static let photosExportSaved = ""
-    static let photosFacesAFace = ""
-    static let photosFacesKeepUnnamed = ""
-    static let photosFacesNewName = ""
-    static let photosFacesNone = ""
-    static let photosFacesNoneCaption = ""
-    static let photosFacesNotThis = ""
-    static let photosFacesOffCaption = ""
-    static let photosFacesSayWho = ""
-    static let photosFacesSkipForNow = ""
-    static let photosFacesSomeoneElse = ""
-    static let photosFacesWho = ""
     static let photosFavorite = ""
     static let photosFileSizeUnreadable = ""
+    static let photosFreeUpRetentionBody = ""
     static let photosFreeUpTitle = ""
     static let photosGridEmpty = ""
     static let photosGridEmptyCaption = ""
@@ -382,17 +348,6 @@ enum PhotosWords {
     static let photosOriginalHeldBack = ""
     static let photosOriginalOnPhone = ""
     static let photosOriginalYourChoice = ""
-    static let photosPeopleAllMatched = ""
-    static let photosPeopleNone = ""
-    static let photosPeopleNoneNamed = ""
-    static let photosPeopleNoneNamedCaption = ""
-    static let photosPeopleNotLooked = ""
-    static let photosPeopleNotLookedCaption = ""
-    static let photosPeopleNoOne = ""
-    static let photosPeopleOff = ""
-    static let photosPeopleOffCaption = ""
-    static let photosPeopleToNameCaption = ""
-    static let photosPeopleUnreadable = ""
     static let photosPermissionDenied = ""
     static let photosPermissionLimited = ""
     static let photosPermissionNotAsked = ""
@@ -468,7 +423,6 @@ enum PhotosWords {
     static let photosUntitledAlbum = ""
     static let photosVideoStatus = ""
     static let photosVideoStillOnly = ""
-    static let photosWhoInIt = ""
     static let placeNoLocation = ""
     static let placeUnnamed = ""
     static let tileCountMany = ""

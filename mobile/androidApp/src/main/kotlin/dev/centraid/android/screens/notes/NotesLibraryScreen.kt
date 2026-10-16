@@ -28,7 +28,7 @@ import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.OptionSheet
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomChip
@@ -148,7 +148,7 @@ public fun NotesLibraryScreen(
                                     modifier = Modifier.weight(1f).padding(top = 9.dp),
                                 )
                                 if (data.window_end_verb.isNotEmpty()) {
-                                    QuietButton(data.window_end_verb, testTag = "notes-window-widen") {
+                                    OutlineButton(data.window_end_verb, testTag = "notes-window-widen") {
                                         onEvent(NotesLibraryEvent(window_widened = NotesLibraryEvent.WindowWidened()))
                                     }
                                 }

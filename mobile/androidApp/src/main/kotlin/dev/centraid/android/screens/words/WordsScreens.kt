@@ -82,8 +82,10 @@ import centraid.screen.v1.WordEntry
 import centraid.screen.v1.WordsEntryEvent
 import centraid.screen.v1.WordsEntryState
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
@@ -157,17 +159,24 @@ internal fun VaultWordsScreen(state: VaultWordsState, onEvent: (VaultWordsEvent)
                 KitSpinner()
             }
         }
-        WordsControls(
-            primary = state.primary_label,
-            primaryEnabled = state.primary_enabled,
-            secondary = state.secondary_label,
-            prefix = "words-make",
-            onPrimary = { onEvent(VaultWordsEvent(primary = VaultWordsEvent.Primary())) },
-            onSecondary = { onEvent(VaultWordsEvent(secondary = VaultWordsEvent.Secondary())) },
-        )
-        if (state.restore_label.isNotEmpty()) {
-            InkButton(label = state.restore_label, testTag = "words-make-restore") {
-                onEvent(VaultWordsEvent(restore = VaultWordsEvent.RestoreTapped()))
+        // THE PRIMARY AND RESTORING ARE ALTERNATIVES: one stack.
+        ChoiceStack {
+            WordsControls(
+                primary = state.primary_label,
+                primaryEnabled = state.primary_enabled,
+                secondary = state.secondary_label,
+                prefix = "words-make",
+                onPrimary = { onEvent(VaultWordsEvent(primary = VaultWordsEvent.Primary())) },
+                onSecondary = { onEvent(VaultWordsEvent(secondary = VaultWordsEvent.Secondary())) },
+            )
+            // ONE INK BUTTON: with the primary drawn, restoring is the outline.
+            if (state.restore_label.isNotEmpty()) {
+                val restore = { onEvent(VaultWordsEvent(restore = VaultWordsEvent.RestoreTapped())) }
+                if (state.primary_label.isEmpty()) {
+                    InkButton(label = state.restore_label, testTag = "words-make-restore", onPress = restore)
+                } else {
+                    OutlineButton(label = state.restore_label, testTag = "words-make-restore", onPress = restore)
+                }
             }
         }
     }
@@ -647,6 +656,9 @@ internal fun WordsControls(
     onPrimary: () -> Unit,
     onSecondary: () -> Unit,
 ) {
+    // NOTHING DRAWN WHEN THERE IS NOTHING TO DRAW: an empty column would still
+    // spend its top padding and a gap in whatever holds it.
+    if (primary.isEmpty() && secondary.isEmpty()) return
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (primary.isNotEmpty()) {
             InkButton(

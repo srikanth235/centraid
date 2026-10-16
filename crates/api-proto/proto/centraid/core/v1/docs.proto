@@ -74,8 +74,11 @@ message DocsDriveRequest {
   // FALSE (the default) is descending: newest changed, Z→A, largest first.
   bool ascending = 7;
   // The drive's window over filed documents, clamped 20…2,000; 0 is the
-  // default, 200 (v0's `min(max(limit || 200, 20), 2000)`). Every shelf is
-  // cut from this ONE window, so `truncated` applies to all of them.
+  // default, 200 (v0's `min(max(limit || 200, 20), 2000)`). All and Folders
+  // are cut from this window. Trash, Starred and Recent are NOT defined by
+  // when a document was filed, so once the window is truncated each reads
+  // its own set instead (Trash and Starred up to this many rows, Recent the
+  // newest fifty).
   uint32 limit = 8;
   // The zone (the file header's rule).
   string tz = 9;
@@ -296,15 +299,20 @@ message DocsDrive {
   // options. From the unfiltered set, so choosing one never removes its own
   // pill.
   repeated string labels = 3;
-  // Counts over the window, for the rail: live, live at the top level,
-  // starred-and-live, and trashed.
+  // Counts for the rail: live, live at the top level, starred-and-live, and
+  // trashed. The first two are over the window. The last two are over the
+  // window while it holds the whole drive, and over the whole vault once it
+  // is truncated (a floor, not a total, when `window` rows of them exist).
   uint32 all_count = 4;
   uint32 unfiled_count = 5;
   uint32 starred_count = 6;
   uint32 trash_count = 7;
-  // OLDER FILED DOCUMENTS EXIST BEYOND THE WINDOW, so every shelf and count
-  // above is of the newest `window` only. The page's own cursor, never a row
-  // count. A screen says so, or offers search, which is not windowed.
+  // THIS SHELF'S ROWS STOP SHORT OF WHAT EXISTS. For All and Folders: older
+  // filed documents exist beyond the window, so the rows and the first two
+  // counts are of the newest `window` only. For Trash and Starred: more of
+  // them exist than the shelf's own read returned. Never true for Recent,
+  // which is the newest fifty by definition. The read's own cursor, never a
+  // row count. A screen says so, or offers search, which is not windowed.
   bool truncated = 8;
   uint32 window = 9;
   // The vault clock's day and wall clock in `tz`.

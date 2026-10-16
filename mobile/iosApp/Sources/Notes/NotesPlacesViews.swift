@@ -107,17 +107,18 @@ private struct NotesCreateNotebookSheet: View {
             primary: SheetPrimary(label: chrome.create) {
                 guard state.createEnabled else { return }
                 send(NotesEvents.notebooks { $0.createConfirmed = .init() })
-            }
+            },
+            outlines: [
+                SheetOutline(label: chrome.cancel, identifier: "notes-notebook-cancel") {
+                    send(NotesEvents.notebooks { $0.createDismissed = .init() })
+                },
+            ]
         ) {
             EditableFieldRow(key: "", text: $name, placeholder: chrome.namePlaceholder, identifier: "notes-notebook-name") { typed in
                 guard typed != state.draftName else { return }
                 send(NotesEvents.notebooks { $0.name = .with { $0.name = typed } })
             }
             .padding(.horizontal, -CentraidGeometry.pageMargin)
-            KitOutlineButton(label: chrome.cancel, fullWidth: true) {
-                send(NotesEvents.notebooks { $0.createDismissed = .init() })
-            }
-            .accessibilityIdentifier("notes-notebook-cancel")
         }
         .onAppear { name = state.draftName }
     }

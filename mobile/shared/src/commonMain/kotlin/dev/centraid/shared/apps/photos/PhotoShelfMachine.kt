@@ -18,7 +18,7 @@ import dev.centraid.shared.screen.Step
  * A PHOTO SHELF: the library under a predicate (#1029, the photos port).
  *
  * One machine for four of v0's routes. `PhotoStateView` (favourites, archive,
- * trash, videos, one person), `AlbumDetail`, `PlaceDetail` and a memory's
+ * trash, videos), `AlbumDetail`, `PlaceDetail` and a memory's
  * members were four screens reading one table in one order and drawing one
  * cell, and they drifted exactly where four copies drift: `AlbumDetail.tsx`
  * grew a selection mode the state views never got, `PlaceDetail.tsx` its own
@@ -427,8 +427,6 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
     }
 
     private fun emptyStateViewSentence(view: PhotoStateView): String {
-        val person = view.person
-        if (person != null) return "No photos of ${person.person_name} yet."
         return when (view.mode?.kind) {
             PhotoStateView.Mode.Kind.KIND_FAVORITES ->
                 PhotosCopy.PHOTOS_EMPTY_FAVORITES
@@ -465,8 +463,6 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
     }
 
     private fun stateViewTitle(view: PhotoStateView): String {
-        val person = view.person
-        if (person != null) return person.person_name
         return when (view.mode?.kind) {
             PhotoStateView.Mode.Kind.KIND_FAVORITES -> "Favorites"
             PhotoStateView.Mode.Kind.KIND_ARCHIVE -> "Archive"
@@ -756,21 +752,20 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
         state.data_?.cells?.map { it.asset_id }?.toSet() ?: emptySet()
 
     /**
-     * FIVE TABLES, AND ONLY ONE OF THEM ANSWERS IN ASSET IDS.
+     * FOUR TABLES, AND ONLY ONE OF THEM ANSWERS IN ASSET IDS.
      *
      * `media_asset` is the table the page is read from, so its keys ARE the
      * ids this shelf holds and the reducer can ask whether it is showing one.
      *
-     * The other four are the MEMBERSHIPS the shelf's predicate is over, and
+     * The other three are the MEMBERSHIPS the shelf's predicate is over, and
      * every one of them is a real way a shelf changes without `media_asset`
      * moving at all: `media.add_to_album` writes `core_collection_entry` and
-     * nothing else, a star is a `core_tag` row (`set_starred`), naming a face
-     * writes `media_face_region`, and a memory pass writes
-     * `media_memory_member`. A shelf that listened to `media_asset` alone would
+     * nothing else, a star is a `core_tag` row (`set_starred`), and a memory
+     * pass writes `media_memory_member`. A shelf that listened to `media_asset` alone would
      * be right only after a relaunch — which is the silent staleness
      * `ScreenReads.table`'s own comment describes.
      *
-     * Their keys are entry, tag, region and member-row ids, which this shelf
+     * Their keys are entry, tag and member-row ids, which this shelf
      * cannot match against anything, so the event carries an EMPTY list and
      * [reduce] reads that as "re-read, I cannot tell whose". The core never
      * delivers an empty key list, so the two readings cannot collide.
@@ -799,7 +794,6 @@ public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent
     private val MEMBERSHIP_TABLES: Set<String> = setOf(
         "core_collection_entry",
         "core_tag",
-        "media_face_region",
         "media_memory_member",
     )
 

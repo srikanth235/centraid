@@ -23,6 +23,8 @@ import dev.centraid.shared.apps.agenda.AgendaEventReads
 import dev.centraid.shared.apps.agenda.AgendaHomeMachine
 import dev.centraid.shared.apps.agenda.AgendaReads
 import dev.centraid.shared.apps.locker.LOCKER_TRASH
+import dev.centraid.shared.apps.locker.LockerAccessMachine
+import dev.centraid.shared.apps.locker.LockerAccessReads
 import dev.centraid.shared.apps.locker.LockerEditorMachine
 import dev.centraid.shared.apps.locker.LockerEditorReads
 import dev.centraid.shared.apps.locker.LockerExportMachine
@@ -149,11 +151,11 @@ class AppReadsSpec : StringSpec({
     val screens: List<Triple<String, ScreenReads<*, *>, ScreenMachine<*, *>>> = listOf(
         Triple("photos", PhotosReads, PhotosGridMachine),
         Triple("notes", NotesReads, NotesEditorMachine),
-        // THE PHOTOS MINIAPP'S OTHER SCREENS (#1029, photos port). Eight of
-        // the ten are `ScreenReads` and belong here; the three that are not —
-        // Collections, People and face review — fan several statements out in
-        // their bridges and fold the answers, because their data case cannot
-        // be CONSTRUCTED from one table (`HomeSession.attachReads`' ruling).
+        // THE PHOTOS MINIAPP'S OTHER SCREENS (#1029, photos port). Seven of
+        // them are `ScreenReads` and belong here; the ones that are not —
+        // Collections and Search — fan several statements out in their
+        // bridges and fold the answers, because their data case cannot be
+        // CONSTRUCTED from one table (`HomeSession.attachReads`' ruling).
         // Those are asserted in their own specs, which is where the fold is.
         Triple("photos.shelf", PhotoShelfReads, PhotoShelfMachine),
         Triple("photos.picker", PhotoPickerReads, PhotoPickerMachine),
@@ -336,6 +338,9 @@ class AppReadsSpec : StringSpec({
         // export and import read the shelf's counts.
         Triple("locker.export", LockerExportReads, LockerExportMachine),
         Triple("locker.import", LockerImportReads, LockerImportMachine),
+        // Q-1047-21: the whole Locker's access history reads the receipts and
+        // the two tables a receipt's item and field are named from.
+        Triple("locker.access", LockerAccessReads, LockerAccessMachine),
         // MONEY (#1099). Every screen reads the same table set: one app query folds
         // accounts, lines, targets, rules, checkpoints, categories and transfer links.
         Triple("money.home", MoneyHomeReads, MoneyHomeMachine),

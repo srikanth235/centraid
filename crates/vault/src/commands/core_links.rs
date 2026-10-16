@@ -142,7 +142,11 @@ fn subject_table(entity: &str) -> Option<(&'static str, String)> {
 
 /// An endpoint must resolve, exist live, and be READABLE under the caller's
 /// grant (`links.ts:36`-`:70`).
-fn endpoint_refusal(
+///
+/// `pub(crate)` because the wikilink compile (`super::wikilinks`) asks the same
+/// question of every target a title resolves to: the compiled link is held to
+/// the rule a hand-made one is.
+pub(crate) fn endpoint_refusal(
     ctx: &CommandCtx<'_, '_>,
     role: &str,
     entity: &str,
@@ -200,7 +204,7 @@ fn pk_of(physical: &str) -> String {
 
 /// The relation concept a notation names, or `None` — relations are VOCABULARY
 /// and a caller cannot invent one.
-fn relation_concept(ctx: &CommandCtx<'_, '_>, relation: &str) -> Result<Option<String>> {
+pub(crate) fn relation_concept(ctx: &CommandCtx<'_, '_>, relation: &str) -> Result<Option<String>> {
     Ok(ctx
         .connection()
         .query_row(

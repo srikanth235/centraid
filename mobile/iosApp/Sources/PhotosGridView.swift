@@ -171,7 +171,6 @@ struct PhotosGridView: View {
                         },
                         onOpenDoor: { kind in
                             switch kind {
-                            case .people: shell.path.append(.photosPeople)
                             case .places: shell.path.append(.places)
                             case .memories: shell.path.append(.photosMemories)
                             case .duplicates: shell.path.append(.photoDuplicates)

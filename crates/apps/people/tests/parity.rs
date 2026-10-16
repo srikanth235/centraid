@@ -341,6 +341,15 @@ fn person_json(data: &PersonData) -> Value {
 }
 
 fn person_body(person: &Person) -> Value {
+    // EVERY CASE RUNS UNDER THE OWNER'S OWN CREDENTIAL, so both readings are
+    // known: a denial lowered onto v0's flat shape would be an empty list, which
+    // is the failure the readings exist to keep apart.
+    assert!(
+        person.contact.known() && person.links.known(),
+        "the owner's credential denied a reading: contact {:?}, links {:?}",
+        person.contact.denial(),
+        person.links.denial()
+    );
     let profile = &person.profile;
     let mut value = json!({
         "party_id": profile.party_id,
@@ -355,8 +364,10 @@ fn person_body(person: &Person) -> Value {
         "list_id": profile.list_id,
         "starred": profile.starred,
         "contact": as_set(&json!(
-            profile
+            person
                 .contact
+                .ready()
+                .map_or(&[][..], Vec::as_slice)
                 .iter()
                 .map(|entry| json!({
                     "channel_id": entry.channel_id,

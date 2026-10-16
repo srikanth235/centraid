@@ -54,7 +54,7 @@ import centraid.screen.v1.BackupLine
 import centraid.screen.v1.BackupScreenEvent
 import centraid.screen.v1.BackupScreenState
 import dev.centraid.android.kit.InkButton
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.screens.words.WordsHead
 import dev.centraid.android.screens.words.WordsPage
 import dev.centraid.android.theme.centraidColor
@@ -390,7 +390,7 @@ private fun BackupScreen(
         if (batteryHeld) {
             Sentence(model.batterySentence)
             if (model.batteryLabel.isNotEmpty()) {
-                QuietButton(label = model.batteryLabel, testTag = "backup-battery", onPress = onBattery)
+                OutlineButton(label = model.batteryLabel, testTag = "backup-battery", onPress = onBattery)
             }
         }
         if (!paired && model.addLabel.isNotEmpty()) {
@@ -509,7 +509,7 @@ private fun RecoveryKey(model: BackupScreenModel, onEvent: (BackupScreenEvent) -
         } else {
             Sentence(model.keyLine, "backup-key-line")
             if (model.keyShowLabel.isNotEmpty()) {
-                QuietButton(label = model.keyShowLabel, testTag = "backup-show-key", onPress = onShowKey)
+                OutlineButton(label = model.keyShowLabel, testTag = "backup-show-key", onPress = onShowKey)
             }
         }
         if (model.keySyncLabel.isNotEmpty()) {
@@ -609,7 +609,7 @@ private fun Destinations(
                 // forgets this phone's pairing and nothing the gateway holds,
                 // and pairing again undoes it.
                 if (model.forgetLabel.isNotEmpty()) {
-                    QuietButton(
+                    OutlineButton(
                         label = model.forgetLabel,
                         testTag = "backup-forget-" + row.id,
                         modifier = Modifier.semantics { contentDescription = model.forgetLabel + " " + row.label },
@@ -624,7 +624,7 @@ private fun Destinations(
             )
         }
         if (model.addLabel.isNotEmpty()) {
-            QuietButton(
+            OutlineButton(
                 label = model.addLabel,
                 testTag = "backup-add-destination",
                 modifier = Modifier.padding(top = 12.dp),

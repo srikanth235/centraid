@@ -153,7 +153,6 @@ struct DuplicateReviewView: View {
             KitOutlineButton(
                 label: resolveLabel(doomed: doomed, picked: !kept.isEmpty),
                 tone: kept.isEmpty ? "textDisabled" : "net",
-                fullWidth: true,
                 iconKey: "trash"
             ) {
                 send(state.resolveEvent)

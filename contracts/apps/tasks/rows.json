@@ -453,7 +453,6 @@
       "byte_size",
       "language",
       "creator_party_id",
-      "origin_device_id",
       "deleted_at",
       "purge_at",
       "created_at",

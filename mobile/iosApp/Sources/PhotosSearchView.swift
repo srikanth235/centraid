@@ -26,7 +26,7 @@ struct PhotosSearchView: View {
     let data: Data
     var send: (Data) -> Void = { _ in }
     var onOpenAsset: (String) -> Void = { _ in }
-    /// A person, place or album was tapped — above the grid or on the resting
+    /// A place or album was tapped — above the grid or on the resting
     /// page. The shelf arrives WHOLE, as encoded `PhotoShelf` bytes the read
     /// built with its name in it, so nothing here composes one.
     var onOpenShelf: (Data) -> Void = { _ in }
@@ -137,9 +137,8 @@ private struct TopHitRow: View {
 /// NOTHING HAS BEEN ASKED YET — so this says what there is to ask FOR.
 ///
 /// One line that is true of every vault — what a search reaches — and then
-/// this vault's own vocabulary under it: the people confirmed on its
-/// photographs and the places they were taken, each a door to its shelf, and
-/// the labels on them as words to type. Never a fixed list of words the
+/// this vault's own vocabulary under it: the places its photographs were
+/// taken, each a door to its shelf, and the labels on them as words to type. Never a fixed list of words the
 /// product hopes are there; a vault with none of them shows the line alone.
 ///
 /// The line sits where the system Photos app puts its own caveat: a note about
@@ -155,15 +154,6 @@ private struct RestingView: View {
             Text(PhotosSearchStateView.restingNote)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
-            if !resting.people.isEmpty {
-                RestingSection(title: "People") {
-                    ForEach(resting.people, id: \.partyID) { person in
-                        RestingDoor(label: person.displayName, iconKey: "person") {
-                            onOpenShelf(PhotosSearchStateView.personShelf(person))
-                        }
-                    }
-                }
-            }
             if !resting.places.isEmpty {
                 RestingSection(title: "Places") {
                     ForEach(resting.places, id: \.placeID) { place in
@@ -210,7 +200,7 @@ private struct RestingSection<Content: View>: View {
     }
 }
 
-/// One person or place on the resting page, opening its shelf.
+/// One place on the resting page, opening its shelf.
 private struct RestingDoor: View {
     let label: String
     let iconKey: String
@@ -323,16 +313,16 @@ struct PhotosSearchStateView {
     /// **THE KIND IS THE CONTRACT'S AND THE WORDS ARE THE SHELL'S.** The field
     /// used to be `repeated string matched_on` and it was the one place in this
     /// section that carried a kind as prose — two shells composing their own
-    /// "Person: Ada" and "In Lisbon" is two shells wording one fact two ways,
+    /// "Place: Lisbon" and "In Lisbon" is two shells wording one fact two ways,
     /// which is how v0's empty states drifted apart. So the enum travels and
     /// this is where iOS spells it; `PhotosSearchScreen.kt` spells the same
-    /// five the same way, and the two are kept in step by hand.
+    /// four the same way, and the two are kept in step by hand.
     ///
     /// Grouped by kind rather than listed flat, because "Captions: a, b — In:
     /// Lisbon" is one sentence and a flat list of five values with four
     /// prefixes is five.
     static func reason(_ matches: [Centraid_Screen_V1_SearchMatch]) -> String {
-        let order: [Centraid_Screen_V1_SearchMatch.Kind] = [.person, .place, .album, .label, .title]
+        let order: [Centraid_Screen_V1_SearchMatch.Kind] = [.place, .album, .label, .title]
         let parts = order.compactMap { kind -> String? in
             let values = matches.filter { $0.kind == kind }.map(\.value)
             guard !values.isEmpty else { return nil }
@@ -354,12 +344,11 @@ struct PhotosSearchStateView {
         PhotosWords.photosSearchHint
 
 
-    /// "Person · 12 photos", or "Album · at least 500 photos". A zero
+    /// "Place · 12 photos", or "Album · at least 500 photos". A zero
     /// is "not counted" on this door, so it prints the kind alone.
     static func topHitSub(_ hit: Centraid_Screen_V1_SearchTopHit) -> String {
         let kind: String
         switch hit.kind {
-        case .person: kind = "Person"
         case .place: kind = "Place"
         case .album: kind = "Album"
         case .label, .title, .unspecified, .UNRECOGNIZED: kind = ""
@@ -373,24 +362,10 @@ struct PhotosSearchStateView {
 
     static func kindIcon(_ kind: Centraid_Screen_V1_SearchMatch.Kind) -> String {
         switch kind {
-        case .person: return "person"
         case .place: return "place"
         case .album: return "album"
         case .label, .title, .unspecified, .UNRECOGNIZED: return "Search"
         }
-    }
-
-    /// A person on the resting page, as the shelf a tap opens — the same
-    /// `PhotoStateView.Person` the People screen opens.
-    static func personShelf(_ person: Centraid_Screen_V1_PhotoPerson) -> Data {
-        var shelf = Centraid_Screen_V1_PhotoShelf()
-        shelf.stateView = .with {
-            $0.person = .with {
-                $0.partyID = person.partyID
-                $0.personName = person.displayName
-            }
-        }
-        return (try? shelf.serializedData()) ?? Data()
     }
 
     /// A place on the resting page arrives AS its shelf's value.
@@ -402,7 +377,6 @@ struct PhotosSearchStateView {
 
     private static func noun(_ kind: Centraid_Screen_V1_SearchMatch.Kind) -> String {
         switch kind {
-        case .person: return "People"
         case .place: return "Places"
         case .album: return "Albums"
         case .label: return "Labels"

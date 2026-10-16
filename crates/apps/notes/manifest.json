@@ -217,14 +217,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.collection_entry",
-        "core.content_item",
-        "core.content_representation",
-        "core.content_text",
-        "knowledge.note"
-      ]
+      }
     },
     {
       "name": "edit-note",
@@ -271,16 +264,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.content_item",
-        "core.content_representation",
-        "core.content_text",
-        "core.link",
-        "knowledge.note"
-      ]
+      }
     },
     {
       "name": "move-note",
@@ -314,8 +298,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.collection_entry", "knowledge.note"]
+      }
     },
     {
       "name": "create-notebook",
@@ -354,8 +337,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.collection"]
+      }
     },
     {
       "name": "rename-notebook",
@@ -389,8 +371,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.collection"]
+      }
     },
     {
       "name": "delete-notebook",
@@ -420,8 +401,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.collection", "core.collection_entry"]
+      }
     },
     {
       "name": "delete-note",
@@ -451,8 +431,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.content_item", "knowledge.note"]
+      }
     },
     {
       "name": "restore-note",
@@ -482,8 +461,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.content_item", "knowledge.note"]
+      }
     },
     {
       "name": "restore-note-version",
@@ -517,13 +495,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.link",
-        "knowledge.note"
-      ]
+      }
     },
     {
       "name": "link",
@@ -550,8 +522,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.link", "core.link_anchor"]
+      }
     },
     {
       "name": "send-to-tasks",
@@ -575,8 +546,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.link", "core.link_anchor", "schedule.task"]
+      }
     },
     {
       "name": "attach",
@@ -630,13 +600,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": [
-        "core.attachment",
-        "core.content_item",
-        "core.content_representation",
-        "core.content_text"
-      ]
+      }
     },
     {
       "name": "detach",
@@ -666,8 +630,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.attachment"]
+      }
     },
     {
       "name": "add-tag",
@@ -701,8 +664,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
+      }
     },
     {
       "name": "remove-tag",
@@ -732,8 +694,7 @@
             "type": "string"
           }
         }
-      },
-      "writes": ["core.tag"]
+      }
     }
   ],
   "queries": [

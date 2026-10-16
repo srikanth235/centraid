@@ -21,6 +21,9 @@ public object KitWords {
     public const val PENDING: String = SharedCopy.KIT_PENDING
     public const val CANCEL: String = SharedCopy.KIT_CANCEL
     public const val DONE: String = SharedCopy.KIT_DONE
+
+    /** The close key's spoken name, on a status line that may be put away. */
+    public const val DISMISS: String = SharedCopy.KIT_DISMISS
     public const val BACK: String = SharedCopy.BACK
     public const val SEARCH: String = SharedCopy.KIT_SEARCH
     public const val CLOSE_SEARCH: String = SharedCopy.KIT_CLOSE_SEARCH

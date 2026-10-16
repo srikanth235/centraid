@@ -1,36 +1,46 @@
--- GENERATED — do not edit. Rung one of the v1 ladder: the baseline schema.
+-- RUNG ONE of the vault's ladder: the whole schema a new vault is founded with, and the rows
+-- that founding seeds.
 --
---   cargo run -p centraid-vault --bin export-baseline -- \
---     contracts/golden/issue-1020/vault.db.gz > contracts/migrations/001_baseline.sql
+-- SQUASHED ON 2026-10-15 from the fifteen-rung ladder that came before it (Q-1029-1, #1029).
+-- Nothing had shipped, so no vault needed the climb, and a new vault no longer founds the
+-- planes #1029 struck only to drop them. The same squash renamed `agent_command` and
+-- `agent_command_invocation`, the command registry and the invocation journal, to
+-- `command_definition` and `command_invocation` (Q-1029-3): there is no agent left in v0.
 --
--- Ordered by DEPENDENCY (tables, views, indexes, triggers), not by name, so it
--- is runnable; `contracts/schema/vault-ddl.sql` is the same shape ordered for
--- READING and is not. FTS shadow tables, `sqlite_sequence` and
--- `sqlite_autoindex_*` are omitted: SQLite creates each of them itself and
--- refuses the hand-written DDL. `crates/vault/tests/baseline.rs` founds a
--- vault from this file and diffs its schema against the corpus (#1020).
+-- AMENDED ON 2026-10-16, before any release (the owner's rulings on the baseline's names): the
+-- other four `agent_*` tables, `agent_capability`, `agent_invocation_check`, `agent_evidence`
+-- and `agent_explanation`, became `command_capability`, `command_invocation_check`,
+-- `command_evidence` and `command_explanation`; `access_device` and `access_device_secret`,
+-- which nothing has written since the gateway's allowlist left (#1080), went with the two
+-- columns that named them, `core_content_item.origin_device_id` and
+-- `media_asset.camera_device_id`; and Tally's value left the
+-- `schedule_recurrence_exception.target_type` CHECK (#1099).
 --
--- THIS FILE IS BOTH the migration `crates/vault` embeds and the fixture under
--- `contracts/` (D-1020-D1-13): one file, because two copies of a schema is two
--- answers to one question.
+-- FROZEN LIKE ANY RUNG. A vault in the field has already run this text, so an edit here changes
+-- what a new vault gets and nothing else, which is two schemas with one number. The next
+-- schema change is `002_<name>.sql`, appended to `LADDER` in `crates/vault/src/migrations.rs`.
+--
+-- Cut with `export-baseline`, which founds a vault from the ladder the build embeds, with
+-- foreign keys off and before `seed_entity_kinds`, and renders what it holds:
+--
+--   cargo run -p centraid-vault --bin export-baseline > contracts/migrations/001_baseline.sql
+--
+-- While this file is the whole ladder that command reproduces it byte for byte, so it is the
+-- tool a later squash is cut with and not a regeneration gate: `tests/baseline.rs` proves that
+-- the baseline it renders rebuilds the same vault. (The 2026-10-15 cut renamed the two tables
+-- in the text it rendered.)
+--
+-- Ordered by DEPENDENCY (tables, views, indexes, rows, triggers), not by name, so it is
+-- runnable; `contracts/schema/vault-ddl.sql` is the same schema ordered for READING and is
+-- not. The rows come before the triggers so that no trigger fires over them. FTS shadow tables,
+-- `sqlite_sequence` and `sqlite_autoindex_*` are omitted: SQLite creates each of them itself
+-- and refuses the hand-written DDL. `core_entity_kind` has no rows here: the registry is
+-- derived from this schema by `seed_entity_kinds` (D-1020-D1-15).
+--
+-- THIS FILE IS BOTH the migration `crates/vault` embeds and the fixture under `contracts/`
+-- (D-1020-D1-13): one file, because two copies of a schema is two answers to one question.
 
----- tables (157)
-
--- table access_agent
-CREATE TABLE access_agent (
-  agent_id       TEXT PRIMARY KEY,
-  party_id       TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
-  model_ref       TEXT NOT NULL,
-  version         TEXT NOT NULL,
-  enrolled_at     TEXT NOT NULL,
-  status          TEXT NOT NULL CHECK (status IN ('active','paused','revoked'))
-) STRICT;
-
--- table access_agent_secret
-CREATE TABLE access_agent_secret (
-  agent_id       TEXT PRIMARY KEY REFERENCES access_agent(agent_id) ON DELETE CASCADE,
-  enrollment_key TEXT NOT NULL UNIQUE
-) STRICT;
+---- tables (111)
 
 -- table access_app
 CREATE TABLE access_app (
@@ -79,27 +89,6 @@ CREATE TABLE access_app_ext (
   PRIMARY KEY (app_id, band, table_name)
 ) STRICT;
 
--- table access_device
-CREATE TABLE access_device (
-  device_id      TEXT PRIMARY KEY,
-  -- Identity here, authority next door: this says who the device IS;
-  -- `share_authority` says what the member let it do (#883).
-  owner_party_id TEXT NOT NULL REFERENCES core_party(party_id),
-  name           TEXT NOT NULL,
-  platform       TEXT,
-  enrolled_at    TEXT NOT NULL,
-  last_seen_at   TEXT
-) STRICT;
-
--- table access_device_secret
-CREATE TABLE access_device_secret (
-  device_id      TEXT PRIMARY KEY REFERENCES access_device(device_id) ON DELETE CASCADE,
-  public_key     TEXT NOT NULL UNIQUE,
-  -- How far the gateway has served THIS device. Gateway bookkeeping about a
-  -- seat, never a fact the seat's own copy should carry.
-  sync_cursor    TEXT
-, sync_cursor_at TEXT) STRICT;
-
 -- table access_provenance
 CREATE TABLE access_provenance (
   prov_id       TEXT PRIMARY KEY,
@@ -123,7 +112,7 @@ CREATE TABLE access_receipt (
   -- by whoever read it. Every answer is a `share_authority` row now, and
   -- NULL means owner-direct — the one act that needs no answer.
   authority_id       TEXT, -- → share.authority; NULL for owner-direct
-  invocation_id      TEXT REFERENCES agent_command_invocation(invocation_id),
+  invocation_id      TEXT REFERENCES command_invocation(invocation_id),
   action             TEXT NOT NULL,
   object_type        TEXT NOT NULL,
   object_id          TEXT,
@@ -152,98 +141,12 @@ CREATE TABLE access_seed_row (
   UNIQUE (target_type, target_id)
 ) STRICT;
 
--- table agent_capability
-CREATE TABLE agent_capability (
-  capability_id         TEXT PRIMARY KEY,
-  schema_name           TEXT NOT NULL,
-  verb                  TEXT NOT NULL CHECK (verb IN ('discover','query','reason','act','verify','explain')),
-  command_id            TEXT REFERENCES agent_command(command_id),
-  description           TEXT NOT NULL,
-  requires_confirmation INTEGER NOT NULL CHECK (requires_confirmation IN (0,1))
-) STRICT;
-
--- table agent_command
-CREATE TABLE agent_command (
-  command_id          TEXT PRIMARY KEY,
-  name                TEXT NOT NULL UNIQUE,
-  owner_schema        TEXT NOT NULL,
-  input_schema_json   TEXT NOT NULL CHECK (json_valid(input_schema_json)),
-  output_schema_json  TEXT NOT NULL CHECK (json_valid(output_schema_json)),
-  preconditions_json  TEXT NOT NULL CHECK (json_valid(preconditions_json)),
-  postconditions_json TEXT NOT NULL CHECK (json_valid(postconditions_json)),
-  idempotency         TEXT NOT NULL CHECK (idempotency IN ('idempotent','once','retry-safe')),
-  risk                TEXT NOT NULL CHECK (risk IN ('low','medium','high')),
-  ontology_version    TEXT NOT NULL
-) STRICT;
-
--- table agent_command_invocation
-CREATE TABLE agent_command_invocation (
-  invocation_id TEXT PRIMARY KEY,
-  -- Pointers into the MODEL half stay VALUE columns, not keys: an audit row
-  -- outlives its subject by design, and a foreign key would either block the
-  -- member's purge or quietly rewrite the evidence (#916).
-  command_id    TEXT NOT NULL, -- → agent.command
-  caller_id     TEXT NOT NULL, -- → access.agent / access.device
-  authority_id  TEXT,          -- → share.authority; NULL for owner-direct
-  input_json    TEXT NOT NULL CHECK (json_valid(input_json)),
-  status        TEXT NOT NULL CHECK (status IN ('proposed','checked','executed','failed','rolled_back')),
-  requested_at  TEXT NOT NULL,
-  executed_at   TEXT,
-  receipt_id    TEXT REFERENCES access_receipt(receipt_id)
-) STRICT;
-
--- table agent_evidence
-CREATE TABLE agent_evidence (
-  evidence_id   TEXT PRIMARY KEY,
-  invocation_id TEXT NOT NULL REFERENCES agent_command_invocation(invocation_id),
-  claim         TEXT NOT NULL,
-  entity_type   TEXT NOT NULL,
-  entity_id     TEXT NOT NULL,
-  prov_id       TEXT REFERENCES access_provenance(prov_id),
-  weight        REAL CHECK (weight BETWEEN 0 AND 1)
-) STRICT;
-
--- table agent_explanation
-CREATE TABLE agent_explanation (
-  explanation_id TEXT PRIMARY KEY,
-  invocation_id  TEXT NOT NULL UNIQUE REFERENCES agent_command_invocation(invocation_id),
-  audience       TEXT NOT NULL CHECK (audience IN ('owner','auditor')),
-  summary        TEXT NOT NULL,
-  generated_at   TEXT NOT NULL
-) STRICT;
-
--- table agent_invocation_check
-CREATE TABLE agent_invocation_check (
-  check_id      TEXT PRIMARY KEY,
-  invocation_id TEXT NOT NULL REFERENCES agent_command_invocation(invocation_id),
-  phase         TEXT NOT NULL CHECK (phase IN ('pre','post')),
-  predicate     TEXT NOT NULL,
-  passed        INTEGER NOT NULL CHECK (passed IN (0,1)),
-  observed_json TEXT CHECK (observed_json IS NULL OR json_valid(observed_json)),
-  checked_at    TEXT NOT NULL
-) STRICT;
-
--- table attachments
-CREATE TABLE attachments (
-  id         TEXT PRIMARY KEY,
-  item_id    TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-  hash       TEXT NOT NULL,
-  mime       TEXT NOT NULL,
-  size_bytes INTEGER NOT NULL,
-  source     TEXT,
-  filename   TEXT,
-  -- Harness-created files stay in their workspace. The hash verifies the
-  -- referenced bytes; no duplicate is copied into the blob CAS.
-  workspace_path TEXT,
-  created_at INTEGER NOT NULL
-) STRICT;
-
 -- table audit_archive_manifest
 CREATE TABLE audit_archive_manifest (
   manifest_id      TEXT PRIMARY KEY,
   -- 'provenance' (access_provenance) or 'invocation_cluster' (the mutually
-  -- FK-linked agent_command_invocation + access_receipt +
-  -- agent_invocation_check + agent_evidence + agent_explanation rows for a
+  -- FK-linked command_invocation + access_receipt +
+  -- command_invocation_check + command_evidence + command_explanation rows for a
   -- batch of invocations old enough, receipt included, to seal together —
   -- see journal-archive.ts for why these archive as one unit).
   stream           TEXT NOT NULL CHECK (stream IN ('provenance', 'invocation_cluster')),
@@ -262,30 +165,6 @@ CREATE TABLE audit_archive_manifest (
 -- table audit_archive_pass
 CREATE TABLE audit_archive_pass (
   active INTEGER PRIMARY KEY CHECK (active = 1)
-) STRICT;
-
--- table automation_state
-CREATE TABLE automation_state (
-  automation_id TEXT NOT NULL,
-  key           TEXT NOT NULL,
-  value_json    TEXT,
-  updated_at    INTEGER NOT NULL,
-  PRIMARY KEY (automation_id, key)
-) STRICT;
-
--- table automation_trigger_cursor
-CREATE TABLE automation_trigger_cursor (
-  automation_id TEXT NOT NULL,
-  trigger_index INTEGER NOT NULL,
-  source_kind   TEXT NOT NULL,
-  position_json TEXT,
-  pending_json  TEXT,
-  window_from  INTEGER,
-  window_to    INTEGER,
-  skipped      INTEGER NOT NULL DEFAULT 0,
-  gap_reason   TEXT,
-  updated_at   INTEGER NOT NULL, dead_letter_json TEXT,
-  PRIMARY KEY (automation_id, trigger_index)
 ) STRICT;
 
 -- table blob_access
@@ -320,26 +199,6 @@ CREATE TABLE blob_custody_state (
   content_hash        TEXT NOT NULL CHECK (length(content_hash) = 64),
   custody_state TEXT NOT NULL CHECK (custody_state IN ('pending-offsite','local-only','replicated','remote-only','missing')),
   checked_at    TEXT NOT NULL
-) STRICT;
-
--- table blob_device_content_key
-CREATE TABLE blob_device_content_key (
-  content_hash       TEXT NOT NULL REFERENCES blob_content_key(content_hash) ON DELETE CASCADE,
-  device_id    TEXT NOT NULL REFERENCES access_device(device_id) ON DELETE CASCADE,
-  wrapped_key  BLOB NOT NULL,
-  wrap_nonce   BLOB NOT NULL CHECK (length(wrap_nonce) = 12),
-  device_key_epoch INTEGER NOT NULL CHECK (device_key_epoch > 0),
-  granted_at   TEXT NOT NULL,
-  PRIMARY KEY (content_hash, device_id)
-) STRICT;
-
--- table blob_device_wrap_key
-CREATE TABLE blob_device_wrap_key (
-  device_id    TEXT PRIMARY KEY REFERENCES access_device(device_id) ON DELETE CASCADE,
-  key_epoch    INTEGER NOT NULL DEFAULT 1 CHECK (key_epoch > 0),
-  salt         BLOB NOT NULL CHECK (length(salt) = 32),
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
 ) STRICT;
 
 -- table blob_ingress_probe
@@ -382,33 +241,6 @@ CREATE TABLE blob_orphan (
   first_orphaned_at INTEGER NOT NULL CHECK (first_orphaned_at >= 0)
 ) STRICT;
 
--- table blob_outbox
-CREATE TABLE blob_outbox (
-  content_hash          TEXT PRIMARY KEY CHECK (length(content_hash) = 64),
-  byte_size       INTEGER NOT NULL CHECK (byte_size >= 0),
-  state           TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','uploading')),
-  temp_id         TEXT,
-  upload_id       TEXT,
-  parts_json      TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(parts_json)),
-  attempt_count   INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
-  next_retry_at   TEXT,
-  last_error      TEXT,
-  created_at      TEXT NOT NULL,
-  updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  -- THE CONFLICT COMPARATOR (#996, R6). Bumped by this table's
-  -- touch trigger on every update, so an intent's expected version is
-  -- compared against a COLUMN rather than against a log position.
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
-, quarantined_at TEXT) STRICT;
-
--- table blob_replica
-CREATE TABLE blob_replica (
-  content_hash        TEXT PRIMARY KEY CHECK (length(content_hash) = 64),
-  replicated_at TEXT NOT NULL,
-  byte_size     INTEGER NOT NULL CHECK (byte_size >= 0),
-  store         TEXT NOT NULL DEFAULT 'cas' CHECK (store IN ('cas','derived'))
-) STRICT;
-
 -- table blob_staging
 CREATE TABLE blob_staging (
   staging_id    TEXT PRIMARY KEY,
@@ -433,118 +265,145 @@ CREATE TABLE blob_staging (
     (variant IN ('text','transcript','embedding','phash','thumbhash') AND inline_content IS NOT NULL))
 ) STRICT;
 
--- table conversation_archive
-CREATE TABLE conversation_archive (
-  id                     TEXT PRIMARY KEY,
-  conversation_id        TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  seq_from               INTEGER NOT NULL,
-  seq_to                 INTEGER NOT NULL,
-  from_time              INTEGER NOT NULL,
-  to_time                INTEGER NOT NULL,
-  turn_count             INTEGER NOT NULL,
-  item_count             INTEGER NOT NULL,
-  segment_hash         TEXT NOT NULL CHECK (length(segment_hash) = 64),
-  segment_bytes          INTEGER NOT NULL CHECK (segment_bytes >= 0),
-  plaintext_bytes        INTEGER NOT NULL CHECK (plaintext_bytes >= 0),
-  attachment_hashes_json TEXT NOT NULL DEFAULT '[]',
-  pruned_at              INTEGER,
-  created_at             INTEGER NOT NULL
+-- table chat_message
+CREATE TABLE chat_message (
+  thread_id   TEXT NOT NULL REFERENCES chat_thread(thread_id) ON DELETE CASCADE,
+  ordinal     INTEGER NOT NULL CHECK (ordinal >= 0),
+  role        TEXT NOT NULL CHECK (role IN ('user','assistant')),
+  text        TEXT NOT NULL,
+  outcome     TEXT NOT NULL CHECK (outcome IN (
+                'sent','answered','stopped','refused',
+                'proposed','applied','dismissed','stale','failed')),
+  refusal     TEXT CHECK (refusal IS NULL OR refusal IN (
+                'no_tool_fits','query_failed','unparsable','model_absent','model_failed',
+                'vision_absent','attachment_unsupported','attachment_unreadable',
+                'attachment_too_large')),
+  notice      TEXT CHECK (notice IS NULL OR notice IN ('doc_truncated')),
+  record_json TEXT CHECK (record_json IS NULL OR json_valid(record_json)),
+  created_at  TEXT NOT NULL,
+  PRIMARY KEY (thread_id, ordinal),
+  CHECK ((role = 'user') = (outcome = 'sent')),
+  CHECK ((outcome = 'refused') = (refusal IS NOT NULL)),
+  CHECK (role = 'assistant' OR (notice IS NULL AND record_json IS NULL))
 ) STRICT;
 
--- table conversation_digest
-CREATE TABLE conversation_digest (
-  conversation_id          TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
-  kind                     TEXT NOT NULL,
-  app_id                   TEXT,
-  automation_ref           TEXT,
-  automation_name          TEXT,
-  title                    TEXT NOT NULL DEFAULT '',
-  first_started_at         INTEGER,
-  last_ended_at            INTEGER,
-  run_count                INTEGER NOT NULL DEFAULT 0,
-  ok_count                 INTEGER NOT NULL DEFAULT 0,
-  err_count                INTEGER NOT NULL DEFAULT 0,
-  retry_count              INTEGER NOT NULL DEFAULT 0,
-  total_input_tokens       INTEGER NOT NULL DEFAULT 0,
-  total_output_tokens      INTEGER NOT NULL DEFAULT 0,
-  total_cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
-  total_cache_write_tokens INTEGER NOT NULL DEFAULT 0,
-  total_hydration_tokens   INTEGER NOT NULL DEFAULT 0,
-  total_cost_usd           REAL NOT NULL DEFAULT 0,
-  step_count               INTEGER NOT NULL DEFAULT 0,
-  tool_count               INTEGER NOT NULL DEFAULT 0,
-  models_json              TEXT NOT NULL DEFAULT '[]',
-  efforts_json             TEXT NOT NULL DEFAULT '[]',
-  updated_at               INTEGER NOT NULL
+-- table chat_message_attachment
+CREATE TABLE chat_message_attachment (
+  thread_id        TEXT NOT NULL,
+  message_ordinal  INTEGER NOT NULL,
+  position         INTEGER NOT NULL CHECK (position >= 0),
+  kind             TEXT NOT NULL CHECK (kind IN ('photo','document','image')),
+  label            TEXT NOT NULL,
+  asset_id         TEXT REFERENCES media_asset(asset_id) ON DELETE SET NULL,
+  document_id      TEXT REFERENCES core_document(document_id) ON DELETE SET NULL,
+  thumb_content_id TEXT REFERENCES core_content_item(content_id) ON DELETE SET NULL,
+  PRIMARY KEY (thread_id, message_ordinal, position),
+  FOREIGN KEY (thread_id, message_ordinal)
+    REFERENCES chat_message(thread_id, ordinal) ON DELETE CASCADE,
+  CHECK ((kind = 'photo' OR asset_id IS NULL)
+     AND (kind = 'document' OR document_id IS NULL)
+     AND (kind = 'image' OR thumb_content_id IS NULL))
 ) STRICT;
 
--- table conversation_harness_sessions
-CREATE TABLE conversation_harness_sessions (
-  id                    TEXT PRIMARY KEY,
-  conversation_id       TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  harness_kind           TEXT NOT NULL,
-  acp_session_id        TEXT NOT NULL,
-  usage_snapshot_json   TEXT,
-  hydrated_through_seq  INTEGER NOT NULL DEFAULT -1,
-  status                TEXT NOT NULL DEFAULT 'warm',
-  last_used_at          INTEGER NOT NULL,
-  created_at            INTEGER NOT NULL,
-  UNIQUE (conversation_id, harness_kind, acp_session_id),
-  CHECK (status IN ('active','warm','cold','stale'))
+-- table chat_message_card
+CREATE TABLE chat_message_card (
+  thread_id       TEXT NOT NULL,
+  message_ordinal INTEGER NOT NULL,
+  position        INTEGER NOT NULL CHECK (position >= 0),
+  app             TEXT NOT NULL
+                  CHECK (app IN ('agenda','docs','money','notes','people','photos','tasks')),
+  entity          TEXT NOT NULL CHECK (length(entity) > 0),
+  row_id          TEXT NOT NULL CHECK (length(row_id) > 0),
+  qualifier       TEXT NOT NULL DEFAULT '',
+  title           TEXT NOT NULL,
+  subtitle        TEXT NOT NULL DEFAULT '',
+  meta            TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (thread_id, message_ordinal, position),
+  FOREIGN KEY (thread_id, message_ordinal)
+    REFERENCES chat_message(thread_id, ordinal) ON DELETE CASCADE
 ) STRICT;
 
--- table conversation_provider_consent
-CREATE TABLE conversation_provider_consent (
-  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  harness_kind     TEXT NOT NULL,
-  source          TEXT NOT NULL,
-  subsystem       TEXT NOT NULL,
-  granted_at      INTEGER NOT NULL,
-  revoked_at      INTEGER,
-  PRIMARY KEY (conversation_id, harness_kind, source, subsystem),
-  CHECK (
-    (source = 'direct' AND subsystem = '')
-    OR
-    (source = 'ladder' AND subsystem IN ('assistant','ask','builder','automations'))
-  )
+-- table chat_thread
+CREATE TABLE chat_thread (
+  thread_id   TEXT PRIMARY KEY,
+  title       TEXT NOT NULL CHECK (length(trim(title)) > 0),
+  scope_app   TEXT CHECK (scope_app IS NULL
+                          OR scope_app IN ('agenda','docs','money','notes','people','photos','tasks')),
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  FOREIGN KEY (thread_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
--- table conversation_turn_locks
-CREATE TABLE conversation_turn_locks (
-  conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
-  lock_token      TEXT NOT NULL,
-  acquired_at     INTEGER NOT NULL
+-- table command_capability
+CREATE TABLE command_capability (
+  capability_id         TEXT PRIMARY KEY,
+  schema_name           TEXT NOT NULL,
+  verb                  TEXT NOT NULL CHECK (verb IN ('discover','query','reason','act','verify','explain')),
+  command_id            TEXT REFERENCES command_definition(command_id),
+  description           TEXT NOT NULL,
+  requires_confirmation INTEGER NOT NULL CHECK (requires_confirmation IN (0,1))
 ) STRICT;
 
--- table conversation_workspace_selection
-CREATE TABLE conversation_workspace_selection (
-  conversation_id             TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
-  primary_kind                TEXT NOT NULL,
-  additional_directories_json TEXT NOT NULL DEFAULT '[]',
-  updated_at                  INTEGER NOT NULL,
-  CHECK (primary_kind IN ('vault-data','app','draft'))
+-- table command_definition
+CREATE TABLE command_definition (
+  command_id          TEXT PRIMARY KEY,
+  name                TEXT NOT NULL UNIQUE,
+  owner_schema        TEXT NOT NULL,
+  input_schema_json   TEXT NOT NULL CHECK (json_valid(input_schema_json)),
+  output_schema_json  TEXT NOT NULL CHECK (json_valid(output_schema_json)),
+  preconditions_json  TEXT NOT NULL CHECK (json_valid(preconditions_json)),
+  postconditions_json TEXT NOT NULL CHECK (json_valid(postconditions_json)),
+  idempotency         TEXT NOT NULL CHECK (idempotency IN ('idempotent','once','retry-safe')),
+  risk                TEXT NOT NULL CHECK (risk IN ('low','medium','high')),
+  ontology_version    TEXT NOT NULL
 ) STRICT;
 
--- table conversations
-CREATE TABLE conversations (
-  id                 TEXT PRIMARY KEY,
-  kind               TEXT NOT NULL,
-  user_id            TEXT NOT NULL,
-  app_id             TEXT,
-  automation_id      TEXT,
-  title              TEXT NOT NULL DEFAULT '',
-  harness_kind       TEXT,
-  harness_session_id TEXT,
-  harness_usage_json TEXT,
-  hydration_count    INTEGER NOT NULL DEFAULT 0,
-  last_hydrated_at   INTEGER,
-  turn_count         INTEGER NOT NULL DEFAULT 0,
-  item_count         INTEGER NOT NULL DEFAULT 0,
-  pinned             INTEGER NOT NULL DEFAULT 0,
-  archived           INTEGER NOT NULL DEFAULT 0,
-  created_at         INTEGER NOT NULL,
-  updated_at         INTEGER NOT NULL,
-  CHECK (kind IN ('chat','automation','build'))
+-- table command_evidence
+CREATE TABLE command_evidence (
+  evidence_id   TEXT PRIMARY KEY,
+  invocation_id TEXT NOT NULL REFERENCES command_invocation(invocation_id),
+  claim         TEXT NOT NULL,
+  entity_type   TEXT NOT NULL,
+  entity_id     TEXT NOT NULL,
+  prov_id       TEXT REFERENCES access_provenance(prov_id),
+  weight        REAL CHECK (weight BETWEEN 0 AND 1)
+) STRICT;
+
+-- table command_explanation
+CREATE TABLE command_explanation (
+  explanation_id TEXT PRIMARY KEY,
+  invocation_id  TEXT NOT NULL UNIQUE REFERENCES command_invocation(invocation_id),
+  audience       TEXT NOT NULL CHECK (audience IN ('owner','auditor')),
+  summary        TEXT NOT NULL,
+  generated_at   TEXT NOT NULL
+) STRICT;
+
+-- table command_invocation
+CREATE TABLE command_invocation (
+  invocation_id TEXT PRIMARY KEY,
+  -- Pointers into the MODEL half stay VALUE columns, not keys: an audit row
+  -- outlives its subject by design, and a foreign key would either block the
+  -- member's purge or quietly rewrite the evidence (#916).
+  command_id    TEXT NOT NULL, -- → command.definition
+  caller_id     TEXT NOT NULL, -- → access.agent / access.device
+  authority_id  TEXT,          -- → share.authority; NULL for owner-direct
+  input_json    TEXT NOT NULL CHECK (json_valid(input_json)),
+  status        TEXT NOT NULL CHECK (status IN ('proposed','checked','executed','failed','rolled_back')),
+  requested_at  TEXT NOT NULL,
+  executed_at   TEXT,
+  receipt_id    TEXT REFERENCES access_receipt(receipt_id)
+) STRICT;
+
+-- table command_invocation_check
+CREATE TABLE command_invocation_check (
+  check_id      TEXT PRIMARY KEY,
+  invocation_id TEXT NOT NULL REFERENCES command_invocation(invocation_id),
+  phase         TEXT NOT NULL CHECK (phase IN ('pre','post')),
+  predicate     TEXT NOT NULL,
+  passed        INTEGER NOT NULL CHECK (passed IN (0,1)),
+  observed_json TEXT CHECK (observed_json IS NULL OR json_valid(observed_json)),
+  checked_at    TEXT NOT NULL
 ) STRICT;
 
 -- table core_account
@@ -593,6 +452,7 @@ CREATE TABLE core_attachment (
 CREATE TABLE core_collection (
   collection_id        TEXT PRIMARY KEY,
   owner_party_id       TEXT NOT NULL REFERENCES core_party(party_id),
+  kind                 TEXT NOT NULL CHECK (kind IN ('notebook','album')),
   name                 TEXT NOT NULL,
   cover_content_id     TEXT REFERENCES core_content_item(content_id),
   parent_collection_id TEXT REFERENCES core_collection(collection_id),
@@ -694,7 +554,6 @@ CREATE TABLE core_content_item (
   byte_size        INTEGER NOT NULL CHECK (byte_size >= 0),
   language         TEXT,
   creator_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
-  origin_device_id TEXT REFERENCES access_device(device_id),
   deleted_at       TEXT,
   purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   created_at       TEXT NOT NULL,
@@ -800,7 +659,7 @@ CREATE TABLE core_entity_revision (
   -- because the archive pass removes old invocations and a revision outlives
   -- the invocation record of it.
   invocation_id  TEXT
-    REFERENCES agent_command_invocation(invocation_id) ON DELETE SET NULL,
+    REFERENCES command_invocation(invocation_id) ON DELETE SET NULL,
   -- THE REVISION OCCURRENCE (#996, ruling R20(a) / #916's ONT-revisions).
   --
   -- This table was ruled "the only history table", and a SECOND history graph
@@ -927,7 +786,7 @@ CREATE TABLE core_party (
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   -- No `ontology_version` (#916, ruling ONT-04): the ontology version is a
   -- property of the FILE (`PRAGMA user_version`) and of the CONTRACT
-  -- (`agent_command.ontology_version`), never of a row.
+  -- (`command_definition.ontology_version`), never of a row.
   -- THE TRASH PAIR (#916, owner decision D1). A person the member no longer
   -- keeps was previously undeletable: `erasePurgedPerson` walked foreign keys
   -- by nullability and deleted whatever it could reach, which destroyed OTHER
@@ -1233,13 +1092,14 @@ CREATE TABLE enrich_target_failure (
     REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 
--- table fts_conversation
-CREATE VIRTUAL TABLE fts_conversation USING fts5(
-  conversation_id UNINDEXED,
-  title,
-  body,
+-- table fts_chat_thread
+CREATE VIRTUAL TABLE fts_chat_thread USING fts5(
+  thread_id UNINDEXED, title, said,
   tokenize = "unicode61 remove_diacritics 2"
 );
+
+-- table fts_chat_thread_vocab
+CREATE VIRTUAL TABLE fts_chat_thread_vocab USING fts5vocab(fts_chat_thread, 'row');
 
 -- table fts_core_collection
 CREATE VIRTUAL TABLE fts_core_collection USING fts5(
@@ -1247,11 +1107,26 @@ CREATE VIRTUAL TABLE fts_core_collection USING fts5(
   tokenize = "unicode61 remove_diacritics 2"
 );
 
+-- table fts_core_collection_vocab
+CREATE VIRTUAL TABLE fts_core_collection_vocab USING fts5vocab(fts_core_collection, 'row');
+
+-- table fts_core_concept
+CREATE VIRTUAL TABLE fts_core_concept USING fts5(
+  concept_id UNINDEXED, pref_label,
+  tokenize = "unicode61 remove_diacritics 2"
+);
+
+-- table fts_core_concept_vocab
+CREATE VIRTUAL TABLE fts_core_concept_vocab USING fts5vocab(fts_core_concept, 'row');
+
 -- table fts_core_content_item
 CREATE VIRTUAL TABLE fts_core_content_item USING fts5(
   content_id UNINDEXED, title,
   tokenize = "unicode61 remove_diacritics 2"
 );
+
+-- table fts_core_content_item_vocab
+CREATE VIRTUAL TABLE fts_core_content_item_vocab USING fts5vocab(fts_core_content_item, 'row');
 
 -- table fts_core_document
 CREATE VIRTUAL TABLE fts_core_document USING fts5(
@@ -1259,35 +1134,26 @@ CREATE VIRTUAL TABLE fts_core_document USING fts5(
   tokenize = "unicode61 remove_diacritics 2"
 );
 
+-- table fts_core_document_vocab
+CREATE VIRTUAL TABLE fts_core_document_vocab USING fts5vocab(fts_core_document, 'row');
+
 -- table fts_core_event
 CREATE VIRTUAL TABLE fts_core_event USING fts5(
-  event_id UNINDEXED, summary, description,
+  event_id UNINDEXED, summary, description, location,
   tokenize = "unicode61 remove_diacritics 2"
 );
+
+-- table fts_core_event_vocab
+CREATE VIRTUAL TABLE fts_core_event_vocab USING fts5vocab(fts_core_event, 'row');
 
 -- table fts_core_party
 CREATE VIRTUAL TABLE fts_core_party USING fts5(
-  party_id UNINDEXED, display_name, sort_name,
+  party_id UNINDEXED, display_name, sort_name, nickname, role, met, channels, memo,
   tokenize = "unicode61 remove_diacritics 2"
 );
 
--- table fts_core_place
-CREATE VIRTUAL TABLE fts_core_place USING fts5(
-  place_id UNINDEXED, name,
-  tokenize = "unicode61 remove_diacritics 2"
-);
-
--- table fts_core_transaction
-CREATE VIRTUAL TABLE fts_core_transaction USING fts5(
-  txn_id UNINDEXED, description,
-  tokenize = "unicode61 remove_diacritics 2"
-);
-
--- table fts_knowledge_annotation
-CREATE VIRTUAL TABLE fts_knowledge_annotation USING fts5(
-  annotation_id UNINDEXED, body_text,
-  tokenize = "unicode61 remove_diacritics 2"
-);
+-- table fts_core_party_vocab
+CREATE VIRTUAL TABLE fts_core_party_vocab USING fts5vocab(fts_core_party, 'row');
 
 -- table fts_knowledge_note
 CREATE VIRTUAL TABLE fts_knowledge_note USING fts5(
@@ -1295,17 +1161,8 @@ CREATE VIRTUAL TABLE fts_knowledge_note USING fts5(
   tokenize = "unicode61 remove_diacritics 2"
 );
 
--- table fts_locker_item
-CREATE VIRTUAL TABLE fts_locker_item USING fts5(
-  item_id UNINDEXED, title, username, url,
-  tokenize = "unicode61 remove_diacritics 2"
-);
-
--- table fts_people_profile
-CREATE VIRTUAL TABLE fts_people_profile USING fts5(
-  profile_id UNINDEXED, role, nickname,
-  tokenize = "unicode61 remove_diacritics 2"
-);
+-- table fts_knowledge_note_vocab
+CREATE VIRTUAL TABLE fts_knowledge_note_vocab USING fts5vocab(fts_knowledge_note, 'row');
 
 -- table fts_schedule_project
 CREATE VIRTUAL TABLE fts_schedule_project USING fts5(
@@ -1313,88 +1170,17 @@ CREATE VIRTUAL TABLE fts_schedule_project USING fts5(
   tokenize = "unicode61 remove_diacritics 2"
 );
 
+-- table fts_schedule_project_vocab
+CREATE VIRTUAL TABLE fts_schedule_project_vocab USING fts5vocab(fts_schedule_project, 'row');
+
 -- table fts_schedule_task
 CREATE VIRTUAL TABLE fts_schedule_task USING fts5(
-  task_id UNINDEXED, title, description,
+  task_id UNINDEXED, title, description, project,
   tokenize = "unicode61 remove_diacritics 2"
 );
 
--- table fts_social_circle
-CREATE VIRTUAL TABLE fts_social_circle USING fts5(
-  circle_id UNINDEXED, name,
-  tokenize = "unicode61 remove_diacritics 2"
-);
-
--- table fts_social_message
-CREATE VIRTUAL TABLE fts_social_message USING fts5(
-  message_id UNINDEXED, body,
-  tokenize = "unicode61 remove_diacritics 2"
-);
-
--- table fts_social_thread
-CREATE VIRTUAL TABLE fts_social_thread USING fts5(
-  thread_id UNINDEXED, subject,
-  tokenize = "unicode61 remove_diacritics 2"
-);
-
--- table fts_tally_expense
-CREATE VIRTUAL TABLE fts_tally_expense USING fts5(
-  expense_id UNINDEXED, description,
-  tokenize = "unicode61 remove_diacritics 2"
-);
-
--- table harness_health
-CREATE TABLE harness_health (
-  workspace_context    TEXT NOT NULL,
-  harness_kind          TEXT NOT NULL,
-  failure_class        TEXT NOT NULL,
-  consecutive_failures INTEGER NOT NULL DEFAULT 0,
-  breaker_until        INTEGER,
-  half_open_claimed_at INTEGER,
-  last_error           TEXT,
-  last_failure_at      INTEGER,
-  last_ok_at           INTEGER,
-  PRIMARY KEY (workspace_context, harness_kind, failure_class),
-  CHECK (failure_class IN ('spawn','auth','init','timeout','quota','wedge','exit','unknown'))
-) STRICT;
-
--- table items
-CREATE TABLE items (
-  id                 TEXT PRIMARY KEY,
-  turn_id            TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
-  ordinal            INTEGER NOT NULL,
-  call_id            TEXT,
-  batch_id           INTEGER,
-  kind               TEXT NOT NULL,
-  role               TEXT,
-  text               TEXT,
-  name               TEXT,
-  args_json          TEXT,
-  output_json        TEXT,
-  raw_json           TEXT,
-  child_turn_id      TEXT,
-  model              TEXT,
-  harness            TEXT,
-  -- ACP semantic thought_level confirmed for this call. NULL means the
-  -- harness did not confirm a selectable effort; never infer a default.
-  effort             TEXT,
-  input_tokens       INTEGER,
-  output_tokens      INTEGER,
-  cache_read_tokens  INTEGER,
-  cache_write_tokens INTEGER,
-  cost_usd           REAL,
-  -- Provenance for cost_usd (issue #514): 'harness' = harness/ACP reported USD;
-  -- 'estimated' = catalog (model-pricing). NULL = legacy or unpriced.
-  cost_source        TEXT,
-  app_id             TEXT,
-  ok                 INTEGER NOT NULL DEFAULT 1,
-  error              TEXT,
-  started_at         INTEGER NOT NULL,
-  ended_at           INTEGER,
-  duration_ms        INTEGER,
-  CHECK (kind IN ('message_in','step','tool','delegate')),
-  CHECK (cost_source IS NULL OR cost_source IN ('harness','estimated'))
-) STRICT;
+-- table fts_schedule_task_vocab
+CREATE VIRTUAL TABLE fts_schedule_task_vocab USING fts5vocab(fts_schedule_task, 'row');
 
 -- table knowledge_annotation
 CREATE TABLE knowledge_annotation (
@@ -1451,8 +1237,6 @@ CREATE TABLE locker_item (
   username     TEXT,
   password     TEXT,
   url          TEXT,
-  url_match_policy TEXT NOT NULL DEFAULT 'registrable-domain'
-    CHECK (url_match_policy IN ('registrable-domain','exact-host')),
   otp_seed     TEXT,
   notes        TEXT,
   -- card
@@ -1475,8 +1259,6 @@ CREATE TABLE locker_item (
   -- have connections for" becomes a join, and Watchtower can correlate a
   -- breach with the connection that uses the password. Nullable: most items
   -- guard services the vault never talks to.
-  connection_id TEXT REFERENCES sync_connection(connection_id),
-  -- watchtower: the one stored security fact (breach flag); weak/reused derive
   compromised  INTEGER NOT NULL DEFAULT 0 CHECK (compromised IN (0,1)),
   -- When the CURRENT password was set (#872, GAPS §3.3 #6d). Stamped by the
   -- write path, never derived from updated_at — an edit that only retags an
@@ -1508,8 +1290,6 @@ CREATE TABLE locker_item_address (
   address_id   TEXT PRIMARY KEY,
   item_id      TEXT NOT NULL REFERENCES locker_item(item_id) ON DELETE CASCADE,
   url          TEXT NOT NULL,
-  match_policy TEXT NOT NULL DEFAULT 'registrable-domain'
-    CHECK (match_policy IN ('registrable-domain','exact-host')),
   position     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL,
   FOREIGN KEY (address_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
@@ -1559,8 +1339,7 @@ CREATE TABLE locker_item_passkey (
 -- table locker_key
 CREATE TABLE locker_key (
   key_id     TEXT PRIMARY KEY,
-  created_at TEXT NOT NULL,
-  retired_at TEXT
+  created_at TEXT NOT NULL
 ) STRICT;
 
 -- table media_asset
@@ -1585,7 +1364,6 @@ CREATE TABLE media_asset (
   -- Stable logical capture grouping for Live Photo / motion-photo companions.
   capture_group_id TEXT,
   place_id         TEXT REFERENCES core_place(place_id),
-  camera_device_id TEXT REFERENCES access_device(device_id),
   width            INTEGER CHECK (width > 0),
   height           INTEGER CHECK (height > 0),
   duration_s       REAL CHECK (duration_s >= 0),
@@ -1716,55 +1494,129 @@ CREATE TABLE media_memory_member (
   PRIMARY KEY (memory_id, asset_id)
 ) STRICT;
 
--- table notifications_notice
-CREATE TABLE notifications_notice (
-  notice_id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL,
-  source_ref TEXT NOT NULL,
-  headline TEXT NOT NULL,
-  detail_json TEXT NOT NULL CHECK (json_valid(detail_json)),
-  severity TEXT NOT NULL CHECK (severity IN ('info','warning','high')),
-  count INTEGER NOT NULL DEFAULT 1 CHECK (count > 0),
-  first_at TEXT NOT NULL,
-  last_at TEXT NOT NULL,
-  read_at TEXT,
-  archived_at TEXT,
-  UNIQUE(kind, source_ref)
+-- table money_account
+CREATE TABLE money_account (
+  account_id    TEXT PRIMARY KEY REFERENCES core_account(account_id) ON DELETE CASCADE,
+  name          TEXT NOT NULL CHECK (length(trim(name)) > 0),
+  kind          TEXT NOT NULL CHECK (kind IN ('checking','savings','credit_card','cash')),
+  -- On budget: its spending counts toward the month's plan. Off budget (a loan
+  -- paid elsewhere, a shared account) it is still listed and still has a balance.
+  on_budget     INTEGER NOT NULL DEFAULT 1 CHECK (on_budget IN (0,1)),
+  -- Where the account stood on `opening_on`, SIGNED (a card owes: negative).
+  -- The balance on any day is this plus the posted rows after `opening_on`,
+  -- derived at read time; an account with no opening date counts every row.
+  opening_minor INTEGER NOT NULL DEFAULT 0,
+  opening_on    TEXT CHECK (opening_on IS NULL
+                            OR opening_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  -- A closed account keeps every row and stays readable; it leaves the lists a
+  -- member picks from. A day, not an instant: the member says which day.
+  closed_on     TEXT CHECK (closed_on IS NULL
+                            OR closed_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version   INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
 ) STRICT;
 
--- table outbox_item
-CREATE TABLE outbox_item (
-  item_id              TEXT PRIMARY KEY,
-  connection_id        TEXT NOT NULL REFERENCES sync_connection(connection_id),
-  actor_id             TEXT NOT NULL,
-  actor_kind           TEXT NOT NULL CHECK (actor_kind IN ('owner','app','ai_agent')),
-  verb                 TEXT NOT NULL,
-  target               TEXT NOT NULL,
-  target_type          TEXT,
-  target_id            TEXT,
-  recipient_party_id   TEXT REFERENCES core_party(party_id),
-  artifact_json        TEXT NOT NULL CHECK (json_valid(artifact_json)),
-  request_json         TEXT NOT NULL CHECK (json_valid(request_json)),
-  status               TEXT NOT NULL CHECK (status IN ('pending','approved','sent','discarded','failed')),
-  -- The standing answer that auto-approved this item, in the ONE id space
-  -- every receipt cites (#928). NULL = the member decided this item itself.
-  authority_id         TEXT REFERENCES share_authority(authority_id),
-  staged_at            TEXT NOT NULL,
-  decided_at           TEXT,
-  drained_at           TEXT,
-  result_json          TEXT CHECK (result_json IS NULL OR json_valid(result_json)),
-  published_message_id TEXT REFERENCES social_message(message_id),
-  note                 TEXT,
-  CHECK ((target_type IS NULL) = (target_id IS NULL)),
-  -- A REAL reference (#916, E1). This was an audit value — "the row this was
-  -- about" — and that reading is wrong for a queue: an item still PENDING when
-  -- its subject is purged would drain afterwards and publish an artifact about
-  -- a row the member deleted. The pair is a composite key into the entity
-  -- supertype and cascades, so a purge empties the queue of anything about it.
-  -- A NULL pair (an outbound write with no canonical subject) satisfies a
-  -- composite foreign key by definition, which is the right reading.
-  FOREIGN KEY (target_type, target_id)
-    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
+-- table money_balance_checkpoint
+CREATE TABLE money_balance_checkpoint (
+  account_id      TEXT NOT NULL REFERENCES core_account(account_id) ON DELETE CASCADE,
+  as_of           TEXT NOT NULL CHECK (as_of GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  source          TEXT NOT NULL CHECK (source IN ('ofx','csv','member')),
+  -- SIGNED, in the account's currency.
+  balance_minor   INTEGER NOT NULL,
+  currency        TEXT NOT NULL CHECK (length(currency) = 3),
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version     INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  PRIMARY KEY (account_id, as_of, source)
+) STRICT;
+
+-- table money_import_profile
+CREATE TABLE money_import_profile (
+  account_id         TEXT NOT NULL REFERENCES core_account(account_id) ON DELETE CASCADE,
+  -- A digest of the file's header row: the same bank's export finds its mapping.
+  header_fingerprint TEXT NOT NULL CHECK (length(header_fingerprint) > 0),
+  delimiter          TEXT NOT NULL CHECK (length(delimiter) = 1),
+  skip_lines         INTEGER NOT NULL DEFAULT 0 CHECK (skip_lines >= 0),
+  date_order         TEXT NOT NULL CHECK (date_order IN ('mdy','dmy','ymd')),
+  -- How the amount's sign is read: one signed column; a debit and a credit
+  -- column; an amount plus an indicator column naming which rows go out; or one
+  -- signed column whose sign is reversed (a card statement that lists charges as
+  -- positive).
+  sign_mode          TEXT NOT NULL CHECK (sign_mode IN ('signed','debit_credit','indicator','flip')),
+  date_col           INTEGER NOT NULL CHECK (date_col >= 0),
+  amount_col         INTEGER CHECK (amount_col IS NULL OR amount_col >= 0),
+  debit_col          INTEGER CHECK (debit_col IS NULL OR debit_col >= 0),
+  credit_col         INTEGER CHECK (credit_col IS NULL OR credit_col >= 0),
+  desc_col           INTEGER NOT NULL CHECK (desc_col >= 0),
+  memo_col           INTEGER CHECK (memo_col IS NULL OR memo_col >= 0),
+  indicator_col      INTEGER CHECK (indicator_col IS NULL OR indicator_col >= 0),
+  -- The indicator word that means money going OUT ("DR", "Debit", "D").
+  indicator_out_value TEXT,
+  created_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version        INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  PRIMARY KEY (account_id, header_fingerprint),
+  CHECK (sign_mode <> 'debit_credit' OR (debit_col IS NOT NULL AND credit_col IS NOT NULL)),
+  CHECK (sign_mode = 'debit_credit' OR amount_col IS NOT NULL),
+  CHECK (sign_mode <> 'indicator'
+         OR (indicator_col IS NOT NULL AND indicator_out_value IS NOT NULL))
+) STRICT;
+
+-- table money_rule
+CREATE TABLE money_rule (
+  rule_id                 TEXT PRIMARY KEY,
+  match_kind              TEXT NOT NULL CHECK (match_kind IN ('is','contains','matches')),
+  pattern                 TEXT NOT NULL CHECK (length(trim(pattern)) > 0),
+  -- Inclusive bounds on the MAGNITUDE (`core_transaction.amount_minor`, > 0);
+  -- either may be absent.
+  amount_min_minor        INTEGER CHECK (amount_min_minor IS NULL OR amount_min_minor >= 0),
+  amount_max_minor        INTEGER CHECK (amount_max_minor IS NULL OR amount_max_minor >= 0),
+  account_id              TEXT REFERENCES core_account(account_id) ON DELETE CASCADE,
+  set_category_concept_id TEXT REFERENCES core_concept(concept_id),
+  set_display_name        TEXT CHECK (set_display_name IS NULL OR length(trim(set_display_name)) > 0),
+  position                INTEGER NOT NULL DEFAULT 0 CHECK (position >= 0),
+  created_at              TEXT NOT NULL,
+  updated_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version             INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  CHECK (amount_min_minor IS NULL OR amount_max_minor IS NULL
+         OR amount_min_minor <= amount_max_minor),
+  -- A rule that does nothing is not a rule.
+  CHECK (set_category_concept_id IS NOT NULL OR set_display_name IS NOT NULL),
+  FOREIGN KEY (rule_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
+) STRICT;
+
+-- table money_target
+CREATE TABLE money_target (
+  -- `YYYY-MM`: the civil month the plan is for (R-1099-2).
+  month               TEXT NOT NULL CHECK (month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),
+  category_concept_id TEXT NOT NULL REFERENCES core_concept(concept_id) ON DELETE CASCADE,
+  amount_minor        INTEGER NOT NULL CHECK (amount_minor >= 0),
+  currency            TEXT NOT NULL CHECK (length(currency) = 3),
+  -- Roll the month's unspent (or overspent) amount into the next month's.
+  carry               INTEGER NOT NULL DEFAULT 0 CHECK (carry IN (0,1)),
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version         INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  PRIMARY KEY (month, category_concept_id)
+) STRICT;
+
+-- table money_transaction
+CREATE TABLE money_transaction (
+  txn_id              TEXT PRIMARY KEY REFERENCES core_transaction(txn_id) ON DELETE CASCADE,
+  -- What the member (or a rule, for them) calls this line. The bank's words stay
+  -- in `core_transaction.description`, exactly as written. Both or neither.
+  display_name        TEXT CHECK (display_name IS NULL OR length(trim(display_name)) > 0),
+  display_name_source TEXT CHECK (display_name_source IN ('rule','member')),
+  memo                TEXT,
+  check_number        TEXT,
+  -- OFX `TRNTYPE` or the CSV's own Type column, as the bank wrote it.
+  bank_type           TEXT,
+  imported_from       TEXT NOT NULL CHECK (imported_from IN ('csv','ofx')),
+  imported_at         TEXT NOT NULL,
+  updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  row_version         INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
+  CHECK ((display_name IS NULL) = (display_name_source IS NULL))
 ) STRICT;
 
 -- table people_important_date
@@ -1821,146 +1673,11 @@ CREATE TABLE people_profile (
   updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
   -- Trash (#630 P5): trashing the profile hides the person from the People
-  -- projection while the canonical party, its links and its Tally
-  -- participation stay, so restore is lossless until the sweep purges.
+  -- projection while the canonical party and its links stay, so restore is
+  -- lossless until the sweep purges.
   deleted_at        TEXT,
   purge_at          TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   FOREIGN KEY (profile_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table replica_intent_outcome
-CREATE TABLE replica_intent_outcome (
-  intent_id     TEXT PRIMARY KEY,
-  device_id     TEXT NOT NULL,
-  app_id        TEXT NOT NULL,
-  action        TEXT NOT NULL,
-  payload_hash  TEXT NOT NULL,
-  status        TEXT NOT NULL CHECK (
-    status IN ('queued','sending','parked','executed','denied','failed','conflict')
-  ),
-  invocation_id TEXT,
-  reason        TEXT,
-  conflict_json TEXT CHECK (conflict_json IS NULL OR json_valid(conflict_json)),
-  -- WHO A PARKED WRITE IS WAITING ON (#929): 'owner' when the origin's member
-  -- must decide it, 'origin' when the write is queued for the vault that owns
-  -- the container, 'gateway' when the host cannot carry it yet. The seat draws
-  -- a person from it, so the label rides along — read off the LINK, never a
-  -- vault id a member has no name for.
-  waiting_on    TEXT CHECK (waiting_on IS NULL OR json_valid(waiting_on)),
-  -- The ORIGIN row versions this intent's answer stands for (#929, G1). A
-  -- member's pending row drops only when their replica holds them; without the
-  -- versions the seat would have to guess, and the guess is what makes a
-  -- pending badge clear before the row it wrote arrives.
-  answered_versions TEXT
-    CHECK (answered_versions IS NULL OR json_valid(answered_versions)),
-  -- THE CANONICAL COMMIT POSITION THIS ANSWER STANDS FOR (#996, R24). Every
-  -- executed outcome carries it, on the device path as well as the peer path,
-  -- and a seat keeps its pending projection until its applied cursor reaches
-  -- it. Without the number the seat has to guess, and the guess is what makes
-  -- a pending badge clear before the row it wrote arrives.
-  commit_seq    INTEGER CHECK (commit_seq IS NULL OR commit_seq > 0),
-  -- The (table, pk, row_version) set this intent's commit produced, read from
-  -- the captured rows rather than re-queried: a second read could see a LATER
-  -- commit's value and settle the intent against work it did not do.
-  produced_json TEXT CHECK (produced_json IS NULL OR json_valid(produced_json)),
-  -- THE INTENTS THIS ONE WAITS ON (#996, R23). A JSON array of intent ids: an
-  -- offline chain is causal, so a rename cannot execute before the create it
-  -- renames, and the gateway is where that is enforced rather than in each
-  -- app's retry loop.
-  depends_on    TEXT CHECK (depends_on IS NULL OR json_valid(depends_on)),
-  -- THE END OF THE IDEMPOTENCY WINDOW (#996, R24 / OQ-13). A retry after this
-  -- gets an explicit 'expired' answer naming what to do, never a silent
-  -- re-execution: the retained outcome is what makes a retry safe, so when it
-  -- is gone the honest answer is "I no longer know", not "here, do it again".
-  expires_at    TEXT,
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
-) STRICT;
-
--- table replica_invocation_commit
-CREATE TABLE replica_invocation_commit (
-  invocation_id       TEXT PRIMARY KEY,
-  command_id          TEXT NOT NULL,
-  intent_id           TEXT,
-  -- Redacted/non-secret post-check + S5 reconstruction material. This row is
-  -- in the canonical transaction, so replay can finish the audit band without
-  -- re-entering the command handler after a crash.
-  audit_json          TEXT NOT NULL CHECK (json_valid(audit_json)),
-  committed_at        TEXT NOT NULL,
-  -- Set only after one atomic audit-band transaction has verified checks,
-  -- provenance, receipt, evidence, explanation, and executed status.
-  journal_finalized_at TEXT
-) STRICT;
-
--- table replica_log
-CREATE TABLE replica_log (
-  seq             INTEGER PRIMARY KEY AUTOINCREMENT,
-  -- The canonical commit position every row of one transaction shares. An
-  -- intent's durable outcome names it (R24), and a seat applies one commit
-  -- per transaction with its cursor in the same transaction.
-  commit_seq      INTEGER NOT NULL CHECK (commit_seq > 0),
-  epoch           TEXT NOT NULL,
-  -- Two numbers, never one (R5): compatibility, then additive progress.
-  schema_epoch    INTEGER NOT NULL CHECK (schema_epoch >= 1),
-  ddl_version     INTEGER NOT NULL DEFAULT 0 CHECK (ddl_version >= 0),
-  -- PHYSICAL table name, not a logical entity: a seat holds the gateway's
-  -- schema and applies to the same table the gateway wrote.
-  "table"         TEXT NOT NULL,
-  op              TEXT NOT NULL CHECK (op IN ('insert','update','delete','ddl')),
-  -- The primary key as a JSON array, in declared key order — one element for
-  -- the ordinary case, several for a composite key. An array, not a scalar,
-  -- so a composite key needs no separator nobody can escape.
-  pk_json         TEXT NOT NULL CHECK (json_valid(pk_json)),
-  -- The full new row image for insert/update; the full OLD image for delete,
-  -- which is the only image a delete has and what a subscriber needs to judge
-  -- that the row left its closure. A `ddl` row carries its statement here.
-  row_json        TEXT CHECK (row_json IS NULL OR json_valid(row_json)),
-  -- 1 when the session flagged the change as trigger- or cascade-produced.
-  -- Carried, not filtered: a cascaded delete is a real row a seat must apply,
-  -- and the flag is what lets a reader tell it from a writer's own statement.
-  indirect        INTEGER NOT NULL DEFAULT 0 CHECK (indirect IN (0,1)),
-  -- What produced the commit — a command name, an import, the enricher. The
-  -- producer bound is denominated per producer, so this is how a bulk writer
-  -- is recognised without guessing from row counts.
-  producer        TEXT NOT NULL,
-  -- 1 when this commit's compressed size crossed the defer threshold, so a
-  -- metered seat may skip it and stay CONSISTENT BEHIND IT rather than
-  -- half-applied. Every row of one commit carries the same value: a commit is
-  -- the unit a seat applies, so it is the unit a seat defers.
-  deferred        INTEGER NOT NULL DEFAULT 0 CHECK (deferred IN (0,1)),
-  committed_at    TEXT NOT NULL
-, prior_json TEXT
-  CHECK (prior_json IS NULL OR json_valid(prior_json)), local INTEGER NOT NULL DEFAULT 0
-  CHECK (local IN (0,1))) STRICT;
-
--- table replica_meta
-CREATE TABLE replica_meta (
-  singleton        INTEGER PRIMARY KEY CHECK (singleton = 1),
-  epoch            TEXT NOT NULL,
-  floor_seq        INTEGER NOT NULL DEFAULT 0 CHECK (floor_seq >= 0),
-  schema_epoch     INTEGER NOT NULL CHECK (schema_epoch >= 1),
-  ddl_version      INTEGER NOT NULL DEFAULT 0 CHECK (ddl_version >= 0),
-  -- The last commit position handed out. Allocated inside the capturing
-  -- transaction, so a rolled-back commit leaves no gap a reader can see.
-  commit_seq       INTEGER NOT NULL DEFAULT 0 CHECK (commit_seq >= 0),
-  active_commit_id TEXT,
-  epoch_reason     TEXT NOT NULL DEFAULT 'created',
-  epoch_started_at TEXT NOT NULL,
-  updated_at       TEXT NOT NULL
-) STRICT;
-
--- table replica_parked_payload
-CREATE TABLE replica_parked_payload (
-  invocation_id TEXT PRIMARY KEY,
-  intent_id     TEXT,
-  identity_json TEXT NOT NULL CHECK (json_valid(identity_json)),
-  request_sealed TEXT NOT NULL,
-  grant_id      TEXT,
-  command_id    TEXT NOT NULL,
-  command_name  TEXT NOT NULL,
-  reason        TEXT NOT NULL,
-  parked_at     TEXT NOT NULL
 ) STRICT;
 
 -- table schedule_attendee
@@ -2024,7 +1741,7 @@ CREATE TABLE schedule_project (
 -- table schedule_recurrence_exception
 CREATE TABLE schedule_recurrence_exception (
   exception_id  TEXT PRIMARY KEY,
-  target_type   TEXT NOT NULL CHECK (target_type IN ('core.event','tally.recurring_expense')),
+  target_type   TEXT NOT NULL CHECK (target_type IN ('core.event')),
   target_id     TEXT NOT NULL,
   -- The series-local wall clock of the occurrence, in the series' own zone —
   -- never a UTC instant, and never suffixed 'Z' unless the series is itself
@@ -2125,180 +1842,6 @@ CREATE TABLE schedule_task (
   FOREIGN KEY (task_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
--- table share_authority
-CREATE TABLE share_authority (
-  authority_id   TEXT PRIMARY KEY,
-  -- 'automation' is ACCEPTED here with no writer yet: #928 wave 3 writes it,
-  -- when an automation's compiled manifest mints one row per (pack or entity
-  -- x read|act) and the owner's refusals become 'declined' rows. Accepting it
-  -- a wave early is what lets that wave land without a schema change. The
-  -- 'app' kind is deliberately NOT here — first-party apps are not principals
-  -- (#928 A1), and a third-party door would be a new answer, not a new value.
-  -- 'device' LEFT this vocabulary (#996, R17). Enrollment is full trust
-  -- (R11): a seat either holds this vault or it does not, and that is
-  -- `access_device`'s answer, not a standing one the member gave. Keeping it
-  -- here made "which surfaces may this seat reach" expressible in the same
-  -- table as "who may see this album", and row-level scoping exists in exactly
-  -- one place in the system -- the closure of a shared subject.
-  principal_kind TEXT NOT NULL CHECK (principal_kind IN
-    ('person','circle','harness','automation')),
-  principal_id   TEXT NOT NULL,
-  subject_type   TEXT NOT NULL,
-  -- '' where the subject is the whole of something the principal is already
-  -- scoped to: every scope, for a vault-wide egress
-  -- answer. Same empty-string argument as enrich_policy_rule.scope_ref — a NULL
-  -- would let one vault-wide answer be recorded twice under the live index.
-  subject_id     TEXT NOT NULL,
-  -- Per (principal_kind x subject_type) vocabulary, not one global union:
-  -- 'view'/'edit' for a share, the enrichment capability for an egress
-  -- answer. The registry that closes those
-  -- triples is ruling V-registry's, and lands with the share.* command pack.
-  verb           TEXT NOT NULL CHECK (length(verb) BETWEEN 1 AND 64),
-  duration       TEXT NOT NULL CHECK (duration IN ('standing','until-date')),
-  expires_at     TEXT,
-  -- A refusal is an ANSWER, not an absent grant (ruling V-table): forgetting a
-  -- 'declined' row would make "asked and told no" indistinguishable from "never
-  -- asked", and it is what ruling V-mask's per-party refusal mask is written as.
-  decision       TEXT NOT NULL CHECK (decision IN ('granted','declined')),
-  granted_at     TEXT NOT NULL,
-  -- The party who answered. NULL only where the member answered about their own
-  -- machinery and no actor party was ever recorded (the egress answers carry
-  -- none); the CHECK below keeps every person/circle row honest, which is what
-  -- makes grant/grant-store.ts's non-null narrowing sound.
-  granted_by     TEXT REFERENCES core_party(party_id),
-  revoked_at     TEXT,
-  -- Why the answer ended, when it ended for a reason the member did not state
-  -- in the moment (#916, E2): the purge of the subject revokes every live
-  -- answer about it through a trigger on `core_entity`, and 'subject-purged'
-  -- is what that trigger writes. NULL for an ordinary owner revoke, where the
-  -- receipt is the reason.
-  revoked_reason TEXT,
-  -- -> access.receipt, in the append-only audit band. A VALUE, not a key: an
-  -- audit outlives its subject (#916). NULL until the receipt is written,
-  -- never a second copy of it.
-  receipt_id     TEXT,
-  CHECK ((duration = 'until-date') = (expires_at IS NOT NULL)),
-  -- 'automation' is deliberately NOT exempted: the owner APPROVES an
-  -- automation's manifest, so there is always a party who answered, and a row
-  -- minted without one would be an automation that granted itself (#928 A3).
-  CHECK (granted_by IS NOT NULL OR principal_kind = 'harness'),
-  -- The one principal whose id is a closed vocabulary rather than a row id:
-  -- a harness principal is an ENGINE CLASS, and an egress class outside the
-  -- three enrich-gate.ts knows is unrepresentable here exactly as it was
-  -- unrepresentable in `enrich_consent.egress` (#807).
-  CHECK (principal_kind <> 'harness'
-         OR principal_id IN ('on-device','gateway','provider'))
-) STRICT;
-
--- table share_authority_request
-CREATE TABLE share_authority_request (
-  request_id   TEXT PRIMARY KEY,
-  -- The automation's own id (its enrolment key), the same principal id
-  -- `share_authority.principal_id` carries for an 'automation' row.
-  principal_id TEXT NOT NULL,
-  scopes_json  TEXT NOT NULL CHECK (json_valid(scopes_json)),
-  requested_at TEXT NOT NULL,
-  decided_at   TEXT,
-  decision     TEXT CHECK (decision IN ('approved','denied'))
-) STRICT;
-
--- table share_authority_use
-CREATE TABLE share_authority_use (
-  authority_id TEXT PRIMARY KEY,
-  last_used_at TEXT NOT NULL
-) STRICT;
-
--- table share_delivery_config
-CREATE TABLE share_delivery_config (
-  grant_id         TEXT PRIMARY KEY
-    REFERENCES share_authority(authority_id) ON DELETE CASCADE,
-  max_size_bytes   INTEGER CHECK (max_size_bytes IS NULL OR max_size_bytes >= 0),
-  departure_policy TEXT NOT NULL DEFAULT 'remove-member-only'
-    CHECK (departure_policy IN ('remove-member-only','retain-ledger-history'))
-) STRICT;
-
--- table share_fulfillment
-CREATE TABLE share_fulfillment (
-  grant_id      TEXT NOT NULL
-    REFERENCES share_authority(authority_id) ON DELETE CASCADE,
-  peer_vault_id TEXT NOT NULL,
-  -- awaiting_channel means the peer vault is known and the link to it has
-  -- ended (#903). It is deliberately NOT narrowed out of this CHECK: that
-  -- state is still reachable — link, share, then unlink — and only the
-  -- retired reading of it ("waiting on an invitation to be claimed") is gone.
-  state         TEXT NOT NULL CHECK (state IN
-    ('awaiting_channel','syncing','delivered','remove_sent','removed')),
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  -- Latest note: a refusal reason, a transport error, why a removal stalled.
-  detail        TEXT,
-  -- When the subject first reached this peer. NULL = never delivered.
-  delivered_at  TEXT,
-  PRIMARY KEY (grant_id, peer_vault_id)
-) STRICT;
-
--- table share_party_vault_binding
-CREATE TABLE share_party_vault_binding (
-  binding_id TEXT PRIMARY KEY,
-  party_id   TEXT NOT NULL REFERENCES core_party(party_id),
-  vault_id   TEXT NOT NULL,
-  vault_public_key TEXT,
-  linked_at  TEXT NOT NULL,
-  revoked_at TEXT,
-  UNIQUE (party_id, vault_id)
-) STRICT;
-
--- table share_subscription
-CREATE TABLE share_subscription (
-  -- NO FOREIGN KEY to `share_authority`, deliberately: the AUDIENCE holds this
-  -- row and never holds the origin's answer. Same reading as the member seat's
-  -- intent overlay — a key here would make holding the subscription depend on
-  -- holding the grant that authorizes it, which only the origin has.
-  authority_id      TEXT NOT NULL,
-  audience_vault_id TEXT NOT NULL,
-  origin_vault_id   TEXT NOT NULL,
-  -- Derivable from `share_authority` on the ORIGIN and only there: the
-  -- audience never holds the grant, so its own row has to carry the subject.
-  subject_type      TEXT NOT NULL,
-  -- The origin's replica epoch this cursor is measured in. A changed epoch is
-  -- a re-bootstrap, exactly as it is for a device (the phone's rule): the seat
-  -- does not extend a floor on a subscriber's behalf.
-  cursor_epoch      TEXT,
-  cursor_seq        INTEGER NOT NULL DEFAULT 0 CHECK (cursor_seq >= 0),
-  -- 'removed' is the audience's own acknowledgement that the grant's rows are
-  -- gone. The origin's `share_fulfillment` vocabulary is untouched.
-  state             TEXT NOT NULL CHECK (state IN ('subscribed','removed')),
-  subscribed_at     TEXT NOT NULL,
-  removed_at        TEXT,
-  detail            TEXT,
-  updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  PRIMARY KEY (authority_id, audience_vault_id)
-) STRICT;
-
--- table share_subscription_lineage
-CREATE TABLE share_subscription_lineage (
-  authority_id       TEXT NOT NULL,
-  target_type        TEXT NOT NULL,
-  target_id          TEXT NOT NULL,
-  origin_item_id     TEXT NOT NULL,
-  origin_row_version INTEGER NOT NULL CHECK (origin_row_version >= 0),
-  audience_row_version INTEGER NOT NULL DEFAULT 0
-    CHECK (audience_row_version >= 0),
-  PRIMARY KEY (authority_id, target_type, target_id),
-  FOREIGN KEY (target_type, target_id)
-    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table share_subscription_member
-CREATE TABLE share_subscription_member (
-  authority_id TEXT NOT NULL,
-  table_name   TEXT NOT NULL,
-  pk           TEXT NOT NULL,
-  entered_seq  INTEGER NOT NULL CHECK (entered_seq >= 0),
-  PRIMARY KEY (authority_id, table_name, pk)
-) STRICT;
-
 -- table social_circle
 CREATE TABLE social_circle (
   circle_id      TEXT PRIMARY KEY,
@@ -2396,476 +1939,9 @@ CREATE TABLE social_thread_participant (
   FOREIGN KEY (tp_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
--- table sync_connection
-CREATE TABLE sync_connection (
-  connection_id TEXT PRIMARY KEY,
-  kind          TEXT NOT NULL,
-  label         TEXT NOT NULL,
-  principal     TEXT,
-  status        TEXT NOT NULL CHECK (status IN ('active','needs-auth','failing','paused')),
-  trust         TEXT NOT NULL CHECK (trust IN ('staged','auto-publish')),
-  -- Per-class standing consent for enrichment (issue #310 C3): NULL means
-  -- auto-publish trust covers every derived-data class; a JSON array
-  -- (['caption','tag','face','collection','filing']) narrows it — classes
-  -- outside it stage as drafts for review instead of landing silently.
-  enrich_classes_json TEXT CHECK (enrich_classes_json IS NULL OR json_valid(enrich_classes_json)),
-  created_at    TEXT NOT NULL,
-  last_run_at   TEXT,
-  UNIQUE (kind, label)
-) STRICT;
+---- views (0)
 
--- table sync_connection_credential
-CREATE TABLE sync_connection_credential (
-  connection_id    TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
-  cred_kind        TEXT NOT NULL CHECK (cred_kind IN ('oauth2','api_key')),
-  oauth_mode       TEXT NOT NULL DEFAULT 'byo' CHECK (oauth_mode IN ('byo','assist')),
-  provider         TEXT,
-  auth_url         TEXT,
-  token_url        TEXT,
-  scopes           TEXT,
-  client_id        TEXT,
-  client_secret    TEXT,
-  access_token     TEXT,
-  refresh_token    TEXT,
-  api_key          TEXT,
-  token_expires_at TEXT,
-  allowed_hosts    TEXT NOT NULL CHECK (json_valid(allowed_hosts)),
-  -- The exchange-minted HMAC capability an Assist refresh token is redeemable
-  -- at the OAuth Worker with (#865). Sealed, re-persisted on every rotation.
-  refresh_capability TEXT,
-  updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
-) STRICT;
-
--- table sync_connection_cursor
-CREATE TABLE sync_connection_cursor (
-  cursor_id     TEXT PRIMARY KEY,
-  connection_id TEXT NOT NULL
-    REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
-  key           TEXT NOT NULL,
-  value_json    TEXT NOT NULL CHECK (json_valid(value_json)),
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  UNIQUE (connection_id, key)
-) STRICT;
-
--- table sync_connection_health
-CREATE TABLE sync_connection_health (
-  connection_id TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
-  auth_note     TEXT,
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1)
-) STRICT;
-
--- table sync_connection_run
-CREATE TABLE sync_connection_run (
-  run_id        TEXT PRIMARY KEY,
-  connection_id TEXT NOT NULL
-    REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
-  started_at    TEXT NOT NULL,
-  finished_at   TEXT,
-  status        TEXT NOT NULL CHECK (status IN ('running','ok','failed','aborted')) ,
-  staged        INTEGER NOT NULL DEFAULT 0,
-  published     INTEGER NOT NULL DEFAULT 0,
-  skipped       INTEGER NOT NULL DEFAULT 0,
-  error         TEXT
-) STRICT;
-
--- table sync_external_entity
-CREATE TABLE sync_external_entity (
-  map_id        TEXT PRIMARY KEY,
-  connection_id TEXT NOT NULL
-    REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
-  external_id   TEXT NOT NULL,
-  target_type   TEXT NOT NULL,
-  target_id     TEXT NOT NULL,
-  content_hash  TEXT NOT NULL,
-  first_seen_at TEXT NOT NULL,
-  last_seen_at  TEXT NOT NULL,
-  gone_upstream INTEGER NOT NULL CHECK (gone_upstream IN (0,1)) DEFAULT 0,
-  UNIQUE (connection_id, external_id),
-  FOREIGN KEY (target_type, target_id)
-    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table sync_import_batch
-CREATE TABLE sync_import_batch (
-  batch_id      TEXT PRIMARY KEY,
-  -- NO CASCADE, deliberately (#916, W2a): a batch is RECEIPTED HISTORY — what
-  -- was imported, when, and what it became — so removing the connection is
-  -- REFUSED while any exists rather than shredding the record of it.
-  -- `sync.remove_connection` says so in its denial.
-  connection_id TEXT NOT NULL REFERENCES sync_connection(connection_id),
-  status        TEXT NOT NULL CHECK (status IN ('draft','published','discarded')),
-  created_at    TEXT NOT NULL,
-  resolved_at   TEXT,
-  summary_json  TEXT NOT NULL CHECK (json_valid(summary_json))
-) STRICT;
-
--- table sync_import_row
-CREATE TABLE sync_import_row (
-  row_id              TEXT PRIMARY KEY,
-  batch_id            TEXT NOT NULL
-    REFERENCES sync_import_batch(batch_id) ON DELETE CASCADE,
-  seq                 INTEGER NOT NULL,
-  entity_type         TEXT NOT NULL,
-  external_id         TEXT NOT NULL,
-  payload_json        TEXT NOT NULL CHECK (json_valid(payload_json)),
-  disposition         TEXT NOT NULL CHECK (disposition IN ('create','update','skip','merge-candidate')),
-  target_entity_id    TEXT,
-  published_entity_id TEXT,
-  note                TEXT
-) STRICT;
-
--- table tally_expense
-CREATE TABLE tally_expense (
-  expense_id   TEXT PRIMARY KEY,
-  -- NULL for a group-less 1:1 expense (GAPS #4), mirroring how a settlement
-  -- has always been free-standing. Participants on a group-less expense are
-  -- validated against the friend roster instead of a circle.
-  group_id     TEXT REFERENCES tally_group(group_id) ON DELETE CASCADE,
-  description  TEXT NOT NULL,
-  amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
-  -- The currency `amount_minor` IS (#916, R1). Splits, payers and line items
-  -- inherit it BY CONSTRUCTION — they are shares of this amount and cannot be
-  -- denominated in anything else, so none of them carries a column. A trigger
-  -- (`tally_expense_currency_matches_group`, below) holds a grouped expense
-  -- to its group's currency; a group-less 1:1 expense is free to be in any.
-  currency     TEXT NOT NULL CHECK (length(currency) = 3),
-  -- The PRINCIPAL payer, always populated and always one of the payer rows.
-  -- Every expense also writes its full payer set to tally_expense_payer (one
-  -- degenerate row in the single-payer case), so a reader that only knows this
-  -- column stays right for the single-payer case and the folds read one shape.
-  paid_by      TEXT NOT NULL REFERENCES core_party(party_id),
-  -- How the shares were arrived at, so an edit re-opens the way it was
-  -- entered. The vault still stores RESOLVED shares — the method and its
-  -- parameters are provenance, never a second arithmetic path.
-  split_method TEXT NOT NULL DEFAULT 'exact' CHECK (split_method IN
-    ('equally','exact','percentages','shares','adjusted','by_line')),
-  split_params_json TEXT
-    CHECK (split_params_json IS NULL OR json_valid(split_params_json)),
-  spent_on     TEXT NOT NULL,
-  category     TEXT NOT NULL CHECK (category IN
-    ('food','groceries','rent','utilities','transport','fun','travel','shopping','general')),
-  txn_id       TEXT REFERENCES core_transaction(txn_id),
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  -- Trash pair + guard (issue #441 A4). tally_expense_split cascades on purge.
-  deleted_at   TEXT,
-  purge_at     TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL), original_amount_minor INTEGER
-  CHECK (original_amount_minor IS NULL OR original_amount_minor > 0), original_currency TEXT
-  CHECK (original_currency IS NULL OR length(original_currency) = 3), settlement_currency TEXT
-  CHECK (settlement_currency IS NULL OR length(settlement_currency) = 3), rate_scaled INTEGER
-  CHECK (rate_scaled IS NULL OR rate_scaled > 0), rate_scale INTEGER
-  CHECK (rate_scale IS NULL OR rate_scale BETWEEN 0 AND 12), rate_source TEXT, rate_date TEXT, recurring_template_id TEXT
-  REFERENCES tally_recurring_expense(template_id) ON DELETE SET NULL,
-  FOREIGN KEY (expense_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_expense_line_allocation
-CREATE TABLE tally_expense_line_allocation (
-  line_item_id TEXT NOT NULL REFERENCES tally_expense_line_item(line_item_id) ON DELETE CASCADE,
-  party_id     TEXT NOT NULL REFERENCES core_party(party_id),
-  share_minor  INTEGER NOT NULL CHECK (share_minor >= 0),
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  PRIMARY KEY (line_item_id, party_id)
-) STRICT;
-
--- table tally_expense_line_item
-CREATE TABLE tally_expense_line_item (
-  line_item_id TEXT PRIMARY KEY,
-  expense_id   TEXT NOT NULL REFERENCES tally_expense(expense_id) ON DELETE CASCADE,
-  -- The role='receipt' attachment this line was read off, or NULL for the
-  -- "By line" division that never had a photo (#883).
-  receipt_id   TEXT REFERENCES core_attachment(attachment_id) ON DELETE SET NULL,
-  kind         TEXT NOT NULL CHECK (kind IN ('item','tax','tip')),
-  description  TEXT NOT NULL,
-  amount_minor INTEGER NOT NULL CHECK (amount_minor >= 0),
-  sort_order   INTEGER NOT NULL CHECK (sort_order >= 0),
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  FOREIGN KEY (line_item_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_expense_payer
-CREATE TABLE tally_expense_payer (
-  expense_id  TEXT NOT NULL REFERENCES tally_expense(expense_id) ON DELETE CASCADE,
-  party_id    TEXT NOT NULL REFERENCES core_party(party_id),
-  paid_minor  INTEGER NOT NULL CHECK (paid_minor >= 0),
-  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  PRIMARY KEY (expense_id, party_id)
-) STRICT;
-
--- table tally_expense_split
-CREATE TABLE tally_expense_split (
-  expense_id  TEXT NOT NULL REFERENCES tally_expense(expense_id) ON DELETE CASCADE,
-  party_id    TEXT NOT NULL REFERENCES core_party(party_id),
-  share_minor INTEGER NOT NULL CHECK (share_minor >= 0),
-  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  PRIMARY KEY (expense_id, party_id)
-) STRICT;
-
--- table tally_friend
-CREATE TABLE tally_friend (
-  friend_id    TEXT PRIMARY KEY,
-  party_id     TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  FOREIGN KEY (friend_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_group
-CREATE TABLE tally_group (
-  group_id   TEXT PRIMARY KEY,
-  circle_id  TEXT NOT NULL UNIQUE REFERENCES social_circle(circle_id),
-  icon       TEXT NOT NULL,
-  color      TEXT NOT NULL,
-  -- Debt simplification rewires who owes whom, so it is OFF unless this group
-  -- turns it on. The flag is the ONLY thing stored: the proposal itself is
-  -- derived at read time and never written, and an accepted proposal is
-  -- recorded as ordinary settlements.
-  simplify_opt_in INTEGER NOT NULL DEFAULT 0
-    CHECK (simplify_opt_in IN (0,1)),
-  -- Archive is not delete: an archived group drops out of the default lists
-  -- and keeps every row. It needs no settled balance.
-  archived_at TEXT,
-  -- THE GROUP'S CURRENCY (#916, R1 / review 4.1). Splitwise's own model puts
-  -- the currency on the group and every expense in it agrees; the vault stored
-  -- amounts in minor units with no currency at all outside
-  -- `tally_obligation` and the cross-currency columns, so two expenses in
-  -- different currencies summed as if they were the same money. The group is
-  -- where it belongs, because a group is the ledger everyone in it reads.
-  currency   TEXT NOT NULL CHECK (length(currency) = 3),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  FOREIGN KEY (group_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_nudge
-CREATE TABLE tally_nudge (
-  nudge_id     TEXT PRIMARY KEY,
-  party_id     TEXT NOT NULL REFERENCES core_party(party_id),
-  group_id     TEXT REFERENCES tally_group(group_id) ON DELETE CASCADE,
-  -- The net the owner saw when they prepared it, in minor units. Provenance
-  -- for the reminder's wording — never read back as a balance.
-  as_of_minor  INTEGER NOT NULL,
-  note         TEXT,
-  prepared_at  TEXT NOT NULL,
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  FOREIGN KEY (nudge_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_obligation
-CREATE TABLE tally_obligation (
-  obligation_id TEXT PRIMARY KEY,
-  from_party    TEXT NOT NULL REFERENCES core_party(party_id),
-  to_party      TEXT NOT NULL REFERENCES core_party(party_id),
-  amount_minor  INTEGER NOT NULL CHECK (amount_minor > 0),
-  currency      TEXT NOT NULL CHECK (length(currency) = 3),
-  reason        TEXT,
-  incurred_on   TEXT NOT NULL,
-  settled_at    TEXT,
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  deleted_at    TEXT,
-  purge_at      TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
-  CHECK (from_party <> to_party),
-  FOREIGN KEY (obligation_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_recurring_expense
-CREATE TABLE tally_recurring_expense (
-  template_id           TEXT PRIMARY KEY,
-  group_id              TEXT NOT NULL
-    REFERENCES tally_group(group_id) ON DELETE CASCADE,
-  description           TEXT NOT NULL,
-  original_amount_minor INTEGER NOT NULL CHECK (original_amount_minor > 0),
-  original_currency     TEXT NOT NULL CHECK (length(original_currency) = 3),
-  settlement_currency   TEXT NOT NULL CHECK (length(settlement_currency) = 3),
-  paid_by               TEXT NOT NULL REFERENCES core_party(party_id),
-  category              TEXT NOT NULL,
-  -- The split is ROWS (#916, owner decision D3), in
-  -- `tally_recurring_expense_split` below. It used to be a JSON array of
-  -- {party_id, share} objects, which put party ids somewhere identity merge
-  -- could not see them, the purge cascade could not reach them, and no CHECK
-  -- could hold their shares to the template's amount.
-  rrule                 TEXT NOT NULL,
-  anchor_start          TEXT NOT NULL,
-  -- `tz`, not `time_zone` (#916, R4): one name for a zone column.
-  tz                    TEXT NOT NULL,
-  rate_scaled           INTEGER CHECK (rate_scaled IS NULL OR rate_scaled > 0),
-  rate_scale            INTEGER CHECK (rate_scale IS NULL OR rate_scale BETWEEN 0 AND 12),
-  rate_source           TEXT,
-  rate_date             TEXT,
-  status                TEXT NOT NULL DEFAULT 'active'
-    CHECK (status IN ('active','paused','ended')),
-  last_materialized_start TEXT,
-  created_at             TEXT NOT NULL,
-  updated_at             TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  FOREIGN KEY (template_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table tally_recurring_expense_split
-CREATE TABLE tally_recurring_expense_split (
-  template_id  TEXT NOT NULL
-    REFERENCES tally_recurring_expense(template_id) ON DELETE CASCADE,
-  party_id     TEXT NOT NULL REFERENCES core_party(party_id),
-  share_minor  INTEGER NOT NULL CHECK (share_minor >= 0),
-  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  PRIMARY KEY (template_id, party_id)
-) STRICT;
-
--- table tally_settlement
-CREATE TABLE tally_settlement (
-  settlement_id TEXT PRIMARY KEY,
-  -- NULL for a free-standing friend-to-friend payment (not scoped to a group).
-  group_id      TEXT REFERENCES tally_group(group_id) ON DELETE CASCADE,
-  from_party    TEXT NOT NULL REFERENCES core_party(party_id),
-  to_party      TEXT NOT NULL REFERENCES core_party(party_id),
-  amount_minor  INTEGER NOT NULL CHECK (amount_minor > 0),
-  -- What was PAID, in the currency it was paid in (#916, R1). The trigger
-  -- below holds a grouped settlement to its group's currency.
-  currency      TEXT NOT NULL CHECK (length(currency) = 3),
-  paid_on       TEXT NOT NULL,
-  txn_id        TEXT REFERENCES core_transaction(txn_id),
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version >= 1),
-  -- Trash pair + guard (issue #441 A4).
-  deleted_at    TEXT,
-  purge_at      TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
-  -- A payment from someone to themselves is not a payment (#916, R2 / review
-  -- 10.2). `tally_obligation` has carried this CHECK since #450; the
-  -- settlement did not, which is how `core.merge_party` could fold two
-  -- parties into one and leave a self-payment behind that every balance then
-  -- counted twice.
-  CHECK (from_party <> to_party),
-  FOREIGN KEY (settlement_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
-) STRICT;
-
--- table trigger_ingress
-CREATE TABLE trigger_ingress (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  source        TEXT NOT NULL,
-  source_key    TEXT NOT NULL,
-  delivery_id   TEXT NOT NULL,
-  received_at   INTEGER NOT NULL,
-  payload_json  TEXT,
-  payload_ref   TEXT,
-  expires_at    INTEGER NOT NULL,
-  UNIQUE (source, source_key, delivery_id),
-  CHECK (source IN ('webhook','poll')),
-  CHECK (payload_json IS NOT NULL OR payload_ref IS NOT NULL)
-) STRICT;
-
--- table turns
-CREATE TABLE turns (
-  id                       TEXT PRIMARY KEY,
-  conversation_id          TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  seq                      INTEGER NOT NULL,
-  parent_turn_id           TEXT,
-  trigger                  TEXT NOT NULL,
-  trigger_origin           TEXT,
-  note                     TEXT,
-  summary                  TEXT,
-  output_json              TEXT,
-  retry_of                 TEXT,
-  idempotency_key          TEXT,
-  -- Explicit handoff-cost marker (D4): estimated canonical-ledger prompt
-  -- tokens injected on this turn, separate from ACP-reported usage.
-  hydration_tokens         INTEGER,
-  ok                       INTEGER NOT NULL DEFAULT 0,
-  error                    TEXT,
-  feedback                 TEXT,
-  pinned                   INTEGER NOT NULL DEFAULT 0,
-  started_at               INTEGER NOT NULL,
-  ended_at                 INTEGER,
-  total_input_tokens       INTEGER,
-  total_output_tokens      INTEGER,
-  total_cache_read_tokens  INTEGER,
-  total_cache_write_tokens INTEGER,
-  total_cost_usd           REAL,
-  step_count               INTEGER,
-  tool_count               INTEGER,
-  CHECK (trigger IN ('scheduled','manual','replay','on_failure','compile','interactive')),
-  CHECK (feedback IS NULL OR feedback IN ('up','down'))
-) STRICT;
-
----- views (1)
-
--- view run_summary
-CREATE VIEW run_summary AS
-  SELECT
-t.id             AS run_id,
-c.kind           AS kind,
-CASE WHEN c.kind = 'automation' THEN c.automation_id END AS automation_ref,
-CASE
-  WHEN c.kind = 'automation' AND instr(c.automation_id, '/') > 1
-    THEN substr(c.automation_id, 1, instr(c.automation_id, '/') - 1)
-  ELSE c.app_id
-END              AS app_id,
--- The automation's display name (issue: orphaned runs showing the raw
--- ref) — conversations.title is refreshed when the stable automation
--- conversation is ensured and outlives the automation manifest being
--- deleted. NULLIF empties it out since the column defaults to ''.
-CASE WHEN c.kind = 'automation' THEN NULLIF(c.title, '') END AS automation_name,
-t.trigger        AS trigger,
-t.trigger_origin AS trigger_origin,
-t.ok             AS ok,
-t.pinned         AS pinned,
-t.summary        AS summary,
-t.note           AS note,
-t.error          AS error,
-t.retry_of       AS retry_of,
-(SELECT i.model FROM items i
-  WHERE i.turn_id = t.id AND i.model IS NOT NULL AND i.kind IN ('step','delegate')
-  GROUP BY i.model
-  ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-  LIMIT 1)       AS model,
--- Dominant harness kind for the Insights harness breakdown (issue #514).
-(SELECT i.harness FROM items i
-  WHERE i.turn_id = t.id AND i.harness IS NOT NULL AND i.kind IN ('step','delegate')
-  GROUP BY i.harness
-  ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-  LIMIT 1)       AS harness,
--- Effort is recorded only after ACP confirms thought_level. Picking
--- the dominant confirmed value mirrors the model/harness rollups.
-(SELECT i.effort FROM items i
-  WHERE i.turn_id = t.id AND i.effort IS NOT NULL AND i.kind IN ('step','delegate')
-  GROUP BY i.effort
-  ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-  LIMIT 1)       AS effort,
-t.started_at               AS started_at,
-t.ended_at                 AS ended_at,
-t.total_input_tokens       AS total_input_tokens,
-t.total_output_tokens      AS total_output_tokens,
-t.total_cache_read_tokens  AS total_cache_read_tokens,
-t.total_cache_write_tokens AS total_cache_write_tokens,
-t.hydration_tokens          AS hydration_tokens,
-t.total_cost_usd           AS total_cost_usd,
-t.step_count               AS step_count,
-t.tool_count               AS tool_count
-  FROM turns t
-  JOIN conversations c ON c.id = t.conversation_id
-  WHERE t.ended_at IS NOT NULL;
-
----- indexes (244)
+---- indexes (170)
 
 -- index access_provenance_occurred_page_idx
 CREATE INDEX access_provenance_occurred_page_idx
@@ -2874,6 +1950,9 @@ CREATE INDEX access_provenance_occurred_page_idx
 -- index access_receipt_occurred_page_idx
 CREATE INDEX access_receipt_occurred_page_idx
   ON access_receipt(occurred_at, receipt_id);
+
+-- index chat_thread_recent_idx
+CREATE INDEX chat_thread_recent_idx ON chat_thread(updated_at DESC, thread_id DESC);
 
 -- index core_attachment_target_role_page_idx
 CREATE INDEX core_attachment_target_role_page_idx
@@ -2969,6 +2048,10 @@ CREATE UNIQUE INDEX core_tag_owner_assertion_idx
   ON core_tag(target_type, target_id, concept_id)
   WHERE tagged_by_party_id IS NOT NULL;
 
+-- index core_transaction_account_external_idx
+CREATE UNIQUE INDEX core_transaction_account_external_idx
+  ON core_transaction(account_id, external_id) WHERE external_id IS NOT NULL;
+
 -- index core_transaction_external_idx
 CREATE INDEX core_transaction_external_idx
   ON core_transaction(external_id) WHERE external_id IS NOT NULL;
@@ -3014,35 +2097,15 @@ CREATE INDEX idx_attachment_content ON core_attachment(content_id);
 -- index idx_attachment_target
 CREATE INDEX idx_attachment_target ON core_attachment(target_type, target_id);
 
--- index idx_attachments_hash
-CREATE INDEX idx_attachments_hash
-  ON attachments(hash);
-
--- index idx_attachments_item
-CREATE INDEX idx_attachments_item
-  ON attachments(item_id);
-
 -- index idx_attendee_party
 CREATE INDEX idx_attendee_party ON schedule_attendee(party_id);
-
--- index idx_automation_trigger_cursor_updated
-CREATE INDEX idx_automation_trigger_cursor_updated
-  ON automation_trigger_cursor(updated_at);
 
 -- index idx_blob_access_lru
 CREATE INDEX idx_blob_access_lru ON blob_access(last_access_at);
 
--- index idx_blob_device_content_key_device
-CREATE INDEX idx_blob_device_content_key_device
-  ON blob_device_content_key(device_id);
-
 -- index idx_blob_ingress_expiry
 CREATE INDEX idx_blob_ingress_expiry
   ON blob_ingress_session(state, expires_at);
-
--- index idx_blob_outbox_retry
-CREATE INDEX idx_blob_outbox_retry
-  ON blob_outbox(state, next_retry_at, created_at);
 
 -- index idx_blob_staging_derivative_slot
 CREATE UNIQUE INDEX idx_blob_staging_derivative_slot
@@ -3063,7 +2126,19 @@ CREATE INDEX idx_blob_staging_sha ON blob_staging(content_hash);
 CREATE INDEX idx_calendar_owner_party ON schedule_calendar(owner_party_id);
 
 -- index idx_capability_command
-CREATE INDEX idx_capability_command ON agent_capability(command_id);
+CREATE INDEX idx_capability_command ON command_capability(command_id);
+
+-- index idx_chat_attachment_asset
+CREATE INDEX idx_chat_attachment_asset
+  ON chat_message_attachment(asset_id) WHERE asset_id IS NOT NULL;
+
+-- index idx_chat_attachment_document
+CREATE INDEX idx_chat_attachment_document
+  ON chat_message_attachment(document_id) WHERE document_id IS NOT NULL;
+
+-- index idx_chat_attachment_thumb
+CREATE INDEX idx_chat_attachment_thumb
+  ON chat_message_attachment(thumb_content_id) WHERE thumb_content_id IS NOT NULL;
 
 -- index idx_circle_member_party
 CREATE INDEX idx_circle_member_party ON social_circle_member(party_id);
@@ -3082,7 +2157,7 @@ CREATE INDEX idx_collection_owner_party ON core_collection(owner_party_id);
 CREATE INDEX idx_collection_parent_collection ON core_collection(parent_collection_id);
 
 -- index idx_command_invocation_receipt
-CREATE INDEX idx_command_invocation_receipt ON agent_command_invocation(receipt_id);
+CREATE INDEX idx_command_invocation_receipt ON command_invocation(receipt_id);
 
 -- index idx_concept_broader_concept
 CREATE INDEX idx_concept_broader_concept ON core_concept(broader_concept_id);
@@ -3093,51 +2168,9 @@ CREATE INDEX idx_content_derivative_content ON core_content_derivative(content_i
 -- index idx_content_item_creator_party
 CREATE INDEX idx_content_item_creator_party ON core_content_item(creator_party_id);
 
--- index idx_content_item_origin_device
-CREATE INDEX idx_content_item_origin_device ON core_content_item(origin_device_id);
-
 -- index idx_content_representation_content
 CREATE INDEX idx_content_representation_content
   ON core_content_representation(content_id);
-
--- index idx_conversation_archive_conv
-CREATE INDEX idx_conversation_archive_conv
-  ON conversation_archive(conversation_id, seq_from);
-
--- index idx_conversation_archive_sha
-CREATE INDEX idx_conversation_archive_sha
-  ON conversation_archive(segment_hash);
-
--- index idx_conversation_archive_unpruned
-CREATE INDEX idx_conversation_archive_unpruned
-  ON conversation_archive(pruned_at) WHERE pruned_at IS NULL;
-
--- index idx_conversation_digest_automation
-CREATE INDEX idx_conversation_digest_automation
-  ON conversation_digest(automation_ref);
-
--- index idx_conversation_harness_latest
-CREATE INDEX idx_conversation_harness_latest
-  ON conversation_harness_sessions(conversation_id, harness_kind, status, last_used_at DESC);
-
--- index idx_conversation_provider_consent_active
-CREATE INDEX idx_conversation_provider_consent_active
-  ON conversation_provider_consent(conversation_id, harness_kind, subsystem, revoked_at);
-
--- index idx_conversations_app
-CREATE INDEX idx_conversations_app
-  ON conversations(app_id, updated_at DESC);
-
--- index idx_conversations_automation
-CREATE INDEX idx_conversations_automation
-  ON conversations(automation_id);
-
--- index idx_conversations_user_updated
-CREATE INDEX idx_conversations_user_updated
-  ON conversations(user_id, pinned DESC, updated_at DESC);
-
--- index idx_device_owner_party
-CREATE INDEX idx_device_owner_party ON access_device(owner_party_id);
 
 -- index idx_document_current_content
 CREATE INDEX idx_document_current_content ON core_document(current_content_id);
@@ -3196,10 +2229,10 @@ CREATE INDEX idx_event_organizer_party ON core_event(organizer_party_id);
 CREATE INDEX idx_event_purge_at ON core_event(purge_at);
 
 -- index idx_evidence_invocation
-CREATE INDEX idx_evidence_invocation ON agent_evidence(invocation_id);
+CREATE INDEX idx_evidence_invocation ON command_evidence(invocation_id);
 
 -- index idx_evidence_prov
-CREATE INDEX idx_evidence_prov ON agent_evidence(prov_id);
+CREATE INDEX idx_evidence_prov ON command_evidence(prov_id);
 
 -- index idx_face_region_asset
 CREATE INDEX idx_face_region_asset ON media_face_region(asset_id);
@@ -3210,32 +2243,11 @@ CREATE INDEX idx_face_region_confirmed_by_party ON media_face_region(confirmed_b
 -- index idx_face_region_party
 CREATE INDEX idx_face_region_party ON media_face_region(party_id);
 
--- index idx_harness_health_breaker
-CREATE INDEX idx_harness_health_breaker
-  ON harness_health(workspace_context, harness_kind, breaker_until);
-
 -- index idx_important_date_party
 CREATE INDEX idx_important_date_party ON people_important_date(party_id);
 
 -- index idx_invocation_check_invocation
-CREATE INDEX idx_invocation_check_invocation ON agent_invocation_check(invocation_id);
-
--- index idx_items_by_model
-CREATE INDEX idx_items_by_model
-  ON items(model, started_at DESC);
-
--- index idx_items_by_turn
-CREATE INDEX idx_items_by_turn
-  ON items(turn_id, ordinal);
-
--- index idx_items_run_rollup
-CREATE INDEX idx_items_run_rollup
-  ON items(turn_id, model, harness, effort, input_tokens, output_tokens)
-  WHERE kind IN ('step','delegate');
-
--- index idx_items_turn_call
-CREATE UNIQUE INDEX idx_items_turn_call
-  ON items(turn_id, call_id) WHERE call_id IS NOT NULL;
+CREATE INDEX idx_invocation_check_invocation ON command_invocation_check(invocation_id);
 
 -- index idx_link_from
 CREATE INDEX idx_link_from ON core_link(from_type, from_id);
@@ -3245,9 +2257,6 @@ CREATE INDEX idx_link_relation_concept ON core_link(relation_concept_id);
 
 -- index idx_link_to
 CREATE INDEX idx_link_to ON core_link(to_type, to_id);
-
--- index idx_media_asset_camera_device
-CREATE INDEX idx_media_asset_camera_device ON media_asset(camera_device_id);
 
 -- index idx_media_asset_capture_group
 CREATE INDEX idx_media_asset_capture_group ON media_asset(capture_group_id);
@@ -3296,6 +2305,18 @@ CREATE INDEX idx_message_thread ON social_message(thread_id);
 -- index idx_message_thread_sent
 CREATE INDEX idx_message_thread_sent ON social_message(thread_id, sent_at);
 
+-- index idx_money_rule_account
+CREATE INDEX idx_money_rule_account
+  ON money_rule(account_id) WHERE account_id IS NOT NULL;
+
+-- index idx_money_rule_category
+CREATE INDEX idx_money_rule_category
+  ON money_rule(set_category_concept_id) WHERE set_category_concept_id IS NOT NULL;
+
+-- index idx_money_target_category
+CREATE INDEX idx_money_target_category
+  ON money_target(category_concept_id);
+
 -- index idx_note_author_party
 CREATE INDEX idx_note_author_party ON knowledge_note(author_party_id);
 
@@ -3304,26 +2325,6 @@ CREATE INDEX idx_note_body_content ON knowledge_note(body_content_id);
 
 -- index idx_note_current_revision
 CREATE INDEX idx_note_current_revision ON knowledge_note(current_revision_id);
-
--- index idx_outbox_item_authority
-CREATE INDEX idx_outbox_item_authority
-  ON outbox_item(authority_id);
-
--- index idx_outbox_item_connection
-CREATE INDEX idx_outbox_item_connection ON outbox_item(connection_id);
-
--- index idx_outbox_item_published_message
-CREATE INDEX idx_outbox_item_published_message ON outbox_item(published_message_id);
-
--- index idx_outbox_item_recipient_party
-CREATE INDEX idx_outbox_item_recipient_party ON outbox_item(recipient_party_id);
-
--- index idx_outbox_item_status
-CREATE INDEX idx_outbox_item_status ON outbox_item(status, staged_at);
-
--- index idx_outbox_item_target
-CREATE INDEX idx_outbox_item_target
-  ON outbox_item(target_type, target_id);
 
 -- index idx_party_avatar_content
 CREATE INDEX idx_party_avatar_content ON core_party(avatar_content_id);
@@ -3353,46 +2354,8 @@ CREATE INDEX idx_receipt_invocation ON access_receipt(invocation_id);
 -- index idx_receipt_seq
 CREATE UNIQUE INDEX idx_receipt_seq ON access_receipt(seq) WHERE seq IS NOT NULL;
 
--- index idx_replica_intent_device_status
-CREATE INDEX idx_replica_intent_device_status
-  ON replica_intent_outcome(device_id, status, updated_at);
-
--- index idx_replica_invocation_commit_intent
-CREATE INDEX idx_replica_invocation_commit_intent
-  ON replica_invocation_commit(intent_id)
-  WHERE intent_id IS NOT NULL;
-
--- index idx_replica_log_epoch_commit
-CREATE INDEX idx_replica_log_epoch_commit
-  ON replica_log(epoch, commit_seq, seq);
-
--- index idx_replica_log_epoch_seq
-CREATE INDEX idx_replica_log_epoch_seq
-  ON replica_log(epoch, seq);
-
--- index idx_replica_log_row
-CREATE INDEX idx_replica_log_row
-  ON replica_log(epoch, "table", pk_json, seq DESC);
-
--- index idx_replica_parked_grant
-CREATE INDEX idx_replica_parked_grant
-  ON replica_parked_payload(grant_id, parked_at);
-
 -- index idx_seed_row_app
 CREATE INDEX idx_seed_row_app ON access_seed_row(app_id);
-
--- index idx_sync_connection_run_connection
-CREATE INDEX idx_sync_connection_run_connection ON sync_connection_run(connection_id);
-
--- index idx_sync_external_entity
-CREATE INDEX idx_sync_external_entity
-  ON sync_external_entity(target_type, target_id);
-
--- index idx_sync_import_batch_connection
-CREATE INDEX idx_sync_import_batch_connection ON sync_import_batch(connection_id);
-
--- index idx_sync_import_row_batch
-CREATE INDEX idx_sync_import_row_batch ON sync_import_row(batch_id, seq);
 
 -- index idx_tag_concept
 CREATE INDEX idx_tag_concept ON core_tag(concept_id);
@@ -3427,30 +2390,6 @@ CREATE INDEX idx_transaction_category_concept ON core_transaction(category_conce
 -- index idx_transaction_counterparty_party
 CREATE INDEX idx_transaction_counterparty_party ON core_transaction(counterparty_party_id);
 
--- index idx_trigger_ingress_expiry
-CREATE INDEX idx_trigger_ingress_expiry
-  ON trigger_ingress(expires_at);
-
--- index idx_trigger_ingress_source_position
-CREATE INDEX idx_trigger_ingress_source_position
-  ON trigger_ingress(source_key, id);
-
--- index idx_turns_conversation
-CREATE INDEX idx_turns_conversation
-  ON turns(conversation_id, seq);
-
--- index idx_turns_idempotency
-CREATE INDEX idx_turns_idempotency
-  ON turns(conversation_id, idempotency_key);
-
--- index idx_turns_parent
-CREATE INDEX idx_turns_parent
-  ON turns(parent_turn_id);
-
--- index idx_turns_started
-CREATE INDEX idx_turns_started
-  ON turns(started_at DESC);
-
 -- index idx_vault_self_party
 CREATE INDEX idx_vault_self_party ON core_vault(self_party_id);
 
@@ -3476,9 +2415,6 @@ CREATE INDEX locker_item_alias_item_idx ON locker_item_alias(item_id);
 -- index locker_item_archived_idx
 CREATE INDEX locker_item_archived_idx ON locker_item(archived_at);
 
--- index locker_item_connection_idx
-CREATE INDEX locker_item_connection_idx ON locker_item(connection_id);
-
 -- index locker_item_field_item_idx
 CREATE INDEX locker_item_field_item_idx
   ON locker_item_field(item_id, section, position);
@@ -3501,9 +2437,8 @@ CREATE INDEX locker_item_type_updated_page_idx
 CREATE INDEX locker_item_updated_page_idx
   ON locker_item(updated_at, item_id);
 
--- index locker_key_live_idx
-CREATE UNIQUE INDEX locker_key_live_idx
-  ON locker_key(retired_at IS NULL) WHERE retired_at IS NULL;
+-- index locker_key_one_generation
+CREATE UNIQUE INDEX locker_key_one_generation ON locker_key((1));
 
 -- index media_asset_captured_page_idx
 CREATE INDEX media_asset_captured_page_idx
@@ -3525,13 +2460,9 @@ CREATE INDEX media_asset_purge_idx
 CREATE INDEX media_face_region_asset_page_idx
   ON media_face_region(asset_id, region_id);
 
--- index notifications_notice_active_idx
-CREATE INDEX notifications_notice_active_idx
-  ON notifications_notice(archived_at, last_at DESC);
-
--- index notifications_notice_retention_idx
-CREATE INDEX notifications_notice_retention_idx
-  ON notifications_notice(last_at);
+-- index money_rule_order_idx
+CREATE INDEX money_rule_order_idx
+  ON money_rule(position, rule_id);
 
 -- index people_important_date_purge_idx
 CREATE INDEX people_important_date_purge_idx
@@ -3603,40 +2534,6 @@ CREATE INDEX schedule_task_section_idx
 CREATE INDEX schedule_task_series_idx
   ON schedule_task(series_id, due_at) WHERE series_id IS NOT NULL;
 
--- index share_authority_granted_by
-CREATE INDEX share_authority_granted_by
-  ON share_authority(granted_by);
-
--- index share_authority_live_answer
-CREATE UNIQUE INDEX share_authority_live_answer
-  ON share_authority(principal_kind, principal_id, subject_type, subject_id,
-                     verb)
-  WHERE revoked_at IS NULL;
-
--- index share_authority_principal
-CREATE INDEX share_authority_principal
-  ON share_authority(principal_kind, principal_id);
-
--- index share_authority_request_open
-CREATE UNIQUE INDEX share_authority_request_open
-  ON share_authority_request(principal_id) WHERE decided_at IS NULL;
-
--- index share_authority_subject
-CREATE INDEX share_authority_subject
-  ON share_authority(subject_type, subject_id) WHERE revoked_at IS NULL;
-
--- index share_party_vault_binding_live_party
-CREATE UNIQUE INDEX share_party_vault_binding_live_party
-  ON share_party_vault_binding(party_id) WHERE revoked_at IS NULL;
-
--- index share_subscription_lineage_target
-CREATE INDEX share_subscription_lineage_target
-  ON share_subscription_lineage(target_type, target_id);
-
--- index share_subscription_subscribed_page_idx
-CREATE INDEX share_subscription_subscribed_page_idx
-  ON share_subscription(subscribed_at, authority_id);
-
 -- index social_contact_channel_duplicate_idx
 CREATE INDEX social_contact_channel_duplicate_idx
   ON social_contact_channel(kind, normalized_value, party_id);
@@ -3649,106 +2546,67 @@ CREATE INDEX social_contact_channel_party_idx
 CREATE UNIQUE INDEX social_contact_channel_preferred_idx
   ON social_contact_channel(party_id, kind) WHERE is_preferred = 1;
 
--- index tally_expense_deleted_page_idx
-CREATE INDEX tally_expense_deleted_page_idx
-  ON tally_expense(deleted_at, expense_id);
+---- rows (48)
 
--- index tally_expense_group_idx
-CREATE INDEX tally_expense_group_idx ON tally_expense(group_id);
+-- Deferred, so the order of the tables does not matter to a connection that
+-- enforces foreign keys. The founding runs the ladder with them off.
+PRAGMA defer_foreign_keys = ON;
 
--- index tally_expense_line_allocation_party_idx
-CREATE INDEX tally_expense_line_allocation_party_idx
-  ON tally_expense_line_allocation(party_id);
+-- rows core_concept (23)
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:income', 'money:categories', 'income', 'Income', NULL, NULL, NULL, 'income', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:housing', 'money:categories', 'housing', 'Housing', NULL, NULL, NULL, 'housing', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:utilities', 'money:categories', 'utilities', 'Utilities', NULL, NULL, NULL, 'utilities', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:food', 'money:categories', 'food', 'Food', NULL, NULL, NULL, 'food', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:transport', 'money:categories', 'transport', 'Transport', NULL, NULL, NULL, 'transport', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:shopping', 'money:categories', 'shopping', 'Shopping', NULL, NULL, NULL, 'shopping', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:health', 'money:categories', 'health', 'Health', NULL, NULL, NULL, 'health', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:fun', 'money:categories', 'fun', 'Fun and travel', NULL, NULL, NULL, 'fun', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:fees', 'money:categories', 'fees', 'Fees and taxes', NULL, NULL, NULL, 'fees', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:income.pay', 'money:categories', 'income.pay', 'Pay', NULL, 'money:cat:income', NULL, 'income.pay', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:income.other', 'money:categories', 'income.other', 'Other income', NULL, 'money:cat:income', NULL, 'income.other', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:housing.rent', 'money:categories', 'housing.rent', 'Rent or mortgage', NULL, 'money:cat:housing', NULL, 'housing.rent', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:housing.home', 'money:categories', 'housing.home', 'Home and repairs', NULL, 'money:cat:housing', NULL, 'housing.home', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:utilities.bills', 'money:categories', 'utilities.bills', 'Power, gas and water', NULL, 'money:cat:utilities', NULL, 'utilities.bills', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:utilities.phone', 'money:categories', 'utilities.phone', 'Phone and internet', NULL, 'money:cat:utilities', NULL, 'utilities.phone', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:food.groceries', 'money:categories', 'food.groceries', 'Groceries', NULL, 'money:cat:food', NULL, 'food.groceries', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:food.dining', 'money:categories', 'food.dining', 'Dining out', NULL, 'money:cat:food', NULL, 'food.dining', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:transport.fuel', 'money:categories', 'transport.fuel', 'Fuel', NULL, 'money:cat:transport', NULL, 'transport.fuel', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:transport.transit', 'money:categories', 'transport.transit', 'Transit and rideshare', NULL, 'money:cat:transport', NULL, 'transport.transit', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:shopping.general', 'money:categories', 'shopping.general', 'Clothes and household', NULL, 'money:cat:shopping', NULL, 'shopping.general', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:health.care', 'money:categories', 'health.care', 'Health care', NULL, 'money:cat:health', NULL, 'health.care', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:fun.subscriptions', 'money:categories', 'fun.subscriptions', 'Subscriptions', NULL, 'money:cat:fun', NULL, 'fun.subscriptions', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition, stable_id, normalized_key, pref_label_lang, created_at, updated_at, row_version) VALUES ('money:cat:fun.entertainment', 'money:categories', 'fun.entertainment', 'Entertainment and travel', NULL, 'money:cat:fun', NULL, 'fun.entertainment', NULL, NULL, '2026-10-15T14:42:14.271Z', '2026-10-15T14:42:14.271Z', 1);
 
--- index tally_expense_line_expense_idx
-CREATE INDEX tally_expense_line_expense_idx
-  ON tally_expense_line_item(expense_id, sort_order);
+-- rows core_concept_scheme (1)
+INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version, created_at) VALUES ('money:categories', 'urn:centraid:money:categories', 'Money categories', 'centraid', '1', '2026-10-15T14:42:14.270Z');
 
--- index tally_expense_line_receipt_idx
-CREATE INDEX tally_expense_line_receipt_idx
-  ON tally_expense_line_item(receipt_id, sort_order);
+-- rows core_entity (24)
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:categories', 'core.concept_scheme', '2026-10-15T14:42:14.270Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:income', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:housing', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:utilities', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:food', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:transport', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:shopping', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:health', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:fun', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:fees', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:income.pay', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:income.other', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:housing.rent', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:housing.home', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:utilities.bills', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:utilities.phone', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:food.groceries', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:food.dining', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:transport.fuel', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:transport.transit', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:shopping.general', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:health.care', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:fun.subscriptions', 'core.concept', '2026-10-15T14:42:14.271Z');
+INSERT INTO core_entity (entity_id, entity_type, created_at) VALUES ('money:cat:fun.entertainment', 'core.concept', '2026-10-15T14:42:14.271Z');
 
--- index tally_expense_paid_by_idx
-CREATE INDEX tally_expense_paid_by_idx ON tally_expense(paid_by);
-
--- index tally_expense_payer_party_idx
-CREATE INDEX tally_expense_payer_party_idx ON tally_expense_payer(party_id);
-
--- index tally_expense_purge_idx
-CREATE INDEX tally_expense_purge_idx
-  ON tally_expense(purge_at) WHERE purge_at IS NOT NULL;
-
--- index tally_expense_recurring_instance_idx
-CREATE UNIQUE INDEX tally_expense_recurring_instance_idx
-  ON tally_expense(recurring_template_id, spent_on)
-  WHERE recurring_template_id IS NOT NULL;
-
--- index tally_expense_spent_page_idx
-CREATE INDEX tally_expense_spent_page_idx
-  ON tally_expense(deleted_at, spent_on, expense_id);
-
--- index tally_expense_split_party_idx
-CREATE INDEX tally_expense_split_party_idx ON tally_expense_split(party_id);
-
--- index tally_expense_txn_idx
-CREATE INDEX tally_expense_txn_idx ON tally_expense(txn_id);
-
--- index tally_group_archived_idx
-CREATE INDEX tally_group_archived_idx ON tally_group(archived_at);
-
--- index tally_nudge_group_idx
-CREATE INDEX tally_nudge_group_idx ON tally_nudge(group_id);
-
--- index tally_nudge_party_idx
-CREATE INDEX tally_nudge_party_idx ON tally_nudge(party_id, prepared_at DESC);
-
--- index tally_nudge_prepared_page_idx
-CREATE INDEX tally_nudge_prepared_page_idx
-  ON tally_nudge(prepared_at, nudge_id);
-
--- index tally_obligation_from_party_idx
-CREATE INDEX tally_obligation_from_party_idx ON tally_obligation(from_party);
-
--- index tally_obligation_purge_idx
-CREATE INDEX tally_obligation_purge_idx
-  ON tally_obligation(purge_at) WHERE purge_at IS NOT NULL;
-
--- index tally_obligation_to_party_idx
-CREATE INDEX tally_obligation_to_party_idx ON tally_obligation(to_party);
-
--- index tally_recurring_expense_group_idx
-CREATE INDEX tally_recurring_expense_group_idx
-  ON tally_recurring_expense(group_id, status, anchor_start);
-
--- index tally_recurring_expense_paid_by_idx
-CREATE INDEX tally_recurring_expense_paid_by_idx
-  ON tally_recurring_expense(paid_by);
-
--- index tally_recurring_expense_split_party_idx
-CREATE INDEX tally_recurring_expense_split_party_idx
-  ON tally_recurring_expense_split(party_id);
-
--- index tally_recurring_expense_updated_page_idx
-CREATE INDEX tally_recurring_expense_updated_page_idx
-  ON tally_recurring_expense(updated_at, template_id);
-
--- index tally_settlement_from_party_idx
-CREATE INDEX tally_settlement_from_party_idx ON tally_settlement(from_party);
-
--- index tally_settlement_group_idx
-CREATE INDEX tally_settlement_group_idx ON tally_settlement(group_id);
-
--- index tally_settlement_purge_idx
-CREATE INDEX tally_settlement_purge_idx
-  ON tally_settlement(purge_at) WHERE purge_at IS NOT NULL;
-
--- index tally_settlement_to_party_idx
-CREATE INDEX tally_settlement_to_party_idx ON tally_settlement(to_party);
-
--- index tally_settlement_txn_idx
-CREATE INDEX tally_settlement_txn_idx ON tally_settlement(txn_id);
-
----- triggers (268)
+---- triggers (237)
 
 -- trigger access_app_ext_touch_updated_at
 CREATE TRIGGER access_app_ext_touch_updated_at
@@ -3795,72 +2653,6 @@ BEGIN
   SELECT RAISE(ABORT, 'access_receipt is append-only: an audit row is never rewritten');
 END;
 
--- trigger agent_command_invocation_append_only_d
-CREATE TRIGGER agent_command_invocation_append_only_d
-BEFORE DELETE ON agent_command_invocation
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_command_invocation is append-only: rows leave only through the archive pass');
-END;
-
--- trigger agent_command_invocation_append_only_u
-CREATE TRIGGER agent_command_invocation_append_only_u
-BEFORE UPDATE OF invocation_id, command_id, caller_id, authority_id, input_json,
-                 requested_at
-ON agent_command_invocation
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_command_invocation is append-only in what was asked: only status, executed_at and receipt_id settle');
-END;
-
--- trigger agent_evidence_append_only_d
-CREATE TRIGGER agent_evidence_append_only_d
-BEFORE DELETE ON agent_evidence
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_evidence is append-only: rows leave only through the archive pass');
-END;
-
--- trigger agent_evidence_append_only_u
-CREATE TRIGGER agent_evidence_append_only_u
-BEFORE UPDATE ON agent_evidence
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_evidence is append-only: an audit row is never rewritten');
-END;
-
--- trigger agent_explanation_append_only_d
-CREATE TRIGGER agent_explanation_append_only_d
-BEFORE DELETE ON agent_explanation
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_explanation is append-only: rows leave only through the archive pass');
-END;
-
--- trigger agent_explanation_append_only_u
-CREATE TRIGGER agent_explanation_append_only_u
-BEFORE UPDATE ON agent_explanation
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_explanation is append-only: an audit row is never rewritten');
-END;
-
--- trigger agent_invocation_check_append_only_d
-CREATE TRIGGER agent_invocation_check_append_only_d
-BEFORE DELETE ON agent_invocation_check
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_invocation_check is append-only: rows leave only through the archive pass');
-END;
-
--- trigger agent_invocation_check_append_only_u
-CREATE TRIGGER agent_invocation_check_append_only_u
-BEFORE UPDATE ON agent_invocation_check
-WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
-BEGIN
-  SELECT RAISE(ABORT, 'agent_invocation_check is append-only: an audit row is never rewritten');
-END;
-
 -- trigger blob_content_key_touch_updated_at
 CREATE TRIGGER blob_content_key_touch_updated_at
 AFTER UPDATE ON blob_content_key
@@ -3872,19 +2664,6 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE content_hash = NEW.content_hash;
-END;
-
--- trigger blob_device_wrap_key_touch_updated_at
-CREATE TRIGGER blob_device_wrap_key_touch_updated_at
-AFTER UPDATE ON blob_device_wrap_key
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE blob_device_wrap_key
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE device_id = NEW.device_id;
 END;
 
 -- trigger blob_ingress_session_touch_updated_at
@@ -3900,33 +2679,121 @@ BEGIN
    WHERE session_id = NEW.session_id;
 END;
 
--- trigger blob_outbox_touch_updated_at
-CREATE TRIGGER blob_outbox_touch_updated_at
-AFTER UPDATE ON blob_outbox
+-- trigger chat_message_is_not_born_settled
+CREATE TRIGGER chat_message_is_not_born_settled
+BEFORE INSERT ON chat_message
+WHEN NEW.outcome IN ('applied','dismissed','stale','failed')
+BEGIN
+  SELECT RAISE(ABORT, 'a message is proposed before it is settled: it is not born applied, dismissed, stale or failed');
+END;
+
+-- trigger chat_message_outcome_settles_once
+CREATE TRIGGER chat_message_outcome_settles_once
+BEFORE UPDATE OF outcome ON chat_message
+WHEN NEW.outcome IS NOT OLD.outcome
+BEGIN
+  SELECT RAISE(ABORT, 'a told answer does not change: only a proposal settles, and once')
+   WHERE OLD.outcome <> 'proposed';
+  SELECT RAISE(ABORT, 'a proposal settles as applied, dismissed, stale or failed')
+   WHERE NEW.outcome NOT IN ('applied','dismissed','stale','failed');
+END;
+
+-- trigger chat_thread_entity_delete
+CREATE TRIGGER chat_thread_entity_delete
+AFTER DELETE ON chat_thread
+BEGIN
+  DELETE FROM core_entity WHERE entity_id = OLD.thread_id;
+END;
+
+-- trigger chat_thread_entity_insert
+CREATE TRIGGER chat_thread_entity_insert
+BEFORE INSERT ON chat_thread
+BEGIN
+  SELECT RAISE(ABORT, 'entity id is already held by another kind: chat_thread (#916)')
+   WHERE EXISTS (
+     SELECT 1 FROM core_entity
+      WHERE entity_id = NEW.thread_id AND entity_type <> 'chat.thread');
+  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
+  VALUES (NEW.thread_id, 'chat.thread', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger chat_thread_touch_updated_at
+CREATE TRIGGER chat_thread_touch_updated_at
+AFTER UPDATE ON chat_thread
 WHEN NEW.row_version = OLD.row_version
 BEGIN
-  UPDATE blob_outbox
+  UPDATE chat_thread
      SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
                            THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
-   WHERE content_hash = NEW.content_hash;
+   WHERE thread_id = NEW.thread_id;
 END;
 
--- trigger conversation_item_count_ad
-CREATE TRIGGER conversation_item_count_ad
-  AFTER DELETE ON items BEGIN
-  UPDATE conversations
-     SET item_count = MAX(item_count - 1, 0)
-   WHERE id = (SELECT conversation_id FROM turns WHERE id = old.turn_id);
+-- trigger command_evidence_append_only_d
+CREATE TRIGGER command_evidence_append_only_d
+BEFORE DELETE ON command_evidence
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_evidence is append-only: rows leave only through the archive pass');
 END;
 
--- trigger conversation_item_count_ai
-CREATE TRIGGER conversation_item_count_ai
-  AFTER INSERT ON items BEGIN
-  UPDATE conversations
-     SET item_count = item_count + 1
-   WHERE id = (SELECT conversation_id FROM turns WHERE id = new.turn_id);
+-- trigger command_evidence_append_only_u
+CREATE TRIGGER command_evidence_append_only_u
+BEFORE UPDATE ON command_evidence
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_evidence is append-only: an audit row is never rewritten');
+END;
+
+-- trigger command_explanation_append_only_d
+CREATE TRIGGER command_explanation_append_only_d
+BEFORE DELETE ON command_explanation
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_explanation is append-only: rows leave only through the archive pass');
+END;
+
+-- trigger command_explanation_append_only_u
+CREATE TRIGGER command_explanation_append_only_u
+BEFORE UPDATE ON command_explanation
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_explanation is append-only: an audit row is never rewritten');
+END;
+
+-- trigger command_invocation_append_only_d
+CREATE TRIGGER command_invocation_append_only_d
+BEFORE DELETE ON command_invocation
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_invocation is append-only: rows leave only through the archive pass');
+END;
+
+-- trigger command_invocation_append_only_u
+CREATE TRIGGER command_invocation_append_only_u
+BEFORE UPDATE OF invocation_id, command_id, caller_id, authority_id, input_json,
+                 requested_at
+ON command_invocation
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_invocation is append-only in what was asked: only status, executed_at and receipt_id settle');
+END;
+
+-- trigger command_invocation_check_append_only_d
+CREATE TRIGGER command_invocation_check_append_only_d
+BEFORE DELETE ON command_invocation_check
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_invocation_check is append-only: rows leave only through the archive pass');
+END;
+
+-- trigger command_invocation_check_append_only_u
+CREATE TRIGGER command_invocation_check_append_only_u
+BEFORE UPDATE ON command_invocation_check
+WHEN NOT EXISTS (SELECT 1 FROM audit_archive_pass)
+BEGIN
+  SELECT RAISE(ABORT, 'command_invocation_check is append-only: an audit row is never rewritten');
 END;
 
 -- trigger core_account_entity_delete
@@ -4022,6 +2889,14 @@ BEGIN
       WHERE entity_id = NEW.entry_id AND entity_type <> 'core.collection_entry');
   INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
   VALUES (NEW.entry_id, 'core.collection_entry', COALESCE(NEW.added_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger core_collection_kind_is_immutable
+CREATE TRIGGER core_collection_kind_is_immutable
+BEFORE UPDATE OF kind ON core_collection
+WHEN NEW.kind IS NOT OLD.kind
+BEGIN
+  SELECT RAISE(ABORT, 'a collection''s kind never changes: a notebook stays a notebook and an album stays an album');
 END;
 
 -- trigger core_collection_touch_updated_at
@@ -4258,6 +3133,36 @@ BEGIN
   VALUES (NEW.revision_id, 'core.entity_revision', COALESCE(NEW.recorded_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
 END;
 
+-- trigger core_entity_revision_no_self_parent
+CREATE TRIGGER core_entity_revision_no_self_parent
+BEFORE INSERT ON core_entity_revision
+WHEN NEW.parent_revision_id IS NOT NULL AND NEW.parent_revision_id = NEW.revision_id
+BEGIN
+  SELECT RAISE(ABORT, 'a revision cannot be its own ancestor (issue #1020, D-1020-N2)');
+END;
+
+-- trigger core_entity_revision_parent_is_immutable
+CREATE TRIGGER core_entity_revision_parent_is_immutable
+BEFORE UPDATE OF parent_revision_id ON core_entity_revision
+WHEN NEW.parent_revision_id IS NOT OLD.parent_revision_id
+BEGIN
+  SELECT RAISE(ABORT, 'a revision occurrence is immutable: history is appended to, never re-pointed (issue #916, R3)');
+END;
+
+-- trigger core_entity_revision_parent_is_same_object
+CREATE TRIGGER core_entity_revision_parent_is_same_object
+BEFORE INSERT ON core_entity_revision
+WHEN NEW.parent_revision_id IS NOT NULL
+ AND NEW.parent_revision_id <> NEW.revision_id
+ AND NOT EXISTS(
+       SELECT 1 FROM core_entity_revision p
+        WHERE p.revision_id = NEW.parent_revision_id
+          AND p.entity_type = NEW.entity_type
+          AND p.entity_id = NEW.entity_id)
+BEGIN
+  SELECT RAISE(ABORT, 'a revision belongs to one object: its parent must be a revision of the same entity (issue #1020, D-1020-N2)');
+END;
+
 -- trigger core_entity_revision_touch_updated_at
 CREATE TRIGGER core_entity_revision_touch_updated_at
 AFTER UPDATE ON core_entity_revision
@@ -4269,36 +3174,6 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE revision_id = NEW.revision_id;
-END;
-
--- trigger core_entity_revoke_on_purge
-CREATE TRIGGER core_entity_revoke_on_purge
-BEFORE DELETE ON core_entity
-BEGIN
-  UPDATE share_authority
-     SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoked_reason = 'subject-purged'
-   WHERE subject_type = OLD.entity_type
-     AND subject_id = OLD.entity_id
-     AND revoked_at IS NULL;
-  -- The PRINCIPAL side of the same rule (#916, D1). `principal_id` is
-  -- polymorphic on `principal_kind` and carries no foreign key, so a purged
-  -- principal would leave live answers naming a row that is not there — a share
-  -- the member granted that can no longer be resolved to a peer vault, failing
-  -- silently. See schema/party-pointers.ts.
-  --
-  -- EVERY principal kind that is a ROW, not just 'person' (#916, audit F3):
-  -- the clause is generated from `PRINCIPAL_ENTITY_KINDS`, so a circle
-  -- deleted by `tally.delete_group` or by share/removal.ts ends the answers
-  -- its members hold through it, and a fifth kind cannot be added to the
-  -- table's CHECK without landing here too.
-  UPDATE share_authority
-     SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoked_reason = 'principal-purged'
-   WHERE principal_id = OLD.entity_id
-     AND revoked_at IS NULL
-     AND principal_kind = CASE OLD.entity_type
-           WHEN 'core.party' THEN 'person'
-           WHEN 'social.circle' THEN 'circle'
-         END;
 END;
 
 -- trigger core_event_entity_delete
@@ -4382,6 +3257,19 @@ BEGIN
       WHERE entity_id = NEW.link_id AND entity_type <> 'core.link');
   INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
   VALUES (NEW.link_id, 'core.link', COALESCE(NEW.valid_from, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger core_link_no_revises_edge
+CREATE TRIGGER core_link_no_revises_edge
+BEFORE INSERT ON core_link
+WHEN EXISTS(
+       SELECT 1 FROM core_concept c
+         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+        WHERE c.concept_id = NEW.relation_concept_id
+          AND c.notation = 'revises'
+          AND s.uri = 'urn:duaility:relations')
+BEGIN
+  SELECT RAISE(ABORT, 'version lineage is core_entity_revision, not a content-to-content link (issue #996, R20(a))');
 END;
 
 -- trigger core_link_touch_updated_at
@@ -4525,6 +3413,24 @@ BEGIN
    WHERE tag_id = NEW.tag_id;
 END;
 
+-- trigger core_transaction_currency_matches_money_account_ai
+CREATE TRIGGER core_transaction_currency_matches_money_account_ai
+BEFORE INSERT ON core_transaction
+WHEN EXISTS (SELECT 1 FROM money_account WHERE account_id = NEW.account_id)
+BEGIN
+  SELECT RAISE(ABORT, 'transaction currency must match its Money account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
+-- trigger core_transaction_currency_matches_money_account_au
+CREATE TRIGGER core_transaction_currency_matches_money_account_au
+BEFORE UPDATE OF account_id, currency ON core_transaction
+WHEN EXISTS (SELECT 1 FROM money_account WHERE account_id = NEW.account_id)
+BEGIN
+  SELECT RAISE(ABORT, 'transaction currency must match its Money account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
 -- trigger core_transaction_entity_delete
 CREATE TRIGGER core_transaction_entity_delete
 AFTER DELETE ON core_transaction
@@ -4542,6 +3448,27 @@ BEGIN
       WHERE entity_id = NEW.txn_id AND entity_type <> 'core.transaction');
   INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
   VALUES (NEW.txn_id, 'core.transaction', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger core_transaction_money_rows_are_fixed
+CREATE TRIGGER core_transaction_money_rows_are_fixed
+BEFORE UPDATE ON core_transaction
+WHEN EXISTS (SELECT 1 FROM money_account WHERE account_id = OLD.account_id)
+BEGIN
+  SELECT RAISE(ABORT, 'a Money transaction is never edited after import: only its category and its void status move (#1099)')
+   WHERE NEW.txn_id IS NOT OLD.txn_id
+      OR NEW.account_id IS NOT OLD.account_id
+      OR NEW.posted_at IS NOT OLD.posted_at
+      OR NEW.amount_minor IS NOT OLD.amount_minor
+      OR NEW.currency IS NOT OLD.currency
+      OR NEW.direction IS NOT OLD.direction
+      OR NEW.transfer_group_id IS NOT OLD.transfer_group_id
+      OR NEW.counterparty_party_id IS NOT OLD.counterparty_party_id
+      OR NEW.description IS NOT OLD.description
+      OR NEW.external_id IS NOT OLD.external_id
+      OR NEW.created_at IS NOT OLD.created_at
+      OR (NEW.status IS NOT OLD.status AND NEW.status <> 'void')
+      OR (OLD.status = 'void' AND NEW.status <> 'void');
 END;
 
 -- trigger core_transaction_touch_updated_at
@@ -4615,58 +3542,129 @@ BEGIN
    WHERE domain = NEW.domain;
 END;
 
--- trigger fts_conversation_conv_ad
-CREATE TRIGGER fts_conversation_conv_ad
-  AFTER DELETE ON conversations BEGIN
-  DELETE FROM fts_conversation WHERE conversation_id = old.id;
+-- trigger fts_chat_thread_ad
+CREATE TRIGGER fts_chat_thread_ad
+  AFTER DELETE ON chat_thread
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid = old.rowid;
 END;
 
--- trigger fts_conversation_conv_ai
-CREATE TRIGGER fts_conversation_conv_ai
-  AFTER INSERT ON conversations WHEN new.kind IN ('chat','build') BEGIN
-  INSERT INTO fts_conversation(conversation_id, title, body)
-    VALUES (new.id, new.title, '');
+-- trigger fts_chat_thread_ai
+CREATE TRIGGER fts_chat_thread_ai
+  AFTER INSERT ON chat_thread
+BEGIN
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
 END;
 
--- trigger fts_conversation_conv_au
-CREATE TRIGGER fts_conversation_conv_au
-  AFTER UPDATE OF title ON conversations WHEN new.kind IN ('chat','build') BEGIN
-  DELETE FROM fts_conversation WHERE conversation_id = old.id;
-  INSERT INTO fts_conversation(conversation_id, title, body)
-    SELECT new.id, new.title,
-      (SELECT COALESCE(group_concat(i.text, ' '), '')
-         FROM items i JOIN turns t ON t.id = i.turn_id
-        WHERE t.conversation_id = new.id AND i.text IS NOT NULL AND i.text <> '');
+-- trigger fts_chat_thread_au
+CREATE TRIGGER fts_chat_thread_au
+  AFTER UPDATE OF thread_id, title ON chat_thread
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid = old.rowid;
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
 END;
 
--- trigger fts_conversation_item_ad
-CREATE TRIGGER fts_conversation_item_ad
-  AFTER DELETE ON items WHEN old.text IS NOT NULL AND old.text <> '' BEGIN
-  UPDATE fts_conversation
-     SET body = (SELECT COALESCE(group_concat(i.text, ' '), '')
-                   FROM items i JOIN turns t ON t.id = i.turn_id
-                  WHERE t.conversation_id = fts_conversation.conversation_id
-                    AND i.text IS NOT NULL AND i.text <> '')
-   WHERE conversation_id = (SELECT conversation_id FROM turns WHERE id = old.turn_id);
+-- trigger fts_chat_thread_from_chat_message_ad
+CREATE TRIGGER fts_chat_thread_from_chat_message_ad
+  AFTER DELETE ON chat_message
+  WHEN old.role = 'user'
+   AND EXISTS (SELECT 1 FROM chat_thread t WHERE t.thread_id = old.thread_id)
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t WHERE t.thread_id = old.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = old.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = old.thread_id;
 END;
 
--- trigger fts_conversation_item_ai
-CREATE TRIGGER fts_conversation_item_ai
-  AFTER INSERT ON items WHEN new.text IS NOT NULL AND new.text <> '' BEGIN
-  UPDATE fts_conversation
-     SET body = CASE WHEN body = '' THEN new.text ELSE body || ' ' || new.text END
-   WHERE conversation_id = (SELECT conversation_id FROM turns WHERE id = new.turn_id);
+-- trigger fts_chat_thread_from_chat_message_ai
+CREATE TRIGGER fts_chat_thread_from_chat_message_ai
+  AFTER INSERT ON chat_message
+  WHEN new.role = 'user'
+   AND EXISTS (SELECT 1 FROM chat_thread t WHERE t.thread_id = new.thread_id)
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t WHERE t.thread_id = new.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
 END;
 
--- trigger fts_conversation_turn_ad
-CREATE TRIGGER fts_conversation_turn_ad
-  AFTER DELETE ON turns BEGIN
-  UPDATE fts_conversation
-     SET body = (SELECT COALESCE(group_concat(i.text, ' '), '')
-                   FROM items i JOIN turns t ON t.id = i.turn_id
-                  WHERE t.conversation_id = fts_conversation.conversation_id
-                    AND i.text IS NOT NULL AND i.text <> '')
-   WHERE conversation_id = old.conversation_id;
+-- trigger fts_chat_thread_from_chat_message_au
+CREATE TRIGGER fts_chat_thread_from_chat_message_au
+  AFTER UPDATE OF thread_id, ordinal, role, text ON chat_message
+  WHEN old.role = 'user' OR new.role = 'user'
+BEGIN
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t WHERE t.thread_id = new.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = new.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = new.thread_id;
+  DELETE FROM fts_chat_thread WHERE rowid IN (
+    SELECT t.rowid FROM chat_thread t
+     WHERE t.thread_id = old.thread_id AND old.thread_id IS NOT new.thread_id);
+  INSERT INTO fts_chat_thread(rowid, thread_id, title, said)
+    SELECT p.rowid, p.thread_id, p.title,
+           CASE WHEN s.said IS NULL THEN NULL
+                WHEN length(s.said) > 262144
+                THEN substr(s.said, 1, 262144) || ' ...(truncated for search index)'
+                ELSE s.said END
+      FROM chat_thread p,
+           (SELECT group_concat(u.text, ' ') AS said
+              FROM (SELECT m.text FROM chat_message m
+                     WHERE m.thread_id = old.thread_id AND m.role = 'user'
+                     ORDER BY m.ordinal) u) s
+     WHERE p.thread_id = old.thread_id
+       AND old.thread_id IS NOT new.thread_id;
 END;
 
 -- trigger fts_core_collection_ad
@@ -4683,6 +3681,52 @@ END;
 CREATE TRIGGER fts_core_collection_au AFTER UPDATE ON core_collection BEGIN
   DELETE FROM fts_core_collection WHERE rowid = old.rowid;
   INSERT INTO fts_core_collection(rowid, collection_id, name) SELECT new.rowid, new."collection_id", new."name";
+END;
+
+-- trigger fts_core_concept_ad
+CREATE TRIGGER fts_core_concept_ad
+  AFTER DELETE ON core_concept
+BEGIN
+  DELETE FROM fts_core_concept WHERE rowid = old.rowid;
+END;
+
+-- trigger fts_core_concept_ai
+CREATE TRIGGER fts_core_concept_ai
+  AFTER INSERT ON core_concept
+BEGIN
+  INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+    SELECT new.rowid, new.concept_id, new.pref_label
+     WHERE new.notation <> 'root'
+       AND EXISTS (SELECT 1 FROM core_concept_scheme s
+                    WHERE s.scheme_id = new.scheme_id
+                      AND s.uri = 'https://centraid.dev/schemes/folders');
+END;
+
+-- trigger fts_core_concept_au
+CREATE TRIGGER fts_core_concept_au
+  AFTER UPDATE ON core_concept
+BEGIN
+  DELETE FROM fts_core_concept WHERE rowid = old.rowid;
+  INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+    SELECT new.rowid, new.concept_id, new.pref_label
+     WHERE new.notation <> 'root'
+       AND EXISTS (SELECT 1 FROM core_concept_scheme s
+                    WHERE s.scheme_id = new.scheme_id
+                      AND s.uri = 'https://centraid.dev/schemes/folders');
+END;
+
+-- trigger fts_core_concept_from_core_concept_scheme_au
+CREATE TRIGGER fts_core_concept_from_core_concept_scheme_au
+  AFTER UPDATE OF uri ON core_concept_scheme
+BEGIN
+  DELETE FROM fts_core_concept WHERE rowid IN (
+    SELECT c.rowid FROM core_concept c WHERE c.scheme_id = new.scheme_id);
+  INSERT INTO fts_core_concept(rowid, concept_id, pref_label)
+    SELECT c.rowid, c.concept_id, c.pref_label
+      FROM core_concept c
+     WHERE c.scheme_id = new.scheme_id
+       AND c.notation <> 'root'
+       AND new.uri = 'https://centraid.dev/schemes/folders';
 END;
 
 -- trigger fts_core_content_item_ad
@@ -4818,83 +3862,583 @@ CREATE TRIGGER fts_core_document_au AFTER UPDATE ON core_document BEGIN
 END;
 
 -- trigger fts_core_event_ad
-CREATE TRIGGER fts_core_event_ad AFTER DELETE ON core_event BEGIN
+CREATE TRIGGER fts_core_event_ad
+  AFTER DELETE ON core_event
+BEGIN
   DELETE FROM fts_core_event WHERE rowid = old.rowid;
 END;
 
 -- trigger fts_core_event_ai
-CREATE TRIGGER fts_core_event_ai AFTER INSERT ON core_event BEGIN
-  INSERT INTO fts_core_event(rowid, event_id, summary, description) SELECT new.rowid, new."event_id", new."summary", new."description" WHERE new."deleted_at" IS NULL;
+CREATE TRIGGER fts_core_event_ai
+  AFTER INSERT ON core_event
+BEGIN
+  INSERT INTO fts_core_event(rowid, event_id, summary, description, location)
+    SELECT p.rowid,
+           p.event_id,
+           p.summary,
+           p.description,
+           pl.name
+      FROM core_event p
+      LEFT JOIN core_place pl ON pl.place_id = p.location_place_id
+     WHERE p.rowid = new.rowid
+       AND p.deleted_at IS NULL;
 END;
 
 -- trigger fts_core_event_au
-CREATE TRIGGER fts_core_event_au AFTER UPDATE ON core_event BEGIN
+CREATE TRIGGER fts_core_event_au
+  AFTER UPDATE ON core_event
+BEGIN
   DELETE FROM fts_core_event WHERE rowid = old.rowid;
-  INSERT INTO fts_core_event(rowid, event_id, summary, description) SELECT new.rowid, new."event_id", new."summary", new."description" WHERE new."deleted_at" IS NULL;
+  INSERT INTO fts_core_event(rowid, event_id, summary, description, location)
+    SELECT p.rowid,
+           p.event_id,
+           p.summary,
+           p.description,
+           pl.name
+      FROM core_event p
+      LEFT JOIN core_place pl ON pl.place_id = p.location_place_id
+     WHERE p.rowid = new.rowid
+       AND p.deleted_at IS NULL;
+END;
+
+-- trigger fts_core_event_from_core_place_au
+CREATE TRIGGER fts_core_event_from_core_place_au
+  AFTER UPDATE OF name ON core_place
+BEGIN
+  DELETE FROM fts_core_event WHERE rowid IN (
+    SELECT p.rowid FROM core_event p WHERE p.location_place_id = new.place_id);
+  INSERT INTO fts_core_event(rowid, event_id, summary, description, location)
+    SELECT p.rowid,
+           p.event_id,
+           p.summary,
+           p.description,
+           pl.name
+      FROM core_event p
+      LEFT JOIN core_place pl ON pl.place_id = p.location_place_id
+     WHERE p.location_place_id = new.place_id
+       AND p.deleted_at IS NULL;
 END;
 
 -- trigger fts_core_party_ad
-CREATE TRIGGER fts_core_party_ad AFTER DELETE ON core_party BEGIN
+CREATE TRIGGER fts_core_party_ad
+  AFTER DELETE ON core_party
+BEGIN
   DELETE FROM fts_core_party WHERE rowid = old.rowid;
 END;
 
 -- trigger fts_core_party_ai
-CREATE TRIGGER fts_core_party_ai AFTER INSERT ON core_party BEGIN
-  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name) SELECT new.rowid, new."party_id", new."display_name", new."sort_name";
+CREATE TRIGGER fts_core_party_ai
+  AFTER INSERT ON core_party
+BEGIN
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.rowid = new.rowid;
 END;
 
 -- trigger fts_core_party_au
-CREATE TRIGGER fts_core_party_au AFTER UPDATE ON core_party BEGIN
+CREATE TRIGGER fts_core_party_au
+  AFTER UPDATE ON core_party
+BEGIN
   DELETE FROM fts_core_party WHERE rowid = old.rowid;
-  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name) SELECT new.rowid, new."party_id", new."display_name", new."sort_name";
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.rowid = new.rowid;
 END;
 
--- trigger fts_core_place_ad
-CREATE TRIGGER fts_core_place_ad AFTER DELETE ON core_place BEGIN
-  DELETE FROM fts_core_place WHERE rowid = old.rowid;
+-- trigger fts_core_party_from_core_link_ad
+CREATE TRIGGER fts_core_party_from_core_link_ad
+  AFTER DELETE ON core_link
+  WHEN old.from_type = 'core.activity' AND old.to_type = 'core.party'
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = old.to_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = old.to_id;
 END;
 
--- trigger fts_core_place_ai
-CREATE TRIGGER fts_core_place_ai AFTER INSERT ON core_place BEGIN
-  INSERT INTO fts_core_place(rowid, place_id, name) SELECT new.rowid, new."place_id", new."name";
+-- trigger fts_core_party_from_core_link_ai
+CREATE TRIGGER fts_core_party_from_core_link_ai
+  AFTER INSERT ON core_link
+  WHEN new.from_type = 'core.activity' AND new.to_type = 'core.party'
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = new.to_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = new.to_id;
 END;
 
--- trigger fts_core_place_au
-CREATE TRIGGER fts_core_place_au AFTER UPDATE ON core_place BEGIN
-  DELETE FROM fts_core_place WHERE rowid = old.rowid;
-  INSERT INTO fts_core_place(rowid, place_id, name) SELECT new.rowid, new."place_id", new."name";
+-- trigger fts_core_party_from_core_link_au
+CREATE TRIGGER fts_core_party_from_core_link_au
+  AFTER UPDATE OF from_type, from_id, to_type, to_id, valid_to ON core_link
+  WHEN (old.from_type = 'core.activity' AND old.to_type = 'core.party')
+    OR (new.from_type = 'core.activity' AND new.to_type = 'core.party')
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p
+     WHERE new.from_type = 'core.activity' AND new.to_type = 'core.party'
+       AND p.party_id = new.to_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE new.from_type = 'core.activity' AND new.to_type = 'core.party'
+       AND p.party_id = new.to_id;
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p
+     WHERE old.from_type = 'core.activity' AND old.to_type = 'core.party'
+       AND p.party_id = old.to_id
+       AND NOT (new.from_type = 'core.activity' AND new.to_type = 'core.party'
+                AND new.to_id = old.to_id));
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE old.from_type = 'core.activity' AND old.to_type = 'core.party'
+       AND p.party_id = old.to_id
+       AND NOT (new.from_type = 'core.activity' AND new.to_type = 'core.party'
+                AND new.to_id = old.to_id);
 END;
 
--- trigger fts_core_transaction_ad
-CREATE TRIGGER fts_core_transaction_ad AFTER DELETE ON core_transaction BEGIN
-  DELETE FROM fts_core_transaction WHERE rowid = old.rowid;
+-- trigger fts_core_party_from_knowledge_annotation_ad
+CREATE TRIGGER fts_core_party_from_knowledge_annotation_ad
+  AFTER DELETE ON knowledge_annotation
+  WHEN old.target_type IN ('core.party', 'core.activity')
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p
+     WHERE (old.target_type = 'core.party' AND p.party_id = old.target_id)
+        OR (old.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = old.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL)));
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE (old.target_type = 'core.party' AND p.party_id = old.target_id)
+        OR (old.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = old.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL));
 END;
 
--- trigger fts_core_transaction_ai
-CREATE TRIGGER fts_core_transaction_ai AFTER INSERT ON core_transaction BEGIN
-  INSERT INTO fts_core_transaction(rowid, txn_id, description) SELECT new.rowid, new."txn_id", new."description";
+-- trigger fts_core_party_from_knowledge_annotation_ai
+CREATE TRIGGER fts_core_party_from_knowledge_annotation_ai
+  AFTER INSERT ON knowledge_annotation
+  WHEN new.target_type IN ('core.party', 'core.activity')
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p
+     WHERE (new.target_type = 'core.party' AND p.party_id = new.target_id)
+        OR (new.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = new.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL)));
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE (new.target_type = 'core.party' AND p.party_id = new.target_id)
+        OR (new.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = new.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL));
 END;
 
--- trigger fts_core_transaction_au
-CREATE TRIGGER fts_core_transaction_au AFTER UPDATE ON core_transaction BEGIN
-  DELETE FROM fts_core_transaction WHERE rowid = old.rowid;
-  INSERT INTO fts_core_transaction(rowid, txn_id, description) SELECT new.rowid, new."txn_id", new."description";
+-- trigger fts_core_party_from_knowledge_annotation_au
+CREATE TRIGGER fts_core_party_from_knowledge_annotation_au
+  AFTER UPDATE OF target_type, target_id, body_text ON knowledge_annotation
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p
+     WHERE (new.target_type = 'core.party' AND p.party_id = new.target_id)
+        OR (new.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = new.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL)));
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE (new.target_type = 'core.party' AND p.party_id = new.target_id)
+        OR (new.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = new.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL));
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p
+     WHERE (old.target_type = 'core.party' AND p.party_id = old.target_id)
+        OR (old.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = old.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL)));
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+              WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                 OR (an.target_type = 'core.activity' AND an.target_id IN (
+                       SELECT l.from_id FROM core_link l
+                        WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                          AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE (old.target_type = 'core.party' AND p.party_id = old.target_id)
+        OR (old.target_type = 'core.activity' AND p.party_id IN (
+              SELECT l.to_id FROM core_link l
+               WHERE l.from_type = 'core.activity' AND l.from_id = old.target_id
+                 AND l.to_type = 'core.party' AND l.valid_to IS NULL));
 END;
 
--- trigger fts_knowledge_annotation_ad
-CREATE TRIGGER fts_knowledge_annotation_ad AFTER DELETE ON knowledge_annotation BEGIN
-  DELETE FROM fts_knowledge_annotation WHERE rowid = old.rowid;
+-- trigger fts_core_party_from_people_profile_ad
+CREATE TRIGGER fts_core_party_from_people_profile_ad
+  AFTER DELETE ON people_profile
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = old.party_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = old.party_id;
 END;
 
--- trigger fts_knowledge_annotation_ai
-CREATE TRIGGER fts_knowledge_annotation_ai AFTER INSERT ON knowledge_annotation BEGIN
-  INSERT INTO fts_knowledge_annotation(rowid, annotation_id, body_text) SELECT new.rowid, new."annotation_id", new."body_text";
+-- trigger fts_core_party_from_people_profile_ai
+CREATE TRIGGER fts_core_party_from_people_profile_ai
+  AFTER INSERT ON people_profile
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = new.party_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = new.party_id;
 END;
 
--- trigger fts_knowledge_annotation_au
-CREATE TRIGGER fts_knowledge_annotation_au AFTER UPDATE ON knowledge_annotation BEGIN
-  DELETE FROM fts_knowledge_annotation WHERE rowid = old.rowid;
-  INSERT INTO fts_knowledge_annotation(rowid, annotation_id, body_text) SELECT new.rowid, new."annotation_id", new."body_text";
+-- trigger fts_core_party_from_people_profile_au
+CREATE TRIGGER fts_core_party_from_people_profile_au
+  AFTER UPDATE OF party_id, nickname, role, met, deleted_at ON people_profile
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = new.party_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = new.party_id;
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = old.party_id
+         AND old.party_id IS NOT new.party_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = old.party_id
+       AND old.party_id IS NOT new.party_id;
+END;
+
+-- trigger fts_core_party_from_social_contact_channel_ad
+CREATE TRIGGER fts_core_party_from_social_contact_channel_ad
+  AFTER DELETE ON social_contact_channel
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = old.party_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = old.party_id;
+END;
+
+-- trigger fts_core_party_from_social_contact_channel_ai
+CREATE TRIGGER fts_core_party_from_social_contact_channel_ai
+  AFTER INSERT ON social_contact_channel
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = new.party_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = new.party_id;
+END;
+
+-- trigger fts_core_party_from_social_contact_channel_au
+CREATE TRIGGER fts_core_party_from_social_contact_channel_au
+  AFTER UPDATE OF party_id, value, normalized_value ON social_contact_channel
+BEGIN
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = new.party_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = new.party_id;
+  DELETE FROM fts_core_party WHERE rowid IN (
+    SELECT p.rowid FROM core_party p WHERE p.party_id = old.party_id
+         AND old.party_id IS NOT new.party_id);
+  INSERT INTO fts_core_party(rowid, party_id, display_name, sort_name, nickname, role, met, channels, memo)
+    SELECT p.rowid,
+           p.party_id,
+           p.display_name,
+           p.sort_name,
+           pp.nickname,
+           pp.role,
+           pp.met,
+           (SELECT group_concat(ch.value || ' ' || ch.normalized_value, ' ')
+              FROM social_contact_channel ch WHERE ch.party_id = p.party_id),
+           (SELECT group_concat(an.body_text, ' ') FROM knowledge_annotation an
+             WHERE (an.target_type = 'core.party' AND an.target_id = p.party_id)
+                OR (an.target_type = 'core.activity' AND an.target_id IN (
+                      SELECT l.from_id FROM core_link l
+                       WHERE l.from_type = 'core.activity' AND l.to_type = 'core.party'
+                         AND l.to_id = p.party_id AND l.valid_to IS NULL)))
+      FROM core_party p
+      LEFT JOIN people_profile pp ON pp.party_id = p.party_id AND pp.deleted_at IS NULL
+     WHERE p.party_id = old.party_id
+       AND old.party_id IS NOT new.party_id;
 END;
 
 -- trigger fts_knowledge_note_ad
@@ -4927,146 +4471,88 @@ CREATE TRIGGER fts_knowledge_note_au AFTER UPDATE ON knowledge_note BEGIN
             WHERE content_id = new."body_content_id") END) WHERE new."deleted_at" IS NULL;
 END;
 
--- trigger fts_locker_item_ad
-CREATE TRIGGER fts_locker_item_ad AFTER DELETE ON locker_item BEGIN
-  DELETE FROM fts_locker_item WHERE rowid = old.rowid;
-END;
-
--- trigger fts_locker_item_ai
-CREATE TRIGGER fts_locker_item_ai AFTER INSERT ON locker_item BEGIN
-  INSERT INTO fts_locker_item(rowid, item_id, title, username, url) SELECT new.rowid, new."item_id", new."title", new."username", new."url" WHERE new."deleted_at" IS NULL;
-END;
-
--- trigger fts_locker_item_au
-CREATE TRIGGER fts_locker_item_au AFTER UPDATE ON locker_item BEGIN
-  DELETE FROM fts_locker_item WHERE rowid = old.rowid;
-  INSERT INTO fts_locker_item(rowid, item_id, title, username, url) SELECT new.rowid, new."item_id", new."title", new."username", new."url" WHERE new."deleted_at" IS NULL;
-END;
-
--- trigger fts_people_profile_ad
-CREATE TRIGGER fts_people_profile_ad AFTER DELETE ON people_profile BEGIN
-  DELETE FROM fts_people_profile WHERE rowid = old.rowid;
-END;
-
--- trigger fts_people_profile_ai
-CREATE TRIGGER fts_people_profile_ai AFTER INSERT ON people_profile BEGIN
-  INSERT INTO fts_people_profile(rowid, profile_id, role, nickname) SELECT new.rowid, new."profile_id", new."role", new."nickname" WHERE new."deleted_at" IS NULL;
-END;
-
--- trigger fts_people_profile_au
-CREATE TRIGGER fts_people_profile_au AFTER UPDATE ON people_profile BEGIN
-  DELETE FROM fts_people_profile WHERE rowid = old.rowid;
-  INSERT INTO fts_people_profile(rowid, profile_id, role, nickname) SELECT new.rowid, new."profile_id", new."role", new."nickname" WHERE new."deleted_at" IS NULL;
-END;
-
 -- trigger fts_schedule_project_ad
-CREATE TRIGGER fts_schedule_project_ad AFTER DELETE ON schedule_project BEGIN
+CREATE TRIGGER fts_schedule_project_ad
+  AFTER DELETE ON schedule_project
+BEGIN
   DELETE FROM fts_schedule_project WHERE rowid = old.rowid;
 END;
 
 -- trigger fts_schedule_project_ai
-CREATE TRIGGER fts_schedule_project_ai AFTER INSERT ON schedule_project BEGIN
-  INSERT INTO fts_schedule_project(rowid, project_id, name) SELECT new.rowid, new."project_id", new."name";
+CREATE TRIGGER fts_schedule_project_ai
+  AFTER INSERT ON schedule_project
+BEGIN
+  INSERT INTO fts_schedule_project(rowid, project_id, name)
+    SELECT new.rowid, new.project_id, new.name
+     WHERE new.archived_at IS NULL;
 END;
 
 -- trigger fts_schedule_project_au
-CREATE TRIGGER fts_schedule_project_au AFTER UPDATE ON schedule_project BEGIN
+CREATE TRIGGER fts_schedule_project_au
+  AFTER UPDATE ON schedule_project
+BEGIN
   DELETE FROM fts_schedule_project WHERE rowid = old.rowid;
-  INSERT INTO fts_schedule_project(rowid, project_id, name) SELECT new.rowid, new."project_id", new."name";
+  INSERT INTO fts_schedule_project(rowid, project_id, name)
+    SELECT new.rowid, new.project_id, new.name
+     WHERE new.archived_at IS NULL;
 END;
 
 -- trigger fts_schedule_task_ad
-CREATE TRIGGER fts_schedule_task_ad AFTER DELETE ON schedule_task BEGIN
+CREATE TRIGGER fts_schedule_task_ad
+  AFTER DELETE ON schedule_task
+BEGIN
   DELETE FROM fts_schedule_task WHERE rowid = old.rowid;
 END;
 
 -- trigger fts_schedule_task_ai
-CREATE TRIGGER fts_schedule_task_ai AFTER INSERT ON schedule_task BEGIN
-  INSERT INTO fts_schedule_task(rowid, task_id, title, description) SELECT new.rowid, new."task_id", new."title", new."description" WHERE new."deleted_at" IS NULL;
+CREATE TRIGGER fts_schedule_task_ai
+  AFTER INSERT ON schedule_task
+BEGIN
+  INSERT INTO fts_schedule_task(rowid, task_id, title, description, project)
+    SELECT p.rowid,
+           p.task_id,
+           p.title,
+           p.description,
+           pr.name
+      FROM schedule_task p
+      LEFT JOIN schedule_project pr ON pr.project_id = p.project_id
+     WHERE p.rowid = new.rowid
+       AND p.deleted_at IS NULL;
 END;
 
 -- trigger fts_schedule_task_au
-CREATE TRIGGER fts_schedule_task_au AFTER UPDATE ON schedule_task BEGIN
+CREATE TRIGGER fts_schedule_task_au
+  AFTER UPDATE ON schedule_task
+BEGIN
   DELETE FROM fts_schedule_task WHERE rowid = old.rowid;
-  INSERT INTO fts_schedule_task(rowid, task_id, title, description) SELECT new.rowid, new."task_id", new."title", new."description" WHERE new."deleted_at" IS NULL;
+  INSERT INTO fts_schedule_task(rowid, task_id, title, description, project)
+    SELECT p.rowid,
+           p.task_id,
+           p.title,
+           p.description,
+           pr.name
+      FROM schedule_task p
+      LEFT JOIN schedule_project pr ON pr.project_id = p.project_id
+     WHERE p.rowid = new.rowid
+       AND p.deleted_at IS NULL;
 END;
 
--- trigger fts_social_circle_ad
-CREATE TRIGGER fts_social_circle_ad AFTER DELETE ON social_circle BEGIN
-  DELETE FROM fts_social_circle WHERE rowid = old.rowid;
-END;
-
--- trigger fts_social_circle_ai
-CREATE TRIGGER fts_social_circle_ai AFTER INSERT ON social_circle BEGIN
-  INSERT INTO fts_social_circle(rowid, circle_id, name) SELECT new.rowid, new."circle_id", new."name";
-END;
-
--- trigger fts_social_circle_au
-CREATE TRIGGER fts_social_circle_au AFTER UPDATE ON social_circle BEGIN
-  DELETE FROM fts_social_circle WHERE rowid = old.rowid;
-  INSERT INTO fts_social_circle(rowid, circle_id, name) SELECT new.rowid, new."circle_id", new."name";
-END;
-
--- trigger fts_social_message_ad
-CREATE TRIGGER fts_social_message_ad AFTER DELETE ON social_message BEGIN
-  DELETE FROM fts_social_message WHERE rowid = old.rowid;
-END;
-
--- trigger fts_social_message_ai
-CREATE TRIGGER fts_social_message_ai AFTER INSERT ON social_message BEGIN
-  INSERT INTO fts_social_message(rowid, message_id, body) SELECT new.rowid, new."message_id", (CASE WHEN (SELECT body_text FROM core_content_text
-            WHERE content_id = new."body_content_id") IS NULL THEN NULL
-                 WHEN length((SELECT body_text FROM core_content_text
-            WHERE content_id = new."body_content_id")) > 262144
-                 THEN substr((SELECT body_text FROM core_content_text
-            WHERE content_id = new."body_content_id"), 1, 262144) || ' ...(truncated for search index)'
-                 ELSE (SELECT body_text FROM core_content_text
-            WHERE content_id = new."body_content_id") END);
-END;
-
--- trigger fts_social_message_au
-CREATE TRIGGER fts_social_message_au AFTER UPDATE ON social_message BEGIN
-  DELETE FROM fts_social_message WHERE rowid = old.rowid;
-  INSERT INTO fts_social_message(rowid, message_id, body) SELECT new.rowid, new."message_id", (CASE WHEN (SELECT body_text FROM core_content_text
-            WHERE content_id = new."body_content_id") IS NULL THEN NULL
-                 WHEN length((SELECT body_text FROM core_content_text
-            WHERE content_id = new."body_content_id")) > 262144
-                 THEN substr((SELECT body_text FROM core_content_text
-            WHERE content_id = new."body_content_id"), 1, 262144) || ' ...(truncated for search index)'
-                 ELSE (SELECT body_text FROM core_content_text
-            WHERE content_id = new."body_content_id") END);
-END;
-
--- trigger fts_social_thread_ad
-CREATE TRIGGER fts_social_thread_ad AFTER DELETE ON social_thread BEGIN
-  DELETE FROM fts_social_thread WHERE rowid = old.rowid;
-END;
-
--- trigger fts_social_thread_ai
-CREATE TRIGGER fts_social_thread_ai AFTER INSERT ON social_thread BEGIN
-  INSERT INTO fts_social_thread(rowid, thread_id, subject) SELECT new.rowid, new."thread_id", new."subject";
-END;
-
--- trigger fts_social_thread_au
-CREATE TRIGGER fts_social_thread_au AFTER UPDATE ON social_thread BEGIN
-  DELETE FROM fts_social_thread WHERE rowid = old.rowid;
-  INSERT INTO fts_social_thread(rowid, thread_id, subject) SELECT new.rowid, new."thread_id", new."subject";
-END;
-
--- trigger fts_tally_expense_ad
-CREATE TRIGGER fts_tally_expense_ad AFTER DELETE ON tally_expense BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid = old.rowid;
-END;
-
--- trigger fts_tally_expense_ai
-CREATE TRIGGER fts_tally_expense_ai AFTER INSERT ON tally_expense BEGIN
-  INSERT INTO fts_tally_expense(rowid, expense_id, description) SELECT new.rowid, new."expense_id", new."description" WHERE new."deleted_at" IS NULL;
-END;
-
--- trigger fts_tally_expense_au
-CREATE TRIGGER fts_tally_expense_au AFTER UPDATE ON tally_expense BEGIN
-  DELETE FROM fts_tally_expense WHERE rowid = old.rowid;
-  INSERT INTO fts_tally_expense(rowid, expense_id, description) SELECT new.rowid, new."expense_id", new."description" WHERE new."deleted_at" IS NULL;
+-- trigger fts_schedule_task_from_schedule_project_au
+CREATE TRIGGER fts_schedule_task_from_schedule_project_au
+  AFTER UPDATE OF name ON schedule_project
+BEGIN
+  DELETE FROM fts_schedule_task WHERE rowid IN (
+    SELECT p.rowid FROM schedule_task p WHERE p.project_id = new.project_id);
+  INSERT INTO fts_schedule_task(rowid, task_id, title, description, project)
+    SELECT p.rowid,
+           p.task_id,
+           p.title,
+           p.description,
+           pr.name
+      FROM schedule_task p
+      LEFT JOIN schedule_project pr ON pr.project_id = p.project_id
+     WHERE p.project_id = new.project_id
+       AND p.deleted_at IS NULL;
 END;
 
 -- trigger knowledge_annotation_entity_delete
@@ -5338,6 +4824,119 @@ BEGIN
   VALUES (NEW.memory_id, 'media.memory', COALESCE(NEW.computed_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
 END;
 
+-- trigger money_account_touch_updated_at
+CREATE TRIGGER money_account_touch_updated_at
+AFTER UPDATE ON money_account
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_account
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE account_id = NEW.account_id;
+END;
+
+-- trigger money_balance_checkpoint_currency_matches_account_ai
+CREATE TRIGGER money_balance_checkpoint_currency_matches_account_ai
+BEFORE INSERT ON money_balance_checkpoint
+BEGIN
+  SELECT RAISE(ABORT, 'checkpoint currency must match its account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
+-- trigger money_balance_checkpoint_currency_matches_account_au
+CREATE TRIGGER money_balance_checkpoint_currency_matches_account_au
+BEFORE UPDATE OF account_id, currency ON money_balance_checkpoint
+BEGIN
+  SELECT RAISE(ABORT, 'checkpoint currency must match its account (#1099)')
+   WHERE NEW.currency IS NOT (SELECT currency FROM core_account WHERE account_id = NEW.account_id);
+END;
+
+-- trigger money_balance_checkpoint_touch_updated_at
+CREATE TRIGGER money_balance_checkpoint_touch_updated_at
+AFTER UPDATE ON money_balance_checkpoint
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_balance_checkpoint
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE account_id = NEW.account_id AND as_of = NEW.as_of AND source = NEW.source;
+END;
+
+-- trigger money_import_profile_touch_updated_at
+CREATE TRIGGER money_import_profile_touch_updated_at
+AFTER UPDATE ON money_import_profile
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_import_profile
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE account_id = NEW.account_id AND header_fingerprint = NEW.header_fingerprint;
+END;
+
+-- trigger money_rule_entity_delete
+CREATE TRIGGER money_rule_entity_delete
+AFTER DELETE ON money_rule
+BEGIN
+  DELETE FROM core_entity WHERE entity_id = OLD.rule_id;
+END;
+
+-- trigger money_rule_entity_insert
+CREATE TRIGGER money_rule_entity_insert
+BEFORE INSERT ON money_rule
+BEGIN
+  SELECT RAISE(ABORT, 'entity id is already held by another kind: money_rule (#916)')
+   WHERE EXISTS (
+     SELECT 1 FROM core_entity
+      WHERE entity_id = NEW.rule_id AND entity_type <> 'money.rule');
+  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
+  VALUES (NEW.rule_id, 'money.rule', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
+END;
+
+-- trigger money_rule_touch_updated_at
+CREATE TRIGGER money_rule_touch_updated_at
+AFTER UPDATE ON money_rule
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_rule
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE rule_id = NEW.rule_id;
+END;
+
+-- trigger money_target_touch_updated_at
+CREATE TRIGGER money_target_touch_updated_at
+AFTER UPDATE ON money_target
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_target
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE month = NEW.month AND category_concept_id = NEW.category_concept_id;
+END;
+
+-- trigger money_transaction_touch_updated_at
+CREATE TRIGGER money_transaction_touch_updated_at
+AFTER UPDATE ON money_transaction
+WHEN NEW.row_version = OLD.row_version
+BEGIN
+  UPDATE money_transaction
+     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
+                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                           ELSE NEW.updated_at END,
+         row_version = OLD.row_version + 1
+   WHERE txn_id = NEW.txn_id;
+END;
+
 -- trigger people_important_date_entity_delete
 CREATE TRIGGER people_important_date_entity_delete
 AFTER DELETE ON people_important_date
@@ -5400,19 +4999,6 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE profile_id = NEW.profile_id;
-END;
-
--- trigger replica_intent_outcome_touch_updated_at
-CREATE TRIGGER replica_intent_outcome_touch_updated_at
-AFTER UPDATE ON replica_intent_outcome
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE replica_intent_outcome
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE intent_id = NEW.intent_id;
 END;
 
 -- trigger schedule_attendee_entity_delete
@@ -5715,50 +5301,6 @@ BEGIN
    WHERE task_id = NEW.task_id;
 END;
 
--- trigger share_fulfillment_touch_updated_at
-CREATE TRIGGER share_fulfillment_touch_updated_at
-AFTER UPDATE ON share_fulfillment
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE share_fulfillment
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE grant_id = NEW.grant_id AND peer_vault_id = NEW.peer_vault_id;
-END;
-
--- trigger share_party_vault_binding_not_self_ai
-CREATE TRIGGER share_party_vault_binding_not_self_ai
-BEFORE INSERT ON share_party_vault_binding
-WHEN NEW.vault_id = (SELECT vault_id FROM core_vault LIMIT 1)
-  OR NEW.party_id = (SELECT self_party_id FROM core_vault LIMIT 1)
-BEGIN
-  SELECT RAISE(ABORT, 'share.party_vault_binding: a binding names another party''s vault, never this vault or its self party');
-END;
-
--- trigger share_party_vault_binding_not_self_au
-CREATE TRIGGER share_party_vault_binding_not_self_au
-BEFORE UPDATE OF party_id, vault_id ON share_party_vault_binding
-WHEN NEW.vault_id = (SELECT vault_id FROM core_vault LIMIT 1)
-  OR NEW.party_id = (SELECT self_party_id FROM core_vault LIMIT 1)
-BEGIN
-  SELECT RAISE(ABORT, 'share.party_vault_binding: a binding names another party''s vault, never this vault or its self party');
-END;
-
--- trigger share_subscription_touch_updated_at
-CREATE TRIGGER share_subscription_touch_updated_at
-AFTER UPDATE ON share_subscription
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE share_subscription
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE authority_id = NEW.authority_id AND audience_vault_id = NEW.audience_vault_id;
-END;
-
 -- trigger social_circle_entity_delete
 CREATE TRIGGER social_circle_entity_delete
 AFTER DELETE ON social_circle
@@ -5949,389 +5491,6 @@ BEGIN
                            ELSE NEW.updated_at END,
          row_version = OLD.row_version + 1
    WHERE thread_id = NEW.thread_id;
-END;
-
--- trigger sync_connection_credential_touch_updated_at
-CREATE TRIGGER sync_connection_credential_touch_updated_at
-AFTER UPDATE ON sync_connection_credential
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE sync_connection_credential
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE connection_id = NEW.connection_id;
-END;
-
--- trigger sync_connection_cursor_touch_updated_at
-CREATE TRIGGER sync_connection_cursor_touch_updated_at
-AFTER UPDATE ON sync_connection_cursor
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE sync_connection_cursor
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE cursor_id = NEW.cursor_id;
-END;
-
--- trigger sync_connection_health_touch_updated_at
-CREATE TRIGGER sync_connection_health_touch_updated_at
-AFTER UPDATE ON sync_connection_health
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE sync_connection_health
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE connection_id = NEW.connection_id;
-END;
-
--- trigger tally_expense_currency_matches_group_ai
-CREATE TRIGGER tally_expense_currency_matches_group_ai
-BEFORE INSERT ON tally_expense
-WHEN NEW.group_id IS NOT NULL
- AND NEW.currency <> (SELECT g.currency FROM tally_group g WHERE g.group_id = NEW.group_id)
-BEGIN
-  SELECT RAISE(ABORT, 'tally.expense: an expense in a group is in that group''s currency');
-END;
-
--- trigger tally_expense_currency_matches_group_au
-CREATE TRIGGER tally_expense_currency_matches_group_au
-BEFORE UPDATE OF currency, group_id ON tally_expense
-WHEN NEW.group_id IS NOT NULL
- AND NEW.currency <> (SELECT g.currency FROM tally_group g WHERE g.group_id = NEW.group_id)
-BEGIN
-  SELECT RAISE(ABORT, 'tally.expense: an expense in a group is in that group''s currency');
-END;
-
--- trigger tally_expense_entity_delete
-CREATE TRIGGER tally_expense_entity_delete
-AFTER DELETE ON tally_expense
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.expense_id;
-END;
-
--- trigger tally_expense_entity_insert
-CREATE TRIGGER tally_expense_entity_insert
-BEFORE INSERT ON tally_expense
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_expense (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.expense_id AND entity_type <> 'tally.expense');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.expense_id, 'tally.expense', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_expense_line_allocation_touch_updated_at
-CREATE TRIGGER tally_expense_line_allocation_touch_updated_at
-AFTER UPDATE ON tally_expense_line_allocation
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_expense_line_allocation
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE line_item_id = NEW.line_item_id AND party_id = NEW.party_id;
-END;
-
--- trigger tally_expense_line_item_entity_delete
-CREATE TRIGGER tally_expense_line_item_entity_delete
-AFTER DELETE ON tally_expense_line_item
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.line_item_id;
-END;
-
--- trigger tally_expense_line_item_entity_insert
-CREATE TRIGGER tally_expense_line_item_entity_insert
-BEFORE INSERT ON tally_expense_line_item
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_expense_line_item (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.line_item_id AND entity_type <> 'tally.expense_line_item');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.line_item_id, 'tally.expense_line_item', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_expense_line_item_touch_updated_at
-CREATE TRIGGER tally_expense_line_item_touch_updated_at
-AFTER UPDATE ON tally_expense_line_item
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_expense_line_item
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE line_item_id = NEW.line_item_id;
-END;
-
--- trigger tally_expense_payer_touch_updated_at
-CREATE TRIGGER tally_expense_payer_touch_updated_at
-AFTER UPDATE ON tally_expense_payer
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_expense_payer
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE expense_id = NEW.expense_id AND party_id = NEW.party_id;
-END;
-
--- trigger tally_expense_split_touch_updated_at
-CREATE TRIGGER tally_expense_split_touch_updated_at
-AFTER UPDATE ON tally_expense_split
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_expense_split
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE expense_id = NEW.expense_id AND party_id = NEW.party_id;
-END;
-
--- trigger tally_expense_touch_updated_at
-CREATE TRIGGER tally_expense_touch_updated_at
-AFTER UPDATE ON tally_expense
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_expense
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE expense_id = NEW.expense_id;
-END;
-
--- trigger tally_friend_entity_delete
-CREATE TRIGGER tally_friend_entity_delete
-AFTER DELETE ON tally_friend
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.friend_id;
-END;
-
--- trigger tally_friend_entity_insert
-CREATE TRIGGER tally_friend_entity_insert
-BEFORE INSERT ON tally_friend
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_friend (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.friend_id AND entity_type <> 'tally.friend');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.friend_id, 'tally.friend', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_friend_touch_updated_at
-CREATE TRIGGER tally_friend_touch_updated_at
-AFTER UPDATE ON tally_friend
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_friend
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE friend_id = NEW.friend_id;
-END;
-
--- trigger tally_group_entity_delete
-CREATE TRIGGER tally_group_entity_delete
-AFTER DELETE ON tally_group
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.group_id;
-END;
-
--- trigger tally_group_entity_insert
-CREATE TRIGGER tally_group_entity_insert
-BEFORE INSERT ON tally_group
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_group (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.group_id AND entity_type <> 'tally.group');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.group_id, 'tally.group', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_group_touch_updated_at
-CREATE TRIGGER tally_group_touch_updated_at
-AFTER UPDATE ON tally_group
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_group
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE group_id = NEW.group_id;
-END;
-
--- trigger tally_nudge_entity_delete
-CREATE TRIGGER tally_nudge_entity_delete
-AFTER DELETE ON tally_nudge
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.nudge_id;
-END;
-
--- trigger tally_nudge_entity_insert
-CREATE TRIGGER tally_nudge_entity_insert
-BEFORE INSERT ON tally_nudge
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_nudge (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.nudge_id AND entity_type <> 'tally.nudge');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.nudge_id, 'tally.nudge', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_nudge_touch_updated_at
-CREATE TRIGGER tally_nudge_touch_updated_at
-AFTER UPDATE ON tally_nudge
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_nudge
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE nudge_id = NEW.nudge_id;
-END;
-
--- trigger tally_obligation_entity_delete
-CREATE TRIGGER tally_obligation_entity_delete
-AFTER DELETE ON tally_obligation
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.obligation_id;
-END;
-
--- trigger tally_obligation_entity_insert
-CREATE TRIGGER tally_obligation_entity_insert
-BEFORE INSERT ON tally_obligation
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_obligation (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.obligation_id AND entity_type <> 'tally.obligation');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.obligation_id, 'tally.obligation', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_obligation_touch_updated_at
-CREATE TRIGGER tally_obligation_touch_updated_at
-AFTER UPDATE ON tally_obligation
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_obligation
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE obligation_id = NEW.obligation_id;
-END;
-
--- trigger tally_recurring_expense_entity_delete
-CREATE TRIGGER tally_recurring_expense_entity_delete
-AFTER DELETE ON tally_recurring_expense
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.template_id;
-END;
-
--- trigger tally_recurring_expense_entity_insert
-CREATE TRIGGER tally_recurring_expense_entity_insert
-BEFORE INSERT ON tally_recurring_expense
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_recurring_expense (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.template_id AND entity_type <> 'tally.recurring_expense');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.template_id, 'tally.recurring_expense', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_recurring_expense_split_touch_updated_at
-CREATE TRIGGER tally_recurring_expense_split_touch_updated_at
-AFTER UPDATE ON tally_recurring_expense_split
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_recurring_expense_split
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE template_id = NEW.template_id AND party_id = NEW.party_id;
-END;
-
--- trigger tally_recurring_expense_touch_updated_at
-CREATE TRIGGER tally_recurring_expense_touch_updated_at
-AFTER UPDATE ON tally_recurring_expense
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_recurring_expense
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE template_id = NEW.template_id;
-END;
-
--- trigger tally_settlement_currency_matches_group_ai
-CREATE TRIGGER tally_settlement_currency_matches_group_ai
-BEFORE INSERT ON tally_settlement
-WHEN NEW.group_id IS NOT NULL
- AND NEW.currency <> (SELECT g.currency FROM tally_group g WHERE g.group_id = NEW.group_id)
-BEGIN
-  SELECT RAISE(ABORT, 'tally.settlement: a settlement in a group is in that group''s currency');
-END;
-
--- trigger tally_settlement_currency_matches_group_au
-CREATE TRIGGER tally_settlement_currency_matches_group_au
-BEFORE UPDATE OF currency, group_id ON tally_settlement
-WHEN NEW.group_id IS NOT NULL
- AND NEW.currency <> (SELECT g.currency FROM tally_group g WHERE g.group_id = NEW.group_id)
-BEGIN
-  SELECT RAISE(ABORT, 'tally.settlement: a settlement in a group is in that group''s currency');
-END;
-
--- trigger tally_settlement_entity_delete
-CREATE TRIGGER tally_settlement_entity_delete
-AFTER DELETE ON tally_settlement
-BEGIN
-  DELETE FROM core_entity WHERE entity_id = OLD.settlement_id;
-END;
-
--- trigger tally_settlement_entity_insert
-CREATE TRIGGER tally_settlement_entity_insert
-BEFORE INSERT ON tally_settlement
-BEGIN
-  SELECT RAISE(ABORT, 'entity id is already held by another kind: tally_settlement (#916)')
-   WHERE EXISTS (
-     SELECT 1 FROM core_entity
-      WHERE entity_id = NEW.settlement_id AND entity_type <> 'tally.settlement');
-  INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
-  VALUES (NEW.settlement_id, 'tally.settlement', COALESCE(NEW.created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));
-END;
-
--- trigger tally_settlement_touch_updated_at
-CREATE TRIGGER tally_settlement_touch_updated_at
-AFTER UPDATE ON tally_settlement
-WHEN NEW.row_version = OLD.row_version
-BEGIN
-  UPDATE tally_settlement
-     SET updated_at = CASE WHEN NEW.updated_at = OLD.updated_at
-                           THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                           ELSE NEW.updated_at END,
-         row_version = OLD.row_version + 1
-   WHERE settlement_id = NEW.settlement_id;
 END;
 
 -- trigger trg_fts_content_item_asset_ad
@@ -6590,18 +5749,6 @@ BEGIN
                  ELSE (SELECT body_text FROM core_content_text
             WHERE content_id = b."body_content_id") END) FROM knowledge_note b
    WHERE b."body_content_id" = NEW.content_id AND b."deleted_at" IS NULL;
-  DELETE FROM fts_social_message
-   WHERE rowid IN (SELECT rowid FROM social_message WHERE "body_content_id" = NEW.content_id);
-  INSERT INTO fts_social_message(rowid, message_id, body)
-  SELECT b.rowid, b."message_id", (CASE WHEN (SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id") IS NULL THEN NULL
-                 WHEN length((SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id")) > 262144
-                 THEN substr((SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id"), 1, 262144) || ' ...(truncated for search index)'
-                 ELSE (SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id") END) FROM social_message b
-   WHERE b."body_content_id" = NEW.content_id;
 END;
 
 -- trigger trg_fts_content_text_au
@@ -6652,18 +5799,6 @@ BEGIN
                  ELSE (SELECT body_text FROM core_content_text
             WHERE content_id = b."body_content_id") END) FROM knowledge_note b
    WHERE b."body_content_id" = NEW.content_id AND b."deleted_at" IS NULL;
-  DELETE FROM fts_social_message
-   WHERE rowid IN (SELECT rowid FROM social_message WHERE "body_content_id" = NEW.content_id);
-  INSERT INTO fts_social_message(rowid, message_id, body)
-  SELECT b.rowid, b."message_id", (CASE WHEN (SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id") IS NULL THEN NULL
-                 WHEN length((SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id")) > 262144
-                 THEN substr((SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id"), 1, 262144) || ' ...(truncated for search index)'
-                 ELSE (SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id") END) FROM social_message b
-   WHERE b."body_content_id" = NEW.content_id;
 END;
 
 -- trigger trg_fts_document_derivative_ad
@@ -6833,19 +5968,6 @@ BEGIN
                  ELSE (SELECT body_text FROM core_content_text
             WHERE content_id = b."body_content_id") END) FROM knowledge_note b
    WHERE b."note_id" = NEW.owner_id AND NEW.owner_type = 'knowledge.note' AND b."deleted_at" IS NULL;
-  DELETE FROM fts_social_message
-   WHERE rowid IN (SELECT rowid FROM social_message WHERE "message_id" = NEW.owner_id)
-     AND NEW.owner_type = 'social.message';
-  INSERT INTO fts_social_message(rowid, message_id, body)
-  SELECT b.rowid, b."message_id", (CASE WHEN (SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id") IS NULL THEN NULL
-                 WHEN length((SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id")) > 262144
-                 THEN substr((SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id"), 1, 262144) || ' ...(truncated for search index)'
-                 ELSE (SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id") END) FROM social_message b
-   WHERE b."message_id" = NEW.owner_id AND NEW.owner_type = 'social.message';
 END;
 
 -- trigger trg_fts_representation_au
@@ -6898,17 +6020,4 @@ BEGIN
                  ELSE (SELECT body_text FROM core_content_text
             WHERE content_id = b."body_content_id") END) FROM knowledge_note b
    WHERE b."note_id" = NEW.owner_id AND NEW.owner_type = 'knowledge.note' AND b."deleted_at" IS NULL;
-  DELETE FROM fts_social_message
-   WHERE rowid IN (SELECT rowid FROM social_message WHERE "message_id" = NEW.owner_id)
-     AND NEW.owner_type = 'social.message';
-  INSERT INTO fts_social_message(rowid, message_id, body)
-  SELECT b.rowid, b."message_id", (CASE WHEN (SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id") IS NULL THEN NULL
-                 WHEN length((SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id")) > 262144
-                 THEN substr((SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id"), 1, 262144) || ' ...(truncated for search index)'
-                 ELSE (SELECT body_text FROM core_content_text
-            WHERE content_id = b."body_content_id") END) FROM social_message b
-   WHERE b."message_id" = NEW.owner_id AND NEW.owner_type = 'social.message';
 END;

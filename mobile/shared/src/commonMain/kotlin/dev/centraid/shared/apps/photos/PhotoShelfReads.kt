@@ -16,7 +16,7 @@ import dev.centraid.shared.sync.ScreenWrites
 /**
  * WHAT A PHOTO SHELF READS (#1029, the photos port).
  *
- * Eight predicates over one table, one order and one projection. The shelf is
+ * Seven predicates over one table, one order and one projection. The shelf is
  * the parameter; the STATEMENT is the only thing that changes, which is the
  * whole claim `PhotoShelfState` makes — and this file is where that claim is
  * either true or is four screens wearing one message.
@@ -74,8 +74,8 @@ import dev.centraid.shared.sync.ScreenWrites
  *
  * ## There is no join on this door, and there is no roster either
  *
- * Four of the eight shelves are a membership — an album's entries, a person's
- * confirmed faces, a memory's members, a star — and the door has no join
+ * Three of the seven shelves are a membership — an album's entries, a memory's
+ * members, a star — and the door has no join
  * clause. The honest shape would be two reads: resolve the ids, then page the
  * assets. **`PhotoShelfState` has nowhere to put a roster** (no field) and
  * `PhotoShelfEvent` has no arm that carries one, so a two-read walk cannot be
@@ -174,21 +174,6 @@ public object PhotoShelfReads :
         "WHERE notation = ? AND scheme_id IN (SELECT scheme_id FROM core_concept_scheme " +
         "WHERE uri = ?)))"
 
-    /**
-     * A CONFIRMED FACE, AND ONLY A CONFIRMED ONE.
-     *
-     * `review_state` is the column `media.answer_face_proposal` writes and the
-     * only writer of it; the DDL's CHECK ties `'confirmed'` to a non-null
-     * `confirmed_by_party_id`, so the two cannot disagree and reading the state
-     * is reading both. A proposal is a QUESTION and not an identification —
-     * putting proposed faces on a person's shelf would show a member
-     * photographs of a stranger under their sister's name.
-     */
-    private const val CONFIRMED: String = "confirmed"
-
-    private const val CONFIRMED_FACE = "asset_id IN (SELECT asset_id FROM media_face_region " +
-        "WHERE party_id = ? AND review_state = ?)"
-
     private const val IN_ALBUM = "asset_id IN (SELECT target_id FROM core_collection_entry " +
         "WHERE collection_id = ? AND target_type = ?)"
 
@@ -236,7 +221,7 @@ public object PhotoShelfReads :
      * One arm's statement: a name for the log, a predicate, its binds and the
      * column it sorts on.
      *
-     * [sortColumn] defaults to the timeline's, because seven of the eight
+     * [sortColumn] defaults to the timeline's, because six of the seven
      * shelves ARE the timeline under a predicate. The trash overrides it, and
      * it is the only arm that does.
      */
@@ -298,14 +283,6 @@ public object PhotoShelfReads :
     }
 
     private fun stateViewArm(view: PhotoStateView): Arm? {
-        val person = view.person
-        if (person != null) {
-            return Arm(
-                name = "photos.shelf.person",
-                where = "$LIVE AND $CONFIRMED_FACE",
-                bind = listOf(Value(text = person.party_id), Value(text = CONFIRMED)),
-            )
-        }
         return when (view.mode?.kind) {
             PhotoStateView.Mode.Kind.KIND_FAVORITES -> Arm(
                 name = "photos.shelf.favorites",

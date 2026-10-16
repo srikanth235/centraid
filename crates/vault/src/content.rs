@@ -230,6 +230,37 @@ impl Vault {
         Ok(written)
     }
 
+    /// The derivatives the vault already has rows for, for the content item
+    /// whose bytes hash to `original` (hex): `(variant, derivative's own
+    /// content hash)`, a thumbnail and a preview. A restored vault holds every
+    /// one of these with the rows it came back in, so a shell that streams the
+    /// original again need not render them (#1080, the simulator run). An item
+    /// past its purge instant has no derivatives to offer.
+    ///
+    /// # Errors
+    /// [`crate::error::VaultError`] when the vault itself is unreadable.
+    pub fn derivatives_of(&self, original: &str) -> Result<Vec<(String, String)>> {
+        let now = self.clock().now_text();
+        self.read(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT d.variant, d.content_hash
+                   FROM core_content_derivative d
+                   JOIN core_content_item i ON i.content_id = d.content_id
+                  WHERE i.content_hash = ?1
+                    AND d.variant IN ('thumb', 'preview')
+                    AND d.content_hash IS NOT NULL
+                    AND (i.purge_at IS NULL OR i.purge_at > ?2)
+                  ORDER BY d.variant",
+            )?;
+            let rows = statement
+                .query_map(rusqlite::params![original, now], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+    }
+
     /// Record a DERIVATIVE the shell rendered and this device now holds: a
     /// thumbnail, a preview or a poster of the content `variant_of` names
     /// (#1080, the stage door's `for_hash` and `tier`).

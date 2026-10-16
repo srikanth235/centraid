@@ -52,7 +52,11 @@ class CameraRollStreamSpec : StringSpec({
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     /** A core that stages for real, in memory, and remembers every begin and command. */
-    class StagingCore(private val held: Set<String> = emptySet()) {
+    class StagingCore(
+        private val held: Set<String> = emptySet(),
+        /** The tiers the vault already holds for any original staged (the restored phone's re-walk). */
+        private val derivativesHeld: List<String> = emptyList(),
+    ) {
         val begins = mutableListOf<StageBegin>()
         val commands = mutableListOf<Command>()
         val landed = mutableListOf<ByteArray>()
@@ -86,6 +90,7 @@ class CameraRollStreamSpec : StringSpec({
                                     content_hash = hash,
                                     byte_size = bytes.size.toLong(),
                                     already_held = hash in held,
+                                    derivatives_held = if (begins.last().for_hash.size == 0) derivativesHeld else emptyList(),
                                 ),
                             ),
                         ),
@@ -258,6 +263,27 @@ class CameraRollStreamSpec : StringSpec({
             report.alreadyHeld shouldBe 1
             services.mediaLibrary.rendered.shouldBeEmpty()
             core.begins.size shouldBe 1
+        }
+    }
+
+    "a restored phone's re-walk renders only the tiers the vault lacks (#1080, the simulator run)" {
+        runTest {
+            // THE ORIGINAL IS THE GATEWAY'S, NOT THE PHONE'S: `already_held` is
+            // false, and the restore brought the thumbnail back.
+            val services = library(asset("A"), bytes = mapOf("A" to still))
+            val core = StagingCore(derivativesHeld = listOf("thumb"))
+            val report = CameraRoll(services, core = { core.core }).pass("vault-1")
+            report.queued shouldBe 1
+            report.alreadyHeld shouldBe 0
+            services.mediaLibrary.rendered.map { it.first to it.second.wire } shouldBe listOf("A" to "preview")
+            core.begins.drop(1).map { it.tier } shouldBe listOf("preview")
+
+            // BOTH HELD: nothing is rendered, and nothing is staged beside the original.
+            val whole = library(asset("A"), bytes = mapOf("A" to still))
+            val full = StagingCore(derivativesHeld = listOf("preview", "thumb"))
+            CameraRoll(whole, core = { full.core }).pass("vault-1").queued shouldBe 1
+            whole.mediaLibrary.rendered.shouldBeEmpty()
+            full.begins.size shouldBe 1
         }
     }
 

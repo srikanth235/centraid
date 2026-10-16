@@ -322,17 +322,22 @@ struct DeniedGate: View {
 /// A SECONDARY VERB: text in ink over a hairline outline, 44pt tall. The
 /// kit's Retry, empty action and Show more all draw this, so none of them
 /// competes with a screen's one ink button.
+///
+/// **IT HUGS ITS LABEL** and sits on the leading edge of the text above it.
+/// There is no width switch on the call: the one place an outline stretches
+/// is inside a `KitChoiceStack`, which hands every button in it the same full
+/// width.
 struct KitOutlineButton: View {
     let label: String
     var tone: String = "text"
-    /// Stretches to the column's width, label centred.
-    var fullWidth: Bool = false
     /// A 16 glyph before the label, in the tone's ink.
     var iconKey: String = ""
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
+    /// Set by the nearest `KitChoiceStack`: the stack's width, not the label's.
+    @Environment(\.inChoiceStack) private var stacked
 
     var body: some View {
         let ink = enabled ? tone : "textDisabled"
@@ -346,7 +351,7 @@ struct KitOutlineButton: View {
                     .foregroundStyle(Theme.color(ink, scheme))
             }
             .padding(.horizontal, 16)
-            .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
+            .frame(maxWidth: stacked ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
                     .strokeBorder(
@@ -357,5 +362,38 @@ struct KitOutlineButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Choice stack
+
+private struct InChoiceStackKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True inside a `KitChoiceStack`, where an outline button stretches.
+    var inChoiceStack: Bool {
+        get { self[InChoiceStackKey.self] }
+        set { self[InChoiceStackKey.self] = newValue }
+    }
+}
+
+/// ALTERNATIVES STACKED VERTICALLY: an ink button and its Cancel or Not now,
+/// or a set of choices like a Money transaction's offers. Every button in the stack shares
+/// one full width, ink and outline alike, so the column reads as one set of
+/// answers to one question. This is the only place an outline stretches; an
+/// outline anywhere else hugs its label.
+struct KitChoiceStack<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.spacing("3", scheme)) {
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.inChoiceStack, true)
     }
 }

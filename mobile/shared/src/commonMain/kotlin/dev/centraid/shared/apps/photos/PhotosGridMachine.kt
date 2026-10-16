@@ -951,9 +951,7 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
 
     /**
      * `media_asset` — the roll's rows. Not `media_asset_phash`, which is a
-     * duplicates hint nothing on this grid draws, and not the face tables,
-     * which move on their own schedule and would redraw the library every time
-     * recognition finished a batch.
+     * duplicates hint nothing on this grid draws.
      *
      * `core_tag` and the collection tables are passed on with their NAME and
      * no ids: the star is the Favorites filter's business and the albums the
@@ -969,6 +967,16 @@ public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent
             PhotosGridEvent(rows_changed = PhotosGridEvent.RowsChanged(table = table))
         else -> null
     }
+
+    /**
+     * THE MEMBER'S RULE CHANGED (#1080): every cell's [PhotoCell.Held] was
+     * derived under the old one, so the grid reads its page again — the
+     * `media_asset` re-read with no ids, which no cell can be excluded from.
+     * What the labels say is `LinkConditions`, which the rule's writer updated
+     * before this was asked.
+     */
+    override fun conditionsChanged(): PhotosGridEvent =
+        PhotosGridEvent(rows_changed = PhotosGridEvent.RowsChanged(table = TABLE))
 
     /**
      * `media_asset` — the roll's rows, AND the table the core names when a

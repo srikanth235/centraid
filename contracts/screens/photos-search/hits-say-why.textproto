@@ -1,20 +1,20 @@
 # WHY THESE MATCHED — AS A KIND AND A NAME, NOT AS PROSE.
 #
-# The same word can hit a label, a person, a place or the member's own title,
-# and a member looking at a grid of photographs has no way to tell which: "Ada"
-# returned these because a face was confirmed, not because someone wrote it in
+# The same word can hit a label, a place or the member's own title, and a
+# member looking at a grid of photographs has no way to tell which: "Dublin"
+# returned these because a place answers to it, not because someone wrote it in
 # a caption.
 #
 # `matches` replaced a `repeated string matched_on` (field 4, now reserved) for
 # the reason this fixture is the proof of: a prose line made each shell compose
-# its own sentence — "Person: Ada" on one, "In photos of Ada" on the other —
+# its own sentence — "Place: Dublin" on one, "In photos of Dublin" on the other —
 # which is exactly how v0's empty states drifted apart. The kind is an enum and
 # the value is the vault's own word for the thing, so the SENTENCE stays the
 # view's and the DISTINCTION is the contract's.
 #
-# The value is never the query echoed back. The query here is "Ada"; the person
-# match says "Ada Lovelace", because the point is to show what it landed on.
-# Two of the three matches below do not contain the query as typed at all.
+# The value is never the query echoed back. The query here is "Dublin"; the
+# place match says "Dún Laoghaire", because the point is to show what it landed
+# on. Two of the three matches below do not contain the query as typed at all.
 #
 # `matches` rides on `SearchHits` rather than on each cell: it explains the
 # RESULT SET. A per-cell reason would be a different feature and a much more
@@ -29,7 +29,7 @@ seat {
   durability: DURABILITY_AUTHORITATIVE
   connectivity: CONNECTIVITY_ONLINE_METERED
 }
-query: "Ada"
+query: "Dublin"
 hits {
   cells {
     asset_id: "ast-0110"
@@ -51,15 +51,15 @@ hits {
   }
   next_cursor: "2026-01-11T14:30:00Z|ast-0320"
   matches {
-    kind: KIND_PERSON
-    value: "Ada Lovelace"
+    kind: KIND_PLACE
+    value: "Dún Laoghaire"
   }
   matches {
     kind: KIND_LABEL
-    value: "Lake"
+    value: "Ferry"
   }
   matches {
     kind: KIND_TITLE
-    value: "Ada at the lake"
+    value: "Dublin ferry at dusk"
   }
 }

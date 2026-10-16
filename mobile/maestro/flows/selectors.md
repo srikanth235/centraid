@@ -52,7 +52,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `backup-forget-<gatewayId>` | Backup | one gateway's Forget |
 | `backup-battery` | Backup | the battery-optimisation remedy — **Android only**; iOS has no such setting |
 | `home-band-chat` | Home | the band's Chat tab (the second place, after Home) |
-| `import-banner` | every route | the contacts import's progress and outcome (and `import-done`) |
+| `import-banner` | every route, at the foot above the band | an import's status line: progress and outcome (`import-sentence`), its one action (`import-action`, "Open People" after a made vault's imports) and its close key (`import-close`) |
 | `home-vault-sheet` | Home | the vault switcher sheet |
 | `vault-row-<vaultId>` | Home | one switcher row (and `vault-forget-<vaultId>`, its **Delete**) |
 | `vault-rename-<vaultId>` | Home | one switcher row's Rename (a swipe on iOS, also in the row's long-press menu; a button on Android), and `vault-rename-field` / `vault-rename-save` in its dialog |
@@ -79,6 +79,10 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `words-shown` | words.make / words.show | the recovery key's 24 cells, read as one grid (each cell is `words-word-<n>`) |
 | `words-save-copy` | words.make / words.show | "Save a copy" — the share sheet with the key as one line |
 | `words-make-primary` | words.make | the sheet's primary ("I've saved it", "Done") |
+| `locker-more-access` | Locker | the More sheet's Access history row — pushes the whole Locker's access history ([Q-1047-21](../../../docs/decisions.md#open-questions-for-the-owner-1046-1047)); **iOS**. Android draws every More row as `sheet-option-<key>`, here `sheet-option-access` |
+| `locker-access-lede` | Locker Access history | the one-line lede under the title ("Every unlock, reveal, copy and export, newest first.") |
+| `locker-access` | Locker Access history | the list of receipts — **Android only** (an iOS container id would leak onto its rows) |
+| `locker-field-access:<receiptId>-value` | Locker Access history, and an item's own Access history | one receipt's day and minute, the value of the item page's history row (`<receiptId>` is the receipt's); **iOS**. Android tags the row `locker-field-access:<receiptId>` and its value `locker-value-access:<receiptId>`. A receipt never carries a value, so these hold a time and never a secret |
 | `BackButton` | any pushed page (iOS) | the navigation bar's back — UIKit's own id; Maestro's `back` is Android's system key and does nothing on iOS |
 
 Home, its Settings and vault sheets, the Backup screen, the first-launch deck and Chat set tags; the Backup screen's ids are written in both shells and selected by no flow yet. The iOS shell runs on a simulator against the real `HomeMachine` through `HomeBridge`, so the iOS half of each id renders; the Android half is compiled and unobserved, because no machine here has an Android emulator.

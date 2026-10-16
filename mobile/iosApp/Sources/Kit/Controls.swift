@@ -189,7 +189,7 @@ struct KitSegmented<Key: Hashable>: View {
         let active = key == selected
         return Button { onSelect(key) } label: {
             Text(label)
-                .centraidType(active ? "control" : "band")
+                .centraidType(active ? "control" : "band", scales: false)
                 .foregroundStyle(Theme.color(active ? "text" : "textSoft", scheme))
                 .lineLimit(1)
                 .padding(.horizontal, CentraidGeometry.pageMargin)

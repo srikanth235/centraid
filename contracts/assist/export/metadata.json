@@ -285,7 +285,7 @@
       ]
     },
     {
-      "card": "task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (1 highest..9 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from",
+      "card": "task: name, date (due), status (open|in_progress|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen delete restore add_to remove_from",
       "container": false,
       "date": {
         "label": "due",
@@ -346,7 +346,7 @@
             "table": "schedule_task"
           },
           "type": "number",
-          "unit": "1 highest..9 lowest, 0 none",
+          "unit": "9 highest..1 lowest, 0 none",
           "values": []
         },
         {

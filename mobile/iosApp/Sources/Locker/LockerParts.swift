@@ -51,30 +51,34 @@ struct LockerWall: View {
                         .foregroundStyle(Theme.color(lock.phase == .failed ? "net" : "textSoft", scheme))
                         .accessibilityIdentifier("locker-wall-notice")
                 }
-                if !lock.unlockLabel.isEmpty {
-                    KitInkButton(label: lock.unlockLabel) {
-                        sendLock(LockerLockSeam.event { $0.unlock = .init() })
+                // UNLOCK AND THE WORDS DOOR ARE ALTERNATIVES: one stack.
+                if !lock.unlockLabel.isEmpty || !lock.wordsLabel.isEmpty {
+                    KitChoiceStack {
+                        if !lock.unlockLabel.isEmpty {
+                            KitInkButton(label: lock.unlockLabel) {
+                                sendLock(LockerLockSeam.event { $0.unlock = .init() })
+                            }
+                            .accessibilityIdentifier("locker-unlock")
+                        }
+                        // THE KEY IS NOT ON THIS PHONE: "Enter your 24 words",
+                        // the intent the shell routes to words.enter (#1047
+                        // E2). ONE INK PER VIEW: Unlock is the thing to do; the
+                        // words verb is the ink only when it stands alone.
+                        if !lock.wordsLabel.isEmpty {
+                            if lock.unlockLabel.isEmpty {
+                                KitInkButton(label: lock.wordsLabel) {
+                                    sendLock(LockerLockSeam.event { $0.words = .init() })
+                                }
+                                .accessibilityIdentifier("locker-words")
+                            } else {
+                                KitOutlineButton(label: lock.wordsLabel) {
+                                    sendLock(LockerLockSeam.event { $0.words = .init() })
+                                }
+                                .accessibilityIdentifier("locker-words")
+                            }
+                        }
                     }
-                    .accessibilityIdentifier("locker-unlock")
                     .padding(.top, 4)
-                }
-                // THE KEY IS NOT ON THIS PHONE: "Enter your 24 words", the
-                // intent the shell routes to words.enter (#1047 E2).
-                // ONE INK PER VIEW: Unlock is the thing to do; the words verb
-                // is the ink only when it stands alone.
-                if !lock.wordsLabel.isEmpty {
-                    if lock.unlockLabel.isEmpty {
-                        KitInkButton(label: lock.wordsLabel) {
-                            sendLock(LockerLockSeam.event { $0.words = .init() })
-                        }
-                        .accessibilityIdentifier("locker-words")
-                        .padding(.top, 4)
-                    } else {
-                        KitOutlineButton(label: lock.wordsLabel, fullWidth: true) {
-                            sendLock(LockerLockSeam.event { $0.words = .init() })
-                        }
-                        .accessibilityIdentifier("locker-words")
-                    }
                 }
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)

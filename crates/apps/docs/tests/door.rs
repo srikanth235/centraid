@@ -277,7 +277,7 @@ fn the_four_queries_answer_over_rows_the_commands_wrote() {
     assert!(denial.is_none());
     assert!(
         activity.events.is_empty(),
-        "the commands receipt against agent.command, not against the document — \
+        "the commands receipt against command.definition, not against the document — \
          an empty rail is honest and the fixture says so: {:?}",
         activity.events
     );

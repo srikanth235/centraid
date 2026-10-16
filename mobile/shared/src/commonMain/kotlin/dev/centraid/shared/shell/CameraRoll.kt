@@ -346,7 +346,12 @@ public class CameraRoll(
             if (original) {
                 // A RE-WALK RENDERS NOTHING: the core already holds this
                 // original, and its derivatives went in with it the first time.
-                if (!ok.alreadyHeld) derivatives(handle, resource.ref, ok.contentHash)
+                // A RESTORED PHONE'S RE-WALK RENDERS ONLY WHAT THE VAULT LACKS
+                // (#1080, the simulator run): the original is the gateway's
+                // there, so `alreadyHeld` is false, but the restore brought
+                // back every derivative with its row, and the core says which
+                // tiers it holds.
+                if (!ok.alreadyHeld) derivatives(handle, resource.ref, ok.contentHash, ok.derivativesHeld)
                 queued = Offered.Queued(alreadyHeld = ok.alreadyHeld, bytes = ok.byteSize)
             } else {
                 queued = queued?.let { it.copy(bytes = it.bytes + ok.byteSize) }
@@ -389,8 +394,9 @@ public class CameraRoll(
      * nothing but itself**: the original is committed already, and the grid
      * falls back to it.
      */
-    private suspend fun derivatives(handle: CentraidCore, ref: String, hash: String) {
+    private suspend fun derivatives(handle: CentraidCore, ref: String, hash: String, held: Set<String>) {
         for (tier in MediaLibrary.Tier.entries) {
+            if (tier.wire in held) continue
             val bytes = services.mediaLibrary.render(ref, tier) ?: continue
             var at = 0
             Staging.stage(

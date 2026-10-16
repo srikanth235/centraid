@@ -14,8 +14,10 @@ import dev.centraid.shared.custody.PairRefusal
 import dev.centraid.shared.custody.PairResult
 import dev.centraid.shared.custody.Pairing
 import dev.centraid.shared.custody.Readiness
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -205,6 +207,42 @@ class PairAndRestoreSpec : StringSpec({
         reduce(pairing, refused(PairRefusal.MOVED)).model.state.notice shouldBe WordsCopy.PAIR_MOVED
         // THE MEMBER CAN PASTE A NEW CODE straight into the failed screen.
         reduce(reduce(pairing, refused(PairRefusal.NOT_TAKEN)).model, typed("new")).model.state.notice shouldBe ""
+    }
+
+    "a moved vault is refused with nothing to retry: no field, no scan, no Try again, and one Done" {
+        // THE ACTION THAT CAN SUCCEED, OR NONE (#1080 receipt, "for the
+        // owner"). `VAULT_MOVED` means another phone holds this vault's writer
+        // epoch, so the same pairing and a fresh code are answered the same
+        // way. The three refusals a second attempt CAN change keep their key.
+        val pairing = reduce(reduce(waiting(), typed("eyJ2")).model, primary).model
+        for (retryable in listOf(PairRefusal.UNREACHABLE, PairRefusal.NOT_A_CODE, PairRefusal.NOT_TAKEN)) {
+            withClue("$retryable") {
+                val failed = reduce(pairing, refused(retryable)).model.state
+                failed.primary_label shouldBe CustodyCopy.TRY_AGAIN
+                failed.payload_label shouldNotBe ""
+            }
+        }
+        val moved = reduce(pairing, refused(PairRefusal.MOVED)).model
+        moved.state.phase shouldBe PairLaptopState.Phase.PHASE_FAILED
+        moved.state.notice shouldBe WordsCopy.PAIR_MOVED
+        moved.state.primary_label shouldBe CustodyCopy.DONE
+        moved.state.primary_label shouldNotBe CustodyCopy.TRY_AGAIN
+        moved.state.payload_label shouldBe ""
+        moved.state.scan_label shouldBe ""
+        moved.state.photo_label shouldBe ""
+        moved.state.secondary_label shouldBe ""
+        moved.state.body shouldBe ""
+        moved.state.primary_enabled shouldBe true
+        // NOTHING TYPED OR SCANNED CHANGES IT, and nothing is sent.
+        reduce(moved, typed("new")).model.state.notice shouldBe WordsCopy.PAIR_MOVED
+        reduce(moved, event(PairLaptopEvent(scanned = PairLaptopEvent.Scanned(payload = "eyJ2")))).effects shouldBe emptyList()
+        // DONE CLOSES, and pairs nothing.
+        val done = reduce(moved, primary)
+        done.effects shouldBe emptyList()
+        done.model.state.phase shouldBe PairLaptopState.Phase.PHASE_CLOSED
+        // A SCREEN OPENED AGAIN STARTS CLEAN: the bar does not outlive the sheet.
+        reduce(done.model, opened).model.barred shouldBe false
+        reduce(done.model, opened).model.state.phase shouldBe PairLaptopState.Phase.PHASE_UNSPECIFIED
     }
 
     "running: a pair that answered stores through the door and reopens the vault, once; a failed one reopens nothing" {

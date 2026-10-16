@@ -60,6 +60,8 @@ struct HomeView: View {
             // A SIBLING OF THE PAGE, NEVER INSIDE IT: the band is never
             // scrolled away, so it cannot live in the scroll view, and nothing
             // subtracts its height from the page because it is a flex peer.
+            // THE IMPORT'S LINE, on the band (DESIGN.md's one status line).
+            ShellBanner(shell: shell)
             if !(shell.tab == .chat && chatTyping) {
                 HomeBand(active: shell.tab == .chat ? "chat" : shell.tab == .backup ? "backup" : "home") { target in
                     switch target {

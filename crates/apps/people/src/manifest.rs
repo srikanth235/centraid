@@ -116,53 +116,22 @@ mod tests {
         }
     }
 
-    #[test]
-    fn every_action_declares_the_tables_it_writes() {
-        for action in &manifest().actions {
-            assert!(
-                !action.writes.is_empty(),
-                "{} declares no writes, but every People action writes",
-                action.name
-            );
-        }
-        // Seven schemas are REACHED by the declared writes, which is the fact
-        // the app's own description states: People stores nothing of its own
-        // and writes everybody else's canonical rows.
-        let mut schemas: Vec<&str> = manifest()
-            .declared_writes()
-            .into_iter()
-            .map(|table| table.split('.').next().unwrap_or_default())
-            .collect();
-        schemas.sort_unstable();
-        schemas.dedup();
-        assert_eq!(
-            schemas,
-            [
-                "core",
-                "knowledge",
-                "outbox",
-                "people",
-                "schedule",
-                "social"
-            ]
-        );
-    }
-
-    /// NINETEEN SCOPES: fourteen reads, four `act` and **one `read+act` over the
-    /// whole `people` schema**. The four `share.*` reads went with the tables
-    /// they named (#1029: v1 has no sharing plane) and `tally.obligation` with
-    /// Tally (#1099).
+    /// SIXTEEN SCOPES: fourteen reads, one narrow `act` (`core.merge_party`) and
+    /// **one `read+act` over the whole `people` schema**. The four `share.*`
+    /// reads went with the tables they named (#1029: v1 has no sharing plane),
+    /// `tally.obligation` with Tally (#1099) and three `social.*` act scopes
+    /// with the commands they never named (P3 in `docs/release/v1-handoffs.md`).
     ///
     /// The whole-schema form is the widest there is and only agenda and People
     /// use it. It is asserted here rather than narrowed, because expanding it
-    /// into nineteen explicit scopes CHANGES THE GRANT'S MEANING — the
-    /// member consented to "People, over the People schema", and nineteen
+    /// into sixteen explicit scopes CHANGES THE GRANT'S MEANING — the
+    /// member consented to "People, over the People schema", and sixteen
     /// rows is a different sentence even where the reach is the same.
     #[test]
-    fn it_declares_nineteen_scopes_with_one_whole_schema_grant() {
+    fn it_declares_sixteen_scopes_with_one_whole_schema_grant() {
         let manifest = manifest();
         let vault = manifest.vault.as_ref().expect("People declares its reach");
-        assert_eq!(vault.scopes.len(), 19);
+        assert_eq!(vault.scopes.len(), 16);
 
         let mut schemas: Vec<&str> = vault
             .scopes
@@ -206,7 +175,7 @@ mod tests {
                 .iter()
                 .filter(|scope| scope.verbs == ScopeVerbs::Act)
                 .count(),
-            4
+            1
         );
         // NOTHING REVEALED: `reveal` is Locker's alone.
         assert!(
@@ -221,16 +190,24 @@ mod tests {
         );
     }
 
-    /// FINDING PE-F1, as an assertion over the manifest itself: three of the
-    /// four narrow `act` scopes name the `social` schema, and the commands
-    /// those three actions invoke are `people.*`.
+    /// THE ACT SCOPES AND THE ACTIONS AGREE, both ways (finding PE-F1, closed by
+    /// P3). Three narrow `act` scopes once named `social.save_contact_channel`,
+    /// `social.delete_contact_channel` and `social.undo_contact_channel`. No
+    /// such commands exist — the three are `people.*`, authorised by the
+    /// whole-schema grant — so the rows granted nothing and told a consent
+    /// screen that the app reaches into `social` by three commands it never
+    /// calls. A narrow `act` scope is a command's name, so:
+    ///
+    /// 1. every narrow `act` scope names a command some action invokes, and
+    /// 2. every action's command is covered by a scope — the whole-schema
+    ///    `read+act` on its schema, or a narrow `act` naming it.
     #[test]
-    fn three_act_scopes_name_social_and_one_names_core() {
+    fn every_act_scope_names_a_command_an_action_invokes_and_every_command_is_covered() {
         let vault = manifest()
             .vault
             .as_ref()
             .expect("People declares its reach");
-        let mut narrow: Vec<(&str, &str)> = vault
+        let narrow: Vec<(&str, &str)> = vault
             .scopes
             .iter()
             .filter(|scope| scope.verbs == ScopeVerbs::Act)
@@ -240,25 +217,40 @@ mod tests {
                     scope
                         .table
                         .as_deref()
-                        .expect("a narrow act scope names a table"),
+                        .expect("a narrow act scope names a command"),
                 )
             })
             .collect();
-        narrow.sort_unstable();
+        for (schema, command) in &narrow {
+            let qualified = format!("{schema}.{command}");
+            assert!(
+                ACTIONS.iter().any(|row| row.command == qualified),
+                "the `act` scope {qualified} names a command no action invokes"
+            );
+        }
         assert_eq!(
             narrow,
-            [
-                ("core", "merge_party"),
-                ("social", "delete_contact_channel"),
-                ("social", "save_contact_channel"),
-                ("social", "undo_contact_channel"),
-            ]
+            [("core", "merge_party")],
+            "the one command People invokes outside its own schema"
         );
-        assert_eq!(
-            crate::commands::act_scope_schemas(),
-            ["core", "people"],
-            "the commands the actions invoke live in `core` and `people`; the scopes say `social`"
-        );
+        let whole_schemas: Vec<&str> = vault
+            .scopes
+            .iter()
+            .filter(|scope| scope.verbs == ScopeVerbs::ReadAct && scope.table.is_none())
+            .map(|scope| scope.schema.as_str())
+            .collect();
+        for row in ACTIONS {
+            let (schema, command) = row
+                .command
+                .split_once('.')
+                .expect("a command is `schema.name`");
+            assert!(
+                whole_schemas.contains(&schema) || narrow.contains(&(schema, command)),
+                "{} invokes {}, and no scope grants it",
+                row.action,
+                row.command
+            );
+        }
     }
 
     /// The `core.entity_revision` scope is the only row-filtered, field-masked
@@ -357,6 +349,26 @@ mod tests {
         let description = person.description.as_deref().unwrap_or_default();
         assert!(!description.contains("shared_with_them"), "{description}");
         assert!(!description.contains("`vaults`"), "{description}");
+    }
+
+    /// `add-journal-entry` CARRIES EVERY FIELD `people.add_journal_entry` TAKES,
+    /// `tz` included: the manifest's input schema is
+    /// `additionalProperties: false`, so a command field the manifest does not
+    /// declare is a field the app can never send — and without `tz` a member
+    /// east of UTC+11:59 files today's entry under tomorrow.
+    #[test]
+    fn add_journal_entry_declares_every_field_the_command_takes() {
+        let input = &manifest()
+            .action("add-journal-entry")
+            .expect("declared")
+            .input;
+        for field in ["mood", "text", "entry_date", "tz"] {
+            assert!(
+                input["properties"].get(field).is_some(),
+                "add-journal-entry does not declare {field}"
+            );
+        }
+        assert_eq!(input["required"], serde_json::json!(["mood", "text"]));
     }
 
     /// `edit-person` CARRIES EVERY FIELD `people.edit_person` TAKES. The

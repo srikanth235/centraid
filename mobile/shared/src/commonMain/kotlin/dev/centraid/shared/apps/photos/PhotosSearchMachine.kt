@@ -39,12 +39,11 @@ import dev.centraid.shared.screen.Step
  *
  * ## WHAT A SEARCH REACHES
  *
- * People (confirmed parties), places (the member's name, the gazetteer's, the
- * home band), albums, labels and captions — v0's `search-hits.ts`, read as legs
- * by `PhotosSearchBridge` and folded by `PhotosSearchReads`. The resting page
- * is the same vault's vocabulary: the people, places and labels a query could
- * land on, read when the field is empty, never a fixed list of words the
- * product hopes are there.
+ * Places (the member's name, the gazetteer's, the home band), albums, labels
+ * and captions — v0's `search-hits.ts`, read as legs by `PhotosSearchBridge`
+ * and folded by `PhotosSearchReads`. The resting page is the same vault's
+ * vocabulary: the places and labels a query could land on, read when the
+ * field is empty, never a fixed list of words the product hopes are there.
  *
  * ## THE FIELD IS THE MACHINE'S (#1097, R-1097-27)
  *
@@ -276,8 +275,7 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
      * EVERY TABLE A SEARCH READS, because every one can change an answer.
      *
      * `media_asset` carries its keys, which are this screen's own cell ids and
-     * are filtered by the reducer. The others — a person named, a place
-     * renamed, an album filled, a label put on — carry none: their keys are not
+     * are filtered by the reducer. The others — a place renamed, an album filled, a label put on — carry none: their keys are not
      * asset ids, and a filter over them would always say "not mine".
      */
     override fun rowsChanged(table: String, keys: List<String>): PhotosSearchEvent? = when (table) {
@@ -290,8 +288,6 @@ public object PhotosSearchMachine : ScreenMachine<PhotosSearchState, PhotosSearc
     internal const val TABLE: String = "media_asset"
 
     private val VOCABULARY_TABLES: Set<String> = setOf(
-        "core_party",
-        "media_face_region",
         "core_place",
         "core_collection",
         "core_collection_entry",

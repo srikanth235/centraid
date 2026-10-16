@@ -720,8 +720,9 @@ fn v0s_access_query_is_refused_by_its_own_door_and_the_port_answers() {
         Some(["password".to_owned()].as_slice()),
         "the reveal says which cell was opened"
     );
-    // THE INNER WALL HELD: no `agent.command` receipt reached the screen, and
-    // the corpus wrote dozens of them.
+    // THE INNER WALL HELD: no command-gate receipt reached the screen, and the
+    // frozen corpus wrote dozens of them (it names their object `agent.command`;
+    // a vault this build writes names it `command.definition`).
     assert!(
         answer
             .entries

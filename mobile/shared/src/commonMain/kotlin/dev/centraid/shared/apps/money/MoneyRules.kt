@@ -208,7 +208,7 @@ public object MoneyRulesMachine :
         val answer = held.answers.accounts ?: return emptyMap()
         val seen = linkedMapOf<String, Int>()
         fun see(amount: MoneyAmount?) {
-            if (amount != null && amount.currency.isNotEmpty()) seen.putIfAbsent(amount.currency, amount.exponent)
+            if (amount != null && amount.currency.isNotEmpty()) seen.getOrPut(amount.currency) { amount.exponent }
         }
         (answer.on_budget + answer.off_budget).forEach { line ->
             see(line.balance)

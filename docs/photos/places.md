@@ -31,9 +31,9 @@ Step 3 mints a row whose stored name is a coordinate — and that name is never 
 Two commands write a place's name, and the split between them is the whole authority rule:
 
 - **`media.name_place`** is the member's. It writes `name` and `kind` (`home | work | venue | city | region | other`) and nothing else. `kind` is how the ladder learns which place is Home. A blank name is refused, and 120 characters is the ceiling.
-- **`media.set_place_gazetteer`** is the `place-names` recognition recipe's. It merges a settlement name into `address_json.gazetteer` (source `geonames-cities15000`) and records `{ none: true }` for a miss. It cannot reach `core_place.name` at all, and it carries no media bytes.
+- **`media.set_place_gazetteer`** is the machine's, and nothing in v0 calls it: its only writer, the `place-names` recognition recipe, was deleted with the recognition plane ([#1029](https://github.com/srikanth235/centraid/issues/1029)). It merges a settlement name into `address_json.gazetteer` (source `geonames-cities15000`) and records `{ none: true }` for a miss. It cannot reach `core_place.name` at all, and it carries no media bytes.
 
-So **a member-entered name is authoritative and derived naming never overwrites it** — by construction rather than by convention. Coordinate-to-settlement naming is an opt-in, zero-egress recognition automation over a vendored open dataset ([recognition automations](../recognition-automations.md), [P-gazetteer](../decisions.md)).
+So **a member-entered name is authoritative and derived naming never overwrites it** — by construction rather than by convention. Coordinate-to-settlement naming, when a writer exists, stays zero-egress over a vendored open dataset ([P-gazetteer](../decisions.md)).
 
 ## Layer 2 — the phrase ladder
 

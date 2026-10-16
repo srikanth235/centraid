@@ -25,10 +25,14 @@
 //!    assertion of the same relationship is then allowed again.
 //! 7. **Every refusal is receipted, not thrown** — asserted through
 //!    `Vault::execute`'s own answer, which is the shape a surface renders.
+//! 8. **A `[[wikilink]]` compiles to a `references` edge** (Q-1047-9): created,
+//!    edited and restored bodies recompute the note's edges, an ended edge is
+//!    ended and not erased, a hand-made link is never taken, and a target the
+//!    caller may not read is not named.
 
 mod common;
 
-use centraid_vault::access::Principal;
+use centraid_vault::access::{Principal, Scope, ScopeClamp};
 use centraid_vault::commands::Registry;
 use centraid_vault::{Command, CommandOutcome, CommandStatus, Vault};
 use serde_json::{Value, json};
@@ -974,4 +978,314 @@ fn a_note_title_may_be_cleared_by_an_edit() {
         .as_deref(),
         Some("some words")
     );
+}
+
+// ---------------------------------------------------------------------------
+// Wikilinks (Q-1047-9): the text is the source, `core.link` its compilation
+// ---------------------------------------------------------------------------
+
+impl Notebook {
+    /// A note's compiled and hand-made edges, newest rows last:
+    /// `(to_type, to_id, asserted_by, live)`.
+    fn edges_from(&self, note: &str) -> Vec<(String, String, String, bool)> {
+        self.vault()
+            .read(|connection| {
+                let mut statement = connection.prepare(
+                    "SELECT to_type, to_id, asserted_by, valid_to IS NULL FROM core_link
+                      WHERE from_type = 'knowledge.note' AND from_id = ?1
+                      ORDER BY valid_from, link_id",
+                )?;
+                let rows = statement.query_map([note], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                })?;
+                Ok(rows.collect::<Result<Vec<_>, _>>()?)
+            })
+            .expect("the edges read")
+    }
+
+    fn edit_body(&self, note: &str, body: &str) {
+        self.run(
+            "knowledge.edit_note",
+            json!({ "note_id": note, "body_text": body }),
+        );
+    }
+}
+
+/// **A WIKILINK COMPILES TO ONE `references` EDGE, AND THE BACKLINK IS A READ OF
+/// THE VAULT.** The edge is the app's (`app`), is asserted from the note to the
+/// row the title names, and a second compile of the same words writes nothing —
+/// the autosave that fires on every pause must not mint a row per keystroke.
+#[test]
+fn a_wikilink_compiles_to_a_references_edge_and_the_backlink_is_a_read() {
+    let book = Notebook::open("wikilink-compile");
+    let cabin = book.note("Cabin", "Book it.", "plain");
+    let budget = book.note("Budget", "About $180 a night.", "plain");
+
+    book.edit_body(&cabin, "Check [[Budget]] before booking.");
+    assert_eq!(
+        book.edges_from(&cabin),
+        [(
+            "knowledge.note".to_owned(),
+            budget.clone(),
+            "app".to_owned(),
+            true
+        )]
+    );
+    assert_eq!(
+        book.text(
+            "SELECT c.notation FROM core_link l
+               JOIN core_concept c ON c.concept_id = l.relation_concept_id
+              WHERE l.from_id = ?1",
+            &[&cabin]
+        )
+        .as_deref(),
+        Some("references"),
+        "the one relation the vault seeds for cross-references"
+    );
+    assert_eq!(
+        book.count(
+            "SELECT COUNT(*) FROM core_link
+              WHERE to_type = 'knowledge.note' AND to_id = ?1 AND valid_to IS NULL",
+            &[&budget]
+        ),
+        1,
+        "the budget's backlink is the same edge, read the other way"
+    );
+
+    // THE SAME LINK AGAIN, with other words around it and another spelling of
+    // its case: one row still, because the edge is recomputed and not appended.
+    book.edit_body(&cabin, "Check [[budget]] before booking, then ring them.");
+    assert_eq!(book.edges_from(&cabin).len(), 1);
+    book.run(
+        "knowledge.edit_note",
+        json!({ "note_id": cabin, "title": "Cabin trip" }),
+    );
+    assert_eq!(
+        book.edges_from(&cabin).len(),
+        1,
+        "a title-only edit changes no words and compiles nothing"
+    );
+}
+
+/// DELETING THE WIKILINK ENDS ITS EDGE, NOT ERASES IT (#916 R3), and typing it
+/// again asserts a fresh one — which is what `valid_to` being a date is for.
+#[test]
+fn removing_a_wikilink_ends_its_edge_and_typing_it_again_asserts_a_fresh_one() {
+    let book = Notebook::open("wikilink-end");
+    let cabin = book.note("Cabin", "Book it.", "plain");
+    let budget = book.note("Budget", "About $180.", "plain");
+
+    book.edit_body(&cabin, "See [[Budget]].");
+    book.edit_body(&cabin, "No links any more.");
+    let ended = book.edges_from(&cabin);
+    assert_eq!(ended.len(), 1, "the row survives");
+    assert!(!ended[0].3, "and it is ended");
+
+    book.edit_body(&cabin, "See [[Budget]] after all.");
+    let edges = book.edges_from(&cabin);
+    assert_eq!(edges.len(), 2, "history keeps the old edge beside the new");
+    assert_eq!(edges.iter().filter(|edge| edge.3).count(), 1);
+    assert!(edges.iter().all(|edge| edge.1 == budget));
+}
+
+/// AN EDGE THE MEMBER MADE BY HAND IS NOT THE COMPILE'S. It is never duplicated
+/// by a wikilink to the same row, and removing the wikilink does not end it.
+#[test]
+fn a_link_made_by_hand_is_never_duplicated_or_ended_by_the_compile() {
+    let book = Notebook::open("wikilink-hand");
+    let cabin = book.note("Cabin", "Book it.", "plain");
+    let budget = book.note("Budget", "About $180.", "plain");
+    book.run(
+        "core.link_entities",
+        json!({
+            "from_type": "knowledge.note", "from_id": cabin,
+            "to_type": "knowledge.note", "to_id": budget,
+            "relation": "references",
+        }),
+    );
+
+    book.edit_body(&cabin, "See [[Budget]].");
+    let edges = book.edges_from(&cabin);
+    assert_eq!(edges.len(), 1, "the hand-made edge already says it");
+    assert_eq!(edges[0].2, "owner");
+
+    book.edit_body(&cabin, "See nothing.");
+    let edges = book.edges_from(&cabin);
+    assert_eq!(edges.len(), 1);
+    assert!(edges[0].3, "the member's own link is still live");
+}
+
+/// A TITLE NAMES A LIVE ROW THAT IS NOT THE NOTE ITSELF AND NOT A JOURNAL ENTRY,
+/// and a title that names nothing waits: the edge appears the next time the
+/// linking note's words change after a row with that title exists.
+#[test]
+fn a_title_names_only_live_rows_and_a_dangling_one_waits() {
+    let book = Notebook::open("wikilink-targets");
+    let cabin = book.note("Cabin", "Book it.", "plain");
+    let budget = book.note("Budget", "About $180.", "plain");
+    let entry = id(
+        &book.run(
+            "people.add_journal_entry",
+            json!({ "mood": "Quiet", "text": "A long walk.", "entry_date": "2099-05-04" }),
+        ),
+        "entry_id",
+    );
+    let entry_title = book
+        .text(
+            "SELECT title FROM knowledge_note WHERE note_id = ?1",
+            &[&entry],
+        )
+        .expect("the entry has a title");
+    book.run("knowledge.delete_note", json!({ "note_id": budget }));
+
+    book.edit_body(
+        &cabin,
+        &format!("[[Cabin]] [[Budget]] [[{entry_title}]] [[Not written yet]]"),
+    );
+    assert!(
+        book.edges_from(&cabin).is_empty(),
+        "not itself, not the trashed note, not a journal entry, not a title nothing has"
+    );
+
+    let later = book.note("Not written yet", "Now it is.", "plain");
+    assert!(
+        book.edges_from(&cabin).is_empty(),
+        "nothing re-resolves a dangling title when its target appears"
+    );
+    book.edit_body(
+        &cabin,
+        &format!("[[Cabin]] [[Budget]] [[{entry_title}]] [[Not written yet]] and more."),
+    );
+    let edges = book.edges_from(&cabin);
+    assert_eq!(edges.len(), 1);
+    assert_eq!(edges[0].1, later);
+}
+
+/// THE TEXT CARRIES A TITLE AND NOT AN ID, so a title two rows share links both:
+/// a superset the member can see, rather than a silently chosen one.
+#[test]
+fn a_title_that_several_rows_share_links_every_one() {
+    let book = Notebook::open("wikilink-ambiguous");
+    let cabin = book.note("Cabin", "Book it.", "plain");
+    let note = book.note("Ana", "Her number is on the fridge.", "plain");
+    let person = id(
+        &book.run("core.add_party", json!({ "display_name": "Ana" })),
+        "party_id",
+    );
+
+    book.edit_body(&cabin, "Call [[Ana]].");
+    let mut targets: Vec<(String, String)> = book
+        .edges_from(&cabin)
+        .into_iter()
+        .map(|edge| (edge.0, edge.1))
+        .collect();
+    targets.sort();
+    assert_eq!(
+        targets,
+        [
+            ("core.party".to_owned(), person),
+            ("knowledge.note".to_owned(), note),
+        ]
+    );
+}
+
+/// A MEMBER WHO PICKS BEFORE THE FIRST AUTOSAVE LANDS makes the note with the
+/// wikilink already in it, so the create compiles too.
+#[test]
+fn a_new_note_whose_first_body_has_a_wikilink_is_compiled_at_birth() {
+    let book = Notebook::open("wikilink-create");
+    let budget = book.note("Budget", "About $180.", "plain");
+    let cabin = book.note("Cabin", "Check [[Budget]] first.", "plain");
+    let edges = book.edges_from(&cabin);
+    assert_eq!(edges.len(), 1);
+    assert_eq!(edges[0].1, budget);
+    assert_eq!(
+        book.edges_from(&budget).len(),
+        0,
+        "the edge is one-way: the budget did not name the cabin"
+    );
+}
+
+/// A RESTORE CHANGES THE WORDS, so it recompiles them: the older body's
+/// wikilinks come back and the newer body's go.
+#[test]
+fn restoring_an_old_version_recompiles_its_wikilinks() {
+    let book = Notebook::open("wikilink-restore");
+    let budget = book.note("Budget", "About $180.", "plain");
+    let created = book.run(
+        "knowledge.create_note",
+        json!({ "title": "Cabin", "body_text": "See [[Budget]].", "format": "plain" }),
+    );
+    let cabin = id(&created, "note_id");
+    let first = id(&created, "body_content_id");
+    book.edit_body(&cabin, "Nothing to link.");
+    assert!(
+        book.edges_from(&cabin).iter().all(|edge| !edge.3),
+        "the edge ended with the words"
+    );
+
+    book.run(
+        "knowledge.restore_note_version",
+        json!({ "note_id": cabin, "content_id": first }),
+    );
+    let live: Vec<_> = book
+        .edges_from(&cabin)
+        .into_iter()
+        .filter(|edge| edge.3)
+        .collect();
+    assert_eq!(live.len(), 1);
+    assert_eq!(live[0].1, budget);
+}
+
+/// THE COMPILE IS HELD TO `core.link_entities`' OWN CONSENT RULE: a row the
+/// caller may not read is not named by an edge, because the edge would be the
+/// disclosure. A caller who reads `knowledge` and not `core.party` links the
+/// note and not the person who shares its title.
+#[test]
+fn a_target_the_caller_may_not_read_is_not_named_by_an_edge() {
+    let book = Notebook::open("wikilink-consent");
+    let cabin = book.note("Cabin", "Book it.", "plain");
+    let note = book.note("Ana", "Her number is on the fridge.", "plain");
+    book.run("core.add_party", json!({ "display_name": "Ana" }));
+
+    let notes_only = Principal::OwnerDevice {
+        device_id: "notes-app".to_owned(),
+        may_act: true,
+        scope_clamp: Some(ScopeClamp {
+            scopes: vec![Scope {
+                schema: "knowledge".to_owned(),
+                table: None,
+                verb: "read+act".to_owned(),
+                row_filter: Vec::new(),
+                field_mask: None,
+            }],
+        }),
+    };
+    let outcome = book
+        .vault()
+        .execute(
+            &book.registry,
+            &notes_only,
+            &Command::new(
+                "knowledge.edit_note",
+                json!({ "note_id": cabin, "body_text": "Call [[Ana]]." }),
+            ),
+        )
+        .expect("the edit runs");
+    assert_eq!(
+        outcome.status,
+        CommandStatus::Executed,
+        "{:?} / {:?}",
+        outcome.predicate,
+        outcome.reason
+    );
+    let edges = book.edges_from(&cabin);
+    assert_eq!(edges.len(), 1, "{edges:?}");
+    assert_eq!(edges[0].1, note, "only the row the caller may read");
+
+    // THE CONTROL: the same words from the owner reach both rows, so the one
+    // edge above is the caller's reach and not the title's.
+    let hut = book.note("Hut", "Book it.", "plain");
+    book.edit_body(&hut, "Call [[Ana]].");
+    assert_eq!(book.edges_from(&hut).len(), 2);
 }

@@ -84,7 +84,7 @@ public fun AlbumChoiceSheet(
                     }
                 }
             }
-            QuietButton(
+            OutlineButton(
                 label = "Cancel",
                 testTag = "album-choice-cancel",
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),

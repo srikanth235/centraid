@@ -81,9 +81,9 @@ import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ProgressStatusLine
 import dev.centraid.android.kit.PushedPage
-import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomChip
@@ -182,7 +182,7 @@ internal fun DocsSheetView(sheet: DocsSheet?, actions: DocsSheetActions) {
                 onEdit = actions.onLabelDraft,
             )
             if (labels.can_add && labels.add_label.isNotEmpty()) {
-                QuietButton(label = labels.add_label, testTag = "docs-label-add", modifier = Modifier.padding(horizontal = KitGeometry.GUTTER)) {
+                OutlineButton(label = labels.add_label, testTag = "docs-label-add", modifier = Modifier.padding(horizontal = KitGeometry.GUTTER)) {
                     actions.onLabelAdded(labels.draft.trim())
                 }
             }
@@ -243,7 +243,7 @@ internal fun RenameLine(rename: DocsRename?, placeholder: String, doneLabel: Str
                 onEdit = onEdit,
             )
         }
-        QuietButton(label = doneLabel.ifEmpty { KitWords.DONE }, testTag = "docs-rename-done", onPress = onDone)
+        OutlineButton(label = doneLabel.ifEmpty { KitWords.DONE }, testTag = "docs-rename-done", onPress = onDone)
     }
     StatusLine(rename.status_label)
 }
@@ -515,7 +515,7 @@ internal fun Crumbs(crumbs: List<DocsCrumb>, onPick: (String, String) -> Unit) {
     ) {
         crumbs.forEachIndexed { index, crumb ->
             if (index > 0) CentraidIcon("ChevronRight", tint = centraidColor("textFaint"), size = 12.dp)
-            QuietButton(label = crumb.name, testTag = "docs-crumb-${crumb.folder_id}", ink = "textSoft") { onPick(crumb.folder_id, crumb.name) }
+            OutlineButton(label = crumb.name, testTag = "docs-crumb-${crumb.folder_id}", ink = "textSoft") { onPick(crumb.folder_id, crumb.name) }
         }
     }
 }
@@ -668,7 +668,7 @@ internal fun DocsDocumentScreen(
                                 color = centraidColor(if (reading.has_text && reading.body.isNotEmpty()) "text" else "textSoft"),
                             )
                             if (reading.editable && reading.edit_label.isNotEmpty() && row != null) {
-                                QuietButton(label = reading.edit_label, testTag = "docs-reader-edit") {
+                                OutlineButton(label = reading.edit_label, testTag = "docs-reader-edit") {
                                     onEvent(DocsDocumentEvent(edit_requested = DocsDocumentEvent.EditRequested(document_id = row.document_id, title = row.title)))
                                     onEdit(row.document_id, row.title)
                                 }
@@ -691,7 +691,7 @@ internal fun DocsDocumentScreen(
                             testTag = "docs-version-${version.content_id}",
                             accessory = if (version.restore_label.isNotEmpty()) {
                                 {
-                                    QuietButton(label = version.restore_label, testTag = "docs-version-restore-${version.content_id}") {
+                                    OutlineButton(label = version.restore_label, testTag = "docs-version-restore-${version.content_id}") {
                                         onEvent(DocsDocumentEvent(version_restore = DocsDocumentEvent.VersionRestoreTapped(content_id = version.content_id)))
                                     }
                                 }

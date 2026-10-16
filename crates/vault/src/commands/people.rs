@@ -78,8 +78,11 @@
 //! `ctx.now`, never SQLite's clock, so the restore window is fixturable at any
 //! instant (lane V's rule).
 
+use crate::clock::format_iso_ms;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
+use crate::time::recurrence::parse_instant_ms;
+use crate::time::zone::{FireZone, WallTime, parse_wall_iso, wall_epoch};
 
 /// An `https` URI, not a `urn:` — the literal is interpolated into condition
 /// SQL, where `:lists` would read as a NAMED PARAMETER (#258, the
@@ -89,8 +92,8 @@ const FLAGS_SCHEME_URI: &str = "https://centraid.dev/schemes/flags";
 const STARRED_NOTATION: &str = "starred";
 const RELATIONS_SCHEME_URI: &str = "urn:duaility:relations";
 const ACTIVITY_KIND_SCHEME_URI: &str = "urn:duaility:activity-kinds";
-const JOURNAL_SCHEME_URI: &str = "https://centraid.dev/schemes/people-journal";
-const JOURNAL_ENTRY_NOTATION: &str = "entry";
+pub(crate) const JOURNAL_SCHEME_URI: &str = "https://centraid.dev/schemes/people-journal";
+pub(crate) const JOURNAL_ENTRY_NOTATION: &str = "entry";
 const PARTY_TARGET_TYPE: &str = "core.party";
 const ACTIVITY_TARGET_TYPE: &str = "core.activity";
 const TASK_TARGET_TYPE: &str = "schedule.task";
@@ -112,7 +115,7 @@ const UNDO_WINDOW_MS: i64 = 10_000;
 const JOURNAL_TITLE_PREFIX: &str = "People journal · ";
 
 /// Every `people.*` command this build carries — **v0's twenty-eight less the two debt
-/// commands (#1099)**, in v0's own file order so the registry's `agent_command` record reads like
+/// commands (#1099)**, in v0's own file order so the registry's `command_definition` record reads like
 /// the source it was ported from.
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
@@ -462,8 +465,8 @@ fn content_item_for(ctx: &CommandCtx<'_, '_>, body_text: &str) -> Result<String>
     ctx.connection().execute(
         "INSERT INTO core_content_item
            (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
-            origin_device_id, deleted_at, purge_at, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
+            deleted_at, purge_at, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, ?6, ?6)",
         rusqlite::params![
             content_id,
             format!(
@@ -2539,6 +2542,77 @@ fn delete_list() -> CommandDefinition {
 // The journal — owner-level, not per-person.
 // ---------------------------------------------------------------------------
 
+/// WHERE A JOURNAL ENTRY IS FILED: the instant `created_at` carries, and so
+/// the day every reader files it under.
+///
+/// **No `tz`**: noon UTC of `entry_date` (or of the vault clock's UTC date when
+/// there is none) — what the command has always done, and right for a member
+/// anywhere between UTC-12:00 and UTC+11:59, where noon UTC is still that
+/// civil day. East of that (NZST, Fiji, Tonga, Chatham) noon UTC is already
+/// the NEXT civil day, so a journal that groups by the member's local day filed
+/// today's entry under tomorrow.
+///
+/// **With `tz`** (IANA, as every other command's `tz` is): the entry's day is
+/// the day in that zone — `entry_date`, or the vault clock's day in the zone
+/// when there is none — and it is filed at that day's LOCAL noon. Where local
+/// noon falls outside the day's UTC date (UTC+12:00 and east, UTC-12:00) it is
+/// moved to the nearest instant that is on BOTH: the stored date's own first ten
+/// characters stay `entry_date`, as they have always been for a reader that
+/// buckets on them, and the day in `tz` is `entry_date` too, for a reader that
+/// buckets in the member's zone. A day the zone skips outright (Samoa, 30
+/// December 2011) is REFUSED rather than nudged, in the sentence a member reads.
+fn journal_stamp(ctx: &CommandCtx<'_, '_>) -> std::result::Result<String, String> {
+    let entry_date = ctx.optional_str("entry_date");
+    let Some(tz) = ctx.optional_str("tz") else {
+        let day = entry_date.map_or_else(
+            || ctx.now.get(0..10).unwrap_or_default().to_owned(),
+            str::to_owned,
+        );
+        return Ok(format!("{day}T12:00:00.000Z"));
+    };
+    let zone = FireZone::named(tz).map_err(|_| format!("{tz} is not a time zone."))?;
+    let day = match entry_date {
+        Some(day) => {
+            let shape = format!("`entry_date` is a day, YYYY-MM-DD; got {day}.");
+            if day.len() != 10 {
+                return Err(shape);
+            }
+            parse_wall_iso(day).ok_or(shape)?
+        }
+        None => {
+            let now = parse_instant_ms(&ctx.now).ok_or_else(|| {
+                format!(
+                    "The vault clock reads {}, which is not an instant.",
+                    ctx.now
+                )
+            })?;
+            zone.zoned_parts(now)
+        }
+    };
+    let at = |hour: i64, millisecond: i64| WallTime {
+        hour,
+        minute: if hour == 23 { 59 } else { 0 },
+        second: if hour == 23 { 59 } else { 0 },
+        millisecond,
+        ..day
+    };
+    let day_text = format!("{:04}-{:02}-{:02}", day.year, day.month, day.day);
+    let local_noon = zone
+        .resolve_wall_time(at(12, 0))
+        .and_then(|resolved| parse_instant_ms(&resolved.instant))
+        .ok_or_else(|| format!("{day_text} does not exist in {zone}: the clocks skip it."))?;
+    // THE UTC DAY the stored date's prefix names, as a closed range of instants.
+    let utc_first = wall_epoch(at(0, 0));
+    let utc_last = wall_epoch(at(23, 999));
+    let landed = local_noon.clamp(utc_first, utc_last);
+    // MOVED ONLY WHEN IT STAYS ON THE ENTRY'S DAY IN THE ZONE: the clamp exists
+    // to serve both readers, and where it could not (a zone more than a day from
+    // UTC, which does not exist) the local noon is the one that is right.
+    let zoned = zone.zoned_parts(landed);
+    let stays = (zoned.year, zoned.month, zoned.day) == (day.year, day.month, day.day);
+    Ok(format_iso_ms(if stays { landed } else { local_noon }))
+}
+
 fn add_journal_entry() -> CommandDefinition {
     CommandDefinition {
         name: "people.add_journal_entry",
@@ -2550,13 +2624,21 @@ fn add_journal_entry() -> CommandDefinition {
           "properties": {
             "mood": { "type": "string", "minLength": 1 },
             "text": { "type": "string", "minLength": 1 },
-            "entry_date": { "type": "string" }
+            "entry_date": { "type": "string" },
+            "tz": {
+              "type": "string",
+              "minLength": 1,
+              "description": "IANA zone the member is in: the entry is filed on `entry_date` (or on today) IN THIS ZONE, so east of UTC+11:59 today's entry is not filed under tomorrow. Absent, the entry is dated by UTC (noon UTC of `entry_date`)."
+            }
           }
         }"#,
         idempotency: Idempotency::Once,
         risk: Risk::Low,
         confirm: false,
-        preconditions: &[],
+        preconditions: &[CommandCondition {
+            predicate: "entry_dated",
+            check: |ctx| Ok(journal_stamp(ctx).err()),
+        }],
         postconditions: &[CommandCondition {
             // THE MARKER IS WHAT MAKES IT A JOURNAL ENTRY. Without the tag the
             // note is an ordinary note, and Notes' library — which excludes
@@ -2589,10 +2671,10 @@ fn add_journal_entry() -> CommandDefinition {
         handler: |ctx| {
             let mood = ctx.required_str("mood")?.to_owned();
             let text = ctx.required_str("text")?.to_owned();
-            let entry_date = ctx.optional_str("entry_date").map_or_else(
-                || ctx.now.get(0..10).unwrap_or_default().to_owned(),
-                str::to_owned,
-            );
+            let filed_at = journal_stamp(ctx).map_err(|detail| VaultError::InvalidInput {
+                name: "entry_date".to_owned(),
+                detail,
+            })?;
             // Minted first so the postcondition finds it as the first produced
             // id — before the content item, which may be deduped away.
             let entry_id = ctx.next_id();
@@ -2609,8 +2691,8 @@ fn add_journal_entry() -> CommandDefinition {
                     content_id,
                     // THE ENTRY'S OWN DAY, at noon, so an entry dated
                     // yesterday sorts where the member put it rather than where
-                    // they typed it.
-                    format!("{entry_date}T12:00:00.000Z"),
+                    // they typed it. `journal_stamp` says whose noon.
+                    filed_at,
                     ctx.now
                 ],
             )?;

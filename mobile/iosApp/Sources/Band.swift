@@ -108,8 +108,9 @@ private struct BandTab: View {
                 .frame(width: BandMetrics.markSize, height: BandMetrics.markSize)
                 Text(label)
                     // The same 11/15 rung either way, so a tap cannot reflow
-                    // the strip.
-                    .centraidType(selected ? "control" : "band")
+                    // the strip, and it HOLDS at every text size: `control`
+                    // scales elsewhere, so the active half says `scales: false`.
+                    .centraidType(selected ? "control" : "band", scales: false)
                     .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
                     .lineLimit(1)
                     .multilineTextAlignment(.center)
@@ -287,8 +288,9 @@ private struct AppBandTab: View {
                 )
                 .frame(width: BandMetrics.markSize, height: BandMetrics.markSize)
                 Text(label)
-                    // THE HELD PAIR: one rung, two weights, no reflow.
-                    .centraidType(selected ? "control" : "band")
+                    // THE HELD PAIR: one rung, two weights, no reflow — and it
+                    // holds at every text size (`control` scales elsewhere).
+                    .centraidType(selected ? "control" : "band", scales: false)
                     .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
                     .lineLimit(1)
             }

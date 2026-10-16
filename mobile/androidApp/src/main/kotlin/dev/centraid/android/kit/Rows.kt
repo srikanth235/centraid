@@ -257,7 +257,7 @@ public fun ShowMoreFooter(
         if (loading) {
             Text(loadingLabel, style = centraidType("annotLabel"), color = centraidColor("textFaint"))
         } else {
-            QuietButton(label = label, testTag = "kit-show-more", onPress = onMore)
+            OutlineButton(label = label, testTag = "kit-show-more", onPress = onMore)
         }
     }
 }

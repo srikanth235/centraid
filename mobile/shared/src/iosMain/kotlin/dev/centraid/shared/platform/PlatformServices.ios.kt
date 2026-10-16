@@ -792,7 +792,7 @@ public class IosMediaLibrary : MediaLibrary {
     }
 
     /** The first walk: `creationDate` keyset, carrying the token it started under. */
-    private fun keysetPage(from: Cursor?, token: String?, limit: Int): MediaLibrary.Page {
+    private suspend fun keysetPage(from: Cursor?, token: String?, limit: Int): MediaLibrary.Page {
         val options = PHFetchOptions()
         options.sortDescriptors = listOf(
             NSSortDescriptor.sortDescriptorWithKey(CREATION_DATE, ascending = true),
@@ -840,7 +840,7 @@ public class IosMediaLibrary : MediaLibrary {
     }
 
     /** Every walk after the first: the assets added since [token], [offered] of them already offered. */
-    private fun changedPage(token: String, offered: Int, limit: Int): MediaLibrary.Page? {
+    private suspend fun changedPage(token: String, offered: Int, limit: Int): MediaLibrary.Page? {
         val (added, newest) = ChangeTokens.insertedSince(token) ?: return null
         val window = added.drop(offered).take(limit)
         val found = PHAsset.fetchAssetsWithLocalIdentifiers(window, null)
@@ -944,13 +944,16 @@ public class IosMediaLibrary : MediaLibrary {
     }
 
     /** One `PHAsset` as this interface describes it, with its resources. See [page]. */
-    private fun describe(asset: PHAsset, cursor: Cursor, after: String): MediaLibrary.Asset {
+    private suspend fun describe(asset: PHAsset, cursor: Cursor, after: String): MediaLibrary.Asset {
         val live = (asset.mediaSubtypes and PHAssetMediaSubtypePhotoLive) != 0uL
         return MediaLibrary.Asset(
             localId = asset.localIdentifier,
             bytes = 0L,
             capturedAtIso = isoOf(cursor.epochMillis),
-            capturedUtcOffsetMinutes = offsetMinutesOf(asset),
+            // THE SHUTTER'S ZONE, from the file's own EXIF (D-1025-S7-77): `PHAsset`
+            // states none. Zero when the file names no offset or cannot be read
+            // without a download, and NEVER the reader's zone — see [captureOffsetOf].
+            capturedUtcOffsetMinutes = captureOffsetOf(asset),
             kind = if (asset.mediaType == PHAssetMediaTypeVideo) {
                 MediaLibrary.Kind.VIDEO
             } else {
@@ -1007,18 +1010,6 @@ public class IosMediaLibrary : MediaLibrary {
         // ordered correctly by the same comparison. Only nil takes the floor.
         return (seconds * 1_000.0).toLong()
     }
-
-    /**
-     * The capture-local offset, in minutes — and it is ALWAYS ZERO here.
-     *
-     * **`PHAsset` publishes no capture time zone.** The shutter's own offset
-     * lives in the EXIF `OffsetTimeOriginal` tag inside the original's bytes.
-     * Zero, and never the READER'S current offset: a phone that stamped
-     * `NSTimeZone.local` onto an import would move every photograph in the
-     * roll into whatever zone the member happened to be standing in. Filed as
-     * an owner question on #1025.
-     */
-    private fun offsetMinutesOf(asset: PHAsset): Int = 0
 
     /** RFC 3339 in UTC, which is what `media.add_asset.captured_at` takes. */
     private fun isoOf(epochMillis: Long): String {

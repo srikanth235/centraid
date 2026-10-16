@@ -12,6 +12,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_apps_agenda::local;
 use centraid_apps_kit::error::{KitError, KitResult};
 use centraid_apps_locker::phone::{self, ItemData, Listed};
+use centraid_apps_locker::queries::AccessKind;
 use centraid_vault::Vault;
 use centraid_vault::time::zone::FireZone;
 
@@ -256,8 +257,16 @@ pub(super) fn review(
     })
 }
 
-/// ONE ITEM'S ACCESS HISTORY (#1047 T2): the receipts the vault already
-/// wrote about it, as metadata, each at its wall clock in the request's zone.
+/// THE ACCESS HISTORY (#1047 T2, Q-1047-21): the receipts the vault already
+/// wrote, as metadata, each at its wall clock in the request's zone. **With an
+/// item it is that item's** (the item page's); **with none it is the whole
+/// Locker's**, unlocks and exports included, each item and custom field named
+/// by what it is called now.
+///
+/// Both ride this one arm, behind the same shell gate as every Locker read: a
+/// shell asks nothing of the core while the Locker is locked, and the core
+/// holds no second gate for any Locker read (the items, the item and the
+/// review are asked the same way).
 pub(super) fn access(
     vault: &Vault,
     door: &VaultDoor<'_>,
@@ -267,7 +276,7 @@ pub(super) fn access(
     let limit = (asked.limit > 0).then(|| i64::from(asked.limit));
     answered(
         door,
-        phone::load_access(door, &asked.item_id, limit),
+        phone::load_access(door, super::non_empty(&asked.item_id), limit),
         |data| {
             Answer::LockerAccess(wire::LockerAccess {
                 entries: data
@@ -281,10 +290,11 @@ pub(super) fn access(
                             .unwrap_or_default();
                         let (local_day, local_time) = wall.split_once('T').unwrap_or(("", ""));
                         wire::LockerAccessEntry {
-                            kind: if entry.derivation.as_deref() == Some("totp") {
-                                wire::LockerAccessKind::Code
-                            } else {
-                                wire::LockerAccessKind::Reveal
+                            kind: match entry.kind {
+                                AccessKind::Auth => wire::LockerAccessKind::Unlock,
+                                AccessKind::Reveal => wire::LockerAccessKind::Reveal,
+                                AccessKind::Code => wire::LockerAccessKind::Code,
+                                AccessKind::Export => wire::LockerAccessKind::Export,
                             } as i32,
                             local_day: local_day.to_owned(),
                             local_time: local_time.to_owned(),
@@ -293,6 +303,9 @@ pub(super) fn access(
                             allowed: entry.allowed,
                             columns: entry.columns.unwrap_or_default(),
                             field_id: entry.field_id.unwrap_or_default(),
+                            item_id: entry.item_id.unwrap_or_default(),
+                            item_title: entry.item_title.unwrap_or_default(),
+                            field_label: entry.field_label.unwrap_or_default(),
                         }
                     })
                     .collect(),

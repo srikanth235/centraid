@@ -792,7 +792,7 @@ internal fun GrainControl(grain: PhotosGridState.Grain, onGrain: (PhotosGridStat
                     }
                     Text(
                         text = label,
-                        style = centraidType(if (active) "control" else "band"),
+                        style = centraidType(if (active) "control" else "band", scales = false),
                         color = centraidColor(if (active) "text" else "textSoft"),
                         maxLines = 1,
                     )

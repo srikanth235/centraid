@@ -308,9 +308,9 @@ impl LibraryInput {
 
 /// Every column both shelves project (`library.ts:19-23`).
 pub const ASSET_COLUMNS: &str = "asset_id, content_id, kind, title, captured_at, tz_offset_min, \
-                                 capture_group_id, place_id, camera_device_id, width, height, \
-                                 duration_s, source_asset_id, archived_at, deleted_at, purge_at, \
-                                 created_at, updated_at";
+                                 capture_group_id, place_id, width, height, duration_s, \
+                                 source_asset_id, archived_at, deleted_at, purge_at, created_at, \
+                                 updated_at";
 
 // ---------------------------------------------------------------------------
 // The statements.
@@ -396,7 +396,7 @@ pub fn memory_members_statement(memory_ids: &[String]) -> KitResult<PageQuery> {
     .filter(&fragment.sql, fragment.bind))
 }
 
-/// `photos.library.contents` / `photos.search.contents` / the face-queue's.
+/// `photos.library.contents` / `photos.search.contents`.
 pub fn content_statement(name: &str, content_ids: &[String]) -> KitResult<PageQuery> {
     let fragment = in_list("content_id", content_ids)?;
     Ok(PageQuery::new(

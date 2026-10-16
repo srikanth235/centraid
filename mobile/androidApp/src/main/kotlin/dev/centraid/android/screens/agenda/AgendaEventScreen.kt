@@ -29,8 +29,8 @@ import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PushedPage
-import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
@@ -131,7 +131,7 @@ private fun EventBody(data: AgendaEventData, onEvent: (AgendaEventEvent) -> Unit
         }
         data.facts.forEach { FieldRow(key = it.label, value = it.detail) }
         if (data.call_uri.isNotEmpty() && data.call_label.isNotEmpty()) {
-            QuietButton(
+            OutlineButton(
                 label = data.call_label,
                 testTag = "agenda-event-call",
                 ink = "accent",
@@ -152,7 +152,7 @@ private fun EventBody(data: AgendaEventData, onEvent: (AgendaEventEvent) -> Unit
                 Text(rsvp.question, style = centraidType("smallStrong"), color = centraidColor("textSoft"))
                 Row(Modifier.padding(top = 8.dp)) {
                     rsvp.choices.forEach { choice ->
-                        QuietButton(
+                        OutlineButton(
                             label = choice.label,
                             testTag = "agenda-rsvp-${choice.partstat}",
                             ink = if (choice.selected) "accent" else if (choice.enabled) "text" else "textFaint",
@@ -181,7 +181,7 @@ private fun EventBody(data: AgendaEventData, onEvent: (AgendaEventEvent) -> Unit
         }
         Row(Modifier.padding(KitGeometry.GUTTER)) {
             data.actions.forEach { action ->
-                QuietButton(
+                OutlineButton(
                     label = action.label,
                     testTag = "agenda-action-${action.key}",
                     ink = if (!action.enabled) "textFaint" else if (action.destructive) "net" else "text",
@@ -245,8 +245,8 @@ private fun ParkedCard(parked: AgendaParkedCard, onRetry: () -> Unit, onDismiss:
         Text(parked.title, style = centraidType("smallStrong"), color = centraidColor("net"))
         if (parked.body.isNotEmpty()) Text(parked.body, style = centraidType("small"), color = centraidColor("textSoft"))
         Row(Modifier.padding(top = 8.dp)) {
-            if (parked.retry_label.isNotEmpty()) QuietButton(parked.retry_label, testTag = "agenda-parked-retry", modifier = Modifier.padding(end = 8.dp), onPress = onRetry)
-            if (parked.dismiss_label.isNotEmpty()) QuietButton(parked.dismiss_label, testTag = "agenda-parked-dismiss", onPress = onDismiss)
+            if (parked.retry_label.isNotEmpty()) OutlineButton(parked.retry_label, testTag = "agenda-parked-retry", modifier = Modifier.padding(end = 8.dp), onPress = onRetry)
+            if (parked.dismiss_label.isNotEmpty()) OutlineButton(parked.dismiss_label, testTag = "agenda-parked-dismiss", onPress = onDismiss)
         }
     }
 }

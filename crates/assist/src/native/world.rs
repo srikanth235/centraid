@@ -330,7 +330,7 @@ impl World {
             .unwrap_or_default();
         world.entity_count = door
             .table(
-                "agent_command_invocation",
+                "command_invocation",
                 "invocation_id, requested_at",
                 "requested_at",
                 "invocation_id",
@@ -781,7 +781,7 @@ impl World {
         // invocation naming that id is the answer. Failing that, what the
         // collection holds; failing that, a notebook.
         let invocations = door.table(
-            "agent_command_invocation",
+            "command_invocation",
             "invocation_id, command_id, input_json, status, requested_at",
             "requested_at",
             "invocation_id",

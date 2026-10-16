@@ -42,7 +42,7 @@ import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.RoomAction
@@ -259,7 +259,7 @@ private fun LazyListScope.touch(touch: PeopleTouchData, onEvent: (PeopleHomeEven
             onTap = { onEvent(PeopleHomeEvent(person = PeopleHomeEvent.PersonPicked(card.party_id, card.name))) },
         ) {
             if (card.action_label.isNotEmpty()) {
-                QuietButton(
+                OutlineButton(
                     label = card.action_label,
                     testTag = "people-log-${card.party_id}",
                     modifier = Modifier.padding(start = 8.dp),

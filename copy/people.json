@@ -24,6 +24,7 @@
     "CADENCE_NEVER": "Never",
     "CADENCE_NONE": "No cadence",
     "CANCEL": "Cancel",
+    "CHANNELS_UNKNOWN": "The channels could not be read.",
     "CHANNEL_A11Y": "{kind}, {value}",
     "CHANNEL_ADDRESS": "Address",
     "CHANNEL_EMAIL": "Email",

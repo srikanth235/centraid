@@ -11,10 +11,10 @@ import SwiftUI
 /// **LAID OUT AS THE SYSTEM PHOTOS APP LAYS OUT ITS COLLECTIONS TAB** (iOS 26):
 /// a run of titled sections, each foldable — Memories as one wide card, Pinned
 /// as a strip of square covers with the name printed on the photograph, Albums
-/// as covers with the name and count beneath, People, and Utilities as a
-/// grouped list. A member who knows that screen knows this one. What is NOT
-/// borrowed is the system's own look: the type, colour and icons are the
-/// emitted tables' (DESIGN.md), because a second icon set is a second product.
+/// as covers with the name and count beneath, and Utilities as a grouped list.
+/// A member who knows that screen knows this one. What is NOT borrowed is the
+/// system's own look: the type, colour and icons are the emitted tables'
+/// (DESIGN.md), because a second icon set is a second product.
 ///
 /// **The wire decides nothing new.** Which section a row lands in is read off
 /// what the row already is — `member_owned` for albums, the mode for a standing
@@ -88,9 +88,6 @@ struct PhotosCollectionsView: View {
                     section(.pinned) { pinnedStrip(layout.pinned) }
                 }
                 section(.albums) { albums(layout.albums) }
-                if let people = layout.people {
-                    section(.people) { PeopleCard(door: people, onOpen: onOpenDoor) }
-                }
                 if !layout.utilities.isEmpty {
                     section(.utilities) {
                         UtilitiesGroup(
@@ -242,20 +239,19 @@ private let pinnedSide: CGFloat = 110
 /// An album cover's side: larger than Pinned's, because an album is read by
 /// its picture and a pinned shelf by its name.
 private let albumSide: CGFloat = 150
-/// The Memories and People cards' height — the system's Memories card.
+/// The Memories card's height — the system's Memories card.
 private let wideCardHeight: CGFloat = 150
 
 // MARK: - which row goes in which section
 
 enum CollectionsSection: Hashable, CaseIterable {
-    case memories, pinned, albums, people, utilities
+    case memories, pinned, albums, utilities
 
     var title: String {
         switch self {
         case .memories: return "Memories"
         case .pinned: return "Pinned"
         case .albums: return "Albums"
-        case .people: return "People"
         case .utilities: return "Utilities"
         }
     }
@@ -275,7 +271,6 @@ enum CollectionsItem {
 /// Deleted. Anything else a standing shelf turns out to be lands in Pinned.
 struct CollectionsLayout {
     var memories: Centraid_Screen_V1_CollectionsDoor?
-    var people: Centraid_Screen_V1_CollectionsDoor?
     var pinned: [CollectionsItem] = []
     var albums: [Centraid_Screen_V1_ShelfRow] = []
     var utilities: [CollectionsItem] = []
@@ -286,7 +281,6 @@ struct CollectionsLayout {
         for door in doors {
             switch door.kind {
             case .memories: memories = door
-            case .people: people = door
             case .places: places = door
             case .duplicates: duplicates = door
             case .unspecified, .UNRECOGNIZED: break
@@ -507,8 +501,8 @@ private struct AlbumCard: View {
     }
 }
 
-/// THE WIDE CARD both Memories and People are drawn on: an icon at the top,
-/// the sentence at the foot, the whole card a door.
+/// THE WIDE CARD Memories is drawn on: an icon at the top, the sentence at the
+/// foot, the whole card a door.
 private struct WideCard: View {
     let iconKey: String
     let title: String
@@ -565,26 +559,6 @@ private struct MemoriesCard: View {
             urgent: count?.urgent ?? false,
             spoken: count.map { "Memories, \($0.spoken)" } ?? "Memories, none yet",
             action: { onOpen(.memories) }
-        )
-    }
-}
-
-/// PEOPLE, AS A WIDE CARD. The system draws a grid of faces here; this state
-/// carries a count and no faces, so the card names the door and what waits
-/// behind it rather than drawing circles it has nothing to fill with.
-private struct PeopleCard: View {
-    let door: Centraid_Screen_V1_CollectionsDoor
-    let onOpen: (Centraid_Screen_V1_CollectionsDoor.Kind) -> Void
-
-    var body: some View {
-        let count = Counted.door(door)
-        WideCard(
-            iconKey: "Users",
-            title: count.map { $0.urgent ? $0.shown : "\($0.shown) people" } ?? "People",
-            caption: PhotosWords.photosCollectionsPeopleCaption,
-            urgent: count?.urgent ?? false,
-            spoken: count.map { "People, \($0.spoken)" } ?? "People",
-            action: { onOpen(.people) }
         )
     }
 }
@@ -851,7 +825,6 @@ struct PhotosCollectionsStateView {
                 case .videos: return "Video"
                 case .unspecified, .UNRECOGNIZED: return "album"
                 }
-            case .person: return "person"
             case .none: return "album"
             }
         case .album, .none: return "album"
@@ -862,7 +835,6 @@ struct PhotosCollectionsStateView {
 
     static func iconKey(for kind: Centraid_Screen_V1_CollectionsDoor.Kind) -> String {
         switch kind {
-        case .people: return "Users"
         case .places: return "place"
         case .memories: return "Sparkle"
         case .duplicates: return "dupe"
@@ -872,12 +844,11 @@ struct PhotosCollectionsStateView {
 
     /// A DOOR'S NAME IS COPY AND RIDES THE SHELL, not the wire.
     ///
-    /// `CollectionsDoor` carries a `kind` and no title, deliberately: the four
-    /// are fixed and a string on the row would be four strings to keep in step
-    /// with Compose's four. The kind is the fact; this is the word.
+    /// `CollectionsDoor` carries a `kind` and no title, deliberately: the three
+    /// are fixed and a string on the row would be three strings to keep in step
+    /// with Compose's three. The kind is the fact; this is the word.
     static func title(for kind: Centraid_Screen_V1_CollectionsDoor.Kind) -> String {
         switch kind {
-        case .people: return "People"
         case .places: return "Places"
         case .memories: return "Memories"
         case .duplicates: return "Duplicates"

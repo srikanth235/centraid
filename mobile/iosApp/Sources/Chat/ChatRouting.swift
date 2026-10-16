@@ -119,8 +119,8 @@ enum ChatRouting {
         case let .screen(identifier, _):
             let app = identifier.split(separator: ".").first.map(String.init) ?? ""
             return app.isEmpty ? nil : app
-        case .photos, .photoShelf, .photoLightbox, .photoPicker, .places, .photosPeople,
-             .photoFaceReview, .photosMemories, .photoDuplicates, .photoDuplicateReview, .photoEditor:
+        case .photos, .photoShelf, .photoLightbox, .photoPicker, .places,
+             .photosMemories, .photoDuplicates, .photoDuplicateReview, .photoEditor:
             return "photos"
         }
     }

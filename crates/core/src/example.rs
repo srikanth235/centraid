@@ -938,9 +938,8 @@ fn roll() -> Vec<Frame> {
 
 /// THE PORTRAIT HALF (`photos/seed.js:212`-`:348`).
 ///
-/// The landscape roll has no people in it, so People, face review and the whole
-/// triage verb had nothing to render on a fresh vault — the one flow v0's pass
-/// rewrote was also the one flow a seeded vault could not reach.
+/// The landscape roll has no people in it, so a fresh vault had no portraits to
+/// show.
 ///
 /// These are ORIGINAL procedurally drawn frames, not photographs of anyone and
 /// not any third party's character art: every byte here has to be ours to

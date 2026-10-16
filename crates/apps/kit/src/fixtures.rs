@@ -1469,8 +1469,8 @@ fn seed_docs_demo(
                 .execute(
                     "INSERT INTO core_content_item
                        (content_id, content_uri, content_hash, byte_size, language,
-                        creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-                     VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6)",
+                        creator_party_id, deleted_at, purge_at, created_at)
+                     VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, ?6)",
                     rusqlite::params![
                         content_id,
                         uri,
@@ -1830,8 +1830,8 @@ fn seed_year3_docs(
             .execute(
                 "INSERT INTO core_content_item
                    (content_id, content_uri, content_hash, byte_size, language,
-                    creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-                 VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6)",
+                    creator_party_id, deleted_at, purge_at, created_at)
+                 VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, ?6)",
                 rusqlite::params![
                     content_id,
                     format!(
@@ -1889,8 +1889,8 @@ fn seed_year3_docs(
                     .execute(
                         "INSERT INTO core_content_item
                            (content_id, content_uri, content_hash, byte_size, language,
-                            creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-                         VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6)",
+                            creator_party_id, deleted_at, purge_at, created_at)
+                         VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, ?6)",
                         rusqlite::params![
                             second,
                             format!(
@@ -2288,9 +2288,9 @@ fn seed_note_body(
                 .execute(
                     "INSERT INTO core_content_item
                        (content_id, content_uri, content_hash, byte_size, language,
-                        creator_party_id, origin_device_id, deleted_at, purge_at,
+                        creator_party_id, deleted_at, purge_at,
                         created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, NULL, ?6, ?6)",
+                     VALUES (?1, ?2, ?3, ?4, NULL, ?5, NULL, NULL, ?6, ?6)",
                     rusqlite::params![
                         content_id,
                         notes_body_uri(media_type, text),
@@ -2596,8 +2596,8 @@ fn seed_notes_demo(
         .execute(
             "INSERT INTO core_content_item
                (content_id, content_uri, content_hash, byte_size, language, creator_party_id,
-                origin_device_id, deleted_at, purge_at, created_at, updated_at)
-             VALUES (?1, 'blob:blake3-aa', ?2, 4096, NULL, ?3, NULL, NULL, NULL, ?4, ?4)",
+                deleted_at, purge_at, created_at, updated_at)
+             VALUES (?1, 'blob:blake3-aa', ?2, 4096, NULL, ?3, NULL, NULL, ?4, ?4)",
             rusqlite::params![
                 attachment_content,
                 text_content_hash("the cabin's confirmation page"),
@@ -2672,7 +2672,7 @@ fn day_after(start: &str, count: usize) -> String {
 /// A CYCLIC REVISION CHAIN — the fixture the cycle refusal needs (D-1020-N2).
 ///
 /// **THE SCHEMA NOW FORBIDS THIS, AND THE READER STILL HAS TO SURVIVE IT.**
-/// `contracts/migrations/002_revisions.sql` is rung two of the ladder, so a
+/// The baseline carries the revision graph's guards (D-1020-N2), so a
 /// vault this build founds cannot be written into a cycle: the guards refuse
 /// A→B→A at insert time. The reader's refusal is not thereby dead code — rung
 /// two REFUSES TO RUN over a file that already carries a malformed chain rather
@@ -4450,6 +4450,40 @@ pub fn trash_asset(
     Ok(())
 }
 
+/// Trash — or, with `at: None`, restore — one row of an entity that carries the
+/// trash pair, as the entity's own delete command leaves it.
+///
+/// For the tests that read the far end of a link after its target was deleted
+/// (a reference card says `trashed`, N4): they cannot hold SQL themselves
+/// (`sql-confinement`), and which entities have the pair is a fact about the
+/// schema, so it is named here once. A type with no such column is refused
+/// rather than guessed at.
+pub fn set_row_trashed(
+    connection: &Connection,
+    entity: &str,
+    id: &str,
+    at: Option<&str>,
+) -> KitResult<()> {
+    let (table, key) = match entity {
+        "knowledge.note" => ("knowledge_note", "note_id"),
+        "core.party" => ("core_party", "party_id"),
+        "core.event" => ("core_event", "event_id"),
+        "schedule.task" => ("schedule_task", "task_id"),
+        other => {
+            return Err(KitError::Door(format!(
+                "{other} carries no trash pair to set"
+            )));
+        }
+    };
+    connection
+        .execute(
+            &format!("UPDATE {table} SET deleted_at = ?2, purge_at = ?2 WHERE {key} = ?1"),
+            rusqlite::params![id, at],
+        )
+        .map_err(door)?;
+    Ok(())
+}
+
 /// Clear one trashed photograph's purge window, leaving it trashed.
 pub fn clear_asset_purge_at(connection: &Connection, asset_id: &str) -> KitResult<()> {
     connection
@@ -4483,43 +4517,6 @@ pub fn seed_custody_rollup(
 pub fn clear_custody_rollup(connection: &Connection) -> KitResult<()> {
     connection
         .execute("DELETE FROM blob_custody_rollup", [])
-        .map_err(door)?;
-    Ok(())
-}
-
-/// Answer a face proposal `confirm`: the region is that person's, judged by
-/// this member.
-///
-/// The two columns move together because the schema pins them to each other
-/// (`CHECK ((review_state = 'confirmed') = (confirmed_by_party_id IS NOT
-/// NULL))`).
-pub fn confirm_face_region(
-    connection: &Connection,
-    region_id: &str,
-    party_id: &str,
-    confirmed_by_party_id: &str,
-) -> KitResult<()> {
-    connection
-        .execute(
-            "UPDATE media_face_region
-                SET review_state = 'confirmed', party_id = ?2, confirmed_by_party_id = ?3
-              WHERE region_id = ?1",
-            rusqlite::params![region_id, party_id, confirmed_by_party_id],
-        )
-        .map_err(door)?;
-    Ok(())
-}
-
-/// Answer a face proposal `reject`: not a person this library names, and the
-/// party goes with the answer (`CHECK (review_state IN ('proposed','confirmed')
-/// OR party_id IS NULL)`).
-pub fn reject_face_region(connection: &Connection, region_id: &str) -> KitResult<()> {
-    connection
-        .execute(
-            "UPDATE media_face_region SET review_state = 'rejected', party_id = NULL
-              WHERE region_id = ?1",
-            [region_id],
-        )
         .map_err(door)?;
     Ok(())
 }

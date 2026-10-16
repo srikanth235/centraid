@@ -117,6 +117,19 @@ class BackupScreenSpec : StringSpec({
         state.background_notice shouldBe ""
     }
 
+    "a gateway that refused this phone's token says to pair it again where it says when it was reached (#1080, F2)" {
+        val refused = home.copy(pairAgain = true)
+        val state = ready(read(reading = reading(destinations = listOf(refused, nas)))).state
+        state.destinations.map { it.pair_again } shouldBe listOf(true, false)
+        state.destinations.first().detail shouldBe
+            "192.168.1.20:7443 · Reached 2 minutes ago · ${SharedCopy.BACKUP_DEST_PAIR_AGAIN}"
+        // ONE REFUSING OF TWO leaves the line the ordinary one; every gateway refusing says pair again.
+        state.line?.pair_again shouldBe false
+        val all = ready(read(reading = reading(destinations = listOf(refused)))).state
+        all.line?.pair_again shouldBe true
+        all.line?.sentence shouldBe SharedCopy.BACKUP_LINE_PAIR_AGAIN
+    }
+
     "battery saving is mentioned only once a backlog has stood a day" {
         // BEHIND AND UNACKNOWLEDGED FOR MORE THAN A DAY: worth a sentence, and
         // the shell decides whether the platform is actually holding it back.

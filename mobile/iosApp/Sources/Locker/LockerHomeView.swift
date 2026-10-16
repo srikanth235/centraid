@@ -234,13 +234,14 @@ struct LockerHomeView: View {
     }
 
     /// A More row: `facts` is the machine's sheet; `import`, `trash`,
-    /// `export` and `lock` are the shell's (a push, and the gate's
+    /// `export`, `access` and `lock` are the shell's (a push, and the gate's
     /// `LockTapped`).
     private func more(_ row: Centraid_Screen_V1_LockerMoreRow) {
         send(Self.event { $0.more = .with { $0.key = row.key } })
         switch row.key {
         case "import": push(LockerScreens.importRoute)
         case "export": push(LockerScreens.exportRoute)
+        case "access": push(LockerScreens.accessRoute)
         case "trash": push(LockerScreens.trashRoute)
         case "lock": sendLock(LockerLockSeam.event { $0.lock = .init() })
         default: break

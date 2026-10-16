@@ -124,10 +124,12 @@ impl Vault {
         connection.pragma_update(None, "auto_vacuum", "NONE")?;
         Self::apply_pragmas(&connection)?;
         connection.pragma_update(None, "application_id", APPLICATION_ID)?;
-        // OFF for the ladder: the baseline creates 157 tables whose foreign
-        // keys point at each other, and SQLite resolves an FK's target lazily,
-        // so leaving enforcement on during creation would only make the order
-        // matter for no benefit.
+        // OFF for the ladder: the baseline creates a hundred tables whose
+        // foreign keys point at each other, and SQLite resolves an FK's target
+        // lazily, so leaving enforcement on during creation would only make the
+        // order matter for no benefit. It also seeds rows (the money
+        // categories and their `core_entity` rows) that point at the registry
+        // `seed_entity_kinds` derives only afterwards.
         connection.pragma_update(None, "foreign_keys", "OFF")?;
         crate::migrations::run_from(&connection, 0)?;
         // The registry the schema's own foreign keys point into, derived from

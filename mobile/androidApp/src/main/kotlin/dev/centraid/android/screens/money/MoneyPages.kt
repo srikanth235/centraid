@@ -17,6 +17,7 @@ import centraid.screen.v1.MoneyRulesEvent
 import centraid.screen.v1.MoneyRulesState
 import dev.centraid.android.kit.ChoiceFieldRow
 import dev.centraid.android.kit.CentraidRow
+import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
@@ -26,8 +27,8 @@ import dev.centraid.android.kit.KitChip
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PushedPage
-import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.SheetOption
@@ -67,7 +68,7 @@ internal fun MoneyImportScreen(state: MoneyImportState, onEvent: (MoneyImportEve
                     item(key = "file") {
                         FieldRow(key = plan.file_label, value = plan.file_value, note = plan.file_note)
                         if (plan.choose_label.isNotEmpty()) {
-                            QuietButton(
+                            OutlineButton(
                                 label = plan.choose_label,
                                 testTag = "money-import-choose",
                                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
@@ -142,19 +143,31 @@ internal fun MoneyImportScreen(state: MoneyImportState, onEvent: (MoneyImportEve
                         statement.more.forEach { more -> item(key = "${statement.key}-more-$more") { MoneyNote(more) } }
                     }
                     item(key = "publish") {
+                        val gutter = Modifier.padding(horizontal = KitGeometry.GUTTER)
                         if (plan.publish_label.isNotEmpty()) {
-                            InkButton(
-                                label = plan.publish_label,
-                                testTag = "money-import-publish",
-                                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                            ) { onEvent(MoneyImportEvent(publish = MoneyImportEvent.Publish())) }
-                            MoneyNote(plan.publish_note)
-                        }
-                        if (plan.discard_label.isNotEmpty()) {
-                            QuietButton(
+                            // PUBLISH AND DISCARD ARE ALTERNATIVES: one stack,
+                            // the note that says what publishing does between
+                            // them.
+                            ChoiceStack(Modifier.padding(vertical = 8.dp)) {
+                                InkButton(
+                                    label = plan.publish_label,
+                                    testTag = "money-import-publish",
+                                    modifier = gutter,
+                                ) { onEvent(MoneyImportEvent(publish = MoneyImportEvent.Publish())) }
+                                MoneyNote(plan.publish_note)
+                                if (plan.discard_label.isNotEmpty()) {
+                                    OutlineButton(
+                                        label = plan.discard_label,
+                                        testTag = "money-import-discard",
+                                        modifier = gutter,
+                                    ) { onEvent(MoneyImportEvent(discard = MoneyImportEvent.Discard())) }
+                                }
+                            }
+                        } else if (plan.discard_label.isNotEmpty()) {
+                            OutlineButton(
                                 label = plan.discard_label,
                                 testTag = "money-import-discard",
-                                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER),
+                                modifier = gutter,
                             ) { onEvent(MoneyImportEvent(discard = MoneyImportEvent.Discard())) }
                         }
                         if (plan.done_label.isNotEmpty()) {
@@ -291,7 +304,7 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
             )
             MoneyNote(editor.external_ref_note)
             if (editor.remove_number_label.isNotEmpty()) {
-                QuietButton(
+                OutlineButton(
                     label = editor.remove_number_label,
                     ink = "net",
                     enabled = editor.can_remove_number,
@@ -358,7 +371,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
                     }
                     if (rules.apply_label.isNotEmpty()) {
                         item(key = "apply") {
-                            QuietButton(
+                            OutlineButton(
                                 label = rules.apply_label,
                                 testTag = "money-rules-apply",
                                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
@@ -452,20 +465,26 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
                 }
                 MoneyNote(editor.amount_note)
                 MoneyNote(editor.issue, ink = "net")
-                if (editor.apply_label.isNotEmpty()) {
-                    QuietButton(
-                        label = editor.apply_label,
-                        testTag = "money-rule-apply",
-                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-                    ) { onEvent(MoneyRulesEvent(apply = MoneyRulesEvent.ApplyTapped())) }
-                }
-                if (editor.delete_label.isNotEmpty()) {
-                    QuietButton(
-                        label = editor.delete_label,
-                        ink = "net",
-                        testTag = "money-rule-delete",
-                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
-                    ) { onEvent(MoneyRulesEvent(delete = MoneyRulesEvent.DeleteTapped())) }
+                // APPLY AND DELETE ARE ALTERNATIVES: one stack.
+                if (editor.apply_label.isNotEmpty() || editor.delete_label.isNotEmpty()) {
+                    val gutter = Modifier.padding(horizontal = KitGeometry.GUTTER)
+                    ChoiceStack(Modifier.padding(vertical = 4.dp)) {
+                        if (editor.apply_label.isNotEmpty()) {
+                            OutlineButton(
+                                label = editor.apply_label,
+                                testTag = "money-rule-apply",
+                                modifier = gutter,
+                            ) { onEvent(MoneyRulesEvent(apply = MoneyRulesEvent.ApplyTapped())) }
+                        }
+                        if (editor.delete_label.isNotEmpty()) {
+                            OutlineButton(
+                                label = editor.delete_label,
+                                ink = "net",
+                                testTag = "money-rule-delete",
+                                modifier = gutter,
+                            ) { onEvent(MoneyRulesEvent(delete = MoneyRulesEvent.DeleteTapped())) }
+                        }
+                    }
                 }
             }
         }

@@ -2,7 +2,6 @@ package dev.centraid.shared
 
 import dev.centraid.shared.apps.notes.NotesEditorMachine
 import dev.centraid.shared.apps.people.PeopleTrashSpec
-import dev.centraid.shared.apps.photos.FaceReviewMachine
 import dev.centraid.shared.apps.tasks.TasksTrashSpec
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
@@ -76,7 +75,6 @@ class ShellCommandsExistSpec : StringSpec({
     /** Every command this shell's screens can submit, where a constant names it. */
     val shellCommands = mapOf(
         "NotesEditorMachine.SAVE_COMMAND" to NotesEditorMachine.SAVE_COMMAND,
-        "FaceReviewMachine.CREATE_PERSON_COMMAND" to FaceReviewMachine.CREATE_PERSON_COMMAND,
         "TasksTrashSpec.restoreCommand" to TasksTrashSpec.restoreCommand,
         "TasksTrashSpec.purgeCommand" to TasksTrashSpec.purgeCommand.orEmpty(),
         "PeopleTrashSpec.purgeCommand" to PeopleTrashSpec.purgeCommand.orEmpty(),

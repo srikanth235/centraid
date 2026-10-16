@@ -5,6 +5,7 @@ Everything durable a Centraid phone knows about a vault is in one SQLite file, a
 ```sh
 cargo test -p centraid-vault
 cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl.sql
+cargo run -p centraid-vault --bin export-baseline > contracts/migrations/001_baseline.sql   # a squash; a no-op while the ladder is one rung
 ```
 
 ## The map
@@ -12,7 +13,7 @@ cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl
 | Module | What it owns |
 | --- | --- |
 | `file` | `Vault::create` / `open`, the one writable connection, `read` under `query_only`, the pragma set, `finish`. |
-| `migrations` | The forward-only ladder (fourteen rungs), the baseline, `application_id`, the derived entity-kind registry. |
+| `migrations` | The forward-only ladder (one rung: the baseline, squashed on 2026-10-15 from fifteen), `application_id`, the derived entity-kind registry, and `render_baseline`, which cuts the baseline. |
 | `log` | The commit guard — `BEGIN IMMEDIATE`, the body, `COMMIT`, with an `update_hook` reporting which tables a commit touched — and SQL identifier quoting. |
 | `value`, `canonical`, `clock`, `time`, `error` | A SQLite value and its JSON; the one canonical JSON spelling; time and ids as injected facts; civil time and recurrence; `VaultError`, with `DiskFull` typed. |
 | `access` | `Principal`, `Verb`, `evaluate_access` — a deny is a value. |
@@ -39,7 +40,7 @@ cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl
 | `restore` | The file rebuilt from a destination and every check that it is the snapshot's (`db_hash`, `integrity_check`, the census); and `restore_check`, the structural check `centraid doctor` reports. |
 | `drill` | Back up, lose the vault, its ledger and its spool, restore, and prove it is the vault that was lost, row for row (`dump`). |
 
-There is **no backup index in the vault**: rung ten dropped the tables rungs three and four founded for the #1029 plane, because a part's name is a keyed hash of its plaintext and the gateway is asked what it holds ([R-1080-4](../../docs/decisions.md#backups-from-first-principles-1080)). The plane speaks to a destination through `Store` and never to a socket; the phone's core wires it to `crates/gateway`'s client.
+There is **no backup index in the vault**: the tables the #1029 plane founded for one were dropped before the first release, because a part's name is a keyed hash of its plaintext and the gateway is asked what it holds ([R-1080-4](../../docs/decisions.md#backups-from-first-principles-1080)). The plane speaks to a destination through `Store` and never to a socket; the phone's core wires it to `crates/gateway`'s client.
 
 ## Decisions specific to this file format
 
@@ -49,8 +50,8 @@ Each with its reason in the module, and each recorded as a decision.
 - **The commit pair is the only writable connection** (D-1020-D1-5). `Vault::read` sets `PRAGMA query_only`, so a write through a read is refused by SQLite rather than by a reviewer.
 - **The pragmas are stated, not inherited**: `journal_mode = WAL`, `synchronous = FULL`, `journal_size_limit`, no `secure_delete`, a 4 KiB page and no auto-vacuum; checkpoints are SQLite's own since #1080 ([R-1080-C33](../../docs/decisions.md#the-phone-core-and-the-cut-over-1080-lane-c)), so a last close folds the WAL into the file.
 - **`VaultError::DiskFull` is a typed answer** (D-1020-D1-8), classified on SQLite's primary code and on `ErrorKind::StorageFull`, so a handler's own `?` carries it.
-- **The vault keeps eleven full-text indexes: seven are search domains and four serve containers.** Rung thirteen folds attribute text into the four widened domain indexes (a person's profile, reach, memos and, through the activity's live `core_link`, the notes of their interactions), re-indexes a parent from its child tables by trigger, and retires seven indexes nothing read (four triggers of other indexes are created again without the message block, [R-1097-12](../../docs/decisions.md#the-owners-rulings-on-the-open-questions-1097)). The four container indexes ([R-1097-19 to 21](../../docs/decisions.md#containers-are-search-results-of-their-own-1097)) hold exactly the live notebooks and albums (`fts_core_collection`), projects (`fts_schedule_project`, while not archived), Tally groups (`fts_social_circle`, a circle only while a live `tally_group` stands on it) and Docs folders (`fts_core_concept`, the folders scheme, never its root); each of the eleven has an `fts5vocab` table, and Locker has none. The rank weights are the search door's, not a row in an index (R-1097-1d).
-- **The baseline migration and its `contracts/` fixture are ONE file** (D-1020-D1-13), and **the entity-kind registry is derived from the DDL** (D-1020-D1-15), not transcribed.
+- **The vault keeps ten full-text indexes: seven are search domains and three serve containers.** Attribute text is folded into the widened domain indexes (a person's profile, reach, memos and, through the activity's live `core_link`, the notes of their interactions), a parent is re-indexed from its child tables by trigger, and seven indexes nothing read are gone ([R-1097-12](../../docs/decisions.md#the-owners-rulings-on-the-open-questions-1097)). The three container indexes ([R-1097-19 to 21](../../docs/decisions.md#containers-are-search-results-of-their-own-1097)) hold exactly the live notebooks and albums (`fts_core_collection`), projects (`fts_schedule_project`, while not archived) and Docs folders (`fts_core_concept`, the folders scheme, never its root); each of the ten has an `fts5vocab` table, and Locker has none. The rank weights are the search door's, not a row in an index (R-1097-1d).
+- **The baseline migration and its `contracts/` fixture are ONE file** (D-1020-D1-13), **it is the whole ladder** — squashed on 2026-10-15 from fifteen rungs, the next schema change appends rung two (Q-1029-1) — and **the entity-kind registry is derived from the DDL** (D-1020-D1-15), not transcribed, so the baseline carries no `core_entity_kind` row. It does carry the rows founding seeds (the money categories scheme, its concepts and their `core_entity` rows), ahead of the triggers so none fires over them.
 
 ## The interface its consumers use
 
@@ -65,6 +66,6 @@ Each with its reason in the module, and each recorded as a decision.
 
 ## The tests that hold it
 
-`tests/restore_drill.rs` runs the plane's drill against the in-memory store; `crates/centraid/tests/restore_drill.rs` runs the product's against the real gateway. `tests/backup_snapshot.rs` covers a snapshot taken while another thread commits and every refusal a restore owes; `tests/backup_v2_rung.rs` climbs a rung-nine file over rung ten; `tests/locker_plaintext_gate.rs` opens every sealed part of a snapshot and finds no Locker plaintext; `tests/snapshot_faults.rs` and `tests/disk_full.rs` are the failure matrix's vault half.
+`tests/restore_drill.rs` runs the plane's drill against the in-memory store; `crates/centraid/tests/restore_drill.rs` runs the product's against the real gateway. `tests/backup_snapshot.rs` covers a snapshot taken while another thread commits and every refusal a restore owes; `src/migrations.rs`'s tests prove the climb itself (order, contiguity, a rung that fails mid-way rolling back whole) and that a squash rebuilds the vault it was cut from; `tests/locker_plaintext_gate.rs` opens every sealed part of a snapshot and finds no Locker plaintext; `tests/snapshot_faults.rs` and `tests/disk_full.rs` are the failure matrix's vault half.
 
 `#![forbid(unsafe_code)]`; there is no `unsafe` in this crate and no reason for there ever to be.

@@ -153,11 +153,17 @@ class DrainPassSpec : StringSpec({
         // A MACHINE THAT IS NOT THE GATEWAY (#1080): it was sent nothing.
         DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNTRUSTED)) shouldBe
             "That isn't your backup device. Nothing was sent."
+        // A GATEWAY THAT ANSWERED AND REFUSED (#1080, the sweep's F1): its
+        // disk is the member's to clear, so the sentence says so — and says
+        // nothing was lost.
+        DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.REFUSED)) shouldBe
+            "Your backup device refused the backup. It may be full. Nothing was lost."
         listOf(
             DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.DEADLINE)),
             DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.UNREACHABLE)),
             DrainCopy.stoppedSentence(DrainAnswer(0, DrainAnswer.Stopped.MOVED)),
             DrainCopy.stoppedSentence(DrainAnswer(0, DrainAnswer.Stopped.UNTRUSTED)),
+            DrainCopy.stoppedSentence(DrainAnswer(99, DrainAnswer.Stopped.REFUSED)),
         ).forEach { it.contains("failed") shouldBe false }
     }
 
