@@ -23,7 +23,6 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import java.io.File
 
 /**
  * THE PICKER (#1029, photos port; v0's `PhotoPicker.tsx`).
@@ -414,30 +413,6 @@ class PhotoPickerSpec : StringSpec({
                 PhotoPickerReads.settled(status, "no", "test.command:row-0001")
                     .write_settled.shouldNotBeNull().committed shouldBe false
             }
-        }
-    }
-
-    "the command this picker submits exists in the vault's declared surface" {
-        // `ShellCommandsExistSpec`'s gate, restated over this screen's own
-        // constant: that spec holds a hand-written map and a screen added
-        // without an entry in it is a screen outside the gate.
-        // `NotesEditorMachine.SAVE_COMMAND` said `knowledge.save_note`, which
-        // is in no registry, and every member read "That request does not make
-        // sense to this build" on every attempt, for ever.
-        val root = File(
-            System.getProperty("centraid.repositoryRoot")
-                ?: error("centraid.repositoryRoot is unset; see mobile/shared/build.gradle.kts"),
-        )
-        val declared = root.resolve("crates/vault/src/commands")
-            .walkTopDown()
-            .filter { it.isFile && it.extension == "rs" }
-            .flatMap { file ->
-                Regex("\"([a-z_]+\\.[a-z_]+)\"").findAll(file.readText())
-                    .map { it.groupValues[1] }
-            }
-            .toSet()
-        withClue(PhotoPickerMachine.ADD_COMMAND) {
-            declared.contains(PhotoPickerMachine.ADD_COMMAND) shouldBe true
         }
     }
 

@@ -2,10 +2,13 @@ package dev.centraid.shared
 
 import centraid.screen.v1.PhotoCell
 import dev.centraid.shared.apps.photos.PhotosReads
+import dev.centraid.shared.platform.FakePlatformServices
+import dev.centraid.shared.sync.LinkConditions
 import dev.centraid.shared.sync.TransferRule
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.test.runTest
 
 /**
  * WHAT A CELL SAYS THIS DEVICE HAS (#1025 S5, D-1025-S7-62).
@@ -155,5 +158,35 @@ class PhotoCellStateSpec : StringSpec({
         }
         everyState.contains(PhotoCell.Held.HELD_FETCHING) shouldBe false
         everyState.contains(PhotoCell.Held.HELD_UNSPECIFIED) shouldBe false
+    }
+
+    "a rule the member just chose is the rule the grid labels by, before any pass has run" {
+        // THE GRID READS `LinkConditions`, WHICH A PASS USED TO WRITE ALONE
+        // (#1080 receipt, "for the owner"): the download arrows stayed the old
+        // rule's until the next pass, though the store already held the new one.
+        // `TransferRule.write` is the one writer of the rule, so it is the one
+        // place the two can be kept one fact.
+        runTest {
+            val store = FakePlatformServices().secureStore
+            LinkConditions.rule = TransferRule.DEFAULT
+            try {
+                for (chosen in TransferRule.entries) {
+                    TransferRule.write(store, chosen)
+                    withClue("$chosen") {
+                        LinkConditions.rule shouldBe chosen
+                        TransferRule.read(store) shouldBe chosen
+                    }
+                }
+                // AND THE LABEL FOLLOWS: a thumbnail whose original the rule
+                // holds back carries the arrow under MANUAL and not under the
+                // photographs-on-cellular rule over a link that is not metered.
+                TransferRule.write(store, TransferRule.MANUAL)
+                held(rule = LinkConditions.rule, metered = false) shouldBe PhotoCell.Held.HELD_WITHHELD_BY_RULE
+                TransferRule.write(store, TransferRule.WIFI_AND_CELLULAR_PHOTOS)
+                held(rule = LinkConditions.rule, metered = false) shouldBe PhotoCell.Held.HELD_THUMBNAIL_ONLY
+            } finally {
+                LinkConditions.rule = TransferRule.DEFAULT
+            }
+        }
     }
 })

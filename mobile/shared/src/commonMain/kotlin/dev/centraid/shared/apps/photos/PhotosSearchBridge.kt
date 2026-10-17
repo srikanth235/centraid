@@ -44,12 +44,12 @@ import kotlinx.coroutines.launch
  *
  * ## WHY THIS BRIDGE SERVES ITS OWN READS
  *
- * `ScreenRuntime` serves ONE statement, and a search is legs: the people,
- * places, albums and labels a query names, their counts, and then the page of
+ * `ScreenRuntime` serves ONE statement, and a search is legs: the places,
+ * albums and labels a query names, their counts, and then the page of
  * photographs all of them reach — whose predicate is built FROM the earlier
  * legs' ids. That chaining cannot ride the reducer (the content oneof has
  * nowhere to park three answers while a fourth is in flight), so it happens
- * here, which is `PhotosPeopleBridge`'s shape and `HomeRuntime`'s reason.
+ * here, which is `HomeRuntime`'s reason.
  * Every statement and every fold is `PhotosSearchReads`; what is here is the
  * trip.
  */
@@ -105,13 +105,12 @@ public class PhotosSearchBridge {
         if (query.isBlank()) resting(session) else hits(session, query, afterCursor)
     }
 
-    /** The three vocabulary legs. A leg that refuses is an empty list. */
+    /** The two vocabulary legs. A leg that refuses is an empty list. */
     private suspend fun resting(session: HomeSession) {
         val core = session.shelf.core()
         val limit = PhotosSearchReads.VOCABULARY_LIMIT
         host.send(
             PhotosSearchReads.restingArrived(
-                peopleRows = core.photosPage(PhotosSearchReads.restingPeopleQuery(), limit).rowsOrEmpty(),
                 placeRows = core.photosPage(PhotosSearchReads.restingPlacesQuery(), limit).rowsOrEmpty(),
                 labelRows = core.photosPage(PhotosSearchReads.restingLabelsQuery(), limit).rowsOrEmpty(),
             ),
@@ -123,7 +122,7 @@ public class PhotosSearchBridge {
      * albums, their counts, then the page they reach.
      *
      * An ENTITY leg that refuses ends the trip with a refusal — a search that
-     * silently dropped "people" would answer fewer photographs than the member
+     * silently dropped "places" would answer fewer photographs than the member
      * asked for and say nothing. A COUNT leg that refuses does not: a door
      * with no number is still the door, and the view prints no count for zero.
      *
@@ -198,7 +197,7 @@ public class PhotosSearchBridge {
     }
 
     /**
-     * EVERY LEG AT ONE TERM: the people, places and labels from the page door,
+     * EVERY LEG AT ONE TERM: the places and labels from the page door,
      * the photographs and albums from the core, then the counts the doors carry.
      *
      * With [core] given the core is not asked again: its answer was for these
@@ -213,28 +212,24 @@ public class PhotosSearchBridge {
         val words = PhotosSearchReads.tokens(term)
         val limit = PhotosSearchReads.ENTITY_LIMIT
 
-        val peopleRows = handle.photosPage(PhotosSearchReads.peopleQuery(words), limit)
-        if (peopleRows is PhotosPage.Refused) return Legs.Refused(peopleRows.failure)
         val placeRows = handle.photosPage(PhotosSearchReads.placesQuery(), PhotosSearchReads.PLACE_LIMIT)
         if (placeRows is PhotosPage.Refused) return Legs.Refused(placeRows.failure)
         val labelRows = handle.photosPage(PhotosSearchReads.labelsQuery(words), limit)
         if (labelRows is PhotosPage.Refused) return Legs.Refused(labelRows.failure)
 
-        val people = PhotosSearchReads.people((peopleRows as PhotosPage.Rows).rows)
         val places = PhotosSearchReads.matchPlaces((placeRows as PhotosPage.Rows).rows, term)
             .let { it.copy(places = it.places.take(PhotosSearchReads.PER_KIND_CAP)) }
         val labels = PhotosSearchReads.labels((labelRows as PhotosPage.Rows).rows)
 
         // THE CORE, asked to correct only when nothing here found a thing: the
-        // people and the places are the legs the core cannot see.
-        val structuredEmpty = people.isEmpty() && places.places.isEmpty() && !places.unplaced && labels.isEmpty()
+        // places and the labels are the legs the core cannot see.
+        val structuredEmpty = places.places.isEmpty() && !places.unplaced && labels.isEmpty()
         val answered = core ?: when (val read = askDoor(handle, term, correct = allowCorrection && structuredEmpty)) {
             is CoreRead.Refused -> return Legs.Refused(read.failure)
             is CoreRead.Answer -> read.search
         }
         val albums = PhotosSearchReads.albums(answered.albums)
 
-        val personCounts = count(handle, PhotosSearchReads.personCountsQuery(people.map { it.id }), 1, 2)
         val placeCounts = count(
             handle,
             PhotosSearchReads.placeCountsQuery(places.places.map { it.id }, places.unplaced),
@@ -243,8 +238,6 @@ public class PhotosSearchBridge {
         )
         val albumCounts = count(handle, PhotosSearchReads.albumCountsQuery(albums.map { it.id }), 1, 0)
         val topHits = PhotosSearchReads.topHits(
-            people = people,
-            personCounts = personCounts,
             places = places,
             placeCounts = placeCounts,
             albums = albums,

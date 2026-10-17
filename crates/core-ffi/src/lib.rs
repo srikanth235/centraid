@@ -156,7 +156,17 @@ pub unsafe extern "C" fn centraid_open(
         handle
             .assist()
             .use_host(centraid_assist_llama::process_host());
-        if let Err(error) = handle.open_own_bytes(path.with_extension("bytes")) {
+        // **A CORE THAT HOLDS NO VAULT OWNS NO BYTES** (#1080, the simulator
+        // run: `custody-probe.backup.db` and `custody-probe.bytes` in
+        // Documents). The core the words and a restore are asked through is
+        // opened `create: false` over a path that is never a file; the byte
+        // store and the ledger beside that path would be a vault's side files
+        // for a vault that does not exist. A restore lays each vault down at
+        // a path of its own and opens its own store there
+        // (`phone::restore`), and a vault-less handle never acquires one.
+        if handle.holds_a_replica()
+            && let Err(error) = handle.open_own_bytes(path.with_extension("bytes"))
+        {
             tracing::warn!(
                 "the byte store did not open; this core holds text and refuses \
                  photographs by name: {error}"

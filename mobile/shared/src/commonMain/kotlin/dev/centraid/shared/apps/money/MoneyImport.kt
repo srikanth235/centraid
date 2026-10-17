@@ -39,6 +39,7 @@ import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.Step
 import dev.centraid.shared.sync.sentenceFor
 import okio.ByteString.Companion.toByteString
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * IMPORT A STATEMENT (#1099): pick a file, read the plan, publish. Nothing is
@@ -59,7 +60,7 @@ import okio.ByteString.Companion.toByteString
  */
 public object MoneyImportMachine :
     MoneyQueryMachine<MoneyImportState, MoneyImportEvent, MoneyImportData>("money.import", MONEY_TABLES) {
-    public const val SCREEN_ID: String = "money.import"
+    public const val SCREEN_ID: String = ScreenIds.MONEY_IMPORT
     public const val CMD_IMPORT: String = "money.import_transactions"
     public const val CMD_PROFILE: String = "money.save_import_profile"
 
@@ -455,9 +456,23 @@ public object MoneyImportMachine :
         val counts = buildList {
             add(MoneyFact(MoneyCopy.COUNT_NEW, statement.new.toString()))
             add(MoneyFact(MoneyCopy.COUNT_ALREADY_IN, statement.already_in.toString()))
-            add(MoneyFact(MoneyCopy.COUNT_CHECK, statement.proposed_duplicates.toString()))
+            // LINES OWED A LOOK carry the tone that says so while there are any:
+            // "Check these" is the seam's, "Can't read" the net's.
+            add(
+                MoneyFact(
+                    MoneyCopy.COUNT_CHECK,
+                    statement.proposed_duplicates.toString(),
+                    tone = if (statement.proposed_duplicates > 0) StatusChip.Tone.TONE_SEAM else StatusChip.Tone.TONE_UNSPECIFIED,
+                ),
+            )
             if (statement.repeats_in_file > 0) add(MoneyFact(MoneyCopy.COUNT_REPEATS, statement.repeats_in_file.toString()))
-            add(MoneyFact(MoneyCopy.COUNT_REJECTED, statement.rejected.toString()))
+            add(
+                MoneyFact(
+                    MoneyCopy.COUNT_REJECTED,
+                    statement.rejected.toString(),
+                    tone = if (statement.rejected > 0) StatusChip.Tone.TONE_NET else StatusChip.Tone.TONE_UNSPECIFIED,
+                ),
+            )
         }
         return MoneyImportStatement(
             key = "statement:$index",

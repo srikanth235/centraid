@@ -1,10 +1,9 @@
 import LocalAuthentication
+import PhotosUI
 import SwiftUI
 import UIKit
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // THE 24 WORDS, DRAWN (#1047 E2). Two screens over the shared machines:
 // `words.make` (`VaultWordsBridge`) and `words.enter` (`WordsEntryBridge`).
@@ -98,28 +97,31 @@ struct VaultWordsView: View {
                             .accessibilityIdentifier("words-making")
                     }
 
-                    WordsControls(
-                        primary: state.primaryLabel,
-                        primaryEnabled: state.primaryEnabled,
-                        secondary: state.secondaryLabel,
-                        prefix: "words-make",
-                        onPrimary: { send(Self.event { $0.primary = .init() }) },
-                        onSecondary: { send(Self.event { $0.secondary = .init() }) }
-                    )
+                    // THE PRIMARY AND RESTORING ARE ALTERNATIVES: one stack.
+                    KitChoiceStack {
+                        WordsControls(
+                            primary: state.primaryLabel,
+                            primaryEnabled: state.primaryEnabled,
+                            secondary: state.secondaryLabel,
+                            prefix: "words-make",
+                            onPrimary: { send(Self.event { $0.primary = .init() }) },
+                            onSecondary: { send(Self.event { $0.secondary = .init() }) }
+                        )
 
-                    // ONE INK BUTTON: with the primary drawn, restoring is the
-                    // outline.
-                    if !state.restoreLabel.isEmpty {
-                        if state.primaryLabel.isEmpty {
-                            KitInkButton(label: state.restoreLabel) {
-                                send(Self.event { $0.restore = .init() })
+                        // ONE INK BUTTON: with the primary drawn, restoring is
+                        // the outline.
+                        if !state.restoreLabel.isEmpty {
+                            if state.primaryLabel.isEmpty {
+                                KitInkButton(label: state.restoreLabel) {
+                                    send(Self.event { $0.restore = .init() })
+                                }
+                                .accessibilityIdentifier("words-make-restore")
+                            } else {
+                                KitOutlineButton(label: state.restoreLabel) {
+                                    send(Self.event { $0.restore = .init() })
+                                }
+                                .accessibilityIdentifier("words-make-restore")
                             }
-                            .accessibilityIdentifier("words-make-restore")
-                        } else {
-                            KitOutlineButton(label: state.restoreLabel, fullWidth: true) {
-                                send(Self.event { $0.restore = .init() })
-                            }
-                            .accessibilityIdentifier("words-make-restore")
                         }
                     }
                 }
@@ -149,6 +151,9 @@ struct WordsEntryView: View {
 
     @Environment(\.colorScheme) private var scheme
     @State private var focus: UInt32?
+    @State private var scanning = false
+    @State private var choosingPhoto = false
+    @State private var photo: PhotosPickerItem?
 
     private var state: Centraid_Screen_V1_WordsEntryState {
         (try? Centraid_Screen_V1_WordsEntryState(serializedBytes: data)) ?? .init()
@@ -234,6 +239,17 @@ struct WordsEntryView: View {
                         .disabled(working)
                     }
 
+                    // THE CODE IS SCANNED AS WELL AS PASTED, as pairing's is:
+                    // the camera, or the photo picker where there is none
+                    // (`scan_camera`). What it reads fills the field above.
+                    if !state.scanLabel.isEmpty {
+                        KitOutlineButton(label: state.scanLabel) {
+                            if state.scanCamera { scanning = true } else { choosingPhoto = true }
+                        }
+                        .disabled(working)
+                        .accessibilityIdentifier("words-scan")
+                    }
+
                     WordsNotice(notice: state.notice)
 
                     if !state.progress.isEmpty {
@@ -283,6 +299,40 @@ struct WordsEntryView: View {
             .scrollDismissesKeyboard(.interactively)
             .background(Theme.color("bg", scheme).ignoresSafeArea())
             .accessibilityIdentifier("words-enter")
+            .fullScreenCover(isPresented: $scanning) {
+                PairScanner(
+                    photoLabel: state.photoLabel,
+                    onRead: { payload in
+                        scanning = false
+                        send(Self.event { $0.scanned = .with { $0.payload = payload } })
+                    },
+                    onPhoto: {},
+                    onUnread: {
+                        scanning = false
+                        send(Self.event { $0.unread = .init() })
+                    },
+                    onCancel: { scanning = false }
+                )
+                .ignoresSafeArea()
+            }
+            .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
+            .onChange(of: photo) { _, item in
+                guard let item else { return }
+                photo = nil
+                Task {
+                    let data = try? await item.loadTransferable(type: Data.self)
+                    let code = data.flatMap(PairPhotoReader.read)
+                    await MainActor.run {
+                        send(Self.event {
+                            if let code {
+                                $0.scanned = .with { $0.payload = code }
+                            } else {
+                                $0.unread = .init()
+                            }
+                        })
+                    }
+                }
+            }
         }
         .onAppear { if state.phase == .entering, focus == nil { focus = 1 } }
         .onChange(of: state.phase) { _, phase in if phase != .entering { focus = nil } }
@@ -305,6 +355,7 @@ private struct EntryCell: View {
     let onReturn: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -321,7 +372,7 @@ private struct EntryCell: View {
                         spoken: cell.accessibilityLabel,
                         identifier: "words-cell-\(cell.position)",
                         focus: focus,
-                        font: Theme.uiFont("body", scheme),
+                        font: Theme.uiFont("body", scheme, dynamicTypeSize),
                         color: UIColor(Theme.color("text", scheme)),
                         onEdit: onEdit,
                         onReturn: onReturn
@@ -572,18 +623,22 @@ struct WordsControls: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(spacing: 4) {
-            if !primary.isEmpty {
-                KitInkButton(label: primary, action: onPrimary)
-                    .disabled(!primaryEnabled)
-                    .accessibilityIdentifier("\(prefix)-primary")
+        // NOTHING DRAWN WHEN THERE IS NOTHING TO DRAW: an empty stack would
+        // still spend its top padding and a gap in whatever holds it.
+        if !primary.isEmpty || !secondary.isEmpty {
+            VStack(spacing: 4) {
+                if !primary.isEmpty {
+                    KitInkButton(label: primary, action: onPrimary)
+                        .disabled(!primaryEnabled)
+                        .accessibilityIdentifier("\(prefix)-primary")
+                }
+                if !secondary.isEmpty {
+                    KitLink(label: secondary, identifier: "\(prefix)-secondary", action: onSecondary)
+                        .frame(maxWidth: .infinity)
+                }
             }
-            if !secondary.isEmpty {
-                KitLink(label: secondary, identifier: "\(prefix)-secondary", action: onSecondary)
-                    .frame(maxWidth: .infinity)
-            }
+            .padding(.top, 8)
         }
-        .padding(.top, 8)
     }
 }
 
@@ -788,6 +843,9 @@ struct WordField: UIViewRepresentable {
             coordinator.sent = [value]
         }
         field.isEnabled = context.environment.isEnabled
+        // THE FONT FOLLOWS THE SYSTEM TEXT SIZE: `makeUIView` set it once, and a
+        // setting changed while the field is on screen arrives here.
+        if field.font != font { field.font = font }
         // FOCUS MOVES ON A CHANGE, NEVER ON A RE-RENDER. A cell that took the
         // keyboard back whenever `focus` still named it stole it from the
         // endpoint field on its first keystroke — that edit re-renders every

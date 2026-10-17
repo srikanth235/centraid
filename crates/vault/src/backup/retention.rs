@@ -23,6 +23,13 @@
 //! manifests and queued parts of uploads still in flight, which no snapshot
 //! list names yet: a collection that ran between a range's upload and its
 //! manifest's would otherwise delete the range.
+//!
+//! ## A FILE OUTLIVES THE VAULT THAT DELETED IT, AS LONG AS A SNAPSHOT NAMES IT
+//!
+//! The vault's current files are live, and a file the vault no longer names is
+//! garbage — but a kept snapshot's rows may still name it, and a restore of
+//! that snapshot needs its bytes. [`collectable`] holds such a file until
+//! every kept snapshot was taken after it left (the sweep's F5).
 
 use std::collections::BTreeSet;
 
@@ -136,6 +143,26 @@ pub fn live_names(
         live.extend(names_of(keys, &h, len));
     }
     live
+}
+
+/// **A FILE LEAVES THE DESTINATION WHEN NO KEPT SNAPSHOT COULD NAME IT**
+/// (#1080, the sweep's F5). A snapshot names the files its rows name, and a
+/// restore of one needs their bytes, so the 7/4/6 history protects records
+/// only if the files they name stay. The phone cannot open every kept
+/// snapshot to read its rows — each is the whole vault — so it keeps the one
+/// fact it has: when it first saw the name unlive, `first_unlive_ms`. A name
+/// that was live in a kept snapshot (taken at or before `first_unlive_ms`, the
+/// name having been live then) is held while the oldest kept snapshot is no
+/// newer than that moment; once every kept snapshot was taken after it, none
+/// can name the file and it is garbage.
+///
+/// Conservative by design: a name that no snapshot ever named waits the same
+/// time, and a name first seen late waits longer. It never collects a name a
+/// kept snapshot may name. `oldest_kept_ms` is `None` only for no kept
+/// snapshot at all, which collects nothing.
+#[must_use]
+pub fn collectable(first_unlive_ms: u64, oldest_kept_ms: Option<u64>) -> bool {
+    oldest_kept_ms.is_some_and(|oldest| oldest > first_unlive_ms)
 }
 
 /// What a destination lists beyond the live set.
@@ -306,5 +333,50 @@ mod tests {
         let mut expected = vec![dropped_manifest, dropped_range];
         expected.sort();
         assert_eq!(garbage(listed, &live), expected);
+    }
+
+    /// **A FILE WAITS UNTIL NO KEPT SNAPSHOT COULD NAME IT** (the sweep's F5).
+    /// A name first seen unlive at `G` is held while the oldest kept snapshot
+    /// is no newer than `G`: a snapshot taken at or before it may have named
+    /// the file, and a restore of that snapshot needs its bytes.
+    #[test]
+    fn a_file_is_collectable_only_once_every_kept_snapshot_postdates_its_leaving() {
+        let left = at(2026, 10, 1, 12);
+        // The oldest kept snapshot was taken before the file left: it may name it.
+        assert!(!collectable(left, Some(at(2026, 9, 28, 9))));
+        // Taken at the very moment, or without a kept snapshot to judge: not yet.
+        assert!(!collectable(left, Some(left)));
+        assert!(!collectable(left, None));
+        // Every kept snapshot is newer than the moment the file left: none names it.
+        assert!(collectable(left, Some(left + 1)));
+        assert!(collectable(left, Some(at(2026, 10, 2, 9))));
+    }
+
+    /// The window a deleted file keeps, over the real schedule: hourly
+    /// snapshots for 400 days, a file that left 100 days ago. The monthly
+    /// history still holds snapshots from before it left, so it is kept; one
+    /// that left 200 days ago predates every kept snapshot and goes.
+    #[test]
+    fn a_deleted_file_is_kept_as_long_as_the_history_that_names_it() {
+        let hour = HOUR_MS;
+        let leaves = NOW_MS - 100 * DAY_MS;
+        let entries: Vec<SnapshotEntry> = (0..400 * 24).map(|h| entry(NOW_MS - h * hour)).collect();
+        let decided = keep(&entries, NOW_MS);
+        let oldest = decided
+            .keep
+            .iter()
+            .filter_map(|name| entries.iter().find(|entry| entry.name == *name))
+            .map(|entry| entry.taken_at_ms)
+            .min();
+        assert!(
+            oldest.is_some_and(|oldest| oldest < leaves),
+            "the monthly history reaches back past the day it left"
+        );
+        assert!(
+            !collectable(leaves, oldest),
+            "so a snapshot that may name it is still kept"
+        );
+        // The same file, left 200 days ago: older than every kept snapshot.
+        assert!(collectable(NOW_MS - 200 * DAY_MS, oldest));
     }
 }

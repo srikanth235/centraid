@@ -181,10 +181,10 @@ struct ChatMarkdownText: View {
     /// at the body's scaled size; emphasis takes the platform's slant of the
     /// regular one, because the family ships no italic.
     private func styled(_ text: AttributedString) -> AttributedString {
-        let body = Theme.uiFont("body", scheme)
+        let body = Theme.baseFont("body", scheme)
         let traits = UITraitCollection(preferredContentSizeCategory: ChatTypeScale.category(size))
         let pointSize = UIFontMetrics(forTextStyle: .body).scaledFont(for: body, compatibleWith: traits).pointSize
-        let strong = Theme.uiFont("smallStrong", scheme).withSize(pointSize)
+        let strong = Theme.baseFont("smallStrong", scheme).withSize(pointSize)
         var out = text
         for run in out.runs {
             let intent = run.inlinePresentationIntent ?? []

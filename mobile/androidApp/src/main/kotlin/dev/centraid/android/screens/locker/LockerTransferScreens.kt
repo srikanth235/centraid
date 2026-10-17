@@ -23,14 +23,15 @@ import centraid.screen.v1.LockerExportState
 import centraid.screen.v1.LockerImportEvent
 import centraid.screen.v1.LockerImportState
 import centraid.screen.v1.SectionHead
+import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PushedPage
-import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.StatusChipView
@@ -131,7 +132,7 @@ internal fun LockerImportScreen(state: LockerImportState, onEvent: (LockerImport
                 item(key = "file") {
                     FieldRow(plan.file_label, plan.file_value, note = plan.file_note)
                     if (plan.choose_label.isNotEmpty()) {
-                        QuietButton(
+                        OutlineButton(
                             plan.choose_label,
                             testTag = "locker-import-choose",
                             modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
@@ -168,16 +169,27 @@ internal fun LockerImportScreen(state: LockerImportState, onEvent: (LockerImport
                     }
                 }
                 item(key = "acts") {
+                    val gutter = Modifier.padding(horizontal = KitGeometry.GUTTER)
                     if (plan.publish_label.isNotEmpty()) {
-                        InkButton(
-                            label = plan.publish_label,
-                            testTag = "locker-import-publish",
-                            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp),
-                        ) { onEvent(LockerImportEvent(publish = LockerImportEvent.PublishTapped())) }
-                        LockerNote(plan.publish_note)
-                    }
-                    if (plan.discard_label.isNotEmpty()) {
-                        QuietButton(
+                        // PUBLISH AND DISCARD ARE ALTERNATIVES: one stack, the
+                        // note that says what publishing does between them.
+                        ChoiceStack(Modifier.padding(vertical = 12.dp)) {
+                            InkButton(
+                                label = plan.publish_label,
+                                testTag = "locker-import-publish",
+                                modifier = gutter,
+                            ) { onEvent(LockerImportEvent(publish = LockerImportEvent.PublishTapped())) }
+                            LockerNote(plan.publish_note)
+                            if (plan.discard_label.isNotEmpty()) {
+                                OutlineButton(
+                                    plan.discard_label,
+                                    testTag = "locker-import-discard",
+                                    modifier = gutter.semantics { },
+                                ) { onEvent(LockerImportEvent(discard = LockerImportEvent.DiscardTapped())) }
+                            }
+                        }
+                    } else if (plan.discard_label.isNotEmpty()) {
+                        OutlineButton(
                             plan.discard_label,
                             testTag = "locker-import-discard",
                             modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).semantics { },

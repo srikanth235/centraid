@@ -5,6 +5,8 @@ import Photos
 import UIKit
 import UniformTypeIdentifiers
 
+import CentraidShared
+
 /// THE PATH THE VIEWER'S PHOTOGRAPH TAKES OFF THIS PHONE (#816, #1029 photos port).
 ///
 /// v0's `photo-share.ts` and `viewer-export.ts`, and the SwiftUI twin of
@@ -29,11 +31,11 @@ enum PhotoHandOff {
     }
 
     /// `PhotoLightboxBridge.kt`'s sentences, read from the same copy table.
-    static let notRemovable = PhotosWords.photosSendNotRemovable
-    static let originalNotHere = PhotosWords.photosSendOriginalNotHere
-    static let exportFailed = PhotosWords.photosErrorExportFailed + " Try again."
-    static let exportSaved = PhotosWords.photosExportSaved
-    static let locationCopied = PhotosWords.photosLocationCopied
+    static let notRemovable = PhotosCopy.shared.PHOTOS_SEND_NOT_REMOVABLE
+    static let originalNotHere = PhotosCopy.shared.PHOTOS_SEND_ORIGINAL_NOT_HERE
+    static let exportFailed = PhotosCopy.shared.PHOTOS_ERROR_EXPORT_FAILED_RETRY
+    static let exportSaved = PhotosCopy.shared.PHOTOS_EXPORT_SAVED
+    static let locationCopied = PhotosCopy.shared.PHOTOS_LOCATION_COPIED
 
     // MARK: - Send a copy
 
@@ -87,12 +89,12 @@ enum PhotoHandOff {
     /// words are `sharePlaceReceipt`'s.
     static func receipt(_ precision: PhotoLightboxSharePlace, _ placeName: String) -> String {
         switch precision {
-        case .exact: return PhotosWords.photosSentExact
+        case .exact: return PhotosCopy.shared.PHOTOS_SENT_EXACT
         case .name:
             return placeName.isEmpty
-                ? PhotosWords.photosSentNone
-                : PhotosWords.photosSentNameOnly
-        case .none: return PhotosWords.photosSentNone
+                ? PhotosCopy.shared.PHOTOS_SENT_NONE
+                : PhotosCopy.shared.PHOTOS_SENT_NAME_ONLY
+        case .none: return PhotosCopy.shared.PHOTOS_SENT_NONE
         }
     }
 
@@ -180,7 +182,7 @@ enum PhotoHandOff {
         guard status == .authorized || status == .limited else {
             return Outcome(
                 done: false,
-                sentence: "Centraid cannot save to Photos. Allow it in Settings."
+                sentence: PhotosCopy.shared.PHOTOS_EXPORT_NO_ACCESS
             )
         }
         do {

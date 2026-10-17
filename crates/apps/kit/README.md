@@ -49,6 +49,6 @@ Each was found in the independent implementation the parity fixtures were captur
 3. **A stated window is walked.** Asking for a 2,000-row window as one page gets 500, discards the cursor that says there are more, and folds a balance over the partial set.
 4. **Formatting takes an explicit locale and a minor-unit table.** Dividing minor units by 100 unconditionally gets JPY and KWD wrong, and an implicit locale renders the same vault differently on two devices.
 5. **A cursor over a column the projection never carried is refused** rather than stringified as `"undefined"`.
-6. **`writes` is required on every manifest action.** A gate outside the type is a gate that can be forgotten. `[]` is still valid and still means "no database writes".
+6. **No manifest action declares `writes`, and the parser refuses the key.** What a command wrote is the commit's own census (`CommandOutcome.tables`, from the commit guard's `update_hook`), which is what the change events are made of; a declared list beside it has no reader and can only drift ([V3](../../../docs/release/v1-handoffs.md)).
 
 Two places use byte order where the captured fixtures used `localeCompare`, both unreachable for the values these types can hold and both documented at the code: the `MoneyBag` sort and the balance folds' tie-break.

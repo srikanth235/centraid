@@ -20,8 +20,10 @@ use centraid_apps_docs as docs;
 use centraid_apps_docs::kind::{self, Kind, Surface, TypeFilter};
 use centraid_apps_docs::phone::{self, Modified, Shelf, Sort, View};
 use centraid_apps_docs::queries::{
-    DOCUMENT_TARGET_TYPE, DocumentRow, DriveInput, FolderRow, VersionRow,
+    ArmCount, DOCUMENT_TARGET_TYPE, DocumentRow, DriveInput, FolderRow, ShelfArm, VersionRow,
 };
+use centraid_apps_kit::Denial;
+use centraid_apps_kit::error::KitResult;
 use centraid_vault::Vault;
 use centraid_vault::page::format_byte_size;
 use centraid_vault::time::zone::FireZone;
@@ -91,7 +93,61 @@ fn view_of(asked: &wire::DocsDriveRequest) -> View {
     }
 }
 
-/// `docs.drive`: one shelf, cut from the one window.
+/// The own reads a TRUNCATED window owes the shelves it does not define
+/// (Q-1047-7): the asked shelf's rows when it is Trash, Starred or Recent, and
+/// the Starred and Trash counts the rail states whichever shelf is open.
+///
+/// The window's own counts for those two are of the newest-filed `window`
+/// documents, so a trashed document filed a year ago was neither in the Trash
+/// shelf nor in the Trash count. Recent is the newest fifty live documents, and
+/// reads that many.
+fn read_arms(
+    door: &VaultDoor<'_>,
+    shelf: &Shelf,
+    window: usize,
+) -> KitResult<(phone::Arms, Option<Denial>)> {
+    let mut arms = phone::Arms::default();
+    if let Some(arm) = phone::Arms::arm_of(shelf) {
+        let rows = if arm == ShelfArm::Recent {
+            phone::RECENT_WINDOW
+        } else {
+            window
+        };
+        let (own, denial) = docs::queries::load_shelf_arm(door, arm, rows)?;
+        if denial.is_some() {
+            return Ok((arms, denial));
+        }
+        // THE SHELF'S OWN ROWS ARE ITS COUNT, so it is not read twice.
+        let held = ArmCount {
+            rows: own.documents.len(),
+            filled: own.filled,
+        };
+        match arm {
+            ShelfArm::Starred => arms.starred = Some(held),
+            ShelfArm::Trash => arms.trash = Some(held),
+            ShelfArm::Recent => {}
+        }
+        arms.shelf = Some(own);
+    }
+    if arms.starred.is_none() {
+        let (count, denial) = docs::queries::count_shelf_arm(door, ShelfArm::Starred, window)?;
+        if denial.is_some() {
+            return Ok((arms, denial));
+        }
+        arms.starred = Some(count);
+    }
+    if arms.trash.is_none() {
+        let (count, denial) = docs::queries::count_shelf_arm(door, ShelfArm::Trash, window)?;
+        if denial.is_some() {
+            return Ok((arms, denial));
+        }
+        arms.trash = Some(count);
+    }
+    Ok((arms, None))
+}
+
+/// `docs.drive`: one shelf. All and Folders are cut from the one window; Trash,
+/// Starred and Recent read for themselves once the window is truncated.
 pub(super) fn drive(
     vault: &Vault,
     door: &VaultDoor<'_>,
@@ -104,8 +160,17 @@ pub(super) fn drive(
     let input = DriveInput {
         limit: Some(usize::try_from(asked.limit).unwrap_or(usize::MAX)),
     };
-    settle(door, docs::load_drive(door, input), |data| {
-        let shelf = phone::shelve(&data, &view, &zone, &clock.today, clock.now_ms);
+    let loaded = docs::load_drive(door, input).and_then(|(data, denial)| {
+        // A WINDOW THAT HOLDS THE WHOLE DRIVE IS COMPLETE, so its cut is too.
+        if denial.is_some() || !data.truncated {
+            return Ok(((data, phone::Arms::default()), denial));
+        }
+        let (arms, denial) = read_arms(door, &view.shelf, data.window)?;
+        Ok(((data, arms), denial))
+    });
+    settle(door, loaded, |(data, arms)| {
+        let shelf = phone::shelve_with_arms(&data, &arms, &view, &zone, &clock.today, clock.now_ms);
+        let truncated = arms.truncated(&view.shelf, data.truncated);
         Answer::DocsDrive(wire::DocsDrive {
             documents: shelf
                 .documents
@@ -129,7 +194,7 @@ pub(super) fn drive(
             unfiled_count: count_of(shelf.unfiled_count),
             starred_count: count_of(shelf.starred_count),
             trash_count: count_of(shelf.trash_count),
-            truncated: data.truncated,
+            truncated,
             window: count_of(data.window),
             today: clock.today,
             now_local: clock.now_local,

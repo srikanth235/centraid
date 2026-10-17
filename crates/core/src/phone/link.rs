@@ -455,7 +455,21 @@ pub fn reach(
     runtime: &tokio::runtime::Handle,
 ) -> Result<std::result::Result<Reached, Unreached>> {
     let mut unreached = Unreached::Silent;
+    // A GATEWAY THAT REFUSED THIS PHONE'S TOKEN IS TRIED LAST (the sweep's
+    // F2): another paired gateway that answers carries the pass, and the
+    // refused one is asked again only when nothing else does — so its mark is
+    // spent the moment it accepts the token, and never blocks a second
+    // gateway behind it. The sort is stable, so the ledger's order holds
+    // within each half.
+    let mut ordered: Vec<(bool, &Destination)> = Vec::with_capacity(destinations.len());
     for destination in destinations {
+        let refused = ledger
+            .unauthorized(&destination.gateway_id)
+            .map_err(super::plane_error)?;
+        ordered.push((refused, destination));
+    }
+    ordered.sort_by_key(|(refused, _)| *refused);
+    for (_, destination) in ordered {
         if ledger
             .moved(&destination.gateway_id)
             .map_err(super::plane_error)?

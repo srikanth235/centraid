@@ -42,6 +42,7 @@ import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -102,7 +103,7 @@ public sealed interface TasksHomeInput {
  *   core's sentence, if the vault refuses it.
  */
 public object TasksHomeMachine : ScreenMachine<TasksHome, TasksHomeInput> {
-    public const val SCREEN_ID: String = "tasks.home"
+    public const val SCREEN_ID: String = ScreenIds.TASKS_HOME
 
     /** The board window, and how far "Show more" may widen it (the manifest's 20…500). */
     public const val PAGE: Int = 100

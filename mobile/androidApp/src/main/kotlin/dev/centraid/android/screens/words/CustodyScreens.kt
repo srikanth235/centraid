@@ -35,9 +35,10 @@ import centraid.screen.v1.PairLaptopEvent
 import centraid.screen.v1.PairLaptopState
 import centraid.screen.v1.WordsShowEvent
 import centraid.screen.v1.WordsShowState
+import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitSpinner
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.screens.locker.LockerSeam
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -162,7 +163,7 @@ internal fun PairLaptopScreen(
         // SCAN FIRST, ON EVERY PHONE: the camera, or the photo picker where
         // there is none (`scan_camera`).
         if (state.scan_label.isNotEmpty()) {
-            QuietButton(label = state.scan_label, modifier = Modifier.fillMaxWidth(), testTag = "pair-scan") {
+            OutlineButton(label = state.scan_label, testTag = "pair-scan") {
                 onEvent(PairLaptopEvent(scan = PairLaptopEvent.ScanTapped()))
                 if (state.scan_camera) onScan() else onPhoto()
             }
@@ -187,11 +188,6 @@ internal fun PairLaptopScreen(
             )
         }
         WordsNotice(state.notice)
-        if (state.words_label.isNotEmpty()) {
-            QuietButton(label = state.words_label, testTag = "pair-words") {
-                onEvent(PairLaptopEvent(words = PairLaptopEvent.WordsTapped()))
-            }
-        }
         if (state.progress.isNotEmpty()) {
             Row(
                 Modifier.testTag("pair-progress").semantics(mergeDescendants = true) { },
@@ -201,14 +197,22 @@ internal fun PairLaptopScreen(
                 KitSpinner(state.progress)
             }
         }
-        WordsControls(
-            primary = state.primary_label,
-            primaryEnabled = state.primary_enabled,
-            secondary = state.secondary_label,
-            prefix = "pair",
-            onPrimary = { onEvent(PairLaptopEvent(primary = PairLaptopEvent.Primary())) },
-            onSecondary = { onEvent(PairLaptopEvent(secondary = PairLaptopEvent.Secondary())) },
-        )
+        // THE WORDS DOOR AND THE PRIMARY ARE ALTERNATIVES: one stack.
+        ChoiceStack {
+            WordsControls(
+                primary = state.primary_label,
+                primaryEnabled = state.primary_enabled,
+                secondary = state.secondary_label,
+                prefix = "pair",
+                onPrimary = { onEvent(PairLaptopEvent(primary = PairLaptopEvent.Primary())) },
+                onSecondary = { onEvent(PairLaptopEvent(secondary = PairLaptopEvent.Secondary())) },
+            )
+            if (state.words_label.isNotEmpty()) {
+                OutlineButton(label = state.words_label, testTag = "pair-words") {
+                    onEvent(PairLaptopEvent(words = PairLaptopEvent.WordsTapped()))
+                }
+            }
+        }
     }
 }
 

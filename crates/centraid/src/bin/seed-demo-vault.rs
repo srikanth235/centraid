@@ -264,7 +264,7 @@ fn main() {
     }
     // WHAT HOME WILL DRAW, READ BACK BEFORE THE HANDLE CLOSES. Each number is
     // the row count of the table that app's Home tile pages (`HomeReads.READS`
-    // in `mobile/shared`), read through the same door.
+    // in `mobile/shared`).
     let seeded =
         SEEDED_TABLES.map(|(app, table, pk, filter)| (app, count_rows(&handle, table, pk, filter)));
     handle.close();
@@ -334,56 +334,48 @@ const SEEDED_TABLES: [(&str, &str, &str, Option<&str>); 8] = [
     ),
 ];
 
-/// Every row of a table, counted by paging it through the read door to the end.
+/// Every row of a table, counted by paging it through the vault's keyset door to the end.
 ///
 /// There is no `COUNT(*)` on the door and `sql-confinement` refuses SQL here
-/// (see [`first_row`]), so the count is the rows the pages hand back — which is
-/// also exactly how a Home tile arrives at its number.
+/// (see [`first_row`]), so the count is the rows the pages hand back. It goes
+/// through `Vault::keyset_page` and not the wire's `Request::Page`, because the
+/// wire door pages only the tables a screen pages (`centraid_core::api::PAGE_TABLES`)
+/// and this mirror also counts `core_event` and `core_transaction`, whose Home
+/// tiles ride their own arms.
 fn count_rows(
     handle: &centraid_core::Handle,
     table: &str,
     pk: &str,
     filter: Option<&str>,
 ) -> usize {
-    let mut rows = 0;
-    let mut after = None;
-    loop {
-        let request = wire::Request {
-            kind: Some(wire::request::Kind::Page(wire::PageRequest {
-                query: Some(wire::PageQuery {
+    handle
+        .with_vault(|vault| {
+            let mut rows = 0;
+            let mut after = None;
+            loop {
+                let answer = vault.keyset_page(&centraid_vault::page::KeysetPage {
                     name: "seed.count".to_owned(),
                     select: vec![pk.to_owned()],
                     from: table.to_owned(),
-                    r#where: filter.map(str::to_owned),
-                    bind: Vec::new(),
-                    order: Some(wire::PageOrder {
-                        sort_column: pk.to_owned(),
-                        pk_column: pk.to_owned(),
-                        descending: false,
-                    }),
-                    with_held_thumbnail: false,
-                    with_note_body: false,
-                    with_document_size: false,
-                    with_minor_units: false,
-                    local_day_columns: Vec::new(),
-                    tz: String::new(),
-                }),
-                limit: 500,
-                after,
-            })),
-        };
-        let response = handle
-            .call(&request)
-            .unwrap_or_else(|refusal| panic!("counting {table} was refused: {refusal:?}"));
-        let Some(wire::response::Kind::Page(page)) = response.kind else {
-            panic!("counting {table} did not answer with a page");
-        };
-        rows += page.rows.len();
-        match page.next {
-            Some(next) => after = Some(next),
-            None => return rows,
-        }
-    }
+                    predicate: filter.map(str::to_owned),
+                    binds: Vec::new(),
+                    sort_column: pk.to_owned(),
+                    pk_column: pk.to_owned(),
+                    descending: false,
+                    limit: 500,
+                    after,
+                    held_thumbnail: false,
+                    note_body: false,
+                    document_size: false,
+                })?;
+                rows += answer.rows.len();
+                match answer.next {
+                    Some(next) => after = Some(next),
+                    None => return Ok(rows),
+                }
+            }
+        })
+        .unwrap_or_else(|refusal| panic!("counting {table} was refused: {refusal:?}"))
 }
 
 // ---------------------------------------------------------------------------

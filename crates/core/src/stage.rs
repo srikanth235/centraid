@@ -109,6 +109,8 @@ pub struct SealInto {
     pub keys: BackupKeys,
     pub spool: Spool,
     pub budget: u64,
+    /// The volume's free bytes (the floor an oversize part keeps; the sweep's F6).
+    pub free: u64,
     /// What the last pass planned for this item, when it asked for it.
     pub planned: Option<Planned>,
 }
@@ -129,18 +131,43 @@ pub struct Planned {
 /// The parts of a `file_len`-byte file, from `parts` in their order, that fit
 /// `room` bytes of plaintext: the first that does not fit ends the window, so
 /// a window is always the earliest parts still owed.
+///
+/// **A FIRST PART LARGER THAN THE ROOM STILL GOES, ALONE, WHEN THE SPOOL IS
+/// EMPTY AND THE VOLUME KEEPS ITS FLOOR** (the sweep's F6; the store files'
+/// rule, `spool::admits_on`): `empty_spool_free` is the volume's free bytes
+/// when nothing else holds the spool, and `None` when something does. Without
+/// it a phone with under about 640 MiB free — a budget under one 64 MiB part —
+/// never asked for a library video's bytes, and the film waited for them
+/// forever.
 #[must_use]
-pub fn window_within(room: u64, file_len: u64, parts: &[u32]) -> Vec<u32> {
+pub fn window_within(
+    room: u64,
+    file_len: u64,
+    parts: &[u32],
+    empty_spool_free: Option<u64>,
+) -> Vec<u32> {
     let mut left = room;
-    parts
-        .iter()
-        .copied()
-        .map_while(|index| {
-            let len = part_len(file_len, index).ok()?;
-            left = left.checked_sub(len)?;
-            Some(index)
-        })
-        .collect()
+    let mut window = Vec::new();
+    for &index in parts {
+        let Ok(len) = part_len(file_len, index) else {
+            break;
+        };
+        if let Some(rest) = left.checked_sub(len) {
+            left = rest;
+        } else if window.is_empty()
+            && empty_spool_free.is_some_and(|free| {
+                free >= centraid_vault::backup::spool::sealed_bound(len)
+                    .saturating_add(centraid_vault::backup::spool::ALONE_FREE_FLOOR_BYTES)
+            })
+        {
+            // ALONE: what the room could not hold, nothing after it may share.
+            left = 0;
+        } else {
+            break;
+        }
+        window.push(index);
+    }
+    window
 }
 
 /// The plaintext bytes of `parts` of a `file_len`-byte file.
@@ -327,7 +354,12 @@ impl Staging {
                             if declared.is_some_and(|size| size != planned.len) {
                                 return None;
                             }
-                            let window = window_within(room, planned.len, &planned.parts);
+                            let window = window_within(
+                                room,
+                                planned.len,
+                                &planned.parts,
+                                (held == 0).then_some(into.free),
+                            );
                             if window.is_empty() {
                                 return None;
                             }
@@ -586,19 +618,27 @@ mod tests {
                     keys: keys(),
                     spool: self.spool.clone(),
                     budget,
+                    free: 0,
                     planned: None,
                 }),
             }
         }
 
-        /// The doors a stream the last pass asked for opens with.
+        /// The doors a stream the last pass asked for opens with, on a volume
+        /// with no room to spare (`free` 0): nothing oversize goes alone.
         fn planned(&self, budget: u64, planned: Planned) -> Doors {
+            self.planned_on(budget, 0, planned)
+        }
+
+        /// [`Self::planned`], on a volume with `free` bytes free.
+        fn planned_on(&self, budget: u64, free: u64, planned: Planned) -> Doors {
             Doors {
                 store: Some(self.store.clone()),
                 seal: Some(SealInto {
                     keys: keys(),
                     spool: self.spool.clone(),
                     budget,
+                    free,
                     planned: Some(planned),
                 }),
             }
@@ -968,6 +1008,60 @@ mod tests {
         assert!(rig.leftovers().is_empty(), "{:?}", rig.leftovers());
     }
 
+    /// **A PLANNED PART LARGER THAN THE WHOLE BUDGET IS SEALED ALONE WHERE THE
+    /// VOLUME KEEPS ITS FLOOR** (the sweep's F6): the store files' rule, so a
+    /// phone whose budget is under one part still backs a library film up.
+    /// One byte short of the floor, or a spool something already holds, and
+    /// the stream is only hashed.
+    #[test]
+    fn a_planned_part_larger_than_the_budget_is_sealed_alone_where_the_volume_keeps_its_floor() {
+        use centraid_vault::backup::spool::{ALONE_FREE_FLOOR_BYTES, sealed_bound};
+        let bytes = payload(700_000);
+        let planned = Planned {
+            h: PlaintextHash::of(&bytes),
+            len: bytes.len() as u64,
+            parts: vec![0],
+        };
+        let floor = sealed_bound(bytes.len() as u64) + ALONE_FREE_FLOOR_BYTES;
+        let seal_with = |free: u64| {
+            let rig = rig();
+            let staging = Staging::default();
+            let (_, sealed) = sealed_of(stream(
+                &staging,
+                &library(0),
+                rig.planned_on(1_000, free, planned.clone()),
+                &bytes,
+            ));
+            sealed
+        };
+        assert!(
+            seal_with(floor).is_some(),
+            "alone, into an empty spool, with the floor kept"
+        );
+        assert!(
+            seal_with(floor - 1).is_none(),
+            "one byte short of the floor is only hashed"
+        );
+        assert!(seal_with(0).is_none(), "a volume that will not say is full");
+
+        // A spool something already holds admits nothing oversize.
+        let rig = rig();
+        let staging = Staging::default();
+        rig.spool
+            .write(
+                &centraid_vault::backup::naming::Name::from_bytes([9; 32]),
+                b"already waiting",
+            )
+            .expect("a part waits");
+        let (_, crowded) = sealed_of(stream(
+            &staging,
+            &library(0),
+            rig.planned_on(1_000, floor, planned),
+            &bytes,
+        ));
+        assert!(crowded.is_none(), "the spool is not empty");
+    }
+
     /// **TWO STREAMS AT ONCE CANNOT EACH FILL THE SAME ROOM**: a session
     /// that knows its size holds that much of the budget until it closes.
     #[test]
@@ -997,21 +1091,57 @@ mod tests {
     fn a_window_is_the_earliest_parts_that_fit() {
         use centraid_media::sealed::PART_BYTES;
         let len = 3 * PART_BYTES + 5;
-        assert_eq!(window_within(PART_BYTES, len, &[0, 1, 2, 3]), vec![0]);
+        assert_eq!(window_within(PART_BYTES, len, &[0, 1, 2, 3], None), vec![0]);
         assert_eq!(
-            window_within(2 * PART_BYTES + 5, len, &[1, 2, 3]),
+            window_within(2 * PART_BYTES + 5, len, &[1, 2, 3], None),
             vec![1, 2, 3]
         );
         assert_eq!(
-            window_within(PART_BYTES - 1, len, &[1, 3]),
+            window_within(PART_BYTES - 1, len, &[1, 3], None),
             Vec::<u32>::new()
         );
-        assert_eq!(window_within(PART_BYTES, len, &[3, 1]), vec![3]);
+        assert_eq!(window_within(PART_BYTES, len, &[3, 1], None), vec![3]);
         assert_eq!(bytes_of_parts(len, &[0, 3]), PART_BYTES + 5);
         assert_eq!(
             bytes_of_parts(len, &[9]),
             0,
             "a part the file lacks weighs nothing"
+        );
+    }
+
+    /// **A PART LARGER THAN THE ROOM GOES ALONE WHEN THE SPOOL IS EMPTY AND
+    /// THE VOLUME KEEPS ITS FLOOR** (the sweep's F6): the store files' rule.
+    /// Without it a phone whose budget is under one part never asked for a
+    /// library video's bytes. Only the first part goes past the room, only
+    /// into an empty spool (`None` is a spool something holds), and only where
+    /// the volume is left its floor.
+    #[test]
+    fn a_part_larger_than_the_room_goes_alone_where_the_volume_keeps_its_floor() {
+        use centraid_media::sealed::PART_BYTES;
+        use centraid_vault::backup::spool::{ALONE_FREE_FLOOR_BYTES, sealed_bound};
+        let len = 2 * PART_BYTES + 5;
+        let roomy = sealed_bound(PART_BYTES) + ALONE_FREE_FLOOR_BYTES;
+        // The budget is a tenth of 400 MiB: under one part. The first goes alone,
+        // and what follows it waits for the next window.
+        assert_eq!(
+            window_within(PART_BYTES / 2, len, &[0, 1, 2], Some(roomy)),
+            vec![0]
+        );
+        // No floor to keep, or something already in the spool: not alone.
+        assert_eq!(
+            window_within(PART_BYTES / 2, len, &[0, 1, 2], Some(roomy - 1)),
+            Vec::<u32>::new()
+        );
+        assert_eq!(
+            window_within(PART_BYTES / 2, len, &[0, 1, 2], None),
+            Vec::<u32>::new()
+        );
+        // A tail part that fits the room needs neither.
+        assert_eq!(window_within(PART_BYTES / 2, len, &[2], None), vec![2]);
+        // And a part that fits alone never uses the exception for the next.
+        assert_eq!(
+            window_within(PART_BYTES, len, &[0, 1, 2], Some(roomy)),
+            vec![0]
         );
     }
 }

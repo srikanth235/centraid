@@ -112,18 +112,18 @@ mod tests {
         assert_eq!(required, ["purge", "empty-trash"], "the two destroys");
     }
 
+    /// DOCS' REACH IS THE `core` SCHEMA'S COMMANDS, and the table says so. What
+    /// each command wrote is the commit's own census, not a list a manifest
+    /// carries (V3).
     #[test]
-    fn every_action_declares_the_tables_it_writes() {
-        for action in &manifest().actions {
+    fn every_action_invokes_a_core_command() {
+        for row in ACTIONS {
             assert!(
-                !action.writes.is_empty(),
-                "{} declares no writes, but every Docs action writes",
-                action.name
+                row.command.starts_with("core."),
+                "{} invokes {}, which is outside Docs' reach",
+                row.action,
+                row.command
             );
-        }
-        for table in manifest().declared_writes() {
-            let schema = table.split('.').next().unwrap_or_default();
-            assert_eq!(schema, "core", "{table} is outside Docs' reach");
         }
     }
 
@@ -232,6 +232,22 @@ mod tests {
         assert_eq!(
             u64::try_from(crate::queries::DRIVE_MAX).unwrap_or_default(),
             limit["maximum"].as_u64().unwrap_or_default()
+        );
+    }
+
+    /// THE ACT SCOPES AND THE ACTIONS AGREE, both ways (finding PE-F1, P3): a
+    /// narrow `act` scope names a command some action invokes, and every
+    /// action's command is covered by a scope. A scope no action uses tells a
+    /// consent screen the app reaches a command it never calls.
+    #[test]
+    fn every_act_scope_names_a_command_an_action_invokes_and_every_command_is_covered() {
+        let commands: Vec<&str> = crate::commands::ACTIONS
+            .iter()
+            .map(|row| row.command)
+            .collect();
+        assert_eq!(
+            manifest().act_scope_disagreements(&commands),
+            Vec::<String>::new()
         );
     }
 }

@@ -183,4 +183,20 @@ mod tests {
             "Tasks has no unrepresentable state"
         );
     }
+
+    /// THE ACT SCOPES AND THE ACTIONS AGREE, both ways (finding PE-F1, P3): a
+    /// narrow `act` scope names a command some action invokes, and every
+    /// action's command is covered by a scope. A scope no action uses tells a
+    /// consent screen the app reaches a command it never calls.
+    #[test]
+    fn every_act_scope_names_a_command_an_action_invokes_and_every_command_is_covered() {
+        let commands: Vec<&str> = crate::commands::ACTIONS
+            .iter()
+            .map(|row| row.command)
+            .collect();
+        assert_eq!(
+            manifest().act_scope_disagreements(&commands),
+            Vec::<String>::new()
+        );
+    }
 }

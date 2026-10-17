@@ -160,13 +160,6 @@ const NOISE_RULES = [
 
 /** Rules silenced on one path only: a known false positive in a file set. */
 const SCOPED_IGNORES = [
-  // Copy registry: `*_PASSWORD` names are UI copy keys whose values are
-  // sentences, checked against copy/<app>.json by KitTimeMoneyCopySpec.
-  {
-    ruleKey: "kotlin:S2068",
-    resourceKey:
-      "mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/**",
-  },
   // Gradle root resolves nothing, so no lockfile; resolving projects commit one.
   { ruleKey: "text:S8569", resourceKey: "mobile/build.gradle.kts" },
 ];

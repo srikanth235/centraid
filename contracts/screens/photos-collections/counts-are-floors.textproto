@@ -11,7 +11,7 @@
 #   - Portugal says 137 with `item_count_capped: true`. The honest phrasing is
 #     "at least 137". A screen printing "137 photos" is stating a total nobody
 #     counted.
-#   - The People door says 214 with `count_capped: true`; the Duplicates door
+#   - The Places door says 214 with `count_capped: true`; the Duplicates door
 #     says 3 and means 3.
 #
 # `needs_attention` is NOT capped and has no capped sibling, which is correct
@@ -43,10 +43,9 @@ data {
     member_owned: true
   }
   doors {
-    kind: KIND_PEOPLE
+    kind: KIND_PLACES
     count: 214
     count_capped: true
-    needs_attention: 63
   }
   doors {
     kind: KIND_DUPLICATES

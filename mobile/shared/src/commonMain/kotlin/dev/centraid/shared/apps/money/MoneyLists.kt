@@ -24,6 +24,7 @@ import dev.centraid.shared.kit.ReadContent
 import dev.centraid.shared.kit.SearchLaw
 import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * THE RECURRING CHARGES (#1099, R-1099-14): what the core detected over the last
@@ -33,7 +34,7 @@ import dev.centraid.shared.screen.Step
  */
 public object MoneyRecurringMachine :
     MoneyQueryMachine<MoneyRecurringState, MoneyRecurringEvent, MoneyRecurringData>("money.recurring", MONEY_TABLES) {
-    public const val SCREEN_ID: String = "money.recurring"
+    public const val SCREEN_ID: String = ScreenIds.MONEY_RECURRING
 
     override val lens: ContentLens<MoneyRecurringState, MoneyRecurringData> = Lens
 
@@ -122,7 +123,7 @@ public object MoneyRecurringReads : MoneyQueries<MoneyRecurringState, MoneyRecur
  */
 public object MoneySearchMachine :
     MoneyQueryMachine<MoneySearchState, MoneySearchEvent, MoneySearchData>("money.search", MONEY_TABLES) {
-    public const val SCREEN_ID: String = "money.search"
+    public const val SCREEN_ID: String = ScreenIds.MONEY_SEARCH
 
     /** Rows asked for. */
     public const val LIMIT: Int = 50

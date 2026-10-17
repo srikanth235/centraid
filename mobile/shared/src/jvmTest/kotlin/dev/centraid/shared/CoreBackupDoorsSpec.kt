@@ -362,6 +362,36 @@ class CoreBackupDoorsSpec : StringSpec({
             stopped(DrainStop.DRAIN_STOP_UNSPECIFIED)
                 .drain(DrainInput(0, TransferRule.WIFI_ONLY, true, false, true, false)).shouldNotBeNull()
                 .stopped shouldBe DrainAnswer.Stopped.UNREACHABLE
+            // A GATEWAY THAT ANSWERED AND REFUSED is its own stop, not an absence (#1080, F1).
+            stopped(DrainStop.DRAIN_STOP_REFUSED)
+                .drain(DrainInput(0, TransferRule.WIFI_ONLY, true, false, true, false)).shouldNotBeNull()
+                .stopped shouldBe DrainAnswer.Stopped.REFUSED
+        }
+    }
+
+    "the two refusals the core now names are read from the wire, and a gateway that refused the token is marked (#1080)" {
+        runTest {
+            val reading = CoreBackupStatus {
+                core {
+                    Envelope(
+                        response = Response(
+                            backup_status = BackupStatusResponse(
+                                destinations = listOf(
+                                    Destination(gateway_id = "gw-1", label = "Home laptop", pair_again = true),
+                                    Destination(gateway_id = "gw-2", label = "NAS"),
+                                ),
+                                waiting = listOf(
+                                    Waiting(reason = WireWaitReason.WAIT_REASON_REFUSED, count = 3),
+                                    Waiting(reason = WireWaitReason.WAIT_REASON_PAIR_AGAIN, count = 2),
+                                ),
+                            ),
+                        ),
+                    )
+                }
+            }.read().shouldNotBeNull()
+            reading.waiting shouldBe mapOf(WaitReason.REFUSED to 3L, WaitReason.PAIR_AGAIN to 2L)
+            reading.destinations.map { it.gatewayId to it.pairAgain } shouldBe
+                listOf("gw-1" to true, "gw-2" to false)
         }
     }
 

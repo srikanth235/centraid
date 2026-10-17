@@ -144,6 +144,10 @@ struct TasksQuickAddBar: View {
     var focusRequested: Binding<Bool> = .constant(false)
     let onChange: (String) -> Void
     let onSubmit: () -> Void
+    /// The field took or gave up the keyboard. The screen that hosts the bar
+    /// uses it to put its band away while the keyboard is up, so the bar sits
+    /// on the keyboard and not under it.
+    var onFocusChange: ((Bool) -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
 
@@ -159,7 +163,8 @@ struct TasksQuickAddBar: View {
                         value: quickAdd.title,
                         focusOnAppear: quickAdd.focused || focusRequested.wrappedValue,
                         onEdit: onChange,
-                        onSubmit: { if quickAdd.canSubmit { onSubmit() } }
+                        onSubmit: { if quickAdd.canSubmit { onSubmit() } },
+                        onFocusChange: onFocusChange
                     )
                     .centraidType("body")
                     .submitLabel(.done)

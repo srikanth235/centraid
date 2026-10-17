@@ -1,5 +1,7 @@
 import SwiftUI
 
+import CentraidShared
+
 /// The decoder between `photos.memories`' bytes and the view below.
 ///
 /// Its own file rather than an addition to `StateViews.swift`: that file is
@@ -82,21 +84,21 @@ struct PhotosMemoriesView: View {
                         // the vault's own order (`computed_at DESC`) and each
                         // section keeps it, so grouping is an arrangement and
                         // never a re-sort that would disagree with the desktop.
-                        section("On this day", icon: "Calendar", rows: memories.filter { $0.kind == .onThisDay })
-                        section("Trips", icon: "place", rows: memories.filter { $0.kind == .trip })
-                        section("Similar moments", icon: "Image", rows: memories.filter { $0.kind == .similar })
+                        section(PhotosCopy.shared.PHOTOS_MEMORIES_ON_THIS_DAY, icon: "Calendar", rows: memories.filter { $0.kind == .onThisDay })
+                        section(PhotosCopy.shared.PHOTOS_MEMORIES_TRIPS, icon: "place", rows: memories.filter { $0.kind == .trip })
+                        section(PhotosCopy.shared.PHOTOS_MEMORIES_SIMILAR_MOMENTS, icon: "Image", rows: memories.filter { $0.kind == .similar })
                         // A KIND THIS BUILD DOES NOT KNOW IS STILL A MEMORY.
                         // Drawn rather than dropped: a shelf that quietly
                         // shrinks when a newer vault adds a fourth kind is a
                         // shelf a member cannot trust.
-                        section("Other", icon: "Sparkle", rows: memories.filter { $0.kind == .unspecified })
+                        section(PhotosCopy.shared.PHOTOS_MEMORIES_OTHER, icon: "Sparkle", rows: memories.filter { $0.kind == .unspecified })
                     }
                 }
             }
             .padding(.vertical, 12)
         }
         .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-        .navigationTitle("Memories")
+        .navigationTitle(PhotosCopy.shared.PHOTOS_MEMORIES)
         .onAppear { send(state.openedEvent) }
     }
 
@@ -111,13 +113,13 @@ struct PhotosMemoriesView: View {
     private func emptyShelf(computed: Bool) -> some View {
         if computed {
             ScreenEmptyView(
-                sentence: PhotosWords.photosMemoriesEmpty,
-                remedy: PhotosWords.photosMemoriesEmptyCaption
+                sentence: PhotosCopy.shared.PHOTOS_MEMORIES_EMPTY,
+                remedy: PhotosCopy.shared.PHOTOS_MEMORIES_EMPTY_CAPTION
             )
         } else {
             ScreenEmptyView(
-                sentence: PhotosWords.photosMemoriesNotLooked,
-                remedy: PhotosWords.photosMemoriesNotLookedCaption
+                sentence: PhotosCopy.shared.PHOTOS_MEMORIES_NOT_LOOKED,
+                remedy: PhotosCopy.shared.PHOTOS_MEMORIES_NOT_LOOKED_CAPTION
             )
         }
     }
@@ -215,18 +217,18 @@ private struct MemoryCard: View {
         if !hint.isEmpty { return hint }
         switch row.kind {
         case .onThisDay:
-            return "On this day"
+            return PhotosCopy.shared.PHOTOS_MEMORIES_ON_THIS_DAY
         case .trip:
             // `place_name` is folded from the trip's members' places by the
             // bridge; a trip whose photographs carry no readable place falls
             // back rather than printing a place id as a place.
-            return row.placeName.isEmpty ? "Away from home" : row.placeName
+            return row.placeName.isEmpty ? PhotosCopy.shared.PHOTOS_MEMORY_AWAY : row.placeName
         case .similar:
             return row.memberCount > 0
-                ? "\(row.memberCount) similar photos"
-                : PhotosWords.photosMemorySimilar
+                ? copyFill(PhotosCopy.shared.PHOTOS_MEMORY_SIMILAR_COUNT, "count", "\(row.memberCount)")
+                : PhotosCopy.shared.PHOTOS_MEMORY_SIMILAR
         case .unspecified, .UNRECOGNIZED:
-            return "A memory"
+            return PhotosCopy.shared.PHOTOS_MEMORY_UNKNOWN
         }
     }
 
@@ -252,17 +254,17 @@ private struct MemoryCard: View {
 /// (`docs/photos/places.md`). The stops are joined in the order the
 /// photographs were taken; a one-stop trip is a dot and no line.
 ///
-/// The projection mirrors `PhotosMemoriesMachine.sketch`, which is what
-/// Compose calls — the state crosses as BYTES, so Swift cannot hand the route
-/// to a Kotlin function. Kept in step by hand, like `PlacesPlot`.
+/// The projection is the machine's (`PhotosMemoriesMachine.sketch`, run when the
+/// route is folded): every stop arrives with its place in the plate's unit box
+/// (`sketchX`, `sketchY`), and this only multiplies by its own box.
 private struct RouteSketch: View {
     @Environment(\.colorScheme) private var scheme
     let route: [Centraid_Screen_V1_MemoryStop]
 
-    private static let width: CGFloat = 96
-    private static let height: CGFloat = 56
+    private static let width = CGFloat(PhotosMemoriesMachine.shared.SKETCH_WIDTH)
+    private static let height = CGFloat(PhotosMemoriesMachine.shared.SKETCH_HEIGHT)
     /// Clear of the plate's edge by a dot's radius, as v0's was.
-    private static let pad: CGFloat = 7
+    private static let pad = CGFloat(PhotosMemoriesMachine.shared.SKETCH_PAD)
 
     var body: some View {
         let line = Theme.color("textFaint", scheme)
@@ -270,8 +272,8 @@ private struct RouteSketch: View {
         Canvas { context, size in
             let width = size.width - Self.pad * 2
             let height = size.height - Self.pad * 2
-            let points = Self.sketch(route, aspect: Double(width / height)).map {
-                CGPoint(x: Self.pad + CGFloat($0.x) * width, y: Self.pad + CGFloat($0.y) * height)
+            let points = route.map {
+                CGPoint(x: Self.pad + CGFloat($0.sketchX) * width, y: Self.pad + CGFloat($0.sketchY) * height)
             }
             if points.count > 1 {
                 var path = Path()
@@ -294,37 +296,10 @@ private struct RouteSketch: View {
         .frame(width: Self.width, height: Self.height)
         .background(Theme.color("bgSunken", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)))
         .accessibilityElement()
-        .accessibilityLabel(route.count == 1 ? "A sketch of one stop" : "A sketch of \(route.count) stops")
-    }
-
-    /// `PhotosMemoriesMachine.sketch`: longitude narrowed by the cosine of the
-    /// middle latitude, one scale for both axes, centred, y growing south.
-    static func sketch(
-        _ route: [Centraid_Screen_V1_MemoryStop],
-        aspect: Double
-    ) -> [(x: Double, y: Double)] {
-        guard !route.isEmpty, aspect > 0 else { return [] }
-        let latitudes = route.map(\.latitude)
-        let middle = ((latitudes.min() ?? 0) + (latitudes.max() ?? 0)) / 2
-        let narrowing = cos(middle * .pi / 180)
-        let xs = route.map { $0.longitude * narrowing }
-        let ys = route.map { -$0.latitude }
-        let minX = xs.min() ?? 0, maxX = xs.max() ?? 0
-        let minY = ys.min() ?? 0, maxY = ys.max() ?? 0
-        let spanX = maxX - minX
-        let spanY = maxY - minY
-        let scale = min(
-            spanX > 0 ? aspect / spanX : .infinity,
-            spanY > 0 ? 1 / spanY : .infinity
+        .accessibilityLabel(
+            route.count == 1
+                ? PhotosCopy.shared.PHOTOS_MEMORY_SKETCH_ONE
+                : copyFill(PhotosCopy.shared.PHOTOS_MEMORY_SKETCH_MANY, "count", "\(route.count)")
         )
-        let centreX = (maxX + minX) / 2
-        let centreY = (maxY + minY) / 2
-        return route.indices.map { index in
-            guard scale.isFinite else { return (0.5, 0.5) }
-            return (
-                0.5 + (xs[index] - centreX) * scale / aspect,
-                0.5 + (ys[index] - centreY) * scale
-            )
-        }
     }
 }

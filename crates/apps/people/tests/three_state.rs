@@ -12,14 +12,18 @@
 //!
 //! 1. the profile stands, with its name, cadence and dates intact;
 //! 2. the refused reading carries the door's own sentence;
-//! 3. **a denied linked read is unrepresentable as empty** — the data lives
+//! 3. **a denied reading is unrepresentable as empty** — the data lives
 //!    inside `ReadState::Ready`, so there is no `null` for a rail to be drawn on
-//!    and no `relationships: []` to be mistaken for "linked to nothing".
+//!    and no `relationships: []` or `contact: []` to be mistaken for "linked to
+//!    nothing" or "no way to reach them";
+//! 4. the two readings are independent of each other: revoking one costs that
+//!    rail and not the other.
 //!
-//! The other candidate, `social.contact_channel`, is deliberately NOT a
-//! reading: how to reach a person is part of who the sheet is about, and the
-//! question goes to the owner in this lane's receipt. `a_denied_contact_plane_is_a_denied_sheet`
-//! is what states that choice, so changing it means changing a test.
+//! `social.contact_channel` is the second reading (P1, `docs/release/v1-handoffs.md`):
+//! it used to deny the whole sheet, on the argument that how to reach a person
+//! is part of who the sheet is about. A sheet that says the channels could not
+//! be read is not a lie; one that drew "No channels" would be, and the type is
+//! what stops it.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -129,27 +133,114 @@ fn a_denied_linked_plane_costs_the_relationship_rail_and_nothing_else() {
     assert!(person.links.ready().is_none());
 }
 
-/// THE FOURTH CANDIDATE, STATED RATHER THAN MODELLED. Revoking
-/// `social.contact_channel` denies the whole sheet, here as in v0 — because how
-/// to reach a person is part of who the sheet is about. The owner question is
-/// in this lane's receipt; changing the answer means changing this test.
+/// THE CONTACT PLANE (P1): revoking `social.contact_channel` costs the contact
+/// rail — which says so, in the door's own sentence — and not the person.
 #[test]
-fn a_denied_contact_plane_is_a_denied_sheet() {
+fn a_denied_contact_plane_costs_the_contact_rail_and_nothing_else() {
     let connection = fixture_vault();
     let party_id = a_person_with_everything(&connection);
     let door = door(&connection, &["social_contact_channel"]);
 
     let (data, denial) = load_person(&door, &party_id).expect("the sheet reads");
-    assert!(data.person.is_none());
+    // A DENIED RAIL IS NOT A DENIED SHEET.
+    assert!(denial.is_none(), "{denial:?}");
+    let person = data.person.expect("the person is still there");
+    assert_eq!(person.profile.name, "Maya Alvarez");
+    assert_eq!(person.profile.cadence_days, 30);
     assert!(
-        denial
-            .as_ref()
+        !person.profile.dates.is_empty(),
+        "the person's dates stand: they are not behind the contact plane"
+    );
+    // THE RAIL SAYS IT COULD NOT BE READ, in the door's own sentence, and has no
+    // list to be drawn as empty.
+    assert!(person.contact.denied());
+    assert!(person.contact.ready().is_none());
+    assert!(
+        person
+            .contact
+            .denial()
             .and_then(|denial| denial.message.as_deref())
             .is_some_and(|message| message.contains("social_contact_channel")),
-        "the denial names the plane: {denial:?}"
+        "the denial names the plane: {:?}",
+        person.contact.denial()
     );
-    // AND IT IS A DENIAL, NOT AN ERROR. A surface renders the ask.
-    assert!(denial.is_some());
+    // THE OTHER READING IS UNTOUCHED: the linked plane sits behind other scopes.
+    assert!(person.links.known());
+}
+
+/// THE TWO READINGS ARE INDEPENDENT: each plane revoked alone leaves the other
+/// known, and both revoked together still leave the person.
+#[test]
+fn the_contact_and_linked_readings_deny_independently_of_each_other() {
+    let connection = fixture_vault();
+    let party_id = a_person_with_everything(&connection);
+
+    let linked_only = door(&connection, &["core_link"]);
+    let (data, denial) = load_person(&linked_only, &party_id).expect("the sheet reads");
+    assert!(denial.is_none());
+    let person = data.person.expect("the person is still there");
+    assert!(person.links.denied());
+    assert!(
+        person.contact.known(),
+        "revoking the linked plane costs the relationship rail, not the channels"
+    );
+    assert!(
+        person
+            .contact
+            .ready()
+            .is_some_and(|contact| !contact.is_empty()),
+        "Maya has channels in the corpus, and they are drawn"
+    );
+
+    let both = door(&connection, &["core_link", "social_contact_channel"]);
+    let (data, denial) = load_person(&both, &party_id).expect("the sheet reads");
+    assert!(denial.is_none());
+    let person = data.person.expect("the person is still there");
+    assert_eq!(person.profile.name, "Maya Alvarez");
+    assert!(person.links.denied());
+    assert!(person.contact.denied());
+}
+
+/// A refusal of the COLLISION SEARCH alone is the contact reading's too: the
+/// search is part of the rail, so a half-drawn rail with its duplicate notes
+/// missing would be the quiet failure this type exists to prevent.
+#[test]
+fn a_refusal_after_the_channels_were_read_still_denies_the_whole_rail() {
+    struct SecondReadRefused<'connection> {
+        inner: TestDoor<'connection>,
+        seen: std::cell::Cell<u32>,
+    }
+    impl PageDoor for SecondReadRefused<'_> {
+        fn page(&self, query: &PageQuery, request: &PageRequest) -> KitResult<Page<Row>> {
+            if query.from.starts_with("social_contact_channel") {
+                let nth = self.seen.get();
+                self.seen.set(nth + 1);
+                // THE FIRST CHANNEL READ (this person's own) answers; the
+                // collision search over the same table is refused.
+                if nth >= 1 {
+                    return Err(KitError::Door(
+                        "the owner has not granted this app access to the collision search"
+                            .to_owned(),
+                    ));
+                }
+            }
+            self.inner.page(query, request)
+        }
+    }
+    let connection = fixture_vault();
+    let party_id = a_person_with_everything(&connection);
+    let door = SecondReadRefused {
+        inner: TestDoor::new(&connection),
+        seen: std::cell::Cell::new(0),
+    };
+    let (data, denial) = load_person(&door, &party_id).expect("the sheet reads");
+    assert!(denial.is_none());
+    let person = data.person.expect("the person is still there");
+    assert!(person.contact.denied(), "{:?}", person.contact);
+    assert!(
+        door.seen.get() >= 2,
+        "the test never reached the collision search"
+    );
 }
 
 /// A DENIAL IS NEVER AN EMPTY ANSWER. The type makes the two different values,

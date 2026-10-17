@@ -78,6 +78,16 @@ public class WordsSheets(
      */
     private var verifying = false
 
+    /**
+     * Whether this phone has a camera to scan a pairing code with: the restore
+     * carries it in `Opened.camera`, as pairing's [openPair] does.
+     */
+    public var camera: Boolean
+        get() = enter.camera
+        set(value) {
+            enter.camera = value
+        }
+
     /** Which sheet is up, if any. */
     public var showing: Sheet? by mutableStateOf(null)
         private set
@@ -343,16 +353,12 @@ public class WordsSheets(
             if (uri != null) {
                 scope.launch {
                     val code = withContext(Dispatchers.Default) { runCatching { readSquare(context, uri) }.getOrNull() }
-                    pair.forward(
-                        if (code != null) {
-                            PairLaptopEvent(scanned = PairLaptopEvent.Scanned(payload = code))
-                        } else {
-                            PairLaptopEvent(unread = PairLaptopEvent.PhotoUnread())
-                        },
-                    )
+                    scanned(scanFor, code)
                 }
             }
         }
+        // WHICH SHEET ASKED: the restore's code field scans as pairing does.
+        scanFor = sheet
         val pickPhoto = {
             photo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
@@ -384,25 +390,49 @@ public class WordsSheets(
             NoAutofill()
             when (sheet) {
                 Sheet.MAKE -> VaultWordsScreen(makeState, ::sendMake)
-                Sheet.ENTER -> WordsEntryScreen(enterState, enter::forward)
+                Sheet.ENTER -> WordsEntryScreen(enterState, enter::forward, onScan = scan, onPhoto = pickPhoto)
                 Sheet.SHOW -> WordsShowScreen(showState, show::forward) { reason -> verify(activity, reason) }
                 Sheet.PAIR -> PairLaptopScreen(pairState, ::sendPair, onScan = scan, onPhoto = pickPhoto)
             }
         }
-        if (scanning && sheet == Sheet.PAIR) {
+        if (scanning && (sheet == Sheet.PAIR || sheet == Sheet.ENTER)) {
             PairScanner(
-                photoLabel = pairState.photo_label,
+                photoLabel = if (sheet == Sheet.PAIR) pairState.photo_label else enterState.photo_label,
                 onRead = { payload ->
                     scanning = false
-                    pair.forward(PairLaptopEvent(scanned = PairLaptopEvent.Scanned(payload = payload)))
+                    scanned(sheet, payload)
                 },
                 onPhoto = {
                     scanning = false
-                    pair.forward(PairLaptopEvent(photo = PairLaptopEvent.PhotoTapped()))
+                    if (sheet == Sheet.PAIR) pair.forward(PairLaptopEvent(photo = PairLaptopEvent.PhotoTapped()))
                     pickPhoto()
                 },
                 onCancel = { scanning = false },
             )
+        }
+    }
+
+    /** The sheet the last scan was opened from; a photo's answer goes back to it. */
+    private var scanFor: Sheet? = null
+
+    /** A scan's answer — the square's text, or null for a photo with none — to the sheet that asked. */
+    private fun scanned(sheet: Sheet?, code: String?) {
+        when (sheet) {
+            Sheet.PAIR -> pair.forward(
+                if (code != null) {
+                    PairLaptopEvent(scanned = PairLaptopEvent.Scanned(payload = code))
+                } else {
+                    PairLaptopEvent(unread = PairLaptopEvent.PhotoUnread())
+                },
+            )
+            Sheet.ENTER -> enter.forward(
+                if (code != null) {
+                    WordsEntryEvent(scanned = WordsEntryEvent.Scanned(payload = code))
+                } else {
+                    WordsEntryEvent(unread = WordsEntryEvent.PhotoUnread())
+                },
+            )
+            else -> Unit
         }
     }
 

@@ -5,6 +5,7 @@ import centraid.screen.v1.HomeState
 import dev.centraid.shared.custody.DevSeed
 import dev.centraid.shared.platform.platformServices
 import dev.centraid.shared.sync.BackgroundUploads
+import dev.centraid.shared.sync.GatewayBrowser
 import dev.centraid.shared.sync.LibraryDeleter
 import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.TransferRule
@@ -140,6 +141,7 @@ public class HomeBridge {
             this@HomeBridge.session = session
             uploadLoop?.let { session.attachUploads(it) }
             deleter?.let { session.installLibraryDeleter(it) }
+            gatewayBrowser?.let { session.installGatewayBrowser(it) }
             opened.complete(session)
             // THE WAITERS BEFORE THE COLLECT, because `collect` on a
             // `StateFlow` never returns: a screen attached after this line
@@ -259,6 +261,20 @@ public class HomeBridge {
     }
 
     private var deleter: LibraryDeleter? = null
+
+    /**
+     * THE iOS GATEWAY BROWSE, INSTALLED (#1080, Q-1080-D3): `NWBrowser` over
+     * `_centraid-gateway._tcp`, which a foreground pass that found no gateway
+     * runs once per [dev.centraid.shared.sync.GatewayRediscovery.MIN_INTERVAL_MS]
+     * ([HomeSession.installGatewayBrowser]). Installed once, before or after the
+     * session opens, and handed on to it as [installLibraryDeleter] hands its own.
+     */
+    public fun installGatewayBrowser(browser: GatewayBrowser) {
+        this.gatewayBrowser = browser
+        session?.installGatewayBrowser(browser)
+    }
+
+    private var gatewayBrowser: GatewayBrowser? = null
 
     /**
      * THE CERTIFICATES THE SHELL'S OWN TLS PINS, by DER equality (`pins`).

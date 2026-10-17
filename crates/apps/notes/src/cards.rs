@@ -20,19 +20,22 @@
 //! resolvable — which is the identity v0's parity fixtures are generated under
 //! and therefore the identity that makes them comparable.
 //!
-//! ## Two v0 behaviours reproduced on purpose, one of them a finding
+//! ## A trashed row's card says it is trashed (N4)
 //!
-//! * `core.party`, `core.place`, `core.event`, `schedule.task`,
-//!   `knowledge.note`, `core.collection` and `social.thread` all hardcode
-//!   `0 AS trashed` (`cards.ts:42`-`:78`) — so **a trashed note's card reads
-//!   `live`**, even though `knowledge_note` carries the trash pair and the
-//!   library's own trash shelf reads it. Reproduced here for parity and filed
-//!   as a finding: a link to a note a member deleted draws as if it were still
-//!   there.
-//! * An **uncurated** entity — one with no card projection — answers existence
-//!   and status only, with a null title. There is none today: `tally.expense`,
-//!   the one v0 had, left with Tally (#1099), and the machinery stays for the
-//!   next entity a powerbox offers before it has a card.
+//! v0's projections hardcoded `0 AS trashed` for seven of the eleven types
+//! (`cards.ts:42`-`:78`), so a link to a note a member deleted drew as if it
+//! were still there. Four of those seven carry the trash pair —
+//! `core.party`, `core.event`, `schedule.task` and `knowledge.note` — and their
+//! cards now read `deleted_at`, exactly as the document, the bytes and the
+//! asset always did. The other three (`core.place`, `core.collection`,
+//! `social.thread`) have no trash column to read, so `live` is the only answer
+//! they can give. The frozen parity fixture holds no trashed ref, so the fix
+//! moves no recorded case.
+//!
+//! An **uncurated** entity — one with no card projection — answers existence
+//! and status only, with a null title. There is none today: `tally.expense`,
+//! the one v0 had, left with Tally (#1099), and the machinery stays for the
+//! next entity a powerbox offers before it has a card.
 
 use std::collections::BTreeMap;
 
@@ -142,8 +145,9 @@ struct CardSpec {
     table: &'static str,
     pk: &'static str,
     select: &'static str,
-    /// `true` where v0's projection reads the trash pair. See the module note:
-    /// six of the eleven hardcode `0`.
+    /// `true` where the table carries the trash pair, so the card reads
+    /// `deleted_at`. See the module note: the three that are `false` have no
+    /// such column.
     reads_trash: bool,
 }
 
@@ -153,8 +157,8 @@ const CARDS: &[CardSpec] = &[
         entity: "core.party",
         table: "core_party",
         pk: "party_id",
-        select: "party_id, display_name, kind, avatar_content_id",
-        reads_trash: false,
+        select: "party_id, display_name, kind, avatar_content_id, deleted_at",
+        reads_trash: true,
     },
     CardSpec {
         entity: "core.place",
@@ -167,8 +171,8 @@ const CARDS: &[CardSpec] = &[
         entity: "core.event",
         table: "core_event",
         pk: "event_id",
-        select: "event_id, summary, dtstart",
-        reads_trash: false,
+        select: "event_id, summary, dtstart, deleted_at",
+        reads_trash: true,
     },
     CardSpec {
         entity: "core.transaction",
@@ -195,15 +199,15 @@ const CARDS: &[CardSpec] = &[
         entity: "schedule.task",
         table: "schedule_task",
         pk: "task_id",
-        select: "task_id, title, status",
-        reads_trash: false,
+        select: "task_id, title, status, deleted_at",
+        reads_trash: true,
     },
     CardSpec {
         entity: "knowledge.note",
         table: "knowledge_note",
         pk: "note_id",
-        select: "note_id, title",
-        reads_trash: false,
+        select: "note_id, title, deleted_at",
+        reads_trash: true,
     },
     CardSpec {
         entity: "core.collection",

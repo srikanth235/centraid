@@ -51,7 +51,9 @@ pub enum Stop {
     Untrusted(String),
     /// A newer writer claimed the vault: this device stops writing.
     Moved { epoch: u64 },
-    /// The destination refused for a reason that stops the pass.
+    /// The destination answered and refused, for a reason that stops the
+    /// pass: its disk is full, a quota, a cap, or a token it no longer knows
+    /// (`UNAUTHORIZED`). Nothing was acknowledged; every part stays queued.
     Refused(Refusal),
 }
 
@@ -117,13 +119,12 @@ impl Pass<'_> {
         match answer {
             Ok(()) | Err(Refusal::NameTaken) => self.acknowledged(part)?,
             Err(Refusal::DigestMismatch) => self.torn(part)?,
-            Err(Refusal::TooLarge) => {
-                // Not this pass's to fix: no part of this format is past the
-                // cap, so the attempt is recorded for the status line and the
-                // queue moves on.
-                self.ledger
-                    .record_attempt(&part.name, Refusal::TooLarge.code())?;
-            }
+            // EVERY OTHER REFUSAL STOPS THE PASS, `TOO_LARGE` AND A FULL DISK
+            // ALIKE (#1080, the sweep's F1): the destination answered, and
+            // what it answered is a fact the member hears, not a part to skip
+            // — no part of this format is past the cap, so a destination that
+            // says so is not one this phone can finish a pass at. The attempt
+            // is recorded and every part stays queued, spooled, unconfirmed.
             Err(refusal) => {
                 self.ledger.record_attempt(&part.name, refusal.code())?;
                 return Ok(Some(Stop::Refused(refusal)));
@@ -696,10 +697,12 @@ mod tests {
     }
 
     /// A destination whose disk is full until a test frees it: every write
-    /// is refused `DISK_FULL`, everything else is the memory store's.
+    /// is refused with `refusal` (`DISK_FULL` unless a test says another),
+    /// everything else is the memory store's.
     struct Full<'a> {
         inner: &'a MemoryStore,
         full: std::cell::Cell<bool>,
+        refusal: Refusal,
     }
 
     impl Store for Full<'_> {
@@ -717,7 +720,7 @@ mod tests {
             body: &mut dyn std::io::Read,
         ) -> std::result::Result<store::Put, StoreError> {
             if self.full.get() {
-                return Err(StoreError::Refused(Refusal::DiskFull));
+                return Err(StoreError::Refused(self.refusal.clone()));
             }
             self.inner.put(name, digest, len, body)
         }
@@ -769,6 +772,7 @@ mod tests {
         let full = Full {
             inner: &rig.store,
             full: std::cell::Cell::new(true),
+            refusal: Refusal::DiskFull,
         };
         let refused =
             move_queue(&rig.ledger, &rig.spool, &full, far(), &rig.clock).expect("a pass");
@@ -797,6 +801,46 @@ mod tests {
         assert_eq!(moved.confirmed.len(), 4);
         assert!(rig.ledger.queued().expect("reads").is_empty());
         assert!(rig.spool.names().expect("lists").is_empty());
+    }
+
+    /// **A REFUSAL THAT IS NOT A FULL DISK STOPS THE PASS TOO** (#1080, the
+    /// sweep's F1): a quota or a cap the destination names is its answer, not
+    /// a part to skip, so the pass stops on it with every part still queued,
+    /// spooled and unconfirmed. A `TOO_LARGE` used to be recorded while the
+    /// queue moved on, which left the status waiting `WINDOW` for time.
+    #[test]
+    fn a_quota_or_a_cap_stops_the_pass_with_every_part_kept() {
+        for refusal in [
+            Refusal::TooLarge,
+            Refusal::Other("QUOTA".to_owned()),
+            Refusal::Unauthorized,
+        ] {
+            let rig = rig();
+            let names: Vec<Name> = (0..3)
+                .map(|index| queue(&rig, &format!("part {index}"), PartKind::Original))
+                .collect();
+            let refusing = Full {
+                inner: &rig.store,
+                full: std::cell::Cell::new(true),
+                refusal: refusal.clone(),
+            };
+            let moved =
+                move_queue(&rig.ledger, &rig.spool, &refusing, far(), &rig.clock).expect("a pass");
+            assert_eq!(moved.stopped, Stop::Refused(refusal.clone()), "{refusal:?}");
+            assert!(moved.confirmed.is_empty(), "{refusal:?}");
+            let queued = rig.ledger.queued().expect("reads");
+            assert_eq!(queued.len(), 3, "{refusal:?}");
+            assert!(names.iter().all(|name| rig.spool.contains(name)));
+            assert_eq!(
+                queued[0].last_error.as_deref(),
+                Some(refusal.code()),
+                "the refusal is the attempt's outcome"
+            );
+            assert_eq!(
+                queued[1].attempts, 0,
+                "the pass stopped at the first answer, so the rest were not tried"
+            );
+        }
     }
 
     #[test]

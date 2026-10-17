@@ -23,10 +23,10 @@
 
 use centraid_apps_kit::contract_vault::open_contract_vault;
 use centraid_apps_kit::fixtures::{
-    NOTES_DEMO_OWNER, notes_demo, notes_revision_cycle, seed_owner_party,
+    NOTES_DEMO_OWNER, notes_demo, notes_revision_cycle, seed_owner_party, set_row_trashed,
 };
 use centraid_apps_kit::testdoor::TestDoor;
-use centraid_apps_notes::cards::{CardStatus, NoCards, OwnerCards};
+use centraid_apps_notes::cards::{CardDoor, CardStatus, NoCards, OwnerCards, Ref};
 use centraid_apps_notes::journal::{JOURNAL_ENTRY_NOTATION, JOURNAL_SCHEME_URI};
 use centraid_apps_notes::queries::{
     SHELF_ROWS, load_history, load_journal, load_library, load_link_targets, load_note,
@@ -38,6 +38,9 @@ use rusqlite::Connection;
 
 /// The instant the corpus is dated from.
 const NOW: &str = "2099-06-01";
+
+/// The corpus's one trashed note, "Reno flights — cancelled".
+const TRASHED_NOTE: &str = "note-000007";
 
 fn vault() -> Connection {
     let ddl = std::fs::read_to_string(
@@ -246,6 +249,91 @@ fn a_reference_carries_its_card_and_its_selector_and_an_ended_link_does_not() {
     assert_eq!(
         drive.backlinks[0].card.title.as_deref(),
         Some("Tahoe long weekend — shortlist")
+    );
+}
+
+/// **A TRASHED ROW'S CARD SAYS IT IS TRASHED** (N4). v0 hardcoded `0 AS trashed`
+/// for the types that carry the trash pair, so a link to a note a member deleted
+/// drew as though it were still there. The card keeps the title — the shelf
+/// draws "Reno flights" struck through, not a blank — and the status is what
+/// changes. A party carries the same pair and is held to the same answer; a
+/// type with no such column (a place) can only ever read `live`.
+#[test]
+fn a_trashed_rows_card_reads_trashed_and_keeps_its_title() {
+    let connection = vault();
+    set_row_trashed(
+        &connection,
+        "core.party",
+        NOTES_DEMO_OWNER,
+        Some("2099-06-02T00:00:00.000Z"),
+    )
+    .expect("the owner party is trashed");
+
+    let door = TestDoor::new(&connection);
+    let resolved = OwnerCards::new(&door)
+        .resolve(&[
+            Ref::new("knowledge.note", TRASHED_NOTE),
+            Ref::new("knowledge.note", "note-000001"),
+            Ref::new("core.party", NOTES_DEMO_OWNER),
+        ])
+        .expect("the cards resolve");
+    assert_eq!(resolved[0].status, CardStatus::Trashed);
+    assert_eq!(
+        resolved[0].title.as_deref(),
+        Some("Reno flights — cancelled"),
+        "a trashed card still says what it was"
+    );
+    assert_eq!(resolved[1].status, CardStatus::Live, "a live note is live");
+    assert_eq!(
+        resolved[2].status,
+        CardStatus::Trashed,
+        "a party carries the trash pair and is held to the same answer"
+    );
+}
+
+/// THE SAME FACT, END TO END: a live note that links to a note the member then
+/// trashed draws that reference as trashed — and a restore draws it live again.
+#[test]
+fn a_reference_to_a_note_that_was_trashed_draws_as_trashed() {
+    let connection = vault();
+    let status_of_the_shortlists_reference = |connection: &Connection| {
+        let door = TestDoor::new(connection);
+        let cards = OwnerCards::new(&door);
+        let (library, _) = load_library(&door, &cards, None).expect("the library folds");
+        let shortlist = library
+            .notes
+            .iter()
+            .find(|row| row.note_id == "note-000001")
+            .expect("the shortlist");
+        assert_eq!(
+            shortlist.references.len(),
+            1,
+            "the link itself stays live whatever its far end is"
+        );
+        shortlist.references[0].card.status
+    };
+    // `note-000002` is "Drive vs fly", the far end of the shortlist's one live
+    // link.
+    assert_eq!(
+        status_of_the_shortlists_reference(&connection),
+        CardStatus::Live
+    );
+    set_row_trashed(
+        &connection,
+        "knowledge.note",
+        "note-000002",
+        Some("2099-06-02T00:00:00.000Z"),
+    )
+    .expect("the far end is trashed");
+    assert_eq!(
+        status_of_the_shortlists_reference(&connection),
+        CardStatus::Trashed
+    );
+    set_row_trashed(&connection, "knowledge.note", "note-000002", None)
+        .expect("the far end is restored");
+    assert_eq!(
+        status_of_the_shortlists_reference(&connection),
+        CardStatus::Live
     );
 }
 

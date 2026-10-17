@@ -71,6 +71,18 @@ public interface ScreenMachine<S, E> {
     public fun seatChanged(seat: SeatState): E?
 
     /**
+     * WHAT A SCREEN LABELS ITS ROWS BY, CHANGED: the member's transfer rule
+     * (#1080). This screen's own event to read again, or null for a screen
+     * whose rows do not say what this phone holds.
+     *
+     * Not a row change, so [rowsChanged] cannot carry it: nothing in the vault
+     * moved, and a screen that waited for a row to move would draw the old
+     * rule's labels until a pass happened to touch one. A default, because only
+     * a screen that draws a held state has anything to say.
+     */
+    public fun conditionsChanged(): E? = null
+
+    /**
      * A [ScreenEffect.Schedule] CAME DUE: this screen's own event for [token],
      * or null for a screen that schedules nothing (the kit's autosave debounce).
      *

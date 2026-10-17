@@ -1,5 +1,5 @@
 {
-  "$comment": "Hand-maintained source: no emitter writes this file (export-copy.ts left with v0's copy leaves in #1020 wave 6). Its twin is mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/DocsCopy.kt; edit both, and KitTimeMoneyCopySpec fails when their strings disagree.",
+  "$comment": "The source of these strings. `:shared:generateCopy` turns `strings` into dev.centraid.design.copy.DocsCopy at build time, which both shells read; there is no checked-in Kotlin twin.",
   "app": "docs",
   "strings": {
     "ACTION_EDIT": "Edit",

@@ -4,9 +4,9 @@
 // TEXT leg and its ALBUM leg are now the door's: the photograph domain
 // (`core.content_item`: the caption, the text recognised in the picture and
 // the transcript of a video) and the album container (`core.collection`,
-// narrowed to the rows that open in Photos). The STRUCTURED legs (the people a
-// member confirmed on a face, the places, the labels) stay with the shell,
-// which reads them through the page door and folds them with this answer.
+// narrowed to the rows that open in Photos). The STRUCTURED legs (the places,
+// the labels) stay with the shell, which reads them through the page door and
+// folds them with this answer.
 //
 // It rides `app_query.proto` at number 90, Photos' own: 80 is Home's, and the
 // apps' blocks are below it.
@@ -28,13 +28,13 @@ message PhotosSearchRequest {
   // photographs by rank; clamped to 500.
   uint32 limit = 2;
   // MAY THE CORE CORRECT THE TERM? The shell sets this only when its OWN legs
-  // (people, places, labels) found nothing for the term as typed, because the
-  // core cannot see them: the correction runs only when EVERY leg is empty.
-  // With it set and the core's legs empty too, the core replaces each
-  // mistyped word by a word the vault's own vocabularies hold
-  // (`core.content_item`, `core.party` and the album container) and runs its
-  // legs again at the corrected words; `PhotosSearch.corrected` says what it
-  // searched. Without it the term is searched as typed and never corrected.
+  // (places, labels) found nothing for the term as typed, because the core
+  // cannot see them: the correction runs only when EVERY leg is empty. With it
+  // set and the core's legs empty too, the core replaces each mistyped word by
+  // a word the vault's own vocabularies hold (`core.content_item` and the
+  // album container) and runs its legs again at the corrected words;
+  // `PhotosSearch.corrected` says what it searched. Without it the term is
+  // searched as typed and never corrected.
   bool correct = 3;
 }
 

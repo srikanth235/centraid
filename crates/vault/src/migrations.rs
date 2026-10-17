@@ -1,4 +1,4 @@
-//! The forward-only ladder, and the baseline it starts from.
+//! The forward-only ladder, and the one rung it holds.
 //!
 //! ## Two axes, and v0's is not one of them (D-1020-D1-2)
 //!
@@ -17,20 +17,39 @@
 //! - A file ABOVE the binary is `DowngradeRefused`. Never guessed down: a
 //!   newer rung may have moved data this binary does not know the shape of.
 //!
+//! ## One rung, squashed on 2026-10-15
+//!
+//! The ladder is ONE rung. `001_baseline.sql` is the whole schema a new vault
+//! is founded with and the rows that founding seeds, squashed from the fifteen
+//! rungs that preceded it (Q-1029-1): nothing had shipped, so no vault needed
+//! the climb, and a new vault had been founding the planes #1029 struck only to
+//! drop them. The file is FROZEN like any rung — a vault in the field has
+//! already run its text — and **the next schema change appends rung two**: a
+//! `002_<name>.sql`, an `include_str!` constant and a [`Migration`] in
+//! [`LADDER`]. It is never an edit to rung one. A rung two is proved the way a
+//! climb is: found a vault, wind its file back to `user_version = 1` by undoing
+//! the rung's own statements, write the rows the old shape let through, and
+//! open it.
+//!
+//! The file is cut by `bin/export-baseline` ([`render_baseline`]), which founds
+//! a vault from whatever ladder the build embeds and renders what it holds. With
+//! one rung it reproduces the file byte for byte; once a rung is appended it
+//! renders the squash of both, which is how a later squash is cut.
+//!
 //! ## Why the baseline lives under `contracts/`
 //!
 //! `contracts/migrations/001_baseline.sql` is BOTH the migration and the
 //! fixture (D-1020-D1-13). The brief asks for migrations under
 //! `crates/vault/src/migrations/` and stated as fixtures under
-//! `contracts/migrations/`; two copies of a 7,000-line DDL file is two answers
+//! `contracts/migrations/`; two copies of a 6,000-line DDL file is two answers
 //! to one question, and the one that drifted would drift silently. So there is
 //! one file, it lives where the language-neutral fixtures live, and this module
 //! reaches it with `include_str!` — compiled in, so a shipped binary carries
 //! the schema it was built with and never looks for a repository path.
 
-use std::path::Path;
-
+use centraid_ontology::SchemaObject;
 use rusqlite::Connection;
+use rusqlite::types::ValueRef;
 
 use crate::error::{Result, VaultError};
 
@@ -46,234 +65,20 @@ pub struct Migration {
     pub sql: &'static str,
 }
 
-/// The baseline: the v1 schema as one statement per line, in dependency order.
+/// The baseline: the vault's schema as one statement per block, in dependency
+/// order, and the rows founding seeds. Rung one, and today the whole ladder.
 pub const BASELINE_SQL: &str = include_str!("../../../contracts/migrations/001_baseline.sql");
-
-/// Rung two: the revision graph's four guards (#1020, D-1020-N2).
-///
-/// `core_entity_revision` is the ONLY history table (#916, ONT-revisions) and a
-/// revision is an OCCURRENCE (#996, R20(a)) — both were reader-enforced, and the
-/// schema still permitted a self-parent, a parent belonging to another object,
-/// an UPDATE re-pointing a parent (the only way a cycle can be closed) and a
-/// `revises` `core_link`. This rung makes all four unwritable, and refuses to
-/// run over a file that already carries one rather than deciding which of two
-/// histories a member keeps.
-pub const REVISIONS_SQL: &str = include_str!("../../../contracts/migrations/002_revisions.sql");
-
-/// Rung three: the in-vault backup index (#1029 §2, §4).
-///
-/// §4's "**the vault is the index**": the range-dedup index and one
-/// generation's base composition are rows here rather than an index file that
-/// would have to be loaded whole.
-pub const BACKUP_INDEX_SQL: &str =
-    include_str!("../../../contracts/migrations/003_backup_index.sql");
-
-/// Rung four: blob custody — every blob's own file key, and where its bytes are
-/// (#1029 §4).
-///
-/// §4's "every blob has its own random file key" and "the vault is the index",
-/// for originals and thumbnails. One row per set of bytes is what makes the
-/// phone's own deduplication a lookup, and what makes W8's sharing upload the
-/// bytes once however many people hold the key.
-pub const BLOB_CUSTODY_SQL: &str =
-    include_str!("../../../contracts/migrations/004_blob_custody.sql");
-
-/// Rung five: the cut — the planes v1 does not have leave the schema (#1029).
-///
-/// **WHY A NEW VAULT FOUNDS AND THEN DROPS.** Rung one is generated from
-/// `contracts/golden/issue-1020/vault.db.gz`, a frozen v0 vault with no
-/// generator; dropping a table there means hand-editing a frozen corpus, which
-/// is the "green by editing the fixture" this repository forbids. So the corpus
-/// keeps describing v0 and the deletions are a rung, like every other schema
-/// change (the owner's ruling of 2026-09-21). The cost is two `sqlite_master`
-/// rows per table in one `Vault::create`; squashing the ladder before the first
-/// release would remove even that and is an owner question, not a cleanup —
-/// a squash is a decision about the migration contract.
-pub const THE_CUT_SQL: &str = include_str!("../../../contracts/migrations/005_the_cut.sql");
-
-/// Rung six: a collection is a notebook or an album, and says which.
-///
-/// `core_collection` gains a REQUIRED `kind` (`notebook` | `album`), so Notes
-/// and Photos stop reading — and writing into, and deleting — each other's
-/// rows. A rebuild rather than `ADD COLUMN`, because SQLite cannot add a
-/// `NOT NULL` column without a default and a default would make the kind
-/// optional. The file states how existing rows are classified.
-pub const COLLECTION_KIND_SQL: &str =
-    include_str!("../../../contracts/migrations/006_collection_kind.sql");
-
-/// Rung seven: the Locker names one generation (#1047, R-1047-D2).
-///
-/// `locker_key` loses `retired_at` and `locker_key_live_idx`, whose only
-/// writer was the rotation R-1047-D1 deleted, and gains
-/// `locker_key_one_generation`, a unique index on a constant that makes a
-/// second row unrepresentable. A rebuild carrying the live row only.
-pub const LOCKER_KEY_ONE_GENERATION_SQL: &str =
-    include_str!("../../../contracts/migrations/007_locker_key_one_generation.sql");
-
-/// Rung eight: a login has no match policy (#1047, Q-1047-15).
-///
-/// `locker_item.url_match_policy` and `locker_item_address.match_policy`
-/// described how wide an address was for a matcher R-1047-D3 deleted; nothing
-/// read them. Two `DROP COLUMN`s, each column's CHECK being its own.
-pub const LOCKER_NO_MATCH_POLICY_SQL: &str =
-    include_str!("../../../contracts/migrations/008_locker_no_match_policy.sql");
-
-/// Rung nine: a vault keeps no notices (#1047).
-///
-/// `notifications_notice` had no writer since the planes that raised notices
-/// were deleted (#1029), and no reader since the inbox left with the v0 tree;
-/// rung five did not name it, so a new vault still founded it. One `DROP`: no
-/// trigger, view or foreign key names the table.
-pub const NO_NOTICES_SQL: &str = include_str!("../../../contracts/migrations/009_no_notices.sql");
-
-/// Rung ten: the vault keeps no backup index (#1080).
-///
-/// Rungs three and four founded the old plane's index inside the vault — the
-/// range dedup index, the base's range list, a file key per blob and where its
-/// bytes sat. The plane that wrote them is deleted and its replacement names
-/// every part from the plaintext it carries and asks the gateway what it
-/// holds, so nothing reads them. Four `DROP`s, the child before its parent.
-pub const BACKUP_V2_SQL: &str = include_str!("../../../contracts/migrations/010_backup_v2.sql");
-
-/// Rung eleven: the on-device chat keeps its history in the vault (R-CHAT-1).
-///
-/// The `chat` schema: `chat_thread` (an entity), `chat_message` (a projection
-/// of its thread) and the card and attachment projections of a message. A card
-/// is a snapshot with no foreign key to its row; an attachment is a typed
-/// reference. The file states each choice.
-pub const CHAT_SQL: &str = include_str!("../../../contracts/migrations/011_chat.sql");
-
-/// Rung twelve: a proposal keeps its life in the vault (#1088, R-1088-2, R-1088-10).
-///
-/// `chat_message.outcome` gains the five words of a proposal's life (`proposed`, `applied`,
-/// `dismissed`, `stale`, `failed`) and `chat_message_outcome_settles_once` states that only a
-/// `proposed` message changes its outcome, and only into one of the four ends. A rebuild of
-/// `chat_message` that carries its two child tables too, because dropping the parent runs the
-/// children's `ON DELETE CASCADE`.
-pub const CHAT_PROPOSALS_SQL: &str =
-    include_str!("../../../contracts/migrations/012_chat_proposals.sql");
-
-/// Rung thirteen: search finds what a member typed (#1097, R1-R3).
-///
-/// Four domain indexes fold in the attribute text that lived in tables nothing
-/// read (a person's nickname, reach and memos; an event's place; a task's
-/// project; an expense's category, group, items and memo), with child-table
-/// triggers that re-index the parent. The rank weights are the search door's and
-/// not a row in the index (R1d). A note logged on an
-/// interaction folds into the memo of the person it is about (Q-1097-5). Seven
-/// indexes no one reads leave; four are kept for the containers a member files
-/// things in (notebook, album, project, Tally group, folder; R-1097-19), the
-/// circle's and the new folder index guarded to the live rows; and each of the
-/// seven domain indexes and four container indexes gains a persistent
-/// `fts5vocab` table for the correction pass. Every statement is guarded with
-/// IF EXISTS, because the suites wind a founded file back by pragma and climb
-/// again over this rung's own objects.
-pub const SEARCH_COVERAGE_SQL: &str =
-    include_str!("../../../contracts/migrations/013_search_coverage.sql");
-
-/// Rung fourteen: Money keeps the member's decisions in the vault (#1099, R-1099-10).
-///
-/// Six `money_*` tables decorate the spine's account and transaction (the member's name for
-/// an account and for a line, a plan per category and month, rules, a remembered statement
-/// layout, a stated balance), a unique index makes a statement line land once per account, two
-/// triggers hold a Money account to one currency and an imported row to never being edited,
-/// and the rung seeds the `transfer` relation and the categories scheme. The file states each
-/// choice and the rule for a vault that already holds duplicate `external_id`s.
-pub const MONEY_SQL: &str = include_str!("../../../contracts/migrations/014_money.sql");
-
-/// Rung fifteen: Tally leaves the vault (#1099, R-1099-19, R-1099-20, R-1099-22).
-///
-/// The app is deleted from v0, so the rows it wrote are swept (the entities of
-/// every `tally.*` kind, the circles its groups stood on, the settlement pool and
-/// the transactions mirrored into it), the twelve `tally_*` tables go with their
-/// indexes and triggers, and so does the circle index whose only reader was a
-/// Tally group (R-1099-35). The chat's two app lists name `money` where they named
-/// `tally`, in the one rebuild of `chat_thread`, `chat_message` and the two
-/// projections of a message that carries their guards and search triggers.
-pub const DROP_TALLY_SQL: &str = include_str!("../../../contracts/migrations/015_drop_tally.sql");
 
 /// The ladder, in order. Rung one is the baseline.
 ///
 /// A NEW RUNG IS APPENDED, NEVER INSERTED, and never edited once released: a
 /// file in the field has already run the old text, so an edit changes what a
 /// fresh file gets and nothing else, which is two schemas with one number.
-pub const LADDER: &[Migration] = &[
-    Migration {
-        version: 1,
-        name: "baseline",
-        sql: BASELINE_SQL,
-    },
-    Migration {
-        version: 2,
-        name: "revisions",
-        sql: REVISIONS_SQL,
-    },
-    Migration {
-        version: 3,
-        name: "backup-index",
-        sql: BACKUP_INDEX_SQL,
-    },
-    Migration {
-        version: 4,
-        name: "blob-custody",
-        sql: BLOB_CUSTODY_SQL,
-    },
-    Migration {
-        version: 5,
-        name: "the-cut",
-        sql: THE_CUT_SQL,
-    },
-    Migration {
-        version: 6,
-        name: "collection-kind",
-        sql: COLLECTION_KIND_SQL,
-    },
-    Migration {
-        version: 7,
-        name: "locker-key-one-generation",
-        sql: LOCKER_KEY_ONE_GENERATION_SQL,
-    },
-    Migration {
-        version: 8,
-        name: "locker-no-match-policy",
-        sql: LOCKER_NO_MATCH_POLICY_SQL,
-    },
-    Migration {
-        version: 9,
-        name: "no-notices",
-        sql: NO_NOTICES_SQL,
-    },
-    Migration {
-        version: 10,
-        name: "backup-v2",
-        sql: BACKUP_V2_SQL,
-    },
-    Migration {
-        version: 11,
-        name: "chat",
-        sql: CHAT_SQL,
-    },
-    Migration {
-        version: 12,
-        name: "chat-proposals",
-        sql: CHAT_PROPOSALS_SQL,
-    },
-    Migration {
-        version: 13,
-        name: "search-coverage",
-        sql: SEARCH_COVERAGE_SQL,
-    },
-    Migration {
-        version: 14,
-        name: "money",
-        sql: MONEY_SQL,
-    },
-    Migration {
-        version: 15,
-        name: "drop-tally",
-        sql: DROP_TALLY_SQL,
-    },
-];
+pub const LADDER: &[Migration] = &[Migration {
+    version: 1,
+    name: "baseline",
+    sql: BASELINE_SQL,
+}];
 
 /// The `user_version` a file this build wrote carries.
 #[must_use]
@@ -288,8 +93,15 @@ pub fn head_version() -> i64 {
 /// `VACUUM INTO` may not run inside a transaction and a snapshot taken
 /// mid-ladder would be a copy of a half-migrated file.
 pub fn run_from(connection: &Connection, from: i64) -> Result<i64> {
+    run_rungs(connection, LADDER, from)
+}
+
+/// [`run_from`] over any ladder, so the climb itself — its order, its
+/// contiguity guard and its per-rung transaction — stays under test while the
+/// real ladder holds one rung.
+fn run_rungs(connection: &Connection, ladder: &[Migration], from: i64) -> Result<i64> {
     let mut at = from;
-    for rung in LADDER.iter().filter(|rung| rung.version > from) {
+    for rung in ladder.iter().filter(|rung| rung.version > from) {
         if rung.version != at + 1 {
             return Err(VaultError::Invariant {
                 context: format!(
@@ -331,8 +143,11 @@ pub fn run_from(connection: &Connection, from: i64) -> Result<i64> {
 /// the symptom is an `entity_type` that fails its foreign key on the first
 /// insert, months later, in one app.
 ///
-/// Verified against the baseline corpus: the derivation yields the same 52
-/// names v0's own ladder seeded, in both directions (`tests/baseline.rs`).
+/// Verified against the baseline corpus: the derivation yields the 52 names v0's
+/// own ladder seeded, less the eight `tally.*` kinds the planes struck took with
+/// them (#1099) and plus `chat.thread` and `money.rule`, in both directions
+/// (`tests/baseline.rs`). The baseline carries no `core_entity_kind` row of its
+/// own for exactly this reason: this function is the registry's one writer.
 pub fn seed_entity_kinds(connection: &Connection) -> Result<usize> {
     let mut statement = connection.prepare(
         r"SELECT name, sql FROM sqlite_master
@@ -392,87 +207,226 @@ fn keys_into_core_entity(sql: &str) -> bool {
     false
 }
 
-/// Render an executable baseline from a corpus, for `bin/export-baseline`.
-///
-/// Ordered by DEPENDENCY, not by name: tables (virtual tables included, in
-/// among them — an FTS5 table's own `CREATE VIRTUAL TABLE` builds its shadow
-/// tables), then views, then indexes, then triggers. What is left out, and why:
-///
-/// - **FTS shadow tables** (`<virtual table>_data`, `_idx`, `_content`,
-///   `_docsize`, `_config`). `CREATE VIRTUAL TABLE` creates them; issuing their
-///   own DDL as well is an error, and omitting them is not a loss — the
-///   snapshot pipeline KEEPS them for the same reason (dropping the shadows
-///   saves 12 MB and then the 57 retained FTS sync triggers fail on the seat's
-///   first write).
-/// - **`sqlite_sequence`**. SQLite creates it itself for the first
-///   `AUTOINCREMENT` table and refuses a hand-written `CREATE TABLE` for it.
-/// - **`sqlite_autoindex_*`**. Implicit, created by the UNIQUE constraint that
-///   needs them, and not nameable in DDL.
-pub fn render_baseline(corpus: &Path) -> Result<String> {
-    use centraid_ontology::golden::{inflate, scratch_dir};
-    use centraid_ontology::vault::Vault as OntologyVault;
+/// The five tables FTS5 itself creates behind a `CREATE VIRTUAL TABLE … USING fts5`.
+const FTS5_SHADOW_SUFFIXES: [&str; 5] = ["data", "idx", "content", "docsize", "config"];
 
-    let scratch;
-    let db_path;
-    if corpus.extension().is_some_and(|ext| ext == "gz") {
-        scratch = Some(scratch_dir());
-        db_path = inflate(corpus, scratch.as_ref().expect("just set"))?;
-    } else {
-        scratch = None;
-        db_path = corpus.to_path_buf();
-    }
-    let rendered = (|| -> Result<String> {
-        let vault = OntologyVault::open(&db_path)?;
-        let objects = vault.schema_objects()?;
+/// The tables whose rows the baseline does not carry, because `seed_entity_kinds` derives them.
+///
+/// `core_entity_kind` is the registry of entity kinds, and D-1020-D1-15 makes the schema its one
+/// source: a literal row here would be a second answer to a question the DDL already answers.
+const DERIVED_TABLES: [&str; 1] = ["core_entity_kind"];
 
-        let virtual_tables: Vec<String> = objects
-            .iter()
-            .filter(|object| object.kind == "table" && is_virtual(&object.sql))
-            .map(|object| object.name.clone())
-            .collect();
-        // ONLY TABLES. An FTS sync trigger is named `fts_<table>_ai`, which
-        // starts with the virtual table's name and an underscore exactly as a
-        // shadow table does — matching on the name alone silently dropped all
-        // 57 of them, and a seat's first write then wrote nothing into the
-        // index (plane census seam 8: a trigger is identified by its body, a
-        // shadow table by the fact that `CREATE VIRTUAL TABLE` made it).
-        let is_shadow_table = |kind: &str, name: &str| {
-            kind == "table"
-                && virtual_tables
+/// Render the baseline: the schema, and the rows that founding seeds, of a vault founded by THIS
+/// BUILD'S ladder, as one executable rung. For `bin/export-baseline`.
+///
+/// The vault is founded exactly as [`crate::Vault::create`] founds it up to the registry — a
+/// connection with foreign keys OFF and the ladder run from nothing, before `seed_entity_kinds`
+/// — and its `sqlite_master` and its rows are read back. Ordered by DEPENDENCY, not by name:
+/// tables (virtual tables included, in among them — an FTS5 table's own `CREATE VIRTUAL TABLE`
+/// builds its shadow tables), then views, then indexes, then the rows, then triggers. The rows
+/// come BEFORE the triggers, so no trigger fires over them: a row a trigger wrote when the
+/// ladder ran (the `core_entity` row that an entity table's insert trigger writes) is read back
+/// as a row and carried as one, and the trigger does not write it a second time.
+///
+/// What is left out, and why:
+///
+/// - **FTS shadow tables** (`<virtual table>_data`, `_idx`, `_content`, `_docsize`,
+///   `_config`). `CREATE VIRTUAL TABLE` creates them; issuing their own DDL as well is an error,
+///   and omitting them is not a loss — the snapshot pipeline KEEPS them for the same reason
+///   (dropping the shadows saves 12 MB and then the 57 retained FTS sync triggers fail on the
+///   seat's first write). **A virtual table is never a shadow table**: an `fts5vocab` table is
+///   named `<index>_vocab`, begins with its index's name exactly as a shadow does, and is a
+///   `CREATE VIRTUAL TABLE` of its own.
+/// - **`sqlite_sequence`**. SQLite creates it itself for the first `AUTOINCREMENT` table and
+///   refuses a hand-written `CREATE TABLE` for it.
+/// - **`sqlite_autoindex_*`**. Implicit, created by the UNIQUE constraint that needs them, and
+///   not nameable in DDL.
+/// - **The rows of `DERIVED_TABLES`**, which `seed_entity_kinds` writes from the DDL.
+///
+/// A founded vault holding rows that an index would have to carry (a populated `_docsize`) is
+/// refused rather than rendered: the rows come before the triggers, so the index would miss them.
+pub fn render_baseline() -> Result<String> {
+    let connection = Connection::open_in_memory()?;
+    connection.pragma_update(None, "foreign_keys", "OFF")?;
+    run_from(&connection, 0)?;
+    render_founded(&connection)
+}
+
+/// The rendering half of [`render_baseline`], over a connection the ladder has just run on.
+fn render_founded(connection: &Connection) -> Result<String> {
+    use std::fmt::Write as _;
+
+    let objects = centraid_ontology::schema_objects_of(connection)?;
+    let virtual_tables: Vec<&str> = objects
+        .iter()
+        .filter(|object| object.kind == "table" && is_virtual(&object.sql))
+        .map(|object| object.name.as_str())
+        .collect();
+    // A SHADOW TABLE IS A REAL TABLE named `<virtual table>_<suffix>`. ONLY TABLES: an FTS sync
+    // trigger is named `fts_<table>_ai`, which starts with the virtual table's name and an
+    // underscore exactly as a shadow table does — matching on the name alone silently dropped
+    // all 57 of them, and a seat's first write then wrote nothing into the index (plane census
+    // seam 8: a trigger is identified by its body, a shadow table by the fact that `CREATE
+    // VIRTUAL TABLE` made it). And NO VIRTUAL TABLE: the `fts5vocab` tables are `<index>_vocab`,
+    // and dropping them as shadows left a vault with no vocabulary at all.
+    let is_shadow_table = |object: &SchemaObject| {
+        object.kind == "table"
+            && !is_virtual(&object.sql)
+            && virtual_tables.iter().any(|virtual_table| {
+                FTS5_SHADOW_SUFFIXES
                     .iter()
-                    .any(|virtual_table| name.starts_with(&format!("{virtual_table}_")))
-        };
+                    .any(|suffix| object.name == format!("{virtual_table}_{suffix}"))
+            })
+    };
+    let leaves_out =
+        |object: &SchemaObject| object.name.starts_with("sqlite_") || is_shadow_table(object);
 
-        let mut out = String::from(BASELINE_HEADER);
-        for (kind, plural) in [
-            ("table", "tables"),
-            ("view", "views"),
-            ("index", "indexes"),
-            ("trigger", "triggers"),
-        ] {
-            let mut emitted = 0_usize;
-            let mut block = String::new();
-            for object in objects.iter().filter(|object| object.kind == kind) {
-                if object.name.starts_with("sqlite_") || is_shadow_table(kind, &object.name) {
-                    continue;
-                }
-                block.push_str(&format!(
-                    "\n-- {} {}\n{};\n",
-                    object.kind,
-                    object.name,
-                    object.sql.trim_end().trim_end_matches(';')
-                ));
-                emitted += 1;
+    // THE ROWS AN INDEX WOULD HAVE TO CARRY: refused, not rendered.
+    for virtual_table in &virtual_tables {
+        let docsize = format!("{virtual_table}_docsize");
+        if objects.iter().any(|object| object.name == docsize) {
+            let indexed: i64 =
+                connection.query_row(&format!("SELECT COUNT(*) FROM {docsize}"), [], |row| {
+                    row.get(0)
+                })?;
+            if indexed > 0 {
+                return Err(VaultError::Invariant {
+                    context: format!(
+                        "`{virtual_table}` indexes {indexed} row(s): the baseline puts its rows \
+                         before its triggers, so the index would not hold them"
+                    ),
+                });
             }
-            out.push_str(&format!("\n---- {plural} ({emitted})\n"));
-            out.push_str(&block);
         }
-        Ok(out)
-    })();
-    if let Some(dir) = scratch {
-        let _ = std::fs::remove_dir_all(&dir);
     }
-    rendered
+
+    let mut out = String::from(BASELINE_HEADER);
+    for (kind, plural) in [
+        ("table", "tables"),
+        ("view", "views"),
+        ("index", "indexes"),
+        ("trigger", "triggers"),
+    ] {
+        if kind == "trigger" {
+            out.push_str(&render_rows(connection, &objects, &leaves_out)?);
+        }
+        let mut emitted = 0_usize;
+        let mut block = String::new();
+        for object in objects.iter().filter(|object| object.kind == kind) {
+            if leaves_out(object) {
+                continue;
+            }
+            writeln!(
+                block,
+                "\n-- {} {}\n{};",
+                object.kind,
+                object.name,
+                object.sql.trim_end().trim_end_matches(';')
+            )
+            .expect("a string accepts writes");
+            emitted += 1;
+        }
+        writeln!(out, "\n---- {plural} ({emitted})").expect("a string accepts writes");
+        out.push_str(&block);
+    }
+    Ok(out)
+}
+
+/// The `---- rows` section: one `INSERT` per row of every table the baseline carries rows for,
+/// in `rowid` order, after the schema and before the triggers.
+fn render_rows(
+    connection: &Connection,
+    objects: &[SchemaObject],
+    leaves_out: &dyn Fn(&SchemaObject) -> bool,
+) -> Result<String> {
+    use std::fmt::Write as _;
+
+    let mut total = 0_usize;
+    let mut body = String::new();
+    for object in objects.iter().filter(|object| {
+        object.kind == "table"
+            && !is_virtual(&object.sql)
+            && !leaves_out(object)
+            && !DERIVED_TABLES.contains(&object.name.as_str())
+    }) {
+        let table = object.name.as_str();
+        if !table
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        {
+            return Err(VaultError::Invariant {
+                context: format!("table `{table}` is not a bare identifier"),
+            });
+        }
+        // `table_info` leaves out generated columns, which are not insertable.
+        let columns: Vec<String> = connection
+            .prepare(&format!("SELECT name FROM pragma_table_info('{table}')"))?
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        let order = if object.sql.to_ascii_uppercase().contains("WITHOUT ROWID") {
+            columns.join(", ")
+        } else {
+            "rowid".to_owned()
+        };
+        let mut statement = connection.prepare(&format!(
+            "SELECT {} FROM {table} ORDER BY {order}",
+            columns.join(", ")
+        ))?;
+        let mut rows = statement.query([])?;
+        let mut inserts = String::new();
+        let mut count = 0_usize;
+        while let Some(row) = rows.next()? {
+            let values = (0..columns.len())
+                .map(|index| sql_literal(row.get_ref(index)?, table))
+                .collect::<Result<Vec<_>>>()?;
+            writeln!(
+                inserts,
+                "INSERT INTO {table} ({}) VALUES ({});",
+                columns.join(", "),
+                values.join(", ")
+            )
+            .expect("a string accepts writes");
+            count += 1;
+        }
+        if count > 0 {
+            write!(body, "\n-- rows {table} ({count})\n{inserts}")
+                .expect("a string accepts writes");
+            total += count;
+        }
+    }
+    let mut section = format!("\n---- rows ({total})\n");
+    if total > 0 {
+        section.push_str(
+            "\n-- Deferred, so the order of the tables does not matter to a connection that\n\
+             -- enforces foreign keys. The founding runs the ladder with them off.\n\
+             PRAGMA defer_foreign_keys = ON;\n",
+        );
+    }
+    section.push_str(&body);
+    Ok(section)
+}
+
+/// One value as a SQL literal.
+fn sql_literal(value: ValueRef<'_>, table: &str) -> Result<String> {
+    Ok(match value {
+        ValueRef::Null => "NULL".to_owned(),
+        ValueRef::Integer(integer) => integer.to_string(),
+        ValueRef::Real(real) if real.is_finite() => format!("{real:?}"),
+        ValueRef::Real(real) => {
+            return Err(VaultError::Invariant {
+                context: format!("`{table}` holds {real}, which has no SQL literal"),
+            });
+        }
+        ValueRef::Text(text) => format!(
+            "'{}'",
+            std::str::from_utf8(text)
+                .map_err(|error| VaultError::Invariant {
+                    context: format!("`{table}` holds text that is not UTF-8: {error}"),
+                })?
+                .replace('\'', "''")
+        ),
+        ValueRef::Blob(blob) => format!("X'{}'", hex::encode(blob)),
+    })
 }
 
 /// The header the ladder-head DDL fixture carries, naming its own generator.
@@ -484,10 +438,11 @@ pub const LADDER_DDL_HEADER: &str = "\
 --     > contracts/schema/vault-ddl.sql
 --
 -- Not the corpus. `contracts/golden/issue-1020/vault-ddl.sql` describes the
--- frozen v0 file as it was, and a rung is allowed to move this file away from
--- it — which is exactly what rung five does (#1029, the owner's ruling of
--- 2026-09-21). Ordered by type then name, for READING; the runnable ordering
--- is `contracts/migrations/001_baseline.sql`.
+-- frozen v0 file as it was, and the ladder is allowed to move this file away
+-- from it — which is exactly what it did when it dropped the planes #1029
+-- struck (the owner's ruling of 2026-09-21) and what the baseline's 2026-10-15
+-- squash kept (Q-1029-1). Ordered by type then name, for READING; the runnable
+-- ordering is `contracts/migrations/001_baseline.sql`.
 --
 -- Source: sqlite_master (type, name, tbl_name, sql) where sql is not null.
 -- `sqlite_stat*` is excluded: it is the planner's own statistics, so it says
@@ -530,56 +485,121 @@ fn is_virtual(sql: &str) -> bool {
         .is_some_and(|head| head.eq_ignore_ascii_case("CREATE VIRTUAL TABLE "))
 }
 
-/// The header the generated baseline carries, naming the command that made it.
+/// The header the baseline carries, naming the command that cuts it.
 pub const BASELINE_HEADER: &str = "\
--- GENERATED — do not edit. Rung one of the v1 ladder: the baseline schema.
+-- RUNG ONE of the vault's ladder: the whole schema a new vault is founded with, and the rows
+-- that founding seeds.
 --
---   cargo run -p centraid-vault --bin export-baseline -- \\
---     contracts/golden/issue-1020/vault.db.gz > contracts/migrations/001_baseline.sql
+-- SQUASHED ON 2026-10-15 from the fifteen-rung ladder that came before it (Q-1029-1, #1029).
+-- Nothing had shipped, so no vault needed the climb, and a new vault no longer founds the
+-- planes #1029 struck only to drop them. The same squash renamed `agent_command` and
+-- `agent_command_invocation`, the command registry and the invocation journal, to
+-- `command_definition` and `command_invocation` (Q-1029-3): there is no agent left in v0.
 --
--- Ordered by DEPENDENCY (tables, views, indexes, triggers), not by name, so it
--- is runnable; `contracts/schema/vault-ddl.sql` is the same shape ordered for
--- READING and is not. FTS shadow tables, `sqlite_sequence` and
--- `sqlite_autoindex_*` are omitted: SQLite creates each of them itself and
--- refuses the hand-written DDL. `crates/vault/tests/baseline.rs` founds a
--- vault from this file and diffs its schema against the corpus (#1020).
+-- AMENDED ON 2026-10-16, before any release (the owner's rulings on the baseline's names): the
+-- other four `agent_*` tables, `agent_capability`, `agent_invocation_check`, `agent_evidence`
+-- and `agent_explanation`, became `command_capability`, `command_invocation_check`,
+-- `command_evidence` and `command_explanation`; `access_device` and `access_device_secret`,
+-- which nothing has written since the gateway's allowlist left (#1080), went with the two
+-- columns that named them, `core_content_item.origin_device_id` and
+-- `media_asset.camera_device_id`; and Tally's value left the
+-- `schedule_recurrence_exception.target_type` CHECK (#1099).
 --
--- THIS FILE IS BOTH the migration `crates/vault` embeds and the fixture under
--- `contracts/` (D-1020-D1-13): one file, because two copies of a schema is two
--- answers to one question.
+-- FROZEN LIKE ANY RUNG. A vault in the field has already run this text, so an edit here changes
+-- what a new vault gets and nothing else, which is two schemas with one number. The next
+-- schema change is `002_<name>.sql`, appended to `LADDER` in `crates/vault/src/migrations.rs`.
+--
+-- Cut with `export-baseline`, which founds a vault from the ladder the build embeds, with
+-- foreign keys off and before `seed_entity_kinds`, and renders what it holds:
+--
+--   cargo run -p centraid-vault --bin export-baseline > contracts/migrations/001_baseline.sql
+--
+-- While this file is the whole ladder that command reproduces it byte for byte, so it is the
+-- tool a later squash is cut with and not a regeneration gate: `tests/baseline.rs` proves that
+-- the baseline it renders rebuilds the same vault. (The 2026-10-15 cut renamed the two tables
+-- in the text it rendered.)
+--
+-- Ordered by DEPENDENCY (tables, views, indexes, rows, triggers), not by name, so it is
+-- runnable; `contracts/schema/vault-ddl.sql` is the same schema ordered for READING and is
+-- not. The rows come before the triggers so that no trigger fires over them. FTS shadow tables,
+-- `sqlite_sequence` and `sqlite_autoindex_*` are omitted: SQLite creates each of them itself
+-- and refuses the hand-written DDL. `core_entity_kind` has no rows here: the registry is
+-- derived from this schema by `seed_entity_kinds` (D-1020-D1-15).
+--
+-- THIS FILE IS BOTH the migration `crates/vault` embeds and the fixture under `contracts/`
+-- (D-1020-D1-13): one file, because two copies of a schema is two answers to one question.
 ";
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
     use super::*;
 
-    /// UNDO RUNG FIFTEEN on a raw connection for the suites that wind a founded file back
-    /// below rung thirteen: the `tally_*` tables, indexes and triggers and the old expense
-    /// index come back EMPTY in the baseline's own text, because rung thirteen creates
-    /// triggers ON them and a head file has none (#1099). `tests/common/mod.rs` holds the
-    /// same function for the integration suites.
-    pub(crate) fn undo_rung_fifteen(connection: &Connection) {
-        let mut statements = String::from("BEGIN;\n");
-        for wanted in ["table", "index", "trigger"] {
-            for chunk in BASELINE_SQL.split("\n-- ").skip(1) {
-                let Some((header, body)) = chunk.split_once('\n') else {
-                    continue;
-                };
-                let Some((kind, name)) = header.split_once(' ') else {
-                    continue;
-                };
-                if kind == wanted
-                    && (name.starts_with("tally_") || name.starts_with("fts_tally_expense"))
-                {
-                    statements.push_str(body.trim_end().trim_end_matches(';'));
-                    statements.push_str(";\n");
-                }
+    /// A migration that fails mid-way ON PURPOSE: it succeeds twice and then fails, so the file
+    /// it leaves is half-migrated if nothing rolls it back (#1020, D-1020-R7). It is not a rung
+    /// of the ladder and the ladder never contains it.
+    const FAILS_SQL: &str = include_str!("../../../contracts/migrations/999_fails.sql");
+
+    /// A connection founded the way `Vault::create` founds one up to the registry: foreign
+    /// keys off, the ladder run from nothing.
+    fn founded() -> Connection {
+        let connection = Connection::open_in_memory().expect("a connection opens");
+        connection
+            .pragma_update(None, "foreign_keys", "OFF")
+            .expect("foreign keys go off");
+        assert_eq!(
+            run_from(&connection, 0).expect("the ladder runs"),
+            head_version()
+        );
+        connection
+    }
+
+    fn user_version(connection: &Connection) -> i64 {
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("the version reads")
+    }
+
+    fn count(connection: &Connection, sql: &str) -> i64 {
+        connection
+            .query_row(sql, [], |row| row.get(0))
+            .unwrap_or_else(|error| panic!("{sql}: {error}"))
+    }
+
+    /// Everything a file holds that a squash must carry: every schema object, and every row of
+    /// every real table but the registry `seed_entity_kinds` derives. One line each, sorted.
+    fn dump(connection: &Connection) -> Vec<String> {
+        let objects: Vec<(String, String, String, Option<String>)> = connection
+            .prepare("SELECT type, name, tbl_name, sql FROM sqlite_master")
+            .expect("the schema reads")
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
+            .expect("the schema reads")
+            .collect::<rusqlite::Result<_>>()
+            .expect("the schema reads");
+        let mut lines = Vec::new();
+        for (kind, name, table, sql) in &objects {
+            lines.push(format!("{kind}|{name}|{table}|{sql:?}"));
+            if kind != "table"
+                || sql.as_deref().is_some_and(is_virtual)
+                || DERIVED_TABLES.contains(&name.as_str())
+            {
+                continue;
+            }
+            let mut statement = connection
+                .prepare(&format!("SELECT * FROM {name}"))
+                .expect("the rows read");
+            let width = statement.column_count();
+            let mut rows = statement.query([]).expect("the rows read");
+            while let Some(row) = rows.next().expect("a row reads") {
+                let values: Vec<String> = (0..width)
+                    .map(|index| format!("{:?}", row.get_ref(index).expect("a value reads")))
+                    .collect();
+                lines.push(format!("row|{name}|{}", values.join("|")));
             }
         }
-        statements.push_str("COMMIT;");
-        connection
-            .execute_batch(&statements)
-            .expect("the baseline's Tally objects come back");
+        lines.sort();
+        lines
     }
 
     #[test]
@@ -598,18 +618,24 @@ pub(crate) mod tests {
             expected += 1;
         }
         assert_eq!(head_version(), expected - 1);
+        // RUNG ONE IS THE BASELINE, whatever is appended above it.
+        assert_eq!(LADDER[0].name, "baseline");
     }
 
     #[test]
     fn the_baseline_is_the_committed_fixture_and_is_not_a_stub() {
         // `include_str!` makes the path a compile-time fact; this holds the
         // CONTENT to being a real schema, so a truncated regeneration is red.
-        assert!(BASELINE_SQL.starts_with("-- GENERATED"));
+        assert!(BASELINE_SQL.starts_with("-- RUNG ONE"));
         let creates = BASELINE_SQL.matches("\nCREATE ").count();
         assert!(creates > 500, "only {creates} statements in the baseline");
         assert!(BASELINE_SQL.contains("CREATE TABLE core_party"));
         assert!(BASELINE_SQL.contains("CREATE VIRTUAL TABLE fts_knowledge_note"));
-        assert!(BASELINE_SQL.contains("CREATE TABLE replica_log"));
+        // THE VOCABULARY TABLES ARE VIRTUAL TABLES OF THEIR OWN, not shadows of the index they
+        // read: a renderer that took them for shadows left a vault with no vocabulary.
+        assert!(BASELINE_SQL.contains("CREATE VIRTUAL TABLE fts_knowledge_note_vocab"));
+        // The planes #1029 struck are not in the file a new vault is founded from.
+        assert!(!BASELINE_SQL.contains("CREATE TABLE replica_log"));
         // The three SQLite builds for itself.
         assert!(!BASELINE_SQL.contains("CREATE TABLE sqlite_sequence"));
         // The statement, not the word: the header explains WHY autoindexes are
@@ -617,6 +643,15 @@ pub(crate) mod tests {
         assert!(!BASELINE_SQL.contains("CREATE UNIQUE INDEX sqlite_autoindex"));
         assert!(!BASELINE_SQL.contains("-- index sqlite_autoindex"));
         assert!(!BASELINE_SQL.contains("CREATE TABLE 'fts_knowledge_note_data'"));
+        // THE ROWS FOUNDING SEEDS ride in the file, ahead of the triggers.
+        let rows = BASELINE_SQL
+            .find("\n---- rows (")
+            .expect("the file has a rows section");
+        let triggers = BASELINE_SQL
+            .find("\n---- triggers (")
+            .expect("the file has a triggers section");
+        assert!(rows < triggers, "rows come before the triggers");
+        assert!(BASELINE_SQL.contains("INSERT INTO core_concept_scheme"));
     }
 
     #[test]
@@ -630,5 +665,188 @@ pub(crate) mod tests {
         assert!(is_virtual("  create virtual table fts_x using fts5(a)"));
         assert!(!is_virtual("CREATE TABLE fts_x_data(id INTEGER)"));
         assert!(!is_virtual("CREATE TABLE x(a)"));
+    }
+
+    #[test]
+    fn a_rung_appended_above_the_baseline_climbs_once_and_in_order() {
+        let connection = founded();
+        let ladder = [
+            Migration {
+                version: 1,
+                name: "baseline",
+                sql: BASELINE_SQL,
+            },
+            Migration {
+                version: 2,
+                name: "scratch",
+                sql: "CREATE TABLE rung_two_scratch (id TEXT PRIMARY KEY) STRICT;",
+            },
+        ];
+        assert_eq!(
+            run_rungs(&connection, &ladder, 1).expect("rung two runs"),
+            2
+        );
+        assert_eq!(user_version(&connection), 2);
+        assert_eq!(
+            count(
+                &connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'rung_two_scratch'"
+            ),
+            1
+        );
+        // A file already at the head runs nothing: the rung would fail if it ran again.
+        assert_eq!(run_rungs(&connection, &ladder, 2).expect("nothing runs"), 2);
+    }
+
+    #[test]
+    fn a_gap_in_the_ladder_is_refused_before_the_rung_after_it_runs() {
+        let connection = Connection::open_in_memory().expect("a connection opens");
+        let ladder = [
+            Migration {
+                version: 1,
+                name: "first",
+                sql: "CREATE TABLE one (id TEXT PRIMARY KEY) STRICT;",
+            },
+            Migration {
+                version: 3,
+                name: "third",
+                sql: "CREATE TABLE three (id TEXT PRIMARY KEY) STRICT;",
+            },
+        ];
+        let error = run_rungs(&connection, &ladder, 0).expect_err("a gap is refused");
+        assert!(
+            error
+                .to_string()
+                .contains("a rung was inserted, not appended"),
+            "{error}"
+        );
+        // Rung one ran and stays; the rung after the gap did not.
+        assert_eq!(user_version(&connection), 1);
+        assert_eq!(
+            count(
+                &connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'three'"
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn a_rung_that_fails_midway_rolls_back_whole_and_leaves_the_version() {
+        // `999_fails.sql` creates a table, writes a row, then fails: the file it would leave is
+        // CHANGED, which is the case the pre-migration snapshot exists for. The rung's own
+        // transaction is what undoes it here.
+        let connection = founded();
+        let ladder = [
+            Migration {
+                version: 1,
+                name: "baseline",
+                sql: BASELINE_SQL,
+            },
+            Migration {
+                version: 2,
+                name: "fails",
+                sql: FAILS_SQL,
+            },
+        ];
+        let error = run_rungs(&connection, &ladder, 1).expect_err("the rung fails");
+        assert!(
+            error.to_string().contains("NOT NULL constraint failed"),
+            "{error}"
+        );
+        assert_eq!(user_version(&connection), 1, "the version did not move");
+        assert_eq!(
+            count(
+                &connection,
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'drill_upgrade_scratch'"
+            ),
+            0,
+            "the half-migrated table is gone"
+        );
+    }
+
+    #[test]
+    fn a_squash_rebuilds_the_vault_it_was_cut_from() {
+        // THE CLAIM A SQUASH MAKES: replay the text `render_baseline` renders over a fresh file
+        // and the schema and every row are the file the ladder founded. Whatever the ladder
+        // holds today — one rung, or one rung and the ones a later squash is about to fold in.
+        // (The two foundings run at different instants: a rung that seeds a row with a
+        // wall-clock default would make them differ, so a seeded row carries a literal.)
+        let founded = founded();
+        let squash = render_baseline().expect("the baseline renders");
+        let rebuilt = Connection::open_in_memory().expect("a connection opens");
+        rebuilt
+            .pragma_update(None, "foreign_keys", "OFF")
+            .expect("foreign keys go off");
+        rebuilt
+            .execute_batch(&format!("BEGIN IMMEDIATE;\n{squash}\nCOMMIT;"))
+            .expect("the squash runs");
+        let (left, right) = (dump(&founded), dump(&rebuilt));
+        assert_eq!(left.len(), right.len());
+        let differing: Vec<&String> = left
+            .iter()
+            .zip(&right)
+            .filter(|(a, b)| a != b)
+            .map(|(a, _)| a)
+            .collect();
+        assert!(differing.is_empty(), "{differing:#?}");
+        // NOT VACUOUS: objects of every kind, and the rows the ladder seeds.
+        assert!(left.len() > 500, "only {} lines dumped", left.len());
+        assert!(
+            left.iter()
+                .any(|line| line.starts_with("row|core_concept|"))
+        );
+        assert!(left.iter().any(|line| line.starts_with("row|core_entity|")));
+    }
+
+    #[test]
+    fn a_virtual_table_is_not_a_shadow_table_and_a_value_survives_as_itself() {
+        // The renderer's two decisions on a file small enough to read: the `fts5vocab` table
+        // begins with its index's name exactly as a shadow table does and is NOT one, and every
+        // kind of value comes back as a literal that means what it meant.
+        let connection = Connection::open_in_memory().expect("a connection opens");
+        connection
+            .execute_batch(
+                "CREATE VIRTUAL TABLE fts_t USING fts5(a);
+                 CREATE VIRTUAL TABLE fts_t_vocab USING fts5vocab(fts_t, 'row');
+                 CREATE TABLE plain (n INTEGER, r REAL, t TEXT, b BLOB, z TEXT);
+                 INSERT INTO plain VALUES (7, 1.5, 'it''s', X'00ff', NULL);",
+            )
+            .expect("the file is built");
+        let text = render_founded(&connection).expect("it renders");
+        assert!(text.contains("CREATE VIRTUAL TABLE fts_t_vocab"), "{text}");
+        assert!(text.contains("CREATE VIRTUAL TABLE fts_t USING"), "{text}");
+        assert!(!text.contains("fts_t_data"), "a shadow table was rendered");
+        assert!(
+            text.contains(
+                "INSERT INTO plain (n, r, t, b, z) VALUES (7, 1.5, 'it''s', X'00ff', NULL);"
+            ),
+            "{text}"
+        );
+        // And it replays.
+        let replay = Connection::open_in_memory().expect("a connection opens");
+        replay.execute_batch(&text).expect("the text runs");
+        assert_eq!(
+            count(
+                &replay,
+                "SELECT COUNT(*) FROM plain WHERE t = 'it''s' AND b = X'00ff'"
+            ),
+            1
+        );
+    }
+
+    #[test]
+    fn a_vault_holding_indexed_rows_is_refused_rather_than_rendered_unindexed() {
+        // The rows come before the triggers, so an index that already holds a row could not be
+        // refilled by the replay: the renderer says so instead of writing a baseline that lies.
+        let connection = Connection::open_in_memory().expect("a connection opens");
+        connection
+            .execute_batch(
+                "CREATE VIRTUAL TABLE fts_t USING fts5(a);
+                 INSERT INTO fts_t (a) VALUES ('indexed');",
+            )
+            .expect("the file is built");
+        let error = render_founded(&connection).expect_err("indexed rows are refused");
+        assert!(error.to_string().contains("indexes 1 row(s)"), "{error}");
     }
 }

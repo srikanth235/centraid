@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.shell.BandPolicy
 
 /**
@@ -104,7 +105,7 @@ public fun HomeBand(
                 // SPEAK WHAT IS PAINTED. v0's band once spoke one noun for
                 // "Needs you" and painted another, so two members got two names
                 // for one place.
-                spoken = place.short + if (place.id == active) ", current place" else "",
+                spoken = place.short + if (place.id == active) ", " + SharedCopy.BAND_CURRENT_SPOKEN else "",
                 selected = place.id == active,
                 testTag = "home-band-${place.id}",
                 onPress = { onSelect(place.id) },
@@ -118,7 +119,7 @@ public fun HomeBand(
         BandTab(
             iconKey = "Backup",
             label = HomeWords.BAND_BACKUP,
-            spoken = HomeWords.BAND_BACKUP_SPOKEN + if (active == "backup") ", current place" else "",
+            spoken = HomeWords.BAND_BACKUP_SPOKEN + if (active == "backup") ", " + SharedCopy.BAND_CURRENT_SPOKEN else "",
             selected = active == "backup",
             testTag = "home-band-backup",
             onPress = { onSelect("backup") },
@@ -187,8 +188,10 @@ private fun BandTab(
         }
         Text(
             label,
-            // The same 11/15 rung either way, so a tap cannot reflow the strip.
-            style = centraidType(if (selected) "control" else "band"),
+            // The same 11/15 rung either way, so a tap cannot reflow the strip,
+            // and it HOLDS at every font scale: `control` scales elsewhere, so the
+            // active half says `scales = false`.
+            style = centraidType(if (selected) "control" else "band", scales = false),
             color = if (selected) centraidColor("text") else centraidColor("textSoft"),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -390,7 +393,7 @@ private fun AppBandTabView(
             .padding(top = BandPolicy.BAND_TAB_TOP.dp, bottom = BandPolicy.BAND_TAB_BOTTOM.dp)
             .testTag(testTag)
             .semantics {
-                contentDescription = label + if (selected) ", current place" else ""
+                contentDescription = label + if (selected) ", " + SharedCopy.BAND_CURRENT_SPOKEN else ""
                 role = Role.Tab
                 this.selected = selected
             },
@@ -405,8 +408,9 @@ private fun AppBandTabView(
         )
         Text(
             label,
-            // THE HELD PAIR: one rung, two weights, no reflow.
-            style = centraidType(if (selected) "control" else "band"),
+            // THE HELD PAIR: one rung, two weights, no reflow — and it holds at
+            // every font scale (`control` scales elsewhere).
+            style = centraidType(if (selected) "control" else "band", scales = false),
             color = if (selected) centraidColor("text") else centraidColor("textSoft"),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

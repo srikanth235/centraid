@@ -673,11 +673,17 @@ fn many_snapshots_keep_the_gateway_bounded() {
 /// **A FILE IS BACKED UP ONCE ITS BYTES AND ITS ROW ARE** (#1080, S2; the
 /// root's simulator repro: "Backed up · All 75 photos and files" while the
 /// three newest photographs' rows were in no snapshot, so a restore then
-/// would have returned 72). Ordinary passes move a new file's bytes and take
-/// no snapshot within the hour; its row reaches the gateway only with the
-/// next one. Until then it is not counted as backed up, and Free up space
-/// does not offer to delete it from the library: lost with the phone, it
-/// would be bytes on a gateway that no restored vault names.
+/// would have returned 72). A file's bytes and its row travel apart — the
+/// bytes by name, the row in a snapshot — and until both are a gateway's it is
+/// not counted as backed up, and Free up space does not offer to delete it
+/// from the library: lost with the phone, it would be bytes on a gateway that
+/// no restored vault names.
+///
+/// A pass that confirms files takes the snapshot their rows need before it
+/// answers (R-1080-C15), so the case that still leaves bytes without a row is
+/// the one no pass confirmed: the operating system moved them while the app
+/// was suspended, and settle recorded it. The next pass takes the snapshot
+/// those files owe, first.
 #[test]
 fn a_file_is_backed_up_once_its_bytes_and_its_row_are() {
     let gateway = gateway();
@@ -686,7 +692,8 @@ fn a_file_is_backed_up_once_its_bytes_and_its_row_are() {
     pair(&phone, &gateway);
     drain(&phone, at_home());
 
-    // A PHOTOGRAPH AND A LIBRARY STILL, MOVED BY AN ORDINARY PASS.
+    // A PHOTOGRAPH AND A LIBRARY STILL, SEALED ON A METERED LINK UNDER WI-FI
+    // ONLY: nothing may cross, and neither may the records.
     let photo = bytes_of("a photograph taken after the head", 60_000);
     let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
     add_asset(&phone, &photo_handle, "photo");
@@ -697,9 +704,21 @@ fn a_file_is_backed_up_once_its_bytes_and_its_row_are() {
         &still,
     );
     add_asset(&phone, &still_handle, "photo");
-    let quiet = drain(&phone, quietly());
-    assert!(quiet.acked_at_ms.is_none(), "no snapshot: {quiet:?}");
-    assert!(quiet.confirmed_parts >= 2, "the bytes moved: {quiet:?}");
+    let sealed = drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            charging: false,
+            wants_snapshot: false,
+            ..at_home()
+        },
+    );
+    assert!(sealed.acked_at_ms.is_none(), "no snapshot: {sealed:?}");
+    assert_eq!(sealed.confirmed_parts, 0, "nothing crossed: {sealed:?}");
+
+    // THE OPERATING SYSTEM MOVES THE BYTES, as it does while the app is
+    // suspended; no pass confirmed them, and no snapshot holds their rows.
+    assert_eq!(the_os_moves_what_was_handed_off(&phone, &gateway), 2);
     let waits = status(&phone);
     assert_eq!(
         (waits.content_confirmed, waits.content_total),
@@ -708,9 +727,9 @@ fn a_file_is_backed_up_once_its_bytes_and_its_row_are() {
         waits.waiting
     );
     assert_eq!(
-        waiting(&waits, wire::WaitReason::Window),
+        waiting(&waits, wire::WaitReason::Wifi),
         2,
-        "{:?}",
+        "the snapshot that holds the rows may not cross this link: {:?}",
         waits.waiting
     );
     let releasable = |phone: &Handle| {
@@ -727,15 +746,10 @@ fn a_file_is_backed_up_once_its_bytes_and_its_row_are() {
         "nothing is offered for deletion before its row is backed up"
     );
 
-    // THE NEXT SNAPSHOT TAKES THE ROWS.
-    let tapped = drain(
-        &phone,
-        wire::DrainRequest {
-            asked: true,
-            ..at_home()
-        },
-    );
-    assert!(tapped.acked_at_ms.is_some(), "{tapped:?}");
+    // THE NEXT PASS TAKES THE ROWS' SNAPSHOT, first: the files the operating
+    // system confirmed owe it (R-1080-C15).
+    let next = drain(&phone, quietly());
+    assert!(next.acked_at_ms.is_some(), "{next:?}");
     let backed = status(&phone);
     assert_eq!((backed.content_confirmed, backed.content_total), (2, 2));
     assert!(backed.waiting.is_empty(), "{:?}", backed.waiting);

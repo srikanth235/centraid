@@ -164,7 +164,7 @@ public fun KitSegmented(
                 Text(
                     label,
                     // THE HELD PAIR: one rung, two weights, no reflow.
-                    style = centraidType(if (lit) "control" else "band"),
+                    style = centraidType(if (lit) "control" else "band", scales = false),
                     color = centraidColor(if (lit) "text" else "textSoft"),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

@@ -59,9 +59,9 @@ import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.DeniedGate
 import dev.centraid.android.kit.LocalPhoneImport
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.KitStepper
-import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.SheetRoom
@@ -154,7 +154,7 @@ public fun AgendaHomeScreen(
                             if (failure.remedy.isNotEmpty()) {
                                 Text(failure.remedy, style = centraidType("small"), color = centraidColor("textSoft"))
                             }
-                            QuietButton(
+                            OutlineButton(
                                 label = chrome.retry,
                                 testTag = "agenda-retry",
                                 modifier = Modifier.padding(top = 12.dp),
@@ -197,7 +197,7 @@ private fun AgendaToolbarRow(
             modifier = Modifier.weight(1f).semantics { heading() },
         )
         if (!toolbar.at_today) {
-            QuietButton(label = chrome.today, testTag = "agenda-today") {
+            OutlineButton(label = chrome.today, testTag = "agenda-today") {
                 onEvent(AgendaHomeEvent(today = AgendaHomeEvent.TodayRequested()))
             }
         }
@@ -266,7 +266,7 @@ private fun AgendaList(
             val importVerb = importLabel(data.import_source)
             val door = LocalPhoneImport.current
             if (importVerb.isNotEmpty() && door != null) {
-                QuietButton(
+                OutlineButton(
                     label = importVerb,
                     testTag = "agenda-empty-import",
                     modifier = Modifier.padding(top = 16.dp),
@@ -274,7 +274,7 @@ private fun AgendaList(
             } else if (data.empty_action.isNotEmpty() && data.empty != AgendaEmpty.AGENDA_EMPTY_NO_MATCH) {
                 // NO-MATCH'S ACTION IS ASK (#1097, R-1097-30): drawn only where the shell has a Chat tab,
                 // and Android has none, so it draws the sentence without it.
-                QuietButton(
+                OutlineButton(
                     label = data.empty_action,
                     testTag = "agenda-empty-action",
                     modifier = Modifier.padding(top = 16.dp),
@@ -320,7 +320,7 @@ private fun AgendaList(
     ) {
         if (offersImport && door != null) {
             item(key = "import") {
-                QuietButton(
+                OutlineButton(
                     label = importVerb,
                     testTag = "agenda-import",
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),

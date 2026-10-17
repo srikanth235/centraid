@@ -23,7 +23,8 @@ use std::sync::Arc;
 use anyhow::Context as _;
 use centraid_gateway::client::Client;
 use centraid_gateway::rules::ids::Pin;
-use centraid_gateway::server::serve::{Advertisement, TlsListener};
+use centraid_gateway::server::bonjour::{self, Announcement};
+use centraid_gateway::server::serve::TlsListener;
 use centraid_gateway::server::service::{DEFAULT_LABEL, Platform, UnitSpec};
 use centraid_gateway::server::sweeps::{Schedule, scrub_once};
 use centraid_gateway::server::tls::Identity;
@@ -208,7 +209,7 @@ async fn run(data_dir: &Path, bind: &str, no_mdns: bool) -> anyhow::Result<()> {
     let advertisement = if no_mdns {
         None
     } else {
-        advertise(gateway_id, bound)
+        advertise(gateway_id, bound).await
     };
     tokio::spawn(sweeps::run(Arc::clone(&shared), Schedule::default()));
     serve::run(listener, shared, shutdown()).await?;
@@ -216,26 +217,20 @@ async fn run(data_dir: &Path, bind: &str, no_mdns: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Advertise on the LAN, or say why not. A gateway that cannot advertise
-/// still serves: a phone's pairing record keeps the addresses it last knew.
-fn advertise(
+/// Advertise on the LAN, or say why not: through the system's `dns-sd` on a
+/// Mac, so the Bonjour Sleep Proxy can wake it for the phone's browse
+/// (Q-1080-1), from this process everywhere else. A gateway that cannot
+/// advertise still serves: a phone's pairing record keeps the addresses it
+/// last knew.
+async fn advertise(
     gateway_id: centraid_gateway::rules::ids::GatewayId,
     bound: SocketAddr,
-) -> Option<Advertisement> {
+) -> Option<Announcement> {
     let Some(host) = addrs::host_name() else {
         tracing::warn!("this host's name is not one Bonjour can carry; not advertising");
         return None;
     };
-    match Advertisement::start(gateway_id, &host, bound.port()) {
-        Ok(advertisement) => {
-            tracing::info!(host = %host, "advertising _centraid-gateway._tcp");
-            Some(advertisement)
-        }
-        Err(error) => {
-            tracing::warn!(%error, "not advertising on the LAN");
-            None
-        }
-    }
+    bonjour::announce(gateway_id, &host, bound.port()).await
 }
 
 /// Ctrl-C, or the SIGTERM a service manager or `docker stop` sends.

@@ -3,9 +3,10 @@
 //! Money reads a bank or card statement the member imported and says where it
 //! went. The canonical rows are the spine's own (`core_account`,
 //! `core_transaction`); this module is the only writer of the six `money_*`
-//! tables rung fourteen founded and of the few columns of the spine rows that a
-//! member decides. `docs/decisions.md#money-1099` holds the rulings, and
-//! `contracts/migrations/014_money.sql` states why each table is what it is.
+//! tables the baseline founds and of the few columns of the spine rows that a
+//! member decides. `docs/decisions.md#money-1099` holds the rulings, and the
+//! comments in `contracts/migrations/001_baseline.sql` state why each table is
+//! what it is.
 //!
 //! ## The doctrine these commands keep
 //!
@@ -47,7 +48,7 @@ use rusqlite::Connection;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
 
-/// The categories scheme (rung fourteen seeds it on every file).
+/// The categories scheme (the baseline seeds it on every file).
 pub const CATEGORIES_SCHEME_URI: &str = "urn:centraid:money:categories";
 
 /// The flags scheme an archived category carries its mark in: one judgment, one
@@ -2267,7 +2268,7 @@ fn categories_scheme_id(ctx: &CommandCtx<'_, '_>) -> Result<String> {
             |row| row.get(0),
         )
         .map_err(|_| VaultError::Invariant {
-            context: "this vault has no Money categories scheme; rung fourteen seeds it".to_owned(),
+            context: "this vault has no Money categories scheme; the baseline seeds it".to_owned(),
         })
 }
 

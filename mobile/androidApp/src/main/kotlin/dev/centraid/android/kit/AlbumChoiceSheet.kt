@@ -37,6 +37,7 @@ import centraid.screen.v1.AlbumChoiceEntry
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.copy.PhotosCopy
+import dev.centraid.shared.kit.CappedCount
 
 /**
  * "ADD TO ALBUM", AS ONE SHEET FOR EVERY SCREEN THAT OFFERS IT (#1029, the
@@ -84,8 +85,8 @@ public fun AlbumChoiceSheet(
                     }
                 }
             }
-            QuietButton(
-                label = "Cancel",
+            OutlineButton(
+                label = PhotosCopy.PHOTOS_CANCEL,
                 testTag = "album-choice-cancel",
                 modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
                 onPress = onDismiss,
@@ -127,11 +128,11 @@ private fun NewAlbumRow(onNewAlbum: (String) -> Unit) {
                 keyboardActions = KeyboardActions(onDone = { create() }),
                 modifier = Modifier.weight(1f).testTag("album-choice-name"),
             )
-            KitLink(label = "Create", onClick = create, dense = true, enabled = name.isNotBlank())
+            KitLink(label = PhotosCopy.PHOTOS_CREATE, onClick = create, dense = true, enabled = name.isNotBlank())
         }
     } else {
         SheetRow(
-            label = "New album\u2026",
+            label = PhotosCopy.PHOTOS_ALBUM_CHOICE_NEW,
             iconKey = "add",
             testTag = "album-choice-new",
             onTap = { naming = true },
@@ -182,12 +183,11 @@ private fun ChoiceRow(choice: AlbumChoiceEntry, onClick: () -> Unit) {
 
 /** A capped count says `N+` and never a bare number — Collections' rule. */
 private fun choiceCount(choice: AlbumChoiceEntry): Pair<String, String> {
-    val noun = if (choice.count == 1L) PhotosCopy.TILE_COUNT_ONE else PhotosCopy.TILE_COUNT_MANY
-    return when {
-        choice.count_capped -> "${choice.count}+ $noun" to "at least ${choice.count} $noun"
-        choice.count == 0L -> "Empty" to "empty"
-        else -> "${choice.count} $noun" to "${choice.count} $noun"
-    }
+    if (choice.count == 0L && !choice.count_capped) return PhotosCopy.PHOTOS_COUNT_EMPTY to PhotosCopy.PHOTOS_COUNT_EMPTY
+    val one = PhotosCopy.TILE_COUNT_ONE
+    val many = PhotosCopy.TILE_COUNT_MANY
+    return CappedCount.shown(choice.count, choice.count_capped, one, many) to
+        CappedCount.spoken(choice.count, choice.count_capped, one, many)
 }
 
 /** A cover thumbnail's side in the list — the system's album-picker row. */

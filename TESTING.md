@@ -36,7 +36,7 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 
 | Profile | Budget | Steps it adds | Where it runs |
 | --- | --- | --- | --- |
-| `local` | 120 s **warm** | `fmt`, `clippy`, `test` (the whole workspace), `restore-drill`, `rules`, `ledgers` | By hand, the edit-run loop |
+| `local` | 120 s **warm** | `fmt`, `clippy`, `test` (the crates the change touches and their dependents), `restore-drill`, `rules`, `doc-links`, `ledgers` | By hand, the edit-run loop |
 | `pr` | 1500 s | `buf`, `deny`, `ci-policy`, `secrets`, `osv`, `release-build`, `ts-static`, `emitters`, `advisory`, `lockfile`, `call-budget`, `fault-door` | [`gate.yml`](.github/workflows/gate.yml), every PR and every push to `main` |
 | `nightly` | unbounded | `pr` plus `device-lanes` | [`gate-nightly.yml`](.github/workflows/gate-nightly.yml), 05:30 UTC |
 | `release` | unbounded | `artifact-identity`, `prebuilt-core-required` | By hand before a tag |
@@ -51,8 +51,9 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 | Step | What it runs |
 | --- | --- |
 | `fmt`, `clippy` | `cargo fmt --all --check`; `cargo clippy --workspace --all-targets -- -D warnings` |
-| `test` | `cargo nextest run --workspace` then `cargo test --workspace --doc` when nextest is installed (nextest runs no doctests, so the second command keeps the set of tests the same), otherwise `cargo test --workspace`; the step line says which. `gate.yml` installs nextest, so CI runs the first |
+| `test` | `cargo nextest run --workspace` then `cargo test --workspace --doc` when nextest is installed (nextest runs no doctests, so the second command keeps the set of tests the same), otherwise `cargo test --workspace`; the step line says which. `gate.yml` installs nextest, so CI runs the first. **On `local` only, the nextest run carries a filter naming the crates the change touches and the crates that depend on them** (`cargo xtask test-plan` prints them), and the step line starts `NARROWED to N of M crates`; the root manifest or lockfile, any crate manifest, the runner's code, or no merge base runs all of them. `pr` and every profile above it always run the whole workspace |
 | `rules` | The structural rules: `sql-confinement` (SQL only under `crates/{ontology,vault,search}` and `crates/apps/kit`), `abi-five-symbols`, `no-listening-socket` (the phone dials and accepts nothing; the one exemption is `crates/gateway/src/server/serve.rs`), `commonmain-no-platform-import`. Also `cargo xtask rules` on its own |
+| `doc-links` | Every relative link and in-repo anchor in the repository's markdown resolves, against the files the repository tracks; no network. Skips only what `doc-integrity` freezes (`receipts/`, `QUALITY.md` § Resolved, `CONSTITUTION.md` § Evolution Log) and the vendored governance kit. Also `cargo xtask doc-links` on its own |
 | `ledgers` | Every number in `contracts/ledgers/` against the merge base — see [the ledgers](#the-ledgers-915-wave-4-927) |
 | `buf` | `buf lint`, then `buf breaking` against the PR base **and** every released tag inside the version window |
 | `deny`, `secrets`, `osv`, `lockfile` | `cargo-deny` over [`deny.toml`](deny.toml); gitleaks over the working tree; osv-scanner, CRITICAL only; no `http:` URLs and pinned checksums in `bun.lock` and `Cargo.lock` |
@@ -60,7 +61,7 @@ Each profile is stated in code as a **concatenation of the one before it** (`loc
 | `advisory` | Every step whose name declares it advisory has an owner, an issue and an unexpired `revisitBy`, in [`contracts/ledgers/advisory.json`](contracts/ledgers/advisory.json) or `tests/inventory.json#advisory` |
 | `release-build` | `cargo build --workspace --release`, timed against its ledger ceiling |
 | `ts-static` | `bun run check:push:static` when TypeScript exists under `crates/`, `contracts/` or `mobile/` |
-| `emitters` | Regenerates the design corpus and native theme ([`contracts/tools/`](contracts/tools)), formats, and fails on drift in `copy/`, `design/` or `mobile/` |
+| `emitters` | Regenerates the design corpus and native theme ([`contracts/tools/`](contracts/tools)), formats, and fails on drift in `copy/`, `design/` or `mobile/` — a changed file, or a new file the repository neither tracks nor ignores, which the step names |
 | `call-budget` | `cargo test --workspace --test call_budget -- --nocapture` (the target is `centraid-core`'s; `--workspace` rather than `-p` so it links the binary `test` already built instead of re-resolving features): any bounded read over its ceiling in [`call-budget.json`](contracts/ledgers/call-budget.json) fails, and p50/p95/p99 reach the log |
 | `fault-door` | `cargo test --workspace --features centraid-core-ffi/debug-fault --test contract …` — clause 9 of the C ABI against a real panic inside `call`. The only step that turns `debug-fault` on |
 | `restore-drill` | The whole durability chain ([#1080](https://github.com/srikanth235/centraid/issues/1080)): found a vault and commit; snapshot, upload and set the head; back up every content item by name and prove every name is confirmed; commit fifty more times and prove the second snapshot uploaded only the ranges that changed; let retention and garbage collection delete exactly what only the dropped snapshot named; **destroy the vault, its WAL, the spool and the ledger**; restore from the store and the key derived from the 24 words, and prove the census, the `db_hash` and a dump of every row equal the lost vault's; then claim the next writer epoch and prove the old writer is refused `MOVED`. A census of zero rows proves nothing, so the drill writes real rows first |
@@ -112,7 +113,7 @@ Everything under [`contracts/`](contracts/README.md) is generated and diffed, ne
 
 ## Mobile
 
-**`mobile-jvm`** builds `centraid-core-ffi`, runs `./gradlew -p mobile mobileJvm --no-daemon` (`:shared:jvmTest`, `:core:jvmTest` — a real ABI round trip against the real cdylib — and `:shared:koverXmlReport`), regenerates the native theme and screen fixtures, formats, and fails on drift in `design`, `copy`, `mobile` or `contracts/screens`. A missing `mobile/gradlew` **fails**; it does not skip. It does not compile Compose, link Kotlin/Native, or touch a simulator or device. Locally: `cd mobile && ./gradlew mobileJvm`. The on-device checks (`swift test`, device builds, snapshots) and their commands are tabled in [mobile/README.md](mobile/README.md).
+**`mobile-jvm`** builds `centraid-core-ffi`, runs `./gradlew -p mobile mobileJvm --no-daemon` (`:shared:jvmTest`, `:core:jvmTest` — a real ABI round trip against the real cdylib — and `:shared:koverXmlReport`), regenerates the native theme and screen fixtures, formats, and fails on drift in `design`, `copy`, `mobile` or `contracts/screens`. A missing `mobile/gradlew` **fails**; it does not skip. It does not compile Compose, link Kotlin/Native, or touch a simulator or device. Locally: `cd mobile && ./gradlew mobileJvm`. The on-device checks (the simulator test bundle, device builds, snapshots) and their commands are tabled in [mobile/README.md](mobile/README.md).
 
 **Maestro flows** live in [`mobile/maestro/flows`](mobile/maestro/README.md), with CLI `MAESTRO_VERSION=2.6.1` pinned. Compose `testTag` and SwiftUI `accessibilityIdentifier` use the same string, so one flow drives both platforms; the ids are listed in `mobile/maestro/flows/selectors.md`. No CI runner has a device, so the flows are run by hand: `maestro test mobile/maestro/flows`.
 

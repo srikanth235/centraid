@@ -18,6 +18,16 @@ package dev.centraid.shared.shell
  */
 public object BandPolicy {
     /**
+     * THE KEYS A SHELL NAMES when the band tells it which place was pressed or
+     * which is active. [PLACE_HOME] is the `PLACES` row of that id; [PLACE_CHAT]
+     * and [PLACE_BACKUP] are tabs drawn in place of Home's springboard, and are
+     * no `PLACES` row (the on-device chat has only the iOS shell so far).
+     */
+    public const val PLACE_HOME: String = "home"
+    public const val PLACE_CHAT: String = "chat"
+    public const val PLACE_BACKUP: String = "backup"
+
+    /**
      * The frame destinations, in FIXED order.
      *
      * Never sorted by recency: a band that reordered itself would move the
@@ -35,7 +45,7 @@ public object BandPolicy {
      */
     public val PLACES: List<Place> = listOf(
         Place(
-            id = "home",
+            id = PLACE_HOME,
             name = "Home",
             short = "Home",
             iconKey = "Home",

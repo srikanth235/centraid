@@ -1,5 +1,7 @@
 import SwiftUI
 
+import CentraidShared
+
 /// THE TWO FACTS TRUE ON EVERY ROUTE: which vault, and how it stands
 /// (#1020, wave A; v0 `screens/home/VaultHeader.tsx`).
 ///
@@ -31,7 +33,7 @@ struct VaultHeader: View {
     let vault: Centraid_Screen_V1_VaultLockup
     @ObservedObject var shell: ShellModel
     /// THE VAULT'S BACKUP, said as the lockup's second line (R-ONBOARD-11):
-    /// `BackupLine.status`, in place of "on this phone". Nil — an example, or
+    /// `BackupLine.status`, in place of "On this phone". Nil — an example, or
     /// a route with no backup line — keeps the vault's own state line.
     var backup: Centraid_Screen_V1_BackupLine? = nil
     /// The status line's door: the Backup tab. Nil draws it as text.
@@ -61,7 +63,7 @@ struct VaultHeader: View {
     /// No name is a REAL STATE; never render a blank lockup.
     private var name: String {
         let trimmed = vault.vaultName.trimmingCharacters(in: .whitespaces)
-        return trimmed.isEmpty ? PhotosWords.vaultNoneYet : trimmed
+        return trimmed.isEmpty ? PhotosCopy.shared.VAULT_NONE_YET : trimmed
     }
 
     /// Where this vault stands, in a member's words. See [stateLine], which
@@ -83,9 +85,9 @@ struct VaultHeader: View {
         vault.originalsWithheld == 0
             ? ""
             : (vault.originalsWithheld == 1
-                ? PhotosWords.transferOriginalWaitingOne
-                : PhotosWords.fill(
-                    PhotosWords.transferOriginalWaitingMany, "count", "\(vault.originalsWithheld)"))
+                ? PhotosCopy.shared.TRANSFER_ORIGINAL_WAITING_ONE
+                : copyFill(
+                    PhotosCopy.shared.TRANSFER_ORIGINAL_WAITING_MANY, "count", "\(vault.originalsWithheld)"))
     }
 
     /// The vault's hue washed behind the mark, exactly as an app chip is washed.
@@ -131,7 +133,7 @@ struct VaultHeader: View {
         // NO DOOR (the Backup tab itself) IS PLAIN TEXT, not a dimmed
         // control: the status is still true there.
         .allowsHitTesting(onOpenBackup != nil)
-        .accessibilityLabel(status + (onOpenBackup == nil ? "" : ". " + ShellWords.backupStatusOpen))
+        .accessibilityLabel(status + (onOpenBackup == nil ? "" : ". " + SharedCopy.shared.BACKUP_STATUS_OPEN))
         .accessibilityIdentifier("home-backup-status")
     }
 
@@ -140,7 +142,7 @@ struct VaultHeader: View {
             // TWO DOORS IN ONE LOCKUP: the mark and the name are the vault
             // switch; the status under them is the Backup tab's.
             Button {
-                shell.send(screen: "home", event: HomeEvents.vaultSwitch())
+                shell.send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.vaultSwitch())
             } label: {
                 Text(String(name.prefix(1)).uppercased())
                     .centraidType("smallStrong")
@@ -155,7 +157,7 @@ struct VaultHeader: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Button {
-                    shell.send(screen: "home", event: HomeEvents.vaultSwitch())
+                    shell.send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.vaultSwitch())
                 } label: {
                     Text(name)
                         .centraidType("smallStrong")
@@ -165,7 +167,7 @@ struct VaultHeader: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(name + ". Switch vault")
+                .accessibilityLabel(name + ". " + SharedCopy.shared.VAULT_SWITCH_SPOKEN)
                 .accessibilityIdentifier("home-vault-switch")
 
                 if !status.isEmpty {
@@ -196,7 +198,7 @@ struct VaultHeader: View {
                 if !waiting.isEmpty {
                     KitIconKey(
                         iconKey: "Settings",
-                        label: "Download settings",
+                        label: PhotosCopy.shared.TRANSFER_SETTINGS_LABEL,
                         identifier: "home-transfer-rules"
                     ) {
                         shell.openTransferRules()
@@ -314,12 +316,12 @@ extension Centraid_Screen_V1_VaultLockup {
     var stateLine: String {
         switch state {
         case .unspecified: return ""
-        case .online: return PhotosWords.vaultOnline
+        case .online: return PhotosCopy.shared.VAULT_ONLINE
         // THE VAULT MOVED TO THE MEMBER'S OTHER PHONE (#1029 F1, W5). The
         // Android table states the identical sentence; the two shells must
         // read the same. The count of what this phone is still holding rides
         // beside it in `VaultLockup.frozen_line`.
-        case .frozen: return PhotosWords.vaultMoved
+        case .frozen: return PhotosCopy.shared.VAULT_MOVED
         case .UNRECOGNIZED: return ""
         }
     }
@@ -344,10 +346,10 @@ struct TransferRulesSheet: View {
 
     var body: some View {
         SheetRoom(
-            title: PhotosWords.transferTitle,
-            primary: SheetPrimary(label: ShellWords.done) { dismiss() }
+            title: PhotosCopy.shared.TRANSFER_TITLE,
+            primary: SheetPrimary(label: KitWords.shared.DONE) { dismiss() }
         ) {
-            Text(PhotosWords.transferSubtitle)
+            Text(PhotosCopy.shared.TRANSFER_SUBTITLE)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
 

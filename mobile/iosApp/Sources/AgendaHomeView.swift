@@ -228,8 +228,8 @@ private struct AgendaList: View {
                     // NO EVENT OF THE MEMBER'S YET, only marks (due tasks,
                     // birthdays): the phone's calendar is offered quietly above
                     // them, at the point of use.
-                    if !ShellWords.importLabel(home.importSource).isEmpty, let importFromPhone {
-                        KitOutlineButton(label: ShellWords.importLabel(home.importSource)) {
+                    if !importLabel(home.importSource).isEmpty, let importFromPhone {
+                        KitOutlineButton(label: importLabel(home.importSource)) {
                             importFromPhone(home.importSource)
                         }
                         .accessibilityIdentifier("agenda-import")

@@ -10,39 +10,35 @@ import centraid.screen.v1.NotesJournalEvent
 import centraid.screen.v1.NotesLibraryEvent
 import centraid.screen.v1.NotesLinkPickerEvent
 import centraid.screen.v1.NotesNotebooksEvent
-import centraid.screen.v1.TasksHomeState
 import centraid.screen.v1.TrashListEvent
 import dev.centraid.android.kit.TrashListScreen
 import dev.centraid.android.screens.AppRoutes
 import dev.centraid.android.screens.NotesEditorScreen
 import dev.centraid.android.screens.RouteNav
 import dev.centraid.design.copy.NotesCopy
-import dev.centraid.shared.apps.notes.NotesBand
 import dev.centraid.shared.apps.notes.NotesBridge
 import dev.centraid.shared.apps.notes.NotesHistoryBridge
 import dev.centraid.shared.apps.notes.NotesJournalBridge
 import dev.centraid.shared.apps.notes.NotesLibraryBridge
-import dev.centraid.shared.apps.notes.NotesLibraryMachine
 import dev.centraid.shared.apps.notes.NotesLinkPickerBridge
 import dev.centraid.shared.apps.notes.NotesNotebooksBridge
-import dev.centraid.shared.apps.notes.NotesNotebooksMachine
 import dev.centraid.shared.apps.notes.NotesRouting
-import dev.centraid.shared.apps.notes.NotesTarget
 import dev.centraid.shared.apps.notes.NotesTrashBridge
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
-import dev.centraid.shared.nav.NavStack
-import dev.centraid.shared.nav.withNotesPlace
+import dev.centraid.shared.nav.ScreenOpenings
 import dev.centraid.shared.shell.HomeSession
 import kotlinx.coroutines.CoroutineScope
 
 /**
  * NOTES' ROUTES (#1029 app port): the library, notebooks and journal under
- * one band (a place change is `withNotesPlace`, never a push), the editor
+ * one band (a place change swaps the top entry, never a push), the editor
  * with the powerbox over it, a note's history and the trash — each on its
  * bridge for the activity's life. The editor's bridge is `departed()` on the
  * way out, never `leave()`, which would shut it down for good.
  *
- * The machines emit intents and route nothing; this file answers them.
+ * The machines emit intents and route nothing; `NotesRouting` decides where
+ * each goes (for iOS too), and this file applies the move.
  */
 public class NotesRoutes : AppRoutes {
     private val notes = NotesBridge()
@@ -69,13 +65,9 @@ public class NotesRoutes : AppRoutes {
      * note it shows, a new note when there is none, nowhere while it reads.
      */
     override fun opens(moveId: String): Destination? {
-        if (moveId != "notes") return null
-        val tile = session?.state?.value?.data_?.tiles?.firstOrNull { it.app_id == "notes" }
-        return when (val target = NotesRouting.target(tile)) {
-            is NotesTarget.Existing -> Destination.NotesEditor(target.noteId, target.title)
-            is NotesTarget.New -> Destination.NotesEditor(target.noteId, isNew = true)
-            null -> null
-        }
+        if (moveId != AppIds.NOTES) return null
+        val tile = session?.state?.value?.data_?.tiles?.firstOrNull { it.app_id == AppIds.NOTES }
+        return NotesRouting.tile(tile)
     }
 
     override fun attach(session: HomeSession, scope: CoroutineScope) {
@@ -101,15 +93,6 @@ public class NotesRoutes : AppRoutes {
         }
     }
 
-    /** A band key: another place in place; More and the current place are the machine's. */
-    private fun place(nav: RouteNav, key: String) {
-        if (key != NotesBand.MORE) nav.go(nav.stack.withNotesPlace(key))
-    }
-
-    private fun newNote(nav: RouteNav) {
-        nav.go(nav.stack.push(Destination.NotesEditor(NotesRouting.mintNoteId(), isNew = true)))
-    }
-
     @Composable
     private fun EditorRoute(destination: Destination.NotesEditor, nav: RouteNav) {
         // THE NOTE'S ID RIDES ON THE EVENT: the editor's read is parameterised
@@ -128,26 +111,10 @@ public class NotesRoutes : AppRoutes {
             state = state,
             onEvent = { event ->
                 notes.forward(event)
-                if (event.history != null) {
-                    // THE ENTRY UNDER HISTORY IS NO LONGER NEW (history is
-                    // offered only once the note exists): coming back must
-                    // re-open it, not blank it.
-                    val title = state.draft?.title.orEmpty()
-                    val editor = Destination.NotesEditor(state.note_id, title, isNew = false)
-                    nav.go(NavStack(nav.stack.entries.dropLast(1) + editor).push(Destination.NotesHistory(state.note_id, title)))
-                }
-                // SEND TO TASKS: Tasks' Inbox, the words waiting in a focused
-                // quick add (`TasksHomeBridge.openQuickAdd`, sent by Tasks'
-                // route on arrival). Nothing is written until the member adds.
-                event.send_to_tasks?.let { sent ->
-                    if (sent.text.isNotBlank()) {
-                        nav.go(
-                            nav.stack.push(
-                                Destination.TasksHome(TasksHomeState.Destination.DESTINATION_INBOX, quickAdd = sent.text),
-                            ),
-                        )
-                    }
-                }
+                // History (over the note, re-spelled as no longer new) and Send
+                // to Tasks (Tasks' Inbox, the words in a focused quick add that
+                // Tasks' route opens on arrival).
+                nav.apply(NotesRouting.editor(event, state))
             },
             // CLOSE = DONE, the room's `onDeparted` is the save.
             onClose = { closeEditor(nav) },
@@ -169,20 +136,10 @@ public class NotesRoutes : AppRoutes {
         }
     }
 
-    /**
-     * DONE LANDS IN NOTES (as on iOS). An editor opened from Home — the tile,
-     * the first move — has no Notes place under it, so Done swaps it for the
-     * library rather than popping to Home: the only road from a Home-opened
-     * note to the band's places. Opened from a Notes screen, Done is a pop.
-     */
+    /** DONE LANDS IN NOTES (`NotesRouting.close`): a pop onto a Notes screen, else the library in place. */
     private fun closeEditor(nav: RouteNav) {
-        val entries = nav.stack.entries
-        val below = entries.dropLast(1).lastOrNull()
-        if (below != null && handles(below)) {
-            nav.pop()
-        } else {
-            nav.go(NavStack(entries.dropLast(1) + Destination.NotesLibrary()))
-        }
+        val below = nav.stack.entries.dropLast(1).lastOrNull()
+        nav.apply(NotesRouting.close(below?.let(ScreenOpenings::of)?.screenId.orEmpty()))
     }
 
     @Composable
@@ -203,10 +160,7 @@ public class NotesRoutes : AppRoutes {
             state = state,
             onEvent = { event ->
                 library.forward(event)
-                event.band?.let { place(nav, it.key) }
-                if (event.new_note != null) newNote(nav)
-                event.note_picked?.let { nav.go(nav.stack.push(Destination.NotesEditor(it.note_id, it.title))) }
-                if (event.more_row?.key == NotesLibraryMachine.MORE_TRASH) nav.go(nav.stack.push(Destination.NotesTrash))
+                nav.apply(NotesRouting.library(event))
             },
             onHome = { nav.home() },
             onOpenContainer = { card -> nav.open(card, parent = state.chrome?.title.orEmpty()) },
@@ -223,16 +177,7 @@ public class NotesRoutes : AppRoutes {
             state = state,
             onEvent = { event ->
                 notebooks.forward(event)
-                event.band?.let { place(nav, it.key) }
-                event.notebook_picked?.let { picked ->
-                    val library = if (picked.id == NotesNotebooksMachine.UNFILED) {
-                        Destination.NotesLibrary(notebookName = picked.name, unfiledOnly = true)
-                    } else {
-                        Destination.NotesLibrary(notebookId = picked.id, notebookName = picked.name)
-                    }
-                    nav.go(nav.stack.push(library))
-                }
-                if (event.trash_opened != null) nav.go(nav.stack.push(Destination.NotesTrash))
+                nav.apply(NotesRouting.notebooks(event))
             },
             onHome = { nav.home() },
         )
@@ -246,11 +191,7 @@ public class NotesRoutes : AppRoutes {
             state = state,
             onEvent = { event ->
                 journal.forward(event)
-                event.band?.let { place(nav, it.key) }
-                event.entry_picked?.let { nav.go(nav.stack.push(Destination.NotesEditor(it.note_id, it.title))) }
-                // "New entry" is the machine's own sheet (`compose`), written
-                // through People's journal command — nothing to route here.
-                if (event.trash_opened != null) nav.go(nav.stack.push(Destination.NotesTrash))
+                nav.apply(NotesRouting.journal(event))
             },
             onHome = { nav.home() },
         )

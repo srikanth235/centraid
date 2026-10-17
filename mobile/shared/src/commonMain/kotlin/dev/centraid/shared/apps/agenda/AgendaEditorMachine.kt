@@ -31,6 +31,7 @@ import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * WHAT THE EDITOR HOLDS BESIDE ITS SCREEN: the raw answers, the values as
@@ -110,7 +111,7 @@ public sealed interface AgendaEditorInput {
  * its civil days, the end INCLUSIVE (`agenda.proto`).
  */
 public object AgendaEditorMachine : ScreenMachine<AgendaEditorScreen, AgendaEditorInput> {
-    public const val SCREEN_ID: String = "agenda.editor"
+    public const val SCREEN_ID: String = ScreenIds.AGENDA_EDITOR
 
     public val TABLES: Set<String> = AgendaEventMachine.TABLES
 

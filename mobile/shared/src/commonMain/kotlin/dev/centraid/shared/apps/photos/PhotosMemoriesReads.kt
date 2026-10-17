@@ -245,6 +245,12 @@ public object PhotosMemoriesReads :
                         longitude = longitude,
                     )
                 }
+                // THE SKETCH IS PROJECTED HERE, once, so a view only multiplies
+                // by its box (`PhotosMemoriesMachine.sketch`).
+                val sketched = PhotosMemoriesMachine.sketch(route, PhotosMemoriesMachine.SKETCH_ASPECT)
+                val projected = route.mapIndexed { at, stop ->
+                    stop.copy(sketch_x = sketched[at].x, sketch_y = sketched[at].y)
+                }
                 val named = placeIds
                     .mapNotNull { id -> places[id]?.let { PlacesReads.readableName(it.text(1)) } }
                     .groupingBy { it }
@@ -252,7 +258,7 @@ public object PhotosMemoriesReads :
                     .maxByOrNull { it.value }
                     ?.key
                 memory.copy(
-                    route = route,
+                    route = projected,
                     place_name = memory.place_name.ifEmpty { named.orEmpty() },
                 )
             },

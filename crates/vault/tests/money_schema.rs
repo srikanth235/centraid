@@ -1,27 +1,26 @@
-//! MONEY'S SCHEMA, RUNG FOURTEEN (#1099, R-1099-6, -10, -11, -15, -16).
+//! MONEY'S SCHEMA (#1099, R-1099-6, -10, -11, -15, -16).
 //!
 //! What each test holds, and the claim a port would get wrong:
 //!
-//! 1. **The seeds are one statement of one list.** A vault founded at the head
-//!    and a vault climbed from rung thirteen hold the same categories scheme,
-//!    the same 23 concepts under the same ids, and the same `transfer` relation.
-//! 2. **A vault that already holds duplicate `external_id`s still climbs, and
-//!    loses nothing.** The earliest row keeps its id; every later one is suffixed
-//!    `#dup-<txn_id>`; row count, amounts and every other column are unchanged.
-//! 3. **A statement line is in a vault once** (the unique index), per account, and
+//! 1. **The seeds are one statement of one list.** A vault founded today holds
+//!    the categories scheme, its 23 concepts under their fixed ids, and the
+//!    `transfer` relation `bootstrap` adds, each concept an entity of its own.
+//! 2. **A statement line is in a vault once** (the unique index), per account, and
 //!    only where an `external_id` is set.
-//! 4. **One account, one currency**, for a Money account only; Tally's settlement
-//!    pool is not touched by it.
-//! 5. **An imported row is never edited**: description and amount refuse, the
+//! 3. **One account, one currency**, for a Money account only; a plain
+//!    `core_account` is not touched by it.
+//! 4. **An imported row is never edited**: description and amount refuse, the
 //!    category moves, `void` is one-way.
-//! 6. **The pack states its commitments**: the rule is an entity with the
+//! 5. **The pack states its commitments**: the rule is an entity with the
 //!    membership triggers, every table is registered with what it is a projection
 //!    of, every mutable table carries `updated_at`, `row_version` and its touch
 //!    trigger, and every amount carries a currency.
+//!
+//! (How a vault written before Money was brought up to this schema is not
+//! proved here: the ladder was squashed into one baseline on 2026-10-15,
+//! Q-1029-1, and no vault in the field predates Money.)
 
 mod common;
-
-use std::collections::BTreeSet;
 
 use centraid_vault::Vault;
 use rusqlite::{Connection, params};
@@ -44,10 +43,10 @@ fn texts(connection: &Connection, sql: &str) -> Vec<String> {
         .expect("the rows read")
 }
 
-/// The vocabulary rung fourteen seeds, as comparable text: every concept of the
-/// categories scheme with its id, notation, label, parent and stable id, and the
-/// `transfer` relation with its id and label. Timestamps are left out: they are
-/// the moment of the climb and not a fact.
+/// The vocabulary a new vault is seeded with, as comparable text: every concept
+/// of the categories scheme with its id, notation, label, parent and stable id,
+/// and the `transfer` relation with its id and label. Timestamps are left out:
+/// they are the moment of the founding and not a fact.
 fn seeds(connection: &Connection) -> Vec<String> {
     let mut rows = texts(
         connection,
@@ -123,226 +122,8 @@ fn a_founded_vault_holds_the_categories_and_the_transfer_relation() {
     assert_eq!(entities, 23);
 }
 
-#[test]
-fn a_vault_climbed_from_rung_thirteen_holds_the_same_seeds_as_one_founded_at_the_head() {
-    let founded = common::Scratch::founded("money-seeds-head").expect("a vault is founded");
-    let at_head = founded
-        .vault
-        .read(|connection| Ok(seeds(connection)))
-        .expect("the seeds read");
-
-    let dir = centraid_ontology::golden::scratch_dir();
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("vault.db");
-    let vault = Vault::create(&path).expect("a vault");
-    vault.found("Test", "Test Owner").unwrap();
-    vault.close().expect("closes");
-    {
-        let raw = rusqlite::Connection::open(&path).unwrap();
-        raw.execute_batch(&format!(
-            "BEGIN; {} PRAGMA user_version = 13; COMMIT;",
-            common::UNDO_RUNG_FOURTEEN
-        ))
-        .unwrap();
-        assert!(
-            seeds(&raw).len() <= 1,
-            "only the founding's own `transfer` is left"
-        );
-        // The relation `bootstrap` seeds is what an old vault lacks.
-        raw.execute("DELETE FROM core_concept WHERE notation = 'transfer'", [])
-            .unwrap();
-        assert!(seeds(&raw).is_empty(), "the old rung seeded none of it");
-    }
-    let climbed = Vault::open(&path).expect("the file climbs rung fourteen");
-    assert_eq!(climbed.schema_version(), centraid_vault::head_version());
-    let after = climbed
-        .read(|connection| Ok(seeds(connection)))
-        .expect("the seeds read");
-    assert_eq!(after, at_head);
-    // Climbing again over its own objects (a suite that winds back by pragma)
-    // seeds nothing twice.
-    climbed.close().unwrap();
-    {
-        let raw = rusqlite::Connection::open(&path).unwrap();
-        raw.execute_batch("PRAGMA user_version = 13;").unwrap();
-    }
-    let again = Vault::open(&path).expect("the rung is idempotent");
-    let twice = again.read(|connection| Ok(seeds(connection))).unwrap();
-    assert_eq!(twice, at_head);
-}
-
 // ---------------------------------------------------------------------------
-// 2. A vault that already holds duplicates still climbs
-// ---------------------------------------------------------------------------
-
-#[test]
-fn a_vault_holding_duplicate_external_ids_climbs_and_loses_nothing() {
-    let dir = centraid_ontology::golden::scratch_dir();
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("vault.db");
-    let vault = Vault::create(&path).expect("a vault");
-    vault.found("Test", "Test Owner").unwrap();
-    let owner = common::owner_party(&vault).unwrap();
-    vault.close().expect("closes");
-
-    let rows: Vec<(String, String)>;
-    {
-        let raw = rusqlite::Connection::open(&path).unwrap();
-        raw.execute_batch(&format!(
-            "BEGIN; {} PRAGMA user_version = 13; COMMIT;",
-            common::UNDO_RUNG_FOURTEEN
-        ))
-        .unwrap();
-        for account in ["acct-a", "acct-b"] {
-            raw.execute(
-                "INSERT INTO core_account (account_id, owner_party_id, name, kind, currency,
-                                           is_asset)
-                 VALUES (?1, ?2, ?1, 'depository', 'USD', 1)",
-                params![account, owner],
-            )
-            .unwrap();
-        }
-        // (txn, account, created_at, external_id, amount)
-        let seed: [(&str, &str, &str, Option<&str>, i64); 8] = [
-            // Three rows of one line in acct-a: the earliest keeps the id, and a
-            // tie on `created_at` is broken by the txn id.
-            (
-                "t-1",
-                "acct-a",
-                "2026-01-01T00:00:01.000Z",
-                Some("ofx:A"),
-                1_100,
-            ),
-            (
-                "t-3",
-                "acct-a",
-                "2026-01-01T00:00:03.000Z",
-                Some("ofx:A"),
-                1_200,
-            ),
-            (
-                "t-2",
-                "acct-a",
-                "2026-01-01T00:00:03.000Z",
-                Some("ofx:A"),
-                1_300,
-            ),
-            // The same id in ANOTHER account is a different line.
-            (
-                "t-4",
-                "acct-b",
-                "2026-01-01T00:00:01.000Z",
-                Some("ofx:A"),
-                1_400,
-            ),
-            // A single row, no duplicate.
-            (
-                "t-5",
-                "acct-a",
-                "2026-01-01T00:00:01.000Z",
-                Some("ofx:B"),
-                1_500,
-            ),
-            // No external id at all: any number of them.
-            ("t-6", "acct-a", "2026-01-01T00:00:01.000Z", None, 1_600),
-            ("t-7", "acct-a", "2026-01-01T00:00:02.000Z", None, 1_700),
-            // A Tally-shaped id.
-            (
-                "t-8",
-                "acct-a",
-                "2026-01-01T00:00:01.000Z",
-                Some("tally:settlement:s1"),
-                1_800,
-            ),
-        ];
-        for (txn, account, created, external, amount) in seed {
-            raw.execute(
-                "INSERT INTO core_transaction
-                   (txn_id, account_id, posted_at, amount_minor, currency, direction, status,
-                    description, external_id, created_at, updated_at)
-                 VALUES (?1, ?2, '2026-01-01T00:00:00Z', ?3, 'USD', 'debit', 'posted',
-                         ?1, ?4, ?5, ?5)",
-                params![txn, account, amount, external, created],
-            )
-            .unwrap();
-        }
-        rows = texts_pairs(&raw);
-        assert_eq!(rows.len(), 8);
-    }
-    let migrated = Vault::open(&path).expect("the file climbs with its duplicates");
-    assert_eq!(migrated.schema_version(), centraid_vault::head_version());
-    let after = migrated
-        .read(|connection| Ok(texts_pairs(connection)))
-        .unwrap();
-
-    // Nothing lost: the same eight transactions with the same amounts.
-    assert_eq!(after.len(), 8);
-    let amounts: BTreeSet<(String, String)> = migrated
-        .read(|connection| {
-            let mut statement = connection
-                .prepare("SELECT txn_id, CAST(amount_minor AS TEXT) FROM core_transaction")?;
-            Ok(statement
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-                .collect::<rusqlite::Result<BTreeSet<_>>>()?)
-        })
-        .unwrap();
-    assert_eq!(amounts.len(), 8);
-    assert!(amounts.contains(&("t-3".to_owned(), "1200".to_owned())));
-
-    let external = |txn: &str| {
-        after
-            .iter()
-            .find(|(id, _)| id == txn)
-            .map(|(_, external)| external.clone())
-            .unwrap()
-    };
-    assert_eq!(external("t-1"), "ofx:A", "the earliest keeps its id");
-    assert_eq!(
-        external("t-2"),
-        "ofx:A#dup-t-2",
-        "a tie is broken by the txn id"
-    );
-    assert_eq!(external("t-3"), "ofx:A#dup-t-3");
-    assert_eq!(
-        external("t-4"),
-        "ofx:A",
-        "another account's line is its own"
-    );
-    assert_eq!(external("t-5"), "ofx:B");
-    assert_eq!(external("t-6"), "-");
-    assert_eq!(external("t-8"), "tally:settlement:s1");
-    // And the index now holds: the old state cannot be re-created.
-    let refused = migrated.commit(|tx| {
-        tx.connection().execute(
-            "INSERT INTO core_transaction
-               (txn_id, account_id, posted_at, amount_minor, currency, direction, status,
-                external_id)
-             VALUES ('t-9', 'acct-a', '2026-01-01T00:00:00Z', 1, 'USD', 'debit', 'posted',
-                     'ofx:A')",
-            [],
-        )?;
-        Ok(())
-    });
-    assert!(
-        refused.is_err(),
-        "the unique index refuses a second `ofx:A`"
-    );
-}
-
-/// `(txn_id, external_id or "-")`, ordered.
-fn texts_pairs(connection: &Connection) -> Vec<(String, String)> {
-    let mut statement = connection
-        .prepare("SELECT txn_id, COALESCE(external_id, '-') FROM core_transaction ORDER BY txn_id")
-        .unwrap();
-    statement
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-        .unwrap()
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .unwrap()
-}
-
-// ---------------------------------------------------------------------------
-// 3-5. The invariants the schema holds
+// 2-4. The invariants the schema holds
 // ---------------------------------------------------------------------------
 
 /// A founded vault with a Money account in USD, one in EUR, and a plain
@@ -539,7 +320,7 @@ fn an_imported_row_is_never_edited_but_its_category_moves_and_void_is_one_way() 
 }
 
 // ---------------------------------------------------------------------------
-// 6. The pack's commitments
+// 5. The pack's commitments
 // ---------------------------------------------------------------------------
 
 #[test]

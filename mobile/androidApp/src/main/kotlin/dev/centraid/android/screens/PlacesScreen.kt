@@ -36,7 +36,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.PhotoShelf
 import centraid.screen.v1.PlaceRow
@@ -54,7 +53,7 @@ import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PlacesMachine
-import kotlin.math.sqrt
+import dev.centraid.shared.kit.CappedCount
 
 /**
  * PLACES — THE SHELF AND THE PLOT, ON ONE SCREEN (#1029, photos port).
@@ -151,7 +150,7 @@ public fun PlacesScreen(
         // outcome is a denial teaches a member nothing.
         RenameSheet(
             title = PhotosCopy.PHOTOS_PLACES_NAME_THIS,
-            fieldLabel = "Place name",
+            fieldLabel = PhotosCopy.PHOTOS_PLACE_NAME,
             current = target.name,
             onDismiss = { renaming = null },
         ) { name ->
@@ -181,7 +180,7 @@ private fun PresentationControl(
     onEvent: (PlacesEvent) -> Unit,
 ) {
     KitSegmented(
-        options = listOf(PRESENT_CARDS to "Cards", PRESENT_MAP to "Map"),
+        options = listOf(PRESENT_CARDS to PhotosCopy.PHOTOS_PLACES_CARDS, PRESENT_MAP to PhotosCopy.PHOTOS_PLACES_MAP),
         selected = if (presentation == PlacesState.Presentation.PRESENTATION_MAP) PRESENT_MAP else PRESENT_CARDS,
         onSelect = { key ->
             onEvent(
@@ -284,11 +283,14 @@ private fun PlaceCard(
  * separate decision with that privacy cost attached.
  *
  * The projection is [PlacesMachine.plot], in `commonMain`, so the one place the
- * arithmetic can be wrong is the one place a JVM spec can test it.
+ * arithmetic can be wrong is the one place a JVM spec can test it: it runs as
+ * the rows arrive, every pinned row carries its place on the plate and its
+ * pin's size (`pin_x`, `pin_y`, `pin_size`), and this only multiplies by its
+ * own box.
  */
 @Composable
 private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
-    val plotted = PlacesMachine.plot(places)
+    val plotted = places.filter { it.has_coordinate }
     if (plotted.isEmpty()) {
         ScreenEmpty(
             sentence = PhotosCopy.PHOTOS_PLACES_MAP_EMPTY,
@@ -296,8 +298,6 @@ private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
         )
         return
     }
-    val byId = places.associateBy { it.place_id }
-    val largest = plotted.maxOf { it.count }.coerceAtLeast(1)
     val line = centraidColor("line")
     BoxWithConstraints(
         modifier = Modifier
@@ -329,17 +329,16 @@ private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
         // NORTH, because the plate has no other orientation cue and a chart
         // without one is a picture.
         Text(
-            text = "N ↑",
+            text = PhotosCopy.PHOTOS_PLACES_NORTH,
             style = centraidType("mono"),
             color = centraidColor("textFaint"),
             modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
         )
-        val inset = 30.dp
+        val inset = PlacesMachine.PLOT_INSET.dp
         val spanWidth = maxWidth - inset * 2
         val spanHeight = maxHeight - inset * 2
-        plotted.forEach { pin ->
-            val row = byId[pin.placeId] ?: return@forEach
-            val diameter = pinSize(pin.count, largest)
+        plotted.forEach { row ->
+            val diameter = row.pin_size.dp
             val label = if (row.asset_count > 0) {
                 PhotosCopy.PHOTOS_PLACES_SPOKEN.replace("{name}", row.name).replace("{count}", countPhrase(row))
             } else {
@@ -355,8 +354,8 @@ private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
             Box(
                 modifier = Modifier
                     .offset(
-                        x = inset + spanWidth * pin.x.toFloat() - diameter / 2,
-                        y = inset + spanHeight * pin.y.toFloat() - diameter / 2,
+                        x = inset + spanWidth * row.pin_x.toFloat() - diameter / 2,
+                        y = inset + spanHeight * row.pin_y.toFloat() - diameter / 2,
                     )
                     .size(diameter)
                     .clip(shape)
@@ -371,9 +370,9 @@ private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
             ) {
                 if (cover != null) {
                     ContentImage(path = cover)
-                    if (pin.count > 0) {
+                    if (row.asset_count > 0) {
                         Text(
-                            text = pin.count.toString(),
+                            text = row.asset_count.toString(),
                             style = centraidType("mono"),
                             color = centraidColor("onStage"),
                             modifier = Modifier
@@ -387,7 +386,7 @@ private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
                     }
                 } else {
                     Text(
-                        text = if (pin.count > 0) pin.count.toString() else "·",
+                        text = if (row.asset_count > 0) row.asset_count.toString() else "·",
                         style = centraidType("mono"),
                         color = centraidColor("onStage"),
                     )
@@ -395,19 +394,6 @@ private fun PlacesPlot(places: List<PlaceRow>, onOpen: (PlaceRow) -> Unit) {
             }
         }
     }
-}
-
-/**
- * Area tracks the count, as `pinSize` did: the square root, so a place with
- * four times the photographs is twice as wide and not four times.
- */
-private fun pinSize(count: Int, largest: Int): Dp {
-    // Large enough that the photograph in it is a photograph.
-    val floor = 40.dp
-    val ceiling = 64.dp
-    if (largest <= 1 || count <= 0) return floor
-    val ratio = sqrt(count.toFloat()) / sqrt(largest.toFloat())
-    return floor + (ceiling - floor) * ratio
 }
 
 /**
@@ -444,7 +430,7 @@ private fun Footer(
                 .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
                 .clickable(onClick = onOpenUnplaced)
                 .semantics(mergeDescendants = true) {
-                    contentDescription = "$sentence Open them."
+                    contentDescription = "$sentence ${PhotosCopy.PHOTOS_PLACES_OPEN_THEM}"
                     role = Role.Button
                 },
             verticalAlignment = Alignment.CenterVertically,
@@ -480,17 +466,13 @@ private fun Footer(
 }
 
 /**
- * One sentence, four shapes, because "1 photo has" and "at least 1 photo has"
- * are both things a member may read.
+ * One sentence, two verbs, because "1 photo has" and "at least 1 photo has"
+ * are both things a member may read; the count phrase is `CappedCount`'s.
  */
 private fun unplacedSentence(unplaced: Int, capped: Boolean): String {
-    val template = when {
-        unplaced == 1 && !capped -> PhotosCopy.PHOTOS_PLACES_UNPLACED_ONE
-        !capped -> PhotosCopy.PHOTOS_PLACES_UNPLACED_MANY
-        unplaced == 1 -> PhotosCopy.PHOTOS_PLACES_UNPLACED_ONE_CAPPED
-        else -> PhotosCopy.PHOTOS_PLACES_UNPLACED_MANY_CAPPED
-    }
-    return template.replace("{count}", "$unplaced")
+    val photos = CappedCount.phrase(unplaced.toLong(), capped, PhotosCopy.TILE_COUNT_ONE, PhotosCopy.TILE_COUNT_MANY)
+    val template = if (unplaced == 1) PhotosCopy.PHOTOS_PLACES_UNPLACED_ONE else PhotosCopy.PHOTOS_PLACES_UNPLACED_MANY
+    return template.replace("{photos}", photos)
 }
 
 /**
@@ -502,4 +484,4 @@ private fun unplacedSentence(unplaced: Int, capped: Boolean): String {
  * a bare number over it would be this card claiming a total it never read.
  */
 private fun countPhrase(row: PlaceRow): String =
-    if (row.asset_count_capped) "at least ${row.asset_count}" else "${row.asset_count}"
+    CappedCount.spoken(row.asset_count.toLong(), row.asset_count_capped, "", "")

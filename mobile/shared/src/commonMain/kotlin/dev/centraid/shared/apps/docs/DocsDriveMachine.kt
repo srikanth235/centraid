@@ -35,6 +35,7 @@ import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.kit.dataOf
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenMachine
 import dev.centraid.shared.screen.Step
@@ -78,7 +79,15 @@ import dev.centraid.shared.screen.Step
  * every label are recomputed on every step ([decorate]).
  */
 public object DocsDriveMachine : ScreenMachine<DocsDriveState, DocsDriveEvent> {
-    public const val SCREEN_ID: String = "docs.drive"
+    public const val SCREEN_ID: String = ScreenIds.DOCS_DRIVE
+
+    /**
+     * THE FOLDER PAGE'S KEY in a shell that registers screens by id: this
+     * machine on a bridge of its own, so the drive under a pushed folder keeps
+     * its tab, filters and scroll. It is a registry key and never a read's
+     * screen id ([SCREEN_ID] is what the effects carry).
+     */
+    public const val FOLDER_SCREEN_ID: String = ScreenIds.DOCS_FOLDER
 
     /**
      * THE TABLES `docs.drive` AND `docs.search` READ: the document, its folder

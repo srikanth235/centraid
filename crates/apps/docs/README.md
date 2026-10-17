@@ -6,7 +6,7 @@ Docs is 5 queries, 18 actions and 29 scopes over three schemas, plus a demo seed
 | --- | --- |
 | `manifest` | The app's `manifest.json`, parsed by the kit's parser at load time. Two copies of "which tables does Docs write" is how the two answers drift. |
 | `queries` | `drive`, `search`, `document`, `history` and `activity`: the statements, the taxonomy pair, the folder rail, the labels, the custody decoration, the decoded body and the occurrence walk. |
-| `phone` | The phone's shelves (#1046): All, a folder, Starred, Recent and Trash cut from the one drive window, v0's Type/Modified/label filters, the sort, the rail's counts, and the civil-time readings in the device's zone. Pure; no read of its own. |
+| `phone` | The phone's shelves (#1046): All and a folder cut from the one drive window, Starred, Recent and Trash cut from their own reads once the window is truncated ([`queries::ShelfArm`](src/queries.rs), Q-1047-7), v0's Type/Modified/label filters, the sort, the rail's counts, and the civil-time readings in the device's zone. Pure; no read of its own. |
 | `kind` | What a document is to a member — its kind, which screen opens it (reader, stage, facts) and which Type pill it passes — media type first, title second. |
 | `bytes` | The three shell verbs as requests, plus the never-inline rule. No buffer, no filesystem, no socket. |
 | `commands` | The eighteen actions as `core.*` invocations, `invoke_key` mandatory. |
@@ -43,7 +43,7 @@ The second discovery read is `search`'s FTS read, which belongs to `crates/searc
 
 ## The phone's app query (#1046)
 
-The phone asks `docs_drive`, `docs_search`, `docs_document` and `docs_activity` through `AppQueryRequest` (`crates/api-proto/proto/centraid/core/v1/docs.proto`), and `crates/core`'s `app_query::docs` runs these loaders over the page door. The shelf, the filters and the sort are the request's; `phone::shelve` cuts them from the one drive window, so **when the drive says `truncated`, every shelf and count is of the newest `limit` filed documents only** — v0's own limitation, carried and stated. Search is not windowed. The core adds the two facts only it can: the size phrase (`format_byte_size`, the formatter Home's tile reads) and whether the head's bytes are on this device (`Vault::content_location`).
+The phone asks `docs_drive`, `docs_search`, `docs_document` and `docs_activity` through `AppQueryRequest` (`crates/api-proto/proto/centraid/core/v1/docs.proto`), and `crates/core`'s `app_query::docs` runs these loaders over the page door. The shelf, the filters and the sort are the request's; `phone::shelve` cuts All and a folder from the one drive window, so **when the drive says `truncated`, those two shelves and the counts of All and of each folder are of the newest `limit` filed documents only**. Trash, Starred and Recent are not defined by when a document was filed, so once the window is truncated each reads its own set (`docs.shelf.trash`, `docs.shelf.starred`, `docs.shelf.recent`; `phone::shelve_with_arms` lays them over the window's answer) and the rail's Starred and Trash counts are the vault's, whichever shelf is open ([`tests/arms.rs`](tests/arms.rs); owner ruling 2026-10-15). An arm says it is `truncated` from its own cursor; Recent is the newest fifty by definition and never does. Search is not windowed. The core adds the two facts only it can: the size phrase (`format_byte_size`, the formatter Home's tile reads) and whether the head's bytes are on this device (`Vault::content_location`).
 
 ## Trash
 

@@ -1242,6 +1242,189 @@ fn an_items_access_history_is_its_receipts_as_metadata() {
     assert!(!contains(&bytes, PASSWORD), "a receipt carried the value");
 }
 
+/// THE WHOLE LOCKER'S ACCESS HISTORY (#1047, Q-1047-21): the same arm with no
+/// item. Every item's reveals, copies and codes, and the two receipts no item
+/// page shows — an unlock and an export — each item and custom field named by
+/// what it is called now, a trashed item by its title and a purged one by
+/// nothing, and not one value anywhere in the bytes.
+///
+/// It is also the answer to L1 (v1-handoffs): the phone's page door has no
+/// entity catalog to widen, so `access_receipt` is readable here today, and
+/// what keeps another surface's receipts out is the statement's own
+/// `object_type` wall, which this test counts exactly.
+#[test]
+fn the_whole_lockers_access_history_names_every_receipt_and_carries_no_value() {
+    let scratch = stocked();
+    scratch.unlock();
+    scratch.run(
+        "locker.edit_item",
+        json!({ "item_id": "item-bank", "username": "maya@example.com", "password": "«sealed»",
+                "url": "https://bank.example.com", "otp_seed": "JBSWY3DPEHPK3PXP" }),
+    );
+    scratch.run(
+        "locker.set_field",
+        json!({ "item_id": "item-bank", "field_id": "field-rc", "section": "Recovery",
+                "label": "Recovery code", "kind": "sealed", "value": "rc-4411" }),
+    );
+    // Items that go: one is trashed (its title is still its title), one is
+    // purged (a purge takes the row and leaves the receipt).
+    for (id, title) in [("item-bin", "In the bin"), ("item-temp", "Temporary")] {
+        scratch.run(
+            "locker.add_item",
+            json!({ "item_id": id, "type": "password", "title": title, "password": PASSWORD }),
+        );
+    }
+
+    scratch.reveal("item-bank", "password");
+    scratch.step_reveal(wire::LockerReveal {
+        item_id: "item-bank".to_owned(),
+        column: "password".to_owned(),
+        copy: true,
+        ..wire::LockerReveal::default()
+    });
+    scratch.step_reveal(wire::LockerReveal {
+        item_id: "item-bank".to_owned(),
+        column: "value_sealed".to_owned(),
+        field_id: "field-rc".to_owned(),
+        copy: true,
+    });
+    scratch.totp("item-bank");
+    scratch.reveal("item-card", "card_number");
+    scratch.reveal("item-bin", "password");
+    scratch.reveal("item-temp", "password");
+    scratch.run("locker.trash_item", json!({ "item_id": "item-bin" }));
+    scratch.run("locker.trash_item", json!({ "item_id": "item-temp" }));
+    scratch.run("locker.purge_item", json!({ "item_id": "item-temp" }));
+    assert!(
+        scratch
+            .export(wire::LockerExportFormat::Csv)
+            .exported
+            .is_some(),
+        "the export ran"
+    );
+
+    let access = scratch.access("");
+    let count = |kind: wire::LockerAccessKind| {
+        access
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == kind as i32)
+            .count()
+    };
+    // THE STOCKING'S UNLOCK AND THIS TEST'S; the export; the code; and six
+    // reveals — the bank's password shown and copied, its field copied, the
+    // card's number and the two items that went. Nothing else is in it, and
+    // every command the test ran wrote receipts of its own that are not.
+    assert_eq!(count(wire::LockerAccessKind::Unlock), 2);
+    assert_eq!(count(wire::LockerAccessKind::Export), 1);
+    assert_eq!(count(wire::LockerAccessKind::Code), 1);
+    assert_eq!(count(wire::LockerAccessKind::Reveal), 6);
+    assert_eq!(access.entries.len(), 10, "{:#?}", access.entries);
+    assert!(!access.truncated);
+    assert!(access.entries.iter().all(|entry| entry.allowed));
+    for entry in &access.entries {
+        assert_eq!(entry.local_day, "2099-06-30");
+        assert_eq!(entry.local_time, "22:00");
+    }
+
+    // AN UNLOCK AND AN EXPORT NAME NO ITEM.
+    for entry in access.entries.iter().filter(|entry| {
+        entry.kind == wire::LockerAccessKind::Unlock as i32
+            || entry.kind == wire::LockerAccessKind::Export as i32
+    }) {
+        assert!(entry.item_id.is_empty(), "{entry:?}");
+        assert!(entry.item_title.is_empty(), "{entry:?}");
+    }
+
+    // EVERY OTHER RECEIPT NAMES ITS ITEM BY WHAT IT IS CALLED NOW.
+    let titled = |item_id: &str| -> Vec<&wire::LockerAccessEntry> {
+        access
+            .entries
+            .iter()
+            .filter(|entry| entry.item_id == item_id)
+            .collect()
+    };
+    let bank = titled("item-bank");
+    assert_eq!(bank.len(), 4, "the password twice, the field, the code");
+    assert!(bank.iter().all(|entry| entry.item_title == "Bank"));
+    assert_eq!(titled("item-card")[0].item_title, "Visa");
+    // A TRASHED ITEM KEEPS ITS TITLE; A PURGED ONE HAS NONE, and its receipt
+    // stays (a purge takes the row, not the record of who opened it).
+    assert_eq!(titled("item-bin")[0].item_title, "In the bin");
+    let purged = titled("item-temp");
+    assert_eq!(purged.len(), 1);
+    assert!(purged[0].item_title.is_empty());
+    // A CUSTOM FIELD IS NAMED BY ITS LABEL, and only the field's own receipt
+    // carries one; its copy is a copy.
+    let field: Vec<_> = bank
+        .iter()
+        .filter(|entry| !entry.field_id.is_empty())
+        .collect();
+    assert_eq!(field.len(), 1);
+    assert_eq!(field[0].field_id, "field-rc");
+    assert_eq!(field[0].field_label, "Recovery code");
+    assert!(field[0].copied);
+    assert!(
+        access
+            .entries
+            .iter()
+            .filter(|entry| entry.field_id.is_empty())
+            .all(|entry| entry.field_label.is_empty())
+    );
+
+    // THE ITEM PAGE'S READ IS UNCHANGED: this item's four, no unlock and no
+    // export, each carrying the item's id and — as before — no title, which
+    // the page already holds.
+    let page = scratch.access("item-bank");
+    assert_eq!(page.entries.len(), 4);
+    assert!(
+        page.entries
+            .iter()
+            .all(|entry| entry.item_id == "item-bank")
+    );
+    assert!(page.entries.iter().all(|entry| entry.item_title.is_empty()));
+
+    // METADATA ONLY: not a password, a code seed, a card number, a field's
+    // value or the file's rows is in the whole-Locker answer.
+    let bytes = scratch.ask_bytes(Q::LockerAccess(wire::LockerAccessRequest {
+        item_id: String::new(),
+        limit: 0,
+        tz: TZ.to_owned(),
+    }));
+    for secret in [PASSWORD, "JBSWY3DPEHPK3PXP", "4111111111111111", "rc-4411"] {
+        assert!(!contains(&bytes, secret), "a receipt carried {secret}");
+    }
+}
+
+/// THE WHOLE-LOCKER WINDOW IS THE REQUEST'S, CLAMPED, AND SAYS WHEN IT FILLED:
+/// 20 at the least, so a caller that asks for fewer still gets a history.
+#[test]
+fn the_whole_lockers_access_window_is_clamped_and_says_when_it_filled() {
+    let scratch = stocked();
+    scratch.unlock();
+    for _ in 0..25 {
+        scratch.reveal("item-bank", "password");
+    }
+    let ask = |limit: u32| match scratch.ask(Q::LockerAccess(wire::LockerAccessRequest {
+        item_id: String::new(),
+        limit,
+        tz: TZ.to_owned(),
+    })) {
+        Answer::LockerAccess(access) => access,
+        other => panic!("access answered as {other:?}"),
+    };
+    // Five asked, twenty given: the floor.
+    let small = ask(5);
+    assert_eq!(small.window, 20);
+    assert_eq!(small.entries.len(), 20);
+    assert!(small.truncated, "27 receipts do not fit a window of 20");
+    // Wider, nothing is cut: 25 reveals and the two unlocks.
+    let wide = ask(200);
+    assert_eq!(wide.window, 200);
+    assert_eq!(wide.entries.len(), 27);
+    assert!(!wide.truncated);
+}
+
 /// EXPORT: the receipt first, then every live and archived secret in the
 /// clear, in 1Password's CSV or Centraid's JSON — never a passkey's key and
 /// never the trash; refused while locked (#1047 T2).

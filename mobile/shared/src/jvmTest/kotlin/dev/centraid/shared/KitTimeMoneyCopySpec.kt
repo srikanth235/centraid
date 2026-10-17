@@ -16,7 +16,7 @@ import java.util.Locale
 /**
  * The kit's pure halves: civil days in words, money arithmetic, and the one
  * money fixture both shells' renderers answer to — plus the copy tables, which
- * are hand-maintained in two places and must say the same thing.
+ * are generated from `copy/<app>.json` and must say exactly what it says.
  */
 class KitTimeMoneyCopySpec : StringSpec({
 
@@ -88,21 +88,22 @@ class KitTimeMoneyCopySpec : StringSpec({
 
     // --- Copy -------------------------------------------------------------
 
-    "copy: every app's Kotlin table and its copy/<app>.json say the same strings" {
-        val tables = root.resolve("mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy")
-        val files = tables.listFiles { file -> file.name.endsWith("Copy.kt") }!!.sorted()
+    "copy: every generated table holds exactly its copy/<app>.json strings" {
+        // THE TABLES ARE GENERATED (`:shared:generateCopy`), so this reads the
+        // COMPILED object against the JSON: what it proves is the generator's
+        // escaping (a `$`, a quote, a newline) and that no key is dropped.
+        val files = root.resolve("copy").listFiles { file -> file.name.endsWith(".json") }!!.sorted()
         files.size shouldBe 11
         files.forEach { file ->
-            val app = file.name.removeSuffix("Copy.kt").lowercase()
-            val kotlin = Regex("""const val (\w+): String = "((?:[^"\\]|\\.)*)"""")
-                .findAll(file.readText()).associate { it.groupValues[1] to it.groupValues[2] }
+            val app = file.name.removeSuffix(".json")
+            val table = Class.forName("dev.centraid.design.copy.${app.replaceFirstChar { it.uppercase() }}Copy")
+            val compiled = table.declaredFields
+                .filter { java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type == String::class.java }
+                .associate { it.name to it.get(null) as String }
             val json = Regex(""""(\w+)": "((?:[^"\\]|\\.)*)"""")
-                .findAll(
-                    root.resolve("copy/$app.json").readText()
-                        .substringAfter("\"strings\": {").substringBefore("\n  }"),
-                )
-                .associate { it.groupValues[1] to it.groupValues[2] }
-            withClue(app) { kotlin shouldBe json }
+                .findAll(file.readText().substringAfter("\"strings\": {").substringBefore("\n  }"))
+                .associate { it.groupValues[1] to unescapeJson(it.groupValues[2]) }
+            withClue(app) { compiled shouldBe json }
         }
     }
 }) {
@@ -129,5 +130,28 @@ class KitTimeMoneyCopySpec : StringSpec({
                 maximumFractionDigits = exponent
             }.format(amount)
         }
+    }
+}
+
+private fun unescapeJson(text: String): String = buildString {
+    var index = 0
+    while (index < text.length) {
+        val char = text[index]
+        if (char != '\\') {
+            append(char)
+            index += 1
+            continue
+        }
+        when (val next = text[index + 1]) {
+            'n' -> append('\n')
+            't' -> append('\t')
+            'r' -> append('\r')
+            'u' -> {
+                append(text.substring(index + 2, index + 6).toInt(16).toChar())
+                index += 4
+            }
+            else -> append(next)
+        }
+        index += 2
     }
 }

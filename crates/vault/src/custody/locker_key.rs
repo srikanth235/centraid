@@ -31,7 +31,7 @@
 //!
 //! `locker_key(key_id PK, created_at)` holds **at most one row**, the vault's
 //! generation, and a unique index on a constant makes a second one
-//! unrepresentable (rung seven, `contracts/migrations/007_locker_key_one_generation.sql`):
+//! unrepresentable (in the baseline, `contracts/migrations/001_baseline.sql`):
 //!
 //! ```sql
 //! CREATE UNIQUE INDEX locker_key_one_generation ON locker_key((1))
@@ -493,73 +493,38 @@ mod tests {
         );
     }
 
-    /// RUNG SEVEN OVER A FILE WRITTEN BEFORE IT (R-1047-D2): the live
-    /// generation survives, a retired one does not, and the guard reads the
-    /// survivor.
+    /// THE FOUNDED `locker_key` IS ONE ROW AND ONE INDEX (R-1047-D2): the table carries the
+    /// generation's id and nothing that retires one, and the only object on it besides the
+    /// table is the unique index on a constant that makes a second row unrepresentable. The
+    /// guard reads the survivor.
     #[test]
-    fn rung_seven_keeps_the_live_generation_and_drops_the_retired_ones() {
-        let dir = tempfile::tempdir().expect("scratch dir");
-        let vault_file = dir.path().join("vault").join("v1").join("vault.db");
-        std::fs::create_dir_all(vault_file.parent().unwrap()).unwrap();
-        Vault::create(&vault_file).unwrap().close().unwrap();
-        {
-            let raw = rusqlite::Connection::open(&vault_file).unwrap();
-            // Tally's objects come back for rung thirteen to fold into and rung
-            // fifteen to drop, and rungs three and four's tables for rung ten to
-            // drop, because the climb runs every rung above six.
-            crate::migrations::tests::undo_rung_fifteen(&raw);
-            raw.execute_batch(crate::migrations::BACKUP_INDEX_SQL)
-                .unwrap();
-            raw.execute_batch(crate::migrations::BLOB_CUSTODY_SQL)
-                .unwrap();
-            raw.execute_batch(
-                "BEGIN;
-                 DROP TABLE locker_key;
-                 CREATE TABLE locker_key (
-                   key_id     TEXT PRIMARY KEY,
-                   created_at TEXT NOT NULL,
-                   retired_at TEXT
-                 ) STRICT;
-                 CREATE UNIQUE INDEX locker_key_live_idx
-                   ON locker_key(retired_at IS NULL) WHERE retired_at IS NULL;
-                 CREATE TABLE notifications_notice (notice_id TEXT PRIMARY KEY) STRICT;
-                 DROP TABLE chat_message_attachment;
-                 DROP TABLE chat_message_card;
-                 DROP TABLE chat_message;
-                 DROP TABLE chat_thread;
-                 ALTER TABLE locker_item ADD COLUMN url_match_policy TEXT NOT NULL
-                   DEFAULT 'registrable-domain';
-                 ALTER TABLE locker_item_address ADD COLUMN match_policy TEXT NOT NULL
-                   DEFAULT 'registrable-domain';
-                 INSERT INTO locker_key VALUES
-                   ('k-old', '2026-01-01T00:00:00Z', '2026-02-01T00:00:00Z'),
-                   ('k-live', '2026-02-01T00:00:00Z', NULL);
-                 PRAGMA user_version = 6;
-                 COMMIT;",
-            )
-            .unwrap();
-        }
-        let migrated = Vault::open(&vault_file).expect("the file climbs rung seven");
-        assert_eq!(migrated.schema_version(), crate::head_version());
-        let (rows, live, objects) = migrated
-            .read(|connection| {
-                let rows: Vec<String> = connection
-                    .prepare("SELECT key_id FROM locker_key ORDER BY key_id")?
-                    .query_map([], |row| row.get(0))?
-                    .collect::<rusqlite::Result<_>>()?;
-                let objects: Vec<String> = connection
-                    .prepare(
-                        "SELECT name FROM sqlite_master
-                          WHERE tbl_name = 'locker_key' AND sql IS NOT NULL ORDER BY name",
-                    )?
-                    .query_map([], |row| row.get(0))?
-                    .collect::<rusqlite::Result<_>>()?;
-                Ok((rows, live_locker_key_id(connection).ok().flatten(), objects))
-            })
-            .unwrap();
-        assert_eq!(rows, ["k-live"]);
-        assert_eq!(live.as_deref(), Some("k-live"));
+    fn the_founded_locker_key_names_one_generation_and_nothing_retires_it() {
+        let fixture = founded();
+        let (objects, columns, live) = (
+            fixture
+                .connection
+                .prepare(
+                    "SELECT name FROM sqlite_master
+                      WHERE tbl_name = 'locker_key' AND sql IS NOT NULL ORDER BY name",
+                )
+                .unwrap()
+                .query_map([], |row| row.get::<_, String>(0))
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap(),
+            fixture
+                .connection
+                .prepare("SELECT name FROM pragma_table_info('locker_key') ORDER BY cid")
+                .unwrap()
+                .query_map([], |row| row.get::<_, String>(0))
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap(),
+            live_locker_key_id(&fixture.connection).unwrap(),
+        );
         assert_eq!(objects, ["locker_key", "locker_key_one_generation"]);
+        assert_eq!(columns, ["key_id", "created_at"], "no `retired_at`");
+        assert_eq!(live.as_deref(), Some("k-1"));
     }
 
     #[test]

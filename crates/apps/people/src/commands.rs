@@ -18,20 +18,23 @@
 //! the surviving row are the difference between "the one you are keeping" and
 //! "the one that still exists afterwards", and only the second is true.
 //!
-//! ### Finding PE-F1 — three `act` scopes name the wrong schema
+//! ### The three contact-channel commands are `people`'s, not `social`'s (finding PE-F1)
 //!
-//! The manifest declares `{schema: "social", table: "save_contact_channel"}`,
-//! `{…, "delete_contact_channel"}` and `{…, "undo_contact_channel"}` as its
-//! three narrow `act` scopes. **No such commands exist.** The `social` schema's
-//! four commands are `resolve_identity`, `draft_message`, `send_message` and
-//! `mark_thread_read`; the three contact-channel commands are
+//! The `social` schema's four commands are `resolve_identity`, `draft_message`,
+//! `send_message` and `mark_thread_read`; the three contact-channel commands are
 //! `people.save_contact_channel`, `people.delete_contact_channel` and
-//! `people.undo_contact_channel`. The three actions work today only because
-//! `{schema: "people", verbs: "read+act"}` covers the whole schema, so the
-//! narrow scopes are never consulted. [`act_scope_schemas`] is derived from
-//! this table rather than transcribed, and
-//! `the_three_social_act_scopes_name_no_social_command` is the red that
-//! states it.
+//! `people.undo_contact_channel`, authorised by
+//! `{schema: "people", verbs: "read+act"}`, which covers the whole schema. The
+//! manifest once carried three narrow `social.*_contact_channel` `act` scopes
+//! that named commands which do not exist; they granted nothing and told a
+//! consent screen the app reaches into `social` three ways it does not, and
+//! were removed (P3, `docs/release/v1-handoffs.md`).
+//! [`act_scope_schemas`] is derived from this table rather than transcribed, and
+//! `the_contact_channel_commands_belong_to_the_people_schema` states it; the
+//! manifest side — every `act` scope names a command an action invokes, and
+//! every action's command is covered by a scope — is
+//! `every_act_scope_names_a_command_an_action_invokes_and_every_command_is_covered`
+//! in [`crate::manifest`].
 //!
 //! ### Two gates, never one (census §A0)
 //!
@@ -213,8 +216,8 @@ pub fn action_row(action: &str) -> Option<&'static ActionRow> {
 
 /// The schemas this table's commands actually belong to, deduplicated.
 ///
-/// Derived rather than transcribed, because the manifest's own `act` scopes
-/// disagree with it — see finding PE-F1 in the module note.
+/// Derived rather than transcribed, because the manifest's `act` scopes once
+/// disagreed with it — see finding PE-F1 in the module note.
 #[must_use]
 pub fn act_scope_schemas() -> Vec<&'static str> {
     let mut schemas: Vec<&'static str> = ACTIONS
@@ -323,10 +326,11 @@ mod tests {
         );
     }
 
-    /// A DEMONSTRATED RED for finding PE-F1: the manifest's three `social.*`
-    /// act scopes name commands the `social` schema does not own.
+    /// Finding PE-F1, from the table's side: the three contact-channel actions
+    /// invoke `people.*` commands, so no action reaches the `social` schema's
+    /// own commands and no `social.*` act scope has a command to name.
     #[test]
-    fn the_three_social_act_scopes_name_no_social_command() {
+    fn the_contact_channel_commands_belong_to_the_people_schema() {
         assert_eq!(act_scope_schemas(), ["core", "people"]);
         for channel in [
             "save-contact-channel",
@@ -336,7 +340,7 @@ mod tests {
             let row = action_row(channel).expect("in the table");
             assert!(
                 row.command.starts_with("people."),
-                "{channel} invokes {}, and the manifest scopes it under `social`",
+                "{channel} invokes {}, which is not a people command",
                 row.command
             );
         }

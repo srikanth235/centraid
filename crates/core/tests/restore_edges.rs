@@ -13,6 +13,7 @@ use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_vault::backup::snapshot::Manifest;
 use serde_json::json;
 
 use common::*;
@@ -854,14 +855,28 @@ fn after_a_restore_only_what_is_new_is_sent() {
     let fresh_handle = stage(&phone, owned("image/heic", &fresh), &fresh);
     add_asset(&phone, &fresh_handle, "photo");
     let next = drain(&phone, quietly());
+    // THE PASS THAT MOVED THE PHOTOGRAPH ALSO TOOK THE SNAPSHOT ITS ROW NEEDS
+    // (R-1080-C15): its new ranges and manifest are the only other parts.
     assert_eq!(
-        next.confirmed_parts, 1,
-        "the new photograph alone: {next:?}"
+        next.confirmed_parts - snapshot_parts_after(&path, &before),
+        1,
+        "the new photograph alone, besides the snapshot: {next:?}"
     );
+    let snapshot_names = {
+        let book = ledger(&path);
+        let snapshots = book.snapshots().expect("reads");
+        let newest = snapshots.last().expect("a snapshot");
+        let mut names = Manifest::from_json(newest.manifest_json.as_bytes())
+            .expect("a manifest")
+            .range_names();
+        names.insert(newest.name);
+        names
+    };
     let added: Vec<_> = gateway
         .held(&vault_id())
         .difference(&before)
         .copied()
+        .filter(|name| !snapshot_names.contains(name))
         .collect();
     let fresh_name = centraid_vault::backup::naming::name(
         &keys().backup,
@@ -944,5 +959,174 @@ fn a_records_only_vault_and_a_cut_short_pass_restore_what_was_acknowledged() {
         backed.content_confirmed, backed.content_total,
         "the restored phone counts what the gateway holds: {:?}",
         backed.waiting
+    );
+}
+
+/// **A RESTORED PHONE'S RE-WALK IS TOLD WHICH DERIVATIVES THE VAULT ALREADY
+/// HOLDS** (#1080, the simulator run). The walk streams every library item
+/// again, and finds `already_held` false — the original is the gateway's, not
+/// the phone's — so it rendered and staged each photograph's thumbnail and
+/// preview, which the restore had brought back with their rows. The stage
+/// door now names the tiers the vault holds, rows and bytes both, so the shell
+/// renders only the rest. A derivative whose bytes did not come back is not
+/// held: the shell renders it, and staging replaces the row.
+#[test]
+fn a_restored_phones_walk_is_told_which_derivatives_the_vault_already_holds() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    let photo = bytes_of("a library photograph, with its two derivatives", 120_000);
+    let original = stage(
+        &old,
+        library("image/heic", "lib-derived", &photo, false),
+        &photo,
+    );
+    assert!(
+        original.derivatives_held.is_empty(),
+        "nothing is held for a photograph the vault has never seen: {original:?}"
+    );
+    let thumb = bytes_of("its thumbnail", 4_000);
+    let thumb_handle = stage(&old, thumb_of(&original, &thumb), &thumb);
+    let preview = bytes_of("its preview", 9_000);
+    let preview_handle = stage(
+        &old,
+        wire::StageBegin {
+            tier: "preview".to_owned(),
+            ..thumb_of(&original, &preview)
+        },
+        &preview,
+    );
+    add_asset(&old, &original, "photo");
+    drain(&old, at_home());
+
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let path = PathBuf::from(&restore(new_dir.path(), &gateway).vaults[0].path);
+    let phone = reopen(&path);
+    let walked = stage(
+        &phone,
+        library("image/heic", "lib-derived", &photo, false),
+        &photo,
+    );
+    assert!(
+        !walked.already_held,
+        "the original is the gateway's, not this phone's: {walked:?}"
+    );
+    assert_eq!(
+        walked.derivatives_held,
+        vec!["preview".to_owned(), "thumb".to_owned()],
+        "the restore brought both back: {walked:?}"
+    );
+
+    // A DERIVATIVE WHOSE BYTES ARE NOT HERE IS NOT HELD, whatever its row says.
+    let store = centraid_blobs::ByteStore::open(path.with_extension("bytes")).expect("opens");
+    assert!(
+        store
+            .remove(
+                centraid_blobs::ContentHash::parse_hex(&thumb_handle.content_hash).expect("a hash")
+            )
+            .expect("removes"),
+        "the thumbnail was in the store"
+    );
+    let again = stage(
+        &phone,
+        library("image/heic", "lib-derived", &photo, false),
+        &photo,
+    );
+    assert_eq!(
+        again.derivatives_held,
+        vec!["preview".to_owned()],
+        "{again:?}"
+    );
+    assert_ne!(preview_handle.content_hash, thumb_handle.content_hash);
+}
+
+/// The three files that are a phone's backup ledger, removed: its record of
+/// every gateway, its token and every acknowledgement.
+fn lose_the_ledger(path: &std::path::Path) {
+    let lost = centraid_vault::backup::ledger::Ledger::path_for(path);
+    for suffix in ["", "-wal", "-shm"] {
+        let mut file = lost.clone().into_os_string();
+        file.push(suffix);
+        let _ = std::fs::remove_file(PathBuf::from(file));
+    }
+}
+
+/// **A PHONE WITH NO RECORD OF THE GATEWAY, AND A COPY OLDER THAN THE HEAD,
+/// TAKES NOTHING OVER** (#1080, the sweep's F4). The old phone was superseded
+/// by a restore and lost its ledger as well, so nothing on it says it moved —
+/// R-1080-C17 lets it claim. Its copy is older than the head the new phone
+/// set, and a claim would put the vault back where it was and leave the new
+/// phone's records out of the history. The claim first compares the head with
+/// its own copy: the head was taken after the copy's last command and holds
+/// commands the copy never ran, so the pairing is refused `MOVED`, nothing is
+/// claimed, and the new phone goes on backing up.
+#[test]
+fn a_phone_with_no_record_of_the_gateway_and_an_older_copy_takes_nothing_over() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old_path = old_dir.path().join("vault.db");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    note(&old, "Before", "written before the move");
+    drain(&old, at_home());
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let (new, object) = moved_on(&gateway, new_dir.path());
+    let writer = gateway.writer(&vault_id());
+    let held = gateway.held(&vault_id());
+
+    // THE OLD PHONE LOSES ITS LEDGER: nothing on it records the gateway, so
+    // nothing tells it that another phone superseded it.
+    drop(old);
+    lose_the_ledger(&old_path);
+    let old = reopen(&old_path);
+    let refused = try_pair(&old, &gateway).expect_err("its copy is older than the head");
+    assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
+    assert_eq!(gateway.writer(&vault_id()), writer, "nothing was claimed");
+    assert_eq!(gateway.held(&vault_id()), held, "no object moved");
+    goes_on_writing(&new, &gateway, &object);
+
+    // THE NEW PHONE'S RECORDS ARE WHAT A RESTORE BRINGS BACK, the newest note
+    // included: the head never regressed.
+    let restored_dir = tempfile::tempdir().expect("a directory");
+    let restored = restore(restored_dir.path(), &gateway);
+    let restored_rows = rows(&PathBuf::from(&restored.vaults[0].path));
+    let new_rows = rows(new.path());
+    assert_eq!(
+        restored_rows, new_rows,
+        "the newer phone's vault, row for row"
+    );
+}
+
+/// **A COPY THAT RAN COMMANDS AFTER THE HEAD WAS TAKEN STILL TAKES ITS VAULT
+/// OVER** (#1080, the sweep's F4, the other side of the comparison). The
+/// head's `taken_at_ms` is the cheap gate: a phone whose last command ran
+/// after it is not behind it, so a lost ledger costs the vault's own phone
+/// nothing — and, with the head equal to its copy (the case above this one
+/// in the file), the manifest's receipts say the same.
+#[test]
+fn a_copy_that_ran_commands_after_the_head_still_takes_its_vault_over() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    note(&phone, "Before", "written before the last snapshot");
+    drain(&phone, at_home());
+    note(&phone, "After", "written after the last snapshot");
+    drop(phone);
+    lose_the_ledger(&path);
+
+    let phone = reopen(&path);
+    pair(&phone, &gateway);
+    assert_eq!(gateway.writer(&vault_id()).0, 2, "it claimed the vault");
+    let next = drain(&phone, at_home());
+    assert!(next.acked_at_ms.is_some(), "it backs up: {next:?}");
+    let restored_dir = tempfile::tempdir().expect("a directory");
+    let restored = restore(restored_dir.path(), &gateway);
+    assert_eq!(
+        rows(&PathBuf::from(&restored.vaults[0].path)),
+        rows(&path),
+        "the head is its vault, row for row, the note written last included"
     );
 }

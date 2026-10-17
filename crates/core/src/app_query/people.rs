@@ -461,6 +461,26 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
         ),
         people::ReadState::Loading | people::ReadState::Denied(_) => (false, Vec::new()),
     };
+    // THE CONTACT READING (P1): a refused `social.contact_channel` is UNKNOWN,
+    // never an empty rail — `channels_known` says which, and the rest of the
+    // sheet stands.
+    let (channels_known, channels) = match person.contact {
+        people::ReadState::Ready(contact) => (
+            true,
+            contact
+                .into_iter()
+                .map(|channel| wire::PeopleChannel {
+                    channel_id: channel.channel_id,
+                    kind: channel.kind,
+                    label: channel.label,
+                    value: channel.value,
+                    preferred: channel.preferred,
+                    duplicate_names: channel.duplicate_names,
+                })
+                .collect(),
+        ),
+        people::ReadState::Loading | people::ReadState::Denied(_) => (false, Vec::new()),
+    };
     wire::PeopleSheet {
         person: Some(row_to_wire_with(
             RosterRow {
@@ -482,18 +502,8 @@ fn sheet_to_wire(person: people::person::Person, clock: &Clock) -> wire::PeopleS
         )),
         nickname: profile.nickname,
         met: profile.met,
-        channels: profile
-            .contact
-            .into_iter()
-            .map(|channel| wire::PeopleChannel {
-                channel_id: channel.channel_id,
-                kind: channel.kind,
-                label: channel.label,
-                value: channel.value,
-                preferred: channel.preferred,
-                duplicate_names: channel.duplicate_names,
-            })
-            .collect(),
+        channels_known,
+        channels,
         dates,
         notes: profile
             .notes
@@ -883,6 +893,7 @@ mod tests {
         assert_eq!(touch.recent[0].name, "Weekly");
         let sheet = scratch.person(&weekly).sheet.expect("a live person");
         assert!(sheet.touches_known);
+        assert!(sheet.channels_known);
         assert_eq!(sheet.touches.len(), 1);
         assert_eq!(sheet.touches[0].text, "Caught up");
         assert!(!sheet.person.expect("a header").due);
@@ -1035,5 +1046,71 @@ mod tests {
             }))
             .expect_err("an unknown zone is refused");
         assert_eq!(refused.code(), wire::ErrorCode::InvalidRequest);
+    }
+
+    /// A refused contact plane is UNKNOWN on the wire, never an empty rail
+    /// (P1): `channels_known` is false, `channels` is empty, and the rest of
+    /// the sheet — the touch log included — stands.
+    #[test]
+    fn a_denied_contact_reading_is_unknown_on_the_wire_and_the_sheet_stands() {
+        use people::person::{ContactEntry, Links, Person, Profile};
+        use people::{Denial, ReadState};
+
+        let zone = FireZone::named(TZ).expect("a zone");
+        let clock = clock(&zone, ADDED).expect("a clock");
+        let profile = Profile {
+            party_id: "p1".to_owned(),
+            name: "Grandpa Ray".to_owned(),
+            role: "Grandfather".to_owned(),
+            nickname: String::new(),
+            avatar_color: None,
+            cadence_days: 7,
+            last_contacted_at: None,
+            created_at: ADDED.to_owned(),
+            met: String::new(),
+            list_id: None,
+            starred: false,
+            dates: Vec::new(),
+            notes: Vec::new(),
+        };
+        let sheet = |contact: ReadState<Vec<ContactEntry>>| {
+            sheet_to_wire(
+                Person {
+                    profile: profile.clone(),
+                    contact,
+                    links: ReadState::Ready(Links::default()),
+                },
+                &clock,
+            )
+        };
+
+        let denied = sheet(ReadState::Denied(Denial::default()));
+        assert!(!denied.channels_known);
+        assert!(denied.channels.is_empty());
+        assert_eq!(
+            denied.person.as_ref().map(|row| row.name.as_str()),
+            Some("Grandpa Ray")
+        );
+        assert!(denied.touches_known, "the linked reading is its own");
+
+        // AND KNOWN-EMPTY IS NOT THE SAME VALUE: "no channels" is a fact.
+        let empty = sheet(ReadState::Ready(Vec::new()));
+        assert!(empty.channels_known);
+        assert!(empty.channels.is_empty());
+
+        let held = sheet(ReadState::Ready(vec![ContactEntry {
+            channel_id: "c1".to_owned(),
+            kind: "phone".to_owned(),
+            label: None,
+            value: "+1 555 0100".to_owned(),
+            normalized_value: "+15550100".to_owned(),
+            preferred: true,
+            provenance: None,
+            duplicate_party_ids: Vec::new(),
+            duplicate_names: vec!["Ray's other number".to_owned()],
+        }]));
+        assert!(held.channels_known);
+        assert_eq!(held.channels.len(), 1);
+        assert_eq!(held.channels[0].duplicate_names, ["Ray's other number"]);
     }
 }

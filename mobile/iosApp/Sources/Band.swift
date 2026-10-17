@@ -3,9 +3,7 @@ import SwiftUI
 import UIKit
 #endif
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// THE BAND — invariant 1 (#1020, wave A; v0 `screens/home/HomeBand.tsx`).
 ///
@@ -39,7 +37,7 @@ struct HomeBand: View {
                     // SPEAK WHAT IS PAINTED. v0's band once spoke one noun for
                     // "Needs you" and painted another, so two members got two
                     // names for one place.
-                    spoken: place.short + (place.id == active ? ", current place" : ""),
+                    spoken: place.short + (place.id == active ? ", " + SharedCopy.shared.BAND_CURRENT_SPOKEN : ""),
                     selected: place.id == active,
                     identifier: "home-band-\(place.id)",
                     onPress: { onSelect(place.id) }
@@ -51,11 +49,11 @@ struct HomeBand: View {
             // that brings the vault back. Every app is a tile on Home.
             BandTab(
                 iconKey: "Backup",
-                label: ShellWords.bandBackup,
-                spoken: ShellWords.bandBackupSpoken + (active == "backup" ? ", current place" : ""),
-                selected: active == "backup",
+                label: HomeWords.shared.BAND_BACKUP,
+                spoken: HomeWords.shared.BAND_BACKUP_SPOKEN + (active == BandPolicy.shared.PLACE_BACKUP ? ", " + SharedCopy.shared.BAND_CURRENT_SPOKEN : ""),
+                selected: active == BandPolicy.shared.PLACE_BACKUP,
                 identifier: "home-band-backup",
-                onPress: { onSelect("backup") }
+                onPress: { onSelect(BandPolicy.shared.PLACE_BACKUP) }
             )
         }
         .padding(BandMetrics.platePad)
@@ -108,8 +106,9 @@ private struct BandTab: View {
                 .frame(width: BandMetrics.markSize, height: BandMetrics.markSize)
                 Text(label)
                     // The same 11/15 rung either way, so a tap cannot reflow
-                    // the strip.
-                    .centraidType(selected ? "control" : "band")
+                    // the strip, and it HOLDS at every text size: `control`
+                    // scales elsewhere, so the active half says `scales: false`.
+                    .centraidType(selected ? "control" : "band", scales: false)
                     .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
                     .lineLimit(1)
                     .multilineTextAlignment(.center)
@@ -203,7 +202,7 @@ struct AppBand: View {
                 Capsule()
                     .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
             )
-            .accessibilityLabel(ShellWords.bandHome)
+            .accessibilityLabel(HomeWords.shared.BAND_HOME)
             .accessibilityIdentifier("\(app)-band-home")
 
             // ONE plate; the gutter between the tabs is the seam. NO PLATE
@@ -224,7 +223,7 @@ struct AppBand: View {
                 if let onMore {
                     AppBandTab(
                         iconKey: "MoreHoriz",
-                        label: ShellWords.bandMore,
+                        label: HomeWords.shared.BAND_MORE,
                         selected: false,
                         rule: rule,
                         identifier: "\(app)-band-more",
@@ -287,8 +286,9 @@ private struct AppBandTab: View {
                 )
                 .frame(width: BandMetrics.markSize, height: BandMetrics.markSize)
                 Text(label)
-                    // THE HELD PAIR: one rung, two weights, no reflow.
-                    .centraidType(selected ? "control" : "band")
+                    // THE HELD PAIR: one rung, two weights, no reflow — and it
+                    // holds at every text size (`control` scales elsewhere).
+                    .centraidType(selected ? "control" : "band", scales: false)
                     .foregroundStyle(Theme.color(selected ? "text" : "textSoft", scheme))
                     .lineLimit(1)
             }
@@ -315,7 +315,7 @@ private struct AppBandTab: View {
         }
         .buttonStyle(BandPress(ground: nil, inset: 0))
         .accessibilityIdentifier(identifier)
-        .accessibilityLabel(label + (selected ? ", current place" : ""))
+        .accessibilityLabel(label + (selected ? ", " + SharedCopy.shared.BAND_CURRENT_SPOKEN : ""))
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : [.isButton])
     }
 }
@@ -353,38 +353,35 @@ private struct BandPress: ButtonStyle {
     }
 }
 
-/// The plate's geometry, mirroring `BandPolicy`'s constants.
-///
-/// They are read across the Kotlin boundary where the framework is present and
-/// restated here as the SPM host build's floor, because `swift test` runs with
-/// no Kotlin toolchain at all — see `ShellModel.swift`'s import guard. The
-/// values are asserted equal by `ScreenFixtureTests`.
+/// The plate's geometry. The measures `BandPolicy` owns are read from it, so
+/// Compose and SwiftUI draw one band; the rest are this shell's own.
 enum BandMetrics {
-    // `BandPolicy`'s measures, restated for the SPM host build, which links no
-    // Kotlin: the system Photos app's structure at Home's size. See
-    // `BandPolicy.kt` for where each number comes from.
+    // `BandPolicy`'s measures: the system Photos app's structure at Home's size.
+    // See `BandPolicy.kt` for where each number comes from.
     /// From the screen's side edges — the page margin, so the band's edges fall
     /// on the tiles'.
-    static let inset: CGFloat = CentraidGeometry.pageMargin
+    static let inset = CGFloat(BandPolicy.shared.BAND_INSET)
     /// From the screen's BOTTOM EDGE, into the home-indicator zone — see
     /// `floorPadding`.
-    static let floor: CGFloat = 21
-    static let topGap: CGFloat = 8
-    /// The pill rung — `BandPolicy.BAND_RADIUS`. Drawn as `Capsule`, which is
-    /// what a radius past half the height resolves to.
-    static let radius: CGFloat = 999
+    static let floor = CGFloat(BandPolicy.shared.BAND_FLOOR)
+    static let topGap = CGFloat(BandPolicy.shared.BAND_TOP_GAP)
+    /// The pill rung. Drawn as `Capsule`, which is what a radius past half the
+    /// height resolves to.
+    static let radius = CGFloat(BandPolicy.shared.BAND_RADIUS)
     /// Between the plate's edge and the tabs, on every side.
-    static let platePad: CGFloat = 4
-    static let tabMinHeight: CGFloat = 46
+    static let platePad = CGFloat(BandPolicy.shared.BAND_PLATE_PAD)
+    static let tabMinHeight = CGFloat(BandPolicy.shared.BAND_TAB_MIN_HEIGHT)
     /// The plate, and so the home circle's side: a tab and its pad.
-    static let height: CGFloat = tabMinHeight + 2 * platePad
+    static let height = CGFloat(BandPolicy.shared.BAND_HEIGHT)
     /// A Home tile's mark, so the band is never drawn heavier than the page.
-    static let markSize: CGFloat = 22
-    static let iconSize: CGFloat = 22
+    static let markSize = CGFloat(BandPolicy.shared.BAND_MARK_SIZE)
+    static let iconSize = CGFloat(BandPolicy.shared.BAND_ICON_SIZE)
     /// A tab's column: 5 + mark + 1 + one `band` line (15) + 3 = 46.
-    static let tabTop: CGFloat = 5
-    static let labelGap: CGFloat = 1
-    static let tabBottom: CGFloat = 3
+    static let tabTop = CGFloat(BandPolicy.shared.BAND_TAB_TOP)
+    static let labelGap = CGFloat(BandPolicy.shared.BAND_LABEL_GAP)
+    static let tabBottom = CGFloat(BandPolicy.shared.BAND_TAB_BOTTOM)
+    // THIS SHELL'S OWN: the policy states no gap between the home circle and the
+    // plate, nor the search bar's measures.
     /// Between the home circle and the app's plate.
     static let plateGap: CGFloat = 8
     /// Between tabs inside the plate.
@@ -436,12 +433,6 @@ enum BandMetrics {
 /// a sixth overflowing into More. Restating those ten rows here would be a
 /// second table for one band, and the two would disagree the first time a name
 /// changed; this reads the same rows Compose reads.
-///
-/// The SPM host build has no Kotlin toolchain at all (see `ShellModel.swift`'s
-/// import guard), so there it resolves to no tabs. Nothing under `swift test`
-/// renders the band, and an EMPTY band is the honest answer to "what does the
-/// policy say" when the policy is not linked — a hard-coded copy would be the
-/// duplicate this comment exists to refuse.
 enum BandDestinations {
     struct Place {
         let id: String
@@ -450,7 +441,6 @@ enum BandDestinations {
     }
 
     static var tabs: [Place] {
-        #if canImport(CentraidShared)
         var places = BandPolicy.shared.bandTabs(pins: BandPolicy.shared.DEFAULT_PINS).map {
             // `short_`, not `short`: Kotlin/Native suffixes a name that
             // collides with an Objective-C keyword, and `short` is a C type.
@@ -465,101 +455,9 @@ enum BandDestinations {
         // ITS MARK IS THE ASSISTANT'S, NOT A SPEECH BUBBLE: the chat is the
         // on-device assistant, and `Sparkle` is the design system's `ask`
         // concept (`ICON_CONCEPTS`), so the tab and every ask key agree.
-        if let home = places.firstIndex(where: { $0.id == "home" }) {
-            places.insert(Place(id: "chat", short: ShellWords.bandChat, iconKey: "Sparkle"), at: home + 1)
+        if let home = places.firstIndex(where: { $0.id == BandPolicy.shared.PLACE_HOME }) {
+            places.insert(Place(id: BandPolicy.shared.PLACE_CHAT, short: ChatCopy.shared.TAB_LABEL, iconKey: "Sparkle"), at: home + 1)
         }
         return places
-        #else
-        return []
-        #endif
     }
-}
-
-/// THE FRAME'S OWN WORDS — the band, Home and the vault switcher — from
-/// `copy/shared.json` through `HomeWords` (#1047: views decide nothing, and
-/// spell nothing either). Empty without the shared framework, as
-/// `LockerWords` is.
-enum ShellWords {
-    #if canImport(CentraidShared)
-    static var bandHome: String { HomeWords.shared.BAND_HOME }
-    static var bandMore: String { HomeWords.shared.BAND_MORE }
-    static var bandBackup: String { HomeWords.shared.BAND_BACKUP }
-    static var bandBackupSpoken: String { HomeWords.shared.BAND_BACKUP_SPOKEN }
-    static var bandChat: String { ChatCopy.shared.TAB_LABEL }
-    static var loading: String { HomeWords.shared.LOADING }
-    static var photosAbsent: String { HomeWords.shared.PHOTOS_ABSENT }
-    static var dayOneTitle: String { HomeWords.shared.DAY_ONE_TITLE }
-    static var dayOneBody: String { HomeWords.shared.DAY_ONE_BODY }
-    static var vaultsTitle: String { HomeWords.shared.VAULTS_TITLE }
-    static var vaultsOne: String { HomeWords.shared.VAULTS_ONE }
-    /// THE FIRST-LAUNCH GATE's sentence and two actions (`FirstLaunchView`).
-    static var firstLaunchBody: String { HomeWords.shared.FIRST_LAUNCH_BODY }
-    static var firstLaunchHouseTitle: String { HomeWords.shared.FIRST_LAUNCH_HOUSE_TITLE }
-    static var firstLaunchHouseBody: String { HomeWords.shared.FIRST_LAUNCH_HOUSE_BODY }
-    static var firstLaunchAssistantTitle: String { HomeWords.shared.FIRST_LAUNCH_ASSISTANT_TITLE }
-    static var firstLaunchAssistantBody: String { HomeWords.shared.FIRST_LAUNCH_ASSISTANT_BODY }
-    static var firstLaunchBackupTitle: String { HomeWords.shared.FIRST_LAUNCH_BACKUP_TITLE }
-    static var firstLaunchBackupBody: String { HomeWords.shared.FIRST_LAUNCH_BACKUP_BODY }
-    static var firstLaunchNext: String { HomeWords.shared.FIRST_LAUNCH_NEXT }
-    static var firstLaunchSkip: String { HomeWords.shared.FIRST_LAUNCH_SKIP }
-    static var firstLaunchMake: String { HomeWords.shared.FIRST_LAUNCH_MAKE }
-    static var firstLaunchRestore: String { HomeWords.shared.FIRST_LAUNCH_RESTORE }
-    /// "Restore my vaults" — words.enter's door on the vault sheets (#1047 E2).
-    static var wordsRestore: String { WordsCopy.shared.RESTORE_FIRST_ACTION }
-    /// The vault switcher's "Make a vault" (R-ONBOARD-11).
-    static var vaultsMake: String { HomeWords.shared.VAULTS_MAKE }
-    /// The lockup's status line, spoken as a door.
-    static var backupStatusOpen: String { SharedCopy.shared.BACKUP_STATUS_OPEN }
-    /// The Backup tab's heading over its backup devices.
-    static var backupDevices: String { SharedCopy.shared.BACKUP_DEVICES_HEADING }
-    static var vaultsCurrent: String { HomeWords.shared.VAULTS_CURRENT }
-    static var vaultsForget: String { HomeWords.shared.VAULTS_FORGET }
-    static var vaultsForgetBody: String { HomeWords.shared.VAULTS_FORGET_BODY }
-    /// The switcher's Rename: its swipe, its alert, its field and its save.
-    static var vaultsRename: String { HomeWords.shared.VAULTS_RENAME }
-    static var vaultsRenameTitle: String { HomeWords.shared.VAULTS_RENAME_TITLE }
-    static var vaultsRenameField: String { HomeWords.shared.VAULTS_RENAME_FIELD }
-    static var vaultsRenameSave: String { HomeWords.shared.VAULTS_RENAME_SAVE }
-    static var vaultsRenameFailed: String { HomeWords.shared.VAULTS_RENAME_FAILED }
-    static var cancel: String { KitWords.shared.CANCEL }
-    /// The import banner's one exit.
-    static var done: String { KitWords.shared.DONE }
-    /// CONTACTS → PEOPLE, the one importer a day-one empty state offers today.
-    static var importContacts: String { PeopleCopy.shared.IMPORT_CONTACTS }
-    static var importContactsRunning: String { PeopleCopy.shared.IMPORT_CONTACTS_RUNNING }
-    static var importContactsDenied: String { PeopleCopy.shared.IMPORT_CONTACTS_DENIED }
-    static var importCalendar: String { AgendaCopy.shared.IMPORT_CALENDAR }
-    static var importCalendarRunning: String { AgendaCopy.shared.IMPORT_CALENDAR_RUNNING }
-    static var importCalendarDenied: String { AgendaCopy.shared.IMPORT_CALENDAR_DENIED }
-    static var importReminders: String { TasksCopy.shared.IMPORT_REMINDERS }
-    static var importRemindersRunning: String { TasksCopy.shared.IMPORT_REMINDERS_RUNNING }
-    static var importRemindersDenied: String { TasksCopy.shared.IMPORT_REMINDERS_DENIED }
-    /// The import's verb for a day-one empty state, by where the phone holds the data.
-    static func importLabel(_ source: Centraid_Screen_V1_ImportSource) -> String {
-        switch source {
-        case .contacts: return importContacts
-        case .calendar: return importCalendar
-        case .reminders: return importReminders
-        default: return ""
-        }
-    }
-    static func vaultName(_ name: String) -> String { HomeWords.shared.vaultName(name: name) }
-    static func forgetTitle(_ name: String) -> String { HomeWords.shared.forgetTitle(name: name) }
-    #else
-    static let bandHome = "", bandMore = "", bandBackup = "", bandBackupSpoken = "", bandChat = "", loading = ""
-    static let photosAbsent = "", dayOneTitle = "", dayOneBody = ""
-    static let vaultsTitle = "", vaultsOne = ""
-    static let firstLaunchBody = "", firstLaunchMake = "", firstLaunchRestore = ""
-    static let firstLaunchHouseTitle = "", firstLaunchHouseBody = "", firstLaunchAssistantTitle = "", firstLaunchAssistantBody = "", firstLaunchBackupTitle = "", firstLaunchBackupBody = "", firstLaunchNext = "", firstLaunchSkip = ""
-    static let wordsRestore = "", backupDevices = "", vaultsMake = "", backupStatusOpen = ""
-    static let vaultsCurrent = "", vaultsForget = "", vaultsForgetBody = "", cancel = ""
-    static let vaultsRename = "", vaultsRenameTitle = "", vaultsRenameField = "", vaultsRenameSave = "", vaultsRenameFailed = ""
-    static let done = ""
-    static let importContacts = "", importContactsRunning = "", importContactsDenied = ""
-    static let importCalendar = "", importCalendarRunning = "", importCalendarDenied = ""
-    static let importReminders = "", importRemindersRunning = "", importRemindersDenied = ""
-    static func importLabel(_ source: Centraid_Screen_V1_ImportSource) -> String { "" }
-    static func vaultName(_ name: String) -> String { name }
-    static func forgetTitle(_ name: String) -> String { "" }
-    #endif
 }

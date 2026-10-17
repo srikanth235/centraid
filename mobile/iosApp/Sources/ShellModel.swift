@@ -3,24 +3,7 @@ import Foundation
 import SwiftUI
 import UIKit
 
-// THE FRAMEWORK IS OPTIONAL AT COMPILE TIME, AND `Package.swift` SAYS WHY.
-//
-// Its `binaryTarget` is commented out on purpose: `swift test` had to run on a
-// bare macOS with no Kotlin toolchain, and that was what made
-// `Tests/ScreenFixtureTests.swift` a one-command hand-off rather than an Xcode
-// scheme. THE `import UIKit` FOUR LINES UP IS WHAT ENDED THAT — it arrived with
-// this file in `a4dd49d0d` and macOS has no UIKit, so the host build has failed
-// at dependency scanning ever since and the guard below now protects a build
-// nobody can run. `Package.swift`'s header carries the whole account and the
-// open question. An unconditional `import CentraidShared` here breaks that promise for
-// the WHOLE `Sources` target — wave A did exactly that and turned the hand-off
-// command red — so the import and everything that touches Kotlin types is
-// guarded. Xcode builds always have the framework; only the SPM host build does
-// not, and on that build Home renders whatever `homeState` holds, which the
-// fixture test sets by hand.
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// What holds the shared module's screen hosts on iOS (#1020, D-1020-E1).
 ///
@@ -74,8 +57,6 @@ final class ShellModel: ObservableObject {
         case photoLightbox(String, [String], album: String = "")
         case photoPicker(String, String)
         case places
-        case photosPeople
-        case photoFaceReview
         case photosMemories
         case photoDuplicates
         case photoDuplicateReview(String)
@@ -84,7 +65,11 @@ final class ShellModel: ObservableObject {
         case photoEditor(String, [String])
     }
 
-    @Published var path: [Route] = []
+    @Published var path: [Route] = [] {
+        // A SETTLED IMPORT LINE GOES WITH THE NEXT MOVE (DESIGN.md: the line
+        // never clears on a timer; the member's own next step puts it away).
+        didSet { if path != oldValue { importLineMoved() } }
+    }
     @Published var masked = false
 
     /// WHICH PLACE THE BAND'S ROOT IS SHOWING: Home's springboard, or the Chat
@@ -95,7 +80,9 @@ final class ShellModel: ObservableObject {
         case home, chat, backup
     }
 
-    @Published var tab: Tab = .home
+    @Published var tab: Tab = .home {
+        didSet { if tab != oldValue { importLineMoved() } }
+    }
 
     /// THE ON-DEVICE CHAT, with its own observable (see `ChatModel`): a state
     /// per streamed token must not re-evaluate Home.
@@ -143,10 +130,8 @@ final class ShellModel: ObservableObject {
     /// running, iOS gives it the background task's seconds to finish its
     /// current part instead of suspending it mid-part.
     func becameActive() {
-        #if canImport(CentraidShared)
         let grace = ForegroundGrace(name: "dev.centraid.pass.active")
         home.becameActive(onDone: { _ in grace.end() })
-        #endif
     }
 
     /// THE APP WENT TO THE BACKGROUND (#1080, the shells).
@@ -163,13 +148,11 @@ final class ShellModel: ObservableObject {
     /// the `didEnterBackground` observer below, not here.
     func wentToBackground() {
         BackgroundPasses.resubmitAll()
-        #if canImport(CentraidShared)
         let grace = ForegroundGrace(name: "dev.centraid.pass.background")
         home.enteredBackground(
             graceMs: Int64(Self.backgroundPassSeconds * 1000),
             onDone: { _ in grace.end() }
         )
-        #endif
     }
 
     /// Under the ~30 seconds iOS grants a background task, with room for the
@@ -264,8 +247,6 @@ final class ShellModel: ObservableObject {
     @Published var photosCollectionsState = Data()
     @Published var photosSearchState = Data()
     @Published var placesState = Data()
-    @Published var photosPeopleState = Data()
-    @Published var faceReviewState = Data()
     @Published var duplicatesState = Data()
     @Published var duplicateReviewState = Data()
     @Published var photosMemoriesState = Data()
@@ -281,7 +262,6 @@ final class ShellModel: ObservableObject {
     /// sentence and three state views without one.
     @Published var photoShelfCopy = PhotoShelfCopy.unknown
 
-    #if canImport(CentraidShared)
     /// Home's bridge into `CentraidShared`. Created once, observed once.
     ///
     /// Home is the only screen wired this way so far: wave A built it, so wave A
@@ -338,8 +318,6 @@ final class ShellModel: ObservableObject {
     private let photosCollections = PhotosCollectionsBridge()
     private let photosSearch = PhotosSearchBridge()
     private let places = PlacesBridge()
-    private let photosPeople = PhotosPeopleBridge()
-    private let faceReview = FaceReviewBridge()
     private let duplicates = DuplicatesBridge()
     private let duplicateReview = DuplicateReviewBridge()
     private let photosMemories = PhotosMemoriesBridge()
@@ -351,9 +329,7 @@ final class ShellModel: ObservableObject {
         }
         photos.observe { [weak self] bytes in self?.photosState = bytes.data }
         home.observeHoldsNoVault { [weak self] none in self?.holdsNoVaultChanged(none.boolValue) }
-        #if canImport(CentraidShared)
         home.appearance { [weak self] stored in self?.appearance = stored }
-        #endif
         vaultWords.observe { [weak self] bytes in self?.vaultWordsChanged(bytes.data) }
         // A VAULT WAS MADE (`VaultWordsBridge.made`, once per make): its
         // sentence stays on the vault sheet, as `found`'s did, and what the
@@ -364,12 +340,11 @@ final class ShellModel: ObservableObject {
         vaultWords.observeMade { [weak self] sentence in
             guard let self else { return }
             self.gatewayStatus = sentence
-            #if canImport(CentraidShared)
             self.photos.askForPhotos { [weak self] in
                 DispatchQueue.main.async { self?.importEverythingFromPhone() }
             }
-            #endif
         }
+        wordsEntry.camera = PairScanner.available
         wordsEntry.observe { [weak self] bytes in self?.wordsEntryChanged(bytes.data) }
         wordsShow.observe { [weak self] bytes in self?.wordsShowChanged(bytes.data) }
         pairLaptop.observe { [weak self] bytes in self?.pairLaptopChanged(bytes.data) }
@@ -397,8 +372,6 @@ final class ShellModel: ObservableObject {
         photosCollections.observe { [weak self] bytes in self?.photosCollectionsState = bytes.data }
         photosSearch.observe { [weak self] bytes in self?.photosSearchState = bytes.data }
         places.observe { [weak self] bytes in self?.placesState = bytes.data }
-        photosPeople.observe { [weak self] bytes in self?.photosPeopleState = bytes.data }
-        faceReview.observe { [weak self] bytes in self?.faceReviewState = bytes.data }
         duplicates.observe { [weak self] bytes in self?.duplicatesState = bytes.data }
         duplicateReview.observe { [weak self] bytes in self?.duplicateReviewState = bytes.data }
         photosMemories.observe { [weak self] bytes in self?.photosMemoriesState = bytes.data }
@@ -432,8 +405,6 @@ final class ShellModel: ObservableObject {
             self.photosCollections.attach(session: session)
             self.photosSearch.attach(session: session)
             self.places.attach(session: session)
-            self.photosPeople.attach(session: session)
-            self.faceReview.attach(session: session)
             self.duplicates.attach(session: session)
             self.duplicateReview.attach(session: session)
             self.photosMemories.attach(session: session)
@@ -472,9 +443,11 @@ final class ShellModel: ObservableObject {
         wireUploads()
         // FREE UP SPACE'S HAND ON THE PHOTO LIBRARY (#1080 A20), installed once;
         // `HomeBridge` hands it to the session when the session opens.
-        #if canImport(CentraidShared)
         home.installLibraryDeleter(deleter: PhotoLibraryDeleter())
-        #endif
+        // THE GATEWAY BROWSE (#1080, Q-1080-D3): `NWBrowser` over
+        // `_centraid-gateway._tcp`, run in the foreground after a pass found no
+        // paired gateway. Outbound only; the phone never listens.
+        home.installGatewayBrowser(browser: BonjourGatewayBrowser())
         // THE DEVICE MAKES ITS OWN VAULT (#1025 S5; #1029 §1).
         //
         // This used to hand over every `.db` file that had been PLACED in the
@@ -608,7 +581,6 @@ final class ShellModel: ObservableObject {
         #endif
     }
 
-    #endif
 
     /// THE SHELF'S ANSWER TO "DOES THIS DEVICE HOLD NO VAULT?" (`Shelf.holdsNoVault`).
     ///
@@ -624,7 +596,7 @@ final class ShellModel: ObservableObject {
             transferRulesOpen = false
             // A DISMISSAL, as the switcher's own swipe sends it: shut the
             // machine's sheet flag, change no vault.
-            send(screen: "home", event: HomeEvents.vaultPicked(""))
+            send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.vaultPicked(""))
         }
         holdsNoVault = none
     }
@@ -724,7 +696,7 @@ final class ShellModel: ObservableObject {
     private func closeVaultSwitcher() -> Double {
         let state = (try? Centraid_Screen_V1_HomeState(serializedBytes: homeState)) ?? .init()
         guard state.vaultSheetOpen else { return 0 }
-        send(screen: "home", event: HomeEvents.vaultPicked(""))
+        send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.vaultPicked(""))
         return 0.45
     }
 
@@ -743,9 +715,7 @@ final class ShellModel: ObservableObject {
         let wait = closeVaultSwitcher()
         makePending = true
         makeReadyAt = Date().addingTimeInterval(wait)
-        #if canImport(CentraidShared)
         vaultWords.open()
-        #endif
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.presentMakeIfAsked() }
     }
 
@@ -777,27 +747,21 @@ final class ShellModel: ObservableObject {
     /// shelf's, and words.make's RESTORE_FIRST intent.
     func openRestore() {
         let wait = closeVaultSwitcher()
-        #if canImport(CentraidShared)
         wordsEntry.openRestore()
-        #endif
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.wordsSheet = .enter }
     }
 
     /// HAND THE WORDS BACK to this phone's vaults (`words.enter`,
     /// PURPOSE_REKEY): Locker's wall's `WordsTapped` intent.
     func openRekey() {
-        #if canImport(CentraidShared)
         wordsEntry.openRekey()
-        #endif
         wordsSheet = .enter
     }
 
     /// The same re-key from pair.laptop's `WordsTapped`: the screen explains
     /// the words in pairing's terms, not Locker's (#1047 F5).
     private func openRekeyForPairing() {
-        #if canImport(CentraidShared)
         wordsEntry.openRekeyForPairing()
-        #endif
         wordsSheet = .enter
     }
 
@@ -805,7 +769,6 @@ final class ShellModel: ObservableObject {
     /// ignores: the shell closes words.make (RESTORE_FIRST holds no words)
     /// and opens words.enter for a restore in its place.
     func sendVaultWords(_ event: Data) {
-        #if canImport(CentraidShared)
         vaultWords.send(event: event.kotlin)
         let decoded = (try? Centraid_Screen_V1_VaultWordsEvent(serializedBytes: event)) ?? .init()
         if case .restore = decoded.kind {
@@ -821,13 +784,10 @@ final class ShellModel: ObservableObject {
             }
             wordsSheet = .enter
         }
-        #endif
     }
 
     func sendWordsEntry(_ event: Data) {
-        #if canImport(CentraidShared)
         wordsEntry.send(event: event.kotlin)
-        #endif
     }
 
     /// THE SHEET WAS SWIPED AWAY. words.make hears `Dismissed` (the words are
@@ -858,18 +818,14 @@ final class ShellModel: ObservableObject {
     /// `wordsShowChanged` runs the owner check, and the sheet is presented
     /// only once the machine has something to draw.
     func openShowWords() {
-        #if canImport(CentraidShared)
         showWordsRequested = true
         wordsShow.open()
-        #endif
     }
 
     /// PAIR WITH THE LAPTOP (`pair.laptop`): the Backup screen's "Add".
     /// Whether this phone has a camera is the one fact the machine is told.
     func openPairLaptop() {
-        #if canImport(CentraidShared)
         pairLaptop.open(camera: PairScanner.available)
-        #endif
         DispatchQueue.main.async { self.wordsSheet = .pair }
     }
 
@@ -891,13 +847,11 @@ final class ShellModel: ObservableObject {
     /// THE BACKUP TAB'S READ: the rule's three sentences from the store, and
     /// the screen's `Opened`, which reads the line and the destinations.
     private func readBackup() {
-        #if canImport(CentraidShared)
         transferRuleChoices = home.transferRuleChoices().map {
             (stored: $0.stored, sentence: $0.sentence)
         }
         home.transferRule { [weak self] stored in self?.transferRule = stored }
         backup.open()
-        #endif
     }
 
     /// LEAVING THE BACKUP TAB tells its machine the screen is gone, as a
@@ -907,9 +861,7 @@ final class ShellModel: ObservableObject {
     }
 
     func sendBackup(_ event: Data) {
-        #if canImport(CentraidShared)
         backup.send(event: event.kotlin)
-        #endif
     }
 
     /// "ADD A BACKUP DEVICE" IS PAIRING: `pair.laptop` opens over the Backup
@@ -937,15 +889,11 @@ final class ShellModel: ObservableObject {
         let now = BackupScreenModel(decoding: data)
         // A GATEWAY FORGOTTEN OR ADDED CHANGES THE PINS: the mover must never
         // trust a certificate this phone no longer pairs with.
-        #if canImport(CentraidShared)
         if before.destinations.map(\.id) != now.destinations.map(\.id) { refreshUploadPins() }
-        #endif
     }
 
     func sendWordsShow(_ event: Data) {
-        #if canImport(CentraidShared)
         wordsShow.send(event: event.kotlin)
-        #endif
     }
 
     /// An event for `pair.laptop`. `WordsTapped` is an INTENT: the machine
@@ -953,12 +901,10 @@ final class ShellModel: ObservableObject {
     /// place — Locker's wall's door. The sheet swaps before the machine's
     /// CLOSED arrives, so that arrival leaves the words sheet up.
     func sendPairLaptop(_ event: Data) {
-        #if canImport(CentraidShared)
         pairLaptop.send(event: event.kotlin)
         if case .words = (try? Centraid_Screen_V1_PairLaptopEvent(serializedBytes: event))?.kind {
             openRekeyForPairing()
         }
-        #endif
     }
 
     /// THE APP LEFT THE FOREGROUND: words.show drops its words (`Dismissed`),
@@ -1004,9 +950,7 @@ final class ShellModel: ObservableObject {
         // A NEW DESTINATION IS A NEW PIN (#1080): the mover must hold its
         // certificate before the next batch is handed to the OS, which may be
         // the moment this app goes to the background.
-        #if canImport(CentraidShared)
         if state.phase == .paired, before != .paired { refreshUploadPins() }
-        #endif
         if state.phase == .closed, wordsSheet == .pair {
             wordsSheet = nil
             if tab == .backup { readBackup() }
@@ -1058,28 +1002,22 @@ final class ShellModel: ObservableObject {
     /// device enrolled and a re-pair took the copy again — and there is no
     /// gateway and no copy. The confirmation in `VaultSheet` has to say so.
     func forget(vaultID: String) {
-        #if canImport(CentraidShared)
         home.forget(vaultId: vaultID) {}
         // R-SHELL-2: member-visible sentences name the FOREGROUND holding,
         // not the last successful found() call. Forgetting (or switching away
         // from) a vault must not leave "Made Fresh Vault." over Tahoe Weekend.
         gatewayStatus = ""
-        #else
-        gatewayStatus = "This build has no core."
-        #endif
     }
 
     /// RENAME A VAULT from the switcher: written into the vault's own file
     /// (`core.rename_vault`), and the header and the roster follow the shelf.
     /// A name that did not take says so on the switcher's status line.
     func renameVault(vaultID: String, name: String) {
-        #if canImport(CentraidShared)
         home.renameVault(vaultId: vaultID, name: name) { [weak self] renamed in
             DispatchQueue.main.async {
-                self?.gatewayStatus = renamed.boolValue ? "" : ShellWords.vaultsRenameFailed
+                self?.gatewayStatus = renamed.boolValue ? "" : HomeWords.shared.VAULTS_RENAME_FAILED
             }
         }
-        #endif
     }
 
     // MARK: One-tap imports (docs/decisions.md, "Onboarding without sample data")
@@ -1088,7 +1026,6 @@ final class ShellModel: ObservableObject {
     /// of use: the OS asks its own permission now, and never at launch.
     /// Contacts → People, Calendar → Agenda, Reminders → Tasks.
     func importFromPhone(_ source: Centraid_Screen_V1_ImportSource) {
-        #if canImport(CentraidShared)
         guard !importing, let words = Self.importWords(source) else { return }
         // CONTACTS SHARED IN PART (iOS 18's limited access): a second ask
         // draws no prompt and reads only what was already shared, so the tap
@@ -1100,12 +1037,14 @@ final class ShellModel: ObservableObject {
         }
         importing = true
         importNotice = words.running
+        // ASKED FROM THE APP ITSELF: the rows land on the page the member is
+        // reading, so the line has nowhere else to send them.
+        importOpens = ""
         Task { @MainActor in
             let sentence = await self.imported(source)
             self.importing = false
             self.importNotice = sentence ?? words.denied
         }
-        #endif
     }
 
     /// A VAULT WAS JUST MADE: contacts, calendar and reminders, one after
@@ -1113,27 +1052,41 @@ final class ShellModel: ObservableObject {
     /// (`PhoneImport.madeSummary`); a store the member refused, or one with
     /// nothing in it, says nothing.
     private func importEverythingFromPhone() {
-        #if canImport(CentraidShared)
         guard !importing else { return }
         importing = true
         Task { @MainActor in
+            var apps: [String] = []
             var outcomes: [String] = []
             for source in [Centraid_Screen_V1_ImportSource.contacts, .calendar, .reminders] {
                 self.importNotice = Self.importWords(source)?.running ?? ""
-                if let sentence = await self.imported(source) { outcomes.append(sentence) }
+                if let sentence = await self.imported(source) {
+                    apps.append(Self.importApp(source))
+                    outcomes.append(sentence)
+                }
             }
             self.importing = false
             self.importNotice = PhoneImport.shared.madeSummary(outcomes: outcomes)
+            // THE LINE'S ONE ACTION opens what came in (the first app that
+            // received anything); a line with nothing new opens nothing.
+            self.importOpens = self.importNotice.isEmpty ? "" : PhoneImport.shared.madeOpens(apps: apps, outcomes: outcomes)
         }
-        #endif
     }
 
-    #if canImport(CentraidShared)
+    /// The app an import writes to: Contacts → People, Calendar → Agenda, Reminders → Tasks.
+    private static func importApp(_ source: Centraid_Screen_V1_ImportSource) -> String {
+        switch source {
+        case .contacts: return "people"
+        case .calendar: return "agenda"
+        case .reminders: return "tasks"
+        default: return ""
+        }
+    }
+
     private static func importWords(_ source: Centraid_Screen_V1_ImportSource) -> (running: String, denied: String)? {
         switch source {
-        case .contacts: return (ShellWords.importContactsRunning, ShellWords.importContactsDenied)
-        case .calendar: return (ShellWords.importCalendarRunning, ShellWords.importCalendarDenied)
-        case .reminders: return (ShellWords.importRemindersRunning, ShellWords.importRemindersDenied)
+        case .contacts: return (PeopleCopy.shared.IMPORT_CONTACTS_RUNNING, PeopleCopy.shared.IMPORT_CONTACTS_DENIED)
+        case .calendar: return (AgendaCopy.shared.IMPORT_CALENDAR_RUNNING, AgendaCopy.shared.IMPORT_CALENDAR_DENIED)
+        case .reminders: return (TasksCopy.shared.IMPORT_REMINDERS_RUNNING, TasksCopy.shared.IMPORT_REMINDERS_DENIED)
         default: return nil
         }
     }
@@ -1171,7 +1124,6 @@ final class ShellModel: ObservableObject {
         default: return ""
         }
     }
-    #endif
 
     /// iOS's contact picker is up (limited access, iOS 18).
     @Published var contactAccessPickerShown = false
@@ -1179,10 +1131,10 @@ final class ShellModel: ObservableObject {
     /// THE PICKER CLOSED: import the contacts it newly shared. Nothing shared
     /// is nothing to say.
     func contactsShared(_ identifiers: [String]) {
-        #if canImport(CentraidShared)
         guard !importing, !identifiers.isEmpty else { return }
         importing = true
-        importNotice = ShellWords.importContactsRunning
+        importNotice = PeopleCopy.shared.IMPORT_CONTACTS_RUNNING
+        importOpens = ""
         Task { @MainActor in
             let found = await PhoneContacts.read(identifiers: identifiers)
             let sentence: String = await withCheckedContinuation { done in
@@ -1191,13 +1143,33 @@ final class ShellModel: ObservableObject {
             self.importing = false
             self.importNotice = sentence
         }
-        #endif
     }
 
-    /// The import banner's Done.
+    /// The app the import line's one action opens ("Open People"), or empty.
+    @Published var importOpens = ""
+
+    /// The import line's close key.
     func dismissImportNotice() {
         guard !importing else { return }
         importNotice = ""
+        importOpens = ""
+    }
+
+    /// The import line's action: put the line away and open what came in.
+    func openImported() {
+        let app = importOpens
+        dismissImportNotice()
+        guard let route = ShellModel.Route.home(of: app) else { return }
+        tab = .home
+        path.append(route)
+    }
+
+    /// The member moved: a settled line has been read, and goes. A running
+    /// import keeps its line, since the work it describes is not done.
+    private func importLineMoved() {
+        guard !importing, !importNotice.isEmpty else { return }
+        importNotice = ""
+        importOpens = ""
     }
 
     /// Clear member-visible copy that named a vault no longer in front.
@@ -1224,7 +1196,6 @@ final class ShellModel: ObservableObject {
     /// DRAW AN EDIT, OFF THE MAIN THREAD, and hand the JPEG to the bridge —
     /// which gives it the original's date, place and caption (#1029).
     private func renderEdit(key: String, path: String, plan: Data) {
-        #if canImport(CentraidShared)
         let decoded = (try? Centraid_Screen_V1_PhotoEditPlan(serializedBytes: plan)) ?? .init()
         // THE BRIDGE, NOT `self`, crosses into the detached task: it is the one
         // thing the answer goes to, and a captured model is a main-actor type
@@ -1241,7 +1212,6 @@ final class ShellModel: ObservableObject {
                 }
             }
         }
-        #endif
     }
 
     /// A BAND BODY CAME ON SCREEN (#1029, photos port).
@@ -1255,13 +1225,11 @@ final class ShellModel: ObservableObject {
     /// Idempotence is the machines': a second `Opened` re-reads, which is what
     /// a member returning to a band should get.
     func openedPhotosBand(_ destination: Centraid_Screen_V1_PhotosGridState.Destination) {
-        #if canImport(CentraidShared)
         switch destination {
         case .collections: photosCollections.opened()
         case .search: photosSearch.opened()
         case .library, .unspecified, .UNRECOGNIZED: break
         }
-        #endif
     }
 
     /// THE MACHINE'S ANSWERS, CROSSING THE ABI AS SIX PLAIN VALUES.
@@ -1273,7 +1241,6 @@ final class ShellModel: ObservableObject {
     /// a `PlaceDetail` carrying an empty sentence and three state views
     /// carrying none.
     private func shelfWords() -> PhotoShelfCopy {
-        #if canImport(CentraidShared)
         let words = photoShelf.sentences()
         return PhotoShelfCopy(
             title: words.title,
@@ -1283,14 +1250,11 @@ final class ShellModel: ObservableObject {
             isTrash: words.isTrash,
             isArchive: words.isArchive
         )
-        #else
-        return .unknown
-        #endif
     }
 
-    /// THE THREE SHELVES THAT ARE REACHED FROM ANOTHER SCREEN, ENCODED.
+    /// THE TWO SHELVES THAT ARE REACHED FROM ANOTHER SCREEN, ENCODED.
     ///
-    /// A place card, a person and a memory each open the SAME screen —
+    /// A place card and a memory each open the SAME screen —
     /// `photos.shelf`, the library under a predicate — so each of these builds
     /// the parameter that says which. They are here rather than in the views
     /// because a route's payload is the shell's business, and because
@@ -1305,21 +1269,6 @@ final class ShellModel: ObservableObject {
         shelf.place = .with {
             $0.placeID = identifier
             $0.placeName = name
-        }
-        return (try? shelf.serializedData()) ?? Data()
-    }
-
-    func personShelf(identifier: String, name: String) -> Data {
-        var shelf = Centraid_Screen_V1_PhotoShelf()
-        // A PERSON IS A `PhotoStateView`, NOT AN ARM OF ITS OWN — law 3, and
-        // the shape `navigation.ts:43-46` chose: the state view is a
-        // discriminated union and "one person's photographs" is one of its
-        // cases, beside favourites, archive, trash and videos.
-        shelf.stateView = .with {
-            $0.person = .with {
-                $0.partyID = identifier
-                $0.personName = name
-            }
         }
         return (try? shelf.serializedData()) ?? Data()
     }
@@ -1355,42 +1304,34 @@ final class ShellModel: ObservableObject {
     /// view's screen name into a crash on a member's phone, in a build where
     /// every screen that exists is connected.
     func send(screen: String, event: Data) {
-        #if canImport(CentraidShared)
         switch screen {
-        case "home": home.send(event: event.kotlin)
-        case "photos.grid": photos.send(event: event.kotlin)
-        case "photos.shelf": photoShelf.send(event: event.kotlin)
-        case "photos.lightbox": photoLightbox.send(event: event.kotlin)
-        case "photos.picker": photoPicker.send(event: event.kotlin)
-        case "photos.collections": photosCollections.send(event: event.kotlin)
-        case "photos.search": photosSearch.send(event: event.kotlin)
-        case "photos.places": places.send(event: event.kotlin)
-        case "photos.people": photosPeople.send(event: event.kotlin)
-        case "photos.faces": faceReview.send(event: event.kotlin)
-        case "photos.duplicates": duplicates.send(event: event.kotlin)
-        case "photos.duplicate": duplicateReview.send(event: event.kotlin)
-        case "photos.memories": photosMemories.send(event: event.kotlin)
-        case "photos.editor": photoEditor.send(event: event.kotlin)
+        case HomeMachine.shared.SCREEN_ID: home.send(event: event.kotlin)
+        case PhotosScreens.grid: photos.send(event: event.kotlin)
+        case PhotosScreens.shelf: photoShelf.send(event: event.kotlin)
+        case PhotosScreens.lightbox: photoLightbox.send(event: event.kotlin)
+        case PhotosScreens.picker: photoPicker.send(event: event.kotlin)
+        case PhotosScreens.collections: photosCollections.send(event: event.kotlin)
+        case PhotosScreens.search: photosSearch.send(event: event.kotlin)
+        case PhotosScreens.places: places.send(event: event.kotlin)
+        case PhotosScreens.duplicates: duplicates.send(event: event.kotlin)
+        case PhotosScreens.duplicateReview: duplicateReview.send(event: event.kotlin)
+        case PhotosScreens.memories: photosMemories.send(event: event.kotlin)
+        case PhotosScreens.editor: photoEditor.send(event: event.kotlin)
         // EVERY REGISTERED SCREEN: a lookup, not a case (K5).
         default: ports[screen]?.send(event)
         }
-        #endif
     }
 
     /// "Send a copy" and "Download original" over a shelf's pick. The work is
     /// `ShelfCopyExport.swift`'s; this only lends it the shelf's bridge.
     func exportShelf(_ assetIdentifiers: [String], as kind: ShelfCopyExport.Kind) {
-        #if canImport(CentraidShared)
         ShelfCopyExport.run(kind, assetIdentifiers, bridge: photoShelf)
-        #endif
     }
 
     /// "Send a copy" over the library's selection — the shelf's batch hand-off,
     /// lent the grid's `LibraryCopies` so the outcome lands on the library.
     func exportLibrary(_ assetIdentifiers: [String], keepLocation: Bool) {
-        #if canImport(CentraidShared)
         ShelfCopyExport.run(.send(keepLocation: keepLocation), assetIdentifiers, bridge: photos.copies)
-        #endif
     }
 
     /// Open the transfer-rules sheet, reading the current rule as it opens.
@@ -1399,14 +1340,12 @@ final class ShellModel: ObservableObject {
     /// value held since launch is a value a second device — or this device's
     /// own restore — may have moved underneath.
     func openTransferRules() {
-        #if canImport(CentraidShared)
         transferRuleChoices = home.transferRuleChoices().map {
             (stored: $0.stored, sentence: $0.sentence)
         }
         home.transferRule { [weak self] stored in
             self?.transferRule = stored
         }
-        #endif
         transferRulesOpen = true
     }
 
@@ -1424,23 +1363,17 @@ final class ShellModel: ObservableObject {
     /// `CANCELLED`, the core requeues it, and the next handoff carries the new
     /// rule's verdict. A tap on the rule already held cancels nothing.
     func setTransferRule(_ stored: String) {
-        #if canImport(CentraidShared)
         let before = transferRule
         home.setTransferRule(stored: stored) { [weak self] settled in
             self?.transferRule = settled
             if settled != before { BackgroundUploader.shared.cancelEverything() }
         }
-        #endif
     }
 
     /// THE SCHEME THE WINDOW IS HELD TO, or nil to follow the phone.
     var preferredScheme: ColorScheme? {
-        #if canImport(CentraidShared)
         guard let held = home.appearanceHeldDark(stored: appearance) else { return nil }
         return held.boolValue ? .dark : .light
-        #else
-        return nil
-        #endif
     }
 
     /// What the PHONE shows, under any hold this app puts on its own window:
@@ -1454,22 +1387,16 @@ final class ShellModel: ObservableObject {
 
     /// Home's appearance key as drawn on a screen that is `dark`.
     func appearanceKey(dark: Bool) -> (iconKey: String, label: String) {
-        #if canImport(CentraidShared)
         let key = home.appearanceKey(dark: dark)
         return (key.iconKey, key.label)
-        #else
-        return ("Moon", "")
-        #endif
     }
 
     /// The key's tap: flipped against the phone, written, and drawn from
     /// what the store answers.
     func toggleAppearance() {
-        #if canImport(CentraidShared)
         home.toggleAppearance(current: appearance, phoneDark: phoneDark) { [weak self] stored in
             self?.appearance = stored
         }
-        #endif
     }
 
     /// Run one camera-roll pass now (#1025 S6).
@@ -1479,9 +1406,7 @@ final class ShellModel: ObservableObject {
     /// `BackupChanged` events through the bridge's own runner. A view that sent
     /// an event here would be asking the reducer to do a file read.
     func backUpCameraRoll() {
-        #if canImport(CentraidShared)
         photos.backUpNow()
-        #endif
     }
 
     /// Tell a screen it is on screen (#1025 S5, lane L5).
@@ -1499,7 +1424,6 @@ final class ShellModel: ObservableObject {
     /// sorted first.
     func opened(_ route: Route) {
         noteVisit(route)
-        #if canImport(CentraidShared)
         switch route {
         case let .screen(identifier, parameter):
             routes[identifier]?.open(parameter)
@@ -1537,8 +1461,6 @@ final class ShellModel: ObservableObject {
             )
 
         case .places: places.opened()
-        case .photosPeople: photosPeople.opened()
-        case .photoFaceReview: faceReview.opened()
         case .photosMemories: photosMemories.opened()
         case .photoDuplicates: duplicates.opened()
         case let .photoEditor(identifier, _):
@@ -1546,7 +1468,6 @@ final class ShellModel: ObservableObject {
         case let .photoDuplicateReview(clusterIdentifier):
             duplicateReview.opened(clusterId: clusterIdentifier)
         }
-        #endif
     }
 }
 
@@ -1561,7 +1482,6 @@ final class ShellModel: ObservableObject {
 //
 // A screen state is a few kilobytes at most, so the per-byte loop is not worth
 // replacing with an unsafe-pointer copy until a measurement says so.
-#if canImport(CentraidShared)
 extension KotlinByteArray {
     var data: Data {
         var bytes = Data(count: Int(size))
@@ -1581,4 +1501,3 @@ extension Data {
         return array
     }
 }
-#endif

@@ -219,6 +219,8 @@ public fun AppPlace(
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         StatusLine(status)
         statusLine?.invoke()
+        // THE SHELL'S LINE SITS ON THE BAND, never under it.
+        LocalShellLine.current?.invoke()
         band?.invoke()
     }
 }
@@ -278,6 +280,7 @@ public fun PushedPage(
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         StatusLine(status)
         statusLine?.invoke()
+        LocalShellLine.current?.invoke()
     }
 }
 
@@ -339,9 +342,23 @@ public data class SheetPrimary(
 )
 
 /**
+ * AN ALTERNATIVE TO A SHEET'S PRIMARY: Cancel, Not now, or a removal. It is
+ * drawn as an [OutlineButton] in the same [ChoiceStack] as the ink button,
+ * under it, so the sheet's answers share one full width. [ink] is `net` when
+ * it destroys.
+ */
+public data class SheetOutline(
+    val label: String,
+    val testTag: String,
+    val ink: String = "text",
+    val onPress: () -> Unit,
+)
+
+/**
  * `SheetRoom`: the grabber (Material's drag handle), a title carrying the
  * noun, [content], the status line, and ≤1 ink button. A destructive primary
- * is the OUTLINED `net` button, never a filled one.
+ * is the OUTLINED `net` button, never a filled one. [outlines] are the
+ * primary's alternatives, drawn under it in one [ChoiceStack].
  *
  * **[swipeable] false is a sheet nobody can walk out of**: no drag, no back
  * press, no tap outside, and the dismiss request is dropped. It is for a sheet
@@ -363,6 +380,7 @@ public fun SheetRoom(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     primary: SheetPrimary? = null,
+    outlines: List<SheetOutline> = emptyList(),
     status: String = "",
     swipeable: Boolean = true,
     secure: Boolean = false,
@@ -389,15 +407,21 @@ public fun SheetRoom(
             if (title.isNotEmpty()) RoomTitle(title, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp))
             content()
             StatusLine(status)
-            if (primary != null) {
-                InkButton(
-                    label = primary.label,
-                    destructive = primary.destructive,
-                    testTag = primary.testTag,
-                    enabled = primary.enabled,
-                    modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                    onPress = primary.onPress,
-                )
+            if (primary != null || outlines.isNotEmpty()) {
+                ChoiceStack(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
+                    if (primary != null) {
+                        InkButton(
+                            label = primary.label,
+                            destructive = primary.destructive,
+                            testTag = primary.testTag,
+                            enabled = primary.enabled,
+                            onPress = primary.onPress,
+                        )
+                    }
+                    outlines.forEach { outline ->
+                        OutlineButton(outline.label, testTag = outline.testTag, ink = outline.ink, onPress = outline.onPress)
+                    }
+                }
             }
         }
     }
@@ -506,7 +530,7 @@ public fun StatusLine(line: StatusLineMessage?, modifier: Modifier = Modifier, o
             modifier = Modifier.weight(1f),
         )
         if (line.action_label.isNotEmpty()) {
-            QuietButton(line.action_label, testTag = "room-status-act", onPress = onAct)
+            OutlineButton(line.action_label, testTag = "room-status-act", onPress = onAct)
         }
     }
 }
@@ -541,7 +565,7 @@ public fun ProgressStatusLine(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            if (actionLabel.isNotEmpty()) QuietButton(actionLabel, testTag = "$testTag-act", onPress = onAct)
+            if (actionLabel.isNotEmpty()) OutlineButton(actionLabel, testTag = "$testTag-act", onPress = onAct)
             if (closeLabel.isNotEmpty()) IconKey("X", closeLabel, "$testTag-close", bordered = false, onPress = onClose)
         }
         if (permille != null) {

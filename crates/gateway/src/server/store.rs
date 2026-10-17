@@ -23,6 +23,8 @@
 
 use std::io::{ErrorKind, Read as _};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use tokio::io::AsyncWriteExt as _;
 
@@ -40,6 +42,10 @@ pub const OBJECTS_DIR: &str = "objects";
 pub struct ObjectStore {
     objects: PathBuf,
     incoming: PathBuf,
+    /// Whether every upload is refused `DISK_FULL` as if the disk were. Only
+    /// a test sets it ([`ObjectStore::pretend_full`]): a real full disk is not
+    /// something a test can make on any machine it runs on.
+    full: Arc<AtomicBool>,
 }
 
 /// Why staging stopped.
@@ -93,7 +99,18 @@ impl ObjectStore {
         let incoming = data_dir.join(INCOMING_DIR);
         std::fs::create_dir_all(&objects)?;
         std::fs::create_dir_all(&incoming)?;
-        Ok(Self { objects, incoming })
+        Ok(Self {
+            objects,
+            incoming,
+            full: Arc::new(AtomicBool::new(false)),
+        })
+    }
+
+    /// Refuse every upload `DISK_FULL` until told otherwise: what a test does
+    /// to prove a phone hears a full disk as one (#1080, the sweep's F1). Not
+    /// reachable from the product — only the test harness calls it.
+    pub fn pretend_full(&self, full: bool) {
+        self.full.store(full, Ordering::SeqCst);
     }
 
     /// Remove every upload a crash left staged. **Only the process that
@@ -127,6 +144,9 @@ impl ObjectStore {
     ///
     /// If the staging file cannot be created.
     pub async fn stage(&self, limit: u64) -> Result<Staged, StageError> {
+        if self.full.load(Ordering::SeqCst) {
+            return Err(StageError::DiskFull);
+        }
         let path = self
             .incoming
             .join(format!("{}.part", hex::encode(rand::random::<[u8; 16]>())));

@@ -462,12 +462,45 @@ impl Ledger {
             params![gateway_id],
         )?;
         self.connection.execute(
-            "DELETE FROM meta WHERE k IN (?1, ?2, ?3)",
+            "DELETE FROM meta WHERE k IN (?1, ?2, ?3, ?4)",
             params![
                 head_key(gateway_id),
                 moved_key(gateway_id),
-                head_acked_key(gateway_id)
+                head_acked_key(gateway_id),
+                unauthorized_key(gateway_id)
             ],
+        )?;
+        Ok(())
+    }
+
+    /// `gateway_id` answered `UNAUTHORIZED` to this device's token: it no
+    /// longer knows it — its store was lost or its operator revoked the token
+    /// — so nothing reaches it until the member pairs again (#1080, the
+    /// sweep's F2). A `meta` fact, not a column: the ledger's schema is
+    /// untouched.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn set_unauthorized(&self, gateway_id: &str) -> Result<()> {
+        self.set_meta(&unauthorized_key(gateway_id), "1")
+    }
+
+    /// Whether `gateway_id` last refused this device's token.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn unauthorized(&self, gateway_id: &str) -> Result<bool> {
+        Ok(self.meta(&unauthorized_key(gateway_id))?.is_some())
+    }
+
+    /// `gateway_id` accepted this device's token: the mark is spent.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn clear_unauthorized(&self, gateway_id: &str) -> Result<()> {
+        self.connection.execute(
+            "DELETE FROM meta WHERE k = ?1",
+            params![unauthorized_key(gateway_id)],
         )?;
         Ok(())
     }
@@ -505,6 +538,22 @@ impl Ledger {
             params![moved_key(gateway_id)],
         )?;
         Ok(())
+    }
+
+    /// Replace the addresses a paired gateway is dialled at, keeping its
+    /// certificate, token and everything it acknowledged. Whether the ledger
+    /// held the gateway.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn set_destination_addrs(&self, gateway_id: &str, addrs: &[String]) -> Result<bool> {
+        let addrs = serde_json::to_string(addrs)
+            .map_err(|error| invariant(format!("the address list: {error}")))?;
+        let changed = self.connection.execute(
+            "UPDATE destination SET addrs = ?2 WHERE gateway_id = ?1",
+            params![gateway_id, addrs],
+        )?;
+        Ok(changed > 0)
     }
 
     /// The gateway answered at `now_ms`.
@@ -963,6 +1012,34 @@ impl Ledger {
         Ok(())
     }
 
+    /// Every small fact whose key starts with `prefix`, as `(key, value)`, by
+    /// key. The garbage list keeps one per name it is holding back.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn meta_with_prefix(&self, prefix: &str) -> Result<Vec<(String, String)>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT k, v FROM meta WHERE substr(k, 1, ?2) = ?1 ORDER BY k")?;
+        let rows = statement
+            .query_map(
+                params![prefix, i64::try_from(prefix.len()).unwrap_or(0)],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Forget one small fact.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn forget_meta(&self, key: &str) -> Result<()> {
+        self.connection
+            .execute("DELETE FROM meta WHERE k = ?1", params![key])?;
+        Ok(())
+    }
+
     /// The manifest this device last set as the head at `gateway_id`: the
     /// `prev` of its next compare-and-set.
     ///
@@ -1017,6 +1094,10 @@ fn moved_key(gateway_id: &str) -> String {
 
 fn head_acked_key(gateway_id: &str) -> String {
     format!("head-acked:{gateway_id}")
+}
+
+fn unauthorized_key(gateway_id: &str) -> String {
+    format!("unauthorized:{gateway_id}")
 }
 
 fn read_local(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalBytes> {
@@ -1106,6 +1187,31 @@ mod tests {
             !printed.contains(&"a".repeat(64)),
             "the token is never printed"
         );
+    }
+
+    #[test]
+    fn a_destinations_addresses_change_and_nothing_else_does() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let ledger = Ledger::open(dir.path().join("l.backup.db")).expect("creates");
+        ledger.put_destination(&destination("gw")).expect("pairs");
+        ledger.touch_seen("gw", 5_000).expect("seen");
+        let moved = vec![
+            "192.168.1.44:7443".to_owned(),
+            "192.168.1.20:7443".to_owned(),
+        ];
+        assert!(ledger.set_destination_addrs("gw", &moved).expect("sets"));
+        let after = ledger.destination("gw").expect("reads").expect("held");
+        assert_eq!(after.addrs, moved);
+        // THE CERTIFICATE, THE TOKEN AND WHEN IT WAS LAST SEEN ARE UNTOUCHED:
+        // a new address is not a new pairing.
+        let before = destination("gw");
+        assert_eq!(after.cert_der, before.cert_der);
+        assert_eq!(after.token, before.token);
+        assert_eq!(after.epoch, before.epoch);
+        assert_eq!(after.last_seen_ms, Some(5_000));
+        // A GATEWAY THE LEDGER DOES NOT HOLD IS NOT CREATED BY THIS.
+        assert!(!ledger.set_destination_addrs("other", &moved).expect("sets"));
+        assert_eq!(ledger.destinations().expect("reads").len(), 1);
     }
 
     #[test]
@@ -1203,6 +1309,55 @@ mod tests {
         ledger.remove_destination("gw").expect("unpairs");
         assert!(ledger.confirmed_names("gw").expect("reads").is_empty());
         assert_eq!(ledger.head("gw").expect("reads"), None);
+    }
+
+    /// **A GATEWAY THAT REFUSED THIS DEVICE'S TOKEN IS MARKED** (#1080, the
+    /// sweep's F2), and the mark goes when the token is accepted again or the
+    /// gateway is paired afresh: a pairing starts its record over.
+    #[test]
+    fn a_refused_token_is_marked_until_it_is_accepted_or_the_gateway_is_paired_again() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let ledger = Ledger::open(dir.path().join("l.backup.db")).expect("creates");
+        ledger.put_destination(&destination("gw")).expect("pairs");
+        assert!(!ledger.unauthorized("gw").expect("reads"));
+        ledger.set_unauthorized("gw").expect("marks");
+        assert!(ledger.unauthorized("gw").expect("reads"));
+        assert!(
+            !ledger.unauthorized("other").expect("reads"),
+            "the mark is one gateway's"
+        );
+        ledger.clear_unauthorized("gw").expect("clears");
+        assert!(!ledger.unauthorized("gw").expect("reads"));
+        ledger.set_unauthorized("gw").expect("marks");
+        ledger.remove_destination("gw").expect("unpairs");
+        assert!(
+            !ledger.unauthorized("gw").expect("reads"),
+            "a pairing starts the record over"
+        );
+    }
+
+    #[test]
+    fn small_facts_are_listed_by_prefix_and_forgotten_one_at_a_time() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let ledger = Ledger::open(dir.path().join("l.backup.db")).expect("creates");
+        ledger.set_meta("grave:b", "20").expect("sets");
+        ledger.set_meta("grave:a", "10").expect("sets");
+        ledger.set_meta("graveyard", "not a grave").expect("sets");
+        ledger.set_meta("head:gw", "x").expect("sets");
+        assert_eq!(
+            ledger.meta_with_prefix("grave:").expect("lists"),
+            vec![
+                ("grave:a".to_owned(), "10".to_owned()),
+                ("grave:b".to_owned(), "20".to_owned())
+            ],
+            "by key, and only what starts with the prefix"
+        );
+        ledger.forget_meta("grave:a").expect("forgets");
+        ledger
+            .forget_meta("grave:never")
+            .expect("forgetting nothing is fine");
+        assert_eq!(ledger.meta_with_prefix("grave:").expect("lists").len(), 1);
+        assert_eq!(ledger.meta("head:gw").expect("reads"), Some("x".to_owned()));
     }
 
     #[test]

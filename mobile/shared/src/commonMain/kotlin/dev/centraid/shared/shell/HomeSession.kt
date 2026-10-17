@@ -21,9 +21,13 @@ import dev.centraid.shared.sync.CoreBackupStatus
 import dev.centraid.shared.sync.CoreDrainDoor
 import dev.centraid.shared.sync.DrainAnswer
 import dev.centraid.shared.sync.DrainPass
+import dev.centraid.shared.sync.CoreAddressDoor
 import dev.centraid.shared.sync.ForgetAnswer
+import dev.centraid.shared.sync.GatewayBrowser
+import dev.centraid.shared.sync.GatewayRediscovery
 import dev.centraid.shared.sync.LibraryDeleter
 import dev.centraid.shared.sync.PassConditions
+import dev.centraid.shared.sync.RecordedGateway
 import dev.centraid.shared.sync.ScreenQueries
 import dev.centraid.shared.sync.ScreenQueryRuntime
 import dev.centraid.shared.sync.ScreenReads
@@ -33,6 +37,7 @@ import dev.centraid.shared.sync.ShelfDrain
 import dev.centraid.shared.sync.StrandedWrites
 import dev.centraid.shared.sync.UploadLoop
 import dev.centraid.shared.sync.UploadPin
+import dev.centraid.shared.sync.WakeReason
 import dev.centraid.shared.sync.freezeFor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -206,6 +211,53 @@ public class HomeSession private constructor(
         // the pass sealed but did not move goes to the OS to carry while the
         // app is suspended. No loop is installed on Android.
         uploads?.afterPass(outcome.vaultId)
+        if (answer?.stopped == DrainAnswer.Stopped.UNREACHABLE && outcome.reason in GatewayRediscovery.TRIGGERS) {
+            rediscover(outcome.vaultId)
+        }
+    }
+
+    /**
+     * THE SHELL'S BROWSE FOR A GATEWAY THAT MOVED, or null (#1080, Q-1080-D3).
+     * `NWBrowser` on iOS, `NsdManager` on Android, each installed by its shell
+     * because only a shell has the API; a session with none never browses.
+     */
+    private var gatewayBrowser: GatewayBrowser? = null
+
+    /** Install the shell's browse, or clear it with null. See [gatewayBrowser]. */
+    public fun installGatewayBrowser(browser: GatewayBrowser?) {
+        gatewayBrowser = browser
+    }
+
+    private val rediscovering = Mutex()
+    private var lastRediscoveryMs: Long? = null
+
+    /**
+     * A FOREGROUND PASS FOUND NO PAIRED GATEWAY AT ITS RECORDED ADDRESSES, so
+     * ask the LAN where each one is now (Q-1080-D3). When the core keeps a new
+     * address the pass runs again once, as a connectivity pass, which is not a
+     * trigger here, so an unreachable laptop is browsed for at most once per
+     * [GatewayRediscovery.MIN_INTERVAL_MS] and never in a loop. Launched on the
+     * session's scope: the pass that found nothing has already been answered,
+     * and the member is looking at "waiting for your laptop", not at a spinner.
+     */
+    private fun rediscover(vaultId: String) {
+        val browser = gatewayBrowser ?: return
+        val now = sinceOpen.elapsedNow().inWholeMilliseconds
+        val last = lastRediscoveryMs
+        if (last != null && now - last < GatewayRediscovery.MIN_INTERVAL_MS) return
+        if (!rediscovering.tryLock()) return
+        lastRediscoveryMs = now
+        scope.launch {
+            try {
+                val core = { shelf.all().firstOrNull { it.vaultId == vaultId && it.moved == null }?.core }
+                val recorded = CoreBackupStatus(core).read()?.destinations.orEmpty()
+                    .map { RecordedGateway(it.gatewayId, it.addrs) }
+                val refreshed = GatewayRediscovery(browser).run(recorded, CoreAddressDoor(core))
+                if (refreshed > 0) drain.run(ShelfDrain.FOREGROUND_DEADLINE_MS, WakeReason.CONNECTIVITY)
+            } finally {
+                rediscovering.unlock()
+            }
+        }
     }
 
     /** The iOS mover's Kotlin half, once the shell installed one ([attachUploads]). */
@@ -287,10 +339,16 @@ public class HomeSession private constructor(
      * The member changed the rule: the windows' constraints follow it, and on
      * iOS every upload the OS holds is cancelled, because each keeps the
      * cellular flag of the rule it was handed off under ([UploadLoop.cancelAll]).
+     * The screens that label by it read again ([ChangeStream.conditionsChanged]).
      */
     public fun ruleChanged() {
         services.backgroundTasks.resubmit()
         uploads?.cancelAll()
+        // AND THE GRID LABELS ITS CELLS BY THE RULE (#1080): the writer has
+        // already put the new one on `LinkConditions`, and the screens that
+        // read it are told to read again, so a download arrow is as new as the
+        // choice and not as old as the last pass.
+        scope.launch { changes.conditionsChanged() }
     }
 
     /**

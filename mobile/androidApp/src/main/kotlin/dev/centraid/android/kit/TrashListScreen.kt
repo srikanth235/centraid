@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.TrashListEvent
 import centraid.screen.v1.TrashListState
-import centraid.screen.v1.WriteState
 import dev.centraid.design.copy.SharedCopy
 
 /**
@@ -45,7 +44,7 @@ public fun TrashListScreen(
         } else {
             null
         },
-        status = if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "",
+        status = write?.refusal.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, state.data_, state.denied),
@@ -63,13 +62,13 @@ public fun TrashListScreen(
                             testTag = "trash-row-${row.id}",
                         ) {
                             Row {
-                                QuietButton(
+                                OutlineButton(
                                     label = row.restore_label.ifEmpty { SharedCopy.TRASH_RESTORE },
                                     testTag = "trash-restore-${row.id}",
                                     modifier = Modifier.padding(start = 8.dp),
                                 ) { onEvent(TrashListEvent(restore = TrashListEvent.RestoreTapped(id = row.id))) }
                                 if (row.purge_label.isNotEmpty()) {
-                                    QuietButton(
+                                    OutlineButton(
                                         label = row.purge_label,
                                         testTag = "trash-purge-${row.id}",
                                         ink = "net",

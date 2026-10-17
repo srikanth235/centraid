@@ -1345,6 +1345,17 @@ fn the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault() {
         !dir.join("nothing-here.sqlite3").exists(),
         "asking for the words founds nothing"
     );
+    // AND LEAVES NOTHING BESIDE IT (#1080, the simulator run): a core with no
+    // vault has no byte store and no ledger to keep for one.
+    let leaves_nothing_beside = |when: &str| {
+        for side in ["nothing-here.bytes", "nothing-here.backup.db"] {
+            assert!(
+                !dir.join(side).exists(),
+                "a core that holds no vault leaves `{side}` behind, {when}"
+            );
+        }
+    };
+    leaves_nothing_beside("at its open");
 
     let phrase = |id: u64, op: wire::phrase_request::Op| -> (i32, wire::Envelope) {
         let (code, bytes) = call(
@@ -1440,6 +1451,7 @@ fn the_words_are_minted_judged_and_seeded_over_a_core_with_no_vault() {
         "a refusal names no word: {}",
         error.detail
     );
+    leaves_nothing_beside("after the words were asked");
 
     // SAFETY: the handle came from `centraid_open` and is closed once.
     unsafe { centraid_close(handle) };
@@ -1507,6 +1519,16 @@ fn the_backup_plane_doors_are_request_kinds_and_answer_an_unpaired_phone() {
         panic!("a forget answers");
     };
     assert!(!forgot.forgotten);
+    let Some(wire::response::Kind::RefreshDestination(refreshed)) = Some(answered(
+        48,
+        wire::request::Kind::RefreshDestination(wire::RefreshDestinationRequest {
+            gateway_id: "a-gateway".to_owned(),
+            candidates: vec!["192.168.1.44:7443".to_owned()],
+        }),
+    )) else {
+        panic!("a refresh answers");
+    };
+    assert!(!refreshed.refreshed && refreshed.addrs.is_empty());
     let Some(wire::response::Kind::Releasable(releasable)) = Some(answered(
         46,
         wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 10 }),

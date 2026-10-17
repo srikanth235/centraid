@@ -22,6 +22,7 @@ import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.screen.Step
+import dev.centraid.shared.nav.ScreenIds
 
 /**
  * ADD OR EDIT AN ITEM (#1047) — with an EXPLICIT SAVE (R-1047-L5): a secret
@@ -48,7 +49,7 @@ import dev.centraid.shared.screen.Step
  */
 public object LockerEditorMachine :
     LockerQueryMachine<LockerEditorState, LockerEditorEvent, LockerEditorData>("locker.editor", LOCKER_TABLES) {
-    public const val SCREEN_ID: String = "locker.editor"
+    public const val SCREEN_ID: String = ScreenIds.LOCKER_EDITOR
 
     /** The vault's "leave this secret alone" (`SEALED_PLACEHOLDER`). */
     public const val PLACEHOLDER: String = "«sealed»"
@@ -397,7 +398,7 @@ public object LockerEditorMachine :
 
 /** What the editor asks: the item it edits, on EDIT only. */
 public object LockerEditorReads : LockerQueries<LockerEditorState, LockerEditorEvent>(
-    screenId = "locker.editor",
+    screenId = ScreenIds.LOCKER_EDITOR,
     tables = LOCKER_TABLES,
     ask = { held, now ->
         held.screen.item_id

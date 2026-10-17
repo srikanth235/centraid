@@ -29,6 +29,7 @@ import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.CentraidSearchField
+import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
@@ -38,8 +39,8 @@ import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PushedPage
-import dev.centraid.android.kit.QuietButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomChip
@@ -288,7 +289,7 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
-        status = status?.sentence.orEmpty().ifEmpty { refusal(state.write) },
+        status = status?.sentence.orEmpty().ifEmpty { state.write?.refusal.orEmpty() },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -382,10 +383,10 @@ private fun OfferCard(offer: centraid.screen.v1.MoneyOffer, key: String, onEvent
     MoneyNote(offer.body, ink = "text")
     MoneyNote(offer.detail)
     Row(Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)) {
-        QuietButton(label = offer.accept_label, testTag = "money-offer-accept-$key") {
+        OutlineButton(label = offer.accept_label, testTag = "money-offer-accept-$key") {
             onEvent(MoneyTransactionEvent(offer_accepted = MoneyTransactionEvent.OfferAccepted(key = key)))
         }
-        QuietButton(label = offer.dismiss_label, testTag = "money-offer-dismiss-$key", modifier = Modifier.padding(start = 8.dp)) {
+        OutlineButton(label = offer.dismiss_label, testTag = "money-offer-dismiss-$key", modifier = Modifier.padding(start = 8.dp)) {
             onEvent(MoneyTransactionEvent(offer_dismissed = MoneyTransactionEvent.OfferDismissed(key = key)))
         }
     }
@@ -403,7 +404,7 @@ internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEve
         title = data?.title.orEmpty().ifEmpty { chrome?.title.orEmpty() },
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
-        status = refusal(state.write),
+        status = state.write?.refusal.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -425,7 +426,7 @@ internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEve
                 }
                 items(target.figures.size, key = { "fig-$it" }) { index -> MoneyFigureRow(target.figures[index]) }
                 item(key = "average") {
-                    QuietButton(
+                    OutlineButton(
                         label = target.use_average_label,
                         testTag = "money-target-average",
                         modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp),
@@ -443,19 +444,23 @@ internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEve
                     MoneyNote(target.preview_note)
                 }
                 item(key = "save") {
-                    InkButton(
-                        label = target.save_label,
-                        enabled = target.can_save,
-                        testTag = "money-target-save",
-                        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                    ) { onEvent(MoneyTargetEvent(save = MoneyTargetEvent.Save())) }
-                    if (target.remove_label.isNotEmpty()) {
-                        QuietButton(
-                            label = target.remove_label,
-                            ink = "net",
-                            testTag = "money-target-remove",
-                            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER),
-                        ) { onEvent(MoneyTargetEvent(remove = MoneyTargetEvent.Remove())) }
+                    // SAVE AND REMOVE ARE ALTERNATIVES: one stack.
+                    val gutter = Modifier.padding(horizontal = KitGeometry.GUTTER)
+                    ChoiceStack(Modifier.padding(vertical = 8.dp)) {
+                        InkButton(
+                            label = target.save_label,
+                            enabled = target.can_save,
+                            testTag = "money-target-save",
+                            modifier = gutter,
+                        ) { onEvent(MoneyTargetEvent(save = MoneyTargetEvent.Save())) }
+                        if (target.remove_label.isNotEmpty()) {
+                            OutlineButton(
+                                label = target.remove_label,
+                                ink = "net",
+                                testTag = "money-target-remove",
+                                modifier = gutter,
+                            ) { onEvent(MoneyTargetEvent(remove = MoneyTargetEvent.Remove())) }
+                        }
                     }
                 }
             }

@@ -8,7 +8,7 @@
 //!
 //! Two shapes worth naming:
 //!
-//! - **`agent_command_invocation`'s pointers into the model half are VALUE
+//! - **`command_invocation`'s pointers into the model half are VALUE
 //!   COLUMNS, not foreign keys.** An audit row outlives its subject, and a key
 //!   would either block a purge or rewrite the evidence. That is a deliberate
 //!   asymmetry, not a missing constraint.
@@ -34,8 +34,8 @@ use crate::error::Result;
 /// answering commit inserts its OWN row rather than replacing it — so the
 /// fabricated one would simply stay, for ever.
 pub const TRAIL_TABLES: [&str; 3] = [
-    "agent_command_invocation",
-    "agent_invocation_check",
+    "command_invocation",
+    "command_invocation_check",
     "access_receipt",
 ];
 
@@ -114,7 +114,7 @@ pub fn insert_invocation(
     } = *invocation;
     let redacted = redact_command_input(input, sealed_keys);
     connection.execute(
-        "INSERT INTO agent_command_invocation
+        "INSERT INTO command_invocation
            (invocation_id, command_id, caller_id, authority_id, input_json, status, requested_at)
          VALUES (?1, ?2, ?3, ?4, ?5, 'proposed', ?6)",
         rusqlite::params![
@@ -140,7 +140,7 @@ pub fn assert_invocation_identity(
     caller_id: &str,
 ) -> Result<()> {
     let mut statement = connection.prepare_cached(
-        "SELECT command_id, caller_id FROM agent_command_invocation WHERE invocation_id = ?1",
+        "SELECT command_id, caller_id FROM command_invocation WHERE invocation_id = ?1",
     )?;
     let mut rows = statement.query([invocation_id])?;
     if let Some(row) = rows.next()? {
@@ -170,7 +170,7 @@ pub fn set_invocation_status(
         None
     };
     connection.execute(
-        "UPDATE agent_command_invocation
+        "UPDATE command_invocation
             SET status = ?1, executed_at = COALESCE(?2, executed_at)
           WHERE invocation_id = ?3",
         rusqlite::params![status, executed_at, invocation_id],
@@ -206,7 +206,7 @@ pub fn write_check(
         observed,
     } = *check;
     connection.execute(
-        "INSERT INTO agent_invocation_check
+        "INSERT INTO command_invocation_check
            (check_id, invocation_id, phase, predicate, passed, observed_json, checked_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         rusqlite::params![
@@ -231,7 +231,7 @@ pub fn write_explanation(
     summary: &str,
 ) -> Result<()> {
     connection.execute(
-        "INSERT INTO agent_explanation
+        "INSERT INTO command_explanation
            (explanation_id, invocation_id, audience, summary, generated_at)
          VALUES (?1, ?2, 'owner', ?3, ?4)",
         rusqlite::params![ids.next(), invocation_id, summary, clock.now_text()],
@@ -306,7 +306,7 @@ pub fn write_receipt(
         ],
     )?;
     connection.execute(
-        "UPDATE agent_command_invocation SET receipt_id = ?1 WHERE invocation_id = ?2",
+        "UPDATE command_invocation SET receipt_id = ?1 WHERE invocation_id = ?2",
         rusqlite::params![receipt_id, receipt.invocation_id],
     )?;
     Ok(receipt_id)

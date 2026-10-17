@@ -55,7 +55,7 @@ import dev.centraid.shared.apps.notes.NotesTrashMachine
 import dev.centraid.shared.apps.notes.NotesTrashReads
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
-import dev.centraid.shared.nav.withNotesPlace
+import dev.centraid.shared.nav.applying
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -450,9 +450,12 @@ class NotesAppSpec : StringSpec({
         val same = NotesLibraryMachine.reduce(state, NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = "notes")))
         same.effects.shouldBeEmpty()
         same.state shouldBe state
+        // Another place swaps the top entry; the same place and More move nothing.
         val stack = NavStack().push(Destination.NotesLibrary())
-        stack.withNotesPlace("journal").entries shouldBe listOf(Destination.Home, Destination.NotesJournal)
-        stack.withNotesPlace("more") shouldBe stack
+        val journal = NotesRouting.library(NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = NotesBand.JOURNAL)))!!
+        stack.applying(journal).entries shouldBe listOf(Destination.Home, Destination.NotesJournal)
+        NotesRouting.library(NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = NotesBand.MORE))).shouldBeNull()
+        NotesRouting.library(NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key = NotesBand.NOTES))).shouldBeNull()
     }
 
     // --- Notebooks ---------------------------------------------------------
@@ -667,6 +670,26 @@ class NotesAppSpec : StringSpec({
         // THE COMMIT ENDS THE SITTING (#1089): the sheet is gone, so a second Save files no second entry.
         NotesJournalMachine.reduce(filed, NotesJournalEvent(compose_saved = NotesJournalEvent.ComposeSaved())).effects.shouldBeEmpty()
         NotesJournalMachine.reduce(refused, NotesJournalEvent(compose_closed = NotesJournalEvent.ComposeClosed())).state.compose shouldBe null
+    }
+
+    "the journal's new entry states the zone the day was read in, so east of UTC+11:59 today is not tomorrow" {
+        val loaded = NotesJournalMachine.reduce(
+            NotesJournalMachine.reduce(NotesJournalMachine.initial(), NotesJournalEvent(opened = NotesJournalEvent.Opened())).state,
+            NotesJournalReads.arrived(
+                listOf(AppQueryResponse(notes_journal = NotesJournal(today = "2026-03-12", tz = "Pacific/Auckland"))),
+            ),
+        ).state
+        loaded.data_!!.tz shouldBe "Pacific/Auckland"
+        val composing = NotesJournalMachine.reduce(loaded, NotesJournalEvent(new_entry = NotesJournalEvent.NewEntryRequested())).state
+        composing.compose!!.day shouldBe "2026-03-12"
+        composing.compose.tz shouldBe "Pacific/Auckland"
+        val typed = NotesJournalMachine.reduce(
+            composing,
+            NotesJournalEvent(compose_edited = NotesJournalEvent.ComposeEdited(mood = "Good", text = "Walked")),
+        ).state
+        NotesJournalMachine.reduce(typed, NotesJournalEvent(compose_saved = NotesJournalEvent.ComposeSaved()))
+            .effects.filterIsInstance<ScreenEffect.SubmitWrite>().single().inputJson shouldBe
+            """{"mood":"Good","text":"Walked","entry_date":"2026-03-12","tz":"Pacific/Auckland"}"""
     }
 
     // --- History -----------------------------------------------------------

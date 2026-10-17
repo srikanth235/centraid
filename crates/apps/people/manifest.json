@@ -23,17 +23,6 @@
       { "schema": "knowledge", "table": "note", "verbs": "read" },
       { "schema": "schedule", "table": "task", "verbs": "read" },
       { "schema": "social", "table": "contact_channel", "verbs": "read" },
-      { "schema": "social", "table": "save_contact_channel", "verbs": "act" },
-      {
-        "schema": "social",
-        "table": "delete_contact_channel",
-        "verbs": "act"
-      },
-      {
-        "schema": "social",
-        "table": "undo_contact_channel",
-        "verbs": "act"
-      },
       {
         "schema": "core",
         "table": "merge_party",
@@ -93,8 +82,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.party", "core.tag", "people.profile"]
+      }
     },
     {
       "name": "edit-person",
@@ -120,8 +108,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.party", "outbox.item", "people.profile"]
+      }
     },
     {
       "name": "set-cadence",
@@ -143,8 +130,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["people.profile"]
+      }
     },
     {
       "name": "trash-person",
@@ -165,8 +151,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["people.profile"]
+      }
     },
     {
       "name": "restore-person",
@@ -187,8 +172,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["people.profile"]
+      }
     },
     {
       "name": "purge-person",
@@ -209,20 +193,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.activity",
-        "core.entity_revision",
-        "core.link",
-        "core.party",
-        "core.party_identifier",
-        "core.tag",
-        "knowledge.annotation",
-        "people.important_date",
-        "people.profile",
-        "schedule.task",
-        "social.contact_channel"
-      ]
+      }
     },
     {
       "name": "undo-person",
@@ -244,8 +215,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.entity_revision", "core.party", "people.profile"]
+      }
     },
     {
       "name": "log-interaction",
@@ -268,15 +238,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.activity",
-        "core.concept",
-        "core.concept_scheme",
-        "core.link",
-        "knowledge.annotation",
-        "people.profile"
-      ]
+      }
     },
     {
       "name": "star-person",
@@ -295,13 +257,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.party",
-        "core.tag"
-      ]
+      }
     },
     {
       "name": "unstar-person",
@@ -320,13 +276,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.party",
-        "core.tag"
-      ]
+      }
     },
     {
       "name": "move-person",
@@ -348,8 +298,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.party", "core.tag"]
+      }
     },
     {
       "name": "add-note",
@@ -371,8 +320,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["knowledge.annotation"]
+      }
     },
     {
       "name": "add-task",
@@ -394,13 +342,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.link",
-        "schedule.task"
-      ]
+      }
     },
     {
       "name": "complete-task",
@@ -419,8 +361,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.link", "schedule.task"]
+      }
     },
     {
       "name": "reopen-task",
@@ -439,8 +380,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["schedule.task"]
+      }
     },
     {
       "name": "add-important-date",
@@ -464,8 +404,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.party", "outbox.item", "people.important_date"]
+      }
     },
     {
       "name": "toggle-reminder",
@@ -484,8 +423,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["people.important_date"]
+      }
     },
     {
       "name": "add-relationship",
@@ -510,13 +448,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.link",
-        "core.party"
-      ]
+      }
     },
     {
       "name": "add-gift",
@@ -538,13 +470,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.link",
-        "schedule.task"
-      ]
+      }
     },
     {
       "name": "toggle-gift",
@@ -563,8 +489,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["schedule.task"]
+      }
     },
     {
       "name": "create-list",
@@ -583,8 +508,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.concept", "core.concept_scheme"]
+      }
     },
     {
       "name": "rename-list",
@@ -606,8 +530,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.concept"]
+      }
     },
     {
       "name": "delete-list",
@@ -626,8 +549,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["core.concept"]
+      }
     },
     {
       "name": "add-journal-entry",
@@ -638,7 +560,12 @@
         "properties": {
           "mood": { "type": "string", "minLength": 1 },
           "text": { "type": "string", "minLength": 1 },
-          "entry_date": { "type": "string" }
+          "entry_date": { "type": "string" },
+          "tz": {
+            "type": "string",
+            "minLength": 1,
+            "description": "IANA zone the member is in: the entry is filed on entry_date (or on today) in this zone, so east of UTC+11:59 today's entry is not filed under tomorrow. Absent, the entry is dated by UTC."
+          }
         },
         "required": ["mood", "text"],
         "additionalProperties": false
@@ -650,16 +577,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.concept",
-        "core.concept_scheme",
-        "core.content_item",
-        "core.content_representation",
-        "core.content_text",
-        "core.tag",
-        "knowledge.note"
-      ]
+      }
     },
     {
       "name": "save-contact-channel",
@@ -689,8 +607,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["outbox.item", "social.contact_channel"]
+      }
     },
     {
       "name": "delete-contact-channel",
@@ -711,8 +628,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": ["outbox.item", "social.contact_channel"]
+      }
     },
     {
       "name": "undo-contact-channel",
@@ -734,12 +650,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.entity_revision",
-        "outbox.item",
-        "social.contact_channel"
-      ]
+      }
     },
     {
       "name": "merge-people",
@@ -761,13 +672,7 @@
           "output": { "type": "object" },
           "reason": { "type": "string" }
         }
-      },
-      "writes": [
-        "core.party",
-        "core.party_identifier",
-        "people.profile",
-        "social.contact_channel"
-      ]
+      }
     }
   ],
   "queries": [

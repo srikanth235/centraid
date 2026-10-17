@@ -117,6 +117,19 @@ class BackupScreenSpec : StringSpec({
         state.background_notice shouldBe ""
     }
 
+    "a gateway that refused this phone's token says to pair it again where it says when it was reached (#1080, F2)" {
+        val refused = home.copy(pairAgain = true)
+        val state = ready(read(reading = reading(destinations = listOf(refused, nas)))).state
+        state.destinations.map { it.pair_again } shouldBe listOf(true, false)
+        state.destinations.first().detail shouldBe
+            "192.168.1.20:7443 · Reached 2 minutes ago · ${SharedCopy.BACKUP_DEST_PAIR_AGAIN}"
+        // ONE REFUSING OF TWO leaves the line the ordinary one; every gateway refusing says pair again.
+        state.line?.pair_again shouldBe false
+        val all = ready(read(reading = reading(destinations = listOf(refused)))).state
+        all.line?.pair_again shouldBe true
+        all.line?.sentence shouldBe SharedCopy.BACKUP_LINE_PAIR_AGAIN
+    }
+
     "battery saving is mentioned only once a backlog has stood a day" {
         // BEHIND AND UNACKNOWLEDGED FOR MORE THAN A DAY: worth a sentence, and
         // the shell decides whether the platform is actually holding it back.
@@ -327,6 +340,29 @@ class BackupScreenSpec : StringSpec({
         ready(read().copy(key = alone.copy(place = ""))).state.key_sync_label shouldBe ""
         // A KEY THAT CAME THROUGH THE KEYCHAIN has no words here to show.
         ready(read().copy(key = icloud.copy(wordsHere = false))).state.key_show_label shouldBe ""
+    }
+
+    "the page has one Ink button, and the machine names it (DESIGN.md: at most one per view)" {
+        val ink = BackupScreenState.InkAction.INK_ACTION_SHOW_KEY
+        val alone = icloud.copy(synced = false)
+        // A KEY WARNING IS THE PAGE'S FIRST CONCERN, over adding a backup device and over Back up now.
+        ready(read(reading(destinations = emptyList())).copy(key = alone)).state.ink_action shouldBe ink
+        ready(read().copy(key = alone)).state.ink_action shouldBe ink
+        // NO WORDS HERE, NO SHOW CONTROL: the warning has no button to promote.
+        ready(read().copy(key = alone.copy(wordsHere = false))).state.ink_action shouldBe
+            BackupScreenState.InkAction.INK_ACTION_BACK_UP_NOW
+        // WITHOUT A WARNING the page's act is adding a device, then Back up now.
+        ready(read(reading(destinations = emptyList())).copy(key = icloud)).state.ink_action shouldBe
+            BackupScreenState.InkAction.INK_ACTION_ADD_DESTINATION
+        ready(read(reading(destinations = emptyList()))).state.ink_action shouldBe
+            BackupScreenState.InkAction.INK_ACTION_ADD_DESTINATION
+        ready(read().copy(key = icloud)).state.ink_action shouldBe BackupScreenState.InkAction.INK_ACTION_BACK_UP_NOW
+        ready(read()).state.ink_action shouldBe BackupScreenState.InkAction.INK_ACTION_BACK_UP_NOW
+        // A VAULT THAT MOVED AND PAIRS NO GATEWAY offers neither add nor Back up now: no Ink at all.
+        ready(read(reading(destinations = emptyList()), frozen = true)).state.ink_action shouldBe
+            BackupScreenState.InkAction.INK_ACTION_NONE
+        // A MOVED VAULT WITH A GATEWAY still draws Back up now, disabled, as the page's act.
+        ready(read(frozen = true)).state.ink_action shouldBe BackupScreenState.InkAction.INK_ACTION_BACK_UP_NOW
     }
 
     "a phone holding no key draws no section at all" {

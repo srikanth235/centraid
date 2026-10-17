@@ -46,7 +46,7 @@ import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
-import dev.centraid.android.kit.QuietButton
+import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRow
@@ -146,7 +146,7 @@ internal fun TaskRowView(
             // THE VISIBLE VERB (`TasksChrome.file_verb`); the catalog's folder
             // key only while the state has no word for it.
             if (fileVerb.isNotEmpty()) {
-                QuietButton(fileVerb, testTag = "tasks-file-${row.task_id}", modifier = Modifier.padding(start = 6.dp)) {
+                OutlineButton(fileVerb, testTag = "tasks-file-${row.task_id}", modifier = Modifier.padding(start = 6.dp)) {
                     onFile(row.task_id)
                 }
             } else {
@@ -282,7 +282,7 @@ internal fun TasksQuickAddBar(
                 )
             }
             if (quickAdd.can_submit) {
-                QuietButton(verb, testTag = "tasks-quick-add-verb", modifier = Modifier.padding(end = 4.dp), onPress = submit)
+                OutlineButton(verb, testTag = "tasks-quick-add-verb", modifier = Modifier.padding(end = 4.dp), onPress = submit)
             }
         }
         if (quickAdd.lands_label.isNotEmpty()) {

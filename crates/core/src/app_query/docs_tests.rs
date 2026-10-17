@@ -286,6 +286,110 @@ fn a_trashed_document_is_excluded_from_the_drive_and_dated_in_trash() {
     assert!(found.documents.is_empty());
 }
 
+/// **A TRUNCATED WINDOW DOES NOT TRUNCATE TRASH, STARRED OR RECENT** (Q-1047-7,
+/// owner ruling 2026-10-15). The window is the newest `limit` documents FILED,
+/// and these three shelves are not defined by when a document was filed — so a
+/// trashed document filed a month ago was on no Trash shelf, and was not
+/// counted, once twenty newer ones had been filed. Each now reads its own set;
+/// All and Folders keep the window.
+///
+/// The five oldest documents are the ones the window of twenty cannot see:
+/// two of them starred and live, two trashed (one of which is also starred, and
+/// a star survives the trash without putting the document on Starred).
+#[test]
+fn a_truncated_window_does_not_truncate_trash_starred_or_recent() {
+    let scratch = Scratch::founded();
+    let mut ids: Vec<String> = Vec::new();
+    for index in 0..25 {
+        scratch.clock.advance_ms(60_000);
+        ids.push(scratch.add(&format!("Doc {index:02}"), "body", None));
+    }
+    for index in [0, 1, 2] {
+        scratch.run(
+            "core.star_document",
+            serde_json::json!({ "document_id": ids[index] }),
+        );
+    }
+    for index in [1, 3] {
+        scratch.clock.advance_ms(60_000);
+        scratch.run(
+            "core.trash_document",
+            serde_json::json!({ "document_id": ids[index] }),
+        );
+    }
+    let at = |shelf: wire::DocsShelf| {
+        scratch.drive(wire::DocsDriveRequest {
+            shelf: shelf as i32,
+            limit: 20,
+            ..wire::DocsDriveRequest::default()
+        })
+    };
+    let sorted = |drive: &wire::DocsDrive| {
+        let mut names: Vec<String> = titles(drive).into_iter().map(str::to_owned).collect();
+        names.sort();
+        names
+    };
+
+    // ALL IS THE WINDOW: the twenty newest filed, and it says so.
+    let all = at(wire::DocsShelf::All);
+    assert!(all.truncated);
+    assert_eq!(all.documents.len(), 20);
+    assert_eq!(all.all_count, 20, "All's count is the window's");
+    // BUT THE RAIL'S STARRED AND TRASH COUNTS ARE THE VAULT'S, whichever shelf
+    // is open: two live stars and two trashed documents, none in the window.
+    assert_eq!(all.starred_count, 2);
+    assert_eq!(all.trash_count, 2);
+
+    // TRASH reads the trash: newest-trashed first, and not itself cut.
+    let trash = at(wire::DocsShelf::Trash);
+    assert_eq!(titles(&trash), ["Doc 03", "Doc 01"]);
+    assert!(!trash.truncated, "two trashed documents fit the window");
+    assert_eq!(trash.trash_count, 2);
+    assert!(trash.documents.iter().all(|row| row.trashed));
+
+    // STARRED reads the stars, minus the one in the trash.
+    let starred = at(wire::DocsShelf::Starred);
+    assert_eq!(sorted(&starred), ["Doc 00", "Doc 02"]);
+    assert!(!starred.truncated);
+    assert_eq!(starred.starred_count, 2);
+    assert!(starred.documents.iter().all(|row| row.starred));
+
+    // RECENT is the newest live documents: all twenty-three, not the twenty the
+    // window held, and never "older documents are missing".
+    let recent = at(wire::DocsShelf::Recent);
+    assert_eq!(recent.documents.len(), 23);
+    assert_eq!(titles(&recent)[0], "Doc 24");
+    assert!(!recent.truncated);
+}
+
+/// A WINDOW THAT HOLDS THE WHOLE DRIVE IS UNTOUCHED: the shelves are cut from it
+/// exactly as before, and nothing but the window is read.
+#[test]
+fn a_window_that_holds_the_drive_leaves_the_shelves_alone() {
+    let scratch = Scratch::founded();
+    let kept = scratch.add("Kept", "body", None);
+    let gone = scratch.add("Gone", "body", None);
+    scratch.run(
+        "core.star_document",
+        serde_json::json!({ "document_id": kept }),
+    );
+    scratch.run(
+        "core.trash_document",
+        serde_json::json!({ "document_id": gone }),
+    );
+    for (shelf, expected) in [
+        (wire::DocsShelf::All, vec!["Kept"]),
+        (wire::DocsShelf::Starred, vec!["Kept"]),
+        (wire::DocsShelf::Recent, vec!["Kept"]),
+        (wire::DocsShelf::Trash, vec!["Gone"]),
+    ] {
+        let drive = scratch.shelf(shelf);
+        assert_eq!(titles(&drive), expected, "{shelf:?}");
+        assert!(!drive.truncated);
+        assert_eq!((drive.starred_count, drive.trash_count), (1, 1));
+    }
+}
+
 /// THE GRACE WINDOW IS THIRTY DAYS OF TWENTY-FOUR HOURS, and the countdown is
 /// counted the way the vault counts it (#1090). `purge_at` is the trashing
 /// instant plus 30 x 86 400 000 ms; counting the civil days between two local

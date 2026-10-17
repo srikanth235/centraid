@@ -387,7 +387,7 @@ fn issue_14_the_kind_card_says_which_end_of_priority_is_high() {
     let mut session = world.session();
     let system = session.prompt()["system"].as_str().unwrap().to_owned();
     assert!(
-        system.contains("priority (1 highest..9 lowest, 0 none)"),
+        system.contains("priority (9 highest..1 lowest, 0 none)"),
         "{system}"
     );
 }

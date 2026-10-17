@@ -18,6 +18,10 @@ struct TasksHomeView: View {
     @Environment(\.colorScheme) private var scheme
     /// The header's Plus asks the quick add for the keyboard (R-CHROME-1).
     @State private var quickAddFocus = false
+    /// The quick add holds the keyboard: the band is put away while it does
+    /// (as an editor's is, DESIGN.md "The seven rooms"), so the bar sits on the
+    /// keyboard and not behind it, and a scroll or the Done key lets it go.
+    @State private var quickAddTyping = false
 
     private var state: Centraid_Screen_V1_TasksHomeState {
         (try? Centraid_Screen_V1_TasksHomeState(serializedBytes: data)) ?? .init()
@@ -47,7 +51,7 @@ struct TasksHomeView: View {
                 onTerm: { term in send(event { $0.searchTerm = .with { $0.term = term } }) },
                 onClose: { send(event { $0.searchClosed = .init() }) }
             ),
-            showsBand: !content.isDenied && !state.band.isEmpty
+            showsBand: !content.isDenied && !state.band.isEmpty && !quickAddTyping
         ) {
             AppBand(
                 app: "tasks",
@@ -79,7 +83,8 @@ struct TasksHomeView: View {
                         verb: chrome.quickAddVerb,
                         focusRequested: $quickAddFocus,
                         onChange: { title in send(event { $0.quickAddChanged = .with { $0.title = title } }) },
-                        onSubmit: { send(event { $0.quickAddSubmitted = .init() }) }
+                        onSubmit: { send(event { $0.quickAddSubmitted = .init() }) },
+                        onFocusChange: { quickAddTyping = $0 }
                     )
                 }
             }
@@ -196,6 +201,7 @@ struct TasksHomeView: View {
           .padding(.bottom, 16)
         }
         .refreshable { send(event { $0.refreshed = .init() }) }
+        .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("tasks-home-list")
     }
 

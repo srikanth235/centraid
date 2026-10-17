@@ -28,6 +28,7 @@ import dev.centraid.android.kit.ScreenFailure
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.copy.PhotosCopy
+import dev.centraid.shared.kit.CappedCount
 
 /**
  * The shelf of near-duplicate clusters (#1029, photos port).
@@ -136,11 +137,10 @@ public fun DuplicatesScreen(
                     // while it cannot measure it at all.
                     if (data.total_reclaimable_phrase.isNotEmpty()) {
                         Text(
-                            text = if (data.total_capped) {
-                                "At least ${data.total_reclaimable_phrase} to reclaim."
-                            } else {
-                                "${data.total_reclaimable_phrase} to reclaim."
-                            },
+                            text = PhotosCopy.PHOTOS_TO_RECLAIM.replace(
+                                "{size}",
+                                CappedCount.floor(data.total_reclaimable_phrase, data.total_capped),
+                            ),
                             style = centraidType("small"),
                             color = centraidColor("textSoft"),
                         )
@@ -185,12 +185,12 @@ private fun DuplicateClusterRow(cluster: DuplicateCluster, onOpen: () -> Unit) {
     // — so today the flag is false and this says "4 copies" and means four. A
     // view that hard-coded that would be a view that lies the day the read
     // learns to walk.
-    val noun = if (cluster.member_count == 1) "copy" else "near-identical copies"
-    val headline = if (cluster.member_count_capped) {
-        "At least ${cluster.member_count} $noun"
-    } else {
-        "${cluster.member_count} $noun"
-    }
+    val headline = CappedCount.phrase(
+        cluster.member_count.toLong(),
+        cluster.member_count_capped,
+        PhotosCopy.PHOTOS_DUPLICATES_COPY_ONE,
+        PhotosCopy.PHOTOS_DUPLICATES_COPY_MANY,
+    )
     // WHAT THIS ONE CARD WOULD GIVE BACK, or the invitation when nothing can
     // say. The PHRASE and never the number, for the reason the shelf's total
     // gives: a size is the vault's to spell and this composes nothing. An empty
@@ -205,8 +205,7 @@ private fun DuplicateClusterRow(cluster: DuplicateCluster, onOpen: () -> Unit) {
     val phrase = cluster.reclaimable_phrase
     val subhead = when {
         phrase.isEmpty() -> PhotosCopy.PHOTOS_DUPLICATES_PICK_ONE
-        cluster.member_count_capped -> "At least $phrase to reclaim."
-        else -> "$phrase to reclaim."
+        else -> PhotosCopy.PHOTOS_TO_RECLAIM.replace("{size}", CappedCount.floor(phrase, cluster.member_count_capped))
     }
     Row(
         modifier = Modifier

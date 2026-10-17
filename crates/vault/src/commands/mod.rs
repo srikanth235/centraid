@@ -19,7 +19,7 @@
 //!    message quotes the value that failed, which for a sealed field is the
 //!    secret.
 //! 3. **The LIVE definition is what runs.** `preconditions_json` in
-//!    `agent_command` is the registry's *record*; a predicate does not survive
+//!    `command_definition` is the registry's *record*; a predicate does not survive
 //!    `JSON.stringify`, so the row cannot be the thing that executes.
 //! 4. **Preconditions**, every result written as a `pre` check row, then the
 //!    first failure denies with the author's SENTENCE while the raw predicate
@@ -61,6 +61,7 @@ pub mod money;
 pub mod people;
 pub mod schedule;
 pub mod social;
+mod wikilinks;
 
 use std::collections::BTreeMap;
 
@@ -165,7 +166,7 @@ impl<'conn> CommandCtx<'_, 'conn> {
     /// Append a SUBJECT-BEARING receipt beside the command's own.
     ///
     /// Gate 8 already writes one receipt per invocation, under
-    /// `object_type: "agent.command"`. That answers *which command ran*; it
+    /// `object_type: "command.definition"`. That answers *which command ran*; it
     /// does not answer *which row was opened*, and the two are different
     /// audit questions — Locker's access history reads `object_type IN
     /// ('locker.item', 'locker.auth')` and would never see a command receipt.
@@ -378,7 +379,7 @@ impl Registry {
         self.commands.is_empty()
     }
 
-    /// Write the registry's RECORD into `agent_command`.
+    /// Write the registry's RECORD into `command_definition`.
     ///
     /// The record, not the definition: a predicate is a function and does not
     /// serialise, so these rows say what is registered and the Rust definition
@@ -389,7 +390,7 @@ impl Registry {
             for (name, entry) in &self.commands {
                 let definition = &entry.definition;
                 tx.connection().execute(
-                    "INSERT INTO agent_command
+                    "INSERT INTO command_definition
                        (command_id, name, owner_schema, input_schema_json, output_schema_json,
                         preconditions_json, postconditions_json, idempotency, risk, ontology_version)
                      VALUES (?1, ?2, ?3, ?4, '{}', ?5, ?6, ?7, ?8, ?9)
@@ -495,7 +496,7 @@ impl Vault {
         let registered: Option<String> = self.read(|connection| {
             Ok(connection
                 .query_row(
-                    "SELECT ontology_version FROM agent_command WHERE name = ?1",
+                    "SELECT ontology_version FROM command_definition WHERE name = ?1",
                     [&command.name],
                     |row| row.get(0),
                 )
@@ -691,7 +692,7 @@ impl Vault {
                     },
                     invocation_id: &invocation_id,
                     action: &format!("act {}", definition.name),
-                    object_type: "agent.command",
+                    object_type: "command.definition",
                     object_id: Some(definition.name),
                     decision: "allow",
                     detail: serde_json::json!({
@@ -750,7 +751,7 @@ fn deny(
             },
             invocation_id,
             action: &format!("act {}", definition.name),
-            object_type: "agent.command",
+            object_type: "command.definition",
             object_id: Some(definition.name),
             decision: "deny",
             detail: serde_json::json!({

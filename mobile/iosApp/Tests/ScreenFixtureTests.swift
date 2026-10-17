@@ -12,34 +12,17 @@ import XCTest
 /// file decodes the same bytes with SwiftProtobuf and asserts the same laws**,
 /// because a fixture each is two fixtures.
 ///
-/// ## IT RUNS NOW, AND ON A SIMULATOR
+/// ## IT RUNS ON A SIMULATOR
 ///
-/// There is still no Xcode and no simulator on the machines that run
-/// `cargo xtask gate`, so this is still an **owner hand-off** — but it is a
-/// hand-off that has been cashed, and the command is step 4 in
-/// `mobile/README.md`:
+/// There is no Xcode and no simulator on the machines that run
+/// `cargo xtask gate`, so this is an **owner hand-off**, and the command is
+/// step 4 in `mobile/README.md`:
 ///
 ///     cd mobile/iosApp && xcodebuild -project Centraid.xcodeproj \
 ///       -scheme Centraid -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
-///
-/// This doc comment used to say "THIS TEST HAS NEVER RUN", and for longer than
-/// it claimed: the command it named was `swift test`, which stopped being able
-/// to build `Sources/` when #1020 landed unguarded UIKit imports in
-/// `ShellModel` and `ContentImage`. UIKit is not a macOS framework and no
-/// `#if canImport` guard conjures one, so the host build failed at dependency
-/// scanning and this file was not merely unrun but **uncompiled**. Two fixes in
-/// `project.yml` gave the Xcode test bundle an `Info.plist` and made its module
-/// name agree with `Package.swift`'s, and all 17 laws below passed on the first
-/// run that could ask them.
-///
-/// The photos port added eleven screens and thirty-four laws for them, written
-/// here in the same pass that wrote the Kotlin half and NOT yet run: no
-/// simulator step belonged to the lane that wrote them. They are a hand-off in
-/// the same sense the file already was, and the command above is the one that
-/// cashes it.
 final class ScreenFixtureTests: XCTestCase {
     /// `contracts/screens`, found from this file rather than from a working
-    /// directory: `swift test` and Xcode disagree about the latter.
+    /// directory.
     private var screens: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // Tests
@@ -60,7 +43,7 @@ final class ScreenFixtureTests: XCTestCase {
         let manifest = try Data(contentsOf: screens.appendingPathComponent("manifest.json"))
         let decoded = try JSONSerialization.jsonObject(with: manifest) as? [String: Any]
         let fixtures = decoded?["fixtures"] as? [[String: Any]] ?? []
-        XCTAssertEqual(fixtures.count, 79)
+        XCTAssertEqual(fixtures.count, 72)
         for fixture in fixtures {
             let binary = try XCTUnwrap(fixture["binary"] as? String)
             let name = String(binary.dropFirst("contracts/screens/".count).dropLast(".bin".count))
@@ -172,7 +155,7 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertNotEqual(unreadable.data.springboard, firstRun.data.springboard)
     }
 
-    /// A withheld count is ABSENT, never zero — and the vault total omits it.
+    /// A withheld count is ABSENT, never zero.
     func testWithheldCountIsAbsentAndNotZero() throws {
         let content = try home("content")
         let locker = try XCTUnwrap(content.data.tiles.first { $0.appID == "locker" })
@@ -180,14 +163,6 @@ final class ScreenFixtureTests: XCTestCase {
         // `hasCount` is the whole point: a `0` here would be a lie about how
         // many secrets a member holds.
         XCTAssertFalse(locker.hasCount)
-        // 1284 + 42 + 7, with Locker contributing nothing at all.
-        XCTAssertEqual(content.data.things.total, 1333)
-    }
-
-    func testCappedCountIsOnlyAFloor() throws {
-        let things = try home("status-urgent").data.things
-        XCTAssertTrue(things.capped)
-        XCTAssertEqual(things.total, 500)
     }
 
     /// An asset whose bytes are not addressable yet is STILL A CELL: dropping
@@ -210,10 +185,9 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertEqual(Set(data.gridRows.flatMap { $0.appIds }), Set(data.tiles.map { $0.appID }))
     }
 
-    func testLoadingSpringboardReportsItsTotalUnsettled() throws {
+    func testLoadingSpringboardHoldsItsGrid() throws {
         let loading = try home("loading-first").data
         XCTAssertEqual(loading.springboard, .loading)
-        XCTAssertFalse(loading.things.settled)
         // A read in flight holds its slot at full geometry.
         XCTAssertEqual(Set(loading.gridRows.flatMap { $0.appIds }), Set(loading.tiles.map { $0.appID }))
     }
@@ -228,12 +202,6 @@ final class ScreenFixtureTests: XCTestCase {
             return XCTFail("a refused Home decodes to the failure case")
         }
         XCTAssertEqual(failure.kind, .noCopyYet)
-    }
-
-    func testAllAppsSheetLeavesTheHomeUnderneathIntact() throws {
-        let sheet = try home("all-apps-open")
-        XCTAssertTrue(sheet.allAppsSheetOpen)
-        XCTAssertEqual(sheet.data.tiles.count, 8)
     }
 
     // MARK: - Photos: the rest of the miniapp
@@ -260,21 +228,9 @@ final class ScreenFixtureTests: XCTestCase {
         }
         XCTAssertEqual(mode.kind, .trash)
         XCTAssertEqual(trash.purgeWindowDays, 30)
-        for case_ in ["person", "album-selecting", "memory-empty-but-titled"] {
+        for case_ in ["album-selecting", "memory-empty-but-titled"] {
             XCTAssertEqual(try shelf(case_).purgeWindowDays, 0, "\(case_) may not state a window")
         }
-    }
-
-    /// The person arm brings its own name, and taking it means there is no mode
-    /// to read — which is what a bag of optionals could not promise.
-    func testThePersonArmBringsItsOwnName() throws {
-        guard case let .stateView(view) = try shelf("person").shelf.of else {
-            return XCTFail("a person shelf is a state view")
-        }
-        guard case let .person(person) = view.view else {
-            return XCTFail("the person arm, not the mode arm")
-        }
-        XCTAssertEqual(person.personName, "Ada Lovelace")
     }
 
     /// A selection outlives the page it was made on: `ast-0204` is selected and
@@ -331,13 +287,11 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertTrue(try lightbox("withheld-by-rule").chromeVisible)
     }
 
-    /// The facts panel names confirmed people only, and says which labels are
-    /// guesses — the member's tag and a derivation's proposal are one list.
+    /// The facts panel says which labels are guesses — the member's tag and a
+    /// derivation's proposal are one list.
     func testTheFactsPanelSaysWhichLabelsAreGuesses() throws {
         let info = try lightbox("info-sheet-proposals")
         XCTAssertEqual(info.sheet, .info)
-        XCTAssertEqual(info.detail.people.count, 1)
-        XCTAssertEqual(info.detail.people[0].displayName, "Ada Lovelace")
         XCTAssertEqual(info.detail.labels.map(\.confirmed), [true, false])
     }
 
@@ -390,10 +344,10 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertFalse(videos.hasCoverThumbnailPath)
         // The doors are the taps that land somewhere other than a shelf, and
         // the badge is a different number from the count.
-        let people = try XCTUnwrap(data.doors.first { $0.kind == .people })
-        XCTAssertEqual(people.count, 214)
-        XCTAssertEqual(people.needsAttention, 63)
-        XCTAssertEqual(data.doors.count, 4)
+        let duplicates = try XCTUnwrap(data.doors.first { $0.kind == .duplicates })
+        XCTAssertEqual(duplicates.count, 3)
+        XCTAssertEqual(duplicates.needsAttention, 3)
+        XCTAssertEqual(data.doors.count, 3)
     }
 
     /// A sheet leaves the list underneath intact — a shape a route could not
@@ -419,13 +373,13 @@ final class ScreenFixtureTests: XCTestCase {
         // "At least 137". A bare number states a total nobody counted.
         XCTAssertTrue(album.itemCountCapped)
 
-        let peopleDoor = try XCTUnwrap(data.doors.first { $0.kind == .people })
+        let placesDoor = try XCTUnwrap(data.doors.first { $0.kind == .places })
         let duplicatesDoor = try XCTUnwrap(data.doors.first { $0.kind == .duplicates })
-        XCTAssertTrue(peopleDoor.countCapped)
+        XCTAssertTrue(placesDoor.countCapped)
         XCTAssertFalse(duplicatesDoor.countCapped)
         // A badge is "there is work": a floor and a total draw the same dot,
         // which is why `needsAttention` has no capped sibling to assert.
-        XCTAssertEqual(peopleDoor.needsAttention, 63)
+        XCTAssertEqual(duplicatesDoor.needsAttention, 3)
         XCTAssertTrue(data.hasNextCursor)
     }
 
@@ -487,11 +441,11 @@ final class ScreenFixtureTests: XCTestCase {
     /// view's.
     func testAMatchIsAKindAndANameNeverProse() throws {
         let hits = try search("hits-say-why").hits
-        XCTAssertEqual(hits.matches.map(\.kind), [.person, .label, .title])
+        XCTAssertEqual(hits.matches.map(\.kind), [.place, .label, .title])
         // The value is the vault's word for the thing, never the query echoed
-        // back: two of these three do not contain "Ada" as it was typed.
-        XCTAssertEqual(hits.matches.first?.value, "Ada Lovelace")
-        XCTAssertEqual(hits.matches.filter { $0.value.contains("Ada") }.count, 2)
+        // back: two of these three do not contain "Dublin" as it was typed.
+        XCTAssertEqual(hits.matches.first?.value, "Dún Laoghaire")
+        XCTAssertEqual(hits.matches.filter { $0.value.contains("Dublin") }.count, 1)
         XCTAssertEqual(hits.cells.count, 2)
     }
 
@@ -535,87 +489,6 @@ final class ScreenFixtureTests: XCTestCase {
         let data = try places("no-places-but-unplaced").data
         XCTAssertTrue(data.places.isEmpty)
         XCTAssertEqual(data.unplacedCount, 1904)
-    }
-
-    private func people(_ case_: String) throws -> Centraid_Screen_V1_PhotosPeopleState {
-        try Centraid_Screen_V1_PhotosPeopleState(
-            serializedBytes: try bytes("photos-people/\(case_)")
-        )
-    }
-
-    /// An empty People screen is two different screens. v0 drew one sentence
-    /// for all three causes (`PeopleEmptyState.tsx`); these two have the same
-    /// empty list and differ in both fields that decide what a member is told
-    /// and what they are offered.
-    func testAnEmptyPeopleListIsTwoDifferentScreens() throws {
-        let off = try people("recognition-off").data
-        let noneNamed = try people("none-named").data
-        XCTAssertTrue(off.people.isEmpty)
-        XCTAssertTrue(noneNamed.people.isEmpty)
-
-        XCTAssertEqual(off.emptyReason, .recognitionOff)
-        // No plane running means no queue: the answer is a setting, not a door.
-        XCTAssertEqual(off.proposedFaceCount, 0)
-
-        XCTAssertEqual(noneNamed.emptyReason, .noneNamed)
-        // The answer here IS the door, with its count on it.
-        XCTAssertEqual(noneNamed.proposedFaceCount, 63)
-        XCTAssertNotEqual(off.emptyReason, noneNamed.emptyReason)
-    }
-
-    /// A populated list says NONE explicitly — 0 is the UNSPECIFIED slot, so
-    /// "not empty" is stated rather than inferred — and the door keeps its
-    /// badge: named people and waiting questions are independent facts.
-    func testAPopulatedPeopleListSaysNoneExplicitly() throws {
-        let full = try people("named-with-proposals-waiting").data
-        XCTAssertEqual(full.emptyReason, Centraid_Screen_V1_PhotosPeopleData.EmptyReason.none)
-        XCTAssertEqual(full.people.count, 2)
-        XCTAssertEqual(full.proposedFaceCount, 7)
-        // And the per-person count is a floor when its own read filled a page.
-        // Ada's 148 is where the read stopped; Grace's twelve came back whole.
-        let ada = try XCTUnwrap(full.people.first { $0.displayName == "Ada Lovelace" })
-        let grace = try XCTUnwrap(full.people.first { $0.displayName == "Grace Hopper" })
-        XCTAssertTrue(ada.photoCountCapped)
-        XCTAssertFalse(grace.photoCountCapped)
-    }
-
-    private func faces(_ case_: String) throws -> Centraid_Screen_V1_FaceReviewState {
-        try Centraid_Screen_V1_FaceReviewState(serializedBytes: try bytes("photos-faces/\(case_)"))
-    }
-
-    /// A cursor past the end is a FINISH, not an empty queue — and the other
-    /// screen with no question showing is not a finish either: a queue cannot
-    /// fill while the plane that fills it is off.
-    func testACursorPastTheEndIsAFinish() throws {
-        let done = try faces("worked-through")
-        XCTAssertEqual(done.data.candidates.count, 2)
-        XCTAssertGreaterThanOrEqual(Int(done.cursor), done.data.candidates.count)
-        XCTAssertTrue(done.recognitionEnabled)
-
-        let off = try faces("recognition-off")
-        guard case let .data(data) = off.content else {
-            // A setting a member chose is not an error, so there is no retry.
-            return XCTFail("recognition being off is data, not a failure")
-        }
-        XCTAssertTrue(data.candidates.isEmpty)
-        XCTAssertEqual(off.cursor, 0)
-        XCTAssertFalse(off.recognitionEnabled)
-    }
-
-    /// A face with no guess is still a question, and every box is a FRACTION of
-    /// the image: there is no per-face derivative, so the box is drawn over the
-    /// asset's thumbnail at whatever size the view rendered.
-    func testAFaceWithNoGuessIsStillAQuestion() throws {
-        let data = try faces("unnamed-guess").data
-        let unnamed = try XCTUnwrap(data.candidates.first { $0.regionID == "rgn-0010" })
-        XCTAssertTrue(unnamed.proposedPartyID.isEmpty)
-        XCTAssertTrue(unnamed.proposedName.isEmpty)
-        XCTAssertEqual(unnamed.confidence, 0)
-        XCTAssertTrue(data.candidates.allSatisfy {
-            $0.boxX + $0.boxWidth <= 1 && $0.boxY + $0.boxHeight <= 1
-        })
-        // The picker needs no second read while a member is mid-answer.
-        XCTAssertEqual(data.knownPeople.count, 2)
     }
 
     private func duplicates(_ case_: String) throws -> Centraid_Screen_V1_DuplicatesState {
@@ -794,7 +667,7 @@ final class ScreenFixtureTests: XCTestCase {
         XCTAssertTrue(state.pickedAssetIds.isEmpty)
     }
 
-    /// The three-state law as a sweep over the eleven new screens. An empty data
+    /// The three-state law as a sweep over the nine new screens. An empty data
     /// case standing in for a failure is the fourth state every one of these is
     /// tempted to grow, and the only way to know none of them did is to ask all
     /// of them. `content` is an optional oneof: exactly one arm, or nil.
@@ -809,7 +682,7 @@ final class ScreenFixtureTests: XCTestCase {
         }
         try sweep(
             "photos-shelf",
-            ["album-selecting", "memory-empty-but-titled", "person", "trash-states-its-window"]
+            ["album-selecting", "memory-empty-but-titled", "trash-states-its-window"]
         ) { try Centraid_Screen_V1_PhotoShelfState(serializedBytes: $0).content != nil }
         try sweep(
             "photos-lightbox",
@@ -836,14 +709,6 @@ final class ScreenFixtureTests: XCTestCase {
             "photos-places",
             ["map-presentation", "no-coordinate", "no-places-but-unplaced"]
         ) { try Centraid_Screen_V1_PlacesState(serializedBytes: $0).content != nil }
-        try sweep(
-            "photos-people",
-            ["named-with-proposals-waiting", "none-named", "recognition-off"]
-        ) { try Centraid_Screen_V1_PhotosPeopleState(serializedBytes: $0).content != nil }
-        try sweep(
-            "photos-faces",
-            ["recognition-off", "unnamed-guess", "worked-through"]
-        ) { try Centraid_Screen_V1_FaceReviewState(serializedBytes: $0).content != nil }
         try sweep(
             "photos-duplicates",
             [
@@ -891,7 +756,7 @@ final class ScreenFixtureTests: XCTestCase {
             return XCTFail("a failed read is a failure")
         }
         XCTAssertEqual(failure.kind, .unavailable)
-        XCTAssertEqual(refused.band.count, 5)
+        XCTAssertEqual(refused.band.count, 4)
     }
 
     /// The first load anchors on no day, so the day bar is not shown.

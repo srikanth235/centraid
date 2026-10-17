@@ -34,6 +34,25 @@
 //! backed up (the root's simulator repro, #1080). The way back is a restore
 //! from the 24 words, which starts from the gateway's head.
 //!
+//! # A TAKEOVER BY AN OLDER COPY IS REFUSED TOO (the sweep's F4)
+//!
+//! A phone with no record of the gateway — its ledger was lost — cannot be
+//! told it was superseded, and its copy can still be older than the head:
+//! another phone restored the vault, wrote to it and set a newer head, and
+//! this one, frozen and then stripped of its ledger, pairs again. The claim
+//! would make the older copy the vault: its next pass sets its snapshot as the
+//! head, and the newer phone's records leave the history. So the claim first
+//! compares the head with the copy. The head's `taken_at_ms` is the cheap gate
+//! — a copy that ran a command after the head was taken is not behind it — and
+//! when the head is later than the copy's last command, the head's manifest
+//! says how many commands (receipts, an append-only count) the vault had run
+//! when it was taken: more than this copy has run, and the head holds
+//! commands this copy never saw, so it is refused `VAULT_MOVED` and the way
+//! back is a restore. A head taken after the copy's last command that holds no
+//! more of them is this phone's own, with nothing written since. The files the
+//! newer phone backed up are kept regardless, as long as a kept snapshot names
+//! them (`retention::collectable`).
+//!
 //! # THE NUMBER THE MEMBER READS ALOUD (#1029 W15-D5, the root's ruling A17)
 //!
 //! `safety_number_of_bytes` over the vault's identity key and the pin, both 32
@@ -48,6 +67,8 @@ use centraid_gateway::rules::ids::{GatewayId, Pin, Token};
 use centraid_gateway::rules::payload::{PairPayload, PayloadError};
 use centraid_gateway::rules::wire::{ClaimBody, PairKind, PairRequest, Paired, ReadBody};
 use centraid_vault::backup::ledger::Destination;
+use centraid_vault::backup::naming::Name as PlaneName;
+use centraid_vault::backup::snapshot::{History, Manifest};
 
 use super::{Keyring, Plane, now_ms, plane_error, wire_destination};
 use crate::error::{CoreError, Result};
@@ -222,6 +243,41 @@ const fn superseded(current_epoch: u64) -> CoreError {
     }
 }
 
+/// **WHETHER THE HEAD HOLDS COMMANDS THIS COPY NEVER RAN** (the sweep's F4):
+/// the head was taken after this copy's last command, and its manifest counts
+/// more receipts than this copy holds. See the module header. A head that
+/// will not open cannot be judged — and holds nothing a claim would lose — so
+/// it is not newer.
+fn head_is_ahead(
+    client: &Client,
+    keyring: &Keyring,
+    head: &centraid_gateway::rules::wire::HeadView,
+    own: &History,
+    runtime: &tokio::runtime::Handle,
+) -> Result<bool> {
+    let taken = u64::try_from(head.taken_at_ms).unwrap_or(0);
+    // A COPY THAT RAN A COMMAND AFTER THE HEAD WAS TAKEN is not behind it.
+    if own.last_write_ms.is_some_and(|written| written >= taken) {
+        return Ok(false);
+    }
+    let sealed_bytes = match runtime.block_on(client.get(&keyring.vault_id(), &head.name, None)) {
+        Ok(bytes) => bytes,
+        Err(ClientError::Refused(Refusal::NotFound { .. })) => return Ok(false),
+        Err(error) => return Err(pairing_error(error)),
+    };
+    let name = PlaneName::from_bytes(*head.name.as_bytes());
+    let opened = centraid_media::sealed::open_whole(&keyring.backup, &name, &sealed_bytes)
+        .map_err(|error| error.to_string())
+        .and_then(|json| Manifest::from_json(&json).map_err(|error| error.to_string()));
+    match opened {
+        Ok(manifest) => Ok(manifest.receipts() > own.receipts),
+        Err(reason) => {
+            tracing::warn!(%reason, "the gateway's head would not open; a claim cannot be judged against it");
+            Ok(false)
+        }
+    }
+}
+
 /// Take this vault over at `gateway`: read its head under a read-only grant,
 /// then claim the writer epoch one past it, naming that head — retried when
 /// either moved under the claim. Answers the pairing and the head the claim
@@ -233,11 +289,16 @@ const fn superseded(current_epoch: u64) -> CoreError {
 /// phone's claim since — a restore, or a takeover — and this phone's copy is
 /// older than the head that phone set, so it is refused
 /// [`CoreError::VaultMoved`] and nothing is claimed.
+///
+/// `own` is how far this phone's copy has run, when it holds one: a head that
+/// holds commands the copy never ran is refused the same way, claimed by
+/// nobody ([`head_is_ahead`], the sweep's F4).
 pub(crate) fn take_over(
     client: &Client,
     keyring: &Keyring,
     gateway: &GatewayId,
     held: Option<u64>,
+    own: Option<&History>,
     runtime: &tokio::runtime::Handle,
 ) -> Result<(Paired, Option<centraid_gateway::rules::ids::Name>)> {
     let Some(grant) = read_grant(client, keyring, gateway, runtime)? else {
@@ -249,6 +310,13 @@ pub(crate) fn take_over(
     let state = runtime
         .block_on(client.head_state(&keyring.vault_id()))
         .map_err(pairing_error)?;
+    // AN OLDER COPY CLAIMS NOTHING (the sweep's F4): the head is checked
+    // against this phone's own copy before any claim is made.
+    if let (Some(head), Some(own)) = (state.head.as_ref(), own)
+        && head_is_ahead(client, keyring, head, own, runtime)?
+    {
+        return Err(superseded(state.epoch));
+    }
     let (mut epoch, mut head) = (state.epoch, state.head.map(|head| head.name));
     for _ in 0..CLAIM_ATTEMPTS {
         if held.is_some_and(|mine| epoch > mine) {
@@ -288,6 +356,7 @@ pub(crate) fn take_over(
 pub fn pair(
     plane: &Plane,
     keyring: Option<&Keyring>,
+    own: Option<&History>,
     request: &wire::PairRequest,
     runtime: &tokio::runtime::Handle,
 ) -> Result<wire::PairResponse> {
@@ -323,7 +392,7 @@ pub fn pair(
         // A SECRET ADMITS ONLY A VAULT THE GATEWAY HOLDS NOTHING OF: no head.
         Ok(paired) => (paired, None),
         Err(ClientError::Refused(Refusal::VaultKnown)) => {
-            match take_over(&client, keyring, &payload.gw, held, runtime) {
+            match take_over(&client, keyring, &payload.gw, held, own, runtime) {
                 // LEARNED HERE, AS A PASS WOULD HAVE: the phone freezes.
                 Err(CoreError::VaultMoved { current_epoch, .. }) => {
                     ledger

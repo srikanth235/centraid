@@ -45,8 +45,7 @@ import kotlinx.coroutines.launch
  * **the command's output never reaches a screen** — so the id the pick would
  * go into is not known when the create settles. The create's own commit moves
  * `core_collection`, the host re-reads the list, and the new album is there for
- * the tap that finishes the job. `FaceReviewMachine` pays the same price for
- * the same reason with a new person's name.
+ * the tap that finishes the job.
  *
  * Emitting the create and the adds together would not work either: the runner
  * launches one coroutine per write, so the adds would race the album they need
