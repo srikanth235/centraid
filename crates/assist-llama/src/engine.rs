@@ -94,6 +94,7 @@ fn free_every_model_at_exit() {
                 *weights = None;
             }
         }
+        // SAFETY: the declaration matches the C atexit ABI on supported targets.
         unsafe extern "C" {
             fn atexit(callback: extern "C" fn()) -> std::ffi::c_int;
         }

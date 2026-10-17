@@ -60,6 +60,7 @@ test("the branch tier is a subset of the full tier, and every member is static",
 
 test("every gate in check:push is classified", () => {
   for (const gate of checkPushGates) {
+    assert.ok(scripts.has(gate), `${gate} has no root script`);
     assert.ok(
       classes[gate],
       `${gate} is in check:push but not in gate-classes.json`
@@ -174,10 +175,36 @@ test("every gate the weekly lane runs exists in package.json", () => {
 });
 
 test("the lint:product bundle holds classified, non-hygiene gates and duplicates none of check:push", () => {
-  assert.ok(
-    PRODUCT_GATES.length >= 30,
-    `the bundle replaces ${PRODUCT_GATES.length} names; #915 asks for at least 30`
-  );
+  // Pin surviving contracts by identity: a count can hide a removed gate
+  // behind an unrelated addition. Retired v0 gates have no implementation.
+  assert.deepEqual([...PRODUCT_GATES].sort(), [
+    "lint:aria-labels",
+    "lint:ci-egress",
+    "lint:container-opacity",
+    "lint:copy",
+    "lint:design-md",
+    "lint:design-tokens",
+    "lint:journey-ledger",
+    "lint:law-registry",
+    "lint:ledgers",
+    "lint:motion-rule",
+    "lint:native-controls",
+    "lint:no-nul-bytes",
+    "lint:node-version",
+    "lint:packages",
+    "lint:path-filters",
+    "lint:site-tokens",
+    "lint:test-reachability",
+    "lint:tsconfigs",
+    "lint:turbo-cache",
+    "lockfile:lint",
+    "security:lifecycle",
+    "security:unsafe-edges",
+    "test:accessibility",
+    "test:advisory-expiry",
+    "test:quarantine",
+    "test:ratchet",
+  ]);
   assert.equal(new Set(PRODUCT_GATES).size, PRODUCT_GATES.length);
   for (const gate of PRODUCT_GATES) {
     assert.ok(

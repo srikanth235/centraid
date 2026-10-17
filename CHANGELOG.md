@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+- CI scans the root Rust workspace lockfile, refuses empty supply-chain scans, installs buf in both nightly consumers, and records the existing assistant unsafe surface with its safety evidence ([#1108](https://github.com/srikanth235/centraid/issues/1108)).
+
 ### Added
 
 - **One phone, one statement of every fact** ([#1124](https://github.com/srikanth235/centraid/pull/1124)). The owner's rulings of 2026-10-15/16 land: one baseline migration, Notes wikilinks, a Page read held to the tables screens use, backup refusals that stop the pass and a phone that re-finds a backup device that moved. The two phone shells stop restating each other: copy, Photos layout, the lightbox text, sizes and clocks, and every app's navigation are decided once in shared code; restore scans the pairing QR; Android shows one primary button on Backup; Money can be the chat's scope. Android edits are not yet compiled.
@@ -229,3 +231,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Read-only CLI verbs (`devices list`, `backup status`, `backup list`) report that the running daemon owns the database instead of a raw `database is locked` stack trace ([#568](https://github.com/srikanth235/centraid/issues/568))
 - macOS network-filesystem detection reads the mount table's filesystem type; the previous probe could never match and also suppressed its own fallback ([#568](https://github.com/srikanth235/centraid/issues/568))
 - Re-opening the founding QR while a restore is downloading no longer destroys that restore ([#568](https://github.com/srikanth235/centraid/issues/568))
+
+- #1108: Retry transient lane-health gateway failures without suppressing errors; reconcile deleted push commands and pin surviving bundle identities.
+
+- #1108: Repair Money protobuf enum sizing, existing card-route metadata, synthetic secret-scanner fixture naming and runtime test handles after #1112; preserve checks and budgets.

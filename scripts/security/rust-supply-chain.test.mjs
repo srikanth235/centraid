@@ -223,3 +223,53 @@ test("no crate to scan at all is reported loudly rather than silently passing", 
   });
   assert.match(result.lines.join("\n"), /nothing to scan/u);
 });
+
+test("workspace root and standalone locks both run, excluding build outputs", () => {
+  const root = lockedCrates("workspace", [
+    ".",
+    "nested/tool",
+    "target/generated",
+    "node_modules/vendor",
+  ]);
+  assert.deepEqual(discoverLockedCrates(root), [".", "nested/tool"]);
+  const calls = [];
+  const result = runRustSupplyChain({
+    root,
+    probe: () => AVAILABLE,
+    run: (args, cwd) => {
+      calls.push([args[0], cwd]);
+      return { status: 0 };
+    },
+  });
+  assert.deepEqual(calls, [
+    ["audit", root],
+    ["audit", path.join(root, "nested/tool")],
+    ["deny", root],
+    ["deny", path.join(root, "nested/tool")],
+  ]);
+  assert.equal(
+    decideExit(result.records, { require: true, crates: result.crates }).code,
+    0
+  );
+});
+
+test("empty discovery fails with available or missing tools, including --require", () => {
+  const root = lockedCrates("empty-fails", []);
+  for (const probe of [AVAILABLE, MISSING]) {
+    const result = runRustSupplyChain({
+      root,
+      probe: () => probe,
+      run: () => {
+        throw new Error("empty tree must not invoke cargo");
+      },
+    });
+    for (const required of [false, true]) {
+      const verdict = decideExit(result.records, {
+        require: required,
+        crates: result.crates,
+      });
+      assert.equal(verdict.code, 1);
+      assert.match(verdict.reasons.join("\n"), /empty scan cannot pass/u);
+    }
+  }
+});

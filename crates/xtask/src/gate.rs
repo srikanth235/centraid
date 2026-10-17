@@ -1053,6 +1053,10 @@ fn run_tests(ctx: &Ctx) -> Result<Outcome> {
         );
         return run_whole_workspace_tests(ctx);
     }
+    let built = build_test_artifacts(ctx)?;
+    if !matches!(built, Outcome::Ok(_)) {
+        return Ok(built);
+    }
     let selected = plan.selected();
     // THE DRILLS RUN ONCE PER LOOP, NOT TWICE. `restore_drill` is an ordinary
     // integration test of `centraid-vault` and `centraid`, so a narrowed run
@@ -1127,9 +1131,20 @@ fn crate_list(names: &[&str]) -> String {
     }
 }
 
+// The C harness links the workspace cdylib, which `cargo test` does not
+// refresh. Keep workspace feature resolution; a zero-crate local selection
+// returns before this build, preserving the owner's no-test path.
+fn build_test_artifacts(ctx: &Ctx) -> Result<Outcome> {
+    process(ctx, "test-build", "cargo", &["build", "--workspace"])
+}
+
 /// Every workspace crate: what `pr`, `nightly` and `release` run, and what
 /// `local` falls back to when it cannot narrow.
 fn run_whole_workspace_tests(ctx: &Ctx) -> Result<Outcome> {
+    let built = build_test_artifacts(ctx)?;
+    if !matches!(built, Outcome::Ok(_)) {
+        return Ok(built);
+    }
     if !cargo_subcommand_available(&ctx.root, "nextest") {
         return process(ctx, "test", "cargo", &["test", "--workspace"]);
     }

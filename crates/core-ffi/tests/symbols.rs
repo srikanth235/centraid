@@ -10,8 +10,9 @@
 //!
 //! Both tests skip rather than fail when the `cdylib` is not on disk: `cargo
 //! test -p centraid-core-ffi` builds the `rlib` these tests link and does not
-//! guarantee the `cdylib` is fresh. The gate's `test` step runs
-//! `cargo test --workspace`, which builds both. A skip is printed, loudly.
+//! guarantee the `cdylib` is fresh. The gate's `test` step first runs
+//! `cargo build --workspace` to refresh both forms before either test runner.
+//! A skip outside the gate is printed, loudly.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

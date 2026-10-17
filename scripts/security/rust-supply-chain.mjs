@@ -97,6 +97,12 @@ export function discoverLockedCrates(root) {
   const found = [];
   /** @param {string} dir Directory to walk. */
   const walk = (dir) => {
+    if (
+      existsSync(path.join(dir, "Cargo.lock")) &&
+      statSync(path.join(dir, "Cargo.lock")).isFile()
+    ) {
+      found.push(path.relative(root, dir).split(path.sep).join("/") || ".");
+    }
     let entries;
     try {
       entries = readdirSync(dir, { withFileTypes: true });
@@ -106,12 +112,6 @@ export function discoverLockedCrates(root) {
     for (const entry of entries) {
       if (!entry.isDirectory() || SKIP_DIRS.has(entry.name)) continue;
       const child = path.join(dir, entry.name);
-      try {
-        statSync(path.join(child, "Cargo.lock"));
-        found.push(path.relative(root, child).split(path.sep).join("/"));
-      } catch {
-        // Not a locked crate root; keep descending.
-      }
       walk(child);
     }
   };
@@ -128,6 +128,9 @@ export function discoverLockedCrates(root) {
  */
 export function decideExit(records, context) {
   const reasons = [];
+  if (context.crates.length === 0) {
+    reasons.push("no Cargo.lock found — an empty scan cannot pass");
+  }
   for (const tool of RUST_SUPPLY_CHAIN_TOOLS) {
     const mine = records.filter((r) => r.tool === tool.id);
     const skipped = mine.find((r) => r.outcome === "skipped");

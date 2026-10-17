@@ -1,5 +1,4 @@
-// Refresh discipline: skip doorbells for tables this app does not read, and
-// skip focus refreshes inside the min interval (alt-tab thrash).
+// Filter unread tables and rate-limit focus refreshes.
 
 import type { CentraidChangeDetail } from "./host.js";
 import { host } from "./host.js";
@@ -20,7 +19,7 @@ export function debounce<Args extends unknown[]>(
   };
 }
 
-// Replica subscribe emits the current value; callers also await it — skip that first.
+// Suppress the initial subscription value already returned by await.
 export function subscribeReadUpdates<T = unknown>(
   read: unknown,
   onUpdate: (value: T) => void
@@ -68,12 +67,7 @@ export function onDataChange(
     const named = detail && Array.isArray(detail.tables) ? detail.tables : null;
     if (named && named.length && want.size && !named.some((t) => want.has(t)))
       return;
-    // THE WRITE'S OWN ECHO IS NOT A DOORBELL (#922 D1). An overlay detail is
-    // this seat's own pending row changing state, and the member is watching
-    // for exactly it — a window would make their own edit the one change that
-    // arrives late. Everything else is somebody else's churn and keeps the
-    // window; a queued detail already waiting is left waiting, so this cannot
-    // drop a coalesced re-read.
+    // Own edits bypass debounce; preserve queued remote changes (#922).
     if (detail?.source === "overlay" && typeof detail?.intentId === "string") {
       cb(detail);
       return;

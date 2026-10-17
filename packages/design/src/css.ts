@@ -1,7 +1,5 @@
-// The only lowering of shared design values into custom properties. Two axes
-// no component may re-own: density (row height and padding, never control
-// size) and reduced motion. No surface-tone axis — one page colour, `--bg`
-// (docs/traps/design-tokens.md).
+// Shared CSS lowering owns density and reduced motion. Density changes rows
+// and padding, never controls; --bg is the only page colour.
 
 import {
   DENSITY_TIERS,
