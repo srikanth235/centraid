@@ -1,5 +1,7 @@
 import SwiftUI
 
+import CentraidShared
+
 /// "ADD TO ALBUM", AS ONE SHEET FOR EVERY SCREEN THAT OFFERS IT (#1029, the
 /// photos port).
 ///
@@ -30,14 +32,14 @@ struct AlbumChoiceSheet: View {
     @FocusState private var nameFocused: Bool
 
     var body: some View {
-        SheetRoom(title: PhotosWords.photosAddToAlbum) {
+        SheetRoom(title: PhotosCopy.shared.PHOTOS_ADD_TO_ALBUM) {
             newAlbumRow
             ScrollView {
                 VStack(spacing: 0) {
                     if choices.isEmpty {
                         // ONE SENTENCE, NEVER AN EMPTY SHEET. The row above is
                         // the action; this only says why the list is short.
-                        Text(PhotosWords.photosAlbumChoiceNone)
+                        Text(PhotosCopy.shared.PHOTOS_ALBUM_CHOICE_NONE)
                             .centraidType("small")
                             .foregroundStyle(Theme.color("textFaint", scheme))
                             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
@@ -49,7 +51,7 @@ struct AlbumChoiceSheet: View {
                     }
                 }
             }
-            KitLink(label: "Cancel", identifier: "photos.album-choice.cancel", action: onCancel)
+            KitLink(label: PhotosCopy.shared.PHOTOS_CANCEL, identifier: "photos.album-choice.cancel", action: onCancel)
                 .frame(maxWidth: .infinity)
         }
     }
@@ -62,20 +64,20 @@ struct AlbumChoiceSheet: View {
     private var newAlbumRow: some View {
         if naming {
             HStack(spacing: 12) {
-                TextField(PhotosWords.photosAlbumName, text: $name)
+                TextField(PhotosCopy.shared.PHOTOS_ALBUM_NAME, text: $name)
                     .centraidType("body")
                     .focused($nameFocused)
                     .submitLabel(.done)
                     .onSubmit(create)
                     .frame(minHeight: CentraidGeometry.targetMinCoarse)
                     .accessibilityIdentifier("photos.album-choice.name")
-                KitLink(label: "Create", identifier: "photos.album-choice.create", action: create)
+                KitLink(label: PhotosCopy.shared.PHOTOS_CREATE, identifier: "photos.album-choice.create", action: create)
                     // AN EMPTY NAME IS NOT A WRITE: `media.create_album`'s
                     // `title` is `minLength: 1`.
                     .disabled(trimmed.isEmpty)
             }
         } else {
-            SheetRow(iconKey: "add", label: PhotosWords.photosAlbumChoiceNew, identifier: "photos.album-choice.new") {
+            SheetRow(iconKey: "add", label: PhotosCopy.shared.PHOTOS_ALBUM_CHOICE_NEW, identifier: "photos.album-choice.new") {
                 naming = true
                 nameFocused = true
             }
@@ -83,7 +85,7 @@ struct AlbumChoiceSheet: View {
     }
 
     private func row(_ choice: Centraid_Screen_V1_AlbumChoiceEntry) -> some View {
-        let title = choice.title.isEmpty ? PhotosWords.photosUntitledAlbum : choice.title
+        let title = choice.title.isEmpty ? PhotosCopy.shared.PHOTOS_UNTITLED_ALBUM : choice.title
         let count = Self.count(choice)
         return Button {
             onChoose(choice.albumID)
@@ -130,12 +132,14 @@ struct AlbumChoiceSheet: View {
     /// A CAPPED COUNT SAYS `N+` AND NEVER A BARE NUMBER — Collections' rule,
     /// spelled the same way, with "at least" for a screen reader.
     static func count(_ choice: Centraid_Screen_V1_AlbumChoiceEntry) -> (shown: String, spoken: String) {
-        let noun = choice.count == 1 ? PhotosWords.tileCountOne : PhotosWords.tileCountMany
-        if choice.countCapped {
-            return ("\(choice.count)+ \(noun)", "at least \(choice.count) \(noun)")
+        if choice.count == 0 && !choice.countCapped {
+            return (PhotosCopy.shared.PHOTOS_COUNT_EMPTY, PhotosCopy.shared.PHOTOS_COUNT_EMPTY)
         }
-        if choice.count == 0 { return ("Empty", "empty") }
-        return ("\(choice.count) \(noun)", "\(choice.count) \(noun)")
+        let count = Int64(choice.count)
+        return (
+            CappedCount.shared.shown(count: count, capped: choice.countCapped, one: PhotosCopy.shared.TILE_COUNT_ONE, many: PhotosCopy.shared.TILE_COUNT_MANY),
+            CappedCount.shared.spoken(count: count, capped: choice.countCapped, one: PhotosCopy.shared.TILE_COUNT_ONE, many: PhotosCopy.shared.TILE_COUNT_MANY)
+        )
     }
 }
 

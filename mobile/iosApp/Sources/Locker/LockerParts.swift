@@ -2,9 +2,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // LOCKER'S SHARED PARTS (#1047): the wall, the covered page, the item row,
 // the choice pills and the clipboard. Every word is the machines'.
@@ -106,7 +104,7 @@ struct LockerCovered<Content: View>: View {
     var body: some View {
         let state = Centraid_Screen_V1_LockerLockState.of(lock)
         if state.covers {
-            PushedPage(title: "", parentTitle: LockerWords.appName, onBack: onBack) {
+            PushedPage(title: "", parentTitle: LockerCopy.shared.APP_NAME, onBack: onBack) {
                 EmptyView()
             } content: {
                 LockerWall(lock: state, sendLock: sendLock)
@@ -138,18 +136,6 @@ struct LockerShield<Content: View>: View {
 
     var body: some View {
         WordsShield(secure: Centraid_Screen_V1_LockerLockState.of(lock).secure, content: content)
-    }
-}
-
-/// The app's name, from its copy table — the covered page's back word, where
-/// the wiped screen under the wall has no title left to name.
-enum LockerWords {
-    static var appName: String {
-        #if canImport(CentraidShared)
-        LockerCopy.shared.APP_NAME
-        #else
-        ""
-        #endif
     }
 }
 

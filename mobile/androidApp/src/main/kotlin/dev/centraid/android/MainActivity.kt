@@ -162,7 +162,11 @@ public class MainActivity : FragmentActivity() {
     private val locker: LockerRoutes by lazy { LockerRoutes(openWords = { words.openRekey() }) }
 
     /** THE 24 WORDS' SHEETS (#1047 E3), over every screen. See `WordsSheets`. */
-    private val words: WordsSheets by lazy { WordsSheets(onEnterClosed = { locker.reattach(this) }) }
+    private val words: WordsSheets by lazy {
+        WordsSheets(onEnterClosed = { locker.reattach(this) }).also {
+            it.camera = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+        }
+    }
 
     /** THE BACKUP SCREEN'S SHEET (#1080), over every screen. See `BackupSheets`. */
     private val backupSheet: BackupSheets by lazy { BackupSheets() }

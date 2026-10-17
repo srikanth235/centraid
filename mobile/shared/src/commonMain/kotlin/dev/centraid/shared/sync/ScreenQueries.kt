@@ -231,7 +231,8 @@ internal fun deniedFailure(denial: AppQueryDenial): ReadFailure =
 /**
  * The `tz` a query states, or null for one that states none.
  *
- * EVERY ARM THAT CARRIES A `tz` IS LISTED — `ZonePrecheckSpec` reads the
+ * EVERY ARM THAT CARRIES A `tz` IS LISTED — `ScreenQueryRuntimeSpec`'s "every
+ * query arm whose request carries a tz is in the zone pre-check" case reads the
  * core protos and fails when an arm with a `string tz` field is missing here,
  * so a new app's query cannot slip past the pre-check into `INVALID_REQUEST`.
  */

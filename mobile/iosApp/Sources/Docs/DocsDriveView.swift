@@ -2,6 +2,8 @@ import SwiftUI
 import AVFoundation
 import UIKit
 
+import CentraidShared
+
 /// THE DRIVE — All · Folders · Starred, More as a sheet; and, pushed over it,
 /// a folder's page (#1046).
 ///
@@ -399,10 +401,10 @@ struct DocsDriveView: View {
                 // The keys are `DocsWrites.KEY_*`. Capture and the trash are
                 // the shell's; everything else is the machine's.
                 switch (state.sheet.kind, action.key) {
-                case (.add, "upload"): addRequested(action.key, .upload, state)
-                case (.add, "scan"): addRequested(action.key, .scan, state)
-                case (.add, "text"): addRequested(action.key, .text, state)
-                case (.more, "trash_shelf"):
+                case (.add, DocsWrites.shared.KEY_UPLOAD): addRequested(action.key, .upload, state)
+                case (.add, DocsWrites.shared.KEY_SCAN): addRequested(action.key, .scan, state)
+                case (.add, DocsWrites.shared.KEY_TEXT): addRequested(action.key, .text, state)
+                case (.more, DocsWrites.shared.KEY_TRASH_SHELF):
                     send(Self.event { $0.trashOpened = .init() })
                     push(DocsScreens.trashRoute)
                 default:

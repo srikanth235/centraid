@@ -5,9 +5,7 @@ import Photos
 import UIKit
 import UniformTypeIdentifiers
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// A COPY OF A PICK, HANDED TO THE PLATFORM (#1029, the photos port) — a
 /// shelf's selection or the library's, whichever `CopyExportScreen` asked.
@@ -38,7 +36,6 @@ enum ShelfCopyExport {
         case save
     }
 
-    #if canImport(CentraidShared)
     static func run(_ kind: Kind, _ assetIdentifiers: [String], bridge: any CopyExportScreen) {
         bridge.locateOriginals(assetIds: assetIdentifiers) { located in
             let originals = located.originals
@@ -166,12 +163,11 @@ enum ShelfCopyExport {
     /// `Photo 1.jpg`, `Video 2.mov` — the extension from the media type the
     /// byte door reported, because the vault's own file is named by its hash.
     private static func name(for original: LocatedOriginal, index: Int) -> String {
-        let stem = original.isVideo ? "Video" : "Photo"
+        let stem = original.isVideo ? PhotosCopy.shared.PHOTOS_CELL_VIDEO : PhotosCopy.shared.PHOTOGRAPH
         let fallback = original.isVideo ? "mov" : "jpg"
         let ext = UTType(mimeType: original.mediaType)?.preferredFilenameExtension ?? fallback
         return "\(stem) \(index + 1).\(ext)"
     }
-    #endif
 
     @MainActor
     private static func topController() -> UIViewController? {

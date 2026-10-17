@@ -69,6 +69,8 @@ public object WriteLaw {
                         WriteState.Phase.PHASE_REFUSED
                     },
                     failure = if (settled.committed) null else settled.failure,
+                    // SAID ONCE, HERE: the sentence a shell draws for a refusal.
+                    refusal = if (settled.committed) "" else settled.failure?.sentence.orEmpty(),
                 ),
             ),
         )

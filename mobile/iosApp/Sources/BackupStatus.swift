@@ -5,6 +5,8 @@ import Photos
 import PhotosUI
 import SwiftUI
 
+import CentraidShared
+
 /// THE CAMERA-ROLL IMPORT'S OWN SURFACE (#1025 S6, D-1025-S7-75).
 ///
 /// **An import, not the backup** (#1080). It brings the camera roll into this
@@ -82,7 +84,7 @@ struct BackupStatus: View {
                     switch banner.remedy {
                     case .ask:
                         KitLink(label: banner.allowLabel) {
-                            shell.send(screen: "photos.grid", event: state.permissionRequestEvent)
+                            shell.send(screen: PhotosScreens.grid, event: state.permissionRequestEvent)
                         }
                     case .settings:
                         KitLink(label: banner.settingsLabel, identifier: "photos.backup.open-settings") { openSettings() }
@@ -101,7 +103,7 @@ struct BackupStatus: View {
             // Inset is owned by `PhotosGridView` (R-PHOTOS-2) — this banner does
             // not pad for the status bar or the navigation bar.
             .accessibilityElement(children: .contain)
-            .accessibilityLabel(PhotosWords.photosCameraRoll)
+            .accessibilityLabel(PhotosCopy.shared.PHOTOS_CAMERA_ROLL)
         }
     }
 

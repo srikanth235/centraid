@@ -70,7 +70,7 @@ public object PairLaptopMachine {
             // A PHOTO WITH NO SQUARE spends nothing: the field keeps what was
             // typed and the sentence says what to do instead.
             event.unread != null && waiting ->
-                PairStep(render(model.copy(phase = PairLaptopState.Phase.PHASE_WAITING, notice = CustodyCopy.PAIR_PHOTO_UNREAD)))
+                PairStep(render(model.copy(phase = PairLaptopState.Phase.PHASE_WAITING, notice = WordsCopy.PAIR_PHOTO_UNREAD)))
             event.primary != null -> when (model.phase) {
                 // A BARRED REFUSAL'S ONE KEY IS DONE: pairing again would be
                 // refused the same way, so there is nothing to send.
@@ -113,7 +113,7 @@ public object PairLaptopMachine {
     private fun pair(model: Pairing): PairStep {
         val ticket = ticketOf(model.payload)
         if (ticket.isEmpty()) {
-            return PairStep(render(model.copy(phase = PairLaptopState.Phase.PHASE_WAITING, notice = CustodyCopy.PAIR_EMPTY)))
+            return PairStep(render(model.copy(phase = PairLaptopState.Phase.PHASE_WAITING, notice = WordsCopy.PAIR_EMPTY)))
         }
         return PairStep(
             render(model.copy(phase = PairLaptopState.Phase.PHASE_PAIRING, notice = "")),
@@ -128,8 +128,8 @@ public object PairLaptopMachine {
                 when (readiness) {
                     Readiness.READY -> model.copy(phase = PairLaptopState.Phase.PHASE_WAITING)
                     Readiness.NEEDS_WORDS ->
-                        model.copy(phase = PairLaptopState.Phase.PHASE_NEEDS_WORDS, notice = CustodyCopy.PAIR_NEEDS_WORDS, rekey = true)
-                    Readiness.NO_VAULT -> model.copy(phase = PairLaptopState.Phase.PHASE_NEEDS_WORDS, notice = CustodyCopy.PAIR_NO_VAULT)
+                        model.copy(phase = PairLaptopState.Phase.PHASE_NEEDS_WORDS, notice = WordsCopy.PAIR_NEEDS_WORDS, rekey = true)
+                    Readiness.NO_VAULT -> model.copy(phase = PairLaptopState.Phase.PHASE_NEEDS_WORDS, notice = WordsCopy.PAIR_NO_VAULT)
                 },
             ),
         )
@@ -145,7 +145,7 @@ public object PairLaptopMachine {
                     // did not take wants a new code, not a laptop woken up.
                     is PairResult.Refused -> failed.copy(
                         notice = when (result.because) {
-                            PairRefusal.UNREACHABLE -> CustodyCopy.PAIR_UNREACHABLE
+                            PairRefusal.UNREACHABLE -> WordsCopy.PAIR_UNREACHABLE
                             PairRefusal.NOT_A_CODE -> WordsCopy.PAIR_NOT_A_CODE
                             PairRefusal.NOT_TAKEN -> WordsCopy.PAIR_NOT_TAKEN
                             PairRefusal.MOVED -> WordsCopy.PAIR_MOVED
@@ -160,7 +160,7 @@ public object PairLaptopMachine {
                     // CHECK, so it is refused rather than shown: the core
                     // answers an empty safety number when it could not make one.
                     is PairResult.Paired -> if (result.answer.safetyNumber.isBlank()) {
-                        failed.copy(notice = CustodyCopy.PAIR_NOTHING_TO_COMPARE)
+                        failed.copy(notice = WordsCopy.PAIR_NOTHING_TO_COMPARE)
                     } else {
                         model.copy(phase = PairLaptopState.Phase.PHASE_PAIRED, payload = "", answer = result.answer, notice = "")
                     }
@@ -175,35 +175,35 @@ public object PairLaptopMachine {
         val phase = model.phase
         val answer = model.answer
         val title = when (phase) {
-            PairLaptopState.Phase.PHASE_PAIRED -> CustodyCopy.PAIRED_TITLE
-            PairLaptopState.Phase.PHASE_FAILED -> CustodyCopy.PAIR_FAILED_TITLE
+            PairLaptopState.Phase.PHASE_PAIRED -> WordsCopy.PAIRED_TITLE
+            PairLaptopState.Phase.PHASE_FAILED -> WordsCopy.PAIR_FAILED_TITLE
             // "Your words come first" only where words ARE the way out (the
             // re-key door below); no vault keeps the screen's own title over
             // its one sentence.
             PairLaptopState.Phase.PHASE_NEEDS_WORDS ->
-                if (model.rekey) CustodyCopy.PAIR_NEEDS_WORDS_TITLE else CustodyCopy.PAIR_TITLE
+                if (model.rekey) WordsCopy.PAIR_NEEDS_WORDS_TITLE else WordsCopy.PAIR_TITLE
             PairLaptopState.Phase.PHASE_CLOSED -> ""
-            else -> CustodyCopy.PAIR_TITLE
+            else -> WordsCopy.PAIR_TITLE
         }
         val barred = model.barred && phase == PairLaptopState.Phase.PHASE_FAILED
         val body = when (phase) {
             // A BARRED REFUSAL IS ITS NOTICE ALONE: the instruction to paste a
             // code would be asking for what cannot work.
-            PairLaptopState.Phase.PHASE_FAILED -> if (barred) "" else CustodyCopy.PAIR_ASK
+            PairLaptopState.Phase.PHASE_FAILED -> if (barred) "" else WordsCopy.PAIR_ASK
             PairLaptopState.Phase.PHASE_WAITING,
             PairLaptopState.Phase.PHASE_PAIRING,
-            -> CustodyCopy.PAIR_ASK
-            PairLaptopState.Phase.PHASE_PAIRED -> if (answer == null) "" else CustodyCopy.pairedLine(answer)
+            -> WordsCopy.PAIR_ASK
+            PairLaptopState.Phase.PHASE_PAIRED -> if (answer == null) "" else pairedLine(answer)
             else -> ""
         }
         val entering = (phase == PairLaptopState.Phase.PHASE_WAITING || phase == PairLaptopState.Phase.PHASE_FAILED) && !barred
         val primary = when (phase) {
-            PairLaptopState.Phase.PHASE_WAITING -> CustodyCopy.PAIR_PRIMARY
+            PairLaptopState.Phase.PHASE_WAITING -> WordsCopy.PAIR_PRIMARY
             // THE ACTION THAT CAN SUCCEED, OR NONE (#1080 receipt, "for the
             // owner"): Try again under a refusal no retry changes is a key that
             // does nothing, so a barred refusal closes instead.
-            PairLaptopState.Phase.PHASE_FAILED -> if (barred) CustodyCopy.DONE else CustodyCopy.TRY_AGAIN
-            PairLaptopState.Phase.PHASE_PAIRED, PairLaptopState.Phase.PHASE_NEEDS_WORDS -> CustodyCopy.DONE
+            PairLaptopState.Phase.PHASE_FAILED -> if (barred) WordsCopy.DONE else WordsCopy.TRY_AGAIN
+            PairLaptopState.Phase.PHASE_PAIRED, PairLaptopState.Phase.PHASE_NEEDS_WORDS -> WordsCopy.DONE
             else -> ""
         }
         return model.copy(
@@ -212,13 +212,13 @@ public object PairLaptopMachine {
                 title = title,
                 body = body,
                 payload = if (entering) model.payload else "",
-                payload_label = if (entering) CustodyCopy.PAIR_PASTE_LABEL else "",
+                payload_label = if (entering) WordsCopy.PAIR_PASTE_LABEL else "",
                 // ONE SCAN, ON EVERY PHONE: with a camera it opens the camera,
                 // which offers a photo too; without one (the simulator), the
                 // photo picker — a screenshot of the square is still a scan.
-                scan_label = if (entering) CustodyCopy.PAIR_SCAN else "",
+                scan_label = if (entering) WordsCopy.PAIR_SCAN else "",
                 scan_camera = entering && model.camera,
-                photo_label = if (entering && model.camera) CustodyCopy.PAIR_PHOTO else "",
+                photo_label = if (entering && model.camera) WordsCopy.PAIR_PHOTO else "",
                 safety_number = if (phase == PairLaptopState.Phase.PHASE_PAIRED && answer != null) {
                     answer.safetyNumber
                 } else {
@@ -238,8 +238,8 @@ public object PairLaptopMachine {
                     entering -> ticketOf(model.payload).isNotEmpty()
                     else -> primary.isNotEmpty()
                 },
-                secondary_label = if (entering) CustodyCopy.CANCEL else "",
-                progress = if (phase == PairLaptopState.Phase.PHASE_PAIRING) CustodyCopy.PAIRING else "",
+                secondary_label = if (entering) WordsCopy.CANCEL else "",
+                progress = if (phase == PairLaptopState.Phase.PHASE_PAIRING) WordsCopy.PAIRING else "",
                 accessibility_label = listOf(title, model.notice).filter { it.isNotEmpty() }.joinToString(". "),
             ),
         )

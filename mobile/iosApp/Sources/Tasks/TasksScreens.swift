@@ -1,9 +1,7 @@
 import SwiftProtobuf
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// TASKS, REGISTERED (#1029 app port; K5). Its one line is in `AppRegistry.apps`.
 ///
@@ -18,68 +16,35 @@ import CentraidShared
 /// **INTENTS ARE THE SHELL'S.** A machine that emits `RowPicked`,
 /// `ProjectPicked`, a More row, a Catch-up verb, `SubtaskPicked` or
 /// `ParentPicked` changes nothing (or only closes its sheet); `routeIntent`
-/// reads the event the view just forwarded and pushes the destination.
+/// hands the event the view just forwarded to `TasksRouting` (the shared side
+/// decides WHICH page, for Android too) and pushes what it answers.
 enum TasksScreens: AppScreens {
-    static let appID = "tasks"
+    static let appID = AppIds.shared.TASKS
     /// The machines' `SCREEN_ID`s.
-    static let home = "tasks.home"
-    static let list = "tasks.list"
-    static let project = "tasks.project"
-    static let detail = "tasks.detail"
-    static let catchUp = "tasks.catch_up"
-    static let trash = "tasks.trash"
-
-    static var homeRoute: ShellModel.Route {
-        .screen(home, tasksEvent(Centraid_Screen_V1_TasksHomeEvent.self) { $0.opened = .with { $0.destination = .today } })
-    }
-
-    static func listRoute(_ view: Centraid_Screen_V1_TasksListState.View) -> ShellModel.Route {
-        .screen(list, tasksEvent(Centraid_Screen_V1_TasksListEvent.self) { $0.opened = .with { $0.view = view } })
-    }
-
-    static func projectRoute(_ projectIdentifier: String, title: String) -> ShellModel.Route {
-        .screen(project, tasksEvent(Centraid_Screen_V1_TasksProjectEvent.self) {
-            $0.opened = .with {
-                $0.projectID = projectIdentifier
-                $0.title = title
-            }
-        })
-    }
-
-    static func detailRoute(_ taskIdentifier: String) -> ShellModel.Route {
-        .screen(detail, tasksEvent(Centraid_Screen_V1_TasksDetailEvent.self) { $0.opened = .with { $0.taskID = taskIdentifier } })
-    }
-
-    static var catchUpRoute: ShellModel.Route {
-        .screen(catchUp, tasksEvent(Centraid_Screen_V1_TasksCatchUpEvent.self) { $0.opened = .init() })
-    }
-
-    static var trashRoute: ShellModel.Route {
-        .screen(trash, TrashListView.event { $0.opened = .init() })
-    }
+    static let home = TasksHomeMachine.shared.SCREEN_ID
+    static let list = TasksListMachine.shared.SCREEN_ID
+    static let project = TasksProjectMachine.shared.SCREEN_ID
+    static let detail = TasksDetailMachine.shared.SCREEN_ID
+    static let catchUp = TasksCatchUpMachine.shared.SCREEN_ID
+    static let trash = TasksTrashMachine.shared.machine.screenId
 
     /// The home as `openQuickAdd` left it: its route's `open` sends nothing,
     /// because the bridge was already opened — and a pop back onto it must
     /// not seed the words a second time.
     private static let quickAddParameter = Data("quick-add".utf8)
 
-    #if canImport(CentraidShared)
     @MainActor private static var homeBridge: TasksHomeBridge?
-    #endif
 
     /// NOTES' "SEND TO TASKS": Tasks' home on the Inbox with `text` in a
     /// focused quick add (`TasksHomeBridge.openQuickAdd`), pushed.
     @MainActor
     static func openQuickAdd(_ text: String, _ shell: ShellModel) {
-        #if canImport(CentraidShared)
         homeBridge?.openQuickAdd(text: text)
-        #endif
         shell.path.append(.screen(home, quickAddParameter))
     }
 
     @MainActor
     static func register(into shell: ShellModel) {
-        #if canImport(CentraidShared)
         // The no-argument constructors mint `add_task`'s ids in Kotlin, so the
         // row the member sees is the row the vault keeps.
         let homeBridge = TasksHomeBridge()
@@ -124,7 +89,6 @@ enum TasksScreens: AppScreens {
             departed: { catchUpBridge.departed() }
         ))
         shell.register(.of(trash, TasksTrashBridge()))
-        #endif
 
         // EVERY OPEN IS THE ROUTE'S OWN `Opened`.
         for identifier in [home, list, project, detail, catchUp, trash] {
@@ -184,71 +148,20 @@ enum TasksScreens: AppScreens {
         }
     }
 
-    @MainActor
-    private static func homeState(_ shell: ShellModel) -> Centraid_Screen_V1_TasksHomeState {
-        (try? Centraid_Screen_V1_TasksHomeState(serializedBytes: shell.state(home))) ?? .init()
-    }
-
-    /// THE INTENTS, ROUTED.
+    /// THE INTENTS, ROUTED BY THE SHARED SIDE (`TasksRouting`): which page an
+    /// event opens is decided once, for both shells, from the event the view
+    /// just forwarded and the screen's own state. This only pushes it.
     @MainActor
     static func routeIntent(_ identifier: String, _ bytes: Data, _ shell: ShellModel) {
-        switch identifier {
-        case home:
-            guard let event = try? Centraid_Screen_V1_TasksHomeEvent(serializedBytes: bytes) else { return }
-            switch event.kind {
-            case let .rowPicked(picked): shell.path.append(detailRoute(picked.taskID))
-            case let .projectPicked(picked):
-                var title = ""
-                if case let .data(data)? = homeState(shell).content {
-                    title = data.projects.flatMap(\.rows).first { $0.id == picked.projectID }?.title ?? ""
-                }
-                shell.path.append(projectRoute(picked.projectID, title: title))
-            case let .moreRow(row):
-                switch row.key {
-                case "anytime": shell.path.append(listRoute(.anytime))
-                case "all": shell.path.append(listRoute(.all))
-                case "logbook": shell.path.append(listRoute(.logbook))
-                case "reminders": shell.path.append(listRoute(.reminders))
-                case "catch_up": shell.path.append(catchUpRoute)
-                case "trash": shell.path.append(trashRoute)
-                default: break // `search` and `reads` are the machine's.
-                }
-            case let .groupVerb(verb) where verb.key == "catch_up":
-                shell.path.append(catchUpRoute)
-            case .noticeActed:
-                if case let .data(data)? = homeState(shell).content, data.notice.verbKey == "catch_up" {
-                    shell.path.append(catchUpRoute)
-                }
-            default: break
-            }
-        case list:
-            if case let .rowPicked(picked)? = (try? Centraid_Screen_V1_TasksListEvent(serializedBytes: bytes))?.kind {
-                shell.path.append(detailRoute(picked.taskID))
-            }
-        case project:
-            if case let .rowPicked(picked)? = (try? Centraid_Screen_V1_TasksProjectEvent(serializedBytes: bytes))?.kind {
-                shell.path.append(detailRoute(picked.taskID))
-            }
-        case catchUp:
-            if case let .rowPicked(picked)? = (try? Centraid_Screen_V1_TasksCatchUpEvent(serializedBytes: bytes))?.kind {
-                shell.path.append(detailRoute(picked.taskID))
-            }
-        case detail:
-            guard let event = try? Centraid_Screen_V1_TasksDetailEvent(serializedBytes: bytes) else { return }
-            switch event.kind {
-            case let .subtaskPicked(picked): shell.path.append(detailRoute(picked.taskID))
-            case .parentPicked:
-                let state = (try? Centraid_Screen_V1_TasksDetailState(serializedBytes: shell.state(detail))) ?? .init()
-                if case let .data(data)? = state.content, !data.parentTaskID.isEmpty {
-                    shell.path.append(detailRoute(data.parentTaskID))
-                }
-            default: break
-            }
-        default: break
-        }
+        guard let opening = TasksRouting.shared.route(
+            screenId: identifier,
+            event: bytes.kotlin,
+            state: shell.state(identifier).kotlin
+        ) else { return }
+        shell.path.append(.opening(opening))
     }
 
-    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { homeRoute }
+    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { .home(of: appID) }
 }
 
 /// One Tasks event, encoded — the bytes every bridge takes.

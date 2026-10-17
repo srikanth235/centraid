@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 import UIKit
 
 // THE SEARCH FIELD, ONCE (K5). Lifted from `PhotosSearchBar`, which still draws

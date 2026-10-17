@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import centraid.screen.v1.TrashListEvent
 import centraid.screen.v1.TrashListState
-import centraid.screen.v1.WriteState
 import dev.centraid.design.copy.SharedCopy
 
 /**
@@ -45,7 +44,7 @@ public fun TrashListScreen(
         } else {
             null
         },
-        status = if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "",
+        status = write?.refusal.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, state.data_, state.denied),

@@ -342,6 +342,29 @@ class BackupScreenSpec : StringSpec({
         ready(read().copy(key = icloud.copy(wordsHere = false))).state.key_show_label shouldBe ""
     }
 
+    "the page has one Ink button, and the machine names it (DESIGN.md: at most one per view)" {
+        val ink = BackupScreenState.InkAction.INK_ACTION_SHOW_KEY
+        val alone = icloud.copy(synced = false)
+        // A KEY WARNING IS THE PAGE'S FIRST CONCERN, over adding a backup device and over Back up now.
+        ready(read(reading(destinations = emptyList())).copy(key = alone)).state.ink_action shouldBe ink
+        ready(read().copy(key = alone)).state.ink_action shouldBe ink
+        // NO WORDS HERE, NO SHOW CONTROL: the warning has no button to promote.
+        ready(read().copy(key = alone.copy(wordsHere = false))).state.ink_action shouldBe
+            BackupScreenState.InkAction.INK_ACTION_BACK_UP_NOW
+        // WITHOUT A WARNING the page's act is adding a device, then Back up now.
+        ready(read(reading(destinations = emptyList())).copy(key = icloud)).state.ink_action shouldBe
+            BackupScreenState.InkAction.INK_ACTION_ADD_DESTINATION
+        ready(read(reading(destinations = emptyList()))).state.ink_action shouldBe
+            BackupScreenState.InkAction.INK_ACTION_ADD_DESTINATION
+        ready(read().copy(key = icloud)).state.ink_action shouldBe BackupScreenState.InkAction.INK_ACTION_BACK_UP_NOW
+        ready(read()).state.ink_action shouldBe BackupScreenState.InkAction.INK_ACTION_BACK_UP_NOW
+        // A VAULT THAT MOVED AND PAIRS NO GATEWAY offers neither add nor Back up now: no Ink at all.
+        ready(read(reading(destinations = emptyList()), frozen = true)).state.ink_action shouldBe
+            BackupScreenState.InkAction.INK_ACTION_NONE
+        // A MOVED VAULT WITH A GATEWAY still draws Back up now, disabled, as the page's act.
+        ready(read(frozen = true)).state.ink_action shouldBe BackupScreenState.InkAction.INK_ACTION_BACK_UP_NOW
+    }
+
     "a phone holding no key draws no section at all" {
         val state = ready(read().copy(key = icloud.copy(held = false))).state
         state.key_heading shouldBe ""

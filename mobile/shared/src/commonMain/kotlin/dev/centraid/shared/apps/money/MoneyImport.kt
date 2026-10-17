@@ -455,9 +455,23 @@ public object MoneyImportMachine :
         val counts = buildList {
             add(MoneyFact(MoneyCopy.COUNT_NEW, statement.new.toString()))
             add(MoneyFact(MoneyCopy.COUNT_ALREADY_IN, statement.already_in.toString()))
-            add(MoneyFact(MoneyCopy.COUNT_CHECK, statement.proposed_duplicates.toString()))
+            // LINES OWED A LOOK carry the tone that says so while there are any:
+            // "Check these" is the seam's, "Can't read" the net's.
+            add(
+                MoneyFact(
+                    MoneyCopy.COUNT_CHECK,
+                    statement.proposed_duplicates.toString(),
+                    tone = if (statement.proposed_duplicates > 0) StatusChip.Tone.TONE_SEAM else StatusChip.Tone.TONE_UNSPECIFIED,
+                ),
+            )
             if (statement.repeats_in_file > 0) add(MoneyFact(MoneyCopy.COUNT_REPEATS, statement.repeats_in_file.toString()))
-            add(MoneyFact(MoneyCopy.COUNT_REJECTED, statement.rejected.toString()))
+            add(
+                MoneyFact(
+                    MoneyCopy.COUNT_REJECTED,
+                    statement.rejected.toString(),
+                    tone = if (statement.rejected > 0) StatusChip.Tone.TONE_NET else StatusChip.Tone.TONE_UNSPECIFIED,
+                ),
+            )
         }
         return MoneyImportStatement(
             key = "statement:$index",

@@ -2,9 +2,7 @@ import Foundation
 import Network
 import XCTest
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 @testable import CentraidApp
 
@@ -146,7 +144,6 @@ final class GatewayBrowseTests: XCTestCase {
         XCTAssertEqual(answers, 1)
     }
 
-    #if canImport(CentraidShared)
     /// The Swift-built sighting is the one the shared match reads: the TXT
     /// `gw` is the identity, and the instance name is nobody's.
     func testTheSharedMatchReadsWhatThisFileHandsIt() {
@@ -163,7 +160,6 @@ final class GatewayBrowseTests: XCTestCase {
             ["192.168.1.44:7443"]
         )
     }
-    #endif
 
     // MARK: fakes
 

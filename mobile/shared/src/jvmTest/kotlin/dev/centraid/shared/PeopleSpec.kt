@@ -61,7 +61,6 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import java.io.File
 
 /**
  * PEOPLE ON THE PHONE (#1029 app port), from the core's typed answers to what
@@ -917,21 +916,6 @@ class PeopleSpec : StringSpec({
     }
 
     // --- The whole port ------------------------------------------------------
-
-    "every command People submits exists in the vault's declared surface" {
-        val root = File(System.getProperty("centraid.repositoryRoot") ?: error("unset"))
-        val name = Regex("\"([a-z_]+\\.[a-z_]+)\"")
-        val declared = root.resolve("crates/vault/src/commands").walkTopDown()
-            .filter { it.isFile && it.extension == "rs" }
-            .flatMap { file -> name.findAll(file.readText()).map { it.groupValues[1] } }
-            .toSet()
-        (PeoplePersonMachine.COMMANDS + listOf(
-            PeopleEditorMachine.ADD_COMMAND,
-            PeopleEditorMachine.EDIT_COMMAND,
-            PeopleEditorMachine.CADENCE_COMMAND,
-            "people.restore_person",
-        )).forEach { command -> withClue(command) { declared.contains(command) shouldBe true } }
-    }
 
     "no People word says gateway, vault link or share" {
         val words = PeopleCopy::class.java.declaredFields

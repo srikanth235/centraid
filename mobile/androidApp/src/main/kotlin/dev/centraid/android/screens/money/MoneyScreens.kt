@@ -289,7 +289,7 @@ internal fun MoneyTransactionScreen(state: MoneyTransactionState, onEvent: (Mone
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
-        status = status?.sentence.orEmpty().ifEmpty { refusal(state.write) },
+        status = status?.sentence.orEmpty().ifEmpty { state.write?.refusal.orEmpty() },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -404,7 +404,7 @@ internal fun MoneyTargetScreen(state: MoneyTargetState, onEvent: (MoneyTargetEve
         title = data?.title.orEmpty().ifEmpty { chrome?.title.orEmpty() },
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
-        status = refusal(state.write),
+        status = state.write?.refusal.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),

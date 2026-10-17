@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// LOCKER, REGISTERED (#1047, D-5). Its one line is in `AppRegistry.apps`.
 ///
@@ -18,28 +16,24 @@ import CentraidShared
 /// and `UseTapped` change nothing in their machines; each view forwards the
 /// event and then pushes the route built here.
 enum LockerScreens: AppScreens {
-    static let appID = "locker"
+    static let appID = AppIds.shared.LOCKER
 
-    /// `LockerHomeMachine.SCREEN_ID`.
-    static let home = "locker.home"
-    /// `LockerItemMachine.SCREEN_ID`.
-    static let item = "locker.item"
-    /// `LockerEditorMachine.SCREEN_ID`.
-    static let editor = "locker.editor"
-    /// `LockerGeneratorMachine.SCREEN_ID` — drawn in the home's band slot.
-    static let generator = "locker.generator"
+    /// The machines' `SCREEN_ID`s.
+    static let home = LockerHomeMachine.shared.SCREEN_ID
+    static let item = LockerItemMachine.shared.SCREEN_ID
+    static let editor = LockerEditorMachine.shared.SCREEN_ID
+    /// Drawn in the home's band slot.
+    static let generator = LockerGeneratorMachine.shared.SCREEN_ID
     /// The kit's trash with Locker as its parameter.
-    static let trash = "locker.trash"
-    /// `LockerExportMachine.SCREEN_ID` (#1047 T2).
-    static let export = "locker.export"
-    /// `LockerImportMachine.SCREEN_ID` (#1047 T2).
-    static let importScreen = "locker.import"
-    /// `LockerAccessMachine.SCREEN_ID` — the whole Locker's access history (Q-1047-21).
-    static let access = "locker.access"
+    static let trash = LockerBridgesKt.LockerTrashMachine.screenId
+    /// Export and import (#1047 T2).
+    static let export = LockerExportMachine.shared.SCREEN_ID
+    static let importScreen = LockerImportMachine.shared.SCREEN_ID
+    /// The whole Locker's access history (Q-1047-21).
+    static let access = LockerAccessMachine.shared.SCREEN_ID
     /// The lock wall's state.
-    static let lock = "locker.lock"
+    static let lock = LockerGate.Companion.shared.SCREEN_ID
 
-    #if canImport(CentraidShared)
     /// THE WALL'S BRIDGE, for the app's life (`LockerLockBridge`'s header).
     static let lockBridge = LockerLockBridge(gate: LockerGate.Companion.shared.shared)
     static let editorBridge = LockerEditorBridge()
@@ -50,7 +44,6 @@ enum LockerScreens: AppScreens {
     static let importBridge = LockerImportBridge()
     /// The access history's bridge: read-only metadata, so no seam to install.
     static let accessBridge = LockerAccessBridge()
-    #endif
 
     // MARK: Routes
 
@@ -86,7 +79,6 @@ enum LockerScreens: AppScreens {
 
     @MainActor
     static func register(into shell: ShellModel) {
-        #if canImport(CentraidShared)
         shell.register(ScreenPort(
             id: lock,
             send: { [weak shell] event in
@@ -108,7 +100,6 @@ enum LockerScreens: AppScreens {
         shell.register(.locker(export, exportBridge))
         shell.register(.locker(importScreen, importBridge))
         shell.register(.locker(access, accessBridge))
-        #endif
 
         func push(_ shell: ShellModel?) -> (ShellModel.Route) -> Void {
             { [weak shell] route in shell?.path.append(route) }
@@ -152,10 +143,8 @@ enum LockerScreens: AppScreens {
             open: { [weak shell] parameter in
                 guard let shell else { return }
                 LockerLockSeam.attached(shell)
-                #if canImport(CentraidShared)
                 let opened = (try? Centraid_Screen_V1_LockerItemEvent.Opened(serializedBytes: parameter)) ?? .init()
                 itemBridge.open(itemId: opened.itemID, parent: opened.parent)
-                #endif
             },
             view: { shell, _ in
                 AnyView(LockerItemView(
@@ -174,7 +163,6 @@ enum LockerScreens: AppScreens {
             open: { [weak shell] parameter in
                 guard let shell else { return }
                 LockerLockSeam.attached(shell)
-                #if canImport(CentraidShared)
                 let spoken = String(decoding: parameter, as: UTF8.self)
                 if spoken == "generator" {
                     editorBridge.openAddFrom(generator: generatorBridge)
@@ -183,7 +171,6 @@ enum LockerScreens: AppScreens {
                 } else {
                     editorBridge.openAdd()
                 }
-                #endif
             },
             view: { shell, _ in
                 AnyView(LockerEditorView(
@@ -201,9 +188,7 @@ enum LockerScreens: AppScreens {
             open: { [weak shell] _ in
                 guard let shell else { return }
                 LockerLockSeam.attached(shell)
-                #if canImport(CentraidShared)
-                exportBridge.open(parent: LockerWords.appName)
-                #endif
+                exportBridge.open(parent: LockerCopy.shared.APP_NAME)
             },
             view: { shell, _ in
                 AnyView(LockerExportView(
@@ -221,9 +206,7 @@ enum LockerScreens: AppScreens {
             open: { [weak shell] _ in
                 guard let shell else { return }
                 LockerLockSeam.attached(shell)
-                #if canImport(CentraidShared)
-                importBridge.open(parent: LockerWords.appName)
-                #endif
+                importBridge.open(parent: LockerCopy.shared.APP_NAME)
             },
             view: { shell, _ in
                 AnyView(LockerImportView(
@@ -232,9 +215,7 @@ enum LockerScreens: AppScreens {
                     send: sender(shell, importScreen),
                     sendLock: sender(shell, lock),
                     onPicked: { name, bytes in
-                        #if canImport(CentraidShared)
                         importBridge.picked(name: name, bytes: bytes.kotlin)
-                        #endif
                     },
                     onBack: pop(shell),
                     onDeparted: { [weak shell] in shell?.departed(importScreen) }
@@ -246,9 +227,7 @@ enum LockerScreens: AppScreens {
             open: { [weak shell] _ in
                 guard let shell else { return }
                 LockerLockSeam.attached(shell)
-                #if canImport(CentraidShared)
                 accessBridge.open()
-                #endif
             },
             view: { shell, _ in
                 AnyView(LockerAccessView(
@@ -296,7 +275,6 @@ enum LockerScreens: AppScreens {
     }
 }
 
-#if canImport(CentraidShared)
 extension ScreenPort {
     /// A Locker bridge: `LockerScreenBridge` holds Locker's own held state (the
     /// gate, a reveal) rather than subclassing the kit's `ScreenBridge`, and
@@ -311,4 +289,3 @@ extension ScreenPort {
         )
     }
 }
-#endif

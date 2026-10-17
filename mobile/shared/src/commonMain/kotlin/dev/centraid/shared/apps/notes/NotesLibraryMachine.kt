@@ -27,6 +27,7 @@ import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -54,7 +55,7 @@ import dev.centraid.shared.screen.Step
  *   ([decorate]).
  */
 public object NotesLibraryMachine : ScreenMachine<NotesLibraryState, NotesLibraryEvent> {
-    public const val SCREEN_ID: String = "notes.library"
+    public const val SCREEN_ID: String = ScreenIds.NOTES_LIBRARY
 
     /** Every table `notes.library`, `notes.notebooks` and `notes.search` read. */
     public val TABLES: Set<String> = setOf(

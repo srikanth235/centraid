@@ -17,6 +17,7 @@ import centraid.screen.v1.PhotoLabel
 import centraid.screen.v1.PhotoLightboxEvent
 import centraid.screen.v1.PhotoLightboxState
 import dev.centraid.core.CentraidCore
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.apps.photos.PhotoEditorMachine
 import dev.centraid.shared.apps.photos.PhotoLightboxLeg
@@ -1006,5 +1007,185 @@ class PhotoLightboxSpec : StringSpec({
                     .sharePlaceReceipt(precision, "Lyme Regis").isNotEmpty() shouldBe true
             }
         }
+    }
+
+    // --- The words ----------------------------------------------------------
+
+    "a loaded photograph arrives with its words said, in the shutter's own zone" {
+        // THE SHELLS HOLD NO RULE FOR THESE. 17:42 UTC at +01:00 is 18:42, and
+        // the date and the clock are moved by the SAME offset, so they cannot
+        // name two different evenings.
+        val state = loaded().state
+        state.stamp_date shouldBe "30 July 2026"
+        state.stamp_line shouldBe "18:42"
+        state.whereabouts shouldBe PhotosCopy.PHOTOS_SMALLER_COPY_ONLY
+        state.facts.map { it.label to it.text } shouldBe listOf(
+            PhotosCopy.PHOTOS_FACT_CAPTURED to "30 July 2026 18:42 · UTC+01:00",
+            PhotosCopy.PHOTOS_FACT_SIZE to "4032 × 3024",
+            PhotosCopy.PHOTOS_FACT_LENGTH to "0:24",
+        )
+    }
+
+    "an evening that is the next morning in UTC is filed on the evening" {
+        // LISBON: 23:30 UTC at +01:00 is 00:30 on the NEXT day there, and a
+        // negative offset moves the other way. The stamp follows the grid.
+        val late = loaded(assetRow(capturedAt = "2026-07-30T23:30:00.000Z")).state
+        late.stamp_date shouldBe "31 July 2026"
+        late.stamp_line shouldBe "00:30"
+        val detail = detailOf(assetRow(capturedAt = "2026-01-01T02:05:00.000Z")).copy(captured_utc_offset_minutes = -330)
+        val west = PhotoLightboxMachine.reduce(
+            opened().state,
+            PhotoLightboxEvent(data_ = PhotoLightboxEvent.DataArrived(detail = detail)),
+        ).state
+        west.stamp_date shouldBe "31 December 2025"
+        west.stamp_line shouldBe "20:35"
+        west.facts.first().text shouldBe "31 December 2025 20:35 · UTC-05:30"
+    }
+
+    "a row with no capture time says no date and no Captured fact, never a guess" {
+        val state = loaded(assetRow(capturedAt = "")).state
+        state.stamp_date shouldBe ""
+        state.stamp_line shouldBe ""
+        state.facts.map { it.label } shouldBe listOf(PhotosCopy.PHOTOS_FACT_SIZE, PhotosCopy.PHOTOS_FACT_LENGTH)
+    }
+
+    "no recorded offset is UTC, and the line says so" {
+        val detail = detailOf().copy(captured_utc_offset_minutes = 0)
+        val state = PhotoLightboxMachine.reduce(
+            opened().state,
+            PhotoLightboxEvent(data_ = PhotoLightboxEvent.DataArrived(detail = detail)),
+        ).state
+        state.facts.first().text shouldBe "30 July 2026 17:42 · UTC"
+    }
+
+    "the place joins the stamp line and the Captured fact when its leg lands" {
+        val state = PhotoLightboxMachine.reduce(
+            loaded().state,
+            PhotoLightboxEvent(
+                data_ = PhotoLightboxEvent.DataArrived(
+                    detail = PhotoDetail(asset_id = asset, place_name = "Lyme Regis"),
+                    amendment = true,
+                ),
+            ),
+        ).state
+        state.stamp_line shouldBe "18:42 · Lyme Regis"
+        state.facts.first().text shouldBe "30 July 2026 18:42 · Lyme Regis · UTC+01:00"
+    }
+
+    "the file row is the size when known, and an unreadable row when the content leg refused" {
+        val sized = PhotoLightboxMachine.reduce(
+            loaded().state,
+            PhotoLightboxEvent(
+                data_ = PhotoLightboxEvent.DataArrived(
+                    detail = PhotoDetail(asset_id = asset, byte_size = 1_250_000L),
+                    amendment = true,
+                ),
+            ),
+        ).state
+        // A TIE GOES UP, as the core's formatter does it.
+        sized.facts.single { it.label == PhotosCopy.PHOTOS_FACT_FILE }.text shouldBe "1.3 MB"
+        val refused = PhotoLightboxMachine.reduce(
+            loaded().state,
+            PhotoLightboxEvent(
+                data_ = PhotoLightboxEvent.DataArrived(
+                    detail = PhotoDetail(asset_id = asset, unread_parts = listOf(PhotoDetail.Part.PART_CONTENT)),
+                    amendment = true,
+                ),
+            ),
+        ).state
+        refused.facts.single { it.label == PhotosCopy.PHOTOS_FACT_FILE }.text shouldBe
+            PhotosCopy.PHOTOS_FILE_SIZE_UNREADABLE
+    }
+
+    "a status line only when there is something to say, and a video's depends on its player alone" {
+        fun with(held: PhotoCell.Held, kind: PhotoCell.Kind = PhotoCell.Kind.KIND_PHOTO, percent: Int = 0) =
+            PhotoLightboxMachine.reduce(
+                opened().state,
+                PhotoLightboxEvent(
+                    data_ = PhotoLightboxEvent.DataArrived(
+                        detail = detailOf().copy(held = held, kind = kind, fetch_percent = percent),
+                    ),
+                ),
+            ).state
+        with(PhotoCell.Held.HELD_ORIGINAL).status_line shouldBe ""
+        with(PhotoCell.Held.HELD_WITHHELD_BY_RULE).status_line shouldBe PhotosCopy.PHOTOS_ORIGINAL_HELD_BACK
+        with(PhotoCell.Held.HELD_ABSENT).status_line shouldBe PhotosCopy.PHOTOS_NOTHING_ON_PHONE
+        with(PhotoCell.Held.HELD_FETCHING).status_line shouldBe PhotosCopy.PHOTOS_ORIGINAL_DOWNLOADING
+        with(PhotoCell.Held.HELD_FETCHING, percent = 40).status_line shouldBe
+            "Downloading the original — 40%"
+        // A VIDEO WITH NO PLAYER IS ONE WHOSE FILE IS NOT HERE; one with a player is not.
+        val video = with(PhotoCell.Held.HELD_THUMBNAIL_ONLY, PhotoCell.Kind.KIND_VIDEO)
+        video.status_line shouldBe PhotosCopy.PHOTOS_VIDEO_STILL_ONLY
+        video.status_line_playing shouldBe ""
+        // A BYTE STATUS BEATS THE PLAYER LINE, because an offer beats a lesson.
+        with(PhotoCell.Held.HELD_WITHHELD_BY_RULE, PhotoCell.Kind.KIND_VIDEO).status_line_playing shouldBe
+            PhotosCopy.PHOTOS_ORIGINAL_HELD_BACK
+        loaded().state.status_line shouldBe ""
+    }
+
+    "the camera the header names becomes a fact, survives a re-read, and is keyed by asset" {
+        val named = PhotoLightboxMachine.reduce(
+            loaded().state,
+            PhotoLightboxEvent(camera_read = PhotoLightboxEvent.CameraRead(asset_id = asset, camera = "Leica Q3")),
+        ).state
+        named.facts.last().label to named.facts.last().text shouldBe
+            (PhotosCopy.PHOTOS_FACT_CAMERA to "Leica Q3")
+        // A CAPTION EDIT RE-READS THE ASSET, which replaces the detail whole.
+        val reread = PhotoLightboxMachine.reduce(
+            named,
+            PhotoLightboxEvent(data_ = PhotoLightboxEvent.DataArrived(detail = detailOf())),
+        ).state
+        reread.facts.last().text shouldBe "Leica Q3"
+        // AN ANSWER FOR A PHOTOGRAPH THE MEMBER SWIPED PAST LANDS ON NOTHING.
+        val stale = PhotoLightboxMachine.reduce(
+            loaded().state,
+            PhotoLightboxEvent(camera_read = PhotoLightboxEvent.CameraRead(asset_id = "asset-9", camera = "Nikon")),
+        ).state
+        stale.facts.none { it.label == PhotosCopy.PHOTOS_FACT_CAMERA } shouldBe true
+    }
+
+    "the refusals are said on the state, the same sentences that gate the verbs" {
+        // BEFORE A PHOTOGRAPH LANDS there is nothing to write TO, and the
+        // sentence is already there for a shell that draws a disabled control.
+        PhotoLightboxMachine.initial().write_refusal shouldBe PhotoLightboxMachine.NOT_IN_A_VAULT_YET_REASON
+        opened().state.write_refusal shouldBe PhotoLightboxMachine.NOT_IN_A_VAULT_YET_REASON
+        val live = loaded().state
+        live.write_refusal shouldBe ""
+        live.edit_refusal shouldBe PhotoEditorMachine.editRefusal(live.detail).orEmpty()
+        // THIS FIXTURE'S ORIGINAL IS NOT ON THIS PHONE, so Edit says which absence it is.
+        live.edit_refusal shouldNotBe ""
+        val video = PhotoLightboxMachine.reduce(
+            opened().state,
+            PhotoLightboxEvent(
+                data_ = PhotoLightboxEvent.DataArrived(
+                    detail = detailOf().copy(kind = PhotoCell.Kind.KIND_VIDEO),
+                ),
+            ),
+        ).state
+        video.edit_refusal shouldBe PhotoEditorMachine.editRefusal(video.detail).orEmpty()
+    }
+
+    "a swipe clears the words with the detail" {
+        val moved = PhotoLightboxMachine.reduce(
+            loaded().state,
+            PhotoLightboxEvent(moved = PhotoLightboxEvent.Moved(asset_id = "asset-2")),
+        ).state
+        moved.facts.shouldBeEmpty()
+        moved.stamp_date shouldBe ""
+        moved.whereabouts shouldBe ""
+    }
+
+    "the slideshow meta is a field, and the strip's window reads the same from primitives" {
+        val shelf = (1..100).map { "a$it" }
+        val state = PhotoLightboxMachine.reduce(
+            PhotoLightboxMachine.initial(),
+            PhotoLightboxEvent(opened = PhotoLightboxEvent.Opened(asset_id = "a50", neighbour_asset_ids = shelf)),
+        ).state
+        state.slideshow_meta shouldBe "50 of 100, 4 seconds a photo"
+        PhotoLightboxMachine.filmWindow(shelf, "a50") shouldBe PhotoLightboxMachine.filmWindow(state)
+        PhotoLightboxMachine.filmWindow(shelf, "a50").size shouldBe 2 * PhotoLightboxMachine.FILM_REACH + 1
+        PhotoLightboxMachine.filmOffset(shelf, "a50") shouldBe 49 - PhotoLightboxMachine.FILM_REACH
+        PhotoLightboxMachine.filmWindow(shelf, "gone").shouldBeEmpty()
+        PhotoLightboxMachine.filmOffset(shelf, "gone") shouldBe 0
     }
 })

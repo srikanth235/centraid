@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // DOCS' PIECES, SHARED BY THE DRIVE AND THE DOCUMENT PAGE (#1046). The sheet
 // (one oneof: actions, choices, labels, new folder), the document row and the
@@ -310,9 +308,9 @@ struct DocsWriteLine: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if write.phase == .refused, write.hasFailure {
+        if !write.refusal.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
-                Text(write.failure.sentence)
+                Text(write.refusal)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("net", scheme))
                 if !write.failure.remedy.isEmpty {

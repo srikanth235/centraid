@@ -2347,6 +2347,40 @@ message PhotoLightboxState {
   // `neighbour_asset_ids`, never by this read.
   repeated PhotoCell film = 16;
 
+  // THE LIGHTBOX'S WORDS, FILLED BY THE REDUCER AND DRAWN BY BOTH SHELLS.
+  // Each is a pure function of `detail`, so a shell that composed one itself
+  // would be a second statement of a rule the other shell states too (the
+  // drift a byte size and a clock each showed once). Empty when there is no
+  // detail, or nothing to say.
+  //
+  // The stage's one status line, for a video the shell has NO player on (and
+  // for everything else, which does not depend on the player).
+  string status_line = 17;
+  // The same line for a video the shell IS playing: the only input the shell
+  // owns is whether a player exists, so both answers are carried and the shell
+  // picks one by that fact alone.
+  string status_line_playing = 18;
+  // Where the bytes are, in a sentence that says what fetching costs.
+  string whereabouts = 19;
+  // The facts panel's rows, in order. A fact the record lacks is omitted;
+  // one that could not be read is still a row.
+  repeated PhotoLightboxFact facts = 20;
+  // `30 July 2026` in the capture's own zone, or empty when the row records no
+  // capture time.
+  string stamp_date = 21;
+  // `17:42 · Lyme Regis`, the capture-local clock and the place.
+  string stamp_line = 22;
+  // `12 of 184 · 4 seconds a photograph`, the slideshow's meta line. Empty when
+  // the photograph on screen is not on the shelf it was opened from.
+  string slideshow_meta = 23;
+  // WHY A WRITE IS REFUSED, or empty when every write is live: v0's ladder
+  // (`viewer-write-refusal.ts`), decided by the reducer that also GATES the
+  // command, so a disabled control and the sentence beside it cannot disagree.
+  string write_refusal = 24;
+  // WHY EDIT IS REFUSED (a video, an original this phone does not hold), or
+  // empty when it is live.
+  string edit_refusal = 25;
+
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
     SHEET_NONE = 1;
@@ -2359,6 +2393,12 @@ message PhotoLightboxState {
     // "Adjust location": the place picker.
     SHEET_PLACE = 5;
   }
+}
+
+// ONE ROW OF THE FACTS PANEL: the label and its text, both finished words.
+message PhotoLightboxFact {
+  string label = 1;
+  string text = 2;
 }
 
 message PhotoLightboxEvent {
@@ -2394,6 +2434,7 @@ message PhotoLightboxEvent {
     AlbumChosen album_chosen = 29;
     AlbumChoicesArrived album_choices = 30;
     AlbumChoiceCreated album_choice_created = 31;
+    CameraRead camera_read = 32;
   }
 
   message Opened {
@@ -2488,6 +2529,15 @@ message PhotoLightboxEvent {
     bool embeddable = 3;
     string media_type = 4;
     optional string live_path = 5;
+  }
+
+  // THE CAMERA THE ORIGINAL'S OWN HEADER NAMES, read by the shell (a platform
+  // file read the core does not do). Keyed by asset like `OriginalLocated`, so
+  // an answer for a photograph the member has swiped past lands on nothing;
+  // the vault's own `camera` wins when it ever carries one.
+  message CameraRead {
+    string asset_id = 1;
+    string camera = 2;
   }
 
   // Start or leave the slideshow.
@@ -2906,6 +2956,15 @@ message PlaceRow {
   // assets takes ONE page and never continues (`KitError::NullableSortKey`).
   // Past that page the honest phrasing is "at least".
   bool asset_count_capped = 9;
+  // WHERE THE PIN STANDS ON THE MAP PLATE, and how big it is — set only on a
+  // row with `has_coordinate`, which is the only row the plate draws.
+  // `pin_x`/`pin_y` are in the plotted rows' unit square: 0,0 top left, 1,1
+  // bottom right, y growing SOUTH. `pin_size` is the pin's side in points,
+  // growing with the square root of the count. The machine computes them
+  // (`PlacesMachine.plot`) so neither shell restates the projection.
+  double pin_x = 10;
+  double pin_y = 11;
+  double pin_size = 12;
 }
 
 // CARDS OR A MAP IS A PARAMETER, NOT A SCREEN.
@@ -3343,6 +3402,12 @@ message MemoryStop {
   string place_id = 1;
   double latitude = 2;
   double longitude = 3;
+  // WHERE THE STOP FALLS IN THE ROUTE'S SKETCH, in a box 1 high and as wide as
+  // the sketch's plate: 0,0 top left, 1,1 bottom right, y growing SOUTH. The
+  // machine projects the route (`PhotosMemoriesMachine.sketch`) so neither
+  // shell does; a view multiplies by its own box. Set with the route.
+  double sketch_x = 4;
+  double sketch_y = 5;
 }
 
 message PhotosMemoriesState {
@@ -4749,6 +4814,12 @@ message WriteState {
   // The key the in-flight (or last) write was submitted under. A settle with
   // another key is someone else's answer and is ignored.
   string invoke_key = 3;
+  // THE SENTENCE A REFUSED WRITE LEFT BEHIND, and empty in every other phase —
+  // also when the core refused and said nothing. "Is this write refused, and
+  // what do I say" was decided at twenty-three call sites in two shells, each
+  // reading `phase` and `failure`; it is the write law's to say, once, when it
+  // settles. A shell draws it where the member is looking and decides nothing.
+  string refusal = 4;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -10096,6 +10167,15 @@ message WordsEntryState {
   // both.
   repeated string held_keys = 20;
   string held_keys_label = 21;
+  // THE PAIRING CODE IS SCANNED AS WELL AS PASTED, as pair.laptop's is: drawn
+  // beside `endpoint_label` and empty with it. With a camera (`Opened.camera`)
+  // the control opens the camera, whose screen offers `photo_label` for a
+  // screenshot of the square; without one it opens the photo picker
+  // (`scan_camera` false). What it reads comes back as `Scanned` and fills
+  // `endpoint`; a photo with no square comes back as `PhotoUnread`.
+  string scan_label = 22;
+  bool scan_camera = 23;
+  string photo_label = 24;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -10173,12 +10253,25 @@ message WordsEntryEvent {
     Retry retry = 7;
     // `words_label`'s control: leave the held seed and type the 24 words.
     UseWords use_words = 8;
+    // `scan_label`'s answer: the square's text, read by the camera or out
+    // of a photo. It fills `endpoint` as if it had been pasted.
+    Scanned scanned = 9;
+    // A photo chosen to scan held no square.
+    PhotoUnread unread = 10;
   }
 
   message Opened {
     WordsEntryState.Purpose purpose = 1;
     WordsEntryState.Origin origin = 2;
+    // Whether the shell can scan with a camera; `scan_camera` follows it.
+    bool camera = 3;
   }
+
+  message Scanned {
+    string payload = 1;
+  }
+
+  message PhotoUnread {}
 
   message Retry {}
 
@@ -10566,12 +10659,29 @@ message BackupScreenState {
   // Empty where the platform will not synchronise.
   string key_sync_label = 26;
   bool key_synced = 27;
+  // THE VIEW'S ONE INK BUTTON (DESIGN.md: at most one per view). The machine
+  // names the control that is the page's one thing to do; every other button
+  // the shell draws for these labels is the Outline button. The key's warning
+  // comes first, then adding a backup device, then "Back up now".
+  InkAction ink_action = 28;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
     PHASE_LOADING = 1;
     PHASE_READY = 2;
     PHASE_CLOSED = 3;
+  }
+
+  enum InkAction {
+    INK_ACTION_UNSPECIFIED = 0;
+    // The state draws no button worth an Ink fill.
+    INK_ACTION_NONE = 1;
+    // `key_show_label`, while `key_warning` stands.
+    INK_ACTION_SHOW_KEY = 2;
+    // `add_destination_label`, with nothing paired.
+    INK_ACTION_ADD_DESTINATION = 3;
+    // `back_up_now_label`.
+    INK_ACTION_BACK_UP_NOW = 4;
   }
 }
 
@@ -11159,6 +11269,15 @@ message MoneyFigure {
 message MoneyFact {
   string label = 1;
   string detail = 2;
+  // The `MoneyAction.key` that changes this fact (the transaction's Category
+  // and Name); empty for a fact nothing changes. A shell never reads the label
+  // to learn what a fact is.
+  string action = 3;
+  // SEAM or NET when the fact is owed attention: a value still to supply
+  // ("No category"), a count of statement lines to look at ("Check these"
+  // is SEAM, "Can't read" is NET, either only while it is not zero). UNSPECIFIED
+  // for every other fact.
+  StatusChip.Tone tone = 4;
 }
 
 message MoneyPageChrome {
@@ -11350,6 +11469,9 @@ message MoneyActivityData {
   string window = 6;
   bool more = 7;
   optional EmptyState empty = 8;
+  // The `category_options` key that lists the rows `needs_label` counts; empty
+  // while there are none. A tap on the Needs row sends it as `category_picked`.
+  string needs_key = 9;
 }
 
 // --- Cash flow --------------------------------------------------------------

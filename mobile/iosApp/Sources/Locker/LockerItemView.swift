@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// ONE LOCKER ITEM (#1047; the handoff's field row recipe): its sections of
 /// field rows — plain metadata shows its value, a sealed cell shows its mask
@@ -213,7 +211,7 @@ struct LockerItemView: View {
     /// A row's verb. `open` is the shell's — the address, handed to the OS;
     /// every other verb is the machine's.
     private func tapped(_ row: Centraid_Screen_V1_LockerFieldRow, _ verb: Centraid_Screen_V1_LockerVerb) {
-        if verb.key == "open", let url = URL(string: row.value), url.scheme != nil {
+        if verb.key == LockerItemMachine.shared.VERB_OPEN, let url = URL(string: row.value), url.scheme != nil {
             openURL(url)
             return
         }

@@ -3,7 +3,6 @@ package dev.centraid.shared
 import centraid.screen.v1.PairLaptopEvent
 import centraid.screen.v1.PairLaptopState
 import dev.centraid.design.copy.WordsCopy
-import dev.centraid.shared.custody.CustodyCopy
 import dev.centraid.shared.custody.PairAnswer
 import dev.centraid.shared.custody.PairDoor
 import dev.centraid.shared.custody.PairEffect
@@ -14,6 +13,7 @@ import dev.centraid.shared.custody.PairRefusal
 import dev.centraid.shared.custody.PairResult
 import dev.centraid.shared.custody.Pairing
 import dev.centraid.shared.custody.Readiness
+import dev.centraid.shared.custody.pairedLine
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
@@ -69,14 +69,14 @@ class PairAndRestoreSpec : StringSpec({
     "opening asks whether the vault can pair; a keyed one waits for the code, an unkeyed one needs its words" {
         val ready = waiting().state
         ready.phase shouldBe PairLaptopState.Phase.PHASE_WAITING
-        ready.scan_label shouldBe CustodyCopy.PAIR_SCAN
+        ready.scan_label shouldBe WordsCopy.PAIR_SCAN
         ready.primary_enabled shouldBe false
 
         val open = reduce(PairLaptopMachine.initial(), opened).model
         val words = reduce(open, PairInput.Readiness(Readiness.NEEDS_WORDS)).model.state
         words.phase shouldBe PairLaptopState.Phase.PHASE_NEEDS_WORDS
-        words.notice shouldBe CustodyCopy.PAIR_NEEDS_WORDS
-        reduce(open, PairInput.Readiness(Readiness.NO_VAULT)).model.state.notice shouldBe CustodyCopy.PAIR_NO_VAULT
+        words.notice shouldBe WordsCopy.PAIR_NEEDS_WORDS
+        reduce(open, PairInput.Readiness(Readiness.NO_VAULT)).model.state.notice shouldBe WordsCopy.PAIR_NO_VAULT
     }
 
     "a vault that opened without its words is offered them back; `WordsTapped` closes the pairing for the re-key" {
@@ -85,7 +85,7 @@ class PairAndRestoreSpec : StringSpec({
         val open = reduce(PairLaptopMachine.initial(), opened).model
         val needs = reduce(open, PairInput.Readiness(Readiness.NEEDS_WORDS)).model
         needs.state.words_label shouldBe WordsCopy.PAIR_WORDS_ACTION
-        needs.state.primary_label shouldBe CustodyCopy.DONE
+        needs.state.primary_label shouldBe WordsCopy.DONE
         val words = event(PairLaptopEvent(words = PairLaptopEvent.WordsTapped()))
         val tapped = reduce(needs, words)
         tapped.model.state.phase shouldBe PairLaptopState.Phase.PHASE_CLOSED
@@ -102,18 +102,18 @@ class PairAndRestoreSpec : StringSpec({
 
     "Scan is drawn on every phone: the camera, with a photo beside it, or the photo picker without one" {
         val camera = waiting().state
-        camera.scan_label shouldBe CustodyCopy.PAIR_SCAN
+        camera.scan_label shouldBe WordsCopy.PAIR_SCAN
         camera.scan_camera shouldBe true
-        camera.photo_label shouldBe CustodyCopy.PAIR_PHOTO
+        camera.photo_label shouldBe WordsCopy.PAIR_PHOTO
 
         // THE SIMULATOR HAS NO CAMERA: Scan still shows, and reads a photo.
         val open = reduce(PairLaptopMachine.initial(), event(PairLaptopEvent(opened = PairLaptopEvent.Opened(camera = false)))).model
         val none = reduce(open, PairInput.Readiness(Readiness.READY)).model
         none.state.phase shouldBe PairLaptopState.Phase.PHASE_WAITING
-        none.state.scan_label shouldBe CustodyCopy.PAIR_SCAN
+        none.state.scan_label shouldBe WordsCopy.PAIR_SCAN
         none.state.scan_camera shouldBe false
         none.state.photo_label shouldBe ""
-        none.state.payload_label shouldBe CustodyCopy.PAIR_PASTE_LABEL
+        none.state.payload_label shouldBe WordsCopy.PAIR_PASTE_LABEL
 
         // `ScanTapped` and `PhotoTapped` ARE INTENTS: the shell opens its
         // camera or picker, and the machine moves only on what comes back.
@@ -132,9 +132,9 @@ class PairAndRestoreSpec : StringSpec({
         val unread = reduce(typed, event(PairLaptopEvent(unread = PairLaptopEvent.PhotoUnread())))
         unread.effects shouldBe emptyList()
         unread.model.state.phase shouldBe PairLaptopState.Phase.PHASE_WAITING
-        unread.model.state.notice shouldBe CustodyCopy.PAIR_PHOTO_UNREAD
+        unread.model.state.notice shouldBe WordsCopy.PAIR_PHOTO_UNREAD
         unread.model.state.payload shouldBe "half a code"
-        unread.model.state.scan_label shouldBe CustodyCopy.PAIR_SCAN
+        unread.model.state.scan_label shouldBe WordsCopy.PAIR_SCAN
 
         // Typing again clears the sentence, as it clears every other one.
         reduce(unread.model, typed("half a code.")).model.state.notice shouldBe ""
@@ -161,7 +161,7 @@ class PairAndRestoreSpec : StringSpec({
     "an empty box is answered here, because there is nothing to send" {
         val step = reduce(reduce(waiting(), typed("   ")).model, primary)
         step.effects shouldBe emptyList()
-        step.model.state.notice shouldBe CustodyCopy.PAIR_EMPTY
+        step.model.state.notice shouldBe WordsCopy.PAIR_EMPTY
     }
 
     "a scan pairs at once" {
@@ -180,18 +180,18 @@ class PairAndRestoreSpec : StringSpec({
         // and the address it was reached at, and the body names both.
         paired.body shouldContain "Paired with Home laptop at 192.168.1.20:7443."
         paired.payload shouldBe ""
-        paired.primary_label shouldBe CustodyCopy.DONE
+        paired.primary_label shouldBe WordsCopy.DONE
 
         val unreachable = reduce(pairing, refused(PairRefusal.UNREACHABLE)).model
         unreachable.state.phase shouldBe PairLaptopState.Phase.PHASE_FAILED
-        unreachable.state.notice shouldBe CustodyCopy.PAIR_UNREACHABLE
+        unreachable.state.notice shouldBe WordsCopy.PAIR_UNREACHABLE
         // THE SAME TEXT, AGAIN.
         reduce(unreachable, primary).effects.single().shouldBeInstanceOf<PairEffect.Pair>()
 
         // THE COMPARISON IS THE WHOLE SECURITY PROPERTY. A screen asking a
         // member to compare a blank is worse than one that refused.
         reduce(pairing, paired(safety = " ")).model.state.notice shouldBe
-            CustodyCopy.PAIR_NOTHING_TO_COMPARE
+            WordsCopy.PAIR_NOTHING_TO_COMPARE
     }
 
     "a laptop that answered and refused is not one that did not answer: each refusal says its own remedy" {
@@ -201,9 +201,9 @@ class PairAndRestoreSpec : StringSpec({
         val notTaken = reduce(pairing, refused(PairRefusal.NOT_TAKEN)).model.state
         notTaken.phase shouldBe PairLaptopState.Phase.PHASE_FAILED
         notTaken.notice shouldBe WordsCopy.PAIR_NOT_TAKEN
-        notTaken.primary_label shouldBe CustodyCopy.TRY_AGAIN
+        notTaken.primary_label shouldBe WordsCopy.TRY_AGAIN
         reduce(pairing, refused(PairRefusal.NOT_A_CODE)).model.state.notice shouldBe WordsCopy.PAIR_NOT_A_CODE
-        reduce(pairing, refused(PairRefusal.UNREACHABLE)).model.state.notice shouldBe CustodyCopy.PAIR_UNREACHABLE
+        reduce(pairing, refused(PairRefusal.UNREACHABLE)).model.state.notice shouldBe WordsCopy.PAIR_UNREACHABLE
         reduce(pairing, refused(PairRefusal.MOVED)).model.state.notice shouldBe WordsCopy.PAIR_MOVED
         // THE MEMBER CAN PASTE A NEW CODE straight into the failed screen.
         reduce(reduce(pairing, refused(PairRefusal.NOT_TAKEN)).model, typed("new")).model.state.notice shouldBe ""
@@ -218,15 +218,15 @@ class PairAndRestoreSpec : StringSpec({
         for (retryable in listOf(PairRefusal.UNREACHABLE, PairRefusal.NOT_A_CODE, PairRefusal.NOT_TAKEN)) {
             withClue("$retryable") {
                 val failed = reduce(pairing, refused(retryable)).model.state
-                failed.primary_label shouldBe CustodyCopy.TRY_AGAIN
+                failed.primary_label shouldBe WordsCopy.TRY_AGAIN
                 failed.payload_label shouldNotBe ""
             }
         }
         val moved = reduce(pairing, refused(PairRefusal.MOVED)).model
         moved.state.phase shouldBe PairLaptopState.Phase.PHASE_FAILED
         moved.state.notice shouldBe WordsCopy.PAIR_MOVED
-        moved.state.primary_label shouldBe CustodyCopy.DONE
-        moved.state.primary_label shouldNotBe CustodyCopy.TRY_AGAIN
+        moved.state.primary_label shouldBe WordsCopy.DONE
+        moved.state.primary_label shouldNotBe WordsCopy.TRY_AGAIN
         moved.state.payload_label shouldBe ""
         moved.state.scan_label shouldBe ""
         moved.state.photo_label shouldBe ""
@@ -273,7 +273,7 @@ class PairAndRestoreSpec : StringSpec({
     }
 
     "the paired line names the gateway and where it is, and what a mismatch means" {
-        val line = CustodyCopy.pairedLine(
+        val line = pairedLine(
             PairAnswer(safetyNumber = number, destinationLabel = "the kitchen laptop", destinationAddress = "192.168.1.20:7443"),
         )
         line shouldContain "safety number"
@@ -285,7 +285,7 @@ class PairAndRestoreSpec : StringSpec({
     }
 
     "a gateway with no label is still named, and no address is left out rather than blank" {
-        val line = CustodyCopy.pairedLine(PairAnswer(safetyNumber = number))
+        val line = pairedLine(PairAnswer(safetyNumber = number))
         line shouldContain "Paired with your backup device."
         line shouldNotContain " at ."
     }

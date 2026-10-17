@@ -27,10 +27,12 @@ import dev.centraid.android.screens.RouteNav
 import dev.centraid.design.copy.DocsCopy
 import dev.centraid.shared.apps.docs.DocsDocumentBridge
 import dev.centraid.shared.apps.docs.DocsDriveBridge
+import dev.centraid.shared.apps.docs.DocsDriveMachine
 import dev.centraid.shared.apps.docs.DocsEditorBridge
 import dev.centraid.shared.apps.docs.DocsIngestBridge
 import dev.centraid.shared.apps.docs.DocsTrashBridge
 import dev.centraid.shared.apps.docs.DocsWrites
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.HomeSession
@@ -75,7 +77,7 @@ public class DocsRoutes : AppRoutes {
 
     // `open()` ON THE PUSH: coming back from a document keeps the drive's tab,
     // filters and answer.
-    override fun opens(moveId: String): Destination? = if (moveId == "docs") {
+    override fun opens(moveId: String): Destination? = if (moveId == AppIds.DOCS) {
         drive.open()
         Destination.DocsHome()
     } else {
@@ -372,7 +374,7 @@ public class DocsRoutes : AppRoutes {
             val root = entries.indexOfLast { it is Destination.DocsHome }
             if (root >= 0) {
                 nav.go(NavStack(entries.take(root + 1)))
-                drive.forward(DocsDriveEvent(band = DocsDriveEvent.BandPicked(key = "folders")))
+                drive.forward(DocsDriveEvent(band = DocsDriveEvent.BandPicked(key = DocsDriveMachine.BAND_FOLDERS)))
             }
             return
         }

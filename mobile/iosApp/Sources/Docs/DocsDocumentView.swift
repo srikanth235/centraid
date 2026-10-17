@@ -2,6 +2,8 @@ import AVKit
 import PDFKit
 import SwiftUI
 
+import CentraidShared
+
 /// ONE DOCUMENT'S PAGE (#1046): its surface — the reader (text), the stage
 /// (image, video, PDF), facts only, or gone — then its path, facts, versions
 /// (restore on an earlier one), activity, and the verbs the state offers.
@@ -262,7 +264,7 @@ struct DocsDocumentView: View {
     private func sheetActions(_ document: Centraid_Screen_V1_DocsDocumentData?) -> DocsSheetActions {
         DocsSheetActions(
             onAction: { action in
-                if action.key == "edit", let document {
+                if action.key == DocsWrites.shared.KEY_EDIT, let document {
                     send(Self.event { $0.action = .with { $0.key = action.key } })
                     edit(document)
                 } else {

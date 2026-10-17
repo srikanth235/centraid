@@ -435,19 +435,10 @@ fn run_mobile_jvm(ctx: &Ctx) -> Result<Outcome> {
     if !matches!(formatted, Outcome::Ok(_)) {
         return Ok(formatted);
     }
-    process(
+    assert_clean_tree(
         ctx,
         "mobile-jvm",
-        "git",
-        &[
-            "diff",
-            "--exit-code",
-            "--",
-            "design",
-            "copy",
-            "mobile",
-            "contracts/screens",
-        ],
+        &["design", "copy", "mobile", "contracts/screens"],
     )
 }
 
@@ -474,11 +465,73 @@ fn run_emitters(ctx: &Ctx) -> Result<Outcome> {
     if !matches!(formatted, Outcome::Ok(_)) {
         return Ok(formatted);
     }
-    process(
-        ctx,
-        "emitters",
-        "git",
-        &["diff", "--exit-code", "--", "copy", "design", "mobile"],
+    assert_clean_tree(ctx, "emitters", &["copy", "design", "mobile"])
+}
+
+/// THE CLEAN-TREE ASSERTION BOTH DRIFT CHECKS END WITH: nothing under `paths`
+/// differs from the index, AND nothing under them is untracked.
+///
+/// `git diff --exit-code` alone reads only files git already knows, so an
+/// emitter that started writing a NEW file (a second Swift table, a fixture
+/// for a screen added this week) left the tree "clean" and the step green with
+/// the file uncommitted — the drift check passed on exactly the drift it
+/// exists to find. Untracked files are listed with `--exclude-standard`, so
+/// anything `.gitignore` already names (`Sources/Generated`, `build/`) is
+/// not drift; a file staged with `git add` is tracked and passes, as an edited
+/// one does.
+fn assert_clean_tree(ctx: &Ctx, step: &str, paths: &[&str]) -> Result<Outcome> {
+    let mut args = vec!["diff", "--exit-code", "--"];
+    args.extend_from_slice(paths);
+    let diffed = process(ctx, step, "git", &args)?;
+    if !matches!(diffed, Outcome::Ok(_)) {
+        return Ok(diffed);
+    }
+    let untracked = untracked_files(&ctx.root, paths)?;
+    if untracked.is_empty() {
+        return Ok(diffed);
+    }
+    Ok(Outcome::Failed(untracked_message(&untracked, paths)))
+}
+
+/// Every file under `paths` that git neither tracks nor ignores.
+fn untracked_files(root: &Path, paths: &[&str]) -> Result<Vec<String>> {
+    let output = Command::new("git")
+        .args(["ls-files", "--others", "--exclude-standard", "--"])
+        .args(paths)
+        .current_dir(root)
+        .output()
+        .context("spawn `git ls-files --others`")?;
+    anyhow::ensure!(
+        output.status.success(),
+        "`git ls-files --others --exclude-standard -- {}` failed: {}",
+        paths.join(" "),
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
+/// The failure line for [`assert_clean_tree`]: the files, by name, because "the
+/// tree is dirty" without them sends a reader to run `git status` themselves.
+fn untracked_message(files: &[String], paths: &[&str]) -> String {
+    const SHOWN: usize = 8;
+    let mut named = files
+        .iter()
+        .take(SHOWN)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    if files.len() > SHOWN {
+        named.push_str(&format!(" (+{} more)", files.len() - SHOWN));
+    }
+    format!(
+        "{} untracked file(s) under {}: {named} — an emitter wrote a file the repository \
+         does not carry; `git add` it if it is meant to be committed, or stop the emitter",
+        files.len(),
+        paths.join(" ")
     )
 }
 
@@ -2207,6 +2260,63 @@ mod tests {
 
     fn names(profile: Profile) -> Vec<&'static str> {
         steps(profile).into_iter().map(|entry| entry.name).collect()
+    }
+
+    /// Run `git` in a throwaway tree; the untracked-file rule is asserted over
+    /// a repository built for the purpose, not over whatever this one holds.
+    fn git(root: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .status()
+            .expect("spawn git");
+        assert!(status.success(), "git {args:?} failed");
+    }
+
+    /// THE HOLE THIS CLOSES: an emitter's NEW file is invisible to `git diff`.
+    /// It is found while untracked, named, and not found once the author has
+    /// staged it — and a file `.gitignore` names is never drift.
+    #[test]
+    fn a_new_untracked_file_under_an_emitted_path_is_drift() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        git(root, &["init", "--quiet"]);
+        fs::create_dir_all(root.join("design")).unwrap();
+        fs::create_dir_all(root.join("other")).unwrap();
+        fs::write(root.join(".gitignore"), "design/build/\n").unwrap();
+        fs::write(root.join("design/known.json"), "{}").unwrap();
+        git(root, &["add", "-A"]);
+
+        assert_eq!(
+            untracked_files(root, &["design"]).unwrap(),
+            Vec::<String>::new()
+        );
+
+        fs::write(root.join("design/emitted-new.json"), "{}").unwrap();
+        fs::create_dir_all(root.join("design/build")).unwrap();
+        fs::write(root.join("design/build/out.json"), "{}").unwrap();
+        fs::write(root.join("other/elsewhere.json"), "{}").unwrap();
+        let found = untracked_files(root, &["design"]).unwrap();
+        assert_eq!(
+            found,
+            ["design/emitted-new.json"],
+            "ignored and out-of-scope files are not drift"
+        );
+
+        git(root, &["add", "design/emitted-new.json"]);
+        assert!(untracked_files(root, &["design"]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_untracked_failure_names_the_files() {
+        let few = untracked_message(&["design/a.json".to_owned()], &["copy", "design"]);
+        assert!(few.contains("design/a.json"), "{few}");
+        assert!(few.contains("copy design"), "{few}");
+        let many: Vec<String> = (0..11).map(|n| format!("mobile/f{n}.swift")).collect();
+        let long = untracked_message(&many, &["mobile"]);
+        assert!(long.contains("mobile/f0.swift"), "{long}");
+        assert!(long.contains("(+3 more)"), "{long}");
+        assert!(!long.contains("mobile/f10.swift"), "{long}");
     }
 
     /// The `call` budget the `pr` profile owes (#1020).

@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// AGENDA, REGISTERED (K5; #1046 waves 4 and 5). Its bridges predate the kit's
 /// `ScreenBridge`, so each port is spelled out closure by closure — the
@@ -21,11 +19,11 @@ import CentraidShared
 /// `NewEventRequested` the editor on the home's anchor day, and the detail's
 /// `ActionPicked{edit}` the editor on that occurrence.
 enum AgendaScreens: AppScreens {
-    static let appID = "agenda"
-    static let home = "agenda.home"
-    static let detail = "agenda.event"
-    static let editor = "agenda.editor"
-    static let homeRoute = ShellModel.Route.screen(home, Data())
+    static let appID = AppIds.shared.AGENDA
+    /// The machines' `SCREEN_ID`s.
+    static let home = AgendaHomeMachine.shared.SCREEN_ID
+    static let detail = AgendaEventMachine.shared.SCREEN_ID
+    static let editor = AgendaEditorMachine.shared.SCREEN_ID
 
     static func detailRoute(eventID: String, instanceKey: String, originalStartLocal: String?, day: String) -> ShellModel.Route {
         .screen(detail, tasksEvent(Centraid_Screen_V1_AgendaEventEvent.self) {
@@ -62,7 +60,6 @@ enum AgendaScreens: AppScreens {
 
     @MainActor
     static func register(into shell: ShellModel) {
-        #if canImport(CentraidShared)
         let marks = AgendaMarks()
         let homeBridge = AgendaBridge(marks: marks)
         let detailBridge = AgendaEventBridge(marks: marks)
@@ -87,7 +84,6 @@ enum AgendaScreens: AppScreens {
             observe: { onState in editorBridge.observe { onState($0.data) } },
             departed: { editorBridge.departed() }
         ))
-        #endif
         shell.route(
             home,
             // EVERY OPEN LANDS ON TODAY, on Day — `AgendaBridge.open`'s event,
@@ -165,7 +161,7 @@ enum AgendaScreens: AppScreens {
     @MainActor
     private static func routeDetailIntent(_ bytes: Data, _ shell: ShellModel) {
         guard case let .action(action)? = (try? Centraid_Screen_V1_AgendaEventEvent(serializedBytes: bytes))?.kind,
-              action.key == "edit" else { return }
+              action.key == AgendaEventMachine.shared.ACTION_EDIT else { return }
         let state = (try? Centraid_Screen_V1_AgendaEventState(serializedBytes: shell.state(detail))) ?? .init()
         shell.path.append(editRoute(
             eventID: state.eventID,
@@ -175,5 +171,5 @@ enum AgendaScreens: AppScreens {
         ))
     }
 
-    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { homeRoute }
+    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { .home(of: appID) }
 }

@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.copy.SharedCopy
 import dev.centraid.shared.shell.BandPolicy
 
 /**
@@ -104,7 +105,7 @@ public fun HomeBand(
                 // SPEAK WHAT IS PAINTED. v0's band once spoke one noun for
                 // "Needs you" and painted another, so two members got two names
                 // for one place.
-                spoken = place.short + if (place.id == active) ", current place" else "",
+                spoken = place.short + if (place.id == active) ", " + SharedCopy.BAND_CURRENT_SPOKEN else "",
                 selected = place.id == active,
                 testTag = "home-band-${place.id}",
                 onPress = { onSelect(place.id) },
@@ -118,7 +119,7 @@ public fun HomeBand(
         BandTab(
             iconKey = "Backup",
             label = HomeWords.BAND_BACKUP,
-            spoken = HomeWords.BAND_BACKUP_SPOKEN + if (active == "backup") ", current place" else "",
+            spoken = HomeWords.BAND_BACKUP_SPOKEN + if (active == "backup") ", " + SharedCopy.BAND_CURRENT_SPOKEN else "",
             selected = active == "backup",
             testTag = "home-band-backup",
             onPress = { onSelect("backup") },
@@ -392,7 +393,7 @@ private fun AppBandTabView(
             .padding(top = BandPolicy.BAND_TAB_TOP.dp, bottom = BandPolicy.BAND_TAB_BOTTOM.dp)
             .testTag(testTag)
             .semantics {
-                contentDescription = label + if (selected) ", current place" else ""
+                contentDescription = label + if (selected) ", " + SharedCopy.BAND_CURRENT_SPOKEN else ""
                 role = Role.Tab
                 this.selected = selected
             },

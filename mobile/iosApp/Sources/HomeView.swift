@@ -1,5 +1,7 @@
 import SwiftUI
 
+import CentraidShared
+
 /// Home, the graded springboard, in SwiftUI (#1020, wave A).
 ///
 /// **THIS VIEW DECIDES NOTHING.** `springboard`, `every_tile_unreadable`
@@ -63,13 +65,13 @@ struct HomeView: View {
             // THE IMPORT'S LINE, on the band (DESIGN.md's one status line).
             ShellBanner(shell: shell)
             if !(shell.tab == .chat && chatTyping) {
-                HomeBand(active: shell.tab == .chat ? "chat" : shell.tab == .backup ? "backup" : "home") { target in
+                HomeBand(active: shell.tab == .chat ? BandPolicy.shared.PLACE_CHAT : shell.tab == .backup ? BandPolicy.shared.PLACE_BACKUP : BandPolicy.shared.PLACE_HOME) { target in
                     switch target {
-                    case "home": shell.openHomeTab()
+                    case BandPolicy.shared.PLACE_HOME: shell.openHomeTab()
                     // PRESSED WHILE CHAT IS SHOWING it only shuts the drawer: it
                     // is already where it was asked to go, and starting over
                     // here would be harm no member asked for.
-                    case "chat":
+                    case BandPolicy.shared.PLACE_CHAT:
                         if shell.tab == .chat {
                             shell.chat.toggleDrawer(false)
                         } else {
@@ -78,7 +80,7 @@ struct HomeView: View {
                     // BACKUP is a tab like Chat: where this vault's backup
                     // stands, the backup devices, and the 24 words. The apps
                     // are tiles on Home.
-                    case "backup": shell.openBackup()
+                    case BandPolicy.shared.PLACE_BACKUP: shell.openBackup()
                     default: break
                     }
                 }
@@ -110,7 +112,7 @@ struct HomeView: View {
             isPresented: Binding(
                 get: { home.vaultSheetOpen },
                 set: { open in
-                    if !open { shell.send(screen: "home", event: HomeEvents.vaultPicked("")) }
+                    if !open { shell.send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.vaultPicked("")) }
                 }
             )
         ) {
@@ -461,7 +463,7 @@ private struct TileCard: View {
             // band drew its tabs, the tiles drew their bodies, and a tap moved
             // nothing. It was invisible because Home is the root and Home is
             // what every screenshot showed.
-            shell.send(screen: "home", event: HomeEvents.movePicked(tile.appID))
+            shell.send(screen: HomeMachine.shared.SCREEN_ID, event: HomeEvents.movePicked(tile.appID))
             if let route = TileCard.route(for: tile) { shell.path.append(route) }
         } label: {
             VStack(alignment: .leading, spacing: 16) {
@@ -512,7 +514,7 @@ private struct TileCard: View {
     static func route(for tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
         // Photos is the one app still routed by its own case; every other
         // app's tile route is its `AppScreens.tileRoute` (K5).
-        if tile.appID == "photos" { return .photos }
+        if tile.appID == AppIds.shared.PHOTOS { return .photos }
         return AppRegistry.tileRoute(tile)
     }
 }
@@ -838,7 +840,7 @@ private struct PhotoMosaic: View {
                 // own photographs, and "these fill in when it is back" was a
                 // sentence about a connection that is not the reason. What is
                 // true in every case is that the bytes are not here yet.
-                Text(ShellWords.photosAbsent)
+                Text(HomeWords.shared.PHOTOS_ABSENT)
                     .centraidType("mono")
                     .foregroundStyle(Theme.color("textFaint", scheme))
             }
@@ -884,7 +886,7 @@ private struct Skeleton: View {
         // `GeometryReader` has no intrinsic height and would otherwise eat the
         // whole card.
         .frame(height: 56)
-        .accessibilityLabel(ShellWords.loading)
+        .accessibilityLabel(HomeWords.shared.LOADING)
     }
 }
 
@@ -911,10 +913,10 @@ private struct DayOne: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(ShellWords.dayOneTitle)
+                Text(HomeWords.shared.DAY_ONE_TITLE)
                     .centraidType("title")
                     .foregroundStyle(Theme.color("text", scheme))
-                Text(ShellWords.dayOneBody)
+                Text(HomeWords.shared.DAY_ONE_BODY)
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
                 TileGrid(data: data, shell: shell)
@@ -955,7 +957,7 @@ private struct VaultSheet: View {
     var body: some View {
         // A SHEETROOM: the room owns the grabber, the title and the gutter,
         // and the roster scrolls inside it.
-        SheetRoom(title: ShellWords.vaultsTitle, titleIdentifier: "home-vault-sheet") {
+        SheetRoom(title: HomeWords.shared.VAULTS_TITLE, titleIdentifier: "home-vault-sheet") {
             roster
         }
         .sheet(item: Binding(get: { forgetting.map(VaultPick.init) }, set: { if $0 == nil { forgetting = nil } })) { pick in
@@ -981,7 +983,7 @@ private struct VaultSheet: View {
             // the existing sentence (switching is not a choice of one, but
             // Forget still is).
             if vaults.count == 1 {
-                Text(ShellWords.vaultsOne)
+                Text(HomeWords.shared.VAULTS_ONE)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .padding(.bottom, 8)
@@ -996,7 +998,7 @@ private struct VaultSheet: View {
                         shell.clearStaleGatewayStatus()
                     }
                     shell.send(
-                        screen: "home",
+                        screen: HomeMachine.shared.SCREEN_ID,
                         event: HomeEvents.vaultPicked(vault.vaultID)
                     )
                 } label: {
@@ -1011,7 +1013,7 @@ private struct VaultSheet: View {
                             )
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 8) {
-                                Text(ShellWords.vaultName(vault.vaultName))
+                                Text(HomeWords.shared.vaultName(name: vault.vaultName))
                                     .centraidType("smallStrong")
                                     .foregroundStyle(Theme.color("text", scheme))
                             }
@@ -1035,7 +1037,7 @@ private struct VaultSheet: View {
                                 tint: Theme.color("link", scheme),
                                 size: 18
                             )
-                            .accessibilityLabel(ShellWords.vaultsCurrent)
+                            .accessibilityLabel(HomeWords.shared.VAULTS_CURRENT)
                         }
                     }
                     .frame(minHeight: 44)
@@ -1058,14 +1060,14 @@ private struct VaultSheet: View {
                     Button(role: .destructive) {
                         forgetting = vault
                     } label: {
-                        Label(ShellWords.vaultsForget, systemImage: "trash")
+                        Label(HomeWords.shared.VAULTS_FORGET, systemImage: "trash")
                     }
                     .accessibilityIdentifier("vault-forget-\(vault.vaultID)")
                     if vault.state != .frozen {
                         Button {
                             startRename(vault)
                         } label: {
-                            Label(ShellWords.vaultsRename, systemImage: "pencil")
+                            Label(HomeWords.shared.VAULTS_RENAME, systemImage: "pencil")
                         }
                         .tint(Theme.color("link", scheme))
                         .accessibilityIdentifier("vault-rename-\(vault.vaultID)")
@@ -1076,14 +1078,14 @@ private struct VaultSheet: View {
                         Button {
                             startRename(vault)
                         } label: {
-                            Label(ShellWords.vaultsRename, systemImage: "pencil")
+                            Label(HomeWords.shared.VAULTS_RENAME, systemImage: "pencil")
                         }
                     }
                     // DELETE, behind the same confirmation the swipe opens.
                     Button(role: .destructive) {
                         forgetting = vault
                     } label: {
-                        Label(ShellWords.vaultsForget, systemImage: "trash")
+                        Label(HomeWords.shared.VAULTS_FORGET, systemImage: "trash")
                     }
                 }
             }
@@ -1093,8 +1095,8 @@ private struct VaultSheet: View {
             // settings gear to hide them behind. In the same list, so a long
             // roster scrolls them with it rather than clipping either.
             Section {
-                switcherAction(ShellWords.vaultsMake, icon: "Plus", id: "vault-found-button") { shell.makeVault() }
-                switcherAction(ShellWords.wordsRestore, icon: "Refresh", id: "vault-restore-button") { shell.openRestore() }
+                switcherAction(HomeWords.shared.VAULTS_MAKE, icon: "Plus", id: "vault-found-button") { shell.makeVault() }
+                switcherAction(WordsCopy.shared.RESTORE_FIRST_ACTION, icon: "Refresh", id: "vault-restore-button") { shell.openRestore() }
                     .listRowSeparator(.hidden)
                 // THE LAST OUTCOME, IN A MEMBER'S WORDS (what a make or a
                 // restore came to).
@@ -1124,12 +1126,12 @@ private struct VaultSheet: View {
     private func forgetConfirm(_ vault: Centraid_Screen_V1_VaultLockup) -> some View {
         ConfirmSheet(
             .with {
-                $0.title = ShellWords.forgetTitle(vault.vaultName)
-                $0.body = ShellWords.vaultsForgetBody
-                $0.confirmLabel = ShellWords.vaultsForget
+                $0.title = HomeWords.shared.forgetTitle(name: vault.vaultName)
+                $0.body = HomeWords.shared.VAULTS_FORGET_BODY
+                $0.confirmLabel = HomeWords.shared.VAULTS_FORGET
                 $0.destructive = true
             },
-            cancelLabel: ShellWords.cancel,
+            cancelLabel: KitWords.shared.CANCEL,
             onConfirm: {
                 shell.forget(vaultID: vault.vaultID)
                 forgetting = nil
@@ -1141,9 +1143,9 @@ private struct VaultSheet: View {
     /// A RENAME IS A SHEET HOLDING THE FIELD, with Save as its one ink button.
     private func renameSheet(_ vault: Centraid_Screen_V1_VaultLockup) -> some View {
         SheetRoom(
-            title: ShellWords.vaultsRenameTitle,
+            title: HomeWords.shared.VAULTS_RENAME_TITLE,
             primary: SheetPrimary(
-                label: ShellWords.vaultsRenameSave,
+                label: HomeWords.shared.VAULTS_RENAME_SAVE,
                 enabled: !newName.trimmingCharacters(in: .whitespaces).isEmpty,
                 identifier: "vault-rename-save"
             ) {
@@ -1151,7 +1153,7 @@ private struct VaultSheet: View {
                 renaming = nil
             }
         ) {
-            TextField(ShellWords.vaultsRenameField, text: $newName)
+            TextField(HomeWords.shared.VAULTS_RENAME_FIELD, text: $newName)
                 .textInputAutocapitalization(.words)
                 .centraidType("body")
                 .foregroundStyle(Theme.color("text", scheme))

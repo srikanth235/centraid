@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// `money.home` — Spending · Activity · Cash flow, More a sheet (#1099), on the kit.
 ///
@@ -198,8 +196,8 @@ struct MoneyHomeView: View {
             EmptyStateView(activity.empty, onAction: addStatement)
         } else {
             if !activity.needsLabel.isEmpty {
-                // THE FILTER THAT LISTS THESE ROWS is one of the state's own category choices.
-                let needsKey = activity.categoryOptions.first { $0.label == MoneyCopy.shared.NEEDS_CATEGORY_OPTION }?.key ?? ""
+                // THE FILTER THAT LISTS THESE ROWS is the state's own `needs_key`.
+                let needsKey = activity.needsKey
                 MoneyNeedsRow(label: activity.needsLabel, figures: activity.needsCategory) {
                     send(event { $0.categoryPicked = .with { $0.key = needsKey } })
                 }

@@ -1,9 +1,7 @@
 import Foundation
 import Network
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // THE iOS HALF OF Q-1080-D3: ASK THE LAN WHERE A GATEWAY WENT.
 //
@@ -291,7 +289,6 @@ final class ConnectionResolver: AddressResolver {
     }
 }
 
-#if canImport(CentraidShared)
 /// THE KOTLIN-VISIBLE HALF: `GatewayBrowser` is `commonMain`'s interface
 /// (`sync/GatewayDiscovery.kt`) and this is its iOS implementation, installed
 /// once through `HomeBridge.installGatewayBrowser` (`ShellModel.init`).
@@ -311,4 +308,3 @@ final class BonjourGatewayBrowser: NSObject, GatewayBrowser {
         run.start()
     }
 }
-#endif

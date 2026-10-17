@@ -285,7 +285,12 @@ internal fun ShownWords(cells: List<WordCell>) {
 // ---------------------------------------------------------------------------
 
 @Composable
-internal fun WordsEntryScreen(state: WordsEntryState, onEvent: (WordsEntryEvent) -> Unit) {
+internal fun WordsEntryScreen(
+    state: WordsEntryState,
+    onEvent: (WordsEntryEvent) -> Unit,
+    onScan: () -> Unit = {},
+    onPhoto: () -> Unit = {},
+) {
     val working = state.phase == WordsEntryState.Phase.PHASE_WORKING
     val requesters = remember { mutableMapOf<Int, FocusRequester>() }
     var focus by remember { mutableStateOf<Int?>(null) }
@@ -378,6 +383,13 @@ internal fun WordsEntryScreen(state: WordsEntryState, onEvent: (WordsEntryEvent)
                 enabled = !working,
                 onEdit = { text -> onEvent(WordsEntryEvent(endpoint = WordsEntryEvent.EndpointTyped(text = text))) },
             )
+        }
+        // THE CODE IS SCANNED AS WELL AS PASTED, as pairing's is: the camera,
+        // or the photo picker where there is none (`scan_camera`).
+        if (state.scan_label.isNotEmpty()) {
+            OutlineButton(label = state.scan_label, testTag = "words-scan", enabled = !working) {
+                if (state.scan_camera) onScan() else onPhoto()
+            }
         }
         WordsNotice(state.notice)
         if (state.progress.isNotEmpty()) {

@@ -96,19 +96,19 @@ public fun PhotosMemoriesScreen(
                     // never a re-sort that would disagree with the desktop.
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         memorySection(
-                            "On this day",
+                            PhotosCopy.PHOTOS_MEMORIES_ON_THIS_DAY,
                             "Calendar",
                             memories.filter { it.kind == MemoryRow.Kind.KIND_ON_THIS_DAY },
                             onOpenMemory,
                         )
                         memorySection(
-                            "Trips",
+                            PhotosCopy.PHOTOS_MEMORIES_TRIPS,
                             "place",
                             memories.filter { it.kind == MemoryRow.Kind.KIND_TRIP },
                             onOpenMemory,
                         )
                         memorySection(
-                            "Similar moments",
+                            PhotosCopy.PHOTOS_MEMORIES_SIMILAR_MOMENTS,
                             "Image",
                             memories.filter { it.kind == MemoryRow.Kind.KIND_SIMILAR },
                             onOpenMemory,
@@ -118,7 +118,7 @@ public fun PhotosMemoriesScreen(
                         // shrinks when a newer vault adds a fourth kind is a
                         // shelf a member cannot trust.
                         memorySection(
-                            "Other",
+                            PhotosCopy.PHOTOS_MEMORIES_OTHER,
                             "Sparkle",
                             memories.filter { it.kind == MemoryRow.Kind.KIND_UNSPECIFIED },
                             onOpenMemory,
@@ -210,8 +210,10 @@ private fun MemoryCard(row: MemoryRow, onOpen: (MemoryRow) -> Unit) {
  * drawn here from the member's own coordinates with nothing fetched: a tile
  * would tell a stranger's server where the member has been
  * (`docs/photos/places.md`). The stops are joined in the order the photographs
- * were taken; a one-stop trip is a dot and no line. The arithmetic is
- * [PhotosMemoriesMachine.sketch], shared with `PhotosMemoriesView.swift`.
+ * were taken; a one-stop trip is a dot and no line. The projection is the
+ * machine's ([PhotosMemoriesMachine.sketch], run when the route is folded):
+ * every stop arrives with its place in the plate's unit box, and this only
+ * multiplies by its own.
  */
 @Composable
 private fun RouteSketch(row: MemoryRow) {
@@ -224,22 +226,24 @@ private fun RouteSketch(row: MemoryRow) {
             .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["sm"] ?: 0).dp))
             .background(centraidColor("bgSunken"))
             .semantics {
-                contentDescription = if (stops == 1) "A sketch of one stop" else "A sketch of $stops stops"
+                contentDescription = if (stops == 1) {
+                    PhotosCopy.PHOTOS_MEMORY_SKETCH_ONE
+                } else {
+                    PhotosCopy.PHOTOS_MEMORY_SKETCH_MANY.replace("{count}", "$stops")
+                }
             },
     ) {
         val pad = SKETCH_PAD.toPx()
         val width = size.width - pad * 2
         val height = size.height - pad * 2
-        val points = PhotosMemoriesMachine
-            .sketch(row.route, aspect = (width / height).toDouble())
-            .map { Offset(pad + it.x.toFloat() * width, pad + it.y.toFloat() * height) }
+        val points = row.route.map { Offset(pad + it.sketch_x.toFloat() * width, pad + it.sketch_y.toFloat() * height) }
         points.zipWithNext { from, to -> drawLine(line, from, to, strokeWidth = 1.dp.toPx()) }
         points.forEach { drawCircle(dot, radius = 2.5.dp.toPx(), center = it) }
     }
 }
 
-private val SKETCH_WIDTH = 96.dp
-private val SKETCH_HEIGHT = 56.dp
+private val SKETCH_WIDTH = PhotosMemoriesMachine.SKETCH_WIDTH.dp
+private val SKETCH_HEIGHT = PhotosMemoriesMachine.SKETCH_HEIGHT.dp
 
 /** Clear of the plate's edge by a dot's radius, as v0's was. */
-private val SKETCH_PAD = 7.dp
+private val SKETCH_PAD = PhotosMemoriesMachine.SKETCH_PAD.dp

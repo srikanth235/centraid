@@ -12,34 +12,17 @@ import XCTest
 /// file decodes the same bytes with SwiftProtobuf and asserts the same laws**,
 /// because a fixture each is two fixtures.
 ///
-/// ## IT RUNS NOW, AND ON A SIMULATOR
+/// ## IT RUNS ON A SIMULATOR
 ///
-/// There is still no Xcode and no simulator on the machines that run
-/// `cargo xtask gate`, so this is still an **owner hand-off** — but it is a
-/// hand-off that has been cashed, and the command is step 4 in
-/// `mobile/README.md`:
+/// There is no Xcode and no simulator on the machines that run
+/// `cargo xtask gate`, so this is an **owner hand-off**, and the command is
+/// step 4 in `mobile/README.md`:
 ///
 ///     cd mobile/iosApp && xcodebuild -project Centraid.xcodeproj \
 ///       -scheme Centraid -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
-///
-/// This doc comment used to say "THIS TEST HAS NEVER RUN", and for longer than
-/// it claimed: the command it named was `swift test`, which stopped being able
-/// to build `Sources/` when #1020 landed unguarded UIKit imports in
-/// `ShellModel` and `ContentImage`. UIKit is not a macOS framework and no
-/// `#if canImport` guard conjures one, so the host build failed at dependency
-/// scanning and this file was not merely unrun but **uncompiled**. Two fixes in
-/// `project.yml` gave the Xcode test bundle an `Info.plist` and made its module
-/// name agree with `Package.swift`'s, and all 17 laws below passed on the first
-/// run that could ask them.
-///
-/// The photos port added eleven screens and thirty-four laws for them, written
-/// here in the same pass that wrote the Kotlin half and NOT yet run: no
-/// simulator step belonged to the lane that wrote them. They are a hand-off in
-/// the same sense the file already was, and the command above is the one that
-/// cashes it.
 final class ScreenFixtureTests: XCTestCase {
     /// `contracts/screens`, found from this file rather than from a working
-    /// directory: `swift test` and Xcode disagree about the latter.
+    /// directory.
     private var screens: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // Tests

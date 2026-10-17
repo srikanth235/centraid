@@ -3,9 +3,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // THE CHAT'S ATTACH PICKERS: three sources, one chip.
 //
@@ -154,7 +152,7 @@ struct ChatVaultPhotoSheet: View {
                     // Photographs and scans: a video is not an image to read.
                     let images = cells.filter { $0.kind == .photo || $0.kind == .scan }
                     if images.isEmpty {
-                        ScreenEmptyView(sentence: ChatWords.noPhotos)
+                        ScreenEmptyView(sentence: ChatCopy.shared.ATTACH_NO_PHOTOS)
                             .padding(.top, 24)
                     } else {
                         PhotoCellsGrid(
@@ -170,14 +168,14 @@ struct ChatVaultPhotoSheet: View {
                 }
             }
             .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-            .navigationTitle(ChatWords.pickPhoto)
+            .navigationTitle(ChatCopy.shared.ATTACH_PICK_PHOTO)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         CentraidIconView(iconKey: "X", tint: Theme.color("text", scheme), size: 18)
                     }
-                    .accessibilityLabel(ChatWords.close)
+                    .accessibilityLabel(ChatCopy.shared.CLOSE)
                     .accessibilityIdentifier("chat-attach-close")
                 }
             }
@@ -203,7 +201,7 @@ struct ChatDocumentSheet: View {
                 if !chat.documentsLoaded {
                     RowSkeleton(rows: 6).padding(.top, 24)
                 } else if chat.documents.isEmpty {
-                    ScreenEmptyView(sentence: ChatWords.noDocuments)
+                    ScreenEmptyView(sentence: ChatCopy.shared.ATTACH_NO_DOCUMENTS)
                         .padding(.top, 24)
                 } else {
                     LazyVStack(spacing: 0) {
@@ -240,14 +238,14 @@ struct ChatDocumentSheet: View {
                 }
             }
             .contentMargins(.horizontal, CentraidGeometry.pageMargin, for: .scrollContent)
-            .navigationTitle(ChatWords.pickDocument)
+            .navigationTitle(ChatCopy.shared.ATTACH_PICK_DOCUMENT)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         CentraidIconView(iconKey: "X", tint: Theme.color("text", scheme), size: 18)
                     }
-                    .accessibilityLabel(ChatWords.close)
+                    .accessibilityLabel(ChatCopy.shared.CLOSE)
                     .accessibilityIdentifier("chat-attach-close")
                 }
             }

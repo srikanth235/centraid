@@ -219,8 +219,8 @@ struct AgendaEditorView: View {
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.vertical, 8)
                 .overlay(alignment: .bottom) { KitHairline() }
-                if state.write.phase == .refused, state.write.hasFailure {
-                    Text(state.write.failure.sentence)
+                if !state.write.refusal.isEmpty {
+                    Text(state.write.refusal)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("net", scheme))
                         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -325,7 +325,7 @@ struct AgendaEditorView: View {
         case .scope:
             SheetRoom(
                 title: chrome.scopeTitle,
-                status: state.write.phase == .refused && state.write.hasFailure ? state.write.failure.sentence : "",
+                status: state.write.refusal,
                 primary: editor.scopeArmed ? SheetPrimary(label: chrome.save) { send(event { $0.save = .init() }) } : nil
             ) {
                 if !chrome.scopeQuestion.isEmpty {

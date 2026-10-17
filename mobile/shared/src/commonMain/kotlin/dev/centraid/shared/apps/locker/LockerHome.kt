@@ -35,6 +35,18 @@ public object LockerHomeMachine :
     LockerQueryMachine<LockerHomeState, LockerHomeEvent, LockerHomeData>("locker.home", LOCKER_TABLES) {
     public const val SCREEN_ID: String = "locker.home"
 
+    /**
+     * More's row keys. `facts` is the machine's (a sheet); the rest are the
+     * shell's: a push for `import`, `trash`, `export` and `access`, and the
+     * gate's `LockTapped` for `lock`.
+     */
+    public const val MORE_IMPORT: String = "import"
+    public const val MORE_TRASH: String = "trash"
+    public const val MORE_EXPORT: String = "export"
+    public const val MORE_ACCESS: String = "access"
+    public const val MORE_FACTS: String = "facts"
+    public const val MORE_LOCK: String = "lock"
+
     /** The filter keys that are not a type. */
     public const val ALL: String = "all"
     public const val STARRED: String = "starred"
@@ -89,7 +101,7 @@ public object LockerHomeMachine :
                 force = false,
             )
             // `facts` is the machine's (a sheet); `trash` and `lock` are the shell's.
-            event.more?.key == "facts" -> Step(held.copy(screen = held.screen.copy(sheet = LockerHomeState.Sheet.SHEET_FACTS)))
+            event.more?.key == MORE_FACTS -> Step(held.copy(screen = held.screen.copy(sheet = LockerHomeState.Sheet.SHEET_FACTS)))
             event.more != null -> Step(held.copy(screen = held.screen.copy(sheet = LockerHomeState.Sheet.SHEET_NONE)))
             // INTENTS: the shell routes them.
             else -> Step(held)
@@ -303,12 +315,12 @@ public object LockerHomeMachine :
         // Locker's Access history (Q-1047-21) — then what the phone adds, the
         // facts and the Lock (D-8).
         more_rows = listOf(
-            LockerMoreRow(key = "import", label = LockerCopy.MORE_IMPORT, meta = LockerCopy.MORE_IMPORT_META, icon_key = "Download"),
-            LockerMoreRow(key = "trash", label = LockerCopy.MORE_TRASH, meta = LockerCopy.MORE_TRASH_META, icon_key = "Trash"),
-            LockerMoreRow(key = "export", label = LockerCopy.MORE_EXPORT, meta = LockerCopy.MORE_EXPORT_META, icon_key = "Share"),
-            LockerMoreRow(key = "access", label = LockerCopy.MORE_ACCESS, meta = LockerCopy.MORE_ACCESS_META, icon_key = "History"),
-            LockerMoreRow(key = "facts", label = LockerCopy.MORE_FACTS, meta = LockerCopy.MORE_FACTS_META, icon_key = "Info"),
-            LockerMoreRow(key = "lock", label = LockerCopy.LOCK_NOW, meta = LockerCopy.MORE_LOCK_META, icon_key = "Lock"),
+            LockerMoreRow(key = MORE_IMPORT, label = LockerCopy.MORE_IMPORT, meta = LockerCopy.MORE_IMPORT_META, icon_key = "Download"),
+            LockerMoreRow(key = MORE_TRASH, label = LockerCopy.MORE_TRASH, meta = LockerCopy.MORE_TRASH_META, icon_key = "Trash"),
+            LockerMoreRow(key = MORE_EXPORT, label = LockerCopy.MORE_EXPORT, meta = LockerCopy.MORE_EXPORT_META, icon_key = "Share"),
+            LockerMoreRow(key = MORE_ACCESS, label = LockerCopy.MORE_ACCESS, meta = LockerCopy.MORE_ACCESS_META, icon_key = "History"),
+            LockerMoreRow(key = MORE_FACTS, label = LockerCopy.MORE_FACTS, meta = LockerCopy.MORE_FACTS_META, icon_key = "Info"),
+            LockerMoreRow(key = MORE_LOCK, label = LockerCopy.LOCK_NOW, meta = LockerCopy.MORE_LOCK_META, icon_key = "Lock"),
         ),
         facts_title = LockerCopy.MORE_FACTS,
         facts = listOf(

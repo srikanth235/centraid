@@ -37,6 +37,7 @@ import dev.centraid.shared.kit.jsonString
 import dev.centraid.shared.kit.time.CivilWords
 import dev.centraid.shared.kit.time.isoWeekdayOf
 import dev.centraid.shared.kit.time.plusDays
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -82,7 +83,7 @@ public sealed interface TasksDetailInput {
  * from the platform's picker closes the field, as a chip does.
  */
 public object TasksDetailMachine : ScreenMachine<TasksDetail, TasksDetailInput> {
-    public const val SCREEN_ID: String = "tasks.detail"
+    public const val SCREEN_ID: String = ScreenIds.TASKS_DETAIL
 
     public val TABLES: Set<String> = TasksHomeMachine.TABLES
 

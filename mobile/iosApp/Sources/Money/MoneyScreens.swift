@@ -1,9 +1,7 @@
 import SwiftProtobuf
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// MONEY, REGISTERED (#1099; K5). Its one line is in `AppRegistry.apps`.
 ///
@@ -31,17 +29,17 @@ import CentraidShared
 /// event the view just forwarded and pushes the destination. Choose file is the
 /// import view's own (`.fileImporter`).
 enum MoneyScreens: AppScreens {
-    static let appID = "money"
+    static let appID = AppIds.shared.MONEY
     /// The machines' `SCREEN_ID`s.
-    static let home = "money.home"
-    static let transaction = "money.transaction"
-    static let target = "money.target"
-    static let recurring = "money.recurring"
-    static let importer = "money.import"
-    static let accounts = "money.accounts"
-    static let rules = "money.rules"
-    static let categories = "money.categories"
-    static let search = "money.search"
+    static let home = MoneyHomeMachine.shared.SCREEN_ID
+    static let transaction = MoneyTransactionMachine.shared.SCREEN_ID
+    static let target = MoneyTargetMachine.shared.SCREEN_ID
+    static let recurring = MoneyRecurringMachine.shared.SCREEN_ID
+    static let importer = MoneyImportMachine.shared.SCREEN_ID
+    static let accounts = MoneyAccountsMachine.shared.SCREEN_ID
+    static let rules = MoneyRulesMachine.shared.SCREEN_ID
+    static let categories = MoneyCategoriesMachine.shared.SCREEN_ID
+    static let search = MoneySearchMachine.shared.SCREEN_ID
 
     // MARK: - Routes
 
@@ -88,7 +86,6 @@ enum MoneyScreens: AppScreens {
     @MainActor
     static func register(into shell: ShellModel) {
         var picked: (String, Data) -> Void = { _, _ in }
-        #if canImport(CentraidShared)
         // The no-argument constructors mint nothing: every `open` below spells
         // its own `Opened`, with its own draft token.
         let homeBridge = MoneyHomeBridge()
@@ -165,7 +162,6 @@ enum MoneyScreens: AppScreens {
         ))
         // THE OS PICKER'S FILE, as it was on disk, to the import's bridge.
         picked = { name, bytes in importBridge.picked(name: name, bytes: bytes.kotlin) }
-        #endif
 
         let memory = MoneyOpenMemory()
         let deliver = picked
@@ -331,10 +327,10 @@ enum MoneyScreens: AppScreens {
             case .recurring: shell.path.append(recurringRoute(parent: here))
             case let .more(row):
                 switch row.key {
-                case "accounts": shell.path.append(accountsRoute(parent: here))
-                case "rules": shell.path.append(rulesRoute(parent: here))
-                case "categories": shell.path.append(categoriesRoute(parent: here))
-                case "import": shell.path.append(importRoute(parent: here))
+                case MoneyHomeMachine.shared.MORE_ACCOUNTS: shell.path.append(accountsRoute(parent: here))
+                case MoneyHomeMachine.shared.MORE_RULES: shell.path.append(rulesRoute(parent: here))
+                case MoneyHomeMachine.shared.MORE_CATEGORIES: shell.path.append(categoriesRoute(parent: here))
+                case MoneyHomeMachine.shared.MORE_IMPORT: shell.path.append(importRoute(parent: here))
                 default: break
                 }
             default: break
@@ -358,7 +354,24 @@ enum MoneyScreens: AppScreens {
         }
     }
 
-    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { homeRoute() }
+    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { .home(of: appID) }
+
+    /// A SCREEN THE SHARED SIDE NAMED (`ScreenOpening`) is pushed in the shape
+    /// this app's routes take: the home with a fresh nonce (it opens once per
+    /// push), the transaction with its ids in the parameter. The home opens on
+    /// Spending, which is what its `open` sends.
+    static func present(_ screen: String, _ opened: Data) -> ShellModel.Route {
+        switch screen {
+        case home:
+            return homeRoute()
+        case transaction:
+            guard let event = try? Centraid_Screen_V1_MoneyTransactionEvent(serializedBytes: opened) else { break }
+            return transactionRoute(event.opened.txnID, parent: event.opened.parent)
+        default:
+            break
+        }
+        return .screen(screen, opened)
+    }
 }
 
 /// WHAT A MONEY ROUTE CARRIES: the fields its screen's `Opened` names, and a

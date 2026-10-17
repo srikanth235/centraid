@@ -102,7 +102,7 @@ struct AgendaEventView: View {
     }
 
     private func writeSentence(_ state: Centraid_Screen_V1_AgendaEventState) -> String {
-        state.write.phase == .refused && state.write.hasFailure ? state.write.failure.sentence : ""
+        state.write.refusal
     }
 
     @ViewBuilder

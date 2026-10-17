@@ -22,7 +22,6 @@ import centraid.screen.v1.AgendaParkedCard
 import centraid.screen.v1.AgendaScopeChoice
 import centraid.screen.v1.EmptyState
 import centraid.screen.v1.SectionHead
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EmptyStateView
@@ -62,7 +61,7 @@ internal fun AgendaEventScreen(
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
-        status = if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "",
+        status = write?.refusal.orEmpty(),
     ) {
         val gone = state.gone
         if (gone != null) {

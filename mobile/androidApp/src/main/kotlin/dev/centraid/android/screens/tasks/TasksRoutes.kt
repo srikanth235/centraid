@@ -8,7 +8,6 @@ import centraid.screen.v1.TasksCatchUpEvent
 import centraid.screen.v1.TasksDetailEvent
 import centraid.screen.v1.TasksHomeEvent
 import centraid.screen.v1.TasksHomeState
-import centraid.screen.v1.TasksListState
 import centraid.screen.v1.TasksProjectEvent
 import dev.centraid.android.kit.TrashListScreen
 import dev.centraid.android.screens.AppRoutes
@@ -17,11 +16,11 @@ import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.apps.tasks.TasksCatchUpBridge
 import dev.centraid.shared.apps.tasks.TasksDetailBridge
 import dev.centraid.shared.apps.tasks.TasksHomeBridge
-import dev.centraid.shared.apps.tasks.TasksHomeMachine
 import dev.centraid.shared.apps.tasks.TasksListBridge
 import dev.centraid.shared.apps.tasks.TasksProjectBridge
-import dev.centraid.shared.apps.tasks.TasksRows
+import dev.centraid.shared.apps.tasks.TasksRouting
 import dev.centraid.shared.apps.tasks.TasksTrashBridge
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.nav.withTasksDestination
@@ -55,7 +54,7 @@ public class TasksRoutes : AppRoutes {
     }
 
     // `open()` ON THE PUSH: a band move swaps the top entry and must not land on Today.
-    override fun opens(moveId: String): Destination? = if (moveId == "tasks") {
+    override fun opens(moveId: String): Destination? = if (moveId == AppIds.TASKS) {
         home.open()
         Destination.TasksHome()
     } else {
@@ -84,8 +83,8 @@ public class TasksRoutes : AppRoutes {
         }
     }
 
-    private fun pushDetail(nav: RouteNav, taskId: String) {
-        if (taskId.isNotEmpty()) nav.go(nav.stack.push(Destination.TasksDetail(taskId)))
+    private fun push(nav: RouteNav, destination: Destination?) {
+        if (destination != null) nav.go(nav.stack.push(destination))
     }
 
     @Composable
@@ -121,30 +120,12 @@ public class TasksRoutes : AppRoutes {
         )
     }
 
-    /** Home's intents, as pushes. The event reached the machine first (it closes its sheet). */
+    /**
+     * Home's intents, as pushes (`TasksRouting` decides which page, for iOS
+     * too). The event reached the machine first (it closes its sheet).
+     */
     private fun routeHome(event: TasksHomeEvent, screen: TasksHomeState, nav: RouteNav) {
-        val picked = event.row_picked
-        val projectPicked = event.project_picked
-        val more = event.more_row
-        when {
-            picked != null -> pushDetail(nav, picked.task_id)
-            projectPicked != null -> {
-                val name = screen.data_?.projects.orEmpty().flatMap { it.rows }.firstOrNull { it.id == projectPicked.project_id }?.title.orEmpty()
-                nav.go(nav.stack.push(Destination.TasksProject(projectPicked.project_id, name)))
-            }
-            more != null -> when (more.key) {
-                TasksHomeMachine.MORE_ANYTIME -> nav.go(nav.stack.push(Destination.TasksList(TasksListState.View.VIEW_ANYTIME)))
-                TasksHomeMachine.MORE_ALL -> nav.go(nav.stack.push(Destination.TasksList(TasksListState.View.VIEW_ALL)))
-                TasksHomeMachine.MORE_LOGBOOK -> nav.go(nav.stack.push(Destination.TasksList(TasksListState.View.VIEW_LOGBOOK)))
-                TasksHomeMachine.MORE_REMINDERS -> nav.go(nav.stack.push(Destination.TasksList(TasksListState.View.VIEW_REMINDERS)))
-                TasksHomeMachine.MORE_CATCH_UP -> nav.go(nav.stack.push(Destination.TasksCatchUp))
-                TasksHomeMachine.MORE_TRASH -> nav.go(nav.stack.push(Destination.TasksTrash))
-                else -> Unit
-            }
-            event.group_verb?.key == TasksRows.VERB_CATCH_UP -> nav.go(nav.stack.push(Destination.TasksCatchUp))
-            event.notice_acted != null && screen.data_?.notice?.verb_key == TasksRows.VERB_CATCH_UP ->
-                nav.go(nav.stack.push(Destination.TasksCatchUp))
-        }
+        push(nav, TasksRouting.home(event, screen))
     }
 
     @Composable
@@ -157,7 +138,7 @@ public class TasksRoutes : AppRoutes {
             state = state.screen,
             onEvent = { event ->
                 list.forward(event)
-                event.row_picked?.let { pushDetail(nav, it.task_id) }
+                push(nav, TasksRouting.list(event))
             },
             onBack = { nav.pop() },
         )
@@ -173,7 +154,7 @@ public class TasksRoutes : AppRoutes {
             state = state.screen,
             onEvent = { event: TasksProjectEvent ->
                 project.forward(event)
-                event.row_picked?.let { pushDetail(nav, it.task_id) }
+                push(nav, TasksRouting.project(event))
             },
             onBack = { nav.pop() },
         )
@@ -195,8 +176,7 @@ public class TasksRoutes : AppRoutes {
             state = screen,
             onEvent = { event: TasksDetailEvent ->
                 detail.forward(event)
-                event.subtask_picked?.let { pushDetail(nav, it.task_id) }
-                if (event.parent_picked != null) pushDetail(nav, screen.data_?.parent_task_id.orEmpty())
+                push(nav, TasksRouting.detail(event, screen))
             },
             // CLOSE = DONE: the pop; the room's `onDeparted` is the flush.
             onClose = { nav.pop() },
@@ -212,7 +192,7 @@ public class TasksRoutes : AppRoutes {
             state = state.screen,
             onEvent = { event: TasksCatchUpEvent ->
                 catchUp.forward(event)
-                event.row_picked?.let { pushDetail(nav, it.task_id) }
+                push(nav, TasksRouting.catchUp(event))
             },
             onBack = { nav.pop() },
         )

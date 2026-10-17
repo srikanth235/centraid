@@ -3,9 +3,7 @@ import ContactsUI
 import EventKit
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // ONBOARDING WITHOUT SAMPLE DATA (docs/decisions.md, "Onboarding without sample
 // data"): where the phone already holds an app's data, its day-one empty state
@@ -80,7 +78,6 @@ struct ShellLineHost: ViewModifier {
     }
 }
 
-#if canImport(CentraidShared)
 /// THE PHONE'S ADDRESS BOOK, read once the member tapped "Import contacts".
 /// The OS asks its own permission here — the first time, and never at launch —
 /// and a limited grant reads the contacts the member chose.
@@ -356,7 +353,6 @@ enum PhoneReminders {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 }
-#endif
 
 /// IOS'S OWN CONTACT PICKER (`ContactAccessPicker`, iOS 18), raised when People's
 /// import meets limited access: the member shares more contacts in the

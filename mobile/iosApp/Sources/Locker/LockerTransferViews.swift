@@ -2,9 +2,7 @@ import LocalAuthentication
 import SwiftUI
 import UniformTypeIdentifiers
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// `locker.export` — every secret, in a file (#1047 T2; the handoff's
 /// `locker/export`). The lede in the net register, what leaves, the format,
@@ -312,7 +310,6 @@ struct LockerTransferRoot: View {
     var body: some View {
         Color.clear
             .onAppear {
-                #if canImport(CentraidShared)
                 LockerScreens.exportBridge.onSave = { bytes, fileName, mediaType in
                     let data = bytes.data
                     DispatchQueue.main.async {
@@ -322,7 +319,6 @@ struct LockerTransferRoot: View {
                         exporting = true
                     }
                 }
-                #endif
             }
             .fileExporter(
                 isPresented: $exporting,
@@ -331,7 +327,6 @@ struct LockerTransferRoot: View {
                 defaultFilename: name
             ) { result in
                 answered = true
-                #if canImport(CentraidShared)
                 switch result {
                 case .success: LockerScreens.exportBridge.saved()
                 case let .failure(error):
@@ -341,7 +336,6 @@ struct LockerTransferRoot: View {
                         LockerScreens.exportBridge.saveRefused(sentence: "")
                     }
                 }
-                #endif
                 // THE BYTES LEAVE THIS VIEW'S STATE with the sheet.
                 file = LockerExportFile(bytes: Data(), type: .commaSeparatedText)
             }
@@ -352,9 +346,7 @@ struct LockerTransferRoot: View {
                     file = LockerExportFile(bytes: Data(), type: .commaSeparatedText)
                     guard !answered else { return }
                     answered = true
-                    #if canImport(CentraidShared)
                     LockerScreens.exportBridge.saveCancelled()
-                    #endif
                 }
             }
     }

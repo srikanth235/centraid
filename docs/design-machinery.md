@@ -25,7 +25,7 @@ The direction is one-way:
 
 A screen must not generate a token, a component must not invent a scale, and a lowering must not keep a second editable registry.
 
-`copy/*.json` and `mobile/shared/.../design/Copy.kt` travel beside these artifacts but are no longer generated: their upstream was the v0 app tree, and they are the source now ([#1020](https://github.com/srikanth235/centraid/issues/1020)).
+`copy/*.json` is a source, not an artifact: its upstream was the v0 app tree ([#1020](https://github.com/srikanth235/centraid/issues/1020)). The Kotlin tables both shells read, `dev.centraid.design.copy.<App>Copy`, are generated from it at build time by `:shared:generateCopy` and are not checked in.
 
 The values under the 4px base are the registry's `subBase` seams — `hair` (1), `gutter` (2), `chip` (3). A shell holds no sub-4px constant of its own ([#1015](https://github.com/srikanth235/centraid/issues/1015), R-NY-15).
 
@@ -75,7 +75,7 @@ cargo xtask gate --profile pr               # runs the `emitters` drift step
 cargo xtask gate --profile mobile-jvm       # regenerates and diffs, then `./gradlew -p mobile mobileJvm`
 ```
 
-The drift line is the gate: `emitters` in `cargo xtask gate --profile pr` and the `mobile-jvm` profile both regenerate and fail on a diff, so a token change that forgets to regenerate reds where a test would. Neither gate has an allowance ledger.
+The drift line is the gate: `emitters` in `cargo xtask gate --profile pr` and the `mobile-jvm` profile both regenerate and fail on a diff or on a new file under the emitted trees that the repository neither tracks nor ignores (a plain diff cannot see one), so a token change that forgets to regenerate reds where a test would. Neither gate has an allowance ledger.
 
 ## The public web surfaces
 

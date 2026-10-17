@@ -27,7 +27,6 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
-import java.io.File
 
 /**
  * THE PHOTO SHELF (#1029, photos port).
@@ -735,47 +734,6 @@ class PhotoShelfSpec : StringSpec({
                 PhotoShelfReads.settled(status, "no", "test.command:row-0001")
                     .write_settled.shouldNotBeNull().committed shouldBe false
             }
-        }
-    }
-
-    "every command this shelf can submit exists in the vault's declared surface" {
-        // THE GATE `ShellCommandsExistSpec` IS, APPLIED TO THIS LANE'S FOUR.
-        // That spec holds a hand-written map of every command a screen can
-        // submit, and a screen added without an entry in it is a screen outside
-        // the gate — so the assertion is restated here, over this screen's own
-        // constants, rather than left to a file this lane does not own.
-        //
-        // The oracle is the registry's own source, and the scan over-matches on
-        // purpose: it cannot prove a command is REGISTERED, only that the name
-        // is spelled in `crates/vault/src/commands`. That is exactly the class
-        // of defect it exists for — `knowledge.save_note` appeared nowhere in
-        // this repository, and a typo never does.
-        val root = File(
-            System.getProperty("centraid.repositoryRoot")
-                ?: error("centraid.repositoryRoot is unset; see mobile/shared/build.gradle.kts"),
-        )
-        val declared = root.resolve("crates/vault/src/commands")
-            .walkTopDown()
-            .filter { it.isFile && it.extension == "rs" }
-            .flatMap { file ->
-                Regex("\"([a-z_]+\\.[a-z_]+)\"").findAll(file.readText())
-                    .map { it.groupValues[1] }
-            }
-            .toSet()
-        listOf(
-            PhotoShelfMachine.RESTORE_COMMAND,
-            PhotoShelfMachine.DELETE_COMMAND,
-            PhotoShelfMachine.PURGE_COMMAND,
-            PhotoShelfMachine.UPDATE_COMMAND,
-            PhotoShelfMachine.FAVORITE_COMMAND,
-            PhotoShelfMachine.RENAME_ALBUM_COMMAND,
-            PhotoShelfMachine.DELETE_ALBUM_COMMAND,
-            PhotoShelfMachine.SET_COVER_COMMAND,
-            PhotoShelfMachine.REMOVE_FROM_ALBUM_COMMAND,
-            AlbumChoice.ADD_COMMAND,
-            AlbumChoice.CREATE_COMMAND,
-        ).forEach { command ->
-            withClue(command) { declared.contains(command) shouldBe true }
         }
     }
 

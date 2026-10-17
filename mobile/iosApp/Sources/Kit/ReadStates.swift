@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // THE FOUR READ SHAPES, DRAWN ONCE (K5; DESIGN.md "The seven rooms").
 //
@@ -204,8 +202,8 @@ struct EmptyStateView: View {
             // WHERE THE PHONE ALREADY HOLDS THE DATA, ITS IMPORT IS THE ACTION,
             // asked here at the point of use; the app's own add stays in its
             // header. A shell with no importer for the source draws the app's.
-            if !ShellWords.importLabel(empty.importSource).isEmpty, let importFromPhone {
-                KitOutlineButton(label: ShellWords.importLabel(empty.importSource)) { importFromPhone(empty.importSource) }
+            if !importLabel(empty.importSource).isEmpty, let importFromPhone {
+                KitOutlineButton(label: importLabel(empty.importSource)) { importFromPhone(empty.importSource) }
                     .accessibilityIdentifier("kit-empty-import")
                     .padding(.top, 4)
             } else if !empty.actionLabel.isEmpty, let onAction {

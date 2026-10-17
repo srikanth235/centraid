@@ -1,9 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// `money.import` — pick a statement, read the plan, publish (#1099).
 ///

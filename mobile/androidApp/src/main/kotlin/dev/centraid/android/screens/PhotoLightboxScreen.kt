@@ -2,7 +2,6 @@ package dev.centraid.android.screens
 
 import android.content.Context
 import android.provider.Settings
-import android.text.format.DateFormat
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,7 +29,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -77,10 +75,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 
 /**
  * ONE PHOTOGRAPH, FULL BLEED (#1029, photos port).
@@ -199,7 +193,6 @@ private fun Chrome(
     onEvent: (PhotoLightboxEvent) -> Unit,
     onClose: () -> Unit,
 ) {
-    val context = LocalContext.current
     val ink = centraidColor("onStage")
     val soft = centraidColor("onStageSoft")
     Column(
@@ -217,27 +210,23 @@ private fun Chrome(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Top,
         ) {
-            Chip(icon = "ChevronLeft", label = "Close", onClick = onClose)
+            Chip(icon = "ChevronLeft", label = PhotosCopy.PHOTOS_CLOSE, onClick = onClose)
             Column(
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                val title = if (state.slideshow) "Slideshow" else lightboxStampDate(detail)
-                val meta = if (state.slideshow) {
-                    PhotoLightboxMachine.slideshowMeta(state)
-                } else {
-                    lightboxStampLine(context, detail)
-                }
+                val title = if (state.slideshow) PhotosCopy.PHOTOS_SLIDESHOW else state.stamp_date
+                val meta = if (state.slideshow) state.slideshow_meta else state.stamp_line
                 if (title.isNotEmpty()) Text(text = title, color = ink, style = centraidType("control"))
                 if (meta.isNotEmpty()) Text(text = meta, color = soft, style = centraidType("small"))
             }
             if (state.slideshow) {
                 // THE ONE WAY OUT OF THE SLIDESHOW, named for what it does.
-                StageVerb(label = "Leave", onClick = {
+                StageVerb(label = PhotosCopy.PHOTOS_SLIDESHOW_LEAVE, onClick = {
                     onEvent(PhotoLightboxEvent(slideshow = PhotoLightboxEvent.SlideshowChanged(false)))
                 })
             } else {
-                Chip(icon = "more", label = "More") {
+                Chip(icon = "more", label = PhotosCopy.PHOTOS_MORE) {
                     onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_MORE))
                 }
             }
@@ -255,7 +244,7 @@ private fun Chrome(
         val status = when {
             state.slideshow -> PhotoLightboxMachine.SLIDESHOW_LINE
             state.notice.isNotEmpty() -> state.notice
-            else -> lightboxStatusLine(detail, player != null)
+            else -> if (player != null) state.status_line_playing else state.status_line
         }
         if (status.isNotEmpty()) {
             Row(
@@ -421,7 +410,7 @@ private fun Toolbar(
                     ),
                 )
             }
-            Verb("info", "Info", true) {
+            Verb("info", PhotosCopy.PHOTOS_INFO, true) {
                 onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_INFO))
             }
             // EDIT, in v0's place after Info. Its gate and its route live with
@@ -434,7 +423,7 @@ private fun Toolbar(
             // easier to reach than it is.
             Verb(
                 iconKey = "Archive",
-                label = if (detail.archived) "Unarchive" else "Archive",
+                label = if (detail.archived) PhotosCopy.PHOTOS_UNARCHIVE else PhotosCopy.PHOTOS_ARCHIVE,
                 enabled = refusal == null,
             ) {
                 onEvent(
@@ -444,7 +433,7 @@ private fun Toolbar(
                 )
             }
             val trash = table[PhotoLightboxMachine.Verb.TRASH]
-            Verb("trash", "Delete", trash?.enabled == true) {
+            Verb("trash", PhotosCopy.PHOTOS_DELETE, trash?.enabled == true) {
                 // INTO THE TRASH, NEVER OUT OF THE VAULT. `permanent` is a
                 // separate decision with its own confirmation, and the trash
                 // shelf is where it is made.
@@ -572,12 +561,12 @@ private fun LightboxMoreSheet(
 ) {
     val refusal = PhotoLightboxMachine.writeRefusal(state)
     Column {
-        MoreRow("Archive", if (detail.archived) "Unarchive" else "Archive", refusal) {
+        MoreRow("Archive", if (detail.archived) PhotosCopy.PHOTOS_UNARCHIVE else PhotosCopy.PHOTOS_ARCHIVE, refusal) {
             close()
             onEvent(PhotoLightboxEvent(archive = PhotoLightboxEvent.ArchiveToggled(!detail.archived)))
         }
         if (state.neighbour_asset_ids.size > 1) {
-            MoreRow("Play", "Slideshow", null) {
+            MoreRow("Play", PhotosCopy.PHOTOS_SLIDESHOW, null) {
                 onEvent(PhotoLightboxEvent(slideshow = PhotoLightboxEvent.SlideshowChanged(true)))
             }
         }
@@ -593,11 +582,11 @@ private fun LightboxMoreSheet(
         MoreRow("MapPin", PhotosCopy.PHOTOS_ADJUST_LOCATION, refusal) {
             onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_PLACE))
         }
-        MoreRow("Download", "Download", null, onClick = onDownload)
+        MoreRow("Download", PhotosCopy.PHOTOS_DOWNLOAD, null, onClick = onDownload)
         MoreRow("Send", PhotosCopy.PHOTOS_SEND_COPY, null) {
             onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_SHARE))
         }
-        MoreRow("trash", "Delete", refusal, destructive = true) {
+        MoreRow("trash", PhotosCopy.PHOTOS_DELETE, refusal, destructive = true) {
             close()
             onEvent(PhotoLightboxEvent(delete = PhotoLightboxEvent.DeleteRequested(false)))
         }
@@ -657,7 +646,7 @@ private fun LightboxPlaceSheet(
             )
         }
         if (detail.place_id.isNotEmpty()) {
-            SheetRow(label = "No place", detail = PhotosCopy.PHOTOS_CLEAR_PLACE_DETAIL, onTap = { choose("") })
+            SheetRow(label = PhotosCopy.PHOTOS_PLACE_NONE, detail = PhotosCopy.PHOTOS_CLEAR_PLACE_DETAIL, onTap = { choose("") })
         }
         state.place_choices.forEach { place ->
             val here = place.place_id == detail.place_id
@@ -695,7 +684,6 @@ private fun LightboxInfoSheet(
     onEvent: (PhotoLightboxEvent) -> Unit,
     onCopyLocation: () -> Unit,
 ) {
-    val context = LocalContext.current
     val soft = centraidColor("textSoft")
     val ink = centraidColor("text")
     var caption by remember(detail.asset_id) { mutableStateOf(detail.title) }
@@ -705,10 +693,15 @@ private fun LightboxInfoSheet(
     }
     // THE CAMERA, from the original's own header when this device holds it —
     // see `PhotoLightboxReads`' doc for why the vault's row cannot say.
-    val camera by produceState(initialValue = detail.camera, detail.original_path, detail.camera) {
+    // SAID TO THE MACHINE, which owns the facts: it keys the answer by asset and
+    // keeps it across a re-read.
+    LaunchedEffect(detail.asset_id, detail.original_path, detail.camera) {
         val path = detail.original_path?.takeIf { it.isNotEmpty() }
         if (detail.camera.isEmpty() && path != null) {
-            value = withContext(Dispatchers.IO) { PhotoHandOff.cameraOf(path) }.orEmpty()
+            val named = withContext(Dispatchers.IO) { PhotoHandOff.cameraOf(path) }.orEmpty()
+            if (named.isNotEmpty()) {
+                onEvent(PhotoLightboxEvent(camera_read = PhotoLightboxEvent.CameraRead(asset_id = detail.asset_id, camera = named)))
+            }
         }
     }
     Column(
@@ -723,7 +716,7 @@ private fun LightboxInfoSheet(
             Text(text = it, style = centraidType("small"), color = centraidColor("net"))
         }
 
-        InfoLabel("Caption")
+        InfoLabel(PhotosCopy.PHOTOS_LIGHTBOX_CAPTION)
         TextField(
             value = caption,
             onValueChange = { caption = it },
@@ -733,16 +726,16 @@ private fun LightboxInfoSheet(
             keyboardActions = KeyboardActions(onDone = { commitCaption() }),
             modifier = Modifier
                 .fillMaxWidth()
-                .semantics { contentDescription = "Caption" }
+                .semantics { contentDescription = PhotosCopy.PHOTOS_LIGHTBOX_CAPTION }
                 // COMMITTED WHEN THE FIELD IS LEFT, as v0's was on blur: the
                 // typed text stays exactly where it is if the vault says no.
                 .onFocusChanged { if (!it.isFocused) commitCaption() },
         )
 
-        lightboxFacts(context, detail, camera).forEach { (label, value) ->
+        state.facts.forEach { fact ->
             Column {
-                InfoLabel(label)
-                Text(text = value, style = centraidType("body"), color = ink)
+                InfoLabel(fact.label)
+                Text(text = fact.text, style = centraidType("body"), color = ink)
             }
         }
 
@@ -750,25 +743,25 @@ private fun LightboxInfoSheet(
         // about it. The coordinate is never printed; "Copy exact location"
         // puts it on the member's own clipboard because they asked.
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            InfoLabel("Place")
+            InfoLabel(PhotosCopy.PHOTOS_PLACE)
             Text(
                 text = when {
                     detail.place_name.isNotEmpty() -> detail.place_name
                     PhotoDetail.Part.PART_PLACE in detail.unread_parts ->
                         PhotosCopy.PHOTOS_PLACE_UNREADABLE
                     detail.place_id.isNotEmpty() -> PhotosCopy.PLACE_UNNAMED
-                    else -> "No place"
+                    else -> PhotosCopy.PHOTOS_PLACE_NONE
                 },
                 style = centraidType("body"),
                 color = ink,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 KitLink(
-                    label = if (detail.place_id.isEmpty()) PhotosCopy.PHOTOS_ADD_PLACE else "Change",
+                    label = if (detail.place_id.isEmpty()) PhotosCopy.PHOTOS_ADD_PLACE else PhotosCopy.PHOTOS_CHANGE,
                     onClick = { onEvent(lightboxSheetEvent(PhotoLightboxState.Sheet.SHEET_PLACE)) },
                 )
                 if (detail.place_id.isNotEmpty()) {
-                    KitLink(label = "Remove", onClick = {
+                    KitLink(label = PhotosCopy.PHOTOS_REMOVE, onClick = {
                         onEvent(PhotoLightboxEvent(place_chosen = PhotoLightboxEvent.PlaceChosen(place_id = "")))
                     })
                 }
@@ -781,7 +774,7 @@ private fun LightboxInfoSheet(
         // LABELS, each with its own remove, and a field to add one. Only
         // labels with a word on them are drawn: a concept id is not a word.
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            InfoLabel("Labels")
+            InfoLabel(PhotosCopy.PHOTOS_LABELS)
             val labels = detail.labels.filter { it.label.isNotEmpty() }
             if (labels.isEmpty()) {
                 Text(
@@ -807,7 +800,7 @@ private fun LightboxInfoSheet(
                     if (label.tag_id.isNotEmpty()) {
                         IconKey(
                             iconKey = "X",
-                            label = "Remove ${label.label}",
+                            label = PhotosCopy.PHOTOS_REMOVE_ITEM.replace("{label}", label.label),
                             testTag = "lightbox-tag-remove",
                             bordered = false,
                             onPress = {
@@ -838,7 +831,7 @@ private fun LightboxInfoSheet(
         }
 
         // WHERE THE BYTES ARE, in a sentence that says what fetching costs.
-        Text(text = lightboxWhereabouts(detail), style = centraidType("small"), color = soft)
+        Text(text = state.whereabouts, style = centraidType("small"), color = soft)
         if (state.notice.isNotEmpty()) {
             Text(text = state.notice, style = centraidType("small"), color = soft)
         }
@@ -899,165 +892,4 @@ private fun lightboxDrawnPath(detail: PhotoDetail): String? =
 private fun lightboxStageLabel(detail: PhotoDetail): String = when (detail.held) {
     PhotoCell.Held.HELD_ABSENT -> PhotosCopy.PHOTOS_NOT_ON_PHONE
     else -> PhotosCopy.PHOTOS_PREVIEW_GONE
-}
-
-/**
- * The stage's one line. See the SwiftUI twin for the precedence. A video with
- * no player is one whose file is not here, and the line says what the stage is
- * showing instead.
- */
-private fun lightboxStatusLine(detail: PhotoDetail, playing: Boolean): String = when {
-    detail.held == PhotoCell.Held.HELD_WITHHELD_BY_RULE ->
-        PhotosCopy.PHOTOS_ORIGINAL_HELD_BACK
-    // A PERCENTAGE ONLY WHEN THERE IS ONE: "0%" would read as "nothing has
-    // crossed".
-    detail.held == PhotoCell.Held.HELD_FETCHING ->
-        if (detail.fetch_percent > 0) {
-            PhotosCopy.PHOTOS_ORIGINAL_DOWNLOADING_PERCENT.replace("{percent}", "${detail.fetch_percent}")
-        } else {
-            PhotosCopy.PHOTOS_ORIGINAL_DOWNLOADING
-        }
-    detail.held == PhotoCell.Held.HELD_ABSENT ->
-        PhotosCopy.PHOTOS_NOTHING_ON_PHONE
-    detail.kind == PhotoCell.Kind.KIND_VIDEO && !playing ->
-        PhotosCopy.PHOTOS_VIDEO_STILL_ONLY
-    else -> ""
-}
-
-/**
- * WHERE THE BYTES ARE, in a sentence that says what fetching costs: "explicit
- * choice" is only honest if the choice is described before it is offered.
- */
-private fun lightboxWhereabouts(detail: PhotoDetail): String = when (detail.held) {
-    PhotoCell.Held.HELD_ORIGINAL -> PhotosCopy.PHOTOS_ORIGINAL_ON_PHONE
-    PhotoCell.Held.HELD_WITHHELD_BY_RULE ->
-        PhotosCopy.PHOTOS_ORIGINAL_YOUR_CHOICE
-    PhotoCell.Held.HELD_FETCHING -> PhotosCopy.PHOTOS_ORIGINAL_DOWNLOADING_NOW
-    PhotoCell.Held.HELD_ABSENT -> PhotosCopy.PHOTOS_NOTHING_ON_PHONE
-    PhotoCell.Held.HELD_THUMBNAIL_ONLY, PhotoCell.Held.HELD_UNSPECIFIED ->
-        PhotosCopy.PHOTOS_SMALLER_COPY_ONLY
-}
-
-/**
- * THE FACTS, in the SwiftUI twin's order and words. Each row exists only when
- * the vault answered for it; a fact that could not be read is still a row.
- */
-private fun lightboxFacts(context: Context, detail: PhotoDetail, camera: String): List<Pair<String, String>> =
-    buildList {
-        val date = lightboxStampDate(detail)
-        if (date.isNotEmpty()) {
-            val offset = detail.captured_utc_offset_minutes
-            // NO ORIGINAL OFFSET IS NOT ZERO: the line says UTC rather than
-            // claiming the camera recorded Greenwich.
-            val zone = if (offset == 0) "UTC" else lightboxOffset(offset)
-            add("Captured" to "$date ${lightboxStampLine(context, detail)} · $zone")
-        }
-        if (detail.width > 0 && detail.height > 0) add("Size" to "${detail.width} × ${detail.height}")
-        if (detail.duration_seconds > 0) add("Length" to lightboxClock(detail.duration_seconds))
-        if (detail.byte_size > 0L) {
-            add("File" to lightboxBytes(detail.byte_size))
-        } else if (PhotoDetail.Part.PART_CONTENT in detail.unread_parts) {
-            add("File" to PhotosCopy.PHOTOS_FILE_SIZE_UNREADABLE)
-        }
-        if (camera.isNotEmpty()) add("Camera" to camera)
-    }
-
-/**
- * `30 July 2026` — the SwiftUI twin's `.day().month(.wide).year()`, in this
- * device's locale and the capture's zone. Empty when the row records no capture time: never
- * the raw timestamp, and never an invented date.
- */
-private fun lightboxStampDate(detail: PhotoDetail): String {
-    val instant = lightboxInstant(detail.captured_at) ?: return ""
-    val locale = Locale.getDefault()
-    return SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "dMMMMyyyy"), locale)
-        .apply { timeZone = lightboxCaptureZone(detail) }
-        .format(instant)
-}
-
-/**
- * THE ZONE THE SHUTTER FIRED IN, not this phone's. The Library files a
- * photograph under its capture-local day (`PhotosTimeline.captureDay`), so a
- * stamp in the phone's zone put an evening in Lisbon on the next morning's date
- * here while the grid said the evening. A missing offset is UTC, the same rule
- * the grid and the "Captured" row follow.
- */
-private fun lightboxCaptureZone(detail: PhotoDetail): TimeZone {
-    val offset = detail.captured_utc_offset_minutes
-    return if (offset == 0) TimeZone.getTimeZone("UTC") else TimeZone.getTimeZone(lightboxOffset(offset).replace("UTC", "GMT"))
-}
-
-/**
- * `17:42 · Lyme Regis`, the clock in this device's own 12- or 24-hour habit.
- * The place stops the line short when there is none, never leaving a dangling
- * separator.
- */
-private fun lightboxStampLine(context: Context, detail: PhotoDetail): String {
-    val locale = Locale.getDefault()
-    val skeleton = if (DateFormat.is24HourFormat(context)) "Hm" else "hm"
-    val clock = lightboxInstant(detail.captured_at)?.let {
-        SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, skeleton), locale)
-            .apply { timeZone = lightboxCaptureZone(detail) }
-            .format(it)
-    }.orEmpty()
-    return listOf(clock, detail.place_name).filter { it.isNotEmpty() }.joinToString(" · ")
-}
-
-/**
- * The vault writes `%Y-%m-%dT%H:%M:%fZ` and nothing else — FRACTIONAL SECONDS
- * FIRST, because a parser that only accepted whole seconds would answer null
- * for every photograph in the vault.
- */
-private fun lightboxInstant(text: String): Date? {
-    if (text.isEmpty()) return null
-    for (pattern in listOf("yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd'T'HH:mm:ssX")) {
-        val parser = SimpleDateFormat(pattern, Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-        runCatching { parser.parse(text) }.getOrNull()?.let { return it }
-    }
-    return null
-}
-
-private fun lightboxOffset(minutes: Int): String {
-    val sign = if (minutes < 0) "-" else "+"
-    val total = kotlin.math.abs(minutes)
-    return "UTC$sign${(total / 60).toString().padStart(2, '0')}:${(total % 60).toString().padStart(2, '0')}"
-}
-
-/**
- * `1:01:40`, with an hours arm. A clock without one reads a 61-minute recording
- * as `61:40` — the drift #883 B5 found between two copies of this that claimed
- * to be twins.
- */
-internal fun lightboxClock(seconds: Int): String {
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
-    val rest = seconds % 60
-    val padded = rest.toString().padStart(2, '0')
-    return if (hours > 0) {
-        "$hours:${minutes.toString().padStart(2, '0')}:$padded"
-    } else {
-        "$minutes:$padded"
-    }
-}
-
-/**
- * DECIMAL, not binary, and one decimal above a megabyte — the same rungs
- * `centraid_vault::page::format_byte_size` uses, because a member comparing
- * this with a file's size elsewhere should not be handed two numbers for one
- * amount.
- */
-private fun lightboxBytes(count: Long): String = when {
-    count < 1_000L -> if (count == 1L) "1 byte" else "$count bytes"
-    count < 1_000_000L -> "${count / 1_000L} KB"
-    count < 1_000_000_000L -> "${lightboxTenths(count, 1_000_000L)} MB"
-    else -> "${lightboxTenths(count, 1_000_000_000L)} GB"
-}
-
-/**
- * `count / unit` to one decimal, ROUNDED rather than truncated, so this and the
- * SwiftUI twin's `%.1f` print the same number for the same file.
- */
-private fun lightboxTenths(count: Long, unit: Long): String {
-    val tenth = (count * 10L + unit / 2L) / unit
-    return "${tenth / 10L}.${tenth % 10L}"
 }

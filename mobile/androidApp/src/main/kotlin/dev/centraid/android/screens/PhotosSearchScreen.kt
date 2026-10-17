@@ -60,6 +60,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidGeometry
 import dev.centraid.design.copy.PhotosCopy
+import dev.centraid.shared.kit.CappedCount
 import dev.centraid.shared.shell.BandPolicy
 
 /**
@@ -185,7 +186,7 @@ private fun TopHitRow(hit: SearchTopHit, onOpenShelf: (PhotoShelf) -> Unit) {
             .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
             .clickable { onOpenShelf(shelf) }
             .semantics(mergeDescendants = true) {
-                contentDescription = "Open ${hit.label}, $sub"
+                contentDescription = PhotosCopy.PHOTOS_OPEN_ITEM_SUB.replace("{label}", hit.label).replace("{sub}", sub)
                 role = Role.Button
             },
         verticalAlignment = Alignment.CenterVertically,
@@ -206,14 +207,13 @@ private fun TopHitRow(hit: SearchTopHit, onOpenShelf: (PhotoShelf) -> Unit) {
  */
 private fun topHitSub(hit: SearchTopHit): String {
     val kind = when (hit.kind) {
-        SearchMatch.Kind.KIND_PLACE -> "Place"
-        SearchMatch.Kind.KIND_ALBUM -> "Album"
+        SearchMatch.Kind.KIND_PLACE -> PhotosCopy.PHOTOS_PLACE
+        SearchMatch.Kind.KIND_ALBUM -> PhotosCopy.PHOTOS_ALBUM
         else -> ""
     }
     val count = hit.photo_count
     if (count == 0) return kind
-    val noun = if (count == 1) PhotosCopy.TILE_COUNT_ONE else PhotosCopy.TILE_COUNT_MANY
-    val phrase = if (hit.photo_count_capped) "at least $count $noun" else "$count $noun"
+    val phrase = CappedCount.spoken(count.toLong(), hit.photo_count_capped, PhotosCopy.TILE_COUNT_ONE, PhotosCopy.TILE_COUNT_MANY)
     return if (kind.isEmpty()) phrase else "$kind · $phrase"
 }
 
@@ -265,7 +265,7 @@ private fun RestingPanel(resting: SearchResting, onOpenShelf: (PhotoShelf) -> Un
             color = centraidColor("textSoft"),
         )
         if (resting.places.isNotEmpty()) {
-            RestingSection("Places") {
+            RestingSection(PhotosCopy.PHOTOS_PLACES) {
                 resting.places.forEach { place ->
                     RestingDoor(place.place_name, "place") { onOpenShelf(PhotoShelf(place = place)) }
                 }
@@ -275,14 +275,14 @@ private fun RestingPanel(resting: SearchResting, onOpenShelf: (PhotoShelf) -> Un
             // WORDS, NOT DOORS: a label has no shelf of its own, so it is
             // offered as something to type rather than drawn as a control that
             // would open nothing.
-            RestingSection("Labels") {
+            RestingSection(PhotosCopy.PHOTOS_LABELS) {
                 Text(
                     text = resting.suggested_labels.joinToString(" · ") { it.label },
                     style = centraidType("body"),
                     color = centraidColor("text"),
                     modifier = Modifier.semantics {
-                        contentDescription = "Labels to search: " +
-                            resting.suggested_labels.joinToString(", ") { it.label }
+                        contentDescription = PhotosCopy.PHOTOS_SEARCH_LABELS_SPOKEN
+                            .replace("{labels}", resting.suggested_labels.joinToString(", ") { it.label })
                     },
                 )
             }
@@ -313,7 +313,7 @@ private fun RestingDoor(label: String, iconKey: String, onOpen: () -> Unit) {
             .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
             .clickable(onClick = onOpen)
             .semantics(mergeDescendants = true) {
-                contentDescription = "Open $label"
+                contentDescription = PhotosCopy.PHOTOS_OPEN_ITEM.replace("{label}", label)
                 role = Role.Button
             },
         verticalAlignment = Alignment.CenterVertically,
@@ -366,13 +366,13 @@ private fun reason(matches: List<SearchMatch>): String {
     // itself and quietly omits the rest.
     val rest = matches.filterNot { it.kind in order }.map { it.value_ }
     val all = parts + if (rest.isEmpty()) emptyList() else listOf(rest.joinToString(", "))
-    return if (all.isEmpty()) "" else "Matched " + all.joinToString(" \u2014 ")
+    return if (all.isEmpty()) "" else PhotosCopy.PHOTOS_SEARCH_MATCHED.replace("{matches}", all.joinToString(" \u2014 "))
 }
 
 private fun noun(kind: SearchMatch.Kind): String = when (kind) {
-    SearchMatch.Kind.KIND_PLACE -> "Places"
-    SearchMatch.Kind.KIND_ALBUM -> "Albums"
-    SearchMatch.Kind.KIND_LABEL -> "Labels"
-    SearchMatch.Kind.KIND_TITLE -> "Captions"
+    SearchMatch.Kind.KIND_PLACE -> PhotosCopy.PHOTOS_PLACES
+    SearchMatch.Kind.KIND_ALBUM -> PhotosCopy.PHOTOS_ALBUMS
+    SearchMatch.Kind.KIND_LABEL -> PhotosCopy.PHOTOS_LABELS
+    SearchMatch.Kind.KIND_TITLE -> PhotosCopy.PHOTOS_CAPTIONS
     SearchMatch.Kind.KIND_UNSPECIFIED -> ""
 }

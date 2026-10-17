@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // THE THREE PAGES THAT MANAGE WHAT MONEY KNOWS (#1099): accounts, rules, categories.
 //

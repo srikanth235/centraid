@@ -208,7 +208,7 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-account-add") { onEvent(MoneyAccountsEvent(add = MoneyAccountsEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty().ifEmpty { refusal(state.write) },
+        status = state.status?.sentence.orEmpty().ifEmpty { state.write?.refusal.orEmpty() },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -347,7 +347,7 @@ internal fun MoneyRulesScreen(state: MoneyRulesState, onEvent: (MoneyRulesEvent)
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-rule-add") { onEvent(MoneyRulesEvent(add = MoneyRulesEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty().ifEmpty { refusal(state.write) },
+        status = state.status?.sentence.orEmpty().ifEmpty { state.write?.refusal.orEmpty() },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -513,7 +513,7 @@ internal fun MoneyCategoriesScreen(state: MoneyCategoriesState, onEvent: (MoneyC
         trailing = data?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-category-add") { onEvent(MoneyCategoriesEvent(add = MoneyCategoriesEvent.AddTapped())) }
         },
-        status = state.status?.sentence.orEmpty().ifEmpty { refusal(state.write) },
+        status = state.status?.sentence.orEmpty().ifEmpty { state.write?.refusal.orEmpty() },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),

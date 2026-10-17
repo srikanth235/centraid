@@ -14,7 +14,6 @@ import centraid.screen.v1.NotesLinkPickerState
 import centraid.screen.v1.NotesNotebooksEvent
 import centraid.screen.v1.NotesNotebooksState
 import centraid.screen.v1.SearchField
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.AppPlace
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.CentraidSearchField
@@ -57,7 +56,7 @@ public fun NotesNotebooksScreen(
                 onEvent(NotesNotebooksEvent(create_opened = NotesNotebooksEvent.CreateOpened()))
             }
         },
-        status = if (write?.phase == WriteState.Phase.PHASE_REFUSED && !state.creating) write.failure?.sentence.orEmpty() else "",
+        status = if (state.creating) "" else write?.refusal.orEmpty(),
         band = { NotesBandView(state.band, { key -> onEvent(NotesNotebooksEvent(band = NotesNotebooksEvent.BandPicked(key))) }, onHome) },
     ) {
         ReadStateView(
@@ -85,7 +84,7 @@ public fun NotesNotebooksScreen(
         SheetRoom(
             title = chrome.new_notebook,
             onDismiss = { onEvent(NotesNotebooksEvent(create_dismissed = NotesNotebooksEvent.CreateDismissed())) },
-            status = if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "",
+            status = write?.refusal.orEmpty(),
             primary = SheetPrimary(chrome.create, testTag = "notes-notebook-create", enabled = state.create_enabled) {
                 onEvent(NotesNotebooksEvent(create_confirmed = NotesNotebooksEvent.CreateConfirmed()))
             },
@@ -233,7 +232,7 @@ public fun NotesHistoryScreen(
         title = chrome?.title.orEmpty(),
         parentTitle = parentTitle,
         onBack = onBack,
-        status = if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "",
+        status = write?.refusal.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, state.data_, state.denied),

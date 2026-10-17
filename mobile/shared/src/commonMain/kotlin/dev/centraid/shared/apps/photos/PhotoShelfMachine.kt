@@ -9,6 +9,7 @@ import centraid.screen.v1.PhotosGridData
 import centraid.screen.v1.SeatState
 import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -42,7 +43,7 @@ import dev.centraid.shared.screen.Step
  * an empty place read copy of two different qualities. Two shells, one table.
  */
 public object PhotoShelfMachine : ScreenMachine<PhotoShelfState, PhotoShelfEvent> {
-    public const val SCREEN_ID: String = "photos.shelf"
+    public const val SCREEN_ID: String = ScreenIds.PHOTOS_SHELF
 
     override fun initial(): PhotoShelfState = PhotoShelfState(
         loading = Loading(first_load = true),

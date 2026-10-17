@@ -58,7 +58,7 @@ public fun PhotoPickerScreen(
             // it rode in with `Opened` off the route. A head that waited a
             // round trip would paint under the previous screen's title.
             Text(
-                text = "Add to “${state.collection_name}”",
+                text = PhotosCopy.PHOTOS_PICKER_TITLE.replace("{name}", state.collection_name),
                 style = centraidType("bodyStrong"),
                 color = centraidColor("text"),
             )
@@ -75,7 +75,11 @@ public fun PhotoPickerScreen(
         // so it is drawn disabled rather than absent: a control that appears
         // when a member picks is a control that moves under their thumb.
         InkButton(
-            label = if (state.picked_asset_ids.isEmpty()) "Add" else "Add ${state.picked_asset_ids.size}",
+            label = if (state.picked_asset_ids.isEmpty()) {
+                PhotosCopy.PHOTOS_ADD
+            } else {
+                PhotosCopy.PHOTOS_ADD_COUNT.replace("{count}", "${state.picked_asset_ids.size}")
+            },
             testTag = "picker-add",
             enabled = state.picked_asset_ids.isNotEmpty(),
             onPress = {

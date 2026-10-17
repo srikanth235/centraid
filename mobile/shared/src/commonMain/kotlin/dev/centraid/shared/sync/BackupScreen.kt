@@ -172,9 +172,25 @@ public object BackupScreenMachine {
                 notice = model.notice,
                 background_notice = model.backgroundNotice,
                 phase = model.phase,
-            ).withKey(model.key),
+            ).withKey(model.key).withInk(),
         )
     }
+
+    /**
+     * THE PAGE'S ONE INK BUTTON (DESIGN.md: at most one per view), decided once
+     * for both shells. The recovery key's warning is the page's first concern,
+     * then adding a backup device, then "Back up now"; every other button
+     * these labels draw is the Outline button.
+     */
+    internal fun BackupScreenState.withInk(): BackupScreenState = copy(
+        ink_action = when {
+            key_warning && key_show_label.isNotEmpty() -> BackupScreenState.InkAction.INK_ACTION_SHOW_KEY
+            destinations.isEmpty() && add_destination_label.isNotEmpty() ->
+                BackupScreenState.InkAction.INK_ACTION_ADD_DESTINATION
+            back_up_now_label.isNotEmpty() -> BackupScreenState.InkAction.INK_ACTION_BACK_UP_NOW
+            else -> BackupScreenState.InkAction.INK_ACTION_NONE
+        },
+    )
 
     /**
      * THE RECOVERY KEY'S SECTION (R-ONBOARD-10). Synchronised: the platform's

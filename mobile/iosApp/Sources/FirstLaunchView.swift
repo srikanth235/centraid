@@ -1,5 +1,7 @@
 import SwiftUI
 
+import CentraidShared
+
 /// THE FIRST-LAUNCH GATE: what a device that holds no vault opens onto, in
 /// place of Home.
 ///
@@ -54,7 +56,7 @@ struct FirstLaunchView: View {
                 // SKIP LEAVES ON THE LAST PAGE, which has nowhere further to
                 // skip to; its place is kept so the header never reflows.
                 if page < Self.last {
-                    KitLink(label: ShellWords.firstLaunchSkip, identifier: "first-launch-skip") {
+                    KitLink(label: HomeWords.shared.FIRST_LAUNCH_SKIP, identifier: "first-launch-skip") {
                         page = Self.last
                     }
                 } else {
@@ -68,12 +70,12 @@ struct FirstLaunchView: View {
             Spacer(minLength: 0)
 
             ZStack {
-                slip(0, title: ShellWords.firstLaunchHouseTitle,
-                     sentence: ShellWords.firstLaunchHouseBody, id: "house") { HouseScene() }
-                slip(1, title: ShellWords.firstLaunchAssistantTitle,
-                     sentence: ShellWords.firstLaunchAssistantBody, id: "assistant") { AssistantScene() }
-                slip(2, title: ShellWords.firstLaunchBackupTitle,
-                     sentence: ShellWords.firstLaunchBackupBody, id: "backup") { CopyScene() }
+                slip(0, title: HomeWords.shared.FIRST_LAUNCH_HOUSE_TITLE,
+                     sentence: HomeWords.shared.FIRST_LAUNCH_HOUSE_BODY, id: "house") { HouseScene() }
+                slip(1, title: HomeWords.shared.FIRST_LAUNCH_ASSISTANT_TITLE,
+                     sentence: HomeWords.shared.FIRST_LAUNCH_ASSISTANT_BODY, id: "assistant") { AssistantScene() }
+                slip(2, title: HomeWords.shared.FIRST_LAUNCH_BACKUP_TITLE,
+                     sentence: HomeWords.shared.FIRST_LAUNCH_BACKUP_BODY, id: "backup") { CopyScene() }
             }
             .frame(maxWidth: 300)
             .frame(height: Self.slipHeight)
@@ -91,9 +93,9 @@ struct FirstLaunchView: View {
             // a quiet link for the way back. One ink element per view, so
             // "Next" and "Make a vault" are the same button changing its verb.
             WordsControls(
-                primary: page < Self.last ? ShellWords.firstLaunchNext : ShellWords.firstLaunchMake,
+                primary: page < Self.last ? HomeWords.shared.FIRST_LAUNCH_NEXT : HomeWords.shared.FIRST_LAUNCH_MAKE,
                 primaryEnabled: true,
-                secondary: ShellWords.firstLaunchRestore,
+                secondary: HomeWords.shared.FIRST_LAUNCH_RESTORE,
                 prefix: "first-launch",
                 onPrimary: {
                     if page < Self.last { page += 1 } else { shell.makeVault() }

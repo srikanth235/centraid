@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // THE ROOMS (K5; DESIGN.md "The seven rooms (mobile)").
 //

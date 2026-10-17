@@ -30,7 +30,6 @@ import centraid.screen.v1.AgendaDraft
 import centraid.screen.v1.AgendaEditorData
 import centraid.screen.v1.AgendaEditorEvent
 import centraid.screen.v1.AgendaEditorState
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.ChoiceFieldRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
@@ -86,7 +85,7 @@ internal fun AgendaEditorScreen(
             return@EditorRoom
         }
         val write = state.write
-        StatusLine(if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "")
+        StatusLine(write?.refusal.orEmpty())
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
             onRetry = { onEvent(AgendaEditorEvent(refreshed = AgendaEditorEvent.Refreshed())) },

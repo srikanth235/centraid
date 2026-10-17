@@ -103,7 +103,7 @@ private struct NotesCreateNotebookSheet: View {
         let chrome = state.chrome
         SheetRoom(
             title: chrome.newNotebook,
-            status: state.write.hasFailure ? state.write.failure.sentence : "",
+            status: state.write.refusal,
             primary: SheetPrimary(label: chrome.create) {
                 guard state.createEnabled else { return }
                 send(NotesEvents.notebooks { $0.createConfirmed = .init() })
@@ -314,8 +314,8 @@ struct NotesHistoryView: View {
             EmptyView()
         } content: {
             VStack(spacing: 0) {
-                if state.write.hasFailure {
-                    PeopleStatusLine(text: state.write.failure.sentence)
+                if !state.write.refusal.isEmpty {
+                    PeopleStatusLine(text: state.write.refusal)
                 }
                 ReadStateView(
                     content: content,

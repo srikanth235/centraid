@@ -112,8 +112,12 @@ pub const MAX_CONTENT_URLS: usize = 100;
 /// test `a_table_no_screen_pages_is_refused_and_one_a_screen_pages_still_answers`
 /// is where that is read.
 ///
-/// What this does not cover: the query's `where` is predicate text and may
-/// name a subquery on another table. That is a separate door to close.
+/// The `where` is held to the same list: it is predicate text and could name
+/// a subquery on any table, so the vault prepares it under an authorizer that
+/// refuses a read outside these twenty
+/// ([`Vault::keyset_page_reading_only`]). The vault's test
+/// `a_predicate_that_reads_a_table_outside_the_list_is_refused` is where that
+/// is read: the predicates it tries are SQL, which lives in that crate.
 pub const PAGE_TABLES: [&str; 20] = [
     "core_account",
     "core_collection",
@@ -197,30 +201,33 @@ pub fn page(vault: &Vault, request: &wire::PageRequest) -> Result<wire::Page> {
     // here would be `crates/core` knowing the query language, which the
     // `sql-confinement` rule catches — and it is right to: the statement's
     // shape is this crate's business and its syntax is the vault's.
-    let answer = vault.keyset_page(&KeysetPage {
-        name: query.name.clone(),
-        select: query.select.clone(),
-        from: query.from.clone(),
-        predicate: query.r#where.clone(),
-        binds: query
-            .bind
-            .iter()
-            .map(value_from_wire)
-            .collect::<Result<Vec<_>>>()?,
-        sort_column: order.sort_column.clone(),
-        pk_column: order.pk_column.clone(),
-        descending: order.descending,
-        // Required and validated by the vault, not defaulted here: proto3
-        // cannot say "required", so the validation is the contract.
-        limit: i64::from(request.limit),
-        after: request
-            .after
-            .as_ref()
-            .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
-        held_thumbnail: query.with_held_thumbnail,
-        note_body: query.with_note_body,
-        document_size: query.with_document_size,
-    })?;
+    let answer = vault.keyset_page_reading_only(
+        &KeysetPage {
+            name: query.name.clone(),
+            select: query.select.clone(),
+            from: query.from.clone(),
+            predicate: query.r#where.clone(),
+            binds: query
+                .bind
+                .iter()
+                .map(value_from_wire)
+                .collect::<Result<Vec<_>>>()?,
+            sort_column: order.sort_column.clone(),
+            pk_column: order.pk_column.clone(),
+            descending: order.descending,
+            // Required and validated by the vault, not defaulted here: proto3
+            // cannot say "required", so the validation is the contract.
+            limit: i64::from(request.limit),
+            after: request
+                .after
+                .as_ref()
+                .map(|cursor| (cursor.sort_key.clone(), cursor.pk.clone())),
+            held_thumbnail: query.with_held_thumbnail,
+            note_body: query.with_note_body,
+            document_size: query.with_document_size,
+        },
+        &PAGE_TABLES,
+    )?;
 
     Ok(wire::Page {
         rows: answer

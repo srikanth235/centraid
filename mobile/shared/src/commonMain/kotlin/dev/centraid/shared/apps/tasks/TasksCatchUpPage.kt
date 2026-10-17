@@ -21,6 +21,7 @@ import centraid.screen.v1.TasksCatchUpState
 import centraid.screen.v1.TasksPile
 import dev.centraid.design.copy.TasksCopy
 import dev.centraid.shared.kit.WriteLaw
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.platform.DeviceClock
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
@@ -57,7 +58,7 @@ public sealed interface TasksCatchUpInput {
  * the rule too, so a pile never shows a series that is merely repeating.
  */
 public object TasksCatchUpMachine : ScreenMachine<TasksCatchUpPage, TasksCatchUpInput> {
-    public const val SCREEN_ID: String = "tasks.catch_up"
+    public const val SCREEN_ID: String = ScreenIds.TASKS_CATCH_UP
 
     public val TABLES: Set<String> = TasksHomeMachine.TABLES
 

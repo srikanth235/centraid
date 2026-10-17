@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// ADD OR EDIT AN ITEM (#1047, R-1047-L5): AN EXPLICIT SAVE, NOT AUTOSAVE —
 /// a secret saved on a pause mid-typing would be a wrong secret. Cancel with
@@ -195,9 +193,9 @@ struct LockerWriteLine: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if write.phase == .refused, write.hasFailure {
+        if !write.refusal.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
-                Text(write.failure.sentence)
+                Text(write.refusal)
                     .centraidType("small")
                     .foregroundStyle(Theme.color("net", scheme))
                 if !write.failure.remedy.isEmpty {

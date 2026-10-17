@@ -65,7 +65,6 @@ import centraid.screen.v1.DocsSheet
 import centraid.screen.v1.DocsStage
 import centraid.screen.v1.SectionHead
 import centraid.screen.v1.StatusChip
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
@@ -116,9 +115,6 @@ import java.io.File
  * intents (`FolderPicked`, `DocumentPicked`, `AddRequested`, `TrashOpened`,
  * `EditRequested`) into pushes and OS calls.
  */
-
-private fun refusal(write: WriteState?): String =
-    if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else ""
 
 // ---------------------------------------------------------------------------
 // The sheets both pages share
@@ -343,7 +339,7 @@ internal fun DocsDriveScreen(
             parentTitle = chrome?.back.orEmpty(),
             onBack = onBack,
             trailing = add,
-            status = refusal(state.write),
+            status = state.write?.refusal.orEmpty(),
             statusLine = adding,
             content = body,
         )
@@ -355,7 +351,7 @@ internal fun DocsDriveScreen(
             trailing = add,
             search = search,
             chips = chips,
-            status = refusal(state.write),
+            status = state.write?.refusal.orEmpty(),
             statusLine = adding,
             band = {
                 // MORE IS ONE OF THE MACHINE'S TABS (R-CHROME-4), drawn as a
@@ -626,7 +622,7 @@ internal fun DocsDocumentScreen(
         } else {
             null
         },
-        status = refusal(state.write),
+        status = state.write?.refusal.orEmpty(),
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),

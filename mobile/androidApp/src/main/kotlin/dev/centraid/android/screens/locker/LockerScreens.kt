@@ -74,7 +74,6 @@ import centraid.screen.v1.LockerItemState
 import centraid.screen.v1.LockerLockState
 import centraid.screen.v1.LockerRow
 import centraid.screen.v1.SectionHead
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppMark
@@ -109,6 +108,7 @@ import dev.centraid.android.kit.screenContentOf
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.android.theme.LocalCentraidTokens
+import dev.centraid.shared.apps.locker.LockerItemMachine
 
 // Locker's Compose views (#1047, D-5). THEY DECIDE NOTHING: every word, mask,
 // verb, chip and empty state is the shared machines' (`apps/locker/*`); a view
@@ -591,7 +591,7 @@ internal fun LockerItemScreen(
         trailing = chrome?.edit_label?.takeIf { it.isNotEmpty() && data?.gone == null }?.let { label ->
             RoomAction("Pencil", label, "locker-edit") { onEvent(LockerItemEvent(edit = LockerItemEvent.EditTapped())) }
         },
-        status = refusal(state.write),
+        status = state.write?.refusal.orEmpty(),
         statusLine = { StatusLine(state.status) { onEvent(LockerItemEvent(status_acted = LockerItemEvent.StatusActed())) } },
     ) {
         ReadStateView(
@@ -629,7 +629,7 @@ internal fun LockerItemScreen(
                     item(key = "sec-$index") { if (section.title.isNotEmpty()) SectionHeader(SectionHead(title = section.title)) }
                     items(section.rows, key = { "f-$index-" + it.key }) { row ->
                         LockerFieldView(row) { verb ->
-                            if (verb == "open") {
+                            if (verb == LockerItemMachine.VERB_OPEN) {
                                 onOpen(row.value_)
                             } else {
                                 onEvent(LockerItemEvent(verb = LockerItemEvent.VerbTapped(key = row.key, verb = verb)))
@@ -919,7 +919,7 @@ internal fun LockerEditorScreen(state: LockerEditorState, onEvent: (LockerEditor
         } else {
             null
         },
-        status = refusal(state.write).ifEmpty { data?.blocked.orEmpty() },
+        status = state.write?.refusal.orEmpty().ifEmpty { data?.blocked.orEmpty() },
     ) {
         ReadStateView(
             content = screenContentOf(state.loading, state.failure, data, state.denied),
@@ -1127,7 +1127,3 @@ private fun LockerTextField(
         }
     }
 }
-
-/** A refused write's sentence, for the page's status line. */
-internal fun refusal(write: WriteState?): String =
-    if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else ""

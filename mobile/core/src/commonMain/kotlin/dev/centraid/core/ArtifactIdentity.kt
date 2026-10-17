@@ -2,7 +2,7 @@ package dev.centraid.core
 
 /**
  * The three facts a prebuilt core carries, and the refusal that reads them
- * (#1020 Artifacts, D-1020-G2; `crates/centraid/src/identity.rs`).
+ * (#1020 Artifacts, D-1020-G2; `crates/core/src/identity.rs`).
  *
  * The mobile shell links an AAR or an XCFramework and compiles no Rust, so it
  * cannot tell by construction that the core it loaded is the one its own build
@@ -53,14 +53,15 @@ public sealed interface IdentityVerdict {
 
 /**
  * The stale-artifact refusal, ported clause for clause from
- * `crates/centraid/src/identity.rs`'s `require_digest`.
+ * `crates/core/src/identity.rs`'s `require_digest`.
  *
  * A PORT AND NOT A CALL: this runs before the first `call` completes — on iOS
  * before the framework has said anything — so it cannot be a round trip to the
  * thing it is deciding whether to trust. `RequireDigestMatchesRustSpec` in
- * `jvmTest` walks the same four cases the Rust unit tests walk, and the two
- * bodies are compared by a reader rather than by a machine, which the receipt
- * records as a risk.
+ * `jvmTest` walks the same four cases the Rust unit tests walk and reads
+ * `identity.rs` to assert it still carries the `dev` marker, the three
+ * sentences and the order of the checks this body takes, so a change to one
+ * body that is not made to the other is red in whichever language moved.
  */
 public fun requireDigest(expected: String, reported: ArtifactIdentity): IdentityVerdict = when {
     expected.isBlank() -> IdentityVerdict.Stale(

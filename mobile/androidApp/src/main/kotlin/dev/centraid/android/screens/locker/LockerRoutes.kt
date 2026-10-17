@@ -41,10 +41,12 @@ import dev.centraid.shared.apps.locker.LockerEditorBridge
 import dev.centraid.shared.apps.locker.LockerExportBridge
 import dev.centraid.shared.apps.locker.LockerGeneratorBridge
 import dev.centraid.shared.apps.locker.LockerHomeBridge
+import dev.centraid.shared.apps.locker.LockerHomeMachine
 import dev.centraid.shared.apps.locker.LockerImportBridge
 import dev.centraid.shared.apps.locker.LockerItemBridge
 import dev.centraid.shared.apps.locker.LockerLockBridge
 import dev.centraid.shared.apps.locker.LockerTrashBridge
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.HomeSession
@@ -170,7 +172,7 @@ public class LockerRoutes(
         else -> false
     }
 
-    override fun opens(moveId: String): Destination? = if (moveId == "locker") {
+    override fun opens(moveId: String): Destination? = if (moveId == AppIds.LOCKER) {
         home.open()
         Destination.LockerHome()
     } else {
@@ -370,11 +372,11 @@ public class LockerRoutes(
                     event.add != null -> push(nav, Destination.LockerEditor()) { editor.openAdd() }
                     event.item != null -> push(nav, Destination.LockerItem(event.item!!.item_id, parent = here))
                     event.more != null -> when (event.more!!.key) {
-                        "import" -> push(nav, Destination.LockerImport)
-                        "export" -> push(nav, Destination.LockerExport)
-                        "access" -> push(nav, Destination.LockerAccess)
-                        "trash" -> push(nav, Destination.LockerTrash)
-                        "lock" -> lock.forward(LockerLockEvent(lock = LockerLockEvent.LockTapped()))
+                        LockerHomeMachine.MORE_IMPORT -> push(nav, Destination.LockerImport)
+                        LockerHomeMachine.MORE_EXPORT -> push(nav, Destination.LockerExport)
+                        LockerHomeMachine.MORE_ACCESS -> push(nav, Destination.LockerAccess)
+                        LockerHomeMachine.MORE_TRASH -> push(nav, Destination.LockerTrash)
+                        LockerHomeMachine.MORE_LOCK -> lock.forward(LockerLockEvent(lock = LockerLockEvent.LockTapped()))
                         else -> Unit
                     }
                 }

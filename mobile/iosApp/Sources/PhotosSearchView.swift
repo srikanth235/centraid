@@ -2,9 +2,7 @@ import Foundation
 import SwiftProtobuf
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 import UIKit
 
 /// SEARCH, IN SWIFTUI (#1029, the photos port).
@@ -126,7 +124,7 @@ private struct TopHitRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Open \(hit.label), \(sub)")
+        .accessibilityLabel(copyFill(copyFill(PhotosCopy.shared.PHOTOS_OPEN_ITEM_SUB, "label", hit.label), "sub", sub))
         .accessibilityAddTraits(.isButton)
     }
 }
@@ -155,7 +153,7 @@ private struct RestingView: View {
                 .centraidType("small")
                 .foregroundStyle(Theme.color("textSoft", scheme))
             if !resting.places.isEmpty {
-                RestingSection(title: "Places") {
+                RestingSection(title: PhotosCopy.shared.PHOTOS_PLACES) {
                     ForEach(resting.places, id: \.placeID) { place in
                         RestingDoor(label: place.placeName, iconKey: "place") {
                             onOpenShelf(PhotosSearchStateView.placeShelf(place))
@@ -167,12 +165,12 @@ private struct RestingView: View {
                 // WORDS, NOT DOORS: a label has no shelf of its own, so it is
                 // offered as something to type rather than drawn as a control
                 // that would open nothing.
-                RestingSection(title: "Labels") {
+                RestingSection(title: PhotosCopy.shared.PHOTOS_LABELS) {
                     let words = resting.suggestedLabels.map(\.label)
                     Text(words.joined(separator: " \u{00B7} "))
                         .centraidType("body")
                         .foregroundStyle(Theme.color("text", scheme))
-                        .accessibilityLabel("Labels to search: \(words.joined(separator: ", "))")
+                        .accessibilityLabel(copyFill(PhotosCopy.shared.PHOTOS_SEARCH_LABELS_SPOKEN, "labels", words.joined(separator: ", ")))
                 }
             }
         }
@@ -223,7 +221,7 @@ private struct RestingDoor: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open \(label)")
+        .accessibilityLabel(copyFill(PhotosCopy.shared.PHOTOS_OPEN_ITEM, "label", label))
     }
 }
 
@@ -335,13 +333,13 @@ struct PhotosSearchStateView {
         let known = Set(order)
         let rest = matches.filter { !known.contains($0.kind) }.map(\.value)
         let all = parts + (rest.isEmpty ? [] : [rest.joined(separator: ", ")])
-        return all.isEmpty ? "" : "Matched " + all.joined(separator: " \u{2014} ")
+        return all.isEmpty ? "" : copyFill(PhotosCopy.shared.PHOTOS_SEARCH_MATCHED, "matches", all.joined(separator: " \u{2014} "))
     }
 
     /// What a search reaches, true of every vault. `PhotosSearchScreen.kt`
     /// says the same.
     static let restingNote =
-        PhotosWords.photosSearchHint
+        PhotosCopy.shared.PHOTOS_SEARCH_HINT
 
 
     /// "Place · 12 photos", or "Album · at least 500 photos". A zero
@@ -349,14 +347,18 @@ struct PhotosSearchStateView {
     static func topHitSub(_ hit: Centraid_Screen_V1_SearchTopHit) -> String {
         let kind: String
         switch hit.kind {
-        case .place: kind = "Place"
-        case .album: kind = "Album"
+        case .place: kind = PhotosCopy.shared.PHOTOS_PLACE
+        case .album: kind = PhotosCopy.shared.PHOTOS_ALBUM
         case .label, .title, .unspecified, .UNRECOGNIZED: kind = ""
         }
         let count = hit.photoCount
         guard count > 0 else { return kind }
-        let noun = count == 1 ? PhotosWords.tileCountOne : PhotosWords.tileCountMany
-        let phrase = hit.photoCountCapped ? "at least \(count) \(noun)" : "\(count) \(noun)"
+        let phrase = CappedCount.shared.spoken(
+            count: Int64(count),
+            capped: hit.photoCountCapped,
+            one: PhotosCopy.shared.TILE_COUNT_ONE,
+            many: PhotosCopy.shared.TILE_COUNT_MANY
+        )
         return kind.isEmpty ? phrase : "\(kind) \u{00B7} \(phrase)"
     }
 
@@ -377,10 +379,10 @@ struct PhotosSearchStateView {
 
     private static func noun(_ kind: Centraid_Screen_V1_SearchMatch.Kind) -> String {
         switch kind {
-        case .place: return "Places"
-        case .album: return "Albums"
-        case .label: return "Labels"
-        case .title: return "Captions"
+        case .place: return PhotosCopy.shared.PHOTOS_PLACES
+        case .album: return PhotosCopy.shared.PHOTOS_ALBUMS
+        case .label: return PhotosCopy.shared.PHOTOS_LABELS
+        case .title: return PhotosCopy.shared.PHOTOS_CAPTIONS
         case .unspecified, .UNRECOGNIZED: return ""
         }
     }

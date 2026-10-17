@@ -7,7 +7,7 @@
 //! only works if two questions have crisp answers: *is the artifact in the cache
 //! the one this tree would produce?* and *is the artifact a shell just loaded the
 //! one this tree produced?* The first is this key. The second is the identity
-//! stamp (`crates/centraid/src/identity.rs`), and they are deliberately
+//! stamp (`crates/core/src/identity.rs`), and they are deliberately
 //! different mechanisms: a cache key is computed from SOURCES before a build, an
 //! identity stamp is baked INTO the artifact during one.
 //!

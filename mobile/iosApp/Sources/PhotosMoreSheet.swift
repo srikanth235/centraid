@@ -1,5 +1,7 @@
 import SwiftUI
 
+import CentraidShared
+
 /// THE MORE SHEET, AND THE BACKUP DETAIL BEHIND IT.
 ///
 /// `more` is a sheet and never a destination — the band caps at five and the
@@ -34,15 +36,15 @@ struct PhotosMoreSheet: View {
         // over one row, and Photos has a dozen other surfaces — Places,
         // Memories, Duplicates, Trash, Archive, Favorites, Albums — every one of
         // them reached from Collections, so the claim was false as printed.
-        OptionSheet(title: PhotosWords.photosMoreTitle, status: PhotosWords.photosMoreFoot) {
-            SheetRow(iconKey: "Archive", label: PhotosWords.photosCameraRoll, identifier: "photos.more.cameraRoll") {
-                shell.send(screen: "photos.grid", event: state.sheetEvent(.backupDetail))
+        OptionSheet(title: PhotosCopy.shared.PHOTOS_MORE_TITLE, status: PhotosCopy.shared.PHOTOS_MORE_FOOT) {
+            SheetRow(iconKey: "Archive", label: PhotosCopy.shared.PHOTOS_CAMERA_ROLL, identifier: "photos.more.cameraRoll") {
+                shell.send(screen: PhotosScreens.grid, event: state.sheetEvent(.backupDetail))
             }
             // THE TILE SIZE, A CHOICE AND NOT A HEADER MENU (R-CHROME-3): only
             // where a size acts on something on screen, which the machine says.
             if state.chrome.tileSizeOffered {
                 SheetRow(iconKey: "Grid", label: state.chrome.tileSizeLabel, identifier: "photos.more.tileSize") {
-                    shell.send(screen: "photos.grid", event: state.sheetEvent(.tileSize))
+                    shell.send(screen: PhotosScreens.grid, event: state.sheetEvent(.tileSize))
                 }
             }
             // "FREE UP SPACE" — A STATEMENT, NOT A BUTTON (`KeepOriginals.kt`).
@@ -66,7 +68,7 @@ private struct FreeUpSpaceRow: View {
             CentraidIconView(iconKey: "Gauge", tint: Theme.color("text", scheme), size: 18)
                 .frame(width: 24, height: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text(PhotosWords.photosFreeUpTitle)
+                Text(PhotosCopy.shared.PHOTOS_FREE_UP_TITLE)
                     .centraidType("body")
                     .foregroundStyle(Theme.color("text", scheme))
                 Text(freeUp.meta)
@@ -80,7 +82,7 @@ private struct FreeUpSpaceRow: View {
                 // WHAT A PHOTO DELETED FOR GOOD COSTS THE BACKUP DEVICE
                 // (#1080 F5), said once, with the row it is true beside.
                 if freeUp.offered {
-                    Text(PhotosWords.photosFreeUpRetentionBody)
+                    Text(PhotosCopy.shared.PHOTOS_FREE_UP_RETENTION_BODY)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textFaint", scheme))
                 }
@@ -126,13 +128,13 @@ struct PhotosBackupDetailSheet: View {
 
     var body: some View {
         SheetRoom(
-            title: PhotosWords.photosCameraRoll,
+            title: PhotosCopy.shared.PHOTOS_CAMERA_ROLL,
             status: state.backupIsRunning
-                ? PhotosWords.photosImportRunning
-                : PhotosWords.photosImportAuto,
+                ? PhotosCopy.shared.PHOTOS_IMPORT_RUNNING
+                : PhotosCopy.shared.PHOTOS_IMPORT_AUTO,
             // AN IMPORT ALREADY RUNNING HAS NOTHING TO START, so the ink button is
             // drawn greyed, not hidden.
-            primary: SheetPrimary(label: PhotosWords.photosImportNow, enabled: !state.backupIsRunning) {
+            primary: SheetPrimary(label: PhotosCopy.shared.PHOTOS_IMPORT_NOW, enabled: !state.backupIsRunning) {
                 shell.backUpCameraRoll()
             }
         ) {

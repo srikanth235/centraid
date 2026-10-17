@@ -40,7 +40,7 @@ import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.ReaderException
 import com.google.zxing.common.HybridBinarizer
-import dev.centraid.shared.custody.CustodyCopy
+import dev.centraid.design.copy.WordsCopy
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import dev.centraid.android.kit.OutlineButton
@@ -75,7 +75,7 @@ internal fun PairScanner(
         Box(Modifier.fillMaxSize().background(Color.Black).testTag("pair-scanner")) {
             CameraPreview(onRead)
             OutlineButton(
-                label = CustodyCopy.CANCEL,
+                label = WordsCopy.CANCEL,
                 testTag = "pair-scan-close",
                 ink = "onAccent",
                 modifier = Modifier

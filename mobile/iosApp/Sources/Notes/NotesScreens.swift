@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// NOTES, REGISTERED (K5; #1029 app port). Its one line is in `AppRegistry.apps`.
 ///
@@ -19,15 +17,15 @@ import CentraidShared
 /// `departed()` — the machine's `Left`, which flushes unsaved words — and never
 /// `leave()`.
 enum NotesScreens: AppScreens {
-    static let appID = "notes"
-    /// `NotesEditorMachine.SCREEN_ID`.
-    static let editor = "notes.editor"
-    static let library = "notes.library"
-    static let notebooks = "notes.notebooks"
-    static let journal = "notes.journal"
-    static let history = "notes.history"
-    static let trash = "notes.trash"
-    static let linkTargets = "notes.link_targets"
+    static let appID = AppIds.shared.NOTES
+    /// The machines' `SCREEN_ID`s.
+    static let editor = NotesEditorMachine.shared.SCREEN_ID
+    static let library = NotesLibraryMachine.shared.SCREEN_ID
+    static let notebooks = NotesNotebooksMachine.shared.SCREEN_ID
+    static let journal = NotesJournalMachine.shared.SCREEN_ID
+    static let history = NotesHistoryMachine.shared.SCREEN_ID
+    static let trash = NotesTrashKt.NotesTrashMachine.screenId
+    static let linkTargets = NotesLinkPickerMachine.shared.SCREEN_ID
 
     private static let places: Set<String> = [library, notebooks, journal]
 
@@ -69,16 +67,11 @@ enum NotesScreens: AppScreens {
 
     /// A new note under an id minted on this phone — `NotesRouting.mintNoteId`.
     static func newNoteRoute() -> ShellModel.Route {
-        #if canImport(CentraidShared)
         return editorRoute(NotesRouting.shared.mintNoteId(), isNew: true)
-        #else
-        return editorRoute(UUID().uuidString.lowercased(), isNew: true)
-        #endif
     }
 
     @MainActor
     static func register(into shell: ShellModel) {
-        #if canImport(CentraidShared)
         shell.register(.of(editor, NotesBridge()))
         shell.register(.of(library, NotesLibraryBridge()))
         shell.register(.of(notebooks, NotesNotebooksBridge()))
@@ -86,7 +79,6 @@ enum NotesScreens: AppScreens {
         shell.register(.of(history, NotesHistoryBridge()))
         shell.register(.of(trash, NotesTrashBridge()))
         shell.register(.of(linkTargets, NotesLinkPickerBridge()))
-        #endif
 
         shell.route(
             editor,
@@ -187,7 +179,6 @@ enum NotesScreens: AppScreens {
     /// WHERE THE TILE LEADS: the shared `NotesRouting.target` — the tile's
     /// own note, a new note on an empty vault, nowhere while the read is out.
     static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? {
-        #if canImport(CentraidShared)
         guard let kotlinTile = HomeTile.companion.ADAPTER.decode(bytes: tile.encoded.kotlin) else { return nil }
         let target = NotesRouting.shared.target(tile: kotlinTile, mint: { NotesRouting.shared.mintNoteId() })
         if let existing = target as? NotesTargetExisting {
@@ -197,9 +188,6 @@ enum NotesScreens: AppScreens {
             return editorRoute(fresh.noteId, isNew: true)
         }
         return nil
-        #else
-        return nil
-        #endif
     }
 
     // MARK: - Intents
@@ -209,9 +197,9 @@ enum NotesScreens: AppScreens {
     private static func swapPlace(_ key: String, _ shell: ShellModel) {
         let route: ShellModel.Route
         switch key {
-        case "notes": route = libraryRoute()
-        case "notebooks": route = notebooksRoute
-        case "journal": route = journalRoute
+        case NotesBand.shared.NOTES: route = libraryRoute()
+        case NotesBand.shared.NOTEBOOKS: route = notebooksRoute
+        case NotesBand.shared.JOURNAL: route = journalRoute
         default: return
         }
         if case let .screen(current, _)? = shell.path.last, places.contains(current) {
@@ -232,7 +220,7 @@ enum NotesScreens: AppScreens {
             shell.path.append(newNoteRoute())
         case let .notePicked(picked):
             shell.path.append(editorRoute(picked.noteID))
-        case let .moreRow(row) where row.key == "trash":
+        case let .moreRow(row) where row.key == NotesLibraryMachine.shared.MORE_TRASH:
             shell.path.append(.screen(trash, Data()))
         default:
             break
@@ -308,7 +296,7 @@ enum NotesScreens: AppScreens {
     private static func closeEditor(_ shell: ShellModel?) {
         guard let shell, !shell.path.isEmpty else { return }
         let below = shell.path.dropLast().last
-        if case let .screen(id, _)? = below, id.hasPrefix("notes.") {
+        if case let .screen(id, _)? = below, id.hasPrefix(appID + ".") {
             shell.path.removeLast()
         } else {
             shell.path[shell.path.count - 1] = libraryRoute()

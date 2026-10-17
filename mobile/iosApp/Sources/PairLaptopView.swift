@@ -5,9 +5,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // PAIR WITH THE LAPTOP, DRAWN (#1047 E5) — `pair.laptop` over
 // `PairLaptopBridge`, opened from the More sheet's pairing row.

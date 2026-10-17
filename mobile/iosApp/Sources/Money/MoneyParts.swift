@@ -1,9 +1,7 @@
 import SwiftProtobuf
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // MONEY'S SHARED DRAWING PARTS (#1099).
 //
@@ -35,11 +33,6 @@ enum MoneyWords {
         parts.filter { !$0.isEmpty }.joined(separator: " \u{00B7} ")
     }
 
-    /// A write refusal's sentence, for a page's status host.
-    static func refusal(_ write: Centraid_Screen_V1_WriteState) -> String {
-        write.phase == .refused ? write.failure.sentence : ""
-    }
-
     /// The one status line a page hosts: the machine's own, else a refused write's sentence.
     static func line(
         _ status: Centraid_Screen_V1_StatusLine?,
@@ -48,7 +41,7 @@ enum MoneyWords {
         if let status, !status.sentence.isEmpty { return status }
         var line = Centraid_Screen_V1_StatusLine()
         if let write {
-            line.sentence = refusal(write)
+            line.sentence = write.refusal
             line.refused = true
         }
         return line
@@ -1304,12 +1297,13 @@ struct MoneyCountTiles: View {
     }
 
     private func tile(_ fact: Centraid_Screen_V1_MoneyFact) -> some View {
-        let owed = fact.detail != "0" && (fact.label == MoneyCopy.shared.COUNT_CHECK || fact.label == MoneyCopy.shared.COUNT_REJECTED)
-        let ink = fact.label == MoneyCopy.shared.COUNT_REJECTED ? "net" : "seam"
+        // THE STATE SAYS WHICH COUNTS ARE OWED A LOOK, and in what tone.
+        let ink = StatusChipView.ink(fact.tone, neutral: "text")
+        let owed = ink != "text"
         return VStack(alignment: .leading, spacing: 2) {
             Text(fact.detail)
                 .centraidType("display")
-                .foregroundStyle(Theme.color(owed ? ink : "text", scheme))
+                .foregroundStyle(Theme.color(ink, scheme))
             Text(fact.label)
                 .centraidType("body")
                 .foregroundStyle(Theme.color("textSoft", scheme))

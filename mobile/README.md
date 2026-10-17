@@ -7,7 +7,7 @@ mobile/
 ├── core/        the C ABI binding — JNA on JVM and Android, cinterop on iOS
 ├── shared/      the shell, the apps, the screen contract, navigation, sync
 ├── androidApp/  Compose. Gated on -Pcentraid.android=true + ANDROID_HOME
-├── iosApp/      SwiftUI + XcodeGen + SPM. Needs a macOS host
+├── iosApp/      SwiftUI + XcodeGen. Needs a macOS host
 └── maestro/     the Home device flow, and the iOS transfer experiment's protocol
 ```
 
@@ -144,23 +144,31 @@ cd mobile && ./gradlew -Pkotlin.native.enableKlibsCrossCompilation=true \
     -Pcentraid.iosSimulatorOnly=true \
     :shared:assembleCentraidSharedDebugXCFramework
 
-# 2. The generated Swift types. `buf.gen.yaml` is documentation-only
-#    (`plugins: []`), so this is protoc directly; the output is gitignored.
-protoc --proto_path=../../crates/api-proto/proto \
-    --swift_out=Sources/Generated --swift_opt=Visibility=Public \
-    $(find ../../crates/api-proto/proto -name '*.proto')
+# 2. The generated Swift types: NO COMMAND. They are built, not carried.
+#    `Sources/Generated` is protoc's output over `crates/api-proto/proto`
+#    (gitignored), written by `mobile/scripts/generate-swift-protos.sh`, which
+#    Xcode runs as the app target's PRE-BUILD phase and `xcodegen generate`
+#    runs first through `options.preGenCommand` (the target globs `Sources`, so
+#    the files must exist when the project is generated). The phase declares
+#    every `.proto` as an input and every `.pb.swift` as an output, so editing
+#    a `.proto` re-runs it on the next build and an untouched tree does not.
+#    It needs `protoc` and `protoc-gen-swift`, and stops the build naming the
+#    command when either is missing:
+brew install protobuf swift-protobuf
 
 # 3. The Xcode project. `project.yml` is the source; the `.xcodeproj` is NOT
 #    committed (mobile/.gitignore). Re-run it after
 #    ADDING a source file: the target globs a directory, and a new
-#    `Sources/**.swift` is invisible until the project is regenerated.
+#    `Sources/**.swift` is invisible until the project is regenerated. The same
+#    goes for ADDING a `.proto`: the phase's file lists (`iosApp/.generated/`,
+#    gitignored) are rewritten by this command.
 brew install xcodegen
 cd mobile/iosApp && export CENTRAID_IOS_DEPLOYMENT_TARGET=$(cat ../ios-deployment-target)
 xcodegen generate
 
 # 4. The tests — the other half of "one fixture, two languages", plus the
-#    icon silhouettes and the font registration. A SIMULATOR and not
-#    `swift test`: see the note below.
+#    icon silhouettes and the font registration. A SIMULATOR, and the only
+#    route: see the note below.
 cd mobile/iosApp && xcodebuild -project Centraid.xcodeproj -scheme Centraid \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
@@ -171,16 +179,17 @@ cd mobile/iosApp && xcodebuild -project Centraid.xcodeproj -scheme Centraid \
 | --- | --- | --- |
 | anything under `crates/` the core links — an `app_query` arm, a command, a proto | 0, then 1 | the framework links the Rust archive by path; a stale slice answers the old arm and nothing says so ([stale-core-slice](../docs/traps/stale-core-slice.md)) |
 | `mobile/shared/src/commonMain` (a machine, a bridge, copy) | 1 | Xcode links `XCFrameworks/debug/CentraidShared.xcframework`; check with `find shared/src/commonMain -newer shared/build/XCFrameworks/debug/CentraidShared.xcframework` |
-| `crates/api-proto/proto/**` (`screen.proto`, `app_query.proto`) | 2, and 1 for the Wire side | `Sources/Generated` is gitignored and only protoc writes it |
+| `crates/api-proto/proto/**` (`screen.proto`, `app_query.proto`) — an edited message | 1 for the Wire side; nothing for Swift | Xcode's pre-build phase regenerates `Sources/Generated` when a `.proto` is newer than its output |
+| a NEW `crates/api-proto/proto/**/*.proto` file | 3, and 1 for the Wire side | the phase's input and output lists are written by `xcodegen generate`; a proto the project does not list is a type Swift does not have |
 | a new `Sources/**.swift` file | 3 | the target globs a directory, and the project is generated |
 
 Building beside other work on one Mac: give each `xcodebuild` its own `-derivedDataPath`, and run one Gradle build at a time — two Kotlin/Native links contending for one daemon run out of memory rather than failing cleanly.
 
-**`swift test` IS NOT THE COMMAND, AND HAS NOT BEEN SINCE #1020.** This file said it was for a long time, with a green count beside it. `Package.swift` still argues for it at length — a macOS floor, a commented-out `binaryTarget`, Kotlin-touching declarations behind `#if canImport(CentraidShared)` — and every one of those pieces is real. What defeats it is simpler and newer: `Sources/` imports **UIKit**, which is not a macOS framework and cannot be guarded into existence. `ShellModel.swift` took the first one in `a4dd49d0d` and `ContentImage.swift` the second in `b3832bb6e`, both #1020 waves, and the host build has failed at dependency scanning ever since — so the three files under `Tests/` were not merely unrun, they were **uncompiled**, and the counts this file carried were from before those commits.
+**THERE IS NO `swift test`, AND NO SWIFTPM PACKAGE.** `Sources/` imports **UIKit**, which is not a macOS framework, so a host build cannot compile it, and `project.yml` hard-links the `CentraidShared` XCFramework, so a file that touches Kotlin types imports it unconditionally, with no `#if canImport(CentraidShared)` fallback behind it. SwiftProtobuf is a package dependency of the XcodeGen project (`project.yml`), resolved by Xcode.
 
-The simulator bundle is the route now, and it is the better one regardless: `FontRegistrationTests` asserts `UIFont(name:)` resolves, that `UIAppFonts` names every emitted file, and that the 400 register resolves to the derived 470 face rather than a plain 400 static — none of which means anything without a real app bundle, since the last one reads `familyName` and the CoreText weight trait back out of the registered bytes. It needed two fixes to exist at all — `GENERATE_INFOPLIST_FILE` on the test target, which had no `Info.plist` and so was refused before compiling, and `PRODUCT_MODULE_NAME: CentraidApp` on the app target, because `Tests/` says `@testable import CentraidApp` and XcodeGen names a module after its target. **26 tests, 0 failures.**
+The simulator bundle is the one route, and it is the right one: `FontRegistrationTests` asserts `UIFont(name:)` resolves, that `UIAppFonts` names every emitted file, and that the 400 register resolves to the derived 470 face rather than a plain 400 static — none of which means anything without a real app bundle, since the last one reads `familyName` and the CoreText weight trait back out of the registered bytes. The test target needs `GENERATE_INFOPLIST_FILE` (it has no `Info.plist`) and the app target `PRODUCT_MODULE_NAME: CentraidApp`, because `Tests/` says `@testable import CentraidApp` and XcodeGen names a module after its target.
 
-**What step 2 unblocked:** `mobile/iosApp/Sources/StateViews.swift` used to funnel every decoder through one `unwired()` `fatalError`. The SwiftProtobuf types are generated (`Sources/Generated`) and every decoder in that file is real (#1025 S5, lane L5): the three-state read law is a Swift `enum` with three cases per screen, and a decode that fails renders the screen's LOADING state rather than an empty one, because an empty `.data` case would be a screen claiming an empty vault before it had read one.
+**What the generated types unblocked:** `mobile/iosApp/Sources/StateViews.swift` used to funnel every decoder through one `unwired()` `fatalError`. The SwiftProtobuf types are generated (`Sources/Generated`) and every decoder in that file is real (#1025 S5, lane L5): the three-state read law is a Swift `enum` with three cases per screen, and a decode that fails renders the screen's LOADING state rather than an empty one, because an empty `.data` case would be a screen claiming an empty vault before it had read one.
 
 **What was deliberately unimplemented on iOS, and what became of each** (#1025 S5):
 
@@ -218,9 +227,10 @@ The simulator bundle is the route now, and it is the better one regardless: `Fon
 | `shared/src/commonMain/kotlin/dev/centraid/design/Catalog.kt` | `contracts/tools/export-native-catalog.ts`, called by the above | the same |
 | `iosApp/Design/{Theme,Catalog}.swift` | the same two | the same |
 | `design/native-{theme,catalog}.json` | the same two | the same |
-| `shared/src/commonMain/kotlin/dev/centraid/design/Copy.kt`, `copy/*.json` | **nothing — hand-maintained.** These files are the SOURCE, not an artifact; see the banner in `contracts/tools/export-native-theme.ts`. | none |
+| `dev.centraid.design.copy.<App>Copy` (under `shared/build/generated/copy`) | `:shared:generateCopy`, from `copy/<app>.json`, on every build | not checked in |
 | `contracts/screens/**/*.bin` | `contracts/tools/build-screen-fixtures.ts` | `git diff --exit-code contracts/screens` |
-| the Wire and SwiftProtobuf types | `crates/api-proto/proto` | `buf lint` / `buf breaking` |
+| the Wire types | `crates/api-proto/proto`, by Gradle's `generateCommonMainProtos` | `buf lint` / `buf breaking`; the task is a build input, so a stale tree is not possible |
+| `iosApp/Sources/Generated/**` (the SwiftProtobuf types) | `mobile/scripts/generate-swift-protos.sh`: Xcode's pre-build phase, and `xcodegen generate`'s `preGenCommand` | none needed: the phase re-runs when a `.proto` changes, and `Sources/Generated` is gitignored |
 
 One emitter, N committed artifacts, one lint that fails on drift. A hand-maintained Kotlin colour table would be a fourth lowering with no drift gate — and so would a hand-maintained app catalogue or icon set, which is why the emitter carries the catalogue and the silhouettes rather than eight app names and 139 silhouettes being typed into two languages.
 
@@ -245,7 +255,7 @@ dev/centraid/shared/
 └── platform/   the expect/actual seam, the device clock included
 ```
 
-The copy is `dev/centraid/design/copy/<App>Copy.kt`, one file per app, each the hand-maintained twin of `copy/<app>.json`; `KitTimeMoneyCopySpec` fails when a twin drifts. `design/Copy.kt`'s `CentraidCopy` is a forwarding shim for the old spelling and goes once nothing reads it.
+The copy is `copy/<app>.json`, one file per app; `:shared:generateCopy` turns each into `dev.centraid.design.copy.<App>Copy` at build time, so Swift (`PhotosCopy.shared.…`) and Compose read the same table and there is no twin to keep. Edit the JSON. `design/Copy.kt`'s `CentraidCopy` is a forwarding shim for the old spelling and goes once nothing reads it.
 
 Two Konsist rules make the shape load-bearing rather than decorative (`PerAppLayoutSpec`):
 
@@ -305,10 +315,10 @@ Money renders natively from `{minor, currency, exponent}`; `contracts/screens/mo
 
 ### Adding an app screen
 
-1. **Shared.** Append a `// --- <App> ---` section to `screen.proto` (messages prefixed with the app's name; state, data, event; every content oneof has loading, failure, the kit `Denied` and data). Write the machine, the reads (`ScreenQueries` or `ScreenReads`), the writes and a bridge in `apps/<app>/`; screen ids are `"<app>.<screen>"`. Append the app's block to `nav/Navigation.kt`, add the screen to `AppReadsSpec`, and put every word in `copy/<app>.json` and its `<App>Copy.kt` twin.
+1. **Shared.** Append a `// --- <App> ---` section to `screen.proto` (messages prefixed with the app's name; state, data, event; every content oneof has loading, failure, the kit `Denied` and data). Write the machine, the reads (`ScreenQueries` or `ScreenReads`), the writes and a bridge in `apps/<app>/`; screen ids are `"<app>.<screen>"`. Append the app's block to `nav/Navigation.kt`, add the screen to `AppReadsSpec`, and put every word in `copy/<app>.json` (a new file generates `<App>Copy` on the next build).
 2. **iOS.** One file, `Sources/<App>/<App>Screens.swift`, conforming to `AppScreens`: `register(into:)` hands the shell a `ScreenPort.of(id, bridge)` per bridge and a `shell.route(id, open:, view:)` per screen, and `tileRoute` says where the Home tile leads. Then **one line** in `AppRegistry.apps` (`Kit/ScreenRegistry.swift`). A view pushes with `shell.path.append(.screen(id, parameterBytes))`; an editor passes `onDeparted: { shell.departed(id) }`. The destination switch in `CentraidApp.swift` sends `Opened` with `.task(id: route)`, so a swap in place re-opens (`NavigationAndMountSpec`).
 3. **Android.** One file, `screens/<app>/<App>Routes.kt`, implementing `AppRoutes` (`handles`, `opens(moveId)`, `attach`, `back`, `Routes`), holding the app's bridges for the activity's life; `Routes` sends `Opened` from a `LaunchedEffect` keyed on the destination's parameters, collects `bridge.host.state` and passes `bridge::forward` as `onEvent`. Then **one line** in `MainActivity.routes`.
-4. **Intents are the shell's.** A machine emits `EventPicked`, `NotePicked`, `SendToTasks` and the like and changes nothing; the view forwards the event, then pushes the destination (and opens the target bridge) or hands the OS its `tel:`, `mailto:`, map or share intent.
+4. **Intents are the shell's to push, and the shared side's to decide.** A machine emits `EventPicked`, `NotePicked`, `SendToTasks` and the like and changes nothing; the view forwards the event, then pushes the destination (and opens the target bridge) or hands the OS its `tel:`, `mailto:`, map or share intent. WHICH page an intent opens is stated once in `commonMain`: a reference to one row is `nav/RowRoutes` (chat cards, Home's search and an import's "open", on both shells), and an app's own intents are its `<App>Routing` (Tasks' `TasksRouting` today) answering a `Destination` for Android and, through `ScreenOpenings`, a screen id plus its `Opened` event bytes for SwiftUI, which cannot hold a `Destination`. A Swift file never re-types a `SCREEN_ID`, a More row's key or an app's catalogue id: it reads the machine's constant (`TasksHomeMachine.shared.SCREEN_ID`, `AppIds.shared.TASKS`).
 
 Views decide nothing: a label, sentence, chip, hue key, accessibility label, empty-state choice or enabled flag a view needs and the state does not carry is a gap in the machine, never a computation in Swift or Compose ([R-1047-K1](../docs/decisions.md#the-app-ports-and-the-shell-kit-1047)).
 

@@ -1,5 +1,7 @@
 import SwiftUI
 
+import CentraidShared
+
 // THE BACKUP SCREEN (#1080, the shells; seam contract A11). Home's half of the
 // backup is the vault lockup's status line (`VaultHeader`, R-ONBOARD-11).
 //
@@ -64,6 +66,9 @@ struct BackupScreenModel: Equatable {
     var keyShowLabel = ""
     var keySyncLabel = ""
     var keySynced = false
+    /// The page's one Ink button, named by the machine (DESIGN.md: at most one
+    /// per view); every other button these labels draw is the Outline button.
+    var ink = Centraid_Screen_V1_BackupScreenState.InkAction.none
 
     init() {}
 
@@ -97,6 +102,7 @@ struct BackupScreenModel: Equatable {
         keyShowLabel = state.keyShowLabel
         keySyncLabel = state.keySyncLabel
         keySynced = state.keySynced
+        ink = state.inkAction
     }
 }
 
@@ -150,11 +156,6 @@ struct BackupView: View {
     var body: some View {
         let model = BackupScreenModel(decoding: data)
         let paired = !model.destinations.isEmpty
-        // ONE INK BUTTON AT A TIME: the recovery key's warning is the page's
-        // first concern, then adding a backup device; a verb that would be a
-        // second ink is drawn as the outline.
-        let keyInk = model.keyWarning && !model.keyHeading.isEmpty && !model.keyShowLabel.isEmpty
-        let addShown = !paired && !model.addLabel.isEmpty
         ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -173,13 +174,16 @@ struct BackupView: View {
                     if !model.backgroundNotice.isEmpty {
                         sentence(model.backgroundNotice, id: "backup-background-notice")
                     }
-                    if addShown {
-                        if keyInk {
-                            KitOutlineButton(label: model.addLabel, action: onAddDestination)
+                    // ONE INK BUTTON AT A TIME, and the machine names it
+                    // (`ink_action`); a verb that is not the page's one thing
+                    // to do is the outline.
+                    if !paired && !model.addLabel.isEmpty {
+                        if model.ink == .addDestination {
+                            KitInkButton(label: model.addLabel, action: onAddDestination)
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-add-destination")
                         } else {
-                            KitInkButton(label: model.addLabel, action: onAddDestination)
+                            KitOutlineButton(label: model.addLabel, action: onAddDestination)
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-add-destination")
                         }
@@ -189,13 +193,13 @@ struct BackupView: View {
                     // machine says so; while a run goes, its progress stands
                     // beside it.
                     if !model.backUpNowLabel.isEmpty {
-                        if keyInk || addShown {
-                            KitOutlineButton(label: model.backUpNowLabel) { send(BackupEvents.backUpNow()) }
+                        if model.ink == .backUpNow {
+                            KitInkButton(label: model.backUpNowLabel) { send(BackupEvents.backUpNow()) }
                                 .disabled(!model.backUpNowEnabled)
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-now")
                         } else {
-                            KitInkButton(label: model.backUpNowLabel) { send(BackupEvents.backUpNow()) }
+                            KitOutlineButton(label: model.backUpNowLabel) { send(BackupEvents.backUpNow()) }
                                 .disabled(!model.backUpNowEnabled)
                                 .padding(.top, 8)
                                 .accessibilityIdentifier("backup-now")
@@ -219,7 +223,7 @@ struct BackupView: View {
                 }
 
                 if paired {
-                    section(ShellWords.backupDevices) { destinations(model) }
+                    section(SharedCopy.shared.BACKUP_DEVICES_HEADING) { destinations(model) }
                 }
 
                 if !shell.transferRuleChoices.isEmpty {
@@ -272,10 +276,11 @@ struct BackupView: View {
     private static let top = "backup-top"
 
     /// WHERE THE RECOVERY KEY IS, and what can be done about it. A warning
-    /// carries the attention mark Home's line uses and makes "Show recovery
-    /// key" the primary; otherwise it is one quiet sentence and an outline
-    /// button. Moving the key into or out of the keychain is a plain link: it
-    /// is a choice made once, not a thing to do.
+    /// carries the attention mark Home's line uses, and the machine makes
+    /// "Show recovery key" the page's Ink button (`ink_action`); otherwise it
+    /// is one quiet sentence and an outline button. Moving the key into or out
+    /// of the keychain is a plain link: it is a choice made once, not a thing
+    /// to do.
     @ViewBuilder
     private func recoveryKey(_ model: BackupScreenModel) -> some View {
         if !model.keyHeading.isEmpty {
@@ -294,13 +299,14 @@ struct BackupView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityElement(children: .combine)
                         .accessibilityIdentifier("backup-key-line")
-                        if !model.keyShowLabel.isEmpty {
-                            KitInkButton(label: model.keyShowLabel, action: onShowWords)
-                                .accessibilityIdentifier("backup-show-key")
-                        }
                     } else {
                         sentence(model.keyLine, id: "backup-key-line")
-                        if !model.keyShowLabel.isEmpty {
+                    }
+                    if !model.keyShowLabel.isEmpty {
+                        if model.ink == .showKey {
+                            KitInkButton(label: model.keyShowLabel, action: onShowWords)
+                                .accessibilityIdentifier("backup-show-key")
+                        } else {
                             KitOutlineButton(label: model.keyShowLabel, action: onShowWords)
                                 .accessibilityIdentifier("backup-show-key")
                         }

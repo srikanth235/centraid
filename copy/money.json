@@ -1,5 +1,5 @@
 {
-  "$comment": "Hand-maintained source: no emitter writes this file. Its twin is mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/MoneyCopy.kt; edit both, and KitTimeMoneyCopySpec fails when their strings disagree.",
+  "$comment": "The source of these strings. `:shared:generateCopy` turns `strings` into dev.centraid.design.copy.MoneyCopy at build time, which both shells read; there is no checked-in Kotlin twin.",
   "app": "money",
   "strings": {
     "ACCOUNTS_EMPTY": "No accounts yet.",

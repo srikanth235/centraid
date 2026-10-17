@@ -4,9 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import VisionKit
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// ADDING A DOCUMENT, AT THE APP'S ROOT (#1047, R-1047-Q4; `DocsIngestBridge`'s
 /// header). Two things only the shell can do, and nothing else:
@@ -85,14 +83,11 @@ struct DocsIngestRoot: View {
         } else {
             shell.path.append(DocsScreens.documentRoute(state.documentID, state.title, parent: state.parent))
         }
-        #if canImport(CentraidShared)
         DocsScreens.ingestBridge.routed(requestSeq: Int32(state.requestSeq))
-        #endif
     }
 
     /// Install the shell's picker on the bridge.
     private func seam() {
-        #if canImport(CentraidShared)
         DocsScreens.ingestBridge.onPick = { kind in
             DispatchQueue.main.async {
                 if kind.name == "KIND_SCAN" {
@@ -106,7 +101,6 @@ struct DocsIngestRoot: View {
                 }
             }
         }
-        #endif
         route(state)
     }
 
@@ -153,13 +147,8 @@ struct DocsIngestRoot: View {
         return Int32(permission.rawValue)
     }
 
-    #if canImport(CentraidShared)
     private func answer(_ act: (DocsIngestBridge) -> Void) { act(DocsScreens.ingestBridge) }
     static var noFile: String { DocsCopy.shared.INGEST_NO_FILE }
-    #else
-    private func answer(_ act: (Any) -> Void) {}
-    static var noFile: String { "" }
-    #endif
 }
 
 /// Where a picked or scanned file waits for the bridge: this app's own

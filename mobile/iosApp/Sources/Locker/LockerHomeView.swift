@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// LOCKER'S HOME — Items · Review · Generate, More as a sheet (#1047; the
 /// handoff's Locker §1). Search is the room's bar (R-CHROME-2), never a tab;
@@ -239,11 +237,11 @@ struct LockerHomeView: View {
     private func more(_ row: Centraid_Screen_V1_LockerMoreRow) {
         send(Self.event { $0.more = .with { $0.key = row.key } })
         switch row.key {
-        case "import": push(LockerScreens.importRoute)
-        case "export": push(LockerScreens.exportRoute)
-        case "access": push(LockerScreens.accessRoute)
-        case "trash": push(LockerScreens.trashRoute)
-        case "lock": sendLock(LockerLockSeam.event { $0.lock = .init() })
+        case LockerHomeMachine.shared.MORE_IMPORT: push(LockerScreens.importRoute)
+        case LockerHomeMachine.shared.MORE_EXPORT: push(LockerScreens.exportRoute)
+        case LockerHomeMachine.shared.MORE_ACCESS: push(LockerScreens.accessRoute)
+        case LockerHomeMachine.shared.MORE_TRASH: push(LockerScreens.trashRoute)
+        case LockerHomeMachine.shared.MORE_LOCK: sendLock(LockerLockSeam.event { $0.lock = .init() })
         default: break
         }
     }

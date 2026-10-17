@@ -1,10 +1,9 @@
 import LocalAuthentication
+import PhotosUI
 import SwiftUI
 import UIKit
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // THE 24 WORDS, DRAWN (#1047 E2). Two screens over the shared machines:
 // `words.make` (`VaultWordsBridge`) and `words.enter` (`WordsEntryBridge`).
@@ -152,6 +151,9 @@ struct WordsEntryView: View {
 
     @Environment(\.colorScheme) private var scheme
     @State private var focus: UInt32?
+    @State private var scanning = false
+    @State private var choosingPhoto = false
+    @State private var photo: PhotosPickerItem?
 
     private var state: Centraid_Screen_V1_WordsEntryState {
         (try? Centraid_Screen_V1_WordsEntryState(serializedBytes: data)) ?? .init()
@@ -237,6 +239,17 @@ struct WordsEntryView: View {
                         .disabled(working)
                     }
 
+                    // THE CODE IS SCANNED AS WELL AS PASTED, as pairing's is:
+                    // the camera, or the photo picker where there is none
+                    // (`scan_camera`). What it reads fills the field above.
+                    if !state.scanLabel.isEmpty {
+                        KitOutlineButton(label: state.scanLabel) {
+                            if state.scanCamera { scanning = true } else { choosingPhoto = true }
+                        }
+                        .disabled(working)
+                        .accessibilityIdentifier("words-scan")
+                    }
+
                     WordsNotice(notice: state.notice)
 
                     if !state.progress.isEmpty {
@@ -286,6 +299,40 @@ struct WordsEntryView: View {
             .scrollDismissesKeyboard(.interactively)
             .background(Theme.color("bg", scheme).ignoresSafeArea())
             .accessibilityIdentifier("words-enter")
+            .fullScreenCover(isPresented: $scanning) {
+                PairScanner(
+                    photoLabel: state.photoLabel,
+                    onRead: { payload in
+                        scanning = false
+                        send(Self.event { $0.scanned = .with { $0.payload = payload } })
+                    },
+                    onPhoto: {},
+                    onUnread: {
+                        scanning = false
+                        send(Self.event { $0.unread = .init() })
+                    },
+                    onCancel: { scanning = false }
+                )
+                .ignoresSafeArea()
+            }
+            .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
+            .onChange(of: photo) { _, item in
+                guard let item else { return }
+                photo = nil
+                Task {
+                    let data = try? await item.loadTransferable(type: Data.self)
+                    let code = data.flatMap(PairPhotoReader.read)
+                    await MainActor.run {
+                        send(Self.event {
+                            if let code {
+                                $0.scanned = .with { $0.payload = code }
+                            } else {
+                                $0.unread = .init()
+                            }
+                        })
+                    }
+                }
+            }
         }
         .onAppear { if state.phase == .entering, focus == nil { focus = 1 } }
         .onChange(of: state.phase) { _, phase in if phase != .entering { focus = nil } }

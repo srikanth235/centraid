@@ -47,14 +47,10 @@ class AbiContractSpec : StringSpec({
         val defines = Regex("""#define CENTRAID_([A-Z_]+) (-?\d+)""")
             .findAll(header.readText())
             .associate { it.groupValues[1] to it.groupValues[2].toInt() }
-        defines shouldBe mapOf(
-            "OK" to 0,
-            "BAD_ARGUMENT" to -1,
-            "MALFORMED" to -2,
-            "CLOSED" to -3,
-            "PANICKED" to -4,
-            "TIMEOUT" to -5,
-        )
+        // Not a hand-typed map beside the enum: that would be a third spelling
+        // of the same numbers. The header is the one source, and a check over
+        // an empty match is not a check.
+        withClue("status codes found in centraid.h") { (defines.size >= 6).shouldBeTrue() }
         CoreStatus.entries.associate { it.name to it.code } shouldBe defines
     }
 

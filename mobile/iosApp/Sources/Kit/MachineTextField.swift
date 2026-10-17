@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// A TEXT FIELD WHOSE WORDS THE MACHINE HOLDS, WITHOUT A ROUND TRIP PER KEY.
 ///

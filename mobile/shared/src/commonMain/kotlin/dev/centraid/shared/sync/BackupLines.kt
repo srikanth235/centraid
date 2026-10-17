@@ -3,7 +3,7 @@ package dev.centraid.shared.sync
 import centraid.screen.v1.BackupLine
 import centraid.screen.v1.BackupWaitingRow
 import dev.centraid.design.copy.SharedCopy
-import dev.centraid.shared.custody.CustodyCopy
+import dev.centraid.shared.kit.groupedDigits
 
 /**
  * THE ONE HONEST LINE, FROM THE CORE'S READING (#1080 ruling 7, the shells).
@@ -113,10 +113,10 @@ public object BackupLines {
     internal fun counts(reading: BackupReading): String = when {
         reading.contentTotal <= 0L -> ""
         reading.unconfirmed == 0L ->
-            SharedCopy.BACKUP_LINE_ALL.replace("{total}", CustodyCopy.grouped(reading.contentTotal))
+            SharedCopy.BACKUP_LINE_ALL.replace("{total}", groupedDigits(reading.contentTotal))
         else -> SharedCopy.BACKUP_LINE_COUNT
-            .replace("{confirmed}", CustodyCopy.grouped(reading.contentConfirmed))
-            .replace("{total}", CustodyCopy.grouped(reading.contentTotal))
+            .replace("{confirmed}", groupedDigits(reading.contentConfirmed))
+            .replace("{total}", groupedDigits(reading.contentTotal))
     }
 
     private fun untrusted(reading: BackupReading): Boolean = (reading.waiting[WaitReason.UNTRUSTED] ?: 0L) > 0L
@@ -131,7 +131,7 @@ public object BackupLines {
                 BackupWaitingRow(
                     reason = wire(reason),
                     count = count,
-                    sentence = waitingWords(reason).replace("{count}", CustodyCopy.grouped(count)),
+                    sentence = waitingWords(reason).replace("{count}", groupedDigits(count)),
                 )
             }
         }

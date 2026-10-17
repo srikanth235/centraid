@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// `money.transaction` — one transaction, its facts, the two offers the app
 /// proposes (a transfer, a rule) and the actions (#1099).
@@ -89,15 +87,15 @@ struct MoneyTransactionView: View {
         // A FACT THE MEMBER CAN CHANGE is the row that changes it: the state's
         // Category and Name facts carry the `category` and `name` actions, so those
         // two actions are not drawn a second time below.
-        let folded = Set(transaction.facts.compactMap { actionKey(forFact: $0.label, in: transaction) })
+        let folded = Set(transaction.facts.compactMap { actionKey(forFact: $0, in: transaction) })
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(transaction.facts.enumerated()), id: \.offset) { _, fact in
-                if let key = actionKey(forFact: fact.label, in: transaction),
+                if let key = actionKey(forFact: fact, in: transaction),
                    let action = transaction.actions.first(where: { $0.key == key }) {
                     MoneyFactRow(
                         label: fact.label,
                         value: fact.detail,
-                        owed: fact.detail == MoneyCopy.shared.NO_CATEGORY,
+                        owed: fact.tone == .seam,
                         onTap: action.enabled ? { send(event { $0.action = .with { $0.key = key } }) } : nil,
                         identifier: "money-fact-\(key)"
                     )
@@ -128,12 +126,9 @@ struct MoneyTransactionView: View {
     }
 
     /// The action a fact stands for, when the state offers one.
-    private func actionKey(forFact label: String, in transaction: Centraid_Screen_V1_MoneyTransactionData) -> String? {
-        let key: String
-        if label == MoneyCopy.shared.FACT_CATEGORY { key = "category" }
-        else if label == MoneyCopy.shared.FACT_NAME { key = "name" }
-        else { return nil }
-        return transaction.actions.contains { $0.key == key } ? key : nil
+    private func actionKey(forFact fact: Centraid_Screen_V1_MoneyFact, in transaction: Centraid_Screen_V1_MoneyTransactionData) -> String? {
+        guard !fact.action.isEmpty else { return nil }
+        return transaction.actions.contains { $0.key == fact.action } ? fact.action : nil
     }
 
     /// An offer the app proposes: words, and the member's two choices. Nothing is

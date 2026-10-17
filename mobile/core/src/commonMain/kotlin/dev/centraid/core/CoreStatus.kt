@@ -6,9 +6,10 @@ package dev.centraid.core
  * Written out rather than read from the header: cinterop does hand these over
  * as constants on iOS, but JNA does not hand over anything from a header at
  * all, and two spellings of the same five numbers on two platforms is worse
- * than one spelling in `commonMain`. [CoreStatusCodesMatchTheHeaderSpec] in
- * `jvmTest` reads the committed header and asserts every value, so the copy is
- * checked rather than trusted.
+ * than one spelling in `commonMain`. `AbiContractSpec`'s "the status codes are
+ * the committed header's" case in `jvmTest` reads the committed header and
+ * asserts that every `#define` in it is an entry here, with the same value and
+ * no entry missing either way, so the copy is checked rather than trusted.
  *
  * `TIMEOUT` is **not an error** (`CONTRACT.md` clause 6). It is negative only
  * because every non-`OK` code is, and a caller that treats it as a failure

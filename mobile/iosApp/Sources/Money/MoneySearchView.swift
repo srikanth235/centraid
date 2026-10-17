@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// `money.search` — the search bar's page (R-CHROME-2; #1099).
 ///

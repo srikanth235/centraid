@@ -23,6 +23,7 @@ import dev.centraid.shared.apps.people.PeopleHomeBridge
 import dev.centraid.shared.apps.people.PeopleHomeMachine
 import dev.centraid.shared.apps.people.PeoplePersonBridge
 import dev.centraid.shared.apps.people.PeopleTrashBridge
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.withPeopleDestination
 import dev.centraid.shared.shell.HomeSession
@@ -49,7 +50,7 @@ public class PeopleRoutes : AppRoutes {
             destination is Destination.PeopleEditor ||
             destination == Destination.PeopleTrash
 
-    override fun opens(moveId: String): Destination? = if (moveId == "people") Destination.PeopleHome() else null
+    override fun opens(moveId: String): Destination? = if (moveId == AppIds.PEOPLE) Destination.PeopleHome() else null
 
     override fun attach(session: HomeSession, scope: CoroutineScope) {
         home.attach(session)

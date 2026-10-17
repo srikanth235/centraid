@@ -58,6 +58,7 @@ import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.PhotoShelfMachine
+import dev.centraid.shared.kit.CappedCount
 
 /**
  * A PHOTO SHELF: the library under a predicate (#1029, photos port).
@@ -368,7 +369,7 @@ private fun ShelfHeader(
         )
         when {
             state.selecting -> KitLink(
-                label = "Done",
+                label = PhotosCopy.PHOTOS_DONE,
                 onClick = {
                     onEvent(
                         PhotoShelfEvent(
@@ -392,7 +393,7 @@ private fun ShelfHeader(
                     )
                 }
                 KitLink(
-                    label = "Select",
+                    label = PhotosCopy.PHOTOS_SELECT,
                     onClick = {
                         onEvent(
                             PhotoShelfEvent(
@@ -446,12 +447,12 @@ private fun AlbumActions(onAdd: () -> Unit, onRename: () -> Unit, onDelete: () -
 /** A FLOOR, AND IT SAYS SO WHEN IT IS ONE. See [ShelfHeader]. */
 private fun countSentence(state: PhotoShelfState): String {
     val data = state.data_ ?: return ""
-    val noun = if (data.cells.size == 1) PhotosCopy.TILE_COUNT_ONE else PhotosCopy.TILE_COUNT_MANY
-    return if (data.next_cursor != null) {
-        "At least ${data.cells.size} $noun"
-    } else {
-        "${data.cells.size} $noun"
-    }
+    return CappedCount.phrase(
+        data.cells.size.toLong(),
+        data.next_cursor != null,
+        PhotosCopy.TILE_COUNT_ONE,
+        PhotosCopy.TILE_COUNT_MANY,
+    )
 }
 
 /**
@@ -486,7 +487,7 @@ private fun SelectionBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (trash) {
-            Verb(iconKey = "restore", label = "Restore", enabled = enabled) {
+            Verb(iconKey = "restore", label = PhotosCopy.PHOTOS_RESTORE, enabled = enabled) {
                 onEvent(PhotoShelfEvent(restore = PhotoShelfEvent.RestoreRequested()))
             }
             Verb(iconKey = "trash", label = PhotosCopy.PHOTOS_DELETE_FOREVER, enabled = enabled, run = onAskToPurge)
@@ -499,15 +500,15 @@ private fun SelectionBar(
                 onEvent(PhotoShelfEvent(album_choice_opened = AlbumChoiceOpened()))
             }
             if (archive) {
-                Verb(iconKey = "restore", label = "Unarchive", enabled = enabled) {
+                Verb(iconKey = "restore", label = PhotosCopy.PHOTOS_UNARCHIVE, enabled = enabled) {
                     onEvent(PhotoShelfEvent(restore = PhotoShelfEvent.RestoreRequested()))
                 }
             } else {
-                Verb(iconKey = "Archive", label = "Archive", enabled = enabled) {
+                Verb(iconKey = "Archive", label = PhotosCopy.PHOTOS_ARCHIVE, enabled = enabled) {
                     onEvent(PhotoShelfEvent(archive = PhotoShelfEvent.ArchiveToggled(archived = true)))
                 }
             }
-            Verb(iconKey = "trash", label = "Trash", enabled = enabled) {
+            Verb(iconKey = "trash", label = PhotosCopy.PHOTOS_TRASH, enabled = enabled) {
                 onEvent(
                     PhotoShelfEvent(delete = PhotoShelfEvent.DeleteRequested(permanent = false)),
                 )
@@ -538,7 +539,7 @@ private fun MoreVerbs(
     var open by remember { mutableStateOf(false) }
     val album = state.shelf?.album != null
     Box {
-        Verb(iconKey = "MoreHoriz", label = "More", enabled = enabled) { open = true }
+        Verb(iconKey = "MoreHoriz", label = PhotosCopy.PHOTOS_MORE, enabled = enabled) { open = true }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = { Text(text = PhotosCopy.PHOTOS_DOWNLOAD_ORIGINAL) },
@@ -632,7 +633,7 @@ internal fun RenameSheet(
     fieldLabel: String,
     current: String,
     onDismiss: () -> Unit,
-    primaryLabel: String = "Save",
+    primaryLabel: String = PhotosCopy.PHOTOS_SAVE,
     onSave: (String) -> Unit,
 ) {
     var name by remember { mutableStateOf(current) }

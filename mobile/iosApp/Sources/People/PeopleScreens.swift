@@ -1,9 +1,7 @@
 import SwiftUI
 import UIKit
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// PEOPLE, REGISTERED (#1029 app port; K5). Its one line is in `AppRegistry.apps`.
 ///
@@ -18,17 +16,12 @@ import CentraidShared
 /// the event log still sees it) and then routed here — a push, or the OS for a
 /// channel (tel:, mailto:, Maps, the pasteboard).
 enum PeopleScreens: AppScreens {
-    static let appID = "people"
-    static let home = "people.home"
-    static let person = "people.person"
-    static let editor = "people.editor"
-    static let trash = "people.trash"
-
-    static var homeRoute: ShellModel.Route {
-        .screen(home, Centraid_Screen_V1_PeopleHomeEvent.with {
-            $0.opened = .with { $0.destination = .people }
-        }.encoded)
-    }
+    static let appID = AppIds.shared.PEOPLE
+    /// The machines' `SCREEN_ID`s.
+    static let home = PeopleHomeMachine.shared.SCREEN_ID
+    static let person = PeoplePersonMachine.shared.SCREEN_ID
+    static let editor = PeopleEditorMachine.shared.SCREEN_ID
+    static let trash = PeopleTrashKt.PeopleTrashMachine.screenId
 
     static func personRoute(_ partyID: String, name: String, logTouch: Bool = false) -> ShellModel.Route {
         .screen(person, Centraid_Screen_V1_PeoplePersonEvent.with {
@@ -56,12 +49,10 @@ enum PeopleScreens: AppScreens {
 
     @MainActor
     static func register(into shell: ShellModel) {
-        #if canImport(CentraidShared)
         shell.register(.of(home, PeopleHomeBridge()))
         shell.register(.of(person, PeoplePersonBridge()))
         shell.register(.of(editor, PeopleEditorBridge()))
         shell.register(.of(trash, PeopleTrashBridge()))
-        #endif
 
         shell.route(
             home,
@@ -125,7 +116,7 @@ enum PeopleScreens: AppScreens {
         )
     }
 
-    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { homeRoute }
+    static func tileRoute(_ tile: Centraid_Screen_V1_HomeTile) -> ShellModel.Route? { .home(of: appID) }
 
     // MARK: - Intents
 
@@ -139,7 +130,7 @@ enum PeopleScreens: AppScreens {
             shell.path.append(personRoute(picked.partyID, name: picked.name, logTouch: true))
         case .addPerson:
             shell.path.append(newPersonRoute)
-        case let .moreRow(row) where row.key == "trash":
+        case let .moreRow(row) where row.key == PeopleHomeMachine.shared.MORE_TRASH:
             shell.path.append(.screen(trash, Data()))
         default:
             break

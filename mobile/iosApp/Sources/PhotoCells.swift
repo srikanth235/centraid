@@ -1,5 +1,7 @@
 import SwiftUI
 
+import CentraidShared
+
 /// ONE CELL RENDERER, FOR EVERY SURFACE THAT DRAWS PHOTOGRAPHS.
 ///
 /// The library grid, a shelf, the picker and search hits all draw the same
@@ -92,7 +94,7 @@ struct PhotoCellSquare: View {
                 // putting it" — so the taken dot is the muted ink.
                 if isTaken {
                     PhotoSelectionDot(selected: true, muted: true)
-                        .accessibilityLabel(PhotosWords.photosAlreadyInAlbum)
+                        .accessibilityLabel(PhotosCopy.shared.PHOTOS_ALREADY_IN_ALBUM)
                 } else if isSelected {
                     PhotoSelectionDot(selected: true)
                 }
@@ -112,7 +114,7 @@ struct PhotoCellSquare: View {
 /// ONE TILE OF THE JUSTIFIED TIMELINE (v0's `PhotoTile.tsx`, #1029 photos port).
 ///
 /// Its box is fixed from the asset record before a byte arrives — `width` and
-/// `height` come from `PhotoJustify` — and every state paints INSIDE it, so
+/// `height` come from shared's `PhotoJustify` — and every state paints INSIDE it, so
 /// nothing reflows when a thumbnail lands. Four overlay slots and nothing else
 /// (v0's `tile-overlays.ts`): selection top-trailing, kind bottom-trailing, and
 /// the held state bottom-leading. The fourth, v0's vault rule, marked a
@@ -162,7 +164,7 @@ struct PhotoTile: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(PhotoCellLabel.of(cell, packAbsent: false))
             .accessibilityAddTraits(selected ? [.isImage, .isButton, .isSelected] : [.isImage, .isButton])
-            .accessibilityAction(named: selecting ? "Select" : "Open", onTap)
+            .accessibilityAction(named: selecting ? PhotosCopy.shared.PHOTOS_SELECT : PhotosCopy.shared.PHOTOS_OPEN, onTap)
             .accessibilityIdentifier(path ?? "photos.tile.\(cell.assetID)")
     }
 }
@@ -172,11 +174,13 @@ struct PhotoTile: View {
 /// photograph say so, because that is what changes what a tap does.
 enum PhotoCellLabel {
     static func of(_ cell: Centraid_Screen_V1_PhotoCell, packAbsent: Bool) -> String {
-        let noun = cell.live ? "Live photo" : (cell.kind == .video ? "Video" : "Photo")
+        let noun = cell.live
+            ? PhotosCopy.shared.PHOTOS_CELL_LIVE
+            : (cell.kind == .video ? PhotosCopy.shared.PHOTOS_CELL_VIDEO : PhotosCopy.shared.PHOTOGRAPH)
         if cell.hasThumbnailPath && !cell.thumbnailPath.isEmpty { return noun }
         return packAbsent
-            ? PhotosWords.fill(PhotosWords.photosCellNotDownloaded, "noun", noun)
-            : PhotosWords.fill(PhotosWords.photosCellPreviewGone, "noun", noun)
+            ? copyFill(PhotosCopy.shared.PHOTOS_CELL_NOT_DOWNLOADED, "noun", noun)
+            : copyFill(PhotosCopy.shared.PHOTOS_CELL_PREVIEW_GONE, "noun", noun)
     }
 }
 
@@ -197,7 +201,7 @@ struct PhotoHeldMark: View {
 
     var body: some View {
         if cell.held == .fetching {
-            Text("downloading")
+            Text(PhotosCopy.shared.PHOTOS_CELL_DOWNLOADING_MARK)
                 .centraidType("mono")
                 .foregroundStyle(Theme.color("textFaint", scheme))
                 .lineLimit(1)
@@ -206,7 +210,7 @@ struct PhotoHeldMark: View {
                 .background(Theme.color("bg", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)))
                 .padding(4)
                 .accessibilityIdentifier("photos.cell.fetching.\(cell.assetID)")
-                .accessibilityLabel("Downloading")
+                .accessibilityLabel(PhotosCopy.shared.PHOTOS_CELL_DOWNLOADING)
         } else if cell.held == .withheldByRule, !cell.originalHash.isEmpty, let onFetch {
             Button {
                 onFetch(cell.assetID, cell.originalHash)
@@ -226,7 +230,7 @@ struct PhotoHeldMark: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("photos.cell.download.\(cell.assetID)")
-            .accessibilityLabel("Download full-size photo")
+            .accessibilityLabel(PhotosCopy.shared.PHOTOS_CELL_DOWNLOAD_FULL)
         }
     }
 }
@@ -270,7 +274,7 @@ struct PhotoKindLine: View {
     static let minimumRung = 1
 
     private var text: String? {
-        if cell.live { return "live" }
+        if cell.live { return PhotosCopy.shared.PHOTOS_CELL_LIVE_MARK }
         if cell.kind == .video, cell.durationSeconds > 0 { return PhotoTileMetrics.clock(Int(cell.durationSeconds)) }
         return nil
     }
@@ -298,94 +302,37 @@ struct PhotoKindLine: View {
     }
 }
 
-/// The tile's measures, v0's (`tile-overlays.ts`, `justify.ts`), and the
-/// rungs (`photos-rungs.ts`). Restated for the SPM host build, which links no
-/// Kotlin; `PhotosTimeline.RUNG_HEIGHTS` and `kit/PhotoCells.kt` hold the same
-/// numbers and must agree.
+/// The tile's measures, v0's (`tile-overlays.ts`, `justify.ts`). The rungs and
+/// the gutter are shared's (`PhotosTimeline`, `PhotoJustify`), read across the
+/// bridge so both shells step through one table; the dot and outline are the
+/// tile's own paint.
 enum PhotoTileMetrics {
     /// The gutter between tiles, both axes — the 4 base rung halved.
-    static let gap: CGFloat = 2
+    static let gap = CGFloat(PhotoJustify.shared.GAP)
     static let dot: CGFloat = 20
     static let dotInset: CGFloat = 6
     static let outline: CGFloat = 2
     /// The phone's tile heights, XS to L.
-    static let rungHeights: [CGFloat] = [64, 88, 120, 168]
-    static let rungLabels = ["XS", "S", "M", "L"]
+    static let rungHeights: [CGFloat] = PhotosTimeline.shared.RUNG_HEIGHTS.map { CGFloat($0.intValue) }
 
     static func height(rung: Int) -> CGFloat {
-        rungHeights[min(max(rung, 0), rungHeights.count - 1)]
+        rungHeights[Int(PhotosTimeline.shared.clampRung(rung: Int32(rung)))]
     }
 
-    /// `1:04`, `12:07`, `1:02:03` — v0's `mediaClock`.
+    /// `1:04`, `12:07`, `1:02:03` — the shared `MediaFormat`'s, so a tile, the
+    /// player and the facts panel state one recording's length the same way.
     static func clock(_ seconds: Int) -> String {
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        let rest = seconds % 60
-        return hours > 0
-            ? String(format: "%d:%02d:%02d", hours, minutes, rest)
-            : String(format: "%d:%02d", minutes, rest)
+        MediaFormat.shared.clock(seconds: Int64(seconds))
     }
 }
 
-/// A tile's packed box: the cell, and where `PhotoJustify` put its edges.
+/// A tile's packed box: the cell, and where shared's `PhotoJustify` put its
+/// edges. The packing is Kotlin's — it names tiles by index, and this puts the
+/// cell back under each.
 struct JustifiedTile {
     let cell: Centraid_Screen_V1_PhotoCell
     let width: CGFloat
     let height: CGFloat
-}
-
-/// JUSTIFIED ROWS FROM REAL ASPECT RATIOS (v0's `justify.ts`, §4.1).
-///
-/// Rows pack to a target height and scale to fill the width exactly; nothing
-/// crops to a square and nothing reflows when bytes land. The constants are
-/// v0's and must stay equal to Compose's `justify` in `kit/PhotoCells.kt`: a 2
-/// gutter, a 28% overshoot before a row closes, and a trailing partial row kept
-/// at natural height capped at 1.25× so one wide photograph cannot become a
-/// banner. A full row's rounding remainder folds into its LAST tile so the row
-/// fills the width to the point; the trailing row deliberately does not.
-enum PhotoJustify {
-    static let overshoot: CGFloat = 0.28
-    static let lastRowCap: CGFloat = 1.25
-
-    static func rows(
-        _ cells: [Centraid_Screen_V1_PhotoCell],
-        width containerWidth: CGFloat,
-        target: CGFloat
-    ) -> [[JustifiedTile]] {
-        guard containerWidth > 0, target > 0 else { return [] }
-        let gap = PhotoTileMetrics.gap
-        var rows: [[JustifiedTile]] = []
-        var row: [(Centraid_Screen_V1_PhotoCell, CGFloat)] = []
-        var sum: CGFloat = 0
-        for cell in cells {
-            let ratio = aspect(cell)
-            row.append((cell, ratio))
-            sum += ratio
-            let spare = containerWidth - gap * CGFloat(row.count - 1)
-            if sum * target >= spare + target * overshoot {
-                let height = (spare / sum).rounded()
-                var widths = row.map { (height * $0.1).rounded() }
-                widths[widths.count - 1] += spare - widths.reduce(0, +)
-                rows.append(row.enumerated().map { index, entry in
-                    JustifiedTile(cell: entry.0, width: widths[index], height: height)
-                })
-                row.removeAll()
-                sum = 0
-            }
-        }
-        if !row.isEmpty {
-            let natural = (containerWidth - gap * CGFloat(row.count - 1)) / sum
-            let height = min(target * lastRowCap, natural)
-            rows.append(row.map { JustifiedTile(cell: $0.0, width: (height * $0.1).rounded(), height: height.rounded()) })
-        }
-        return rows
-    }
-
-    /// The real aspect ratio; an unknown box packs SQUARE — a missing record is
-    /// the one case there is nothing to be faithful to.
-    static func aspect(_ cell: Centraid_Screen_V1_PhotoCell) -> CGFloat {
-        cell.width > 0 && cell.height > 0 ? CGFloat(cell.width) / CGFloat(cell.height) : 1
-    }
 }
 
 /// THE GRID IS THE LOADING STATE (v0's `PhotosGridSkeleton.tsx`, §14).
@@ -394,43 +341,32 @@ enum PhotoJustify {
 /// `PhotoJustify`, so the photographs land where their placeholders stood. The
 /// aspect sequence is FIXED — random aspects would flicker — and nothing moves:
 /// DESIGN.md's `Loading` is static skeletons, and a shimmer is
-/// attention-seeking about work the product can simply describe.
+/// attention-seeking about work the product can simply describe. The rows are
+/// shared's (`PhotoJustify.skeleton`).
 struct PhotoGridSkeleton: View {
     @Environment(\.colorScheme) private var scheme
     let width: CGFloat
     let target: CGFloat
     var viewport: CGFloat = 800
 
-    private static let aspects: [CGFloat] = [1.5, 1, 4 / 3, 0.75, 1.5, 16 / 9, 1, 2 / 3, 4 / 3, 1, 1.5, 0.75]
-
-    private var rows: [[JustifiedTile]] {
-        // BOTH HALVES ROUND UP: too few reads as "the library ends here".
-        let perRow = max(1, Int(width / max(target, 1))) + 1
-        let count = perRow * max(1, Int(viewport / max(target, 1)) + 1)
-        let placeholders = (0..<count).map { index -> Centraid_Screen_V1_PhotoCell in
-            var cell = Centraid_Screen_V1_PhotoCell()
-            cell.assetID = "skeleton-\(index)"
-            cell.width = UInt32(1000 * Self.aspects[index % Self.aspects.count])
-            cell.height = 1000
-            return cell
-        }
-        return PhotoJustify.rows(placeholders, width: width, target: target)
+    private var rows: [[PackedTile]] {
+        PhotoJustify.shared.skeleton(containerWidth: Double(width), targetHeight: Double(target), viewportHeight: Double(viewport))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: PhotoTileMetrics.gap) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 HStack(spacing: PhotoTileMetrics.gap) {
-                    ForEach(row, id: \.cell.assetID) { tile in
+                    ForEach(row, id: \.index) { tile in
                         RoundedRectangle(cornerRadius: Theme.radius("sm", scheme))
                             .fill(Theme.color("skel", scheme))
-                            .frame(width: tile.width, height: tile.height)
+                            .frame(width: CGFloat(tile.width), height: CGFloat(tile.height))
                     }
                 }
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(PhotosWords.photosOpeningLibrary)
+        .accessibilityLabel(PhotosCopy.shared.PHOTOS_OPENING_LIBRARY)
     }
 }
 

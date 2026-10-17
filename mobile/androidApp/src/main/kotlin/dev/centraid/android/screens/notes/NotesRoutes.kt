@@ -29,6 +29,7 @@ import dev.centraid.shared.apps.notes.NotesNotebooksMachine
 import dev.centraid.shared.apps.notes.NotesRouting
 import dev.centraid.shared.apps.notes.NotesTarget
 import dev.centraid.shared.apps.notes.NotesTrashBridge
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.nav.withNotesPlace
@@ -69,8 +70,8 @@ public class NotesRoutes : AppRoutes {
      * note it shows, a new note when there is none, nowhere while it reads.
      */
     override fun opens(moveId: String): Destination? {
-        if (moveId != "notes") return null
-        val tile = session?.state?.value?.data_?.tiles?.firstOrNull { it.app_id == "notes" }
+        if (moveId != AppIds.NOTES) return null
+        val tile = session?.state?.value?.data_?.tiles?.firstOrNull { it.app_id == AppIds.NOTES }
         return when (val target = NotesRouting.target(tile)) {
             is NotesTarget.Existing -> Destination.NotesEditor(target.noteId, target.title)
             is NotesTarget.New -> Destination.NotesEditor(target.noteId, isNew = true)

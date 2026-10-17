@@ -31,7 +31,6 @@ import centraid.screen.v1.MoneyFigure
 import centraid.screen.v1.MoneyHero
 import centraid.screen.v1.MoneyRow
 import centraid.screen.v1.SectionHead
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.SectionHeader
@@ -55,10 +54,6 @@ internal fun money(amount: Money?): String = amount?.let(::formatMoney).orEmpty(
 /** The state's words, then the rendered money after them. */
 internal fun spoken(words: String, amount: Money?): String =
     listOf(words, money(amount)).filter { it.isNotEmpty() }.joinToString(", ")
-
-/** A write refusal's sentence, for a room's status host. */
-internal fun refusal(write: WriteState?): String =
-    if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else ""
 
 /** A section label with the kit's header. Empty is nothing. */
 @Composable

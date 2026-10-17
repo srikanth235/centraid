@@ -65,6 +65,9 @@ public object LockerItemMachine :
     LockerQueryMachine<LockerItemState, LockerItemEvent, LockerItemData>("locker.item", LOCKER_ITEM_TABLES) {
     public const val SCREEN_ID: String = "locker.item"
 
+    /** A field row's verb that is the SHELL's: the address, handed to the OS. Every other verb is this machine's. */
+    public const val VERB_OPEN: String = "open"
+
     /** The product's reveal window (`REVEAL_WINDOW_MS`), in seconds. */
     public const val REVEAL_SECONDS: Int = 30
 
@@ -883,7 +886,7 @@ public object LockerItemMachine :
 
     private val copyOnly: List<LockerVerb> = listOf(LockerVerb(key = "copy", label = LockerCopy.COPY))
 
-    private val openCopy: List<LockerVerb> = listOf(LockerVerb(key = "open", label = LockerCopy.OPEN), LockerVerb(key = "copy", label = LockerCopy.COPY))
+    private val openCopy: List<LockerVerb> = listOf(LockerVerb(key = VERB_OPEN, label = LockerCopy.OPEN), LockerVerb(key = "copy", label = LockerCopy.COPY))
 
     private fun plain(key: String, label: String, value: String, verbs: List<LockerVerb> = copyOnly): LockerFieldRow =
         LockerFieldRow(key = key, label = label, value_ = value, verbs = verbs, accessibility_label = "$label, $value")

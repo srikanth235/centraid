@@ -26,6 +26,7 @@ import dev.centraid.shared.kit.SearchLens
 import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -56,7 +57,7 @@ import dev.centraid.shared.screen.Step
  * star back with the sentence on the status line.
  */
 public object PeopleHomeMachine : ScreenMachine<PeopleHomeState, PeopleHomeEvent> {
-    public const val SCREEN_ID: String = "people.home"
+    public const val SCREEN_ID: String = ScreenIds.PEOPLE_HOME
 
     public const val STAR_COMMAND: String = "people.star_person"
     public const val UNSTAR_COMMAND: String = "people.unstar_person"

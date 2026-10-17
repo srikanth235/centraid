@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // THE CONTROLS (DESIGN.md "The controls (mobile)").
 //

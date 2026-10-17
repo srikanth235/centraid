@@ -397,6 +397,13 @@ public class LockerGate(
     }
 
     public companion object {
+        /**
+         * THE WALL'S KEY in a shell that registers its state by screen id: the
+         * gate is not a screen (nothing reads through it), but every Locker
+         * screen is drawn under its `LockerLockState`.
+         */
+        public const val SCREEN_ID: String = "locker.lock"
+
         private var bound: HomeSession? = null
 
         /**

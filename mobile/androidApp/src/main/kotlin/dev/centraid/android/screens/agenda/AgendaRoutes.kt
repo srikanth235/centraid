@@ -19,6 +19,7 @@ import dev.centraid.shared.apps.agenda.AgendaEditorBridge
 import dev.centraid.shared.apps.agenda.AgendaEventBridge
 import dev.centraid.shared.apps.agenda.AgendaEventMachine
 import dev.centraid.shared.apps.agenda.AgendaMarks
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.HomeSession
@@ -41,7 +42,7 @@ public class AgendaRoutes : AppRoutes {
 
     // `open()` ON THE PUSH, not on every composition: a band move swaps the
     // top entry and must not land on today.
-    override fun opens(moveId: String): Destination? = if (moveId == "agenda") {
+    override fun opens(moveId: String): Destination? = if (moveId == AppIds.AGENDA) {
         agenda.open()
         Destination.AgendaHome()
     } else {

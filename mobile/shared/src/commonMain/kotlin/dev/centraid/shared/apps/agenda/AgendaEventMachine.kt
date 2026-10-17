@@ -28,6 +28,7 @@ import dev.centraid.shared.kit.WriteLaw
 import dev.centraid.shared.kit.WriteLens
 import dev.centraid.shared.kit.time.CivilWords
 import dev.centraid.shared.kit.time.plusDays
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -94,7 +95,7 @@ public sealed interface AgendaEventInput {
  * parked card, from [AgendaMarks], with Try again and Dismiss.
  */
 public object AgendaEventMachine : ScreenMachine<AgendaEventScreen, AgendaEventInput> {
-    public const val SCREEN_ID: String = "agenda.event"
+    public const val SCREEN_ID: String = ScreenIds.AGENDA_EVENT
 
     /** The tables `agenda.event` reads for one event — its calendar's and its place's names too. */
     public val TABLES: Set<String> = setOf(

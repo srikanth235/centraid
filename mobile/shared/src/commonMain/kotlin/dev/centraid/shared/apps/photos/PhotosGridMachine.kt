@@ -14,6 +14,7 @@ import centraid.screen.v1.PhotosGridState
 import centraid.screen.v1.PhotosImportBanner
 import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -58,7 +59,7 @@ import dev.centraid.shared.screen.Step
  * it.
  */
 public object PhotosGridMachine : ScreenMachine<PhotosGridState, PhotosGridEvent> {
-    public const val SCREEN_ID: String = "photos.grid"
+    public const val SCREEN_ID: String = ScreenIds.PHOTOS_GRID
 
     override fun initial(): PhotosGridState = decorate(
         PhotosGridState(

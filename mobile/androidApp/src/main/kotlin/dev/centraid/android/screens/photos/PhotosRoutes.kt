@@ -51,6 +51,7 @@ import dev.centraid.android.screens.RouteNav
 import dev.centraid.android.screens.exportShelfCopies
 import dev.centraid.android.screens.installPhotoEditRenderer
 import dev.centraid.android.screens.photosSelectionTitle
+import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.apps.photos.DuplicateReviewBridge
 import dev.centraid.shared.apps.photos.DuplicatesBridge
 import dev.centraid.shared.apps.photos.LibraryCopies
@@ -66,6 +67,7 @@ import dev.centraid.shared.apps.photos.PhotosMemoriesMachine
 import dev.centraid.shared.apps.photos.PhotosSearchBridge
 import dev.centraid.shared.apps.photos.PlacesBridge
 import dev.centraid.shared.apps.photos.PlacesMachine
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.platform.platformServices
@@ -133,7 +135,7 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
         else -> false
     }
 
-    override fun opens(moveId: String): Destination? = if (moveId == "photos") Destination.PhotosHome() else null
+    override fun opens(moveId: String): Destination? = if (moveId == AppIds.PHOTOS) Destination.PhotosHome() else null
 
     /**
      * A VAULT WAS JUST MADE and the system's photo prompt was answered
@@ -710,8 +712,8 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                 LaunchedEffect(Unit) { places.opened() }
                 val state by places.host.state.collectAsStateWithLifecycle()
                 PushedPage(
-                    title = "Places",
-                    parentTitle = "Collections",
+                    title = PhotosCopy.PHOTOS_PLACES,
+                    parentTitle = PhotosCopy.PHOTOS_BAND_COLLECTIONS,
                     onBack = { stack = stack.pop() },
                 ) {
                     PlacesScreen(
@@ -747,8 +749,8 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                 LaunchedEffect(destination) { photosMemories.opened() }
                 val state by photosMemories.host.state.collectAsStateWithLifecycle()
                 PushedPage(
-                    title = "Memories",
-                    parentTitle = "Collections",
+                    title = PhotosCopy.PHOTOS_MEMORIES,
+                    parentTitle = PhotosCopy.PHOTOS_BAND_COLLECTIONS,
                     onBack = { stack = stack.pop() },
                 ) {
                     PhotosMemoriesScreen(
@@ -771,8 +773,8 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                 LaunchedEffect(destination) { duplicates.opened() }
                 val state by duplicates.host.state.collectAsStateWithLifecycle()
                 PushedPage(
-                    title = "Duplicates",
-                    parentTitle = "Collections",
+                    title = PhotosCopy.PHOTOS_DUPLICATES,
+                    parentTitle = PhotosCopy.PHOTOS_BAND_COLLECTIONS,
                     onBack = { stack = stack.pop() },
                 ) {
                     DuplicatesScreen(
@@ -795,8 +797,8 @@ public class PhotosRoutes(private val cacheDir: java.io.File) : AppRoutes {
                 }
                 val state by duplicateReview.host.state.collectAsStateWithLifecycle()
                 PushedPage(
-                    title = "Duplicates",
-                    parentTitle = "Duplicates",
+                    title = PhotosCopy.PHOTOS_DUPLICATES,
+                    parentTitle = PhotosCopy.PHOTOS_DUPLICATES,
                     onBack = { stack = stack.pop() },
                 ) {
                     DuplicateReviewScreen(

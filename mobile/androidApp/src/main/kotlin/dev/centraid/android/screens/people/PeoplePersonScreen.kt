@@ -18,7 +18,6 @@ import centraid.screen.v1.PeoplePersonEvent
 import centraid.screen.v1.PeoplePersonSheet
 import centraid.screen.v1.PeoplePersonState
 import centraid.screen.v1.PeopleSheetFrame
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
@@ -71,10 +70,7 @@ public fun PeoplePersonScreen(
         } else {
             null
         },
-        status = when {
-            write?.phase == WriteState.Phase.PHASE_REFUSED -> write.failure?.sentence.orEmpty()
-            else -> state.status
-        },
+        status = write?.refusal.orEmpty().ifEmpty { state.status },
     ) {
         val gone = state.gone
         if (gone != null) {

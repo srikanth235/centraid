@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 // ONE ROW SHAPE, ONE SECTION HEAD, ONE FIELD ROW (K5; handoff README l.22-27:
 // "one row shape per app reused by every list in it; the section head with a

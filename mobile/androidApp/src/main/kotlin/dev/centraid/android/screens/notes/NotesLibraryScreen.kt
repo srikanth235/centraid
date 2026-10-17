@@ -18,7 +18,6 @@ import centraid.screen.v1.NotesLibrarySort
 import centraid.screen.v1.NotesLibraryState
 import centraid.screen.v1.NotesNoteRow
 import centraid.screen.v1.StatusChip
-import centraid.screen.v1.WriteState
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
@@ -105,7 +104,7 @@ public fun NotesLibraryScreen(
                 spoken = chip.spoken,
             ) { onEvent(NotesLibraryEvent(chip = NotesLibraryEvent.ChipPicked(chip.key))) }
         },
-        status = if (write?.phase == WriteState.Phase.PHASE_REFUSED) write.failure?.sentence.orEmpty() else "",
+        status = write?.refusal.orEmpty(),
         band = { NotesBandView(state.band, { key -> onEvent(NotesLibraryEvent(band = NotesLibraryEvent.BandPicked(key))) }, onHome) },
     ) {
         val results = state.results

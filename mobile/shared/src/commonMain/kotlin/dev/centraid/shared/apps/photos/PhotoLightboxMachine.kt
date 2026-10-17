@@ -10,6 +10,7 @@ import centraid.screen.v1.PhotoPlaceChoice
 import centraid.screen.v1.SeatState
 import dev.centraid.design.copy.PhotosCopy
 import dev.centraid.shared.kit.jsonString
+import dev.centraid.shared.nav.ScreenIds
 import dev.centraid.shared.screen.Reads
 import dev.centraid.shared.screen.ScreenEffect
 import dev.centraid.shared.screen.ScreenMachine
@@ -54,7 +55,7 @@ import dev.centraid.shared.screen.Step
  * once per photograph a member flicked past.
  */
 public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLightboxEvent> {
-    public const val SCREEN_ID: String = "photos.lightbox"
+    public const val SCREEN_ID: String = ScreenIds.PHOTOS_LIGHTBOX
 
     /**
      * THE READS ONE PHOTOGRAPH TAKES, BESIDE THE ASSET ITSELF.
@@ -129,13 +130,26 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
     public const val SLIDESHOW_INTERVAL_MS: Long = 4_000L
 
     /** The neighbours the strip reads around the photograph on screen. */
-    public fun filmWindow(state: PhotoLightboxState): List<String> {
-        val neighbours = state.neighbour_asset_ids
-        val at = neighbours.indexOf(state.asset_id)
+    public fun filmWindow(state: PhotoLightboxState): List<String> =
+        filmWindow(state.neighbour_asset_ids, state.asset_id)
+
+    /**
+     * [filmWindow] over primitives, for SwiftUI: it holds SwiftProtobuf's state
+     * and cannot hand it to a function that takes Wire's, so it passes the two
+     * fields the window is a function of.
+     */
+    public fun filmWindow(neighbours: List<String>, assetId: String): List<String> {
+        val at = neighbours.indexOf(assetId)
         if (at < 0 || neighbours.size <= 1) return emptyList()
         val from = maxOf(0, at - FILM_REACH)
         val to = minOf(neighbours.size, at + FILM_REACH + 1)
         return neighbours.subList(from, to)
+    }
+
+    /** Where [filmWindow] starts on the shelf, for "3 of 184". Zero when there is no window. */
+    public fun filmOffset(neighbours: List<String>, assetId: String): Int {
+        val first = filmWindow(neighbours, assetId).firstOrNull() ?: return 0
+        return neighbours.indexOf(first).coerceAtLeast(0)
     }
 
     /** The window's frames this screen has not read yet. */
@@ -153,7 +167,10 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
         val at = state.neighbour_asset_ids.indexOf(state.asset_id)
         if (at < 0) return ""
         val seconds = SLIDESHOW_INTERVAL_MS / 1_000L
-        return "${at + 1} of ${state.neighbour_asset_ids.size} · $seconds seconds a photo"
+        return PhotosCopy.PHOTOS_SLIDESHOW_META
+            .replace("{position}", "${at + 1}")
+            .replace("{total}", "${state.neighbour_asset_ids.size}")
+            .replace("{seconds}", "$seconds")
     }
 
     /** v0's slideshow status line, unchanged. */
@@ -166,13 +183,28 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
      * A photograph that arrives bare is a screen with no visible way back,
      * whatever the gesture can do.
      */
-    override fun initial(): PhotoLightboxState = PhotoLightboxState(
-        loading = Loading(first_load = true),
-        chrome_visible = true,
-        sheet = PhotoLightboxState.Sheet.SHEET_NONE,
+    override fun initial(): PhotoLightboxState = PhotoLightboxText.fill(
+        PhotoLightboxState(
+            loading = Loading(first_load = true),
+            chrome_visible = true,
+            sheet = PhotoLightboxState.Sheet.SHEET_NONE,
+        ),
     )
 
+    /**
+     * EVERY STEP LANDS WITH ITS WORDS FILLED ([PhotoLightboxText.fill]).
+     *
+     * Filled here and not at each of the arms that change `detail`, because the
+     * arms are many and a lines-from-detail rule is one: a place that arrives,
+     * a fetch that moves its percentage and a caption that re-reads all change
+     * what the stage says, and an arm that forgot would draw a stale sentence.
+     */
     override fun reduce(
+        state: PhotoLightboxState,
+        event: PhotoLightboxEvent,
+    ): Step<PhotoLightboxState> = fold(state, event).let { it.copy(state = PhotoLightboxText.fill(it.state)) }
+
+    private fun fold(
         state: PhotoLightboxState,
         event: PhotoLightboxEvent,
     ): Step<PhotoLightboxState> = when {
@@ -239,6 +271,18 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
         )
 
         event.located != null -> located(state, event.located)
+
+        // THE CAMERA THE ORIGINAL'S HEADER NAMES, read by the shell. Keyed by
+        // asset, like `located`: an answer for a photograph the member has
+        // swiped past lands on nothing.
+        event.camera_read != null -> {
+            val detail = state.detail
+            if (detail == null || event.camera_read.asset_id != detail.asset_id) {
+                Step(state)
+            } else {
+                Step(state.copy(detail = detail.copy(camera = event.camera_read.camera)))
+            }
+        }
 
         // A SLIDESHOW NEEDS SOMEWHERE TO GO. On a shelf of one it would be a
         // mode with a clock that moves nothing, so it is refused by doing
@@ -890,6 +934,10 @@ public object PhotoLightboxMachine : ScreenMachine<PhotoLightboxState, PhotoLigh
             live_asset_id = previous.live_asset_id,
             live_content_id = previous.live_content_id,
             live_path = previous.live_path,
+            // THE HEADER'S CAMERA, for the reason the paths are kept: no page
+            // read carries it, and a caption edit would blank the row until
+            // the shell read the file again. The vault's own word wins.
+            camera = arriving.camera.ifEmpty { previous.camera },
         )
     }
 

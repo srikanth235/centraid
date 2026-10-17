@@ -24,6 +24,7 @@ import dev.centraid.shared.apps.money.MoneyRulesBridge
 import dev.centraid.shared.apps.money.MoneySearchBridge
 import dev.centraid.shared.apps.money.MoneyTargetBridge
 import dev.centraid.shared.apps.money.MoneyTransactionBridge
+import dev.centraid.shared.nav.AppIds
 import dev.centraid.shared.nav.Destination
 import dev.centraid.shared.nav.NavStack
 import dev.centraid.shared.shell.HomeSession
@@ -61,7 +62,7 @@ public class MoneyRoutes : AppRoutes {
 
     // `open()` ON THE PUSH (Agenda's rule): returning to the home from a pushed
     // page keeps its tab, its month, its filters and its answer.
-    override fun opens(moveId: String): Destination? = if (moveId == "money") {
+    override fun opens(moveId: String): Destination? = if (moveId == AppIds.MONEY) {
         home.open()
         Destination.MoneyHome()
     } else {

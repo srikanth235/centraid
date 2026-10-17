@@ -1,8 +1,6 @@
 import SwiftUI
 
-#if canImport(CentraidShared)
 import CentraidShared
-#endif
 
 /// `locker.access` — the whole Locker's access history (#1047, Q-1047-21; the
 /// handoff's `locker/access`): every unlock, reveal, copy, one-time code and

@@ -582,7 +582,7 @@ Rulings that hold for every control:
 
 The house tic this rulebook exists to stop is **defensive reassurance**: a string states a fact and then adds a sentence about what was _not_ lost, not deleted, not sent, not generated. Repeated everywhere, it stops reading as care and starts reading as a product apologising for itself. Reassurance is **positional** — it belongs where the risk decision is actually made, and nowhere else.
 
-Every string has a budget, and the budget is the contract. Copy lives in `copy/<app>.json` and its hand-maintained Kotlin twin, `mobile/shared/src/commonMain/kotlin/dev/centraid/design/copy/<App>Copy.kt`; `KitTimeMoneyCopySpec` fails when the two disagree.
+Every string has a budget, and the budget is the contract. Copy lives in `copy/<app>.json`, and only there: the Kotlin table both shells read, `dev.centraid.design.copy.<App>Copy`, is generated from it at build time (`:shared:generateCopy`).
 
 | Surface | Budget |
 | --- | --- |
